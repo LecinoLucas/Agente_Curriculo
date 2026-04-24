@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -17,6 +18,14 @@ from src.interface.api.schemas.analysis_schemas import (
     AnalysisPipelineJobMatchResponse,
     AnalysisPipelineResponse,
 )
+
+
+# Handles c#, c++, react.js, node.js and plain words as atomic tokens.
+_TOKEN_RE = re.compile(r'[a-z][a-z0-9]*(?:\+\+|#|\.[a-z][a-z0-9]*)*')
+
+
+def _tokenize(text: str) -> frozenset[str]:
+    return frozenset(_TOKEN_RE.findall(text.lower()))
 
 
 class ResumeVersionNotFoundError(Exception):
@@ -208,12 +217,17 @@ class AnalysisService:
         }
         all_candidate_skills = candidate_keywords | candidate_skill_names
 
+        # Pre-tokenize candidate skills once for O(n) matching.
+        candidate_token_sets = [_tokenize(s) for s in all_candidate_skills if s]
+
         mandatory_skills = [row for row in job_skills if row.JobRequiredSkillModel.is_mandatory]
         optional_skills = [row for row in job_skills if not row.JobRequiredSkillModel.is_mandatory]
 
         def skill_matched(skill_name: str) -> bool:
-            norm = skill_name.lower()
-            return any(norm in cand or cand in norm for cand in all_candidate_skills)
+            job_tokens = _tokenize(skill_name)
+            return bool(job_tokens) and any(
+                bool(job_tokens & cand_tokens) for cand_tokens in candidate_token_sets
+            )
 
         mandatory_matched = sum(1 for row in mandatory_skills if skill_matched(row.skill_name))
         optional_matched = sum(1 for row in optional_skills if skill_matched(row.skill_name))
@@ -223,23 +237,51 @@ class AnalysisService:
         missing_skill_names = [
             row.skill_name for row in mandatory_skills if not skill_matched(row.skill_name)
         ]
-        required_skill_names = {row.skill_name.lower() for row in job_skills}
-        bonus_skill_names = sorted(
-            skill for skill in all_candidate_skills if skill and skill not in required_skill_names
-        )
+
+        # Candidate skills that don't overlap with any required job skill token.
+        job_skill_token_sets = [_tokenize(row.skill_name) for row in job_skills]
+
+        def _is_bonus(cand: str) -> bool:
+            cand_tokens = _tokenize(cand)
+            return bool(cand_tokens) and not any(
+                bool(cand_tokens & jt) for jt in job_skill_token_sets
+            )
+
+        bonus_skill_names = sorted(s for s in all_candidate_skills if s and _is_bonus(s))
 
         total_mandatory = len(mandatory_skills)
         total_optional = len(optional_skills)
+
+        # Pure-Decimal scores; avoid float arithmetic entirely.
         mandatory_score = (
-            Decimal(str(mandatory_matched / total_mandatory * 100))
-            if total_mandatory
-            else Decimal("100")
+            Decimal(mandatory_matched) / Decimal(total_mandatory) * Decimal("100")
+            if total_mandatory > 0
+            else Decimal("0")
         )
         optional_score = (
-            Decimal(str(optional_matched / total_optional * 100))
-            if total_optional
-            else Decimal("100")
+            Decimal(optional_matched) / Decimal(total_optional) * Decimal("100")
+            if total_optional > 0
+            else Decimal("0")
         )
+
+        # Auto-reweight when a category has no skills.
+        w_mand = Decimal("0.40")
+        w_opt = Decimal("0.20")
+        w_sen = Decimal("0.20")
+        w_ai = Decimal("0.20")
+
+        if total_mandatory == 0 and total_optional > 0:
+            w_opt += w_mand
+            w_mand = Decimal("0")
+        elif total_mandatory == 0 and total_optional == 0:
+            half = (w_mand + w_opt) / 2
+            w_sen += half
+            w_ai += half
+            w_mand = Decimal("0")
+            w_opt = Decimal("0")
+        elif total_optional == 0:
+            w_mand += w_opt
+            w_opt = Decimal("0")
 
         seniority_map = {
             "intern": 0,
@@ -258,11 +300,20 @@ class AnalysisService:
         if candidate_sen > job_sen:
             seniority_score = seniority_score * Decimal("0.90")
 
-        overall = (
-            mandatory_score * Decimal("0.40")
-            + optional_score * Decimal("0.20")
-            + seniority_score * Decimal("0.20")
-            + Decimal(str(min(float(result.overall_score or 0), 100))) * Decimal("0.20")
+        raw_ai = result.overall_score
+        if raw_ai is None:
+            ai_score = Decimal("0")
+        elif isinstance(raw_ai, Decimal):
+            ai_score = min(raw_ai, Decimal("100"))
+        else:
+            ai_score = min(Decimal(str(raw_ai)), Decimal("100"))
+
+        overall = min(
+            mandatory_score * w_mand
+            + optional_score * w_opt
+            + seniority_score * w_sen
+            + ai_score * w_ai,
+            Decimal("100"),
         ).quantize(Decimal("0.01"))
 
         enough_mandatory_for_strong = (
