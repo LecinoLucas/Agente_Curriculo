@@ -1,0 +1,17 @@
+{
+  "name": "resume-ai-system",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --names frontend,backend,health --prefix \"[{name}]\" --prefix-colors \"cyan.bold,magenta.bold,green.bold\" --kill-others-on-fail \"npm run frontend\" \"npm run backend\" \"npm run backend:health\"",
+    "dev:full": "./scripts/dev-full.sh",
+    "frontend": "sh -c 'VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-8000}} npm --silent --prefix frontend run dev -- --port ${FRONTEND_PORT:-5173} --strictPort'",
+    "backend:bootstrap": "cd backend && .venv/bin/python scripts/bootstrap_dev_db.py",
+    "backend:seed-admin": "cd backend && .venv/bin/python scripts/seed_dev_admin.py",
+    "backend:seed-jobs": "cd backend && .venv/bin/python scripts/seed_jobs.py",
+    "backend": "sh -c 'cd backend && .venv/bin/uvicorn src.interface.api.main:app --reload --reload-dir src --reload-dir scripts --reload-exclude \".venv/*\" --reload-exclude \"tests/*\" --port ${BACKEND_PORT:-8000} --no-access-log --log-level warning'",
+    "backend:health": "sh -c 'printf \"aguardando backend em http://127.0.0.1:%s\\n\" \"${BACKEND_PORT:-8000}\"; until response=$(curl -fsS http://127.0.0.1:${BACKEND_PORT:-8000}/health 2>/dev/null); do sleep 1; done; printf \"backend pronto | %s\\n\" \"$response\"; case \"$response\" in *\"\\\"connected\\\":true\"*) ;; *) exit 1 ;; esac'"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

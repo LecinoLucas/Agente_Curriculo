@@ -1,0 +1,15 @@
+.DS_Store
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+dist/
+backend/dist/
+frontend/dist/
+.env
+.env.local
+.env.development
+.env.production
+backend/.env
+frontend/.env
+*.pyc
+__pycache__/
