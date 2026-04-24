@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Card } from "../components/common/Card";
+import { CrudPage } from "../components/common/CrudPage";
+import { ActionMenu } from "../components/common/ActionMenu";
+import type { ActionMenuItem } from "../components/common/ActionMenu";
 import { EmptyState } from "../components/common/EmptyState";
 import { Modal } from "../components/common/Modal";
 import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
-import { SkeletonRows } from "../components/common/Skeleton";
 import { StatusPill } from "../components/common/StatusPill";
 import { useAsyncState } from "../hooks/useAsyncState";
+import { Button } from "@/components/ui/button";
 import {
   listJobs,
   createJob,
@@ -64,7 +66,7 @@ function formatWorkModel(value: string | null | undefined): string {
     hybrid: "Híbrido",
     onsite: "Presencial",
   };
-  return value ? (labels[value] ?? value) : "Não informado";
+  return value ? (labels[value] ?? value) : "—";
 }
 
 function formatSeniority(value: string | null | undefined): string {
@@ -77,23 +79,20 @@ function formatSeniority(value: string | null | undefined): string {
     principal: "Principal",
     director: "Diretoria",
   };
-  return value ? (labels[value] ?? value) : "Não informada";
+  return value ? (labels[value] ?? value) : "—";
 }
 
 function formatSalary(job: Job): string {
-  if (job.salary_min == null && job.salary_max == null) return "Faixa não informada";
+  if (job.salary_min == null && job.salary_max == null) return "—";
   if (job.salary_min != null && job.salary_max != null) {
-    return `${job.salary_currency} ${job.salary_min.toLocaleString("pt-BR")} - ${job.salary_max.toLocaleString("pt-BR")}`;
+    return `${job.salary_currency} ${job.salary_min.toLocaleString("pt-BR")} – ${job.salary_max.toLocaleString("pt-BR")}`;
   }
-  if (job.salary_min != null) {
-    return `A partir de ${job.salary_currency} ${job.salary_min.toLocaleString("pt-BR")}`;
-  }
+  if (job.salary_min != null) return `A partir de ${job.salary_currency} ${job.salary_min.toLocaleString("pt-BR")}`;
   return `Até ${job.salary_currency} ${job.salary_max?.toLocaleString("pt-BR")}`;
 }
 
-function truncateText(value: string, max = 110): string {
-  if (value.length <= max) return value;
-  return `${value.slice(0, max).trim()}…`;
+function truncate(value: string, max = 100): string {
+  return value.length <= max ? value : `${value.slice(0, max).trim()}…`;
 }
 
 function jobStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
@@ -106,13 +105,9 @@ function jobStatusTone(status: string): "success" | "warning" | "danger" | "neut
 export function VagasPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-
   const { data, error, loading, run } = useAsyncState<Paginated<Job>>();
 
-  useEffect(() => {
-    void run(() => listJobs(page, pageSize));
-  }, [run, page, pageSize]);
-
+  useEffect(() => { void run(() => listJobs(page, pageSize)); }, [run, page, pageSize]);
   useEffect(() => { setPage(1); }, [pageSize]);
 
   const [showForm, setShowForm] = useState(false);
@@ -142,7 +137,7 @@ export function VagasPage() {
     setShowForm(true);
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setFormError(null);
@@ -151,7 +146,7 @@ export function VagasPage() {
       form.salary_max !== undefined &&
       form.salary_min > form.salary_max
     ) {
-      setFormError("Salário mínimo não pode ser maior que o salário máximo.");
+      setFormError("Salário mínimo não pode ser maior que o máximo.");
       setSaving(false);
       return;
     }
@@ -175,7 +170,6 @@ export function VagasPage() {
         const created = await createJob(payload);
         toast.success(`Vaga criada: ${created.title}`);
       }
-
       setForm(EMPTY_FORM);
       setEditingJob(null);
       setShowForm(false);
@@ -188,10 +182,7 @@ export function VagasPage() {
     }
   }
 
-  async function handleTransitionStatus(
-    jobId: string,
-    action: "publish" | "pause" | "close" | "cancel"
-  ) {
+  async function handleTransition(jobId: string, action: "publish" | "pause" | "close" | "cancel") {
     setTransitioning(jobId);
     try {
       const fns = { publish: publishJob, pause: pauseJob, close: closeJob, cancel: cancelJob };
@@ -204,7 +195,7 @@ export function VagasPage() {
     }
   }
 
-  async function confirmDelete() {
+  async function handleDelete() {
     if (!confirmDeleteId) return;
     const job = (data?.data ?? []).find((j) => j.id === confirmDeleteId);
     try {
@@ -247,10 +238,7 @@ export function VagasPage() {
     setAddingSkill(true);
     setSkillError(null);
     try {
-      await skillsService.addJobSkill(selectedJob.id, {
-        skill_id: skillToAdd,
-        is_mandatory: isMandatory,
-      });
+      await skillsService.addJobSkill(selectedJob.id, { skill_id: skillToAdd, is_mandatory: isMandatory });
       setSkillToAdd("");
       setIsMandatory(false);
       await loadJobSkills(selectedJob.id);
@@ -276,59 +264,30 @@ export function VagasPage() {
   const items = data?.data ?? [];
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
-  const publishedCount = items.filter((job) => job.status === "published").length;
-  const draftCount = items.filter((job) => job.status === "draft").length;
-  const pausedCount = items.filter((job) => job.status === "paused").length;
   const linkedSkillIds = new Set(jobSkills.map((s) => s.skill_id));
   const availableSkills = allSkills.filter((s) => !linkedSkillIds.has(s.id));
 
   return (
-    <div className="page-grid">
-      <PageHeader title="Vagas" subtitle="Painel de gestão das oportunidades e critérios de ranking" />
-
-      <div className="stats-mini">
-        <div className="stat-mini">
-          <div className="stat-mini-label">Vagas na página</div>
-          <div className="stat-mini-value">{items.length}</div>
-        </div>
-        <div className="stat-mini">
-          <div className="stat-mini-label">Publicadas</div>
-          <div className="stat-mini-value">{publishedCount}</div>
-        </div>
-        <div className="stat-mini">
-          <div className="stat-mini-label">Em rascunho</div>
-          <div className="stat-mini-value">{draftCount}</div>
-        </div>
-        <div className="stat-mini">
-          <div className="stat-mini-label">Pausadas</div>
-          <div className="stat-mini-value">{pausedCount}</div>
-        </div>
-      </div>
-
-      {canManage ? (
-        <div className="page-toolbar">
-          <button className="btn" type="button" onClick={openCreateForm}>
-            + Nova vaga
-          </button>
-        </div>
-      ) : null}
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
+      <PageHeader title="Vagas" subtitle="Gestão das oportunidades e critérios de ranking" />
 
       {showForm ? (
         <Modal
           title={editingJob ? "Editar vaga" : "Criar vaga"}
           onClose={() => { setShowForm(false); setEditingJob(null); setForm(EMPTY_FORM); }}
         >
-          <form onSubmit={(e) => void handleCreate(e)} style={{ display: "grid", gap: 12 }}>
-            <label>
+          <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Título *
               <input
                 required
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                 placeholder="Ex: Engenheiro de Software Sênior"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Descrição *
               <textarea
                 required
@@ -336,23 +295,26 @@ export function VagasPage() {
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="Descreva as responsabilidades da vaga…"
+                className="min-h-24 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Requisitos
               <textarea
                 rows={2}
                 value={form.requirements}
                 onChange={(e) => setForm((f) => ({ ...f, requirements: e.target.value }))}
                 placeholder="Requisitos técnicos e comportamentais…"
+                className="min-h-20 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <div className="form-grid-3">
-              <label>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
                 Status
                 <select
                   value={form.status}
                   onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   <option value="draft">Rascunho</option>
                   <option value="published">Publicada</option>
@@ -361,11 +323,12 @@ export function VagasPage() {
                   <option value="cancelled">Cancelada</option>
                 </select>
               </label>
-              <label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
                 Senioridade
                 <select
                   value={form.seniority_level}
                   onChange={(e) => setForm((f) => ({ ...f, seniority_level: e.target.value }))}
+                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   <option value="">—</option>
                   <option value="intern">Estagiário</option>
@@ -377,11 +340,12 @@ export function VagasPage() {
                   <option value="director">Diretor</option>
                 </select>
               </label>
-              <label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
                 Modelo de trabalho
                 <select
                   value={form.work_model}
                   onChange={(e) => setForm((f) => ({ ...f, work_model: e.target.value }))}
+                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   <option value="">—</option>
                   <option value="remote">Remoto</option>
@@ -390,61 +354,56 @@ export function VagasPage() {
                 </select>
               </label>
             </div>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Localização
               <input
                 value={form.location}
                 onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                 placeholder="São Paulo - SP"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <div className="form-grid-2">
-              <label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
                 Salário mínimo (BRL)
                 <input
                   type="number"
                   min={0}
                   value={form.salary_min ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, salary_min: e.target.value ? Number(e.target.value) : undefined }))
-                  }
+                  onChange={(e) => setForm((f) => ({ ...f, salary_min: e.target.value ? Number(e.target.value) : undefined }))}
                   placeholder="10000"
+                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
-              <label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
                 Salário máximo (BRL)
                 <input
                   type="number"
                   min={0}
                   value={form.salary_max ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, salary_max: e.target.value ? Number(e.target.value) : undefined }))
-                  }
+                  onChange={(e) => setForm((f) => ({ ...f, salary_max: e.target.value ? Number(e.target.value) : undefined }))}
                   placeholder="15000"
+                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
             </div>
             {formError ? (
-              <div className="alert alert-error">
-                <span className="alert-icon">✕</span>
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span className="font-bold">✕</span>
                 <span>{formError}</span>
               </div>
             ) : null}
-            <div className="form-actions">
-              <button
-                className="btn"
-                type="submit"
-                disabled={saving || !form.title || !form.description}
-              >
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button type="submit" disabled={saving || !form.title || !form.description}>
                 {saving ? "Salvando…" : editingJob ? "Salvar alterações" : "Criar vaga"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btn-secondary"
+                variant="outline"
                 onClick={() => { setShowForm(false); setEditingJob(null); setForm(EMPTY_FORM); }}
               >
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         </Modal>
@@ -452,180 +411,133 @@ export function VagasPage() {
 
       {confirmDeleteId ? (
         <Modal title="Confirmar exclusão" onClose={() => setConfirmDeleteId(null)}>
-          <p>Tem certeza que deseja excluir esta vaga? Esta ação é irreversível.</p>
-          <div className="form-actions" style={{ marginTop: 12 }}>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => setConfirmDeleteId(null)}
-            >
-              Cancelar
-            </button>
-            <button
-              className="btn btn-danger"
-              type="button"
-              onClick={() => void confirmDelete()}
-            >
-              Excluir vaga
-            </button>
+          <p className="text-sm text-gray-600">Tem certeza que deseja excluir esta vaga? Esta ação é irreversível.</p>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setConfirmDeleteId(null)}>Cancelar</Button>
+            <Button type="button" variant="destructive" onClick={() => void handleDelete()}>Excluir vaga</Button>
           </div>
         </Modal>
       ) : null}
 
-      <Card
-        title="Vagas cadastradas"
-        description="Selecione uma vaga para ver contexto completo e gerenciar as skills vinculadas"
-      >
-        {loading ? <SkeletonRows rows={6} /> : null}
-        {error ? (
-          <div className="page-error">
-            <span className="page-error-icon">✕</span>
-            <span>{error}</span>
-          </div>
-        ) : null}
-        {!loading && !error && total === 0 ? (
-          <EmptyState
-            icon="💼"
-            title="Nenhuma vaga cadastrada"
-            description="Crie a primeira vaga para começar o processo de recrutamento."
-            action={canManage ? { label: "+ Criar vaga", onClick: openCreateForm } : undefined}
-          />
-        ) : null}
+      <CrudPage<Job>
+        onNew={canManage ? openCreateForm : undefined}
+        newLabel="Nova vaga"
+        loading={loading}
+        error={error}
+        isEmpty={!loading && !error && total === 0}
+        emptyIcon="💼"
+        emptyTitle="Nenhuma vaga cadastrada"
+        emptyDescription="Crie a primeira vaga para começar o processo de recrutamento."
+        emptyAction={canManage ? { label: "+ Criar vaga", onClick: openCreateForm } : undefined}
+        columns={["Título", "Status", "Perfil", "Localização / Faixa", ...(canManage ? ["Ações"] : [])]}
+        items={items}
+        renderRow={(job) => (
+          (() => {
+            const actionItems: ActionMenuItem[] = [
+              {
+                label: "Editar",
+                onClick: () => {
+                  setEditingJob(job);
+                  setForm({
+                    title: job.title,
+                    description: job.description,
+                    requirements: job.requirements ?? "",
+                    status: job.status,
+                    seniority_level: job.seniority_level ?? "",
+                    work_model: job.work_model ?? "",
+                    location: job.location ?? "",
+                    salary_min: job.salary_min ?? undefined,
+                    salary_max: job.salary_max ?? undefined,
+                  });
+                  setShowForm(true);
+                  setFormError(null);
+                },
+              },
+              job.status === "draft"
+                ? {
+                    label: "Publicar",
+                    onClick: () => void handleTransition(job.id, "publish"),
+                  }
+                : null,
+              job.status === "published"
+                ? {
+                    label: "Pausar",
+                    onClick: () => void handleTransition(job.id, "pause"),
+                  }
+                : null,
+              job.status === "published"
+                ? {
+                    label: "Fechar",
+                    onClick: () => void handleTransition(job.id, "close"),
+                  }
+                : null,
+              job.status === "paused"
+                ? {
+                    label: "Republicar",
+                    onClick: () => void handleTransition(job.id, "publish"),
+                  }
+                : null,
+              job.status === "paused"
+                ? {
+                    label: "Fechar",
+                    onClick: () => void handleTransition(job.id, "close"),
+                  }
+                : null,
+              {
+                label: "Excluir",
+                tone: "danger" as const,
+                onClick: () => setConfirmDeleteId(job.id),
+              },
+            ].filter((item): item is ActionMenuItem => Boolean(item));
 
-        {items.length > 0 ? (
-          <>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Título</th>
-                  <th>Status</th>
-                  <th>Perfil</th>
-                  <th>Localização e faixa</th>
-                  {canManage ? <th>Ações</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((job) => (
-                  <tr
-                    key={job.id}
-                    onClick={() => handleSelectJob(job)}
-                    className={job.id === selectedJob?.id ? "table-row-selected" : "table-row-clickable"}
-                  >
-                    <td>
-                      <div>{job.title}</div>
-                      <div className="text-muted" style={{ fontSize: 12 }}>
-                        {truncateText(job.description)}
-                      </div>
-                    </td>
-                    <td>
-                      <StatusPill label={formatJobStatus(job.status)} tone={jobStatusTone(job.status)} />
-                    </td>
-                    <td className="text-muted">
-                      {formatSeniority(job.seniority_level)} • {formatWorkModel(job.work_model)}
-                    </td>
-                    <td className="text-muted">
-                      <div>{job.location ?? "Local não informado"}</div>
-                      <div style={{ fontSize: 12 }}>{formatSalary(job)}</div>
-                    </td>
-                    {canManage ? (
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <div className="actions-cell">
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            onClick={() => navigate(`/vagas/${job.id}`)}
-                          >
-                            Detalhes
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            type="button"
-                            onClick={() => {
-                              setEditingJob(job);
-                              setForm({
-                                title: job.title,
-                                description: job.description,
-                                requirements: job.requirements ?? "",
-                                status: job.status,
-                                seniority_level: job.seniority_level ?? "",
-                                work_model: job.work_model ?? "",
-                                location: job.location ?? "",
-                                salary_min: job.salary_min ?? undefined,
-                                salary_max: job.salary_max ?? undefined,
-                              });
-                              setShowForm(true);
-                              setFormError(null);
-                            }}
-                          >
-                            Editar
-                          </button>
-                          {job.status === "draft" ? (
-                            <button
-                              className="btn btn-sm"
-                              type="button"
-                              disabled={transitioning === job.id}
-                              onClick={() => void handleTransitionStatus(job.id, "publish")}
-                            >
-                              Publicar
-                            </button>
-                          ) : null}
-                          {job.status === "published" ? (
-                            <>
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                type="button"
-                                disabled={transitioning === job.id}
-                                onClick={() => void handleTransitionStatus(job.id, "pause")}
-                              >
-                                Pausar
-                              </button>
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                type="button"
-                                disabled={transitioning === job.id}
-                                onClick={() => void handleTransitionStatus(job.id, "close")}
-                              >
-                                Fechar
-                              </button>
-                            </>
-                          ) : null}
-                          {job.status === "paused" ? (
-                            <>
-                              <button
-                                className="btn btn-sm"
-                                type="button"
-                                disabled={transitioning === job.id}
-                                onClick={() => void handleTransitionStatus(job.id, "publish")}
-                              >
-                                Republicar
-                              </button>
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                type="button"
-                                disabled={transitioning === job.id}
-                                onClick={() => void handleTransitionStatus(job.id, "close")}
-                              >
-                                Fechar
-                              </button>
-                            </>
-                          ) : null}
-                          <button
-                            className="btn btn-danger btn-sm"
-                            type="button"
-                            onClick={() => setConfirmDeleteId(job.id)}
-                          >
-                            Excluir
-                          </button>
-                        </div>
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="table-footer">
-              <span className="pagination-summary">Mostrando {start}–{end} de {total}</span>
+              return (
+              <tr
+                key={job.id}
+                onClick={() => handleSelectJob(job)}
+                className={[
+                  "border-b border-gray-200 transition-colors",
+                  job.id === selectedJob?.id ? "bg-blue-50/70" : "even:bg-gray-50/50 hover:bg-gray-100",
+                ].join(" ")}
+              >
+                <td className="min-w-[280px] px-4 py-3 align-top">
+                  <div className="space-y-1">
+                    <div className="font-semibold text-gray-900">{job.title}</div>
+                    <div className="text-sm leading-5 text-gray-600">{truncate(job.description, 140)}</div>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 align-top">
+                  <StatusPill label={formatJobStatus(job.status)} tone={jobStatusTone(job.status)} />
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 align-top">
+                  {formatSeniority(job.seniority_level)} · {formatWorkModel(job.work_model)}
+                </td>
+                <td className="min-w-[220px] px-4 py-3 align-top">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-gray-800">{job.location ?? "—"}</div>
+                    <div className="text-sm text-gray-600">{formatSalary(job)}</div>
+                  </div>
+                </td>
+                {canManage ? (
+                  <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" type="button" onClick={() => navigate(`/vagas/${job.id}`)}>
+                        Detalhes
+                      </Button>
+                      <ActionMenu
+                        buttonLabel={`Ações de ${job.title}`}
+                        items={actionItems}
+                      />
+                    </div>
+                  </td>
+                ) : null}
+              </tr>
+            );
+          })()
+        )}
+        footer={
+          total > 0 ? (
+            <>
+              <span className="text-sm text-muted-foreground">Mostrando {start}–{end} de {total}</span>
               <Pagination
                 page={page}
                 totalPages={totalPages}
@@ -634,96 +546,85 @@ export function VagasPage() {
                 onPageSizeChange={(s) => setPageSize(s)}
                 total={total}
               />
+            </>
+          ) : undefined
+        }
+      >
+        {selectedJob && canManage ? (
+          <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800 shadow-sm">
+            <div className="border-b border-slate-700 px-6 py-4">
+              <h3 className="text-lg font-semibold text-white">{selectedJob.title}</h3>
             </div>
-          </>
-        ) : null}
-      </Card>
 
-      {selectedJob && canManage ? (
-        <Card
-          title={selectedJob.title}
-          description="Resumo da vaga e gestão das skills obrigatórias e opcionais"
-        >
-          <div className="info-grid" style={{ marginBottom: 16 }}>
-            <div className="info-row">
-              <span className="info-label">Status</span>
-              <span className="info-value">
+            <div className="grid gap-4 px-6 py-5 md:grid-cols-[160px_1fr] md:gap-x-6">
+              <span className="text-sm font-medium text-slate-400">Status</span>
+              <span>
                 <StatusPill label={formatJobStatus(selectedJob.status)} tone={jobStatusTone(selectedJob.status)} />
               </span>
+              <span className="text-sm font-medium text-slate-400">Perfil</span>
+              <span className="text-sm text-slate-300">{formatSeniority(selectedJob.seniority_level)} · {formatWorkModel(selectedJob.work_model)}</span>
+              <span className="text-sm font-medium text-slate-400">Localização</span>
+              <span className="text-sm text-slate-300">{selectedJob.location ?? "—"}</span>
+              <span className="text-sm font-medium text-slate-400">Faixa salarial</span>
+              <span className="text-sm text-slate-300">{formatSalary(selectedJob)}</span>
+              <span className="text-sm font-medium text-slate-400">Descrição</span>
+              <span className="text-sm leading-6 text-slate-300">{selectedJob.description}</span>
+              {selectedJob.requirements ? (
+                <>
+                  <span className="text-sm font-medium text-slate-400">Requisitos</span>
+                  <span className="text-sm leading-6 text-slate-300">{selectedJob.requirements}</span>
+                </>
+              ) : null}
             </div>
-            <div className="info-row">
-              <span className="info-label">Perfil esperado</span>
-              <span className="info-value">
-                {formatSeniority(selectedJob.seniority_level)} • {formatWorkModel(selectedJob.work_model)}
-              </span>
+
+            <div className="border-t border-slate-700 px-6 py-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Skills vinculadas</h4>
             </div>
-            <div className="info-row">
-              <span className="info-label">Localização</span>
-              <span className="info-value">{selectedJob.location ?? "Não informada"}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Faixa salarial</span>
-              <span className="info-value">{formatSalary(selectedJob)}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Descrição</span>
-              <span className="info-value">{selectedJob.description}</span>
-            </div>
-            {selectedJob.requirements ? (
-              <div className="info-row">
-                <span className="info-label">Requisitos</span>
-                <span className="info-value">{selectedJob.requirements}</span>
+            {jobSkills.length === 0 ? (
+              <div className="px-6 pb-6">
+                <EmptyState icon="🔧" title="Nenhuma skill vinculada" description="Adicione skills para refinar o ranking de candidatos." />
               </div>
-            ) : null}
-          </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-700">
+                  <thead className="bg-slate-700/30">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Skill</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Obrigatória</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Nível mín.</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Anos mín.</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Peso</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700 bg-slate-800">
+                    {jobSkills.map((js) => (
+                      <tr key={js.id} className="hover:bg-slate-700/50">
+                        <td className="px-4 py-3 text-sm font-medium text-white">{js.skill_name}</td>
+                        <td className="px-4 py-3">
+                          <StatusPill label={js.is_mandatory ? "Obrigatória" : "Opcional"} tone={js.is_mandatory ? "warning" : "neutral"} />
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{js.minimum_level ?? "—"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{js.minimum_years ?? "—"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{js.weight}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Button variant="destructive" size="sm" type="button" onClick={() => void handleRemoveSkill(js.skill_id)}>
+                            Remover
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-          <h4 className="section-title">Skills vinculadas</h4>
-          {jobSkills.length === 0 ? (
-            <EmptyState icon="🔧" title="Nenhuma skill vinculada" description="Adicione skills para refinar o ranking de candidatos." />
-          ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Skill</th>
-                  <th>Obrigatória</th>
-                  <th>Nível mínimo</th>
-                  <th>Anos mín.</th>
-                  <th>Peso</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobSkills.map((js) => (
-                  <tr key={js.id}>
-                    <td>{js.skill_name}</td>
-                    <td>
-                      <StatusPill
-                        label={js.is_mandatory ? "Obrigatória" : "Opcional"}
-                        tone={js.is_mandatory ? "warning" : "neutral"}
-                      />
-                    </td>
-                    <td className="text-muted">{js.minimum_level ?? "—"}</td>
-                    <td className="text-muted">{js.minimum_years ?? "—"}</td>
-                    <td className="text-muted">{js.weight}</td>
-                    <td>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        type="button"
-                        onClick={() => void handleRemoveSkill(js.skill_id)}
-                      >
-                        Remover
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          <div className="filters-row" style={{ marginTop: 16 }}>
-            <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>
-              <label>Adicionar skill</label>
-              <select value={skillToAdd} onChange={(e) => setSkillToAdd(e.target.value)}>
+            <div className="flex flex-col gap-3 border-t border-slate-700 px-6 py-5 lg:flex-row lg:items-center">
+              <select
+                value={skillToAdd}
+                onChange={(e) => setSkillToAdd(e.target.value)}
+                className="min-h-10 w-full rounded-md border border-slate-600 bg-slate-700 px-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 lg:min-w-[180px] lg:flex-1"
+              >
                 <option value="">Selecione uma skill…</option>
                 {availableSkills.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -731,34 +632,29 @@ export function VagasPage() {
                   </option>
                 ))}
               </select>
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-500 text-blue-500 focus:ring-blue-500"
+                  checked={isMandatory}
+                  onChange={(e) => setIsMandatory(e.target.checked)}
+                />
+                Obrigatória
+              </label>
+              <Button type="button" disabled={!skillToAdd || addingSkill} onClick={() => void handleAddSkill()}>
+                {addingSkill ? "Adicionando…" : "Vincular"}
+              </Button>
             </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", paddingBottom: 10 }}>
-              <input
-                type="checkbox"
-                style={{ width: "auto", margin: 0 }}
-                checked={isMandatory}
-                onChange={(e) => setIsMandatory(e.target.checked)}
-              />
-              Obrigatória
-            </label>
-            <button
-              className="btn"
-              type="button"
-              disabled={!skillToAdd || addingSkill}
-              onClick={() => void handleAddSkill()}
-            >
-              {addingSkill ? "Adicionando…" : "Vincular"}
-            </button>
-          </div>
 
-          {skillError ? (
-            <div className="page-error" style={{ marginTop: 8 }}>
-              <span className="page-error-icon">✕</span>
-              <span>{skillError}</span>
-            </div>
-          ) : null}
-        </Card>
-      ) : null}
+            {skillError ? (
+              <div className="mx-6 mb-6 flex items-center gap-2 rounded-lg border border-red-700/50 bg-red-900/30 px-4 py-3 text-sm text-red-300">
+                <span className="font-bold">✕</span>
+                <span>{skillError}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </CrudPage>
     </div>
   );
 }
