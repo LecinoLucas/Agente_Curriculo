@@ -4,6 +4,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
+# Penalidade de sobre-qualificação em senioridade só é aplicada quando
+# a diferença de níveis é >= este limiar (configurável).
+_SENIORITY_PENALTY_THRESHOLD = 2
+
 from src.domain.entities.user import User
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
@@ -297,7 +301,7 @@ class AnalysisService:
         distance = abs(candidate_sen - job_sen)
         sen_scores = {0: Decimal("100"), 1: Decimal("75"), 2: Decimal("45"), 3: Decimal("20")}
         seniority_score = sen_scores.get(distance, Decimal("0"))
-        if candidate_sen > job_sen:
+        if candidate_sen > job_sen and distance >= _SENIORITY_PENALTY_THRESHOLD:
             seniority_score = seniority_score * Decimal("0.90")
 
         raw_ai = result.overall_score
@@ -317,10 +321,12 @@ class AnalysisService:
         ).quantize(Decimal("0.01"))
 
         enough_mandatory_for_strong = (
-            mandatory_matched / total_mandatory >= 0.90 if total_mandatory else True
+            Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.90")
+            if total_mandatory else True
         )
         enough_mandatory_for_good = (
-            mandatory_matched / total_mandatory >= 0.75 if total_mandatory else True
+            Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.75")
+            if total_mandatory else True
         )
 
         if overall >= 82 and enough_mandatory_for_strong:

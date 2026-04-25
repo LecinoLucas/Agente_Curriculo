@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+
 type EmptyStateProps = {
   icon?: string;
   title: string;
@@ -8,18 +10,18 @@ type EmptyStateProps = {
 
 export function EmptyState({ icon = "◯", title, description, note, action }: EmptyStateProps) {
   return (
-    <div className="empty-state">
-      <span className="empty-state-icon-wrap">
-        <span className="empty-state-icon">{icon}</span>
+    <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-2xl">
+        {icon}
       </span>
-      <strong>{title}</strong>
-      {description && <p>{description}</p>}
-      {note ? <span className="empty-state-note">{note}</span> : null}
-      {action && (
-        <button className="btn" type="button" onClick={action.onClick}>
+      <strong className="text-base font-semibold text-foreground">{title}</strong>
+      {description ? <p className="text-sm text-muted-foreground max-w-sm">{description}</p> : null}
+      {note ? <span className="text-xs text-muted-foreground">{note}</span> : null}
+      {action ? (
+        <Button variant="outline" size="sm" onClick={action.onClick} className="mt-1">
           {action.label}
-        </button>
-      )}
+        </Button>
+      ) : null}
     </div>
   );
 }

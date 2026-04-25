@@ -1,0 +1,61 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 38% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 224 84% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 35% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 35% 96%;
+    --muted-foreground: 215 18% 46%;
+    --accent: 226 100% 95%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 350 89% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 28% 89%;
+    --input: 214 28% 89%;
+    --ring: 224 84% 56%;
+    --radius: 0.625rem;
+    --sidebar-start: 224 84% 17%;
+    --sidebar-end: 232 55% 22%;
+    --sidebar-accent: 224 84% 56%;
+    --hero-start: 224 84% 56%;
+    --hero-end: 265 83% 63%;
+  }
+
+  * {
+    box-sizing: border-box;
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 28%),
+      radial-gradient(circle at top right, rgba(168, 85, 247, 0.10), transparent 24%),
+      linear-gradient(180deg, hsl(var(--background)) 0%, #eef4ff 100%);
+    color: hsl(var(--foreground));
+    font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Sora", "Plus Jakarta Sans", sans-serif;
+    letter-spacing: -0.03em;
+  }
+
+  ::selection {
+    background: rgba(37, 99, 235, 0.18);
+    color: hsl(var(--foreground));
+  }
+}

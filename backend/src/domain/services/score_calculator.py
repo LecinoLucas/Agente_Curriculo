@@ -17,53 +17,59 @@ Leadership       10%    Gestão, mentoria, liderança de projetos
 """
 
 from dataclasses import dataclass
-from typing import Any
+from decimal import Decimal
 
 from src.domain.value_objects.score import Score, ScoreBreakdown
 
 # ── Constantes de regras ─────────────────────────────────────────────────────
 
-# Pesos das dimensões no overall score (soma = 1.0)
-_DIMENSION_WEIGHTS = {
-    "technical": 0.35,
-    "experience": 0.30,
-    "education": 0.15,
-    "communication": 0.10,
-    "leadership": 0.10,
+_DIMENSION_WEIGHTS: dict[str, Decimal] = {
+    "technical": Decimal("0.35"),
+    "experience": Decimal("0.30"),
+    "education": Decimal("0.15"),
+    "communication": Decimal("0.10"),
+    "leadership": Decimal("0.10"),
 }
 
-# Mapeamento de nível de educação para pontuação base
-_EDUCATION_SCORES: dict[str, float] = {
-    "none": 10.0,
-    "high_school": 25.0,
-    "technical": 40.0,
-    "bachelor": 62.0,
-    "postgraduate": 72.0,
-    "master": 83.0,
-    "phd": 95.0,
+_PROFICIENCY_SCORES: dict[str, Decimal] = {
+    "basic": Decimal("25"),
+    "intermediate": Decimal("50"),
+    "advanced": Decimal("75"),
+    "expert": Decimal("100"),
+}
+_DEFAULT_PROFICIENCY = Decimal("25")
+
+_EDUCATION_SCORES: dict[str, Decimal] = {
+    "none": Decimal("10"),
+    "high_school": Decimal("25"),
+    "technical": Decimal("40"),
+    "bachelor": Decimal("62"),
+    "postgraduate": Decimal("72"),
+    "master": Decimal("83"),
+    "phd": Decimal("95"),
 }
 
-# Bônus de relevância da área de formação (por tipo de vaga detectado)
-_EDUCATION_RELEVANCE_BONUS = {"high": 10.0, "medium": 5.0, "low": 0.0}
+_EDUCATION_RELEVANCE_BONUS: dict[str, Decimal] = {
+    "high": Decimal("10"),
+    "medium": Decimal("5"),
+    "low": Decimal("0"),
+}
 
-# Bônus por certificação relevante (máx: 10 pontos)
-_CERTIFICATION_BONUS_PER_ITEM = 2.5
-_CERTIFICATION_BONUS_MAX = 10.0
+_CERTIFICATION_BONUS_PER_ITEM = Decimal("2.5")
+_CERTIFICATION_BONUS_MAX = Decimal("10")
 
-# Penalidade por gap de emprego > 6 meses
-_GAP_PENALTY_PER_OCCURRENCE = 5.0
+_GAP_PENALTY_PER_OCCURRENCE = Decimal("5")
 
-# Score base por faixa de experiência total (em anos)
-_EXPERIENCE_BAND_SCORES: list[tuple[float, float]] = [
-    (0.0, 5.0),    # < 1 ano
-    (1.0, 25.0),   # 1 ano
-    (2.0, 40.0),   # 2 anos
-    (3.0, 55.0),   # 3 anos
-    (5.0, 68.0),   # 5 anos
-    (7.0, 78.0),   # 7 anos
-    (10.0, 88.0),  # 10 anos
-    (12.0, 95.0),  # 12+ anos → cap em 95 (100 reservado para > 15 anos)
-    (15.0, 100.0),
+_EXPERIENCE_BAND_SCORES: list[tuple[Decimal, Decimal]] = [
+    (Decimal("0"), Decimal("5")),
+    (Decimal("1"), Decimal("25")),
+    (Decimal("2"), Decimal("40")),
+    (Decimal("3"), Decimal("55")),
+    (Decimal("5"), Decimal("68")),
+    (Decimal("7"), Decimal("78")),
+    (Decimal("10"), Decimal("88")),
+    (Decimal("12"), Decimal("95")),
+    (Decimal("15"), Decimal("100")),
 ]
 
 
@@ -99,6 +105,7 @@ class ScoreCalculator:
     """
     Calcula scores de análise a partir de dados estruturados extraídos da IA.
     Zero dependências externas — puro domínio, 100% testável.
+    Toda aritmética interna usa Decimal.
     """
 
     def calculate(self, data: ExtractedResumeData) -> ScoreBreakdown:
@@ -109,15 +116,15 @@ class ScoreCalculator:
         leadership = self._calculate_leadership(data)
 
         overall = Score.of(
-            float(technical.value) * _DIMENSION_WEIGHTS["technical"]
-            + float(experience.value) * _DIMENSION_WEIGHTS["experience"]
-            + float(education.value) * _DIMENSION_WEIGHTS["education"]
-            + float(communication.value) * _DIMENSION_WEIGHTS["communication"]
-            + float(leadership.value) * _DIMENSION_WEIGHTS["leadership"]
+            technical.value * _DIMENSION_WEIGHTS["technical"]
+            + experience.value * _DIMENSION_WEIGHTS["experience"]
+            + education.value * _DIMENSION_WEIGHTS["education"]
+            + communication.value * _DIMENSION_WEIGHTS["communication"]
+            + leadership.value * _DIMENSION_WEIGHTS["leadership"]
         )
 
         details = {
-            "weights": _DIMENSION_WEIGHTS,
+            "weights": {k: float(v) for k, v in _DIMENSION_WEIGHTS.items()},
             "technical_detail": self._technical_detail(data),
             "experience_detail": self._experience_detail(data),
             "education_detail": self._education_detail(data),
@@ -141,25 +148,24 @@ class ScoreCalculator:
     def _calculate_technical(self, data: ExtractedResumeData) -> Score:
         skills = data.skills
         if not skills:
-            return Score.of(5.0)
+            return Score.of(5)
 
-        # Profundidade: média ponderada de proficiency
-        proficiency_map = {"basic": 25, "intermediate": 50, "advanced": 75, "expert": 100}
         total_proficiency = sum(
-            proficiency_map.get(s.get("proficiency_level", "basic"), 25) for s in skills
+            _PROFICIENCY_SCORES.get(s.get("proficiency_level", "basic"), _DEFAULT_PROFICIENCY)
+            for s in skills
         )
         depth_score = total_proficiency / len(skills)
 
-        # Amplitude: cobertura de categorias (cada categoria = 10 pontos, máx 100)
         num_categories = len(set(data.skill_categories))
-        breadth_score = min(num_categories * 12.5, 100.0)
+        breadth_score = min(Decimal(num_categories) * Decimal("12.5"), Decimal("100"))
 
-        # Skills primárias (expert ou marcadas como primary)
         expert_count = sum(1 for s in skills if s.get("proficiency_level") == "expert")
-        primary_score = min(expert_count * 20.0, 100.0)
+        primary_score = min(Decimal(expert_count) * Decimal("20"), Decimal("100"))
 
         return Score.of(
-            depth_score * 0.50 + breadth_score * 0.30 + primary_score * 0.20
+            depth_score * Decimal("0.50")
+            + breadth_score * Decimal("0.30")
+            + primary_score * Decimal("0.20")
         )
 
     def _technical_detail(self, data: ExtractedResumeData) -> dict:
@@ -175,25 +181,22 @@ class ScoreCalculator:
     # Fórmula: score_base_por_anos + bônus_liderança - penalidade_gaps
 
     def _calculate_experience(self, data: ExtractedResumeData) -> Score:
-        years = data.total_experience_months / 12.0
+        years = Decimal(data.total_experience_months) / Decimal("12")
         base = self._experience_base_score(years)
 
-        # Bônus por experiência em liderança ou gestão
-        leadership_bonus = 0.0
+        leadership_bonus = Decimal("0")
         if any(e.get("is_leadership") for e in data.experiences):
-            leadership_bonus = 8.0
+            leadership_bonus = Decimal("8")
 
-        # Penalidade por gaps de emprego significativos (> 6 meses)
         significant_gaps = [
             g for g in data.employment_gaps
             if g.get("duration_months", 0) > 6
         ]
         gap_penalty = len(significant_gaps) * _GAP_PENALTY_PER_OCCURRENCE
 
-        raw = base + leadership_bonus - gap_penalty
-        return Score.of(raw)
+        return Score.of(base + leadership_bonus - gap_penalty)
 
-    def _experience_base_score(self, years: float) -> float:
+    def _experience_base_score(self, years: Decimal) -> Decimal:
         base = _EXPERIENCE_BAND_SCORES[0][1]
         for min_years, score in _EXPERIENCE_BAND_SCORES:
             if years >= min_years:
@@ -216,10 +219,10 @@ class ScoreCalculator:
     # Fórmula: score_base_nivel + bônus_relevância + bônus_certificações
 
     def _calculate_education(self, data: ExtractedResumeData) -> Score:
-        base = _EDUCATION_SCORES.get(data.highest_education_level, 10.0)
-        relevance_bonus = _EDUCATION_RELEVANCE_BONUS.get(data.education_field_relevance, 0.0)
+        base = _EDUCATION_SCORES.get(data.highest_education_level, Decimal("10"))
+        relevance_bonus = _EDUCATION_RELEVANCE_BONUS.get(data.education_field_relevance, Decimal("0"))
         cert_bonus = min(
-            len(data.certifications) * _CERTIFICATION_BONUS_PER_ITEM,
+            Decimal(len(data.certifications)) * _CERTIFICATION_BONUS_PER_ITEM,
             _CERTIFICATION_BONUS_MAX,
         )
         return Score.of(base + relevance_bonus + cert_bonus)
@@ -229,7 +232,7 @@ class ScoreCalculator:
             "highest_level": data.highest_education_level,
             "field_relevance": data.education_field_relevance,
             "certifications_count": len(data.certifications),
-            "base_score": _EDUCATION_SCORES.get(data.highest_education_level, 10.0),
+            "base_score": float(_EDUCATION_SCORES.get(data.highest_education_level, Decimal("10"))),
         }
 
     # ── Communication (10%) ──────────────────────────────────────────────────
@@ -239,18 +242,18 @@ class ScoreCalculator:
     def _calculate_communication(self, data: ExtractedResumeData) -> Score:
         q = data.communication_quality
         if not q:
-            return Score.of(50.0)  # default neutro quando dado ausente
+            return Score.of(50)
 
-        structure = float(q.get("structure", 50))
-        clarity = float(q.get("clarity", 50))
-        professionalism = float(q.get("professionalism", 50))
-        completeness = float(q.get("completeness", 50))
+        structure = Decimal(str(q.get("structure", 50)))
+        clarity = Decimal(str(q.get("clarity", 50)))
+        professionalism = Decimal(str(q.get("professionalism", 50)))
+        completeness = Decimal(str(q.get("completeness", 50)))
 
         return Score.of(
-            structure * 0.30
-            + clarity * 0.30
-            + professionalism * 0.20
-            + completeness * 0.20
+            structure * Decimal("0.30")
+            + clarity * Decimal("0.30")
+            + professionalism * Decimal("0.20")
+            + completeness * Decimal("0.20")
         )
 
     def _communication_detail(self, data: ExtractedResumeData) -> dict:
@@ -264,17 +267,17 @@ class ScoreCalculator:
     #   has_mentoring      → 20 pontos  (mentoria / desenvolvimento de equipe)
     #   has_cross_team     → 10 pontos  (colaboração entre times/áreas)
 
-    _LEADERSHIP_WEIGHTS = {
-        "has_management": 40.0,
-        "has_project_lead": 30.0,
-        "has_mentoring": 20.0,
-        "has_cross_team": 10.0,
+    _LEADERSHIP_WEIGHTS: dict[str, Decimal] = {
+        "has_management": Decimal("40"),
+        "has_project_lead": Decimal("30"),
+        "has_mentoring": Decimal("20"),
+        "has_cross_team": Decimal("10"),
     }
 
     def _calculate_leadership(self, data: ExtractedResumeData) -> Score:
         indicators = data.leadership_indicators
         if not indicators:
-            return Score.of(0.0)
+            return Score.of(0)
 
         total = sum(
             weight

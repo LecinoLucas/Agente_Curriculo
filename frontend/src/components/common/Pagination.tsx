@@ -1,4 +1,7 @@
 import React from "react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 type PaginationProps = {
   page: number;
@@ -21,12 +24,16 @@ export default function Pagination({
 }: PaginationProps) {
   if (totalPages <= 1) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="pagination-summary">Mostrando {total ?? 0} item(s)</div>
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <div>Mostrando {total ?? 0} item(s)</div>
         {onPageSizeChange ? (
-          <label>
+          <label className="flex items-center gap-2">
             Por página
-            <select value={pageSize} onChange={(e) => onPageSizeChange(Number(e.target.value))} style={{ marginLeft: 8 }}>
+            <select
+              className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            >
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -47,12 +54,12 @@ export default function Pagination({
   const pageButtons = [] as React.ReactNode[];
   if (start > 1) {
     pageButtons.push(
-      <button key="page-1" className="btn" type="button" onClick={() => onPageChange(1)}>
+      <Button key="page-1" variant="outline" size="sm" type="button" onClick={() => onPageChange(1)}>
         1
-      </button>,
+      </Button>,
     );
     pageButtons.push(
-      <span key="left-ellipsis" style={{ padding: "0 6px" }}>
+      <span key="left-ellipsis" className="px-2 text-gray-400">
         ...
       </span>,
     );
@@ -60,56 +67,60 @@ export default function Pagination({
 
   for (let p = start; p <= end; p++) {
     pageButtons.push(
-      <button
+      <Button
         key={p}
-        className="btn"
+        variant={p === page ? "default" : "outline"}
+        size="sm"
         type="button"
         onClick={() => onPageChange(p)}
         disabled={p === page}
-        style={{ fontWeight: p === page ? 700 : 400 }}
       >
         {p}
-      </button>,
+      </Button>,
     );
   }
 
   if (end < totalPages) {
     pageButtons.push(
-      <span key="right-ellipsis" style={{ padding: "0 6px" }}>
+      <span key="right-ellipsis" className="px-2 text-gray-400">
         ...
       </span>,
     );
     pageButtons.push(
-      <button key={`page-${totalPages}`} className="btn" type="button" onClick={() => onPageChange(totalPages)}>
+      <Button key={`page-${totalPages}`} variant="outline" size="sm" type="button" onClick={() => onPageChange(totalPages)}>
         {totalPages}
-      </button>,
+      </Button>,
     );
   }
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button className="btn" type="button" onClick={() => onPageChange(1)} disabled={page <= 1}>
-          « Primeiro
-        </button>
-        <button className="btn" type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}>
-          Anterior
-        </button>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", margin: "0 8px" }}>{pageButtons}</div>
-        <button className="btn" type="button" onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages}>
-          Próxima
-        </button>
-        <button className="btn" type="button" onClick={() => onPageChange(totalPages)} disabled={page >= totalPages} style={{ marginLeft: 8 }}>
-          Último »
-        </button>
+    <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" type="button" onClick={() => onPageChange(1)} disabled={page <= 1}>
+          <ChevronsLeft className="mr-1 h-4 w-4" /> Primeiro
+        </Button>
+        <Button variant="outline" size="sm" type="button" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}>
+          <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+        </Button>
+        <div className="flex items-center gap-1">{pageButtons}</div>
+        <Button variant="outline" size="sm" type="button" onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages}>
+          Próxima <ChevronRight className="ml-1 h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="sm" type="button" onClick={() => onPageChange(totalPages)} disabled={page >= totalPages}>
+          Último <ChevronsRight className="ml-1 h-4 w-4" />
+        </Button>
       </div>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div className="pagination-summary">Página {page} de {totalPages}</div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="text-sm text-muted-foreground">Página {page} de {totalPages}</div>
         {onPageSizeChange ? (
-          <label>
+          <label className="flex items-center gap-2 text-sm">
             Por página
-            <select value={pageSize} onChange={(e) => onPageSizeChange(Number(e.target.value))} style={{ marginLeft: 8 }}>
+            <select
+              className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            >
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>

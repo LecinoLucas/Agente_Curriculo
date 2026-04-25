@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+
 export type Tab = {
   key: string;
   label: string;
@@ -12,16 +14,23 @@ type TabsProps = {
 
 export function Tabs({ tabs, active, onChange }: TabsProps) {
   return (
-    <div className="tabs">
+    <div className="flex gap-1 border-b border-border">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           type="button"
-          className={`tab-btn${active === tab.key ? " active" : ""}`}
           onClick={() => onChange(tab.key)}
+          className={cn(
+            "flex flex-col px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors",
+            active === tab.key
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+          )}
         >
-          <span className="tab-btn-label">{tab.label}</span>
-          {tab.caption ? <span className="tab-btn-caption">{tab.caption}</span> : null}
+          <span>{tab.label}</span>
+          {tab.caption ? (
+            <span className="text-xs font-normal text-muted-foreground">{tab.caption}</span>
+          ) : null}
         </button>
       ))}
     </div>

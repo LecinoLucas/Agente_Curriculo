@@ -1,14 +1,10 @@
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List
-import re
+from typing import Any, List
 import logging
+import re
 
 import pdfplumber
-
-# OCR (fallback)
-from pdf2image import convert_from_bytes
-import pytesseract
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +75,18 @@ def _extract_with_pdfplumber(content: bytes):
 
 def _extract_with_ocr(content: bytes):
     page_texts: List[str] = []
+
+    try:
+        from pdf2image import convert_from_bytes
+        import pytesseract
+    except ModuleNotFoundError as exc:
+        logger.warning(
+            "OCR dependencies not installed; skipping OCR fallback",
+            extra={"error": str(exc)},
+        )
+        raise PdfTextExtractionError(
+            "OCR fallback indisponível. Instale pdf2image e pytesseract ou envie um PDF com texto selecionável."
+        ) from exc
 
     try:
         images = convert_from_bytes(content)

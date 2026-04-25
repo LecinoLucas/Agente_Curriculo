@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
+import { ActionMenu } from "../components/common/ActionMenu";
+import { CrudPage } from "../components/common/CrudPage";
 import { EmptyState } from "../components/common/EmptyState";
 import { Modal } from "../components/common/Modal";
 import { PageHeader } from "../components/common/PageHeader";
@@ -10,6 +13,7 @@ import { candidatesService, CreateCandidatePayload } from "../services/candidate
 import { toast } from "../services/toast";
 import { Candidate, CandidateOverview } from "../types/domain";
 import { Paginated } from "../types/api";
+import { Button } from "@/components/ui/button";
 
 const EMPTY_FORM: CreateCandidatePayload = {
   full_name: "",
@@ -31,27 +35,19 @@ function formatScore(score: number): string {
 
 function splitCandidateNotes(notes: string | null | undefined) {
   const rawNotes = (notes ?? "").trim();
-  if (!rawNotes) {
-    return { autoNotes: [] as string[], manualNotes: "" };
-  }
+  if (!rawNotes) return { autoNotes: [] as string[], manualNotes: "" };
 
-  const lines = rawNotes
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
+  const lines = rawNotes.split("\n").map((l) => l.trim()).filter(Boolean);
   const autoNotes = lines
-    .filter((line) => line.startsWith("[AUTO-PRECADASTRO]"))
-    .map((line) => line.replace("[AUTO-PRECADASTRO]", "").trim());
-
-  const manualNotes = lines
-    .filter((line) => !line.startsWith("[AUTO-PRECADASTRO]"))
-    .join("\n");
+    .filter((l) => l.startsWith("[AUTO-PRECADASTRO]"))
+    .map((l) => l.replace("[AUTO-PRECADASTRO]", "").trim());
+  const manualNotes = lines.filter((l) => !l.startsWith("[AUTO-PRECADASTRO]")).join("\n");
 
   return { autoNotes, manualNotes };
 }
 
 export function CandidatosPage() {
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
@@ -66,12 +62,12 @@ export function CandidatosPage() {
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
 
   const [selected, setSelected] = useState<Candidate | null>(null);
   const [selectedOverview, setSelectedOverview] = useState<CandidateOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
-  const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
 
   async function load() {
     setLoading(true);
@@ -213,30 +209,30 @@ export function CandidatosPage() {
   const candidateNotes = splitCandidateNotes(selectedOverview?.candidate.internal_notes);
 
   return (
-    <div className="page-grid">
-      <PageHeader title="Candidatos" subtitle="Gestão dos candidatos cadastrados" />
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
+      <PageHeader
+        title="Candidatos"
+        subtitle="Gestão dos candidatos cadastrados"
+        actions={
+          <Button variant="outline" onClick={() => navigate("/ranking")}>
+            Ver ranking
+          </Button>
+        }
+      />
 
-      <div className="page-toolbar">
-        <form className="search-form" onSubmit={handleSearchSubmit}>
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Buscar por nome ou e-mail…"
-          />
-          <button className="btn" type="submit">Buscar</button>
-          {search ? (
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => { setSearch(""); setSearchInput(""); setPage(1); }}
-            >
-              Limpar
-            </button>
-          ) : null}
-        </form>
-        <button className="btn" type="button" onClick={openCreateForm}>
-          + Novo candidato
-        </button>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Candidatos</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{total}</div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Página atual</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{page}</div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Resultados</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{items.length}</div>
+        </div>
       </div>
 
       {showForm ? (
@@ -244,186 +240,176 @@ export function CandidatosPage() {
           title={editingCandidate ? "Editar candidato" : "Cadastrar candidato"}
           onClose={closeForm}
         >
-          <form onSubmit={(e) => void handleSave(e)} style={{ display: "grid", gap: 12 }}>
-            <label>
+          <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Nome completo *
               <input
                 required
                 value={form.full_name}
                 onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
                 placeholder="Nome completo"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
-              {formErrors.full_name ? <span className="field-error">{formErrors.full_name}</span> : null}
+              {formErrors.full_name ? <span className="text-xs text-red-600">{formErrors.full_name}</span> : null}
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               E-mail
               <input
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="email@exemplo.com"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
-              {formErrors.email ? <span className="field-error">{formErrors.email}</span> : null}
+              {formErrors.email ? <span className="text-xs text-red-600">{formErrors.email}</span> : null}
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Telefone
               <input
                 value={form.phone}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
                 placeholder="+55 11 91234-5678"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <div className="form-grid-2">
-              <label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
                 Cidade
                 <input
                   value={form.location_city}
                   onChange={(e) => setForm((f) => ({ ...f, location_city: e.target.value }))}
                   placeholder="São Paulo"
+                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
-              <label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
                 Estado
                 <input
                   value={form.location_state}
                   onChange={(e) => setForm((f) => ({ ...f, location_state: e.target.value }))}
                   placeholder="SP"
+                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
             </div>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               LinkedIn URL
               <input
                 value={form.linkedin_url}
                 onChange={(e) => setForm((f) => ({ ...f, linkedin_url: e.target.value }))}
                 placeholder="https://linkedin.com/in/…"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               GitHub URL
               <input
                 value={form.github_url}
                 onChange={(e) => setForm((f) => ({ ...f, github_url: e.target.value }))}
                 placeholder="https://github.com/…"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Portfolio URL
               <input
                 value={form.portfolio_url}
                 onChange={(e) => setForm((f) => ({ ...f, portfolio_url: e.target.value }))}
                 placeholder="https://portfolio.exemplo.com"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Notas internas
               <textarea
                 rows={2}
                 value={form.internal_notes}
                 onChange={(e) => setForm((f) => ({ ...f, internal_notes: e.target.value }))}
                 placeholder="Observações internas sobre o candidato…"
+                className="min-h-20 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Tags (separadas por vírgula)
               <input
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
                 placeholder="python, backend, senior"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
             {saveError ? (
-              <div className="alert alert-error">
-                <span className="alert-icon">✕</span>
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span className="font-bold">✕</span>
                 <span>{saveError}</span>
               </div>
             ) : null}
-            <div className="form-actions">
-              <button className="btn" type="submit" disabled={saving}>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button type="submit" disabled={saving}>
                 {saving ? "Salvando…" : editingCandidate ? "Salvar alterações" : "Salvar candidato"}
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={closeForm}>Cancelar</button>
+              </Button>
+              <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
             </div>
           </form>
         </Modal>
       ) : null}
 
-      <div className="card">
-        <div className="card-header">
-          <h3>
-            Candidatos{" "}
-            {total > 0 ? <span className="text-muted">({total})</span> : null}
-          </h3>
-        </div>
-
-        {loading ? <SkeletonRows rows={8} /> : null}
-
-        {loadError ? (
-          <div className="page-error">
-            <span className="page-error-icon">✕</span>
-            <span>{loadError}</span>
-          </div>
-        ) : null}
-
-        {!loading && !loadError && total === 0 ? (
-          <EmptyState
-            icon="👤"
-            title="Nenhum candidato encontrado"
-            description={search ? `Nenhum resultado para "${search}".` : "Adicione o primeiro candidato para começar."}
-            action={search ? { label: "Limpar busca", onClick: () => { setSearch(""); setSearchInput(""); } } : { label: "+ Novo candidato", onClick: openCreateForm }}
-          />
-        ) : null}
-
-        {items.length > 0 ? (
-          <>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>E-mail</th>
-                  <th>Localização</th>
-                  <th>Cadastrado em</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((c) => (
-                  <tr
-                    key={c.id}
-                    className={c.id === selected?.id ? "table-row-selected" : "table-row-clickable"}
-                    onClick={() => setSelected(c.id === selected?.id ? null : c)}
-                  >
-                    <td>{c.full_name}</td>
-                    <td className="text-muted">{c.email ?? "—"}</td>
-                    <td className="text-muted">
-                      {[c.location_city, c.location_state].filter(Boolean).join(", ") || "—"}
-                    </td>
-                    <td className="text-muted">{new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
-                    <td>
-                      <div className="actions-cell">
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); openEditForm(c); }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); void handleDelete(c.id); }}
-                        >
-                          Excluir
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="table-footer">
-              <span className="pagination-summary">
+      <CrudPage<Candidate>
+        onNew={openCreateForm}
+        newLabel="Novo candidato"
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        onSearchSubmit={handleSearchSubmit}
+        onSearchClear={search ? () => { setSearch(""); setSearchInput(""); setPage(1); } : undefined}
+        searchPlaceholder="Buscar por nome ou e-mail…"
+        loading={loading}
+        error={loadError}
+        count={total}
+        isEmpty={!loading && !loadError && total === 0}
+        emptyIcon="👤"
+        emptyTitle="Nenhum candidato encontrado"
+        emptyDescription={search ? `Nenhum resultado para "${search}".` : "Adicione o primeiro candidato para começar."}
+        emptyAction={
+          search
+            ? { label: "Limpar busca", onClick: () => { setSearch(""); setSearchInput(""); } }
+            : { label: "+ Novo candidato", onClick: openCreateForm }
+        }
+        columns={["Nome", "E-mail", "Localização", "Cadastrado em", "Ações"]}
+        items={items}
+        renderRow={(c) => (
+          <tr
+            key={c.id}
+            className={[
+              "border-b border-gray-200 transition-colors",
+              c.id === selected?.id ? "bg-blue-50/70" : "even:bg-gray-50/50 hover:bg-gray-100",
+            ].join(" ")}
+            onClick={() => setSelected(c.id === selected?.id ? null : c)}
+          >
+            <td className="px-4 py-3">
+              <div className="font-semibold text-gray-900">{c.full_name}</div>
+            </td>
+            <td className="px-4 py-3 text-sm text-gray-700">{c.email ?? "—"}</td>
+            <td className="px-4 py-3 text-sm text-gray-700">
+              {[c.location_city, c.location_state].filter(Boolean).join(", ") || "—"}
+            </td>
+            <td className="px-4 py-3 text-sm text-gray-700">{new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
+            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-end gap-2">
+                <ActionMenu
+                  buttonLabel={`Ações de ${c.full_name}`}
+                  items={[
+                    { label: "Editar", onClick: () => openEditForm(c) },
+                    { label: "Excluir", tone: "danger", onClick: () => void handleDelete(c.id) },
+                  ]}
+                />
+              </div>
+            </td>
+          </tr>
+        )}
+        footer={
+          total > 0 ? (
+            <>
+              <span className="text-sm text-gray-500">
                 {total} candidato{total !== 1 ? "s" : ""}
               </span>
               <Pagination
@@ -434,307 +420,251 @@ export function CandidatosPage() {
                 onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
                 total={total}
               />
+            </>
+          ) : undefined
+        }
+      >
+        {selected ? (
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">{selected.full_name}</h3>
+              <p className="text-sm text-gray-500">Perfil consolidado · ID: {selected.id.slice(0, 8)}…</p>
             </div>
-          </>
-        ) : null}
-      </div>
 
-      {selected ? (
-        <div className="card">
-          <div className="card-header">
-            <h3>{selected.full_name}</h3>
-            <p className="text-muted">Perfil consolidado · ID: {selected.id.slice(0, 8)}…</p>
-          </div>
+            {overviewLoading ? <SkeletonRows rows={4} /> : null}
 
-          {overviewLoading ? <SkeletonRows rows={4} /> : null}
-
-          {overviewError ? (
-            <div className="page-error">
-              <span className="page-error-icon">✕</span>
-              <span>{overviewError}</span>
-            </div>
-          ) : null}
-
-          {!overviewLoading && !overviewError && selectedOverview ? (
-            <>
-              <div className="stats-mini">
-                <div className="stat-mini">
-                  <div className="stat-mini-label">Currículos</div>
-                  <div className="stat-mini-value">{selectedOverview.resumes.length}</div>
-                </div>
-                <div className="stat-mini">
-                  <div className="stat-mini-label">Última análise</div>
-                  <div className="stat-mini-value" style={{ fontSize: 15 }}>
-                    {selectedOverview.latest_analysis ? (
-                      <StatusPill
-                        label={selectedOverview.latest_analysis.status}
-                        tone={
-                          selectedOverview.latest_analysis.status === "completed" ? "success"
-                          : selectedOverview.latest_analysis.status === "failed" ? "danger"
-                          : "warning"
-                        }
-                      />
-                    ) : "—"}
-                  </div>
-                </div>
-                {selectedOverview.latest_analysis_pipeline ? (
-                  <div className="stat-mini">
-                    <div className="stat-mini-label">Ranking</div>
-                    <div className="stat-mini-value" style={{ fontSize: 15 }}>
-                      <StatusPill
-                        label={selectedOverview.latest_analysis_pipeline.matching_status}
-                        tone={
-                          selectedOverview.latest_analysis_pipeline.matching_status === "completed" ||
-                          selectedOverview.latest_analysis_pipeline.matching_status === "idle"
-                            ? "success"
-                            : selectedOverview.latest_analysis_pipeline.matching_status === "blocked"
-                              ? "danger"
-                              : "warning"
-                        }
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                <div className="stat-mini">
-                  <div className="stat-mini-label">Melhor match</div>
-                  <div className="stat-mini-value">
-                    {selectedOverview.top_matches[0]?.match_score != null
-                      ? formatScore(selectedOverview.top_matches[0].match_score)
-                      : "—"}
-                  </div>
-                </div>
-                {selectedOverview.latest_analysis?.overall_score != null ? (
-                  <div className="stat-mini">
-                    <div className="stat-mini-label">Score geral</div>
-                    <div className="stat-mini-value">
-                      {formatScore(selectedOverview.latest_analysis.overall_score)}
-                    </div>
-                  </div>
-                ) : null}
+            {overviewError ? (
+              <div className="flex items-start gap-2 px-6 py-4 text-sm text-red-600">
+                <span className="font-bold">✕</span>
+                <span>{overviewError}</span>
               </div>
+            ) : null}
 
-              <div className="info-grid" style={{ marginTop: 16 }}>
-                <div className="info-row">
-                  <span className="info-label">E-mail</span>
-                  <span className="info-value">{selectedOverview.candidate.email ?? "—"}</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Telefone</span>
-                  <span className="info-value">{selectedOverview.candidate.phone ?? "—"}</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">Localização</span>
-                  <span className="info-value">
-                    {[
-                      selectedOverview.candidate.location_city,
-                      selectedOverview.candidate.location_state,
-                      selectedOverview.candidate.location_country,
-                    ].filter(Boolean).join(", ") || "—"}
-                  </span>
-                </div>
-                {(selectedOverview.candidate.linkedin_url || selectedOverview.candidate.github_url || selectedOverview.candidate.portfolio_url) ? (
-                  <div className="info-row">
-                    <span className="info-label">Links</span>
-                    <span className="info-value">
-                      <div className="candidate-links">
-                        {selectedOverview.candidate.linkedin_url ? (
-                          <a className="candidate-link" href={selectedOverview.candidate.linkedin_url} target="_blank" rel="noreferrer">
-                            LinkedIn
-                          </a>
-                        ) : null}
-                        {selectedOverview.candidate.github_url ? (
-                          <a className="candidate-link" href={selectedOverview.candidate.github_url} target="_blank" rel="noreferrer">
-                            GitHub
-                          </a>
-                        ) : null}
-                        {selectedOverview.candidate.portfolio_url ? (
-                          <a className="candidate-link" href={selectedOverview.candidate.portfolio_url} target="_blank" rel="noreferrer">
-                            Portfolio
-                          </a>
-                        ) : null}
+            {!overviewLoading && !overviewError && selectedOverview ? (
+              <div className="px-6 py-5 space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">E-mail</div>
+                    <div className="text-sm text-gray-900">{selectedOverview.candidate.email ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Telefone</div>
+                    <div className="text-sm text-gray-700">{selectedOverview.candidate.phone ?? "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Localização</div>
+                    <div className="text-sm text-gray-700">
+                      {[
+                        selectedOverview.candidate.location_city,
+                        selectedOverview.candidate.location_state,
+                        selectedOverview.candidate.location_country,
+                      ].filter(Boolean).join(", ") || "—"}
+                    </div>
+                  </div>
+                  {(selectedOverview.candidate.linkedin_url ||
+                    selectedOverview.candidate.github_url ||
+                    selectedOverview.candidate.portfolio_url) ? (
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Links</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                          {selectedOverview.candidate.linkedin_url ? (
+                            <a className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-gray-100" href={selectedOverview.candidate.linkedin_url} target="_blank" rel="noreferrer">
+                              LinkedIn
+                            </a>
+                          ) : null}
+                          {selectedOverview.candidate.github_url ? (
+                            <a className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-gray-100" href={selectedOverview.candidate.github_url} target="_blank" rel="noreferrer">
+                              GitHub
+                            </a>
+                          ) : null}
+                          {selectedOverview.candidate.portfolio_url ? (
+                            <a className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-gray-100" href={selectedOverview.candidate.portfolio_url} target="_blank" rel="noreferrer">
+                              Portfolio
+                            </a>
+                          ) : null}
                       </div>
-                    </span>
-                  </div>
-                ) : null}
-                {selectedOverview.candidate.tags.length > 0 ? (
-                  <div className="info-row">
-                    <span className="info-label">Tags</span>
-                    <span className="info-value">
-                      <div className="tags-row">
-                        {selectedOverview.candidate.tags.map((tag) => (
-                          <span key={tag} className="tag">{tag}</span>
-                        ))}
+                    </div>
+                  ) : null}
+                  {selectedOverview.candidate.tags.length > 0 ? (
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Tags</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                          {selectedOverview.candidate.tags.map((tag) => (
+                            <span key={tag} className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700">{tag}</span>
+                          ))}
                       </div>
-                    </span>
-                  </div>
-                ) : null}
-                {candidateNotes.manualNotes ? (
-                  <div className="info-row">
-                    <span className="info-label">Notas</span>
-                    <span className="info-value">{candidateNotes.manualNotes}</span>
-                  </div>
-                ) : null}
-              </div>
+                    </div>
+                  ) : null}
+                  {candidateNotes.manualNotes ? (
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Notas</div>
+                      <div className="text-sm text-gray-700 whitespace-pre-line">{candidateNotes.manualNotes}</div>
+                    </div>
+                  ) : null}
+                </div>
 
-              {candidateNotes.autoNotes.length > 0 ? (
-                <>
-                  <h4 className="section-title">Dados detectados do currículo</h4>
-                  <div className="alert alert-success">
-                    <span className="alert-icon">✓</span>
-                    <span>Este candidato já recebeu pré-cadastro automático a partir do currículo enviado.</span>
-                  </div>
-                  <div className="info-grid" style={{ marginTop: 12 }}>
-                    {candidateNotes.autoNotes.map((note) => (
-                      <div key={note} className="info-row">
-                        <span className="info-label">Detecção</span>
-                        <span className="info-value">{note}</span>
-                      </div>
-                    ))}
-                    <div className="info-row">
-                      <span className="info-label">Resumo atual</span>
-                      <span className="info-value">
-                        {[selectedOverview.candidate.email, selectedOverview.candidate.phone]
-                          .filter(Boolean)
-                          .join(" • ") || "Contato não detectado"}
-                      </span>
+                {candidateNotes.autoNotes.length > 0 ? (
+                  <>
+                    <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Dados detectados do currículo</h4>
+                    <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                      <span className="font-bold">✓</span>
+                      <span>Pré-cadastro automático a partir do currículo enviado.</span>
                     </div>
-                    <div className="info-row">
-                      <span className="info-label">Perfis detectados</span>
-                      <span className="info-value">
-                        {[
-                          selectedOverview.candidate.linkedin_url ? "LinkedIn" : null,
-                          selectedOverview.candidate.github_url ? "GitHub" : null,
-                          selectedOverview.candidate.portfolio_url ? "Portfólio" : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ") || "Nenhum link detectado"}
-                      </span>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {candidateNotes.autoNotes.map((note) => (
+                        <div key={note} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Detecção</div>
+                          <div className="mt-1 text-sm text-gray-700">{note}</div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                </>
-              ) : null}
+                  </>
+                ) : null}
 
-              {selectedOverview.latest_analysis ? (
-                <>
-                  <h4 className="section-title">Última análise</h4>
-                  <div className="info-grid">
-                    <div className="info-row">
-                      <span className="info-label">Currículo</span>
-                      <span className="info-value">{selectedOverview.latest_analysis.resume_title}</span>
-                    </div>
-                    <div className="info-row">
-                      <span className="info-label">Senioridade</span>
-                      <span className="info-value">{selectedOverview.latest_analysis.seniority_level ?? "—"}</span>
-                    </div>
-                    <div className="info-row">
-                      <span className="info-label">Experiência</span>
-                      <span className="info-value">
-                        {selectedOverview.latest_analysis.total_experience_years != null
-                          ? `${selectedOverview.latest_analysis.total_experience_years} anos`
-                          : "—"}
-                      </span>
-                    </div>
-                    {selectedOverview.latest_analysis_pipeline ? (
-                      <>
-                        <div className="info-row">
-                          <span className="info-label">Ranking</span>
-                          <span className="info-value">
-                            <StatusPill
-                              label={selectedOverview.latest_analysis_pipeline.matching_status}
-                              tone={
-                                selectedOverview.latest_analysis_pipeline.matching_status === "completed" ||
-                                selectedOverview.latest_analysis_pipeline.matching_status === "idle"
-                                  ? "success"
-                                  : selectedOverview.latest_analysis_pipeline.matching_status === "blocked"
-                                    ? "danger"
+                {selectedOverview.latest_analysis ? (
+                  <>
+                    <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Última análise</h4>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Currículo</div>
+                        <div className="text-sm text-gray-900">{selectedOverview.latest_analysis.resume_title}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Senioridade</div>
+                        <div className="text-sm text-gray-700">{selectedOverview.latest_analysis.seniority_level ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Experiência</div>
+                        <div className="text-sm text-gray-700">
+                          {selectedOverview.latest_analysis.total_experience_years != null
+                            ? `${selectedOverview.latest_analysis.total_experience_years} anos`
+                            : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Score geral</div>
+                        <div className="text-sm text-gray-700">
+                          {selectedOverview.latest_analysis.overall_score != null
+                            ? formatScore(selectedOverview.latest_analysis.overall_score)
+                            : "—"}
+                        </div>
+                      </div>
+                      {selectedOverview.latest_analysis_pipeline ? (
+                        <>
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ranking</div>
+                            <div className="mt-2">
+                              <StatusPill
+                                label={selectedOverview.latest_analysis_pipeline.matching_status}
+                                tone={
+                                  selectedOverview.latest_analysis_pipeline.matching_status === "completed" ||
+                                  selectedOverview.latest_analysis_pipeline.matching_status === "idle"
+                                    ? "success"
+                                    : selectedOverview.latest_analysis_pipeline.matching_status === "blocked"
+                                      ? "danger"
                                     : "warning"
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Matches prontos</div>
+                            <div className="text-sm text-gray-700">{selectedOverview.latest_analysis_pipeline.matched_jobs_count}</div>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Currículos</h4>
+                {selectedOverview.resumes.length === 0 ? (
+                  <EmptyState icon="📄" title="Nenhum currículo associado" />
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Título</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Arquivo</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Extração</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Atualizado em</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white">
+                      {selectedOverview.resumes.map((resume) => (
+                        <tr key={resume.resume_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                            {resume.title} <span className="text-gray-500">v{resume.current_version}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusPill
+                              label={resume.status}
+                              tone={resume.status === "active" ? "success" : "neutral"}
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{resume.current_file_name ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{resume.extraction_status ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{new Date(resume.updated_at).toLocaleString("pt-BR")}</td>
+                        </tr>
+                      ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Top vagas</h4>
+                {selectedOverview.top_matches.length === 0 ? (
+                  <EmptyState icon="🎯" title="Nenhum match registrado" />
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Vaga</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Match</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Recomendação</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white">
+                      {selectedOverview.top_matches.map((match) => (
+                        <tr key={`${match.analysis_id}-${match.job_id}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{match.job_title}</td>
+                          <td className="px-4 py-3">
+                            <StatusPill
+                              label={match.job_status}
+                              tone={
+                                match.job_status === "published" ? "success"
+                                : match.job_status === "closed" ? "danger"
+                                : "warning"
                               }
                             />
-                          </span>
-                        </div>
-                        <div className="info-row">
-                          <span className="info-label">Vagas publicadas</span>
-                          <span className="info-value">{selectedOverview.latest_analysis_pipeline.published_jobs_total}</span>
-                        </div>
-                        <div className="info-row">
-                          <span className="info-label">Matches prontos</span>
-                          <span className="info-value">{selectedOverview.latest_analysis_pipeline.matched_jobs_count}</span>
-                        </div>
-                        <div className="info-row">
-                          <span className="info-label">Pendentes</span>
-                          <span className="info-value">{selectedOverview.latest_analysis_pipeline.pending_jobs_count}</span>
-                        </div>
-                      </>
-                    ) : null}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{match.match_score != null ? formatScore(match.match_score) : "—"}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{match.recommendation ?? "—"}</td>
+                          <td className="px-4 py-3 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/ranking?jobId=${match.job_id}`)}
+                            >
+                              Ranking
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                      </tbody>
+                    </table>
                   </div>
-                </>
-              ) : null}
-
-              <h4 className="section-title">Currículos</h4>
-              {selectedOverview.resumes.length === 0 ? (
-                <EmptyState icon="📄" title="Nenhum currículo associado" />
-              ) : (
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Título</th>
-                      <th>Status</th>
-                      <th>Arquivo</th>
-                      <th>Extração</th>
-                      <th>Atualizado em</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedOverview.resumes.map((resume) => (
-                      <tr key={resume.resume_id}>
-                        <td>
-                          {resume.title}{" "}
-                          <span className="text-muted">v{resume.current_version}</span>
-                        </td>
-                        <td><StatusPill label={resume.status} tone={resume.status === "active" ? "success" : "neutral"} /></td>
-                        <td className="text-muted">{resume.current_file_name ?? "—"}</td>
-                        <td className="text-muted">{resume.extraction_status ?? "—"}</td>
-                        <td className="text-muted">{new Date(resume.updated_at).toLocaleString("pt-BR")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              <h4 className="section-title">Top vagas</h4>
-              {selectedOverview.top_matches.length === 0 ? (
-                <EmptyState icon="🎯" title="Nenhum match registrado para vagas" />
-              ) : (
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Vaga</th>
-                      <th>Status</th>
-                      <th>Match</th>
-                      <th>Recomendação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedOverview.top_matches.map((match) => (
-                      <tr key={`${match.analysis_id}-${match.job_id}`}>
-                        <td>{match.job_title}</td>
-                        <td>
-                          <StatusPill
-                            label={match.job_status}
-                            tone={match.job_status === "published" ? "success" : match.job_status === "closed" ? "danger" : "warning"}
-                          />
-                        </td>
-                        <td>{match.match_score != null ? formatScore(match.match_score) : "—"}</td>
-                        <td className="text-muted">{match.recommendation ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          ) : null}
-        </div>
-      ) : null}
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </CrudPage>
     </div>
   );
 }

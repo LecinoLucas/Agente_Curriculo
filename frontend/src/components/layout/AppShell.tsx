@@ -15,6 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/curriculos", label: "Documentos", caption: "Currículos e uploads", roles: ["admin", "recruiter", "candidate"] },
   { to: "/analises", label: "Análises", caption: "Pipeline e resultados", roles: ["admin", "recruiter", "candidate", "viewer"] },
   { to: "/vagas", label: "Vagas", caption: "Oportunidades abertas", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/ranking", label: "Ranking", caption: "Match e scores", roles: ["admin", "recruiter", "viewer"] },
   { to: "/cadastros", label: "Cadastros", caption: "Pessoas, skills e gestão", roles: ["admin", "recruiter"] },
 ];
 

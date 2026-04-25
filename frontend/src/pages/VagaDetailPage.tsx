@@ -10,6 +10,7 @@ import { SkeletonRows } from "../components/common/Skeleton";
 import { useAsyncState } from "../hooks/useAsyncState";
 import { matchToJob } from "../services/analysisService";
 import { getJob, listJobCandidates } from "../services/jobsService";
+import { Button } from "@/components/ui/button";
 import { Paginated } from "../types/api";
 import { AnalysisMatch, JobCandidate } from "../types/domain";
 
@@ -95,55 +96,57 @@ function formatWorkModel(model?: string | null) {
 function MatchResult({ data }: { data: AnalysisMatch }) {
   const mandatoryPct = skillPct(data.mandatory_skills_matched, data.mandatory_skills_total);
   const optionalPct = skillPct(data.optional_skills_matched, data.optional_skills_total);
+  const tone = scoreTone(data.match_score);
+  const scoreClass =
+    tone === "high" ? "text-green-600" : tone === "mid" ? "text-amber-600" : "text-red-600";
 
   return (
-    <div className="match-result">
-      <div className="match-score-row">
-        <strong className={`match-score-badge ${scoreTone(data.match_score)}`}>
-          {formatScore(data.match_score)}
-        </strong>
-        <p className="match-recommendation">{data.recommendation}</p>
+    <div className="grid gap-4">
+      <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <strong className={`text-4xl font-semibold tracking-tight ${scoreClass}`}>{formatScore(data.match_score)}</strong>
+        <p className="max-w-3xl text-sm leading-6 text-gray-600">{data.recommendation}</p>
       </div>
 
-      <div className="match-skills-grid">
-        <div className="match-skill-item">
-          <strong>Skills obrigatórias</strong>
-          <div className="match-skill-bar">
-            <div className="match-skill-fill" style={{ width: `${mandatoryPct}%` }} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Skills obrigatórias</div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+            <div className="h-full rounded-full bg-blue-600" style={{ width: `${mandatoryPct}%` }} />
           </div>
-          <span className="text-muted">
+          <div className="mt-2 text-sm text-gray-500">
             {data.mandatory_skills_matched} de {data.mandatory_skills_total} ({mandatoryPct}%)
-          </span>
-        </div>
-        <div className="match-skill-item">
-          <strong>Skills opcionais</strong>
-          <div className="match-skill-bar">
-            <div className="match-skill-fill" style={{ width: `${optionalPct}%` }} />
           </div>
-          <span className="text-muted">
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Skills opcionais</div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+            <div className="h-full rounded-full bg-blue-600" style={{ width: `${optionalPct}%` }} />
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
             {data.optional_skills_matched} de {data.optional_skills_total} ({optionalPct}%)
-          </span>
+          </div>
         </div>
       </div>
 
-      {(data.candidate_seniority || data.job_seniority) && (
-        <div className="match-seniority-row">
-          <span className="text-muted">Senioridade:</span>
-          {data.candidate_seniority && (
-            <span className="seniority-tag">
-              Candidato: <strong>{data.candidate_seniority}</strong>
+      {(data.candidate_seniority || data.job_seniority) ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-600">
+          <span className="font-medium text-gray-500">Senioridade</span>
+          {data.candidate_seniority ? (
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+              Candidato: <strong className="text-gray-900">{data.candidate_seniority}</strong>
             </span>
-          )}
-          {data.job_seniority && (
-            <span className="seniority-tag">
-              Vaga: <strong>{data.job_seniority}</strong>
+          ) : null}
+          {data.job_seniority ? (
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+              Vaga: <strong className="text-gray-900">{data.job_seniority}</strong>
             </span>
-          )}
-          <span className="seniority-tag">
-            Score senioridade: <strong>{formatScore(data.seniority_score)}</strong>
+          ) : null}
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+            Score senioridade: <strong className="text-gray-900">{formatScore(data.seniority_score)}</strong>
           </span>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -153,18 +156,16 @@ export function VagaDetailPage() {
   const navigate = useNavigate();
 
   const { data: jobData, error: jobError, loading: jobLoading, run: runJob } = useAsyncState<any>();
+  const { data: candidateData, error: candidateError, loading: candidateLoading, run: runCandidates } =
+    useAsyncState<Paginated<JobCandidate>>();
+  const { data: matchData, error: matchError, loading: matchLoading, run: runMatch } =
+    useAsyncState<AnalysisMatch>();
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [minScore, setMinScore] = useState<number | undefined>(undefined);
   const [seniority, setSeniority] = useState<string | undefined>(undefined);
-
-  const {
-    data: candidateData,
-    error: candidateError,
-    loading: candidateLoading,
-    run: runCandidates,
-  } = useAsyncState<Paginated<JobCandidate>>();
+  const [analysisIdForMatch, setAnalysisIdForMatch] = useState<string>("");
 
   useEffect(() => {
     if (!id) return;
@@ -176,40 +177,41 @@ export function VagaDetailPage() {
     void runCandidates(() => listJobCandidates(id, page, pageSize, minScore, seniority));
   }, [id, page, pageSize, minScore, seniority, runCandidates]);
 
-  useEffect(() => { setPage(1); }, [minScore, seniority, pageSize]);
+  useEffect(() => {
+    setPage(1);
+  }, [minScore, seniority, pageSize]);
 
   const total = candidateData?.total ?? 0;
   const totalPages = candidateData?.total_pages ?? 1;
   const items = candidateData?.data ?? [];
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
-
-  const { data: matchData, error: matchError, loading: matchLoading, run: runMatch } =
-    useAsyncState<AnalysisMatch>();
-  const [analysisIdForMatch, setAnalysisIdForMatch] = useState<string>("");
-
   const jobSubtitle = [jobData?.location, jobData?.seniority_level].filter(Boolean).join(" · ");
-  const topMatch = [...items]
-    .filter((candidate) => candidate.match_score != null)
-    .sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0))[0];
+  const topMatch = [...items].filter((candidate) => candidate.match_score != null).sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0))[0];
 
   return (
-    <div className="page-grid">
-      <nav className="breadcrumb">
-        <button type="button" onClick={() => navigate("/vagas")}>Vagas</button>
-        <span className="breadcrumb-sep">/</span>
-        <span>{jobLoading ? "Carregando…" : (jobData?.title ?? "Detalhe")}</span>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
+      <nav className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/vagas")}>
+          Vagas
+        </Button>
+        <span>/</span>
+        <span>{jobLoading ? "Carregando…" : jobData?.title ?? "Detalhe"}</span>
       </nav>
 
       <PageHeader
         title={jobData?.title ?? "—"}
         subtitle={jobSubtitle || "Detalhes e candidatos ranqueados"}
+        actions={
+          <Button variant="outline" onClick={() => navigate(`/ranking${id ? `?jobId=${id}` : ""}`)}>
+            Abrir ranking
+          </Button>
+        }
       />
 
       {jobError ? (
-        <div className="page-error">
-          <span className="page-error-icon">✕</span>
-          <span>{jobError}</span>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {jobError}
         </div>
       ) : null}
 
@@ -217,47 +219,50 @@ export function VagaDetailPage() {
         <Card
           title="Resumo da oportunidade"
           description="Use este painel para entender o contexto da vaga, acompanhar a aderência dos candidatos e fazer uma leitura rápida da competitividade do funil."
+          className="rounded-2xl border border-gray-200 bg-white shadow-sm"
         >
-          <div className="stats-mini">
-            <div className="stat-mini">
-              <div className="stat-mini-label">Status</div>
-              <div style={{ marginTop: 6 }}>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status</div>
+              <div className="mt-3">
                 <StatusPill label={formatJobStatus(jobData.status)} tone={jobStatusTone(jobData.status)} />
               </div>
             </div>
-            <div className="stat-mini">
-              <div className="stat-mini-label">Candidatos ranqueados</div>
-              <div className="stat-mini-value">{total}</div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Candidatos ranqueados</div>
+              <div className="mt-2 text-3xl font-semibold tracking-tight text-gray-900">{total}</div>
             </div>
-            <div className="stat-mini">
-              <div className="stat-mini-label">Melhor aderência atual</div>
-              <div className="stat-mini-value">{topMatch?.match_score != null ? formatScore(topMatch.match_score) : "—"}</div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Melhor aderência atual</div>
+              <div className="mt-2 text-3xl font-semibold tracking-tight text-gray-900">
+                {topMatch?.match_score != null ? formatScore(topMatch.match_score) : "—"}
+              </div>
             </div>
-            <div className="stat-mini">
-              <div className="stat-mini-label">Faixa de perfil</div>
-              <div className="stat-mini-value">{formatSeniority(jobData.seniority_level)}</div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Faixa de perfil</div>
+              <div className="mt-2 text-3xl font-semibold tracking-tight text-gray-900">{formatSeniority(jobData.seniority_level)}</div>
             </div>
           </div>
 
-          <div className="info-grid" style={{ marginTop: 16 }}>
-            <div className="info-row">
-              <span className="info-label">Modelo de trabalho</span>
-              <span className="info-value">{formatWorkModel(jobData.work_model)}</span>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Modelo de trabalho</div>
+              <div className="mt-1 text-sm text-gray-900">{formatWorkModel(jobData.work_model)}</div>
             </div>
-            <div className="info-row">
-              <span className="info-label">Localização</span>
-              <span className="info-value">{jobData.location ?? "Não informada"}</span>
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Localização</div>
+              <div className="mt-1 text-sm text-gray-900">{jobData.location ?? "Não informada"}</div>
             </div>
-            <div className="info-row">
-              <span className="info-label">Descrição</span>
-              <span className="info-value" style={{ whiteSpace: "pre-wrap" }}>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 md:col-span-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Descrição</div>
+              <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-700">
                 {jobData.description ?? "Sem descrição cadastrada."}
-              </span>
+              </div>
             </div>
             {jobData.requirements ? (
-              <div className="info-row">
-                <span className="info-label">Requisitos</span>
-                <span className="info-value" style={{ whiteSpace: "pre-wrap" }}>{jobData.requirements}</span>
+              <div className="rounded-xl border border-gray-200 bg-white p-4 md:col-span-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Requisitos</div>
+                <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-700">{jobData.requirements}</div>
               </div>
             ) : null}
           </div>
@@ -267,32 +272,42 @@ export function VagaDetailPage() {
       <Card
         title="Candidatos ranqueados"
         description="Filtre a lista para identificar rapidamente quem já demonstra melhor aderência para esta oportunidade."
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm"
       >
-        <div className="filters-row">
-          <div className="filter-group">
-            <label>Score mínimo</label>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Score mínimo</label>
             <input
               type="number"
               value={minScore ?? ""}
               onChange={(e) => setMinScore(e.target.value ? Number(e.target.value) : undefined)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
-          <div className="filter-group">
-            <label>Senioridade</label>
-            <select value={seniority ?? ""} onChange={(e) => setSeniority(e.target.value || undefined)}>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Senioridade</label>
+            <select
+              value={seniority ?? ""}
+              onChange={(e) => setSeniority(e.target.value || undefined)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
               <option value="">Todos</option>
-              <option value="intern">Intern</option>
-              <option value="junior">Junior</option>
-              <option value="mid">Mid</option>
-              <option value="senior">Senior</option>
+              <option value="intern">Estágio</option>
+              <option value="junior">Júnior</option>
+              <option value="mid">Pleno</option>
+              <option value="senior">Sênior</option>
               <option value="lead">Lead</option>
               <option value="principal">Principal</option>
-              <option value="director">Director</option>
+              <option value="director">Diretoria</option>
             </select>
           </div>
-          <div className="filter-group">
-            <label>Por página</label>
-            <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Por página</label>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -303,50 +318,55 @@ export function VagaDetailPage() {
         {candidateLoading ? <SkeletonRows rows={pageSize > 10 ? 10 : pageSize} /> : null}
 
         {candidateError ? (
-          <div className="page-error">
-            <span className="page-error-icon">✕</span>
-            <span>{candidateError}</span>
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {candidateError}
           </div>
         ) : null}
 
         {!candidateLoading && !candidateError && total === 0 ? (
-          <EmptyState
-            icon="👥"
-            title="Nenhum candidato encontrado"
-            description="Não há candidatos associados a esta vaga ou nenhum corresponde aos filtros aplicados."
-          />
+          <div className="mt-4">
+            <EmptyState
+              icon="👥"
+              title="Nenhum candidato encontrado"
+              description="Não há candidatos associados a esta vaga ou nenhum corresponde aos filtros aplicados."
+            />
+          </div>
         ) : null}
 
         {items.length > 0 ? (
           <>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Candidato</th>
-                  <th>Aderência</th>
-                  <th>Score geral</th>
-                  <th>Senioridade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((c) => (
-                  <tr key={c.candidate_id}>
-                    <td>
-                      <div style={{ display: "grid", gap: 4 }}>
-                        <strong>{c.candidate_name}</strong>
-                        <span className="text-muted">{c.email ?? "E-mail não informado"}</span>
-                      </div>
-                    </td>
-                    <td>{c.match_score != null ? formatScore(c.match_score) : "—"}</td>
-                    <td>{c.overall_score ?? "—"}</td>
-                    <td>{c.seniority_level ? formatSeniority(c.seniority_level) : "—"}</td>
+            <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Candidato</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Aderência</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Score geral</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Senioridade</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {items.map((c) => (
+                    <tr key={c.candidate_id} className="border-b border-gray-200 transition-colors even:bg-gray-50/50 hover:bg-gray-100">
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <strong className="text-sm font-medium text-gray-900">{c.candidate_name}</strong>
+                          <span className="text-sm text-gray-500">{c.email ?? "E-mail não informado"}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{c.match_score != null ? formatScore(c.match_score) : "—"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{c.overall_score ?? "—"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{c.seniority_level ? formatSeniority(c.seniority_level) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-            <div className="table-footer">
-              <span className="pagination-summary">Mostrando {start}–{end} de {total}</span>
+            <div className="mt-4 flex flex-col gap-3 border-t border-gray-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
+              <span className="text-sm text-gray-500">
+                Mostrando {start}–{end} de {total}
+              </span>
               <Pagination
                 page={page}
                 totalPages={totalPages}
@@ -363,18 +383,19 @@ export function VagaDetailPage() {
       <Card
         title="Simulação pontual de match"
         description="Use este teste quando quiser comparar manualmente uma análise específica com esta vaga, sem depender apenas do ranking já persistido."
+        className="rounded-2xl border border-gray-200 bg-white shadow-sm"
       >
-        <div className="filters-row">
-          <div className="filter-group" style={{ flex: 1, minWidth: 280 }}>
-            <label>Identificador da análise</label>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="flex-1 space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Identificador da análise</label>
             <input
               placeholder="Cole aqui a referência da análise que deseja comparar"
               value={analysisIdForMatch}
               onChange={(e) => setAnalysisIdForMatch(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
-          <button
-            className="btn"
+          <Button
             type="button"
             disabled={!id || !analysisIdForMatch || matchLoading}
             onClick={() => {
@@ -383,17 +404,16 @@ export function VagaDetailPage() {
             }}
           >
             {matchLoading ? "Calculando…" : "Calcular match"}
-          </button>
+          </Button>
         </div>
 
         {matchError ? (
-          <div className="page-error">
-            <span className="page-error-icon">✕</span>
-            <span>{matchError}</span>
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {matchError}
           </div>
         ) : null}
 
-        {matchData ? <MatchResult data={matchData} /> : null}
+        {matchData ? <div className="mt-4"><MatchResult data={matchData} /></div> : null}
       </Card>
     </div>
   );

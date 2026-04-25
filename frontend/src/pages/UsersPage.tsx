@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { Card } from "../components/common/Card";
-import { EmptyState } from "../components/common/EmptyState";
+import { ActionMenu } from "../components/common/ActionMenu";
+import { CrudPage } from "../components/common/CrudPage";
 import { Modal } from "../components/common/Modal";
 import { PageHeader } from "../components/common/PageHeader";
 import { StatusPill } from "../components/common/StatusPill";
@@ -10,6 +10,7 @@ import { toast } from "../services/toast";
 import { UserSummary } from "../types/domain";
 import { Paginated } from "../types/api";
 import { UserRole, UserStatus } from "../types/auth";
+import { Button } from "@/components/ui/button";
 
 const ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer"];
 const STATUSES: UserStatus[] = ["pending_verification", "active", "suspended", "inactive"];
@@ -17,46 +18,30 @@ const STATUSES: UserStatus[] = ["pending_verification", "active", "suspended", "
 const EMPTY_CREATE: CreateUserPayload = { email: "", password: "", full_name: "", role: "candidate" };
 
 function formatRole(role: string) {
-  switch (role) {
-    case "admin":
-      return "Administrador";
-    case "recruiter":
-      return "Recrutador";
-    case "candidate":
-      return "Candidato";
-    case "viewer":
-      return "Leitor";
-    default:
-      return role;
-  }
+  const labels: Record<string, string> = {
+    admin: "Administrador",
+    recruiter: "Recrutador",
+    candidate: "Candidato",
+    viewer: "Leitor",
+  };
+  return labels[role] ?? role;
 }
 
 function formatStatus(status: string) {
-  switch (status) {
-    case "active":
-      return "Ativo";
-    case "pending_verification":
-      return "Aguardando validação";
-    case "suspended":
-      return "Suspenso";
-    case "inactive":
-      return "Inativo";
-    default:
-      return status;
-  }
+  const labels: Record<string, string> = {
+    active: "Ativo",
+    pending_verification: "Aguardando validação",
+    suspended: "Suspenso",
+    inactive: "Inativo",
+  };
+  return labels[status] ?? status;
 }
 
 function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
-  switch (status) {
-    case "active":
-      return "success";
-    case "pending_verification":
-      return "warning";
-    case "suspended":
-      return "danger";
-    default:
-      return "neutral";
-  }
+  if (status === "active") return "success";
+  if (status === "pending_verification") return "warning";
+  if (status === "suspended") return "danger";
+  return "neutral";
 }
 
 export function UsersPage() {
@@ -92,9 +77,7 @@ export function UsersPage() {
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, [page, search, roleFilter]);
+  useEffect(() => { void load(); }, [page, search, roleFilter]);
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,12 +113,10 @@ export function UsersPage() {
       if (editForm.full_name) payload.full_name = editForm.full_name;
       if (editForm.role) payload.role = editForm.role;
       if (editForm.status) payload.status = editForm.status;
-
       if (Object.keys(payload).length === 0) {
         setEditError("Nenhuma alteração informada.");
         return;
       }
-
       const updated = await usersService.patch(editingUser.id, payload);
       toast.success(`Usuário atualizado: ${updated.full_name}`);
       setEditingUser(null);
@@ -184,96 +165,44 @@ export function UsersPage() {
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
   const items = data?.data ?? [];
-  const activeCount = items.filter((user) => user.status === "active").length;
-  const pendingCount = items.filter((user) => user.status === "pending_verification").length;
-  const restrictedCount = items.filter((user) => user.status === "suspended" || user.status === "inactive").length;
+  const hasFilters = !!(search || roleFilter);
+
+  const activeCount = items.filter((u) => u.status === "active").length;
+  const adminCount = items.filter((u) => u.role === "admin").length;
 
   return (
-    <div className="page-grid">
-      <PageHeader
-        title="Acessos e usuários"
-        subtitle="Gerencie quem entra na plataforma, com qual perfil e em que estado de ativação cada conta se encontra."
-      />
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
+      <PageHeader title="Acessos e usuários" subtitle="Gerencie contas, perfis e permissões" />
 
-      <Card
-        title="Governança de acesso"
-        description="Use esta área para manter o ambiente seguro, distribuir permissões com clareza e acompanhar a saúde da base de contas."
-      >
-        <div className="stats-mini">
-          <div className="stat-mini">
-            <div className="stat-mini-label">Usuários na página</div>
-            <div className="stat-mini-value">{items.length}</div>
-          </div>
-          <div className="stat-mini">
-            <div className="stat-mini-label">Ativos</div>
-            <div className="stat-mini-value">{activeCount}</div>
-          </div>
-          <div className="stat-mini">
-            <div className="stat-mini-label">Aguardando validação</div>
-            <div className="stat-mini-value">{pendingCount}</div>
-          </div>
-          <div className="stat-mini">
-            <div className="stat-mini-label">Restritos</div>
-            <div className="stat-mini-value">{restrictedCount}</div>
-          </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Usuários</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{total}</div>
         </div>
-      </Card>
-
-      <div className="toolbar-row" style={{ alignItems: "center" }}>
-        <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: 8, flex: 1, flexWrap: "wrap" }}>
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Buscar por nome ou e-mail..."
-            style={{ flex: 1, minWidth: 200 }}
-          />
-          <select
-            value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-          >
-            <option value="">Todos os perfis</option>
-            {ROLES.map((r) => <option key={r} value={r}>{formatRole(r)}</option>)}
-          </select>
-          <button className="btn" type="submit">Buscar</button>
-          {(search || roleFilter) ? (
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => { setSearch(""); setSearchInput(""); setRoleFilter(""); setPage(1); }}
-            >
-              Limpar
-            </button>
-          ) : null}
-        </form>
-        <button
-          className="btn"
-          type="button"
-          onClick={() => { setShowCreateForm(true); setCreateForm(EMPTY_CREATE); setCreateError(null); }}
-        >
-          + Novo usuário
-        </button>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ativos na página</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{activeCount}</div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Admins na página</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{adminCount}</div>
+        </div>
       </div>
-
-      {loadError ? (
-        <div className="page-error">
-          <span className="page-error-icon">✕</span>
-          <span>{loadError}</span>
-        </div>
-      ) : null}
 
       {showCreateForm ? (
         <Modal title="Criar usuário" onClose={() => setShowCreateForm(false)}>
-          <form onSubmit={(e) => void handleCreate(e)} style={{ display: "grid", gap: 12 }}>
-            <label>
+          <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Nome completo *
               <input
                 required
                 value={createForm.full_name}
                 onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
                 placeholder="Nome completo"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               E-mail *
               <input
                 required
@@ -281,9 +210,10 @@ export function UsersPage() {
                 value={createForm.email}
                 onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="email@empresa.com"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Senha *
               <input
                 required
@@ -292,30 +222,35 @@ export function UsersPage() {
                 value={createForm.password}
                 onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                 placeholder="Mínimo 8 caracteres"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
-              <span className="field-error" style={{ display: createForm.password && createForm.password.length < 8 ? "block" : "none" }}>
-                Senha deve ter pelo menos 8 caracteres
-              </span>
+              {createForm.password && createForm.password.length < 8 ? (
+                <span className="text-xs text-red-600">Senha deve ter pelo menos 8 caracteres</span>
+              ) : null}
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Perfil
-              <select value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}>
+              <select
+                value={createForm.role}
+                onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
                 {ROLES.map((r) => <option key={r} value={r}>{formatRole(r)}</option>)}
               </select>
             </label>
             {createError ? (
-              <div className="alert alert-error">
-                <span className="alert-icon">✕</span>
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span className="font-bold">✕</span>
                 <span>{createError}</span>
               </div>
             ) : null}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn" type="submit" disabled={createSaving}>
-                {createSaving ? "Salvando..." : "Criar usuário"}
-              </button>
-              <button className="btn btn-secondary" type="button" onClick={() => setShowCreateForm(false)}>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button type="submit" disabled={createSaving}>
+                {createSaving ? "Salvando…" : "Criar usuário"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         </Modal>
@@ -323,48 +258,51 @@ export function UsersPage() {
 
       {editingUser ? (
         <Modal title={`Editar: ${editingUser.full_name}`} onClose={() => setEditingUser(null)}>
-          <form onSubmit={(e) => void handleEdit(e)} style={{ display: "grid", gap: 12 }}>
-            <label>
+          <form onSubmit={(e) => void handleEdit(e)} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Nome completo
               <input
                 value={editForm.full_name ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
                 placeholder={editingUser.full_name}
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Perfil
               <select
                 value={editForm.role ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value || undefined }))}
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="">— sem alteração —</option>
                 {ROLES.map((r) => <option key={r} value={r}>{formatRole(r)}</option>)}
               </select>
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Status
               <select
                 value={editForm.status ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value || undefined }))}
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="">— sem alteração —</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{formatStatus(s)}</option>)}
               </select>
             </label>
             {editError ? (
-              <div className="alert alert-error">
-                <span className="alert-icon">✕</span>
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span className="font-bold">✕</span>
                 <span>{editError}</span>
               </div>
             ) : null}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn" type="submit" disabled={editSaving}>
-                {editSaving ? "Salvando..." : "Salvar alterações"}
-              </button>
-              <button className="btn btn-secondary" type="button" onClick={() => setEditingUser(null)}>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button type="submit" disabled={editSaving}>
+                {editSaving ? "Salvando…" : "Salvar alterações"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         </Modal>
@@ -372,113 +310,99 @@ export function UsersPage() {
 
       {confirmDeleteId ? (
         <Modal title="Confirmar exclusão" onClose={() => setConfirmDeleteId(null)}>
-          <p>Tem certeza que deseja excluir este usuário? Esta ação é irreversível.</p>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button className="btn btn-secondary" type="button" onClick={() => setConfirmDeleteId(null)}>Cancelar</button>
-            <button className="btn" type="button" onClick={() => void handleDelete()}>Excluir</button>
+          <p className="text-sm text-gray-600">Tem certeza que deseja excluir este usuário? Esta ação é irreversível.</p>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setConfirmDeleteId(null)}>Cancelar</Button>
+            <Button type="button" variant="destructive" onClick={() => void handleDelete()}>Excluir</Button>
           </div>
         </Modal>
       ) : null}
 
-      <Card
-        title={`Base de usuários (${total})`}
-        description="Acompanhe perfis, status de acesso e ações administrativas disponíveis para cada conta."
-      >
-
-        {loading ? <p className="text-muted">Carregando...</p> : null}
-        {!loading && items.length === 0 && !loadError ? (
-          <EmptyState
-            icon="🔐"
-            title="Nenhum usuário encontrado"
-            description={
-              search || roleFilter
-                ? "Nenhuma conta corresponde aos filtros aplicados."
-                : "Crie os primeiros acessos para distribuir perfis e começar a operação com governança."
-            }
-            note={
-              search || roleFilter
-                ? "Você pode limpar os filtros para voltar a visualizar toda a base."
-                : "Perfis bem definidos ajudam a manter a plataforma segura e organizada."
-            }
-          />
-        ) : null}
-
-        {items.length > 0 ? (
-          <>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Pessoa</th>
-                  <th>Perfil</th>
-                  <th>Status</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <div style={{ display: "grid", gap: 4 }}>
-                        <strong>{u.full_name}</strong>
-                        <span className="text-muted">{u.email}</span>
-                      </div>
-                    </td>
-                    <td><StatusPill label={formatRole(u.role)} tone="neutral" /></td>
-                    <td>
-                      <StatusPill label={formatStatus(u.status)} tone={statusTone(u.status)} />
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => {
-                            setEditingUser(u);
-                            setEditForm({ full_name: u.full_name, role: u.role, status: u.status });
-                            setEditError(null);
-                          }}
-                        >
-                          Editar
-                        </button>
-                        {u.status !== "active" ? (
-                          <button className="btn btn-secondary" type="button" onClick={() => void handleActivate(u.id)}>
-                            Ativar
-                          </button>
-                        ) : (
-                          <button className="btn btn-secondary" type="button" onClick={() => void handleDeactivate(u.id)}>
-                            Desativar
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => setConfirmDeleteId(u.id)}
-                        >
-                          Excluir
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="toolbar-row" style={{ marginTop: 12, alignItems: "center" }}>
-              <div className="pagination-summary">
-                Página {page} de {totalPages} • {total} total
+      <CrudPage<UserSummary>
+        onNew={() => { setShowCreateForm(true); setCreateForm(EMPTY_CREATE); setCreateError(null); }}
+        newLabel="Novo usuário"
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        onSearchSubmit={handleSearchSubmit}
+        onSearchClear={hasFilters ? () => { setSearch(""); setSearchInput(""); setRoleFilter(""); setPage(1); } : undefined}
+        searchPlaceholder="Buscar por nome ou e-mail…"
+        filters={
+          <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
+            <option value="">Todos os perfis</option>
+            {ROLES.map((r) => <option key={r} value={r}>{formatRole(r)}</option>)}
+          </select>
+        }
+        loading={loading}
+        error={loadError}
+        count={total}
+        isEmpty={!loading && !loadError && items.length === 0}
+        emptyIcon="🔐"
+        emptyTitle="Nenhum usuário encontrado"
+        emptyDescription={
+          hasFilters
+            ? "Nenhuma conta corresponde aos filtros aplicados."
+            : "Crie os primeiros acessos para distribuir perfis e começar a operação."
+        }
+        emptyAction={
+          hasFilters
+            ? { label: "Limpar filtros", onClick: () => { setSearch(""); setSearchInput(""); setRoleFilter(""); setPage(1); } }
+            : { label: "+ Novo usuário", onClick: () => { setShowCreateForm(true); setCreateForm(EMPTY_CREATE); setCreateError(null); } }
+        }
+        columns={["Pessoa", "Perfil", "Status", "Ações"]}
+        items={items}
+        renderRow={(u) => (
+          <tr key={u.id} className="border-b border-gray-200 transition-colors even:bg-gray-50/50 hover:bg-gray-100">
+            <td className="px-4 py-3">
+              <div className="space-y-1">
+                <div className="font-semibold text-gray-900">{u.full_name}</div>
+                <div className="text-xs text-gray-500">{u.email}</div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn" type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+            </td>
+            <td className="px-4 py-3">
+              <StatusPill label={formatRole(u.role)} tone="neutral" />
+            </td>
+            <td className="px-4 py-3">
+              <StatusPill label={formatStatus(u.status)} tone={statusTone(u.status)} />
+            </td>
+            <td className="px-4 py-3 text-right">
+              <ActionMenu
+                buttonLabel={`Ações de ${u.full_name}`}
+                items={[
+                  {
+                    label: "Editar",
+                    onClick: () => {
+                      setEditingUser(u);
+                      setEditForm({ full_name: u.full_name, role: u.role, status: u.status });
+                      setEditError(null);
+                    },
+                  },
+                  u.status !== "active"
+                    ? { label: "Ativar", onClick: () => void handleActivate(u.id) }
+                    : { label: "Desativar", onClick: () => void handleDeactivate(u.id) },
+                  { label: "Excluir", tone: "danger", onClick: () => setConfirmDeleteId(u.id) },
+                ]}
+              />
+            </td>
+          </tr>
+        )}
+        footer={
+          total > 0 ? (
+            <>
+              <span className="text-sm text-gray-500">
+                Página {page} de {totalPages} · {total} total
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
                   Anterior
-                </button>
-                <button className="btn" type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
                   Próxima
-                </button>
+                </Button>
               </div>
-            </div>
-          </>
-        ) : null}
-      </Card>
+            </>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

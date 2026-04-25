@@ -269,7 +269,15 @@ export function VagasPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
-      <PageHeader title="Vagas" subtitle="Gestão das oportunidades e critérios de ranking" />
+      <PageHeader
+        title="Vagas"
+        subtitle="Gestão das oportunidades e critérios de ranking"
+        actions={
+          <Button variant="outline" onClick={() => navigate("/ranking")}>
+            Ver ranking
+          </Button>
+        }
+      />
 
       {showForm ? (
         <Modal
@@ -522,6 +530,9 @@ export function VagasPage() {
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="outline" size="sm" type="button" onClick={() => navigate(`/vagas/${job.id}`)}>
                         Detalhes
+                      </Button>
+                      <Button variant="secondary" size="sm" type="button" onClick={() => navigate(`/ranking?jobId=${job.id}`)}>
+                        Ranking
                       </Button>
                       <ActionMenu
                         buttonLabel={`Ações de ${job.title}`}

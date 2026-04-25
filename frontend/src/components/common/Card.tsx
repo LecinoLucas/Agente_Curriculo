@@ -1,18 +1,26 @@
-import { PropsWithChildren } from "react";
+import { type PropsWithChildren } from "react";
+import {
+  Card as ShadCard,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 type CardProps = PropsWithChildren<{
   title: string;
   description?: string;
+  className?: string;
 }>;
 
-export function Card({ title, description, children }: CardProps) {
+export function Card({ title, description, className, children }: CardProps) {
   return (
-    <section className="card">
-      <div className="card-header">
-        <h3>{title}</h3>
-        {description ? <p>{description}</p> : null}
-      </div>
-      {children}
-    </section>
+    <ShadCard className={className}>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </ShadCard>
   );
 }

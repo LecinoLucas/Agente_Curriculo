@@ -20,7 +20,13 @@ export const usersService = {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     if (search) params.set("search", search);
     if (role) params.set("role", role);
-    return httpRequest<Paginated<UserSummary>>(`/api/v1/users?${params.toString()}`);
+    return httpRequest<Paginated<UserSummary>>(`/api/v1/users?${params.toString()}`).then((payload) => ({
+      data: Array.isArray(payload?.data) ? payload.data : [],
+      total: payload?.total ?? 0,
+      page: payload?.page ?? page,
+      page_size: payload?.page_size ?? pageSize,
+      total_pages: payload?.total_pages ?? 1,
+    }));
   },
 
   create: (payload: CreateUserPayload): Promise<UserSummary> =>

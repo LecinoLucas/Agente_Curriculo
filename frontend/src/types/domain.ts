@@ -287,7 +287,7 @@ export type Resume = {
 export type AnalysisSummary = {
   id: string;
   resume_id: string | null;
-  resume_version_id: string;
+  resume_version_id: string | null;
   candidate_id: string | null;
   candidate_name: string | null;
   resume_title: string | null;

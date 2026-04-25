@@ -1,12 +1,27 @@
 import { useEffect, useState } from "react";
-
+import { CheckCircle, XCircle, AlertTriangle, Info, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { subscribeToasts, toast, ToastItem } from "../../services/toast";
 
-const ICONS: Record<ToastItem["type"], string> = {
-  success: "✓",
-  error: "✕",
-  warning: "⚠",
-  info: "ℹ",
+const ICONS = {
+  success: CheckCircle,
+  error: XCircle,
+  warning: AlertTriangle,
+  info: Info,
+} as const;
+
+const TONE_CLASSES: Record<ToastItem["type"], string> = {
+  success: "bg-green-50 border-green-200 text-green-800",
+  error: "bg-red-50 border-red-200 text-red-800",
+  warning: "bg-amber-50 border-amber-200 text-amber-800",
+  info: "bg-blue-50 border-blue-200 text-blue-800",
+};
+
+const ICON_CLASSES: Record<ToastItem["type"], string> = {
+  success: "text-green-600",
+  error: "text-red-600",
+  warning: "text-amber-600",
+  info: "text-blue-600",
 };
 
 export function ToastContainer() {
@@ -17,21 +32,36 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="toast-container" role="region" aria-label="Notificações" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.type}`} role="alert">
-          <span className="toast-icon" aria-hidden="true">{ICONS[t.type]}</span>
-          <span className="toast-message">{t.message}</span>
-          <button
-            className="toast-close"
-            type="button"
-            onClick={() => toast.dismiss(t.id)}
-            aria-label="Fechar notificação"
+    <div
+      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full"
+      role="region"
+      aria-label="Notificações"
+      aria-live="polite"
+    >
+      {toasts.map((t) => {
+        const Icon = ICONS[t.type];
+        return (
+          <div
+            key={t.id}
+            role="alert"
+            className={cn(
+              "flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg animate-in slide-in-from-right-5",
+              TONE_CLASSES[t.type]
+            )}
           >
-            ×
-          </button>
-        </div>
-      ))}
+            <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", ICON_CLASSES[t.type])} />
+            <span className="text-sm flex-1 leading-snug">{t.message}</span>
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t.id)}
+              aria-label="Fechar notificação"
+              className="shrink-0 rounded-sm opacity-70 hover:opacity-100 transition-opacity"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

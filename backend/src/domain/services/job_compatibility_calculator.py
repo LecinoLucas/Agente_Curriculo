@@ -15,6 +15,13 @@ Experiência (anos)      10%    Atendimento ao mínimo de anos
 Educação                10%    Atendimento ao nível educacional mínimo
 ─────────────────────────────────────────────────────────────────────────────
 
+Quando uma categoria de skill não existe na vaga, seu peso é redistribuído
+para a categoria complementar (ou para experiência + educação se ambas
+forem ausentes), de forma que o overall sempre soma 100% dos pesos ativos.
+
+Penalidade de sobre-qualificação em senioridade só é aplicada quando a
+diferença de níveis é >= _OVERQUALIFICATION_PENALTY_THRESHOLD (padrão: 2).
+
 Proficiency partial credit (para skills obrigatórias com nível mínimo):
   Nível abaixo do mínimo  → 50% de crédito (não é bloqueante, mas penaliza)
   Nível igual ao mínimo   → 100% de crédito
@@ -47,12 +54,17 @@ _SENIORITY_ORDER: list[SeniorityLevel] = [
 ]
 
 # Score de seniority por distância de níveis (|candidato_rank - vaga_rank|)
-_SENIORITY_DISTANCE_SCORES: dict[int, float] = {
-    0: 100.0,   # nível exato
-    1: 75.0,    # ±1 nível
-    2: 45.0,    # ±2 níveis
-    3: 20.0,    # ±3 níveis
+_SENIORITY_DISTANCE_SCORES: dict[int, Decimal] = {
+    0: Decimal("100"),
+    1: Decimal("75"),
+    2: Decimal("45"),
+    3: Decimal("20"),
 }
+
+# Candidato acima do requisito: penalidade aplicada apenas quando
+# diferença >= _OVERQUALIFICATION_PENALTY_THRESHOLD níveis.
+_OVERQUALIFICATION_PENALTY_THRESHOLD: int = 2
+_OVERQUALIFICATION_MULTIPLIER: Decimal = Decimal("0.90")
 
 # Mapeamento de nível educacional para rank numérico
 _EDUCATION_RANK: dict[str, int] = {
@@ -66,10 +78,10 @@ _EDUCATION_RANK: dict[str, int] = {
 }
 
 # Score de educação por distância abaixo do mínimo (0 = atende, 1 = 1 nível abaixo, etc.)
-_EDUCATION_DISTANCE_SCORES: dict[int, float] = {
-    0: 100.0,
-    1: 60.0,
-    2: 30.0,
+_EDUCATION_DISTANCE_SCORES: dict[int, Decimal] = {
+    0: Decimal("100"),
+    1: Decimal("60"),
+    2: Decimal("30"),
 }
 
 
@@ -124,14 +136,16 @@ class JobCompatibilityCalculator:
     """
     Calcula compatibilidade candidato × vaga.
     Zero dependências externas — puro domínio, 100% testável e auditável.
+    Toda aritmética interna usa Decimal; pesos são redistribuídos quando
+    categorias de skill não existem na vaga.
     """
 
-    _DIMENSION_WEIGHTS = {
-        "mandatory_skills": 0.40,
-        "optional_skills": 0.20,
-        "seniority": 0.20,
-        "experience": 0.10,
-        "education": 0.10,
+    _DIMENSION_WEIGHTS: dict[str, Decimal] = {
+        "mandatory_skills": Decimal("0.40"),
+        "optional_skills": Decimal("0.20"),
+        "seniority": Decimal("0.20"),
+        "experience": Decimal("0.10"),
+        "education": Decimal("0.10"),
     }
 
     def calculate(self, data: CompatibilityInput) -> CompatibilityResult:
@@ -150,18 +164,37 @@ class JobCompatibilityCalculator:
 
         all_details = mandatory_details + optional_details
 
+        # Redistribuição de pesos quando categorias de skill estão ausentes na vaga.
+        w_mand = self._DIMENSION_WEIGHTS["mandatory_skills"]
+        w_opt = self._DIMENSION_WEIGHTS["optional_skills"]
+        w_sen = self._DIMENSION_WEIGHTS["seniority"]
+        w_exp = self._DIMENSION_WEIGHTS["experience"]
+        w_edu = self._DIMENSION_WEIGHTS["education"]
+
+        if not mandatory and not optional:
+            half = (w_mand + w_opt) / 2
+            w_exp += half
+            w_edu += half
+            w_mand = w_opt = Decimal("0")
+        elif not mandatory:
+            w_opt += w_mand
+            w_mand = Decimal("0")
+        elif not optional:
+            w_mand += w_opt
+            w_opt = Decimal("0")
+
         overall = Score.of(
-            float(mandatory_score.value) * self._DIMENSION_WEIGHTS["mandatory_skills"]
-            + float(optional_score.value) * self._DIMENSION_WEIGHTS["optional_skills"]
-            + float(seniority_score.value) * self._DIMENSION_WEIGHTS["seniority"]
-            + float(experience_score.value) * self._DIMENSION_WEIGHTS["experience"]
-            + float(education_score.value) * self._DIMENSION_WEIGHTS["education"]
+            mandatory_score.value * w_mand
+            + optional_score.value * w_opt
+            + seniority_score.value * w_sen
+            + experience_score.value * w_exp
+            + education_score.value * w_edu
         )
 
-        # Cobertura percentual das skills obrigatórias (ignora peso/proficiency)
         covered_mandatory = sum(1 for d in mandatory_details if d.candidate_has)
         mandatory_coverage = (
-            (covered_mandatory / len(mandatory) * 100.0) if mandatory else 100.0
+            float(Decimal(covered_mandatory) / Decimal(len(mandatory)) * Decimal("100"))
+            if mandatory else 100.0
         )
 
         recommendation = self._recommend(
@@ -199,10 +232,10 @@ class JobCompatibilityCalculator:
         self, candidate: SkillSet, required: list[RequiredSkill]
     ) -> tuple[Score, list[SkillMatchDetail]]:
         if not required:
-            return Score.perfect(), []
+            return Score.zero(), []
 
-        total_weight = sum(float(r.weight) for r in required)
-        earned_weight = 0.0
+        total_weight = sum(r.weight for r in required)  # r.weight is Decimal
+        earned_weight = Decimal("0")
         details: list[SkillMatchDetail] = []
 
         for req in required:
@@ -212,16 +245,16 @@ class JobCompatibilityCalculator:
             if has and entry is not None:
                 meets_level = entry.meets_minimum_level(req.minimum_level)
                 partial = not meets_level
-                credit = 0.5 if partial else 1.0
+                credit = Decimal("0.5") if partial else Decimal("1")
                 exceeds = (
                     entry.proficiency_rank > PROFICIENCY_RANK.get(req.minimum_level or "basic", 1)
                     if req.minimum_level else False
                 )
-                earned_weight += credit * float(req.weight)
+                earned_weight += credit * req.weight
             else:
                 meets_level = False
                 partial = False
-                credit = 0.0
+                credit = Decimal("0")
                 exceeds = False
 
             details.append(
@@ -233,12 +266,15 @@ class JobCompatibilityCalculator:
                     required_level=req.minimum_level,
                     meets_level=meets_level,
                     partial_credit=partial,
-                    credit=credit,
+                    credit=float(credit),
                     exceeds_requirement=exceeds,
                 )
             )
 
-        score = (earned_weight / total_weight * 100.0) if total_weight > 0 else 100.0
+        score = (
+            earned_weight / total_weight * Decimal("100")
+            if total_weight > 0 else Decimal("0")
+        )
         return Score.of(score), details
 
     # ── Senioridade ──────────────────────────────────────────────────────────
@@ -253,14 +289,13 @@ class JobCompatibilityCalculator:
         candidate_rank = _SENIORITY_ORDER.index(candidate)
         required_rank = _SENIORITY_ORDER.index(required)
         distance = abs(candidate_rank - required_rank)
+        base_score = _SENIORITY_DISTANCE_SCORES.get(distance, Decimal("10"))
 
-        # Candidato ACIMA do requisito: leve penalidade (pode estar sobre-qualificado)
-        if candidate_rank > required_rank:
-            distance_score = _SENIORITY_DISTANCE_SCORES.get(distance, 10.0)
-            # Reduz 10% se acima (sobre-qualificado pode recusar ou pedir mais $)
-            return Score.of(distance_score * 0.90)
+        # Penalidade de sobre-qualificação apenas quando a diferença é significativa.
+        if candidate_rank > required_rank and distance >= _OVERQUALIFICATION_PENALTY_THRESHOLD:
+            return Score.of(base_score * _OVERQUALIFICATION_MULTIPLIER)
 
-        return Score.of(_SENIORITY_DISTANCE_SCORES.get(distance, 10.0))
+        return Score.of(base_score)
 
     # ── Experiência em anos ───────────────────────────────────────────────────
 
@@ -271,17 +306,17 @@ class JobCompatibilityCalculator:
         if min_years is None or min_years == 0:
             return Score.perfect()
 
-        ratio = candidate_years / min_years
+        ratio = Decimal(str(candidate_years)) / Decimal(str(min_years))
 
-        if ratio >= 1.0:
+        if ratio >= Decimal("1"):
             return Score.perfect()
-        if ratio >= 0.80:
-            return Score.of(75.0)
-        if ratio >= 0.60:
-            return Score.of(50.0)
-        if ratio >= 0.40:
-            return Score.of(25.0)
-        return Score.of(10.0)
+        if ratio >= Decimal("0.80"):
+            return Score.of(75)
+        if ratio >= Decimal("0.60"):
+            return Score.of(50)
+        if ratio >= Decimal("0.40"):
+            return Score.of(25)
+        return Score.of(10)
 
     # ── Educação ─────────────────────────────────────────────────────────────
 
@@ -294,9 +329,9 @@ class JobCompatibilityCalculator:
 
         candidate_rank = _EDUCATION_RANK.get(candidate_level, 0)
         required_rank = _EDUCATION_RANK.get(min_level, 0)
-        distance = max(0, required_rank - candidate_rank)  # apenas déficit é penalizado
+        distance = max(0, required_rank - candidate_rank)
 
-        return Score.of(_EDUCATION_DISTANCE_SCORES.get(distance, 10.0))
+        return Score.of(_EDUCATION_DISTANCE_SCORES.get(distance, Decimal("10")))
 
     # ── Recomendação ─────────────────────────────────────────────────────────
 

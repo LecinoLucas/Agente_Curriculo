@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { Card } from "../components/common/Card";
-import { EmptyState } from "../components/common/EmptyState";
+import { ActionMenu } from "../components/common/ActionMenu";
+import { CrudPage } from "../components/common/CrudPage";
 import { Modal } from "../components/common/Modal";
 import { PageHeader } from "../components/common/PageHeader";
 import { StatusPill } from "../components/common/StatusPill";
@@ -9,10 +9,7 @@ import { useAuth } from "../features/auth/useAuth";
 import { skillsService } from "../services/skillsService";
 import { toast } from "../services/toast";
 import { Skill } from "../types/domain";
-
-function skillVerificationTone(skill: Skill): "success" | "neutral" {
-  return skill.is_verified ? "success" : "neutral";
-}
+import { Button } from "@/components/ui/button";
 
 export function SkillsPage() {
   const { user } = useAuth();
@@ -53,13 +50,19 @@ export function SkillsPage() {
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, [search, categoryFilter]);
+  useEffect(() => { void load(); }, [search, categoryFilter]);
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSearch(searchInput);
+  }
+
+  function openCreate() {
+    setNewName("");
+    setNewCategory("");
+    setNewAliases("");
+    setCreateError(null);
+    setShowCreateForm(true);
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -70,9 +73,6 @@ export function SkillsPage() {
       const aliases = newAliases ? newAliases.split(",").map((a) => a.trim()).filter(Boolean) : [];
       const created = await skillsService.create(newName, newCategory || undefined, aliases);
       toast.success(`Skill criada: ${created.name}`);
-      setNewName("");
-      setNewCategory("");
-      setNewAliases("");
       setShowCreateForm(false);
       await load();
     } catch (err) {
@@ -137,156 +137,119 @@ export function SkillsPage() {
   }
 
   const categories = [...new Set(skills.map((s) => s.category).filter(Boolean))] as string[];
-  const verifiedCount = skills.filter((skill) => skill.is_verified).length;
-  const uncategorizedCount = skills.filter((skill) => !skill.category).length;
+  const hasFilters = !!(search || categoryFilter);
 
   return (
-    <div className="page-grid">
-      <PageHeader
-        title="Catálogo de skills"
-        subtitle="Mantenha um vocabulário consistente para análise de currículos, matching com vagas e curadoria técnica."
-      />
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
+      <PageHeader title="Catálogo de skills" subtitle="Vocabulário consistente para análise e matching" />
 
-      <Card
-        title="Panorama do catálogo"
-        description="Uma base organizada de skills ajuda o sistema a identificar experiência, agrupar sinônimos e comparar candidatos com mais precisão."
-      >
-        <div className="stats-mini">
-          <div className="stat-mini">
-            <div className="stat-mini-label">Skills cadastradas</div>
-            <div className="stat-mini-value">{skills.length}</div>
-          </div>
-          <div className="stat-mini">
-            <div className="stat-mini-label">Verificadas</div>
-            <div className="stat-mini-value">{verifiedCount}</div>
-          </div>
-          <div className="stat-mini">
-            <div className="stat-mini-label">Categorias ativas</div>
-            <div className="stat-mini-value">{categories.length}</div>
-          </div>
-          <div className="stat-mini">
-            <div className="stat-mini-label">Sem categoria</div>
-            <div className="stat-mini-value">{uncategorizedCount}</div>
-          </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Skills cadastradas</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{skills.length}</div>
         </div>
-      </Card>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Verificadas</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{skills.filter((skill) => skill.is_verified).length}</div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Categorias</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{categories.length}</div>
+        </div>
+      </div>
 
-      <Card title="Encontrar uma skill" description="Busque por nome, sinônimos ou categoria para revisar a base com mais rapidez.">
-        <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Ex.: React, liderança, SQL..."
-            style={{ flex: 1, minWidth: 200 }}
-          />
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-            <option value="">Todas as categorias</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-          <button className="btn" type="submit">Buscar</button>
-          {(search || categoryFilter) ? (
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => { setSearch(""); setSearchInput(""); setCategoryFilter(""); }}
-            >
-              Limpar
-            </button>
-          ) : null}
-        </form>
-      </Card>
-
-      {isAdmin ? (
-        <Card title="Nova skill" description="Adicione novas competências ao catálogo para melhorar análise e matching.">
-          <div className="card-actions">
-            <button className="btn" type="button" onClick={() => { setShowCreateForm((v) => !v); setCreateError(null); }}>
-              {showCreateForm ? "Fechar formulário" : "Adicionar skill"}
-            </button>
-          </div>
-
-          {showCreateForm ? (
-            <form onSubmit={(e) => void handleCreate(e)} style={{ marginTop: 16, display: "grid", gap: 12 }}>
-              <label>
-                Nome *
-                <input
-                  required
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Ex: Python, React, Liderança"
-                />
-              </label>
-              <label>
-                Categoria
-                <input
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  placeholder="Ex.: Backend, Frontend, Gestão, Idiomas"
-                />
-              </label>
-              <label>
-                Aliases (separados por vírgula)
-                <input
-                  value={newAliases}
-                  onChange={(e) => setNewAliases(e.target.value)}
-                  placeholder="py, python3"
-                />
-              </label>
-              {createError ? (
-                <div className="alert alert-error">
-                  <span className="alert-icon">✕</span>
-                  <span>{createError}</span>
-                </div>
-              ) : null}
-              <button className="btn" type="submit" disabled={saving || !newName}>
-                {saving ? "Salvando..." : "Salvar skill"}
-              </button>
-            </form>
-          ) : null}
-        </Card>
+      {showCreateForm ? (
+        <Modal title="Nova skill" onClose={() => setShowCreateForm(false)}>
+          <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              Nome *
+              <input
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Ex: Python, React, Liderança"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              Categoria
+              <input
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                placeholder="Ex.: Backend, Frontend, Gestão"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              Aliases (separados por vírgula)
+              <input
+                value={newAliases}
+                onChange={(e) => setNewAliases(e.target.value)}
+                placeholder="py, python3"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
+            {createError ? (
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span className="font-bold">✕</span>
+                <span>{createError}</span>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button type="submit" disabled={saving || !newName}>
+                {saving ? "Salvando…" : "Salvar skill"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        </Modal>
       ) : null}
 
       {editingSkill ? (
         <Modal title={`Editar skill: ${editingSkill.name}`} onClose={() => setEditingSkill(null)}>
-          <form onSubmit={(e) => void handleEditSave(e)} style={{ display: "grid", gap: 12 }}>
-            <label>
+          <form onSubmit={(e) => void handleEditSave(e)} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Nome *
               <input
                 required
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Categoria
               <input
                 value={editCategory}
                 onChange={(e) => setEditCategory(e.target.value)}
-                placeholder="backend, frontend, soft-skill..."
+                placeholder="backend, frontend, soft-skill…"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
-            <label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
               Aliases (separados por vírgula)
               <input
                 value={editAliases}
                 onChange={(e) => setEditAliases(e.target.value)}
                 placeholder="alias1, alias2"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
             {editError ? (
-              <div className="alert alert-error">
-                <span className="alert-icon">✕</span>
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span className="font-bold">✕</span>
                 <span>{editError}</span>
               </div>
             ) : null}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn" type="submit" disabled={editSaving || !editName}>
-                {editSaving ? "Salvando..." : "Salvar alterações"}
-              </button>
-              <button className="btn btn-secondary" type="button" onClick={() => setEditingSkill(null)}>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button type="submit" disabled={editSaving || !editName}>
+                {editSaving ? "Salvando…" : "Salvar alterações"}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setEditingSkill(null)}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         </Modal>
@@ -294,99 +257,89 @@ export function SkillsPage() {
 
       {confirmDeleteId ? (
         <Modal title="Confirmar exclusão" onClose={() => setConfirmDeleteId(null)}>
-          <p>Tem certeza que deseja excluir esta skill? Os vínculos com vagas serão removidos.</p>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button className="btn btn-secondary" type="button" onClick={() => setConfirmDeleteId(null)}>Cancelar</button>
-            <button className="btn" type="button" onClick={() => void confirmDelete()}>Excluir</button>
+          <p className="text-sm text-gray-600">Tem certeza que deseja excluir esta skill? Os vínculos com vagas serão removidos.</p>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setConfirmDeleteId(null)}>Cancelar</Button>
+            <Button type="button" variant="destructive" onClick={() => void confirmDelete()}>Excluir</Button>
           </div>
         </Modal>
       ) : null}
 
-      <Card
-        title={`Base de skills (${skills.length})`}
-        description="Revise nomes, categorias, aliases e status de validação para manter a taxonomia limpa e útil para o time."
-      >
-        {loading ? <p className="text-muted">Carregando...</p> : null}
-        {loadError ? (
-          <div className="page-error">
-            <span className="page-error-icon">✕</span>
-            <span>{loadError}</span>
-          </div>
-        ) : null}
-        {!loading && !loadError && skills.length === 0 ? (
-          <EmptyState
-            icon="🧩"
-            title="Nenhuma skill encontrada"
-            description={
-              search || categoryFilter
-                ? "Nenhum item corresponde aos filtros aplicados no momento."
-                : "Adicione as primeiras skills para começar a estruturar o vocabulário da plataforma."
-            }
-            note={
-              search || categoryFilter
-                ? "Ajuste a busca ou limpe os filtros para ampliar os resultados."
-                : "Uma base bem organizada melhora análise, matching e consistência operacional."
-            }
-          />
-        ) : null}
-
-        {skills.length > 0 ? (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Skill</th>
-                <th>Categoria</th>
-                <th>Sinônimos</th>
-                <th>Curadoria</th>
-                {isAdmin ? <th>Ações</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {skills.map((skill) => (
-                <tr key={skill.id}>
-                  <td>
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <strong>{skill.name}</strong>
-                      <span className="text-muted">Ref. {skill.id.slice(0, 8)}</span>
-                    </div>
-                  </td>
-                  <td>{skill.category ?? "Sem categoria"}</td>
-                  <td>{skill.aliases.length ? skill.aliases.join(", ") : "Nenhum sinônimo cadastrado"}</td>
-                  <td>
-                    <StatusPill
-                      label={skill.is_verified ? "Verificada" : "Pendente de curadoria"}
-                      tone={skillVerificationTone(skill)}
-                    />
-                  </td>
-                  {isAdmin ? (
-                    <td>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        <button className="btn btn-secondary" type="button" onClick={() => openEdit(skill)}>
-                          Editar
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => void handleVerify(skill)}
-                        >
-                          {skill.is_verified ? "Desverificar" : "Verificar"}
-                        </button>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => setConfirmDeleteId(skill.id)}
-                        >
-                          Excluir
-                        </button>
-                      </div>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : null}
-      </Card>
+      <CrudPage<Skill>
+        onNew={isAdmin ? openCreate : undefined}
+        newLabel="Nova skill"
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        onSearchSubmit={handleSearchSubmit}
+        onSearchClear={hasFilters ? () => { setSearch(""); setSearchInput(""); setCategoryFilter(""); } : undefined}
+        searchPlaceholder="Ex.: React, liderança, SQL…"
+        filters={
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            <option value="">Todas as categorias</option>
+            {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+        }
+        loading={loading}
+        error={loadError}
+        isEmpty={!loading && !loadError && skills.length === 0}
+        emptyIcon="🧩"
+        emptyTitle="Nenhuma skill encontrada"
+        emptyDescription={
+          hasFilters
+            ? "Nenhum item corresponde aos filtros aplicados."
+            : "Adicione as primeiras skills para estruturar o vocabulário da plataforma."
+        }
+        emptyAction={
+          hasFilters
+            ? { label: "Limpar filtros", onClick: () => { setSearch(""); setSearchInput(""); setCategoryFilter(""); } }
+            : isAdmin ? { label: "+ Nova skill", onClick: openCreate } : undefined
+        }
+        columns={[
+          "Skill",
+          "Categoria",
+          "Sinônimos",
+          "Curadoria",
+          ...(isAdmin ? ["Ações"] : []),
+        ]}
+        items={skills}
+        renderRow={(skill) => (
+          <tr key={skill.id} className="border-b border-gray-200 transition-colors even:bg-gray-50/50 hover:bg-gray-100">
+            <td className="px-4 py-3">
+              <div className="space-y-1">
+                <div className="font-semibold text-gray-900">{skill.name}</div>
+                <div className="text-xs text-gray-500">Ref. {skill.id.slice(0, 8)}</div>
+              </div>
+            </td>
+            <td className="px-4 py-3 text-sm text-gray-700">{skill.category ?? "—"}</td>
+            <td className="px-4 py-3 text-sm text-gray-700">{skill.aliases.length ? skill.aliases.join(", ") : "—"}</td>
+            <td className="px-4 py-3">
+              <StatusPill
+                label={skill.is_verified ? "Verificada" : "Pendente"}
+                tone={skill.is_verified ? "success" : "neutral"}
+              />
+            </td>
+            {isAdmin ? (
+              <td className="px-4 py-3 text-right">
+                <ActionMenu
+                  buttonLabel={`Ações de ${skill.name}`}
+                  items={[
+                    { label: "Editar", onClick: () => openEdit(skill) },
+                    {
+                      label: skill.is_verified ? "Desverificar" : "Verificar",
+                      onClick: () => void handleVerify(skill),
+                    },
+                    { label: "Excluir", tone: "danger", onClick: () => setConfirmDeleteId(skill.id) },
+                  ]}
+                />
+              </td>
+            ) : null}
+          </tr>
+        )}
+      />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-
 _TWO_PLACES = Decimal("0.01")
+_ZERO = Decimal("0")
+_HUNDRED = Decimal("100")
 
 
 @dataclass(frozen=True)
@@ -10,6 +11,8 @@ class Score:
     """
     Valor entre 0.00 e 100.00 representando um score de análise.
     Imutável por design — scores nunca são alterados, apenas re-calculados.
+    Toda aritmética interna usa Decimal; float só é exposto em __float__ para
+    compatibilidade com serialização externa.
     """
 
     value: Decimal
@@ -17,30 +20,31 @@ class Score:
     def __post_init__(self) -> None:
         if not isinstance(self.value, Decimal):
             raise TypeError("Score.value must be Decimal")
-        if not (Decimal("0") <= self.value <= Decimal("100")):
+        if not (_ZERO <= self.value <= _HUNDRED):
             raise ValueError(f"Score must be between 0 and 100, got {self.value}")
 
     @classmethod
     def zero(cls) -> "Score":
-        return cls(Decimal("0"))
+        return cls(_ZERO)
 
     @classmethod
     def perfect(cls) -> "Score":
-        return cls(Decimal("100"))
+        return cls(_HUNDRED)
 
     @classmethod
-    def of(cls, value: float | int) -> "Score":
-        """Factory conveniente — converte float para Decimal com precisão de 2 casas."""
-        clamped = min(max(float(value), 0.0), 100.0)
-        return cls(Decimal(str(clamped)).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
+    def of(cls, value: "Decimal | int | float | str") -> "Score":
+        """Factory — converte para Decimal e clamp em [0, 100] sem aritmética float."""
+        d = value if isinstance(value, Decimal) else Decimal(str(value))
+        clamped = max(_ZERO, min(_HUNDRED, d))
+        return cls(clamped.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
 
-    def weighted(self, weight: float) -> "Score":
-        """Retorna o valor ponderado (não é um Score válido — use apenas internamente)."""
-        return Score.of(float(self.value) * weight)
+    def weighted(self, weight: Decimal) -> Decimal:
+        """Retorna valor ponderado como Decimal (para somar, não é um Score isolado)."""
+        return self.value * weight
 
     def __add__(self, other: "Score") -> "Score":
         raw = self.value + other.value
-        clamped = min(raw, Decimal("100"))
+        clamped = min(raw, _HUNDRED)
         return Score(clamped.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP))
 
     def __float__(self) -> float:
@@ -51,16 +55,15 @@ class Score:
 
     @property
     def label(self) -> str:
-        v = float(self.value)
-        if v >= 90:
+        if self.value >= Decimal("90"):
             return "Excepcional"
-        if v >= 75:
+        if self.value >= Decimal("75"):
             return "Forte"
-        if v >= 60:
+        if self.value >= Decimal("60"):
             return "Bom"
-        if v >= 45:
+        if self.value >= Decimal("45"):
             return "Regular"
-        if v >= 30:
+        if self.value >= Decimal("30"):
             return "Fraco"
         return "Insuficiente"
 
