@@ -28,3 +28,7 @@ class PatchUserRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
     role: Optional[UserRole] = None
     status: Optional[UserStatus] = None
+
+
+class PatchMyProfileRequest(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)

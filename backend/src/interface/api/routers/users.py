@@ -10,6 +10,10 @@ from src.application.services.user_admin_service import (
     UserAdminService,
     UserNotFoundError,
 )
+from src.application.services.user_profile_service import (
+    InvalidProfileTextError,
+    UserProfileService,
+)
 from src.application.use_cases.users.create_user import CreateUserUseCase
 from src.core.settings import settings
 from src.domain.exceptions import ConflictException
@@ -17,7 +21,12 @@ from src.infrastructure.repositories.sqlalchemy_user_admin_repository import SQL
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.interface.api.dependencies import AdminOnly, CurrentUser, get_db
 from src.interface.api.schemas.common import PaginatedResponse
-from src.interface.api.schemas.user_schemas import CreateUserRequest, PatchUserRequest, UserResponse
+from src.interface.api.schemas.user_schemas import (
+    CreateUserRequest,
+    PatchMyProfileRequest,
+    PatchUserRequest,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -32,6 +41,12 @@ def _handle_user_admin_error(exc: Exception) -> None:
     if isinstance(exc, CannotModifySelfError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Não é possível modificar o próprio usuário nesta ação")
     if isinstance(exc, InvalidUserTextError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Nome não pode estar em branco")
+    raise exc
+
+
+def _handle_user_profile_error(exc: Exception) -> None:
+    if isinstance(exc, InvalidProfileTextError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Nome não pode estar em branco")
     raise exc
 
@@ -81,6 +96,30 @@ async def get_me(current_user: CurrentUser) -> UserResponse:
         status=current_user.status,
         real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
     )
+
+
+@router.patch("/me", response_model=UserResponse)
+async def patch_me(
+    body: PatchMyProfileRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    service = UserProfileService(SQLAlchemyUserRepository(db))
+    try:
+        updated = await service.update_me(current_user, body.full_name)
+        await db.commit()
+        return UserResponse(
+            id=updated.id,
+            email=updated.email,
+            full_name=updated.full_name,
+            role=updated.role,
+            status=updated.status,
+            real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        )
+    except Exception as exc:
+        await db.rollback()
+        _handle_user_profile_error(exc)
+        raise
 
 
 @router.get("", response_model=PaginatedResponse[UserResponse])

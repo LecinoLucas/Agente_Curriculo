@@ -59,3 +59,69 @@
     color: hsl(var(--foreground));
   }
 }
+
+@keyframes kanbanColumnIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kanbanCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kanbanDropPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.22);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
+  }
+}
+
+.kanban-column-enter {
+  opacity: 0;
+  animation: kanbanColumnIn 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+.kanban-card-enter {
+  opacity: 0;
+  animation: kanbanCardIn 260ms ease-out forwards;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+.dnd-card-dragging {
+  opacity: 0.45;
+  transform: rotate(1deg) scale(0.98);
+}
+
+.dnd-drop-target {
+  outline: 2px dashed rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}
+
+.dnd-drop-pulse {
+  animation: kanbanDropPulse 420ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kanban-column-enter,
+  .kanban-card-enter,
+  .dnd-drop-pulse {
+    animation: none;
+    opacity: 1;
+  }
+}

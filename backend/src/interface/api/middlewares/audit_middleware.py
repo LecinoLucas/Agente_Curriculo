@@ -32,6 +32,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         structlog.contextvars.bind_contextvars(
             request_id=str(getattr(request.state, "request_id", "")),
+            correlation_id=str(getattr(request.state, "correlation_id", "")),
             method=request.method,
             path=request.url.path,
             status=response.status_code,
@@ -49,6 +50,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         request: Request, status_code: int, duration_ms: int
     ) -> None:
         request_id: UUID | None = getattr(request.state, "request_id", None)
+        correlation_id: UUID | None = getattr(request.state, "correlation_id", None)
         user_id: UUID | None = getattr(request.state, "user_id", None)
 
         try:
@@ -63,7 +65,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     http_method=request.method,
                     http_path=str(request.url.path),
                     http_status_code=status_code,
-                    metadata_={"duration_ms": duration_ms},
+                    metadata_={
+                        "duration_ms": duration_ms,
+                        "correlation_id": str(correlation_id) if correlation_id else None,
+                    },
                 )
                 session.add(log)
                 await session.commit()

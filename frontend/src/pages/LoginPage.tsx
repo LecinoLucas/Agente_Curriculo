@@ -11,7 +11,7 @@ export function LoginPage() {
   const location = useLocation();
   const isDev = import.meta.env.DEV;
 
-  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/dashboard";
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/pipeline";
 
   const [email, setEmail] = useState("admin@resume.ai");
   const [password, setPassword] = useState("Admin123!");

@@ -69,12 +69,24 @@ class CandidateJobMatchSummaryResponse(BaseModel):
     created_at: datetime
 
 
+class CandidatePipelineEntryResponse(BaseModel):
+    candidate_id: UUID
+    job_id: UUID
+    job_title: str
+    stage: str
+    candidate_status: str
+    match_score: float | None = None
+    entered_at: datetime | None = None
+    updated_at: datetime
+
+
 class CandidateOverviewResponse(BaseModel):
     candidate: CandidateResponse
     resumes: list[CandidateResumeSummaryResponse]
     latest_analysis: CandidateLatestAnalysisResponse | None = None
     latest_analysis_pipeline: CandidateLatestAnalysisPipelineResponse | None = None
     top_matches: list[CandidateJobMatchSummaryResponse]
+    pipeline_entries: list[CandidatePipelineEntryResponse] = Field(default_factory=list)
 
 
 class CreateCandidateRequest(BaseModel):

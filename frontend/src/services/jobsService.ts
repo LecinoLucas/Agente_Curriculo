@@ -1,4 +1,4 @@
-import { Job, JobCandidate } from "../types/domain";
+import { Job, JobCandidate, JobPipelineBoard, PipelineStage } from "../types/domain";
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
 
@@ -52,11 +52,15 @@ export async function listJobCandidates(
     candidate_id: c.candidate_id,
     candidate_name: c.candidate_name,
     email: c.email,
+    job_id: response.job_id,
+    stage: "entry",
+    candidate_status: "Recebido",
     match_score: c.match_score != null ? Number(c.match_score) : null,
     recommendation: c.recommendation ?? null,
     overall_score: c.overall_score != null ? Number(c.overall_score) : null,
     seniority_level: c.seniority_level ?? null,
     total_experience_years: c.total_experience_years != null ? Number(c.total_experience_years) : null,
+    top_skills: [],
   }));
 
   let filtered = candidates;
@@ -73,4 +77,45 @@ export async function listJobCandidates(
   const data = filtered.slice(start, start + page_size);
 
   return { data, total, page, page_size, total_pages };
+}
+
+export async function listJobMatches(jobId: string): Promise<JobCandidate[]> {
+  const response = await httpRequest<any[]>(`/api/v1/jobs/${jobId}/matches`);
+  const raw = Array.isArray(response) ? response : [];
+  return raw
+    .map((item) => ({
+      candidate_id: item.candidate_id ?? "",
+      candidate_name: item.candidate_name ?? "Candidato sem nome",
+      job_id: item.job_id ?? jobId,
+      stage: (item.stage ?? "entry") as PipelineStage,
+      candidate_status: item.candidate_status ?? "Recebido",
+      match_score: item.match_score != null ? Number(item.match_score) : null,
+      top_skills: Array.isArray(item.top_skills) ? item.top_skills.filter(Boolean) : [],
+      updated_at: item.updated_at ?? new Date(0).toISOString(),
+    }))
+    .sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
+}
+
+export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
+  const response = await httpRequest<JobPipelineBoard>(`/api/v1/pipeline/${jobId}`);
+  const columns = Array.isArray(response?.columns) ? response.columns : [];
+  return {
+    job_id: response?.job_id ?? jobId,
+    columns: columns.map((column) => ({
+      stage: column.stage,
+      label: column.label,
+      candidates: Array.isArray(column.candidates)
+        ? column.candidates.map((item) => ({
+            candidate_id: item.candidate_id,
+            candidate_name: item.candidate_name,
+            job_id: item.job_id,
+            stage: item.stage,
+            candidate_status: item.candidate_status,
+            match_score: item.match_score != null ? Number(item.match_score) : null,
+            top_skills: Array.isArray(item.top_skills) ? item.top_skills.filter(Boolean) : [],
+            updated_at: item.updated_at,
+          }))
+        : [],
+    })),
+  };
 }

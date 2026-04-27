@@ -2,7 +2,7 @@ import { createContext, PropsWithChildren, useEffect, useMemo, useState } from "
 
 import { authService } from "../../services/authService";
 import { AuthUser } from "../../types/auth";
-import { tokenStorage } from "../../utils/storage";
+import { AUTH_SESSION_CLEARED_EVENT, tokenStorage } from "../../utils/storage";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -10,6 +10,7 @@ type AuthContextValue = {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -17,6 +18,11 @@ export const AuthContext = createContext<AuthContextValue | undefined>(undefined
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshUser = async () => {
+    const me = await authService.me();
+    setUser(me);
+  };
 
   useEffect(() => {
     void (async () => {
@@ -27,8 +33,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       try {
-        const me = await authService.me();
-        setUser(me);
+        await refreshUser();
       } catch {
         tokenStorage.clear();
         setUser(null);
@@ -38,11 +43,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
     })();
   }, []);
 
+  useEffect(() => {
+    const handleSessionCleared = () => {
+      setUser(null);
+      setIsLoading(false);
+    };
+
+    window.addEventListener(AUTH_SESSION_CLEARED_EVENT, handleSessionCleared);
+    return () => window.removeEventListener(AUTH_SESSION_CLEARED_EVENT, handleSessionCleared);
+  }, []);
+
   const login = async (email: string, password: string) => {
     const session = await authService.login({ email, password });
     tokenStorage.set(session.access_token);
-    const me = await authService.me();
-    setUser(me);
+    await refreshUser();
   };
 
   const logout = async () => {
@@ -61,6 +75,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isLoading,
       login,
       logout,
+      refreshUser,
     }),
     [user, isLoading],
   );

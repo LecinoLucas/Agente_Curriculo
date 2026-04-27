@@ -3,6 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.analysis_service import (
+    AIModelUnavailableError,
+    AnalysisService,
+    PromptTemplateUnavailableError,
+    ResumeVersionNotFoundError,
+    ResumeVersionNotReadyError,
+)
 from src.application.services.resume_service import (
     MAX_PDF_UPLOAD_BYTES,
     InvalidResumeFileError,
@@ -10,6 +17,9 @@ from src.application.services.resume_service import (
     ResumeDetails,
     ResumeNotFoundError,
     ResumeService,
+)
+from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
+    SQLAlchemyAnalysisRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.interface.api.dependencies import CurrentUser, get_db
@@ -21,6 +31,7 @@ from src.interface.api.schemas.resume_schemas import (
     ResumeVersionResponse,
     UpdateResumeRequest,
 )
+from src.interface.workers.analysis_dispatcher import enqueue_analysis
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
@@ -124,6 +135,7 @@ async def upload_resume_pdf(
     db: AsyncSession = Depends(get_db),
 ) -> ResumeFileUploadResponse:
     try:
+        analysis_id = None
         uploaded = await _resume_service(db).upload_pdf(
             resume_id,
             file_name=file.filename or "resume.pdf",
@@ -131,7 +143,23 @@ async def upload_resume_pdf(
             content=await file.read(MAX_PDF_UPLOAD_BYTES + 1),
             current_user=current_user,
         )
+        try:
+            analysis = await AnalysisService(SQLAlchemyAnalysisRepository(db)).request(
+                uploaded.version.id,
+                current_user,
+            )
+            analysis_id = analysis.id
+        except (
+            ResumeVersionNotFoundError,
+            ResumeVersionNotReadyError,
+            AIModelUnavailableError,
+            PromptTemplateUnavailableError,
+        ):
+            # Upload continua mesmo sem disparo automático da análise.
+            pass
         await db.commit()
+        if analysis_id is not None:
+            enqueue_analysis(analysis_id)
         return ResumeFileUploadResponse(
             resume_id=uploaded.resume.id,
             candidate_id=uploaded.candidate.id,

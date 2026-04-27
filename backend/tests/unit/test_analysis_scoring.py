@@ -94,6 +94,11 @@ def _make_service(job: MagicMock, job_skill_rows: list[SimpleNamespace]) -> Anal
     repo.list_active_job_skill_rows = AsyncMock(return_value=job_skill_rows)
     repo.find_job_match = AsyncMock(return_value=None)
     repo.save_job_match = AsyncMock()
+    # session is passed to SQLAlchemyPipelineRepository when register_match_entry
+    # is called from _match_details_to_job. scalar returns None so the pipeline
+    # upsert exits early without further DB interaction.
+    repo.session = MagicMock()
+    repo.session.scalar = AsyncMock(return_value=None)
     return AnalysisService(repository=repo)
 
 

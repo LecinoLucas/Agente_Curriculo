@@ -67,6 +67,17 @@ export type CandidateOverview = {
   latest_analysis: CandidateLatestAnalysisOverview | null;
   latest_analysis_pipeline: CandidateLatestAnalysisPipelineOverview | null;
   top_matches: CandidateJobMatchOverview[];
+  pipeline_entries: CandidatePipelineEntryOverview[];
+};
+
+export type CandidatePipelineEntryOverview = {
+  candidate_id: string;
+  job_id: string;
+  job_title: string;
+  stage: PipelineStage;
+  candidate_status: string;
+  match_score: number | null;
+  updated_at: string;
 };
 
 export type Skill = {
@@ -188,15 +199,48 @@ export type Job = {
   updated_at: string;
 };
 
+export type AIAnalysisStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+
 export type JobCandidate = {
   candidate_id: string;
   candidate_name: string;
   email?: string;
+  job_id?: string;
+  // Human-controlled: which kanban column the candidate occupies.
+  // Only changed by recruiter actions (drag-and-drop, dropdown). Never by AI workers.
+  stage?: PipelineStage;
+  candidate_status?: string;
   match_score?: number | null;
   recommendation?: string | null;
   overall_score?: number | null;
   seniority_level?: string | null;
   total_experience_years?: number | null;
+  top_skills?: string[];
+  updated_at?: string;
+  // AI-controlled: processing state of the candidate's latest analysis.
+  // null means no analysis has been requested yet. Never affects `stage`.
+  ai_status?: AIAnalysisStatus | null;
+};
+
+export type PipelineStage =
+  | "entry"
+  | "screening"
+  | "hr_interview"
+  | "technical_interview"
+  | "final"
+  | "offer"
+  | "hired"
+  | "rejected";
+
+export type PipelineColumn = {
+  stage: PipelineStage;
+  label: string;
+  candidates: JobCandidate[];
+};
+
+export type JobPipelineBoard = {
+  job_id: string;
+  columns: PipelineColumn[];
 };
 
 export type AnalysisStatus = {

@@ -1,4 +1,4 @@
-import { Candidate, CandidateOverview } from "../types/domain";
+import { Candidate, CandidateOverview, PipelineStage } from "../types/domain";
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
 
@@ -17,6 +17,19 @@ export type CreateCandidatePayload = {
 };
 
 export type UpdateCandidatePayload = Partial<CreateCandidatePayload>;
+export type UpdateCandidateStagePayload = {
+  job_id: string;
+  stage: PipelineStage;
+};
+
+export type UpdateCandidateStageResponse = {
+  candidate_id: string;
+  job_id: string;
+  stage: PipelineStage;
+  candidate_status: string;
+  match_score: number | null;
+  updated_at: string;
+};
 
 function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_name?: string; created_by?: string; created_at?: string; updated_at?: string }): Candidate {
   return {
@@ -46,6 +59,7 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
     latest_analysis: item.latest_analysis ?? null,
     latest_analysis_pipeline: item.latest_analysis_pipeline ?? null,
     top_matches: Array.isArray(item.top_matches) ? item.top_matches : [],
+    pipeline_entries: Array.isArray(item.pipeline_entries) ? item.pipeline_entries : [],
   };
 }
 
@@ -80,5 +94,19 @@ export const candidatesService = {
 
   async delete(id: string): Promise<void> {
     return httpRequest<void>(`/api/v1/candidates/${id}`, { method: "DELETE" });
+  },
+
+  async updateStage(id: string, payload: UpdateCandidateStagePayload): Promise<UpdateCandidateStageResponse> {
+    return httpRequest<UpdateCandidateStageResponse>(`/api/v1/candidates/${id}/stage`, {
+      method: "PATCH",
+      body: payload,
+    }).then((item) => ({
+      candidate_id: item.candidate_id,
+      job_id: item.job_id,
+      stage: item.stage,
+      candidate_status: item.candidate_status ?? "Em processo",
+      match_score: item.match_score != null ? Number(item.match_score) : null,
+      updated_at: item.updated_at ?? new Date(0).toISOString(),
+    }));
   },
 };

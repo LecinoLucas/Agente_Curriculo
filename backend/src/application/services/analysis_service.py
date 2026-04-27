@@ -17,11 +17,15 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
+    SQLAlchemyPipelineRepository,
+)
 from src.interface.api.schemas.analysis_schemas import (
     AnalysisMatchResponse,
     AnalysisPipelineJobMatchResponse,
     AnalysisPipelineResponse,
 )
+from src.application.services.pipeline_service import PipelineService
 
 
 # Handles c#, c++, react.js, node.js and plain words as atomic tokens.
@@ -361,6 +365,13 @@ class AnalysisService:
         match.match_summary = summary
         match.recommendation = recommendation
         await self._repository.save_job_match(match)
+        await PipelineService(
+            SQLAlchemyPipelineRepository(self._repository.session)
+        ).register_match_entry(
+            analysis_id=analysis_id,
+            job_id=job_id,
+            match_score=overall,
+        )
 
         return AnalysisMatchResponse(
             analysis_id=analysis_id,

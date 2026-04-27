@@ -12,10 +12,24 @@ from src.application.services.job_service import (
     JobService,
     SkillNotFoundError,
 )
+from src.application.services.pipeline_service import (
+    PipelineJobNotFoundError,
+    PipelineService,
+)
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
+    SQLAlchemyPipelineRepository,
+)
+from src.application.services.candidate_ranking_service import (
+    CandidateRankingService,
+    NoActiveScoreVersionError,
+    RankingJobNotFoundError,
+)
 from src.interface.api.dependencies import CurrentUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.job_schemas import CreateJobRequest, JobResponse, UpdateJobRequest
+from src.interface.api.schemas.pipeline_schemas import JobMatchCandidateResponse
+from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse
 from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -23,6 +37,10 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 def _job_service(db: AsyncSession) -> JobService:
     return JobService(SQLAlchemyJobRepository(db))
+
+
+def _pipeline_service(db: AsyncSession) -> PipelineService:
+    return PipelineService(SQLAlchemyPipelineRepository(db))
 
 
 def _handle_job_service_error(exc: Exception) -> None:
@@ -38,6 +56,15 @@ def _handle_job_service_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Skill já vinculada a esta vaga")
     if isinstance(exc, JobSkillLinkNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vínculo não encontrado")
+    if isinstance(exc, PipelineJobNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
+    if isinstance(exc, RankingJobNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
+    if isinstance(exc, NoActiveScoreVersionError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nenhuma versão de scoring ativa. Configure uma versão ativa antes de calcular.",
+        )
     raise exc
 
 
@@ -224,6 +251,71 @@ async def list_job_candidates(
 ) -> dict:
     try:
         return await _job_service(db).list_candidate_ranking(job_id)
+    except Exception as exc:
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.post(
+    "/{job_id}/scoring",
+    response_model=ScoringComputeResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def compute_job_scoring(
+    job_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ScoringComputeResponse:
+    """Compute and persist multi-factor scores for all pipeline candidates in this job.
+
+    Safe to call multiple times: re-scoring a candidate with the same active version
+    updates the persisted result in-place. After this endpoint completes, GET /ranking
+    will reflect the latest computed scores.
+    """
+    try:
+        svc = CandidateRankingService(db)
+        count = await svc.compute_and_persist(job_id)
+        version = await svc._load_active_version()
+        await db.commit()
+        from datetime import UTC, datetime
+        return ScoringComputeResponse(
+            job_id=job_id,
+            candidates_scored=count,
+            score_version=version.version,
+            computed_at=datetime.now(UTC),
+        )
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.get("/{job_id}/ranking", response_model=JobRankingResponse)
+async def get_job_ranking(
+    job_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> JobRankingResponse:
+    """Return persisted ranking for this job. Never recomputes scores inline.
+
+    Call POST /jobs/{job_id}/scoring first to ensure scores are up-to-date.
+    """
+    try:
+        result = await CandidateRankingService(db).get_ranking(job_id)
+        return JobRankingResponse(**result)
+    except Exception as exc:
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.get("/{job_id}/matches", response_model=list[JobMatchCandidateResponse])
+async def list_job_matches(
+    job_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> list[JobMatchCandidateResponse]:
+    try:
+        return await _pipeline_service(db).list_job_matches(job_id)
     except Exception as exc:
         _handle_job_service_error(exc)
         raise

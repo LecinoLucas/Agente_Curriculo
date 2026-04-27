@@ -10,6 +10,7 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidateLatestAnalysisPipelineResponse,
     CandidateLatestAnalysisResponse,
     CandidateOverviewResponse,
+    CandidatePipelineEntryResponse,
     CandidateResponse,
     CandidateResumeSummaryResponse,
     CreateCandidateRequest,
@@ -74,6 +75,7 @@ class CandidateService:
         resume_rows = await self._repository.list_resume_summaries(candidate_id)
         latest_analysis_row = await self._repository.find_latest_analysis_summary(candidate_id)
         match_rows = await self._repository.list_top_job_matches(candidate_id)
+        pipeline_rows = await self._repository.list_pipeline_entries(candidate_id)
 
         latest_analysis = (
             CandidateLatestAnalysisResponse(**latest_analysis_row)
@@ -118,6 +120,18 @@ class CandidateService:
             top_matches=[
                 CandidateJobMatchSummaryResponse(**row)
                 for row in match_rows
+            ],
+            pipeline_entries=[
+                CandidatePipelineEntryResponse(
+                    candidate_id=row["candidate_id"],
+                    job_id=row["job_id"],
+                    job_title=row["job_title"],
+                    stage=row["stage"],
+                    candidate_status=self._pipeline_stage_to_candidate_status(row["stage"]),
+                    match_score=float(row["match_score"]) if row.get("match_score") is not None else None,
+                    updated_at=row["updated_at"],
+                )
+                for row in pipeline_rows
             ],
         )
 
@@ -181,3 +195,17 @@ class CandidateService:
     @staticmethod
     def _clean_tags(tags: list[str]) -> list[str]:
         return sorted({tag.lower().strip() for tag in tags if tag.strip()})
+
+    @staticmethod
+    def _pipeline_stage_to_candidate_status(stage: str) -> str:
+        mapping = {
+            "entry": "Recebido",
+            "screening": "Em análise",
+            "hr_interview": "Em processo",
+            "technical_interview": "Em processo",
+            "final": "Etapa final",
+            "offer": "Aprovado",
+            "hired": "Aprovado",
+            "rejected": "Reprovado",
+        }
+        return mapping.get(stage, "Em processo")

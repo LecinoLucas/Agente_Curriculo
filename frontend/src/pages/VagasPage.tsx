@@ -26,6 +26,12 @@ import { toast } from "../services/toast";
 import { Job, JobSkill, Skill } from "../types/domain";
 import { Paginated } from "../types/api";
 import { useAuth } from "../features/auth/useAuth";
+import {
+  formatJobStatus,
+  formatSeniority,
+  formatWorkModel,
+  jobStatusTone,
+} from "../utils/jobFormatters";
 
 type CreateJobPayload = {
   title: string;
@@ -49,39 +55,6 @@ const EMPTY_FORM: CreateJobPayload = {
   location: "",
 };
 
-function formatJobStatus(status: string): string {
-  const labels: Record<string, string> = {
-    draft: "Rascunho",
-    published: "Publicada",
-    paused: "Pausada",
-    closed: "Encerrada",
-    cancelled: "Cancelada",
-  };
-  return labels[status] ?? status;
-}
-
-function formatWorkModel(value: string | null | undefined): string {
-  const labels: Record<string, string> = {
-    remote: "Remoto",
-    hybrid: "Híbrido",
-    onsite: "Presencial",
-  };
-  return value ? (labels[value] ?? value) : "—";
-}
-
-function formatSeniority(value: string | null | undefined): string {
-  const labels: Record<string, string> = {
-    intern: "Estagiário",
-    junior: "Júnior",
-    mid: "Pleno",
-    senior: "Sênior",
-    lead: "Lead",
-    principal: "Principal",
-    director: "Diretoria",
-  };
-  return value ? (labels[value] ?? value) : "—";
-}
-
 function formatSalary(job: Job): string {
   if (job.salary_min == null && job.salary_max == null) return "—";
   if (job.salary_min != null && job.salary_max != null) {
@@ -93,13 +66,6 @@ function formatSalary(job: Job): string {
 
 function truncate(value: string, max = 100): string {
   return value.length <= max ? value : `${value.slice(0, max).trim()}…`;
-}
-
-function jobStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
-  if (status === "published") return "success";
-  if (status === "closed" || status === "cancelled") return "danger";
-  if (status === "paused") return "warning";
-  return "neutral";
 }
 
 export function VagasPage() {
@@ -271,12 +237,7 @@ export function VagasPage() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
       <PageHeader
         title="Vagas"
-        subtitle="Gestão das oportunidades e critérios de ranking"
-        actions={
-          <Button variant="outline" onClick={() => navigate("/ranking")}>
-            Ver ranking
-          </Button>
-        }
+        subtitle="Gestão das oportunidades abertas"
       />
 
       {showForm ? (
@@ -528,11 +489,8 @@ export function VagasPage() {
                 {canManage ? (
                   <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="outline" size="sm" type="button" onClick={() => navigate(`/vagas/${job.id}`)}>
-                        Detalhes
-                      </Button>
-                      <Button variant="secondary" size="sm" type="button" onClick={() => navigate(`/ranking?jobId=${job.id}`)}>
-                        Ranking
+                      <Button variant="default" size="sm" type="button" onClick={() => navigate(`/pipeline/${job.id}`)}>
+                        Abrir pipeline
                       </Button>
                       <ActionMenu
                         buttonLabel={`Ações de ${job.title}`}
@@ -586,6 +544,12 @@ export function VagasPage() {
                   <span className="text-sm leading-6 text-slate-300">{selectedJob.requirements}</span>
                 </>
               ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-2 border-t border-slate-700 px-6 py-4">
+              <Button type="button" onClick={() => navigate(`/pipeline/${selectedJob.id}`)}>
+                Abrir pipeline
+              </Button>
             </div>
 
             <div className="border-t border-slate-700 px-6 py-4">

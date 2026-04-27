@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { UserManagementPanel } from "../components/admin/UserManagementPanel";
 import { PageHeader } from "../components/common/PageHeader";
 
 type Role = "admin" | "recruiter" | "candidate" | "viewer";
@@ -13,11 +14,9 @@ const ROLES: { key: Role; label: string; description: string }[] = [
 ];
 
 const SCREENS: { label: string; path: string; roles: Role[] }[] = [
-  { label: "Visão geral", path: "/dashboard", roles: ["admin", "recruiter", "candidate", "viewer"] },
-  { label: "Documentos", path: "/curriculos", roles: ["admin", "recruiter", "candidate"] },
-  { label: "Análises", path: "/analises", roles: ["admin", "recruiter", "candidate", "viewer"] },
+  { label: "Pipeline", path: "/pipeline", roles: ["admin", "recruiter", "viewer"] },
   { label: "Vagas", path: "/vagas", roles: ["admin", "recruiter", "viewer"] },
-  { label: "Cadastros", path: "/cadastros", roles: ["admin", "recruiter"] },
+  { label: "Meu perfil", path: "/perfil", roles: ["admin", "recruiter", "candidate", "viewer"] },
   { label: "Administração", path: "/admin", roles: ["admin"] },
 ];
 
@@ -32,7 +31,7 @@ export function AdminPage() {
       />
 
       {/* Quick actions */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Gerenciar usuários</CardTitle>
@@ -63,6 +62,18 @@ export function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-primary/20">
+        <CardHeader>
+          <CardTitle>Gestão de perfis</CardTitle>
+          <CardDescription>
+            Edite nome, perfil e status dos usuários direto no painel, com CRUD completo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UserManagementPanel showSummaryCards={false} />
+        </CardContent>
+      </Card>
 
       {/* Permissions matrix */}
       <Card>

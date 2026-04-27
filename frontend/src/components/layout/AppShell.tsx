@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "../../features/auth/useAuth";
 import { UserRole } from "../../types/auth";
@@ -11,12 +11,9 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/dashboard", label: "Visão geral", caption: "Resumo operacional", roles: ["admin", "recruiter", "candidate", "viewer"] },
-  { to: "/curriculos", label: "Documentos", caption: "Currículos e uploads", roles: ["admin", "recruiter", "candidate"] },
-  { to: "/analises", label: "Análises", caption: "Pipeline e resultados", roles: ["admin", "recruiter", "candidate", "viewer"] },
+  { to: "/pipeline", label: "Pipeline", caption: "Candidatos e fluxo de admissão", roles: ["admin", "recruiter", "viewer"] },
   { to: "/vagas", label: "Vagas", caption: "Oportunidades abertas", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/ranking", label: "Ranking", caption: "Match e scores", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/cadastros", label: "Cadastros", caption: "Pessoas, skills e gestão", roles: ["admin", "recruiter"] },
+  { to: "/perfil", label: "Meu perfil", caption: "Dados da conta", roles: ["admin", "recruiter", "candidate", "viewer"] },
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
@@ -33,6 +30,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
 
 export function AppShell() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => user && item.roles.includes(user.role)
@@ -109,17 +107,24 @@ export function AppShell() {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Topbar */}
         <header className="flex shrink-0 items-center justify-end gap-3 border-b border-slate-700 bg-slate-900 px-6 py-4">
-          <div className="text-right">
-            <p className="text-sm font-semibold leading-tight tracking-tight text-white">
-              {user?.full_name}
-            </p>
-            <p className="text-xs leading-tight text-slate-300">
-              {user?.role ? ROLE_LABELS[user.role] : ""}
-            </p>
-          </div>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-semibold text-white shadow-sm">
-            {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/perfil")}
+            className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left transition-colors hover:bg-white/10"
+          >
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Meu perfil</p>
+              <p className="text-sm font-semibold leading-tight tracking-tight text-white">
+                {user?.full_name}
+              </p>
+              <p className="text-xs leading-tight text-slate-300">
+                {user?.role ? ROLE_LABELS[user.role] : ""}
+              </p>
+            </div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-semibold text-white shadow-sm">
+              {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
+            </div>
+          </button>
         </header>
 
         {/* Content */}

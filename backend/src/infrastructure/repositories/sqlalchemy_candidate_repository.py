@@ -9,6 +9,7 @@ from src.infrastructure.database.models.analysis_model import (
     ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
@@ -203,3 +204,25 @@ class SQLAlchemyCandidateRepository:
             )
             or 0
         )
+
+    async def list_pipeline_entries(self, candidate_id: UUID) -> list[dict]:
+        result = await self._session.execute(
+            sa.select(
+                CandidatePipelineModel.candidate_id,
+                CandidatePipelineModel.job_id,
+                JobModel.title.label("job_title"),
+                CandidatePipelineModel.stage,
+                CandidatePipelineModel.match_score,
+                CandidatePipelineModel.updated_at,
+            )
+            .join(JobModel, JobModel.id == CandidatePipelineModel.job_id)
+            .where(
+                CandidatePipelineModel.candidate_id == candidate_id,
+                JobModel.deleted_at.is_(None),
+            )
+            .order_by(
+                CandidatePipelineModel.updated_at.desc(),
+                CandidatePipelineModel.match_score.desc().nulls_last(),
+            )
+        )
+        return [dict(row) for row in result.mappings().all()]

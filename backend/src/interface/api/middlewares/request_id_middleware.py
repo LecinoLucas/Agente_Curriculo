@@ -1,8 +1,11 @@
 from uuid import UUID, uuid4
 
+import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+
+from src.observability.context import clear_correlation_id, set_correlation_id
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -13,14 +16,34 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: any) -> Response:  # type: ignore[override]
         incoming = request.headers.get("X-Request-ID")
+        incoming_correlation = request.headers.get("X-Correlation-ID")
 
         try:
             request_id = UUID(incoming) if incoming else uuid4()
         except ValueError:
             request_id = uuid4()
 
-        request.state.request_id = request_id
+        try:
+            correlation_id = UUID(incoming_correlation) if incoming_correlation else request_id
+        except ValueError:
+            correlation_id = request_id
 
-        response = await call_next(request)
+        request.state.request_id = request_id
+        request.state.correlation_id = correlation_id
+        set_correlation_id(correlation_id)
+        structlog.contextvars.bind_contextvars(
+            request_id=str(request_id),
+            correlation_id=str(correlation_id),
+        )
+
+        try:
+            response = await call_next(request)
+        except Exception:
+            raise
+        finally:
+            clear_correlation_id()
+            structlog.contextvars.clear_contextvars()
+
         response.headers["X-Request-ID"] = str(request_id)
+        response.headers["X-Correlation-ID"] = str(correlation_id)
         return response

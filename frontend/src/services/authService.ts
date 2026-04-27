@@ -15,4 +15,10 @@ export const authService = {
     }),
 
   me: () => httpRequest<AuthUser>("/api/v1/users/me"),
+
+  updateMe: (payload: { full_name?: string }) =>
+    httpRequest<AuthUser>("/api/v1/users/me", {
+      method: "PATCH",
+      body: payload,
+    }),
 };

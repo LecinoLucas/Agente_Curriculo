@@ -1,6 +1,9 @@
 from celery import Celery
 
 from src.core.settings import settings
+from src.observability.logging import configure_structured_logging
+
+configure_structured_logging()
 
 celery_app = Celery(
     "resume_ai",
@@ -9,6 +12,7 @@ celery_app = Celery(
     include=[
         "src.interface.workers.analysis_tasks",
         "src.interface.workers.matching_tasks",
+        "src.interface.workers.document_ai_tasks",
     ],
 )
 
@@ -24,6 +28,7 @@ celery_app.conf.update(
     task_routes={
         "src.interface.workers.analysis_tasks.*": {"queue": "analysis.default"},
         "src.interface.workers.matching_tasks.*": {"queue": "matching.default"},
+        "src.interface.workers.document_ai_tasks.*": {"queue": "document_ai.default"},
     },
     task_annotations={
         "src.interface.workers.analysis_tasks.process_analysis": {
@@ -32,6 +37,10 @@ celery_app.conf.update(
         },
         "src.interface.workers.matching_tasks.match_analysis_to_job": {
             "max_retries": 3,
+            "default_retry_delay": 30,
+        },
+        "src.interface.workers.document_ai_tasks.process_document_ai_job": {
+            "max_retries": 0,
             "default_retry_delay": 30,
         },
     },
