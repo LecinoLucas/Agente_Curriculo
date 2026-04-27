@@ -100,6 +100,11 @@ ensure_backend_dependencies() {
 # ===== LEITURA DE CONFIGURAÇÃO (OTIMIZADO) =====
 
 read_frontend_api_url() {
+  if [ -n "${VITE_API_BASE_URL:-}" ]; then
+    printf '%s\n' "$VITE_API_BASE_URL"
+    return 0
+  fi
+
   for file in \
     "$FRONTEND_DIR/.env.development.local" \
     "$FRONTEND_DIR/.env.local" \
@@ -119,6 +124,11 @@ read_frontend_api_url() {
 }
 
 read_frontend_port() {
+  if [ -n "${FRONTEND_PORT:-}" ]; then
+    printf '%s\n' "$FRONTEND_PORT"
+    return 0
+  fi
+
   port=$(grep "port:[[:space:]]*[0-9]" "$FRONTEND_DIR/vite.config.ts" 2>/dev/null | sed -E 's/.*port:[[:space:]]*([0-9]+).*/\1/' | head -n 1)
   if [ -n "$port" ]; then
     printf '%s\n' "$port"
@@ -181,6 +191,7 @@ bootstrap_database() {
   (
     (print_info "Garantindo usuario admin de desenvolvimento" && npm run --silent backend:seed-admin && print_ok "Usuario admin pronto") &
     (print_info "Inserindo vagas de desenvolvimento" && npm run --silent backend:seed-jobs && print_ok "Vagas de desenvolvimento prontas") &
+    (print_info "Garantindo versao de scoring ativa" && npm run --silent backend:seed-scoring && print_ok "Versao de scoring pronta") &
     wait
   )
 }

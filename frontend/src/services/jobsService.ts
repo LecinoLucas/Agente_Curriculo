@@ -1,6 +1,28 @@
-import { Job, JobCandidate, JobPipelineBoard, PipelineStage } from "../types/domain";
+import { Job, JobCandidate, JobPipelineBoard, JobRanking, PipelineStage } from "../types/domain";
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
+
+function normalizeAiStatus(value: unknown): JobCandidate["ai_status"] {
+  if (
+    value === "pending" ||
+    value === "processing" ||
+    value === "completed" ||
+    value === "failed" ||
+    value === "cancelled"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
 
 export async function listJobs(page = 1, page_size = 20): Promise<Paginated<Job>> {
   return httpRequest<Paginated<Job>>(`/api/v1/jobs?page=${page}&page_size=${page_size}`);
@@ -114,8 +136,45 @@ export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
             match_score: item.match_score != null ? Number(item.match_score) : null,
             top_skills: Array.isArray(item.top_skills) ? item.top_skills.filter(Boolean) : [],
             updated_at: item.updated_at,
+            ai_status: normalizeAiStatus(item.ai_status),
           }))
         : [],
+    })),
+  };
+}
+
+export async function getJobRanking(jobId: string): Promise<JobRanking> {
+  const response = await httpRequest<any>(`/api/v1/jobs/${jobId}/ranking`);
+  const candidatesRaw = Array.isArray(response?.candidates) ? response.candidates : [];
+
+  return {
+    job_id: response?.job_id ?? jobId,
+    total_candidates: toNumber(response?.total_candidates),
+    threshold_high: toNumber(response?.threshold_high),
+    threshold_low: toNumber(response?.threshold_low),
+    score_version: response?.score_version ?? "",
+    candidates: candidatesRaw.map((item: any) => ({
+      rank: toNumber(item?.rank),
+      candidate_id: item?.candidate_id ?? "",
+      candidate_name: item?.candidate_name ?? "Candidato sem nome",
+      stage: item?.stage ?? "",
+      pipeline_status: item?.pipeline_status ?? "",
+      score_breakdown: {
+        skill_match_score: toNumber(item?.score_breakdown?.skill_match_score),
+        experience_match_score: toNumber(item?.score_breakdown?.experience_match_score),
+        seniority_match_score: toNumber(item?.score_breakdown?.seniority_match_score),
+        education_score: toNumber(item?.score_breakdown?.education_score),
+        ai_confidence_score: toNumber(item?.score_breakdown?.ai_confidence_score),
+        penalty_score: toNumber(item?.score_breakdown?.penalty_score),
+        final_score: toNumber(item?.score_breakdown?.final_score),
+      },
+      final_score: toNumber(item?.final_score),
+      decision_suggestion: item?.decision_suggestion ?? "review",
+      reason_codes: Array.isArray(item?.reason_codes) ? item.reason_codes : [],
+      explanation_text: item?.explanation_text ?? "",
+      entered_at: item?.entered_at ?? null,
+      computed_at: item?.computed_at ?? new Date(0).toISOString(),
+      version: item?.version ?? "",
     })),
   };
 }

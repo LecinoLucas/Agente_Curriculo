@@ -42,6 +42,10 @@ class ResumeModel(Base):
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
 
+    __table_args__ = (
+        sa.Index("idx_resumes_candidate_id", "candidate_id"),
+    )
+
     candidate: Mapped["CandidateModel"] = relationship(  # type: ignore[name-defined]
         "CandidateModel", back_populates="resumes", lazy="noload"
     )

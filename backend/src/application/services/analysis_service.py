@@ -21,6 +21,7 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
 from src.interface.api.schemas.analysis_schemas import (
+    AnalysisGlobalItemResponse,
     AnalysisMatchResponse,
     AnalysisPipelineJobMatchResponse,
     AnalysisPipelineResponse,
@@ -115,6 +116,39 @@ class AnalysisService:
         status_filter: str | None,
     ) -> tuple[list[AnalysisModel], int]:
         return await self._repository.list_for_user(current_user, page, page_size, status_filter)
+
+    async def list_global(
+        self,
+        page: int,
+        page_size: int,
+        status_filter: str | None = None,
+        search: str | None = None,
+        used_real_ai: bool | None = None,
+    ) -> tuple[list[AnalysisGlobalItemResponse], int]:
+        rows, total = await self._repository.list_global(
+            page, page_size, status_filter, search, used_real_ai
+        )
+        items = [
+            AnalysisGlobalItemResponse(
+                id=row["id"],
+                candidate_id=row["candidate_id"],
+                candidate_name=row["candidate_name"],
+                candidate_email=row["candidate_email"],
+                resume_file_name=row["resume_file_name"],
+                resume_version_id=row["resume_version_id"],
+                status=row["status"],
+                failure_reason=row["failure_reason"],
+                used_real_ai=row["used_real_ai"],
+                overall_score=float(row["overall_score"]) if row.get("overall_score") is not None else None,
+                retry_count=row["retry_count"],
+                created_at=row["created_at"],
+                started_at=row["started_at"],
+                completed_at=row["completed_at"],
+                failed_at=row["failed_at"],
+            )
+            for row in rows
+        ]
+        return items, total
 
     async def get(self, analysis_id: UUID, current_user: User) -> AnalysisModel:
         analysis = await self._repository.find_for_user(analysis_id, current_user)

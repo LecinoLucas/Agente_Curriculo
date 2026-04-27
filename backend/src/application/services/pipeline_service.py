@@ -245,6 +245,7 @@ class PipelineService:
             )
 
         now = datetime.now(UTC)
+        new_status = to_cfg.terminal_status or "active"
 
         # Task 1: atomic conditional UPDATE — only succeeds if stage hasn't changed since our SELECT.
         saved_row = await self._repository.update_entry_stage_if_current(
@@ -252,6 +253,7 @@ class PipelineService:
             job_id=body.job_id,
             expected_stage=from_stage,
             new_stage=body.stage,
+            new_status=new_status,
             last_moved_by=moved_by,
             updated_at=now,
         )

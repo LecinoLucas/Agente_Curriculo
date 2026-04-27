@@ -103,24 +103,9 @@
   animation-delay: var(--enter-delay, 0ms);
 }
 
-.dnd-card-dragging {
-  opacity: 0.45;
-  transform: rotate(1deg) scale(0.98);
-}
-
-.dnd-drop-target {
-  outline: 2px dashed rgba(59, 130, 246, 0.5);
-  outline-offset: 2px;
-}
-
-.dnd-drop-pulse {
-  animation: kanbanDropPulse 420ms ease-out;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .kanban-column-enter,
-  .kanban-card-enter,
-  .dnd-drop-pulse {
+  .kanban-card-enter {
     animation: none;
     opacity: 1;
   }

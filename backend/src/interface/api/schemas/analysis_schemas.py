@@ -96,6 +96,24 @@ class AnalysisResultResponse(BaseModel):
     created_at: datetime
 
 
+class AnalysisGlobalItemResponse(BaseModel):
+    id: UUID
+    candidate_id: UUID | None = None
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    resume_file_name: str | None = None
+    resume_version_id: UUID
+    status: str
+    failure_reason: str | None = None
+    used_real_ai: bool | None = None
+    overall_score: float | None = None
+    retry_count: int
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    failed_at: datetime | None = None
+
+
 class AnalysisMatchResponse(BaseModel):
     analysis_id: UUID
     job_id: UUID

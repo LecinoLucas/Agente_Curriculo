@@ -16,6 +16,25 @@ function normalizeResumeSummary(item: Partial<ResumeSummary> & { id?: string; ca
   };
 }
 
+function normalizeResumeFileUpload(item: Partial<ResumeFileUploadResponse>): ResumeFileUploadResponse {
+  return {
+    resume_id: item.resume_id ?? "",
+    candidate_id: item.candidate_id ?? "",
+    candidate_full_name: item.candidate_full_name ?? "",
+    version_id: item.version_id ?? "",
+    analysis_auto_requested: item.analysis_auto_requested ?? false,
+    analysis_id: item.analysis_id ?? null,
+    analysis_status: item.analysis_status ?? null,
+    original_file_name: item.original_file_name ?? "",
+    file_size_bytes: item.file_size_bytes ?? 0,
+    file_hash_sha256: item.file_hash_sha256 ?? "",
+    extraction_status: item.extraction_status ?? "pending",
+    page_count: item.page_count ?? null,
+    word_count: item.word_count ?? null,
+    prefilled_fields: Array.isArray(item.prefilled_fields) ? item.prefilled_fields : [],
+  };
+}
+
 export const resumeService = {
   list: () =>
     httpRequest<ResumeSummary[]>("/api/v1/resumes").then((payload) =>
@@ -24,8 +43,11 @@ export const resumeService = {
 
   get: (id: string) => httpRequest<Resume>(`/api/v1/resumes/${id}`),
 
-  initiateUpload: () =>
-    httpRequest<ResumeUploadResponse>("/api/v1/resumes", { method: "POST" }),
+  initiateUpload: (candidateId?: string) =>
+    httpRequest<ResumeUploadResponse>("/api/v1/resumes", {
+      method: "POST",
+      body: candidateId ? { candidate_id: candidateId } : undefined,
+    }),
 
   uploadPdf: (id: string, file: File) => {
     const formData = new FormData();
@@ -33,7 +55,7 @@ export const resumeService = {
     return httpRequest<ResumeFileUploadResponse>(`/api/v1/resumes/${id}/upload`, {
       method: "POST",
       body: formData,
-    });
+    }).then(normalizeResumeFileUpload);
   },
 
   update: (id: string, payload: { title?: string; status?: "active" | "archived" }) =>

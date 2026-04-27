@@ -16,11 +16,11 @@ const AI_STATUS_CLS: Record<AIAnalysisStatus, string> = {
 };
 
 const AI_STATUS_LABEL: Record<AIAnalysisStatus, string> = {
-  completed:  "IA ✓",
-  processing: "IA ⟳",
-  pending:    "IA ·",
-  failed:     "IA ✗",
-  cancelled:  "IA —",
+  completed:  "IA concluida",
+  processing: "IA processando",
+  pending:    "IA na fila",
+  failed:     "IA falhou",
+  cancelled:  "IA cancelada",
 };
 
 function scoreVariant(score: number | null | undefined): keyof typeof SCORE_CLS {
@@ -37,20 +37,14 @@ function fmt(score: number | null | undefined): string {
 interface KanbanCardProps {
   candidate: JobCandidate;
   isSaving: boolean;
-  isDragging: boolean;
   enterDelay: number;
-  onDragStart: () => void;
-  onDragEnd: () => void;
   onCardClick?: () => void;
 }
 
 export function KanbanCard({
   candidate,
   isSaving,
-  isDragging,
   enterDelay,
-  onDragStart,
-  onDragEnd,
   onCardClick,
 }: KanbanCardProps) {
   const variant = scoreVariant(candidate.match_score);
@@ -59,36 +53,34 @@ export function KanbanCard({
 
   return (
     <div
-      draggable={!isSaving}
       onClick={onCardClick}
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", candidate.candidate_id);
-        onDragStart();
-      }}
-      onDragEnd={onDragEnd}
       className={[
         "select-none rounded-lg border bg-white p-3 shadow-sm",
         "transition-all duration-150 hover:shadow-md hover:border-gray-300",
-        isSaving ? "cursor-wait opacity-50" : "cursor-grab active:cursor-grabbing",
+        isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
         onCardClick ? "hover:ring-2 hover:ring-blue-200" : "",
-        isDragging ? "dnd-card-dragging" : "",
         "kanban-card-enter",
       ]
         .filter(Boolean)
         .join(" ")}
       style={{ "--enter-delay": `${enterDelay}ms` } as CSSProperties}
     >
-      {/* Name + match score */}
+      {/* Name + compatibility score */}
       <div className="flex items-start justify-between gap-2">
         <span className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900">
           {candidate.candidate_name}
         </span>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${SCORE_CLS[variant]}`}
-        >
-          {fmt(candidate.match_score)}
-        </span>
+        <div className="shrink-0 text-right">
+          <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+            Compat.
+          </div>
+          <span
+            className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${SCORE_CLS[variant]}`}
+            title="Compatibilidade com a vaga"
+          >
+            {fmt(candidate.match_score)}
+          </span>
+        </div>
       </div>
 
       {/* Top skills */}
@@ -115,7 +107,7 @@ export function KanbanCard({
             {aiStatus ? (
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${AI_STATUS_CLS[aiStatus]}`}
-                title={`IA: ${aiStatus}`}
+                title={AI_STATUS_LABEL[aiStatus]}
               >
                 {AI_STATUS_LABEL[aiStatus]}
               </span>

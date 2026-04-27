@@ -7,9 +7,14 @@ from pydantic import BaseModel, Field
 
 class ResumeUploadResponse(BaseModel):
     resume_id: UUID
+    candidate_id: UUID
     version_id: UUID
     upload_url: str
     upload_fields: dict[str, str]
+
+
+class ResumeUploadRequest(BaseModel):
+    candidate_id: UUID | None = None
 
 
 class ResumeFileUploadResponse(BaseModel):
@@ -17,6 +22,9 @@ class ResumeFileUploadResponse(BaseModel):
     candidate_id: UUID
     candidate_full_name: str
     version_id: UUID
+    analysis_auto_requested: bool = False
+    analysis_id: UUID | None = None
+    analysis_status: str | None = None
     original_file_name: str
     file_size_bytes: int
     file_hash_sha256: str

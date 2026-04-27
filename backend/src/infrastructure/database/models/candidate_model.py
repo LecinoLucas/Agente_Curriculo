@@ -24,6 +24,7 @@ class CandidateModel(Base):
     full_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(sa.String(255))
     phone: Mapped[Optional[str]] = mapped_column(sa.String(50))
+    cpf: Mapped[Optional[str]] = mapped_column(sa.String(14))
     location_city: Mapped[Optional[str]] = mapped_column(sa.String(100))
     location_state: Mapped[Optional[str]] = mapped_column(sa.String(100))
     location_country: Mapped[str] = mapped_column(sa.String(10), nullable=False, server_default="BR")
@@ -46,6 +47,11 @@ class CandidateModel(Base):
         server_default=sa.text("NOW()"),
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
+
+    __table_args__ = (
+        sa.Index("idx_candidates_email", "email"),
+        sa.Index("idx_candidates_cpf", "cpf"),
+    )
 
     resumes: Mapped[list["ResumeModel"]] = relationship(  # type: ignore[name-defined]
         "ResumeModel", back_populates="candidate", lazy="noload"

@@ -1,4 +1,5 @@
 import {
+  AnalysisGlobalItem,
   AnalysisMatch,
   AnalysisPipelineStatus,
   AnalysisResult,
@@ -132,6 +133,28 @@ export const analysisService = {
     httpRequest<AnalysisPipelineStatus>(`/api/v1/analyses/${analysisId}/pipeline`).then(normalizePipelineStatus),
   result: (analysisId: string) =>
     httpRequest<AnalysisResult>(`/api/v1/analyses/${analysisId}/result`).then(normalizeAnalysisResult),
+
+  listGlobal: (
+    page = 1,
+    pageSize = 20,
+    statusFilter?: string,
+    search?: string,
+    usedRealAi?: boolean,
+  ): Promise<PaginatedResponse<AnalysisGlobalItem>> => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
+    if (search) params.set("search", search);
+    if (usedRealAi !== undefined) params.set("used_real_ai", String(usedRealAi));
+    return httpRequest<PaginatedResponse<AnalysisGlobalItem>>(
+      `/api/v1/analyses/global?${params.toString()}`,
+    ).then((payload) => ({
+      data: Array.isArray(payload?.data) ? payload.data : [],
+      total: payload?.total ?? 0,
+      page: payload?.page ?? page,
+      page_size: payload?.page_size ?? pageSize,
+      total_pages: payload?.total_pages ?? 1,
+    }));
+  },
 };
 
 export async function matchToJob(analysisId: string, jobId: string): Promise<AnalysisMatch> {

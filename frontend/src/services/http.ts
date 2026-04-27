@@ -29,7 +29,7 @@ function statusFallback(status: number): string {
     503: "Serviço temporariamente indisponível",
     504: "Tempo de resposta do servidor esgotado",
   };
-  return messages[status] ?? `Erro inesperado (HTTP ${status})`;
+  return messages[status] ?? `Não foi possível concluir a solicitação (HTTP ${status})`;
 }
 
 function resolveError(status: number, payload: unknown): HttpError {

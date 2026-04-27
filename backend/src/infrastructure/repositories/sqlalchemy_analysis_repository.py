@@ -119,6 +119,87 @@ class SQLAlchemyAnalysisRepository:
             sa.select(AnalysisResultModel).where(AnalysisResultModel.analysis_id == analysis_id)
         )
 
+    async def list_global(
+        self,
+        page: int,
+        page_size: int,
+        status_filter: str | None = None,
+        search: str | None = None,
+        used_real_ai: bool | None = None,
+    ) -> tuple[list[dict], int]:
+        total_tokens_expr = (
+            sa.func.coalesce(AnalysisResultModel.input_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.output_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.cache_read_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.cache_write_tokens, 0)
+        )
+        used_real_ai_expr = sa.case(
+            (AnalysisResultModel.id.is_(None), None),
+            (total_tokens_expr > 0, True),
+            else_=False,
+        ).label("used_real_ai")
+
+        # Admin view — intentionally includes analyses for soft-deleted candidates/resumes.
+        filters: list[sa.ColumnElement] = []
+        if status_filter:
+            filters.append(AnalysisModel.status == status_filter)
+        if search:
+            term = f"%{search.lower().strip()}%"
+            filters.append(
+                sa.or_(
+                    sa.func.lower(CandidateModel.full_name).like(term),
+                    sa.func.lower(CandidateModel.email).like(term),
+                )
+            )
+        if used_real_ai is True:
+            filters.append(
+                sa.and_(AnalysisResultModel.id.is_not(None), total_tokens_expr > 0)
+            )
+        elif used_real_ai is False:
+            filters.append(
+                sa.and_(AnalysisResultModel.id.is_not(None), total_tokens_expr == 0)
+            )
+
+        joins = (
+            sa.select(sa.func.count())
+            .select_from(AnalysisModel)
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .join(CandidateModel, CandidateModel.id == ResumeModel.candidate_id)
+            .outerjoin(AnalysisResultModel, AnalysisResultModel.analysis_id == AnalysisModel.id)
+        )
+        total = int((await self._session.scalar(joins.where(*filters))) or 0)
+
+        offset = (page - 1) * page_size
+        result = await self._session.execute(
+            sa.select(
+                AnalysisModel.id,
+                AnalysisModel.resume_version_id,
+                AnalysisModel.status,
+                AnalysisModel.failure_reason,
+                AnalysisModel.retry_count,
+                AnalysisModel.created_at,
+                AnalysisModel.started_at,
+                AnalysisModel.completed_at,
+                AnalysisModel.failed_at,
+                CandidateModel.id.label("candidate_id"),
+                CandidateModel.full_name.label("candidate_name"),
+                CandidateModel.email.label("candidate_email"),
+                ResumeVersionModel.original_file_name.label("resume_file_name"),
+                used_real_ai_expr,
+                AnalysisResultModel.overall_score,
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .join(CandidateModel, CandidateModel.id == ResumeModel.candidate_id)
+            .outerjoin(AnalysisResultModel, AnalysisResultModel.analysis_id == AnalysisModel.id)
+            .where(*filters)
+            .order_by(AnalysisModel.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        return [dict(row) for row in result.mappings().all()], total
+
     async def find_active_job(self, job_id: UUID) -> JobModel | None:
         return await self._session.scalar(
             sa.select(JobModel).where(JobModel.id == job_id, JobModel.deleted_at.is_(None))

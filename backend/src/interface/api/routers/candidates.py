@@ -1,12 +1,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.candidate_service import (
+    CandidateCpfConflictError,
     CandidateEmailConflictError,
     CandidateNotFoundError,
     CandidateService,
+    InvalidCandidateCpfError,
     InvalidCandidateTextError,
 )
 from src.application.services.pipeline_service import (
@@ -23,6 +26,8 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
 )
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.candidate_schemas import (
+    CandidateCheckResponse,
+    CandidateListSummaryResponse,
     CandidateOverviewResponse,
     CandidateResponse,
     CreateCandidateRequest,
@@ -46,6 +51,18 @@ def _pipeline_service(db: AsyncSession) -> PipelineService:
 
 
 def _handle_candidate_service_error(exc: Exception) -> None:
+    if isinstance(exc, IntegrityError):
+        message = str(exc.orig)
+        if "uq_candidates_active_email" in message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Candidato com este e-mail já existe",
+            )
+        if "uq_candidates_active_cpf" in message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Candidato com este CPF já existe",
+            )
     if isinstance(exc, CandidateNotFoundError):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -56,10 +73,20 @@ def _handle_candidate_service_error(exc: Exception) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Candidato com este e-mail já existe",
         )
+    if isinstance(exc, CandidateCpfConflictError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato com este CPF já existe",
+        )
     if isinstance(exc, InvalidCandidateTextError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Nome não pode estar em branco",
+        )
+    if isinstance(exc, InvalidCandidateCpfError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CPF deve conter 11 dígitos",
         )
     if isinstance(exc, PipelineCandidateNotFoundError):
         raise HTTPException(
@@ -113,6 +140,40 @@ async def list_candidates(
         page_size=page_size,
         total_pages=max(1, (total_items + page_size - 1) // page_size),
     )
+
+
+@router.get("/summaries", response_model=PaginatedResponse[CandidateListSummaryResponse])
+async def list_candidate_summaries(
+    current_user: RecruiterOrAdmin,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    search: str | None = Query(default=None),
+    has_resume: bool | None = Query(default=None),
+    ai_status: list[str] | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedResponse[CandidateListSummaryResponse]:
+    items, total = await _candidate_service(db).list_summaries(
+        page, page_size, search, has_resume, ai_status
+    )
+    return PaginatedResponse[CandidateListSummaryResponse](
+        data=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=max(1, (total + page_size - 1) // page_size),
+    )
+
+
+@router.get("/search", response_model=CandidateCheckResponse)
+async def search_candidate_duplicate(
+    current_user: RecruiterOrAdmin,
+    email: str | None = Query(default=None),
+    cpf: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateCheckResponse:
+    if not email and not cpf:
+        return CandidateCheckResponse(exists=False)
+    return await _candidate_service(db).check_duplicate(email, cpf)
 
 
 @router.get("/{candidate_id}", response_model=CandidateResponse)

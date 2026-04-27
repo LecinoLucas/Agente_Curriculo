@@ -3,6 +3,7 @@ export type Candidate = {
   full_name: string;
   email: string | null;
   phone: string | null;
+  cpf: string | null;
   location_city: string | null;
   location_state: string | null;
   location_country: string;
@@ -15,6 +16,19 @@ export type Candidate = {
   created_by: string;
   created_at: string;
   updated_at: string;
+};
+
+export type CandidateListSummary = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  cpf: string | null;
+  tags: string[];
+  created_at: string;
+  resume_count: number;
+  ai_status: string | null;
+  ai_score: number | null;
 };
 
 export type CandidateResumeOverview = {
@@ -33,6 +47,13 @@ export type CandidateLatestAnalysisOverview = {
   resume_id: string;
   resume_title: string;
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  started_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
+  used_real_ai: boolean | null;
+  task_id: string | null;
+  worker_id: string | null;
   overall_score: number | null;
   seniority_level: string | null;
   total_experience_years: number | null;
@@ -150,6 +171,7 @@ export type AnalysisMatch = {
 
 export type ResumeUploadResponse = {
   resume_id: string;
+  candidate_id: string;
   version_id: string;
   upload_url: string;
   upload_fields: Record<string, string>;
@@ -160,6 +182,9 @@ export type ResumeFileUploadResponse = {
   candidate_id: string;
   candidate_full_name: string;
   version_id: string;
+  analysis_auto_requested: boolean;
+  analysis_id: string | null;
+  analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled" | null;
   original_file_name: string;
   file_size_bytes: number;
   file_hash_sha256: string;
@@ -197,6 +222,48 @@ export type Job = {
   created_by: string;
   created_at: string;
   updated_at: string;
+};
+
+export type RankingReasonCode = {
+  type: "skill_match" | "missing_skill" | "seniority" | "experience" | "strength" | "weakness";
+  field: string;
+  impact: number;
+  description: string;
+};
+
+export type JobRankingBreakdown = {
+  skill_match_score: number;
+  experience_match_score: number;
+  seniority_match_score: number;
+  education_score: number;
+  ai_confidence_score: number;
+  penalty_score: number;
+  final_score: number;
+};
+
+export type JobRankingEntry = {
+  rank: number;
+  candidate_id: string;
+  candidate_name: string;
+  stage: string;
+  pipeline_status: string;
+  score_breakdown: JobRankingBreakdown;
+  final_score: number;
+  decision_suggestion: "approved" | "review" | "rejected_suggested";
+  reason_codes: RankingReasonCode[];
+  explanation_text: string;
+  entered_at: string | null;
+  computed_at: string;
+  version: string;
+};
+
+export type JobRanking = {
+  job_id: string;
+  total_candidates: number;
+  threshold_high: number;
+  threshold_low: number;
+  score_version: string;
+  candidates: JobRankingEntry[];
 };
 
 export type AIAnalysisStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
@@ -241,6 +308,52 @@ export type PipelineColumn = {
 export type JobPipelineBoard = {
   job_id: string;
   columns: PipelineColumn[];
+};
+
+export type PipelineTrigger = "manual" | "auto_match" | "system";
+
+export type PipelineStageTransition = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  from_stage: PipelineStage | null;
+  to_stage: PipelineStage;
+  moved_by: string | null;
+  moved_by_name: string | null;
+  moved_at: string;
+  trigger: PipelineTrigger;
+  notes: string | null;
+  reason: string | null;
+};
+
+export type CandidatePipelineHistory = {
+  candidate_id: string;
+  candidate_name: string;
+  job_id: string;
+  job_title: string;
+  current_stage: PipelineStage;
+  status: "active" | "hired" | "rejected";
+  match_score: number | null;
+  entered_at: string | null;
+  updated_at: string;
+  transitions: PipelineStageTransition[];
+};
+
+export type MovePipelineCandidatePayload = {
+  stage: PipelineStage;
+  notes?: string | null;
+  reason?: string | null;
+};
+
+export type MovePipelineCandidateResponse = {
+  candidate_id: string;
+  job_id: string;
+  stage: PipelineStage;
+  candidate_status: string;
+  status: "active" | "hired" | "rejected";
+  match_score: number | null;
+  transition_id: string;
+  updated_at: string;
 };
 
 export type AnalysisStatus = {
@@ -326,6 +439,24 @@ export type Resume = {
   created_at: string;
   updated_at: string;
   versions: ResumeVersion[];
+};
+
+export type AnalysisGlobalItem = {
+  id: string;
+  candidate_id: string | null;
+  candidate_name: string | null;
+  candidate_email: string | null;
+  resume_file_name: string | null;
+  resume_version_id: string;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  failure_reason: string | null;
+  used_real_ai: boolean | null;
+  overall_score: number | null;
+  retry_count: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
 };
 
 export type AnalysisSummary = {

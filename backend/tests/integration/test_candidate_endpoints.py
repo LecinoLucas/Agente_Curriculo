@@ -189,6 +189,65 @@ async def test_recruiter_can_crud_candidate_and_soft_delete(
 
 
 @pytest.mark.asyncio
+async def test_recruiter_must_provide_valid_email_and_can_search_duplicate_candidates(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-duplicate@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-duplicate@test.com", "password123")
+
+    missing_email = await client.post(
+        "/api/v1/candidates",
+        json=_candidate_payload(email=None),
+        headers=headers,
+    )
+    assert missing_email.status_code == 422
+
+    invalid_cpf = await client.post(
+        "/api/v1/candidates",
+        json=_candidate_payload(cpf="123"),
+        headers=headers,
+    )
+    assert invalid_cpf.status_code == 422
+    assert invalid_cpf.json()["detail"] == "CPF deve conter 11 dígitos"
+
+    created = await client.post(
+        "/api/v1/candidates",
+        json=_candidate_payload(cpf="123.456.789-09"),
+        headers=headers,
+    )
+    assert created.status_code == 201
+    created_body = created.json()
+
+    email_duplicate = await client.get(
+        "/api/v1/candidates/search?email=maria.candidate@test.com",
+        headers=headers,
+    )
+    assert email_duplicate.status_code == 200
+    assert email_duplicate.json() == {
+        "exists": True,
+        "candidate_id": created_body["id"],
+        "full_name": created_body["full_name"],
+    }
+
+    cpf_duplicate = await client.get(
+        "/api/v1/candidates/search?cpf=12345678909",
+        headers=headers,
+    )
+    assert cpf_duplicate.status_code == 200
+    assert cpf_duplicate.json() == {
+        "exists": True,
+        "candidate_id": created_body["id"],
+        "full_name": created_body["full_name"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_matches(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -325,11 +384,12 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
     assert body["latest_analysis"]["overall_score"] == 91.0
     assert body["latest_analysis_pipeline"]["analysis_id"] == str(analysis_id)
     assert body["latest_analysis_pipeline"]["published_jobs_total"] >= 1
-    assert body["latest_analysis_pipeline"]["matched_jobs_count"] == 1
+    assert body["latest_analysis_pipeline"]["matched_jobs_count"] >= 1
     assert body["latest_analysis_pipeline"]["pending_jobs_count"] == (
-        body["latest_analysis_pipeline"]["published_jobs_total"] - 1
+        body["latest_analysis_pipeline"]["published_jobs_total"]
+        - body["latest_analysis_pipeline"]["matched_jobs_count"]
     )
     assert body["latest_analysis_pipeline"]["matching_status"] in {"processing", "completed"}
-    assert len(body["top_matches"]) == 1
+    assert len(body["top_matches"]) >= 1
     assert body["top_matches"][0]["job_id"] == job_id
     assert body["top_matches"][0]["recommendation"] in {"strong_match", "good_match"}

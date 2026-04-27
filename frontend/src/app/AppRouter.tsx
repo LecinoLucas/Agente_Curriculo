@@ -10,8 +10,10 @@ const LoginPage = lazy(() => import("../pages/LoginPage").then((m) => ({ default
 const VagasPage = lazy(() => import("../pages/VagasPage").then((m) => ({ default: m.VagasPage })));
 const PipelinePage = lazy(() => import("../pages/PipelinePage").then((m) => ({ default: m.PipelinePage })));
 const ProfilePage = lazy(() => import("../pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const CandidatesPage = lazy(() => import("../pages/CandidatesPage").then((m) => ({ default: m.CandidatesPage })));
 const AdminPage = lazy(() => import("../pages/AdminPage").then((m) => ({ default: m.AdminPage })));
 const UsersPage = lazy(() => import("../pages/UsersPage").then((m) => ({ default: m.UsersPage })));
+const AnalisesIaPage = lazy(() => import("../pages/AnalisesIaPage").then((m) => ({ default: m.AnalisesIaPage })));
 
 function RouteFallback() {
   return (
@@ -56,6 +58,22 @@ export function AppRouter() {
             }
           />
 
+          <Route
+            path="candidatos"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
+                <CandidatesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="analises-ia"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "recruiter"]}>
+                <AnalisesIaPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="vagas"
             element={

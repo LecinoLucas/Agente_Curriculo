@@ -1,11 +1,24 @@
-import { Candidate, CandidateOverview, PipelineStage } from "../types/domain";
+import {
+  Candidate,
+  CandidateLatestAnalysisOverview,
+  CandidateListSummary,
+  CandidateOverview,
+  PipelineStage,
+} from "../types/domain";
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
 
+export type CandidateCheckResponse = {
+  exists: boolean;
+  candidate_id: string | null;
+  full_name: string | null;
+};
+
 export type CreateCandidatePayload = {
   full_name: string;
-  email?: string;
+  email: string;
   phone?: string;
+  cpf?: string;
   location_city?: string;
   location_state?: string;
   location_country?: string;
@@ -37,6 +50,7 @@ function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_
     full_name: candidate.full_name ?? "Candidato sem nome",
     email: candidate.email ?? null,
     phone: candidate.phone ?? null,
+    cpf: candidate.cpf ?? null,
     location_city: candidate.location_city ?? null,
     location_state: candidate.location_state ?? null,
     location_country: candidate.location_country ?? "Brasil",
@@ -52,11 +66,35 @@ function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_
   };
 }
 
+function normalizeLatestAnalysis(
+  item: Partial<CandidateLatestAnalysisOverview>,
+): CandidateLatestAnalysisOverview {
+  return {
+    analysis_id: item.analysis_id ?? "",
+    resume_id: item.resume_id ?? "",
+    resume_title: item.resume_title ?? "",
+    status: item.status ?? "pending",
+    started_at: item.started_at ?? null,
+    completed_at: item.completed_at ?? null,
+    failed_at: item.failed_at ?? null,
+    failure_reason: item.failure_reason ?? null,
+    used_real_ai: item.used_real_ai ?? null,
+    task_id: item.task_id ?? null,
+    worker_id: item.worker_id ?? null,
+    overall_score: item.overall_score != null ? Number(item.overall_score) : null,
+    seniority_level: item.seniority_level ?? null,
+    total_experience_years:
+      item.total_experience_years != null ? Number(item.total_experience_years) : null,
+    created_at: item.created_at ?? new Date(0).toISOString(),
+    updated_at: item.updated_at ?? new Date(0).toISOString(),
+  };
+}
+
 function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candidate?: Partial<Candidate> }): CandidateOverview {
   return {
     candidate: normalizeCandidate(item.candidate ?? {}),
     resumes: Array.isArray(item.resumes) ? item.resumes : [],
-    latest_analysis: item.latest_analysis ?? null,
+    latest_analysis: item.latest_analysis ? normalizeLatestAnalysis(item.latest_analysis) : null,
     latest_analysis_pipeline: item.latest_analysis_pipeline ?? null,
     top_matches: Array.isArray(item.top_matches) ? item.top_matches : [],
     pipeline_entries: Array.isArray(item.pipeline_entries) ? item.pipeline_entries : [],
@@ -82,6 +120,29 @@ export const candidatesService = {
 
   async getOverview(id: string): Promise<CandidateOverview> {
     return httpRequest<CandidateOverview>(`/api/v1/candidates/${id}/overview`).then(normalizeCandidateOverview);
+  },
+
+  async listSummaries(
+    page = 1,
+    pageSize = 20,
+    search?: string,
+    hasResume?: boolean,
+    aiStatus?: string[],
+  ): Promise<Paginated<CandidateListSummary>> {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (search) params.set("search", search);
+    if (hasResume !== undefined) params.set("has_resume", String(hasResume));
+    if (aiStatus?.length) aiStatus.forEach((s) => params.append("ai_status", s));
+    return httpRequest<Paginated<CandidateListSummary>>(
+      `/api/v1/candidates/summaries?${params.toString()}`,
+    );
+  },
+
+  async checkDuplicate(email?: string, cpf?: string): Promise<CandidateCheckResponse> {
+    const params = new URLSearchParams();
+    if (email) params.set("email", email);
+    if (cpf) params.set("cpf", cpf);
+    return httpRequest<CandidateCheckResponse>(`/api/v1/candidates/search?${params.toString()}`);
   },
 
   async create(payload: CreateCandidatePayload): Promise<Candidate> {

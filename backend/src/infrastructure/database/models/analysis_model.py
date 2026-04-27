@@ -87,7 +87,10 @@ class AnalysisModel(Base):
     __tablename__ = "analyses"
 
     id: Mapped[UUID] = mapped_column(
-        sa.UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
     )
     resume_version_id: Mapped[UUID] = mapped_column(
         sa.UUID(as_uuid=True), sa.ForeignKey("resume_versions.id"), nullable=False
@@ -133,10 +136,21 @@ class AnalysisModel(Base):
     worker_id: Mapped[str | None] = mapped_column(sa.String(255))
     task_id: Mapped[str | None] = mapped_column(sa.String(255))
     created_at: Mapped[datetime] = mapped_column(
-        sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("NOW()")
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("NOW()")
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+
+    __table_args__ = (
+        sa.Index("idx_analyses_status_created_at", "status", "created_at"),
+        sa.Index("idx_analyses_created_at", "created_at"),
     )
 
     result: Mapped[AnalysisResultModel | None] = relationship(
@@ -148,7 +162,10 @@ class AnalysisResultModel(Base):
     __tablename__ = "analysis_results"
 
     id: Mapped[UUID] = mapped_column(
-        sa.UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
     )
     analysis_id: Mapped[UUID] = mapped_column(
         sa.UUID(as_uuid=True), sa.ForeignKey("analyses.id"), nullable=False, unique=True
@@ -181,7 +198,10 @@ class AnalysisResultModel(Base):
     raw_llm_response: Mapped[str | None] = mapped_column(sa.Text)
     prompt_version_used: Mapped[str | None] = mapped_column(sa.String(50))
     created_at: Mapped[datetime] = mapped_column(
-        sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("NOW()")
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
     )
 
     analysis: Mapped[AnalysisModel] = relationship(

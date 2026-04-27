@@ -12,7 +12,9 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/pipeline", label: "Pipeline", caption: "Candidatos e fluxo de admissão", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/candidatos", label: "Candidatos", caption: "Listagem e gestão de candidatos", roles: ["admin", "recruiter", "viewer"] },
   { to: "/vagas", label: "Vagas", caption: "Oportunidades abertas", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/analises-ia", label: "Análises IA", caption: "Execuções e status da IA", roles: ["admin", "recruiter"] },
   { to: "/perfil", label: "Meu perfil", caption: "Dados da conta", roles: ["admin", "recruiter", "candidate", "viewer"] },
 ];
 

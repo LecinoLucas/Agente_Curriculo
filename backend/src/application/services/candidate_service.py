@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -6,7 +7,9 @@ from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
 )
 from src.interface.api.schemas.candidate_schemas import (
+    CandidateCheckResponse,
     CandidateJobMatchSummaryResponse,
+    CandidateListSummaryResponse,
     CandidateLatestAnalysisPipelineResponse,
     CandidateLatestAnalysisResponse,
     CandidateOverviewResponse,
@@ -26,7 +29,15 @@ class CandidateEmailConflictError(Exception):
     pass
 
 
+class CandidateCpfConflictError(Exception):
+    pass
+
+
 class InvalidCandidateTextError(Exception):
+    pass
+
+
+class InvalidCandidateCpfError(Exception):
     pass
 
 
@@ -36,13 +47,18 @@ class CandidateService:
 
     async def create(self, body: CreateCandidateRequest, created_by: UUID) -> CandidateModel:
         email = self._clean_email(body.email)
-        if email is not None and await self._repository.find_active_by_email(email):
+        if await self._repository.find_active_by_email(email):
             raise CandidateEmailConflictError
+
+        cpf = self._clean_cpf(body.cpf)
+        if cpf is not None and await self._repository.find_active_by_cpf(cpf):
+            raise CandidateCpfConflictError
 
         candidate = CandidateModel(
             full_name=self._clean_required_text(body.full_name),
             email=email,
             phone=body.phone,
+            cpf=cpf,
             location_city=body.location_city,
             location_state=body.location_state,
             location_country=body.location_country.upper().strip(),
@@ -63,6 +79,34 @@ class CandidateService:
         search: str | None = None,
     ) -> tuple[list[CandidateModel], int]:
         return await self._repository.list_active(page, page_size, search)
+
+    async def list_summaries(
+        self,
+        page: int,
+        page_size: int,
+        search: str | None = None,
+        has_resume: bool | None = None,
+        ai_status_filter: list[str] | None = None,
+    ) -> tuple[list[CandidateListSummaryResponse], int]:
+        rows, total = await self._repository.list_summaries(
+            page, page_size, search, has_resume, ai_status_filter
+        )
+        items = [
+            CandidateListSummaryResponse(
+                id=row["id"],
+                full_name=row["full_name"],
+                email=row["email"],
+                phone=row["phone"],
+                cpf=row["cpf"],
+                tags=row["tags"] or [],
+                created_at=row["created_at"],
+                resume_count=int(row["resume_count"] or 0),
+                ai_status=row["ai_status"],
+                ai_score=float(row["ai_score"]) if row["ai_score"] is not None else None,
+            )
+            for row in rows
+        ]
+        return items, total
 
     async def get(self, candidate_id: UUID) -> CandidateModel:
         candidate = await self._repository.find_active_by_id(candidate_id)
@@ -150,6 +194,18 @@ class CandidateService:
                     raise CandidateEmailConflictError
             candidate.email = email
 
+        if body.cpf is not None:
+            cpf = self._clean_cpf(body.cpf)
+            if cpf != candidate.cpf:
+                conflict = (
+                    await self._repository.find_active_by_cpf(cpf)
+                    if cpf is not None
+                    else None
+                )
+                if conflict is not None and conflict.id != candidate_id:
+                    raise CandidateCpfConflictError
+            candidate.cpf = cpf
+
         if body.full_name is not None:
             candidate.full_name = self._clean_required_text(body.full_name)
         if body.phone is not None:
@@ -181,9 +237,45 @@ class CandidateService:
         candidate.updated_at = now
         await self._repository.save(candidate)
 
+    async def check_duplicate(
+        self,
+        email: str | None,
+        cpf: str | None,
+    ) -> CandidateCheckResponse:
+        if email:
+            clean_email = self._clean_email(email)
+            if clean_email:
+                candidate = await self._repository.find_active_by_email(clean_email)
+                if candidate:
+                    return CandidateCheckResponse(
+                        exists=True,
+                        candidate_id=candidate.id,
+                        full_name=candidate.full_name,
+                    )
+        if cpf:
+            clean_cpf = self._clean_cpf(cpf)
+            if clean_cpf:
+                candidate = await self._repository.find_active_by_cpf(clean_cpf)
+                if candidate:
+                    return CandidateCheckResponse(
+                        exists=True,
+                        candidate_id=candidate.id,
+                        full_name=candidate.full_name,
+                    )
+        return CandidateCheckResponse(exists=False)
+
     @staticmethod
     def _clean_email(email: str | None) -> str | None:
         return email.lower().strip() if email else None
+
+    @staticmethod
+    def _clean_cpf(cpf: str | None) -> str | None:
+        if not cpf:
+            return None
+        digits = re.sub(r"\D", "", cpf)
+        if len(digits) != 11:
+            raise InvalidCandidateCpfError
+        return digits
 
     @staticmethod
     def _clean_required_text(value: str) -> str:

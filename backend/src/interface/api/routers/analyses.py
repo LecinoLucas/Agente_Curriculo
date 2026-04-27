@@ -24,6 +24,7 @@ from src.infrastructure.database.models.resume_model import ResumeModel, ResumeV
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.interface.api.dependencies import CurrentUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.analysis_schemas import (
+    AnalysisGlobalItemResponse,
     AnalysisMatchResponse,
     AnalysisPipelineResponse,
     AnalysisRequestResponse,
@@ -204,6 +205,28 @@ async def list_analyses(
 
     return PaginatedResponse[AnalysisResponse](
         data=[await _analysis_response(db, item) for item in analyses],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=max(1, (total + page_size - 1) // page_size),
+    )
+
+
+@router.get("/global", response_model=PaginatedResponse[AnalysisGlobalItemResponse])
+async def list_analyses_global(
+    current_user: RecruiterOrAdmin,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    status_filter: str | None = Query(default=None, alias="status"),
+    search: str | None = Query(default=None),
+    used_real_ai: bool | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedResponse[AnalysisGlobalItemResponse]:
+    items, total = await _analysis_service(db).list_global(
+        page, page_size, status_filter, search, used_real_ai
+    )
+    return PaginatedResponse[AnalysisGlobalItemResponse](
+        data=items,
         total=total,
         page=page,
         page_size=page_size,

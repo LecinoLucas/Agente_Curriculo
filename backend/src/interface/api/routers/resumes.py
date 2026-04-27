@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -17,10 +18,13 @@ from src.application.services.resume_service import (
     ResumeDetails,
     ResumeNotFoundError,
     ResumeService,
+    ResumeUploadCandidateNotFoundError,
+    ResumeUploadCandidateRequiredError,
 )
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
+from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.interface.api.dependencies import CurrentUser, get_db
 from src.interface.api.schemas.resume_schemas import (
@@ -28,6 +32,7 @@ from src.interface.api.schemas.resume_schemas import (
     ResumeResponse,
     ResumeSummaryResponse,
     ResumeUploadResponse,
+    ResumeUploadRequest,
     ResumeVersionResponse,
     UpdateResumeRequest,
 )
@@ -45,6 +50,16 @@ def _handle_resume_service_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Currículo não encontrado",
+        )
+    if isinstance(exc, ResumeUploadCandidateNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidato não encontrado",
+        )
+    if isinstance(exc, ResumeUploadCandidateRequiredError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="candidate_id é obrigatório para este perfil",
         )
     if isinstance(exc, InvalidResumeTextError):
         raise HTTPException(
@@ -98,12 +113,17 @@ async def list_resumes(
 async def initiate_resume_upload(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
+    body: ResumeUploadRequest | None = None,
 ) -> ResumeUploadResponse:
     try:
-        upload = await _resume_service(db).initiate_dev_upload(current_user)
+        upload = await _resume_service(db).initiate_dev_upload(
+            current_user,
+            candidate_id=body.candidate_id if body is not None else None,
+        )
         await db.commit()
         return ResumeUploadResponse(
             resume_id=upload.resume.id,
+            candidate_id=upload.resume.candidate_id,
             version_id=upload.version.id,
             upload_url=upload.upload_url,
             upload_fields=upload.upload_fields,
@@ -136,6 +156,8 @@ async def upload_resume_pdf(
 ) -> ResumeFileUploadResponse:
     try:
         analysis_id = None
+        analysis_auto_requested = False
+        analysis_status = None
         uploaded = await _resume_service(db).upload_pdf(
             resume_id,
             file_name=file.filename or "resume.pdf",
@@ -159,12 +181,29 @@ async def upload_resume_pdf(
             pass
         await db.commit()
         if analysis_id is not None:
-            enqueue_analysis(analysis_id)
+            try:
+                enqueue_analysis(analysis_id)
+                analysis_auto_requested = True
+                analysis_status = "pending"
+            except Exception as exc:
+                analysis = await db.get(AnalysisModel, analysis_id)
+                if analysis is not None and analysis.status == "pending":
+                    analysis.status = "failed"
+                    analysis.failed_at = datetime.now(UTC)
+                    analysis.failure_reason = (
+                        "Falha ao enfileirar análise automática. Solicite manualmente."
+                    )
+                    analysis.updated_at = datetime.now(UTC)
+                    await db.commit()
+                analysis_status = "failed"
         return ResumeFileUploadResponse(
             resume_id=uploaded.resume.id,
             candidate_id=uploaded.candidate.id,
             candidate_full_name=uploaded.candidate.full_name,
             version_id=uploaded.version.id,
+            analysis_auto_requested=analysis_auto_requested,
+            analysis_id=analysis_id,
+            analysis_status=analysis_status,
             original_file_name=uploaded.version.original_file_name,
             file_size_bytes=uploaded.version.file_size_bytes,
             file_hash_sha256=uploaded.version.file_hash_sha256,

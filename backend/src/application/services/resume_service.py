@@ -14,6 +14,14 @@ class ResumeNotFoundError(Exception):
     pass
 
 
+class ResumeUploadCandidateNotFoundError(Exception):
+    pass
+
+
+class ResumeUploadCandidateRequiredError(Exception):
+    pass
+
+
 class InvalidResumeTextError(Exception):
     pass
 
@@ -60,17 +68,12 @@ class ResumeService:
             return []
         return await self._repository.list_summaries(candidate.id)
 
-    async def initiate_dev_upload(self, current_user: User) -> ResumeUpload:
-        candidate = await self._repository.find_candidate_by_user_id(current_user.id)
-        if candidate is None:
-            candidate = await self._repository.create_candidate(
-                CandidateModel(
-                    user_id=current_user.id,
-                    full_name=current_user.full_name,
-                    email=current_user.email,
-                    created_by=current_user.id,
-                )
-            )
+    async def initiate_dev_upload(
+        self,
+        current_user: User,
+        candidate_id: UUID | None = None,
+    ) -> ResumeUpload:
+        candidate = await self._resolve_upload_candidate(current_user, candidate_id)
 
         resume = await self._repository.create_resume(
             ResumeModel(
@@ -215,6 +218,40 @@ class ResumeService:
     @staticmethod
     def _can_manage_all(user: User) -> bool:
         return user.role.value in {"admin", "recruiter"}
+
+    async def _resolve_upload_candidate(
+        self,
+        current_user: User,
+        candidate_id: UUID | None,
+    ) -> CandidateModel:
+        if candidate_id is not None:
+            candidate = await self._repository.find_candidate_by_id(candidate_id)
+            if candidate is None:
+                raise ResumeUploadCandidateNotFoundError
+
+            if self._can_manage_all(current_user):
+                return candidate
+
+            owner_candidate = await self._repository.find_candidate_by_user_id(current_user.id)
+            if owner_candidate is None or owner_candidate.id != candidate_id:
+                raise ResumeUploadCandidateNotFoundError
+            return candidate
+
+        if self._can_manage_all(current_user):
+            raise ResumeUploadCandidateRequiredError
+
+        candidate = await self._repository.find_candidate_by_user_id(current_user.id)
+        if candidate is not None:
+            return candidate
+
+        return await self._repository.create_candidate(
+            CandidateModel(
+                user_id=current_user.id,
+                full_name=current_user.full_name,
+                email=current_user.email,
+                created_by=current_user.id,
+            )
+        )
 
     @staticmethod
     def _clean_required_text(value: str) -> str:

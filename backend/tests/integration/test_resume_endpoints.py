@@ -14,7 +14,8 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
     ResumeJobMatchModel,
 )
-from src.infrastructure.database.models.resume_model import ResumeVersionModel
+from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -133,6 +134,84 @@ async def test_candidate_can_manage_own_resume_lifecycle(
 
 
 @pytest.mark.asyncio
+async def test_recruiter_must_inform_candidate_id_when_starting_resume_upload(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-resume-missing-candidate@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(
+        client,
+        "recruiter-resume-missing-candidate@test.com",
+        "password123",
+    )
+
+    response = await client.post("/api/v1/resumes", headers=headers)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "candidate_id é obrigatório para este perfil"
+
+
+@pytest.mark.asyncio
+async def test_recruiter_can_start_resume_upload_for_explicit_candidate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-explicit-candidate@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _create_active_user(
+        db_session,
+        "candidate-explicit-resume@test.com",
+        "password123",
+        UserRole.CANDIDATE,
+    )
+    headers = await _auth_headers(client, "recruiter-explicit-candidate@test.com", "password123")
+
+    candidate = await db_session.scalar(
+        sa.select(CandidateModel).where(CandidateModel.email == "candidate-explicit-resume@test.com")
+    )
+    if candidate is None:
+        candidate = CandidateModel(
+            user_id=None,
+            full_name="Candidate Explicit Resume",
+            email="candidate-explicit-resume@test.com",
+            created_by=recruiter.id,
+        )
+        db_session.add(candidate)
+        await db_session.commit()
+        await db_session.refresh(candidate)
+
+    upload = await client.post(
+        "/api/v1/resumes",
+        headers=headers,
+        json={"candidate_id": str(candidate.id)},
+    )
+
+    assert upload.status_code == 202
+    body = upload.json()
+    assert body["candidate_id"] == str(candidate.id)
+
+    resume = await db_session.scalar(
+        sa.select(ResumeModel).where(ResumeModel.id == UUID(body["resume_id"]))
+    )
+    assert resume is not None
+    assert resume.candidate_id == candidate.id
+
+    recruiter_candidate = await db_session.scalar(
+        sa.select(CandidateModel).where(CandidateModel.user_id == recruiter.id)
+    )
+    assert recruiter_candidate is None
+
+
+@pytest.mark.asyncio
 async def test_candidate_can_upload_pdf_and_extract_text(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -166,6 +245,9 @@ async def test_candidate_can_upload_pdf_and_extract_text(
     assert body["extraction_status"] == "completed"
     assert body["page_count"] == 1
     assert body["word_count"] == 4
+    assert body["analysis_auto_requested"] is False
+    assert body["analysis_id"] is None
+    assert body["analysis_status"] is None
 
     version = await db_session.scalar(
         sa.select(ResumeVersionModel).where(ResumeVersionModel.id == UUID(version_id))
@@ -173,6 +255,133 @@ async def test_candidate_can_upload_pdf_and_extract_text(
     assert version is not None
     assert version.extracted_text == "Lucas Backend Python FastAPI"
     assert version.extraction_status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_candidate_upload_pdf_can_auto_request_analysis_when_ai_is_configured(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    candidate = await _create_active_user(
+        db_session,
+        "candidate-upload-auto-analysis@test.com",
+        "password123",
+        UserRole.CANDIDATE,
+    )
+    headers = await _auth_headers(client, "candidate-upload-auto-analysis@test.com", "password123")
+
+    upload = await client.post("/api/v1/resumes", headers=headers)
+    assert upload.status_code == 202
+    resume_id = upload.json()["resume_id"]
+    version_id = UUID(upload.json()["version_id"])
+
+    ai_model = AIModelModel(
+        provider="anthropic",
+        model_id=f"claude-upload-auto-{uuid4()}",
+        model_name="Claude Upload Auto Test",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        name=f"upload_auto_prompt_{uuid4()}",
+        version=1,
+        template_type="full_analysis",
+        user_prompt_template="Analyze resume",
+        is_active=True,
+        created_by=candidate.id,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        "src.interface.api.routers.resumes.enqueue_analysis",
+        lambda analysis_id: None,
+    )
+
+    pdf = _pdf_with_text("Marina Python SQL FastAPI")
+    response = await client.post(
+        f"/api/v1/resumes/{resume_id}/upload",
+        headers=headers,
+        files={"file": ("marina-resume.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analysis_auto_requested"] is True
+    assert body["analysis_id"] is not None
+    assert body["analysis_status"] == "pending"
+
+    analysis = await db_session.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.id == UUID(body["analysis_id"]))
+    )
+    assert analysis is not None
+    assert analysis.resume_version_id == version_id
+    assert analysis.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_candidate_upload_pdf_falls_back_when_auto_enqueue_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    candidate = await _create_active_user(
+        db_session,
+        "candidate-upload-enqueue-fails@test.com",
+        "password123",
+        UserRole.CANDIDATE,
+    )
+    headers = await _auth_headers(client, "candidate-upload-enqueue-fails@test.com", "password123")
+
+    upload = await client.post("/api/v1/resumes", headers=headers)
+    assert upload.status_code == 202
+    resume_id = upload.json()["resume_id"]
+
+    ai_model = AIModelModel(
+        provider="anthropic",
+        model_id=f"claude-upload-fail-{uuid4()}",
+        model_name="Claude Upload Fail Test",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        name=f"upload_fail_prompt_{uuid4()}",
+        version=1,
+        template_type="full_analysis",
+        user_prompt_template="Analyze resume",
+        is_active=True,
+        created_by=candidate.id,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.commit()
+
+    def _raise_enqueue_error(analysis_id):
+        raise RuntimeError(f"queue unavailable for {analysis_id}")
+
+    monkeypatch.setattr(
+        "src.interface.api.routers.resumes.enqueue_analysis",
+        _raise_enqueue_error,
+    )
+
+    pdf = _pdf_with_text("Marina Python SQL FastAPI")
+    response = await client.post(
+        f"/api/v1/resumes/{resume_id}/upload",
+        headers=headers,
+        files={"file": ("marina-resume.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analysis_auto_requested"] is False
+    assert body["analysis_id"] is not None
+    assert body["analysis_status"] == "failed"
+
+    analysis = await db_session.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.id == UUID(body["analysis_id"]))
+    )
+    assert analysis is not None
+    assert analysis.status == "failed"
+    assert analysis.failure_reason == "Falha ao enfileirar análise automática. Solicite manualmente."
+    assert analysis.failed_at is not None
 
 
 @pytest.mark.asyncio

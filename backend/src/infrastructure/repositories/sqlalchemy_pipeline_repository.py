@@ -212,6 +212,7 @@ class SQLAlchemyPipelineRepository:
         job_id: UUID,
         expected_stage: str,
         new_stage: str,
+        new_status: str,
         last_moved_by: UUID,
         updated_at: datetime,
     ) -> dict | None:
@@ -231,6 +232,7 @@ class SQLAlchemyPipelineRepository:
             )
             .values(
                 stage=new_stage,
+                status=new_status,
                 last_moved_by=last_moved_by,
                 updated_at=updated_at,
             )
@@ -238,6 +240,7 @@ class SQLAlchemyPipelineRepository:
                 CandidatePipelineModel.candidate_id,
                 CandidatePipelineModel.job_id,
                 CandidatePipelineModel.stage,
+                CandidatePipelineModel.status,
                 CandidatePipelineModel.match_score,
                 CandidatePipelineModel.updated_at,
             )

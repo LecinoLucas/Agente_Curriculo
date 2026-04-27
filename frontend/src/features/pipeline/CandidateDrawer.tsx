@@ -1,22 +1,28 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type MutableRefObject, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { Tabs } from "../../components/common/Tabs";
 import { useAuth } from "../../features/auth/useAuth";
 import { analysisService } from "../../services/analysisService";
+import { formatContextError } from "../../services/errorMessages";
+import { feedback } from "../../services/feedback";
+import { pipelineService } from "../../services/pipelineService";
 import { resumeService } from "../../services/resumeService";
 import { toast } from "../../services/toast";
 import type {
   AnalysisPipelineStatus,
   AnalysisResult,
+  CandidatePipelineHistory,
   CandidateOverview,
   PipelineStage,
+  PipelineStageTransition,
+  PipelineTrigger,
 } from "../../types/domain";
 import { type PanelTab, usePipeline } from "./PipelineContext";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const DRAWER_TABS = [
-  { key: "ranking" satisfies PanelTab, label: "Score" },
+  { key: "ranking" satisfies PanelTab, label: "Compatibilidade" },
   { key: "analysis" satisfies PanelTab, label: "Análise IA" },
   { key: "history" satisfies PanelTab, label: "Histórico" },
   { key: "documents" satisfies PanelTab, label: "Documentos" },
@@ -93,6 +99,7 @@ export function CandidateDrawer() {
   const [analysisResultLoading, setAnalysisResultLoading] = useState(false);
   const [analysisResultError, setAnalysisResultError] = useState<string | null>(null);
   const analysisResultCacheRef = useRef<Map<string, AnalysisResult>>(new Map());
+  const historyCacheRef = useRef<Map<string, CandidatePipelineHistory>>(new Map());
 
   const [stageSaving, setStageSaving] = useState(false);
 
@@ -128,7 +135,11 @@ export function CandidateDrawer() {
       })
       .catch((err: unknown) => {
         setAnalysisResultError(
-          err instanceof Error ? err.message : "Falha ao carregar análise completa",
+          formatContextError(
+            err,
+            "Não foi possível carregar o resultado completo da análise.",
+            "Tente novamente em alguns instantes.",
+          ),
         );
       })
       .finally(() => setAnalysisResultLoading(false));
@@ -149,10 +160,12 @@ export function CandidateDrawer() {
   async function handleStageChange(newStage: PipelineStage) {
     if (!selectedCandidateId || newStage === currentStage) return;
     setStageSaving(true);
+    feedback.moveCandidate.processing();
     try {
       await moveCandidateStage(selectedCandidateId, newStage);
+      feedback.moveCandidate.success();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Falha ao mover candidato de etapa");
+      feedback.moveCandidate.error(err);
     } finally {
       setStageSaving(false);
     }
@@ -286,7 +299,13 @@ export function CandidateDrawer() {
                   error={analysisResultError}
                 />
               )}
-              {activePanelTab === "history" && <HistoryTab overview={candidateOverview} />}
+              {activePanelTab === "history" && (
+                <HistoryTab
+                  overview={candidateOverview}
+                  activeJobId={activeJobId}
+                  cacheRef={historyCacheRef}
+                />
+              )}
               {activePanelTab === "documents" && <DocumentsTab overview={candidateOverview} />}
             </>
           ) : null}
@@ -296,8 +315,8 @@ export function CandidateDrawer() {
   );
 }
 
-// ── Tab: Score ─────────────────────────────────────────────────────────────────
-// Shows overall score, seniority, pipeline matching stats, and top job matches.
+// ── Tab: Compatibilidade ───────────────────────────────────────────────────────
+// Shows the latest AI score separately from candidate-job compatibility signals.
 // All data comes from CandidateOverview — zero extra fetch.
 
 function ScoreTab({ overview }: { overview: CandidateOverview }) {
@@ -305,13 +324,16 @@ function ScoreTab({ overview }: { overview: CandidateOverview }) {
 
   if (!latest_analysis) {
     return (
-      <EmptyTab message='Nenhuma análise disponível. Solicite uma na aba "Análise IA".' />
+      <EmptyTab
+        title="Ainda não há análise para este candidato"
+        description='Envie um currículo e solicite uma análise na aba "Análise IA" para liberar a compatibilidade.'
+      />
     );
   }
 
   return (
     <div className="flex flex-col gap-6 p-5">
-      {/* Main score badge */}
+      {/* AI score */}
       <div className="flex items-center gap-4">
         <div
           className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl ring-2 ${scoreBgClass(latest_analysis.overall_score)}`}
@@ -323,7 +345,7 @@ function ScoreTab({ overview }: { overview: CandidateOverview }) {
           </span>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Score geral</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Score da IA</p>
           <p className="mt-1 text-sm font-medium text-gray-900">
             {latest_analysis.seniority_level ?? "Senioridade não identificada"}
           </p>
@@ -336,8 +358,18 @@ function ScoreTab({ overview }: { overview: CandidateOverview }) {
         </div>
       </div>
 
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+          Ranking da vaga
+        </p>
+        <p className="mt-1 text-xs text-blue-900">
+          Ainda nao exibido nesta tela. Nesta aba voce ve compatibilidade; o ranking persistido da
+          vaga sera mostrado separadamente.
+        </p>
+      </div>
+
       {latest_analysis_pipeline ? (
-        <Section title="Matching com vagas publicadas">
+        <Section title="Compatibilidade com vagas publicadas">
           <div className="grid grid-cols-3 gap-2">
             <StatBox label="Publicadas" value={latest_analysis_pipeline.published_jobs_total} />
             <StatBox
@@ -355,7 +387,7 @@ function ScoreTab({ overview }: { overview: CandidateOverview }) {
       ) : null}
 
       {top_matches.length > 0 ? (
-        <Section title="Vagas compatíveis">
+        <Section title="Compatibilidade por vaga">
           <div className="flex flex-col gap-2">
             {top_matches.map((match) => (
               <div
@@ -368,17 +400,26 @@ function ScoreTab({ overview }: { overview: CandidateOverview }) {
                     <p className="truncate text-[11px] text-gray-500">{match.recommendation}</p>
                   ) : null}
                 </div>
-                <span
-                  className={`ml-3 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
-                >
-                  {fmtScore(match.match_score)}
-                </span>
+                <div className="ml-3 shrink-0 text-right">
+                  <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                    Compatibilidade
+                  </div>
+                  <span
+                    className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
+                  >
+                    {fmtScore(match.match_score)}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
         </Section>
       ) : (
-        <p className="text-xs text-gray-400">Nenhuma vaga compatível encontrada ainda.</p>
+        <EmptyTab
+          title="Ainda não há vagas compatíveis"
+          description="Conclua uma análise com vagas publicadas para preencher esta comparação."
+          compact
+        />
       )}
     </div>
   );
@@ -400,7 +441,7 @@ function AnalysisTab({
   loading: boolean;
   error: string | null;
 }) {
-  const { startPolling, pollingStatus, pollingAnalysisId } = usePipeline();
+  const { startPolling, pollingStatus, pollingAnalysisId, syncAnalysisStart } = usePipeline();
   const { user } = useAuth();
   const canSpendRealTokens = Boolean(user?.real_ai_token_spend_enabled);
 
@@ -443,12 +484,21 @@ function AnalysisTab({
   async function handleRequestAnalysis() {
     if (!selectedVersionId || !canSpendRealTokens || isRequesting) return;
     setIsRequesting(true);
+    feedback.requestAnalysis.processing();
     try {
       const response = await analysisService.request(selectedVersionId);
-      startPolling(response.analysis_id);
-      toast.success("Análise solicitada — acompanhe o progresso abaixo");
+      const selectedResume = readyResumes.find((resume) => resume.current_version_id === selectedVersionId);
+      await syncAnalysisStart({
+        candidateId: overview.candidate.id,
+        analysisId: response.analysis_id,
+        status: "pending",
+        resumeId: selectedResume?.resume_id ?? null,
+        resumeTitle: selectedResume?.title ?? null,
+      });
+      startPolling(response.analysis_id, overview.candidate.id, "pending");
+      feedback.requestAnalysis.success();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao solicitar análise");
+      feedback.requestAnalysis.error(err);
     } finally {
       setIsRequesting(false);
     }
@@ -457,6 +507,18 @@ function AnalysisTab({
   const isCurrentlyPolling = pollingAnalysisId === analysisId;
   const effectiveStatus =
     isCurrentlyPolling && pollingStatus ? pollingStatus.status : latest_analysis?.status;
+  const effectiveStartedAt =
+    isCurrentlyPolling && pollingStatus ? pollingStatus.started_at : latest_analysis?.started_at;
+  const effectiveCompletedAt =
+    isCurrentlyPolling && pollingStatus
+      ? pollingStatus.completed_at
+      : latest_analysis?.completed_at;
+  const effectiveFailedAt =
+    isCurrentlyPolling && pollingStatus ? pollingStatus.failed_at : latest_analysis?.failed_at;
+  const effectiveFailureReason =
+    isCurrentlyPolling && pollingStatus?.failure_reason
+      ? pollingStatus.failure_reason
+      : latest_analysis?.failure_reason;
   const progressValue =
     effectiveStatus === "completed" ||
     effectiveStatus === "failed" ||
@@ -506,9 +568,96 @@ function AnalysisTab({
             </button>
           </div>
         ) : (
-          <p className="text-xs text-gray-400">
-            Nenhum currículo pronto. Envie um PDF na aba Documentos.
-          </p>
+          <EmptyTab
+            title="Nenhum currículo pronto para análise"
+            description='Envie um PDF na aba "Documentos" para liberar uma nova análise.'
+            compact
+          />
+        )}
+      </Section>
+
+      <Section title="Rastreabilidade da execução">
+        {!latest_analysis ? (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-sm font-semibold text-gray-900">Análise ainda não solicitada</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Selecione um currículo e clique em Analisar para gerar a primeira execução.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900">
+                  {effectiveStatus === "processing"
+                    ? "Análise em processamento"
+                    : effectiveStatus === "completed"
+                      ? "Análise concluída"
+                      : effectiveStatus === "failed"
+                        ? "Análise falhou"
+                        : effectiveStatus === "cancelled"
+                          ? "Análise cancelada"
+                          : "Análise na fila"}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Última execução vinculada ao currículo {latest_analysis.resume_title}.
+                </p>
+              </div>
+              <span
+                className={[
+                  "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
+                  effectiveStatus === "completed"
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                    : effectiveStatus === "failed" || effectiveStatus === "cancelled"
+                      ? "bg-red-50 text-red-700 ring-red-200"
+                      : "bg-amber-50 text-amber-700 ring-amber-200",
+                ].join(" ")}
+              >
+                {ANALYSIS_STATUS_LABEL[effectiveStatus ?? ""] ?? effectiveStatus}
+              </span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <MetaItem label="Solicitada em" value={formatOptionalDateTime(latest_analysis.created_at)} />
+              <MetaItem label="Iniciada em" value={formatOptionalDateTime(effectiveStartedAt)} />
+              <MetaItem label="Concluída em" value={formatOptionalDateTime(effectiveCompletedAt)} />
+              <MetaItem label="Falhou em" value={formatOptionalDateTime(effectiveFailedAt)} />
+              <MetaItem
+                label="Usou IA real"
+                value={
+                  latest_analysis.used_real_ai == null
+                    ? "Ainda não disponível"
+                    : latest_analysis.used_real_ai
+                      ? "Sim"
+                      : "Fallback / sem tokens reais"
+                }
+              />
+              <MetaItem label="Worker" value={latest_analysis.worker_id ?? "Não informado"} />
+              <MetaItem label="Task" value={latest_analysis.task_id ?? "Não informada"} />
+              <MetaItem label="Atualizada em" value={formatOptionalDateTime(latest_analysis.updated_at)} />
+            </div>
+
+            {effectiveFailureReason ? (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700">
+                  Motivo da falha
+                </p>
+                <p className="mt-1 text-xs text-red-800">{effectiveFailureReason}</p>
+              </div>
+            ) : null}
+
+            {latest_analysis.status === "completed" ? (
+              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                  Resultado principal
+                </p>
+                <p className="mt-1 text-xs text-blue-900">
+                  Score da IA {fmtScore(latest_analysis.overall_score)} ·{" "}
+                  {latest_analysis.seniority_level ?? "Senioridade não identificada"}
+                </p>
+              </div>
+            ) : null}
+          </div>
         )}
       </Section>
 
@@ -555,8 +704,8 @@ function AnalysisTab({
                   : "Concluída"}
               </span>
             </div>
-            {isCurrentlyPolling && pollingStatus?.failure_reason ? (
-              <p className="mt-2 text-[11px] text-red-600">{pollingStatus.failure_reason}</p>
+            {effectiveFailureReason ? (
+              <p className="mt-2 text-[11px] text-red-600">{effectiveFailureReason}</p>
             ) : null}
             {isCurrentlyPolling && (pollingStatus?.retry_count ?? 0) > 0 ? (
               <p className="mt-1 text-[11px] text-gray-500">
@@ -569,7 +718,7 @@ function AnalysisTab({
 
       {/* Pipeline matching */}
       {!pipelineLoading && pipelineStatus ? (
-        <Section title="Matching com vagas">
+        <Section title="Compatibilidade com vagas">
           <div className="grid grid-cols-3 gap-2">
             <StatBox label="Publicadas" value={pipelineStatus.published_jobs_total} />
             <StatBox label="Compatíveis" value={pipelineStatus.matched_jobs_count} tone="success" />
@@ -587,11 +736,16 @@ function AnalysisTab({
                     <p className="text-[10px] text-gray-400">{match.job_status}</p>
                   </div>
                   {match.match_score != null ? (
-                    <span
-                      className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
-                    >
-                      {fmtScore(match.match_score)}
-                    </span>
+                    <div className="ml-2 shrink-0 text-right">
+                      <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                        Compatibilidade
+                      </div>
+                      <span
+                        className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
+                      >
+                        {fmtScore(match.match_score)}
+                      </span>
+                    </div>
                   ) : (
                     <span className="ml-2 text-[11px] text-gray-400">—</span>
                   )}
@@ -599,7 +753,11 @@ function AnalysisTab({
               ))}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-gray-400">Nenhum match registrado ainda.</p>
+            <EmptyTab
+              title="Ainda não há matches com vagas"
+              description="Quando a análise terminar, esta seção mostrará os vínculos encontrados."
+              compact
+            />
           )}
         </Section>
       ) : null}
@@ -621,7 +779,7 @@ function AnalysisTab({
                 </Section>
               ) : null}
 
-              <Section title="Scores detalhados">
+              <Section title="Detalhamento do Score da IA">
                 <div className="grid grid-cols-2 gap-2">
                   {(
                     [
@@ -706,7 +864,7 @@ function AnalysisTab({
 }
 
 // ── Tab: Histórico ─────────────────────────────────────────────────────────────
-// Shows pipeline_entries from CandidateOverview — zero extra fetch.
+// Shows real stage transitions from GET /pipeline/{job_id}/{candidate_id}/history.
 
 const STAGE_LABEL: Record<string, string> = {
   entry: "Recebido",
@@ -719,42 +877,216 @@ const STAGE_LABEL: Record<string, string> = {
   rejected: "Reprovado",
 };
 
-function HistoryTab({ overview }: { overview: CandidateOverview }) {
-  const { pipeline_entries } = overview;
+const TRIGGER_LABEL: Record<PipelineTrigger, string> = {
+  manual: "Movido manualmente",
+  auto_match: "Entrada por auto-match",
+  system: "Movido pelo sistema",
+};
 
-  if (pipeline_entries.length === 0) {
-    return <EmptyTab message="Candidato ainda não está em nenhum pipeline." />;
+function HistoryTab({
+  overview,
+  activeJobId,
+  cacheRef,
+}: {
+  overview: CandidateOverview;
+  activeJobId: string | null;
+  cacheRef: MutableRefObject<Map<string, CandidatePipelineHistory>>;
+}) {
+  const [history, setHistory] = useState<CandidatePipelineHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const currentEntry = useMemo(
+    () =>
+      activeJobId
+        ? overview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null
+        : null,
+    [activeJobId, overview.pipeline_entries],
+  );
+
+  useEffect(() => {
+    if (!activeJobId) {
+      setHistory(null);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const cacheKey = `${overview.candidate.id}:${activeJobId}:${currentEntry?.updated_at ?? "none"}`;
+    const cached = cacheRef.current.get(cacheKey);
+    if (cached) {
+      setHistory(cached);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    void pipelineService
+      .getCandidateHistory(activeJobId, overview.candidate.id)
+      .then((result) => {
+        if (cancelled) return;
+        cacheRef.current.set(cacheKey, result);
+        setHistory(result);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setHistory(null);
+        setHistoryError(
+          formatContextError(
+            err,
+            "Não foi possível carregar o histórico deste candidato.",
+            "Tente novamente.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeJobId, overview.candidate.id, currentEntry?.updated_at]);
+
+  if (!activeJobId) {
+    return (
+      <EmptyTab
+        title="Selecione uma vaga para ver o histórico"
+        description="Abra este candidato a partir do pipeline para acompanhar as movimentações reais."
+      />
+    );
+  }
+
+  if (historyLoading) {
+    return (
+      <div className="p-5">
+        <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (historyError) {
+    return (
+      <div className="flex flex-col gap-4 p-5">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {historyError}
+        </div>
+        {currentEntry ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+              Estado atual nesta vaga
+            </p>
+            <p className="mt-1 text-sm text-amber-900">
+              {STAGE_LABEL[currentEntry.stage] ?? currentEntry.stage} · {currentEntry.candidate_status}
+            </p>
+            <p className="mt-1 text-[11px] text-amber-800">
+              Este bloco e apenas um fallback de estado atual. O histórico real não pôde ser carregado.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500">
+            O candidato não possui estado atual visível nesta vaga.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (!history) {
+    return (
+      <EmptyTab
+        title="Ainda não há histórico para esta vaga"
+        description="Movimente o candidato no pipeline para gerar as primeiras entradas."
+      />
+    );
+  }
+
+  if (history.transitions.length === 0) {
+    return (
+      <div className="flex flex-col gap-4 p-5">
+        <EmptyTab
+          title="Ainda não há movimentações registradas"
+          description="Movimente o candidato no pipeline para gerar o histórico desta vaga."
+        />
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Estado atual
+          </p>
+          <p className="mt-1 text-sm text-gray-900">
+            {STAGE_LABEL[history.current_stage] ?? history.current_stage}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-3 p-5">
-      {pipeline_entries.map((entry) => (
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+          Histórico real do pipeline
+        </p>
+        <p className="mt-1 text-[11px] text-blue-900">
+          Eventos registrados de movimentação para {history.job_title}.
+        </p>
+      </div>
+
+      {history.transitions.map((transition) => (
         <div
-          key={entry.job_id}
+          key={transition.id}
           className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
         >
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-gray-900">{entry.job_title}</p>
-              <p className="mt-0.5 text-[11px] text-gray-500">
-                {STAGE_LABEL[entry.stage] ?? entry.stage} · {entry.candidate_status}
+              <p className="text-xs font-semibold text-gray-900">
+                {transition.from_stage
+                  ? `${STAGE_LABEL[transition.from_stage] ?? transition.from_stage} → ${STAGE_LABEL[transition.to_stage] ?? transition.to_stage}`
+                  : `Entrada em ${STAGE_LABEL[transition.to_stage] ?? transition.to_stage}`}
               </p>
+              <p className="mt-1 text-[11px] text-gray-500">{TRIGGER_LABEL[transition.trigger]}</p>
+              {transition.moved_by_name ? (
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Por {transition.moved_by_name}
+                </p>
+              ) : null}
             </div>
-            {entry.match_score != null ? (
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ring-1 ${scoreBgClass(entry.match_score)} ${scoreColorClass(entry.match_score)}`}
-              >
-                {fmtScore(entry.match_score)}
-              </span>
-            ) : null}
+            <p className="shrink-0 text-[11px] text-gray-400">
+              {formatDateTime(transition.moved_at)}
+            </p>
           </div>
-          <p className="mt-2 text-[11px] text-gray-400">
-            Atualizado em {new Date(entry.updated_at).toLocaleDateString("pt-BR")}
-          </p>
+
+          {transition.reason ? (
+            <p className="mt-3 text-xs text-gray-700">
+              <span className="font-semibold text-gray-900">Motivo:</span> {transition.reason}
+            </p>
+          ) : null}
+
+          {transition.notes ? (
+            <p className="mt-2 text-xs text-gray-600">
+              <span className="font-semibold text-gray-900">Notas:</span> {transition.notes}
+            </p>
+          ) : null}
         </div>
       ))}
     </div>
   );
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function formatOptionalDateTime(value: string | null | undefined): string {
+  return value ? formatDateTime(value) : "—";
 }
 
 // ── Tab: Documentos ────────────────────────────────────────────────────────────
@@ -769,7 +1101,14 @@ const EXTRACTION_STATUS_LABEL: Record<string, string> = {
 };
 
 function DocumentsTab({ overview }: { overview: CandidateOverview }) {
-  const { refreshCandidateOverview, startPolling, pollingAnalysisId } = usePipeline();
+  const {
+    refreshCandidateOverview,
+    startPolling,
+    pollingAnalysisId,
+    switchPanelTab,
+    syncAnalysisStart,
+    notifyCandidatesChanged,
+  } = usePipeline();
   const { user } = useAuth();
   const canSpendRealTokens = Boolean(user?.real_ai_token_spend_enabled);
   const { resumes } = overview;
@@ -818,17 +1157,33 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
 
   async function handleUpload() {
     if (!selectedFile) return;
+    if (!overview.candidate.id) {
+      toast.error("Não foi possível enviar o currículo. Abra o candidato novamente e tente outra vez.");
+      return;
+    }
     setUploadLoading(true);
+    feedback.uploadResume.processing();
     try {
-      const payload = await resumeService.initiateUpload();
+      const payload = await resumeService.initiateUpload(overview.candidate.id);
       const uploaded = await resumeService.uploadPdf(payload.resume_id, selectedFile);
-      toast.success(
-        `PDF enviado: ${uploaded.word_count ?? 0} palavras em ${uploaded.page_count ?? 0} página(s). Candidato: ${uploaded.candidate_full_name}.`,
-      );
       clearFile();
       await refreshCandidateOverview();
+      switchPanelTab("analysis");
+      feedback.uploadResume.success();
+      if (uploaded.analysis_auto_requested && uploaded.analysis_id) {
+        await syncAnalysisStart({
+          candidateId: overview.candidate.id,
+          analysisId: uploaded.analysis_id,
+          status: uploaded.analysis_status ?? "pending",
+          resumeId: uploaded.resume_id,
+          resumeTitle: selectedFile.name,
+        });
+        startPolling(uploaded.analysis_id, overview.candidate.id, uploaded.analysis_status ?? "pending");
+      } else {
+        notifyCandidatesChanged();
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao enviar PDF");
+      feedback.uploadResume.error(err);
     } finally {
       setUploadLoading(false);
     }
@@ -842,8 +1197,15 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       toast.success("Título atualizado");
       setEditingResumeId(null);
       await refreshCandidateOverview();
+      notifyCandidatesChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao atualizar título");
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível atualizar o título do currículo.",
+          "Tente novamente.",
+        ),
+      );
     } finally {
       setEditSaving(false);
     }
@@ -859,8 +1221,15 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
         toast.success("Currículo reativado");
       }
       await refreshCandidateOverview();
+      notifyCandidatesChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao alterar status");
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível alterar o status do currículo.",
+          "Tente novamente.",
+        ),
+      );
     }
   }
 
@@ -872,8 +1241,15 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       await resumeService.delete(confirmDeleteId);
       toast.success("Currículo excluído");
       await refreshCandidateOverview();
+      notifyCandidatesChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao excluir currículo");
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível excluir o currículo.",
+          "Tente novamente.",
+        ),
+      );
     } finally {
       setDeletingId(null);
     }
@@ -885,12 +1261,21 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       return;
     }
     setAnalyzingResumeId(resumeId);
+    feedback.requestAnalysis.processing();
     try {
       const response = await analysisService.request(versionId);
-      startPolling(response.analysis_id);
-      toast.success("Análise solicitada — acompanhe na aba Análise IA");
+      const resume = resumes.find((item) => item.resume_id === resumeId);
+      await syncAnalysisStart({
+        candidateId: overview.candidate.id,
+        analysisId: response.analysis_id,
+        status: "pending",
+        resumeId,
+        resumeTitle: resume?.title ?? null,
+      });
+      startPolling(response.analysis_id, overview.candidate.id, "pending");
+      feedback.requestAnalysis.success();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao solicitar análise");
+      feedback.requestAnalysis.error(err);
       setAnalyzingResumeId(null);
     }
   }
@@ -932,7 +1317,10 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
 
       {/* Resume list */}
       {resumes.length === 0 ? (
-        <EmptyTab message="Nenhum currículo enviado para este candidato." />
+        <EmptyTab
+          title="Ainda não há currículos enviados"
+          description="Envie um PDF para começar a análise deste candidato."
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {resumes.map((resume) => {
@@ -1068,9 +1456,15 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
                       }
                       className="rounded-lg bg-blue-600 px-2 py-1 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
                     >
-                      {isAnalyzing ? "Solicitando…" : "Analisar"}
+                      {isAnalyzing ? "Solicitando…" : "Análise manual"}
                     </button>
                   </div>
+                ) : null}
+
+                {!isEditing && canAnalyze ? (
+                  <p className="mt-2 text-[11px] text-gray-400">
+                    Atalho manual. O acompanhamento da execução fica na aba Análise IA.
+                  </p>
                 ) : null}
 
                 {/* Delete confirmation */}
@@ -1144,10 +1538,33 @@ function StatBox({
   );
 }
 
-function EmptyTab({ message }: { message: string }) {
+function MetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-center p-10 text-center text-sm text-gray-400">
-      {message}
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="mt-1 text-xs text-gray-800">{value}</p>
+    </div>
+  );
+}
+
+function EmptyTab({
+  title,
+  description,
+  compact = false,
+}: {
+  title: string;
+  description?: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={[
+        "flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-center",
+        compact ? "gap-1.5 px-4 py-5" : "gap-2 p-10",
+      ].join(" ")}
+    >
+      <p className="text-sm font-medium text-gray-700">{title}</p>
+      {description ? <p className="max-w-sm text-xs text-gray-500">{description}</p> : null}
     </div>
   );
 }
