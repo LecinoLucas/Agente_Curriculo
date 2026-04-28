@@ -756,9 +756,11 @@ class AnalysisService:
             )
         elif total_mandatory > 0 and mandatory_percentage < mandatory_threshold:
             # Job has required skills and candidate doesn't meet 60% threshold
+            validation_status = "fail"
             overall = min(overall, Decimal("39"))  # Cap score at 39 (below "potential")
             recommendation = "not_match"
             reason = f"Não atende habilidades obrigatórias ({mandatory_matched}/{total_mandatory})"
+            validation_reasons.append(reason)
         else:
             # Pass mandatory filter or no mandatory skills required
             enough_mandatory_for_strong = (
