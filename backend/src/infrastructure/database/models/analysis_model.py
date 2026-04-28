@@ -235,6 +235,15 @@ class ResumeJobMatchModel(Base):
     bonus_skills: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     match_summary: Mapped[str | None] = mapped_column(sa.Text)
     recommendation: Mapped[str | None] = mapped_column(sa.String(50))
+    weights_source: Mapped[str | None] = mapped_column(sa.String(50), server_default="fallback_hardcoded")
+    score_model_version_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("score_model_versions.id"),
+        nullable=True,
+    )
+    validation_status: Mapped[str | None] = mapped_column(sa.String(50), server_default="pass")
+    missing_evidence: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
+    rejection_reasons: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("NOW()")
     )

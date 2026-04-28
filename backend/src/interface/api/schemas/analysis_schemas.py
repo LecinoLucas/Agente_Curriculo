@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AnalysisRequestResponse(BaseModel):
@@ -126,3 +126,6 @@ class AnalysisMatchResponse(BaseModel):
     seniority_score: Decimal
     candidate_seniority: str | None = None
     job_seniority: str | None = None
+    validation_status: str = "pass"  # "pass" | "fail" | "unknown"
+    missing_evidence: list[str] = Field(default_factory=list)  # ["education"] or ["experience"]
+    rejection_reasons: list[str] = Field(default_factory=list)  # Detailed failure messages

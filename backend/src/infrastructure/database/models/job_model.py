@@ -30,6 +30,9 @@ class JobModel(Base):
         server_default="draft",
     )
     seniority_level: Mapped[Optional[str]] = mapped_column(sa.String(50))
+    minimum_education_level: Mapped[Optional[str]] = mapped_column(sa.String(50))
+    minimum_years_experience: Mapped[Optional[Decimal]] = mapped_column(sa.Numeric(4, 1))
+    deal_breakers: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     work_model: Mapped[Optional[str]] = mapped_column(sa.String(50))
     location: Mapped[Optional[str]] = mapped_column(sa.String(255))
     salary_min: Mapped[Optional[Decimal]] = mapped_column(sa.Numeric(12, 2))

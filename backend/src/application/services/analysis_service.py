@@ -1,3 +1,4 @@
+import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -8,12 +9,15 @@ from uuid import UUID
 # a diferença de níveis é >= este limiar (configurável).
 _SENIORITY_PENALTY_THRESHOLD = 2
 
+logger = logging.getLogger(__name__)
+
 from src.domain.entities.user import User
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
     ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
@@ -29,12 +33,269 @@ from src.interface.api.schemas.analysis_schemas import (
 from src.application.services.pipeline_service import PipelineService
 
 
-# Handles c#, c++, react.js, node.js and plain words as atomic tokens.
-_TOKEN_RE = re.compile(r'[a-z][a-z0-9]*(?:\+\+|#|\.[a-z][a-z0-9]*)*')
+# ── Validation State ──────────────────────────────────────────────────────────
+@dataclass
+class ValidationResult:
+    """Represents validation outcome: PASS | FAIL | UNKNOWN."""
+    status: str  # "pass" | "fail" | "unknown"
+    reason: str | None = None  # Explanation for FAIL or UNKNOWN
 
 
-def _tokenize(text: str) -> frozenset[str]:
-    return frozenset(_TOKEN_RE.findall(text.lower()))
+# ── Education Level Hierarchy ──────────────────────────────────────────────────
+EDUCATION_HIERARCHY = {
+    None: -1,
+    "none": 0,
+    "high_school": 1,
+    "technical": 2,
+    "bachelor": 3,
+    "postgraduate": 4,
+    "master": 5,
+    "phd": 6,
+}
+
+
+def _get_education_level_rank(level: str | None) -> int:
+    """Get numeric rank of education level for comparison.
+
+    Higher rank = higher education.
+    Returns -1 if level is unknown or None.
+    """
+    if level is None:
+        return -1
+    return EDUCATION_HIERARCHY.get(level.lower(), -1)
+
+
+def _validate_education(
+    candidate_level: str | None, required_level: str | None
+) -> ValidationResult:
+    """Validate candidate education against job requirement.
+
+    Returns:
+        PASS: candidate >= required
+        FAIL: candidate < required
+        UNKNOWN: candidate education level not provided
+    """
+    if required_level is None:
+        return ValidationResult(status="pass")
+
+    if candidate_level is None:
+        return ValidationResult(
+            status="unknown",
+            reason=f"Educação não informada (exigido: {required_level})"
+        )
+
+    candidate_rank = _get_education_level_rank(candidate_level)
+    required_rank = _get_education_level_rank(required_level)
+
+    if candidate_rank < required_rank:
+        return ValidationResult(
+            status="fail",
+            reason=f"Educação insuficiente ({candidate_level} < {required_level})"
+        )
+
+    return ValidationResult(status="pass")
+
+
+def _validate_experience(
+    candidate_years: Decimal | None, required_years: Decimal | None
+) -> ValidationResult:
+    """Validate candidate experience against job requirement.
+
+    Returns:
+        PASS: candidate >= required
+        FAIL: candidate < required
+        UNKNOWN: candidate experience years not provided
+    """
+    if required_years is None:
+        return ValidationResult(status="pass")
+
+    if candidate_years is None:
+        return ValidationResult(
+            status="unknown",
+            reason=f"Experiência não informada (exigido: {float(required_years):.1f} anos)"
+        )
+
+    if candidate_years < required_years:
+        return ValidationResult(
+            status="fail",
+            reason=f"Experiência insuficiente ({float(candidate_years):.1f} < {float(required_years):.1f} anos)"
+        )
+
+    return ValidationResult(status="pass")
+
+
+def _evaluate_deal_breaker(
+    deal_breaker: dict,
+    candidate_result,
+) -> tuple[bool, str | None]:
+    """Evaluate if candidate triggers a deal-breaker criterion.
+
+    Deal-breaker rejects candidates that MATCH a specific criteria.
+
+    Structure: {
+        "field": "seniority_level",
+        "operator": "equals",  # equals | not_equals | contains | in
+        "value": "intern",  # single value or list for 'in' operator
+        "reason": "Vaga não aceita nível junior ou menos",
+        "is_active": true
+    }
+
+    Operators:
+    - equals: reject if candidate_value == value (case-insensitive for strings)
+    - not_equals: reject if candidate_value != value (case-insensitive for strings)
+    - contains: reject if value is in candidate_value (for lists/strings)
+    - in: reject if candidate_value is in values[] (for lists)
+
+    Returns:
+        (breaker_hit, reason) - True if deal-breaker is triggered, with reason
+    """
+    if not deal_breaker.get("is_active", True):
+        return False, None
+
+    field = deal_breaker.get("field")
+    operator = deal_breaker.get("operator", "equals")  # Default to equals for backward compat
+    value = deal_breaker.get("value")
+    reason = deal_breaker.get("reason", f"Não atende requisito: {field}")
+
+    if not field or value is None:
+        return False, None
+
+    # Get candidate value from result (explicit data only)
+    candidate_value = getattr(candidate_result, field, None)
+
+    # No explicit data = no deal-breaker hit
+    if candidate_value is None:
+        return False, None
+
+    # Apply operator logic
+    if operator == "equals":
+        # Reject if candidate equals the prohibited value
+        if isinstance(candidate_value, str) and isinstance(value, str):
+            if candidate_value.lower() == value.lower():
+                return True, reason
+        elif candidate_value == value:
+            return True, reason
+
+    elif operator == "not_equals":
+        # Reject if candidate does NOT equal the required value
+        if isinstance(candidate_value, str) and isinstance(value, str):
+            if candidate_value.lower() != value.lower():
+                return True, reason
+        elif candidate_value != value:
+            return True, reason
+
+    elif operator == "contains":
+        # Reject if value appears in candidate_value (list or string)
+        if isinstance(candidate_value, list):
+            # Normalize strings in list for comparison
+            normalized_list = [
+                str(v).lower() if isinstance(v, str) else v
+                for v in candidate_value
+            ]
+            check_value = value.lower() if isinstance(value, str) else value
+            if check_value in normalized_list:
+                return True, reason
+        elif isinstance(candidate_value, str):
+            if isinstance(value, str) and value.lower() in candidate_value.lower():
+                return True, reason
+
+    elif operator == "in":
+        # Reject if candidate_value is in the values list
+        if not isinstance(value, list):
+            return False, None
+
+        if isinstance(candidate_value, str):
+            # Case-insensitive comparison for strings
+            normalized_values = [
+                v.lower() if isinstance(v, str) else v for v in value
+            ]
+            if candidate_value.lower() in normalized_values:
+                return True, reason
+        else:
+            # Direct comparison for non-strings
+            if candidate_value in value:
+                return True, reason
+
+    return False, None
+
+
+# ── Skill Matching: Exact + Aliases + Levenshtein (for typos only) ─────────────
+
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Calculate Levenshtein distance between two strings.
+
+    Used only for detecting typos in skill names.
+    Only accepts distance <= 2 and length >= 4 to avoid false positives.
+    """
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
+def _skill_matches(
+    candidate_skill_name: str,
+    job_skill_name: str,
+    job_skill_aliases: list[str] | None = None,
+) -> bool:
+    """
+    Check if candidate skill matches job skill using multi-strategy approach:
+
+    1. Exact match (case-insensitive)
+    2. Alias lookup from SkillModel.aliases
+    3. Levenshtein distance <= 2 (only for skill names >= 4 chars)
+
+    Args:
+        candidate_skill_name: Skill from candidate resume (e.g., "javascript")
+        job_skill_name: Skill from job requirement (e.g., "Java")
+        job_skill_aliases: List of aliases from SkillModel (e.g., ["JS", "Node"])
+
+    Returns:
+        True if skills match, False otherwise
+
+    Examples:
+        _skill_matches("Java", "Java")              → True (exact)
+        _skill_matches("javascript", "Java")        → False (different)
+        _skill_matches("JS", "JavaScript", ["JS"]) → True (alias)
+        _skill_matches("Pythn", "Python")           → True (typo, distance=1)
+        _skill_matches("Jv", "Java")                → False (too short for Levenshtein)
+    """
+    # Normalize: lowercase + strip whitespace
+    cand_norm = candidate_skill_name.lower().strip()
+    job_norm = job_skill_name.lower().strip()
+
+    # Strategy 1: Exact match (case-insensitive)
+    if cand_norm == job_norm:
+        return True
+
+    # Strategy 2: Alias lookup
+    if job_skill_aliases:
+        aliases_norm = {alias.lower().strip() for alias in job_skill_aliases if alias}
+        if cand_norm in aliases_norm:
+            return True
+
+    # Strategy 3: Levenshtein distance <= 2 (only for skill names >= 4 chars)
+    # This prevents "Java" from matching "JS" while allowing "Pythn" to match "Python"
+    if len(job_norm) >= 4 and len(cand_norm) >= 4:
+        distance = _levenshtein_distance(cand_norm, job_norm)
+        if distance <= 2:
+            return True
+
+    return False
 
 
 class ResumeVersionNotFoundError(Exception):
@@ -216,6 +477,7 @@ class AnalysisService:
         self,
         analysis_id: UUID,
         job_id: UUID,
+        score_model_version: ScoreModelVersionModel | None = None,
     ) -> AnalysisMatchResponse:
         analysis = await self._repository.find_completed(analysis_id)
         if analysis is None:
@@ -226,13 +488,24 @@ class AnalysisService:
             raise AnalysisResultNotFoundError
 
         details = AnalysisResultDetails(analysis=analysis, result=result)
-        return await self._match_details_to_job(details, job_id)
+        return await self._match_details_to_job(
+            details, job_id, score_model_version=score_model_version
+        )
 
     async def auto_match_published_jobs(self, analysis_id: UUID) -> int:
+        # Load score model version ONCE for all jobs
+        score_version = await self._repository.find_active_score_model_version()
+        logger.info(
+            f"[WeightAlignment] Loaded score model version: "
+            f"{'active' if score_version and score_version.is_active else 'fallback'}"
+        )
+
         jobs = await self._repository.list_published_jobs()
         matched = 0
         for job in jobs:
-            await self.match_completed_analysis_to_job(analysis_id, job.id)
+            await self.match_completed_analysis_to_job(
+                analysis_id, job.id, score_model_version=score_version
+            )
             matched += 1
         return matched
 
@@ -240,6 +513,7 @@ class AnalysisService:
         self,
         details: AnalysisResultDetails,
         job_id: UUID,
+        score_model_version: ScoreModelVersionModel | None = None,
     ) -> AnalysisMatchResponse:
         analysis_id = details.analysis.id
         result = details.result
@@ -259,35 +533,40 @@ class AnalysisService:
         }
         all_candidate_skills = candidate_keywords | candidate_skill_names
 
-        # Pre-tokenize candidate skills once for O(n) matching.
-        candidate_token_sets = [_tokenize(s) for s in all_candidate_skills if s]
-
         mandatory_skills = [row for row in job_skills if row.JobRequiredSkillModel.is_mandatory]
         optional_skills = [row for row in job_skills if not row.JobRequiredSkillModel.is_mandatory]
 
-        def skill_matched(skill_name: str) -> bool:
-            job_tokens = _tokenize(skill_name)
-            return bool(job_tokens) and any(
-                bool(job_tokens & cand_tokens) for cand_tokens in candidate_token_sets
-            )
+        def skill_matched(job_skill_row) -> bool:
+            """Check if candidate has the job skill using multi-strategy matching.
 
-        mandatory_matched = sum(1 for row in mandatory_skills if skill_matched(row.skill_name))
-        optional_matched = sum(1 for row in optional_skills if skill_matched(row.skill_name))
+            Strategies:
+            1. Exact match (case-insensitive)
+            2. Alias match (from SkillModel.aliases)
+            3. Levenshtein distance <= 2 (for typos)
+            """
+            job_skill_name = job_skill_row.skill_name
+            job_skill_aliases = job_skill_row.skill_aliases or []
+
+            for cand_skill in all_candidate_skills:
+                if _skill_matches(cand_skill, job_skill_name, job_skill_aliases):
+                    return True
+            return False
+
+        mandatory_matched = sum(1 for row in mandatory_skills if skill_matched(row))
+        optional_matched = sum(1 for row in optional_skills if skill_matched(row))
         matched_skill_names = [
-            row.skill_name for row in job_skills if skill_matched(row.skill_name)
+            row.skill_name for row in job_skills if skill_matched(row)
         ]
         missing_skill_names = [
-            row.skill_name for row in mandatory_skills if not skill_matched(row.skill_name)
+            row.skill_name for row in mandatory_skills if not skill_matched(row)
         ]
 
-        # Candidate skills that don't overlap with any required job skill token.
-        job_skill_token_sets = [_tokenize(row.skill_name) for row in job_skills]
-
-        def _is_bonus(cand: str) -> bool:
-            cand_tokens = _tokenize(cand)
-            return bool(cand_tokens) and not any(
-                bool(cand_tokens & jt) for jt in job_skill_token_sets
-            )
+        def _is_bonus(cand_skill: str) -> bool:
+            """Check if candidate skill is not a job requirement (bonus skill)."""
+            for job_row in job_skills:
+                if _skill_matches(cand_skill, job_row.skill_name, job_row.skill_aliases or []):
+                    return False
+            return True
 
         bonus_skill_names = sorted(s for s in all_candidate_skills if s and _is_bonus(s))
 
@@ -306,12 +585,42 @@ class AnalysisService:
             else Decimal("0")
         )
 
-        # Auto-reweight when a category has no skills.
-        w_mand = Decimal("0.40")
-        w_opt = Decimal("0.20")
-        w_sen = Decimal("0.20")
-        w_ai = Decimal("0.20")
+        # ── MANDATORY FILTER: Reject if candidate lacks required skills ────────
+        # If job has mandatory skills and candidate doesn't meet 60% threshold,
+        # automatically reject. This prevents unqualified candidates from ranking.
+        mandatory_percentage = (
+            Decimal(mandatory_matched) / Decimal(total_mandatory) * Decimal("100")
+            if total_mandatory > 0
+            else Decimal("100")  # If no mandatory skills, pass this filter
+        )
+        mandatory_threshold = Decimal("60")
 
+        # Load score model version weights (with fallback to hardcoded)
+        weights_source = "fallback_hardcoded"
+        if score_model_version is None:
+            # Load if not provided (e.g., from match_to_job)
+            score_model_version = await self._repository.find_active_score_model_version()
+
+        if score_model_version:
+            weights_dict = score_model_version.weights or {}
+            w_mand = Decimal(str(weights_dict.get("skill_match", "0.40")))
+            w_opt = Decimal(str(weights_dict.get("experience_match", "0.20")))
+            w_sen = Decimal(str(weights_dict.get("seniority_match", "0.20")))
+            w_ai = Decimal(str(weights_dict.get("ai_confidence", "0.20")))
+            weights_source = "score_model_version"
+            logger.debug(
+                f"[WeightAlignment] Using score model version weights: "
+                f"skill_match={w_mand}, experience_match={w_opt}, seniority_match={w_sen}, ai_confidence={w_ai}"
+            )
+        else:
+            # Fallback to hardcoded defaults
+            w_mand = Decimal("0.40")
+            w_opt = Decimal("0.20")
+            w_sen = Decimal("0.20")
+            w_ai = Decimal("0.20")
+            logger.debug("[WeightAlignment] Using fallback hardcoded weights")
+
+        # Auto-reweight when a category has no skills.
         if total_mandatory == 0 and total_optional > 0:
             w_opt += w_mand
             w_mand = Decimal("0")
@@ -350,6 +659,66 @@ class AnalysisService:
         else:
             ai_score = min(Decimal(str(raw_ai)), Decimal("100"))
 
+        # ── OBJECTIVE EDUCATION & EXPERIENCE VALIDATION ──────────────────────
+        # Validate against explicit job requirements (not heuristic scores)
+        # Returns: PASS (ok), FAIL (reject), or UNKNOWN (flag for manual review)
+        education_result = _validate_education(
+            result.highest_education_level, job.minimum_education_level
+        )
+        experience_result = _validate_experience(
+            Decimal(str(result.total_experience_years)) if result.total_experience_years else None,
+            Decimal(str(job.minimum_years_experience)) if job.minimum_years_experience else None,
+        )
+
+        # Track validation status and missing evidence
+        validation_status = "pass"  # Default: everything is ok
+        missing_evidence = []  # Fields that returned UNKNOWN
+        validation_reasons = []  # All validation failure/unknown reasons
+
+        # Check education: if FAIL, mark as failed. If UNKNOWN, add to missing evidence.
+        if education_result.status == "fail":
+            validation_status = "fail"
+            validation_reasons.append(education_result.reason)
+            logger.info(
+                f"[Objective Education Validation] {education_result.reason} FAIL."
+            )
+        elif education_result.status == "unknown":
+            if validation_status != "fail":  # Only override if not already failed
+                validation_status = "unknown"
+            missing_evidence.append("education")
+            validation_reasons.append(education_result.reason)
+            logger.info(
+                f"[Objective Education Validation] {education_result.reason} UNKNOWN."
+            )
+
+        # Check experience: if FAIL, mark as failed. If UNKNOWN, add to missing evidence.
+        if experience_result.status == "fail":
+            validation_status = "fail"
+            validation_reasons.append(experience_result.reason)
+            logger.info(
+                f"[Objective Experience Validation] {experience_result.reason} FAIL."
+            )
+        elif experience_result.status == "unknown":
+            if validation_status != "fail":  # Only override if not already failed
+                validation_status = "unknown"
+            missing_evidence.append("experience")
+            validation_reasons.append(experience_result.reason)
+            logger.info(
+                f"[Objective Experience Validation] {experience_result.reason} UNKNOWN."
+            )
+
+        # ── DEAL-BREAKER EVALUATION ────────────────────────────────────────
+        # Check if candidate matches any active deal-breaker criteria
+        deal_breakers = job.deal_breakers or []
+        for deal_breaker in deal_breakers:
+            breaker_hit, breaker_reason = _evaluate_deal_breaker(deal_breaker, result)
+            if breaker_hit:
+                validation_status = "fail"  # Deal-breaker is a hard reject
+                validation_reasons.append(breaker_reason)
+                logger.info(
+                    f"[Deal-Breaker] {breaker_reason} Candidate REJECTED."
+                )
+
         overall = min(
             mandatory_score * w_mand
             + optional_score * w_opt
@@ -358,31 +727,72 @@ class AnalysisService:
             Decimal("100"),
         ).quantize(Decimal("0.01"))
 
-        enough_mandatory_for_strong = (
-            Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.90")
-            if total_mandatory else True
-        )
-        enough_mandatory_for_good = (
-            Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.75")
-            if total_mandatory else True
-        )
+        # ── APPLY MANDATORY FILTER & OBJECTIVE VALIDATIONS ───────────────────
+        # Decision logic:
+        # 1. If FAIL: reject (score <= 39)
+        # 2. If only UNKNOWN: don't reject, but mark for manual review + light penalty
+        # 3. Otherwise: normal scoring
 
-        if overall >= 82 and enough_mandatory_for_strong:
-            recommendation = "strong_match"
-        elif overall >= 65 and enough_mandatory_for_good:
-            recommendation = "good_match"
-        elif overall >= 45:
-            recommendation = "potential"
+        if validation_status == "fail":
+            # Objective validation FAILED (candidate below minimum threshold)
+            overall = min(overall, Decimal("39"))  # Cap score at 39 (below "potential")
+            recommendation = "not_match"
+            reason = " | ".join(validation_reasons)
+            logger.info(
+                f"[Objective Validation] Candidate REJECTED. "
+                f"Reasons: {reason}. Score capped at 39."
+            )
+        elif validation_status == "unknown":
+            # Objective validation UNKNOWN (missing critical evidence)
+            # Don't reject, but flag for manual review and apply penalty
+            penalty = Decimal("0.90")  # Apply 10% penalty for missing evidence
+            overall = (overall * penalty).quantize(Decimal("0.01"))
+            recommendation = "review_manually"
+            reason = f"Dados insuficientes: {', '.join(missing_evidence)}. {' | '.join(validation_reasons)}"
+            logger.info(
+                f"[Objective Validation] Missing evidence detected. "
+                f"Flagged for manual review. Penalty: 10%. "
+                f"Reasons: {' | '.join(validation_reasons)}"
+            )
+        elif total_mandatory > 0 and mandatory_percentage < mandatory_threshold:
+            # Job has required skills and candidate doesn't meet 60% threshold
+            overall = min(overall, Decimal("39"))  # Cap score at 39 (below "potential")
+            recommendation = "not_match"
+            reason = f"Não atende habilidades obrigatórias ({mandatory_matched}/{total_mandatory})"
         else:
-            recommendation = "not_recommended"
+            # Pass mandatory filter or no mandatory skills required
+            enough_mandatory_for_strong = (
+                Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.90")
+                if total_mandatory else True
+            )
+            enough_mandatory_for_good = (
+                Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.75")
+                if total_mandatory else True
+            )
+
+            if overall >= 82 and enough_mandatory_for_strong:
+                recommendation = "strong_match"
+            elif overall >= 65 and enough_mandatory_for_good:
+                recommendation = "good_match"
+            elif overall >= 45:
+                recommendation = "potential"
+            else:
+                recommendation = "not_recommended"
+            reason = None
 
         skills_score = (
             mandatory_score * Decimal("0.67") + optional_score * Decimal("0.33")
         ).quantize(Decimal("0.01"))
-        summary = (
-            f"{mandatory_matched}/{total_mandatory} skills obrigatórias e "
-            f"{optional_matched}/{total_optional} skills opcionais atendidas."
-        )
+
+        if reason:
+            # Rejected due to mandatory filter
+            summary = reason
+        else:
+            # Normal summary
+            summary = (
+                f"{mandatory_matched}/{total_mandatory} skills obrigatórias e "
+                f"{optional_matched}/{total_optional} skills opcionais atendidas."
+            )
         existing_match = await self._repository.find_job_match(analysis_id, job_id)
         match = existing_match or ResumeJobMatchModel(
             analysis_id=analysis_id,
@@ -398,6 +808,11 @@ class AnalysisService:
         match.bonus_skills = bonus_skill_names
         match.match_summary = summary
         match.recommendation = recommendation
+        match.weights_source = weights_source
+        match.score_model_version_id = score_model_version.id if score_model_version else None
+        match.validation_status = validation_status
+        match.missing_evidence = missing_evidence
+        match.rejection_reasons = validation_reasons
         await self._repository.save_job_match(match)
         await PipelineService(
             SQLAlchemyPipelineRepository(self._repository.session)
@@ -419,4 +834,7 @@ class AnalysisService:
             seniority_score=seniority_score.quantize(Decimal("0.01")),
             candidate_seniority=result.seniority_level,
             job_seniority=job.seniority_level,
+            validation_status=validation_status,
+            missing_evidence=missing_evidence,
+            rejection_reasons=validation_reasons,
         )
