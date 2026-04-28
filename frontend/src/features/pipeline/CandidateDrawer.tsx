@@ -3,6 +3,7 @@ import { type MutableRefObject, type ReactNode, useEffect, useMemo, useRef, useS
 import { Tabs } from "../../components/common/Tabs";
 import { useAuth } from "../../features/auth/useAuth";
 import { analysisService } from "../../services/analysisService";
+import { candidatesService } from "../../services/candidatesService";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { pipelineService } from "../../services/pipelineService";
@@ -18,6 +19,7 @@ import type {
   PipelineTrigger,
 } from "../../types/domain";
 import { type PanelTab, usePipeline } from "./PipelineContext";
+import { EditCandidateModal } from "./EditCandidateModal";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +149,7 @@ export function CandidateDrawer() {
   const historyCacheRef = useRef<Map<string, CandidatePipelineHistory>>(new Map());
 
   const [stageSaving, setStageSaving] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   // Clear local analysis result when the selected candidate changes
   useEffect(() => {
@@ -280,14 +283,24 @@ export function CandidateDrawer() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={closeCandidate}
-              className="shrink-0 rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
-              aria-label="Fechar painel"
-            >
-              ✕
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(true)}
+                className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                aria-label="Editar dados do candidato"
+              >
+                ✎ Editar
+              </button>
+              <button
+                type="button"
+                onClick={closeCandidate}
+                className="shrink-0 rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                aria-label="Fechar painel"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {!candidateLoading && candidate?.tags && candidate.tags.length > 0 ? (
@@ -428,6 +441,15 @@ export function CandidateDrawer() {
           ) : null}
         </div>
       </div>
+
+      <EditCandidateModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        candidate={candidate}
+        onSuccess={() => {
+          openCandidate(selectedCandidateId!);
+        }}
+      />
     </>
   );
 }
