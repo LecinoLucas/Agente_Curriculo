@@ -35,6 +35,15 @@ class SQLAlchemyPipelineRepository:
             )
         )
 
+    async def find_available_job(self, job_id: UUID) -> JobModel | None:
+        return await self._session.scalar(
+            sa.select(JobModel).where(
+                JobModel.id == job_id,
+                JobModel.deleted_at.is_(None),
+                JobModel.status.in_(["published", "paused"]),
+            )
+        )
+
     async def find_active_candidate(self, candidate_id: UUID) -> CandidateModel | None:
         return await self._session.scalar(
             sa.select(CandidateModel).where(
@@ -152,6 +161,10 @@ class SQLAlchemyPipelineRepository:
             .where(
                 CandidatePipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
+                sa.or_(
+                    CandidatePipelineModel.status.is_(None),
+                    CandidatePipelineModel.status != "transferred",
+                ),
             )
             .order_by(
                 CandidatePipelineModel.match_score.desc().nulls_last(),
@@ -255,6 +268,70 @@ class SQLAlchemyPipelineRepository:
         await self._session.flush()
         await self._session.refresh(transition)
         return transition
+
+    async def create_entry(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        stage: str,
+        status: str,
+        moved_by: UUID | None,
+        updated_at: datetime,
+    ) -> dict:
+        result = await self._session.execute(
+            sa.insert(CandidatePipelineModel)
+            .values(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                stage=stage,
+                status=status,
+                entered_at=updated_at,
+                last_moved_by=moved_by,
+                created_at=updated_at,
+                updated_at=updated_at,
+            )
+            .returning(
+                CandidatePipelineModel.candidate_id,
+                CandidatePipelineModel.job_id,
+                CandidatePipelineModel.stage,
+                CandidatePipelineModel.status,
+                CandidatePipelineModel.updated_at,
+            )
+        )
+        row = result.mappings().first()
+        return dict(row) if row else {}
+
+    async def update_entry_status(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        new_status: str,
+        last_moved_by: UUID | None,
+        updated_at: datetime,
+    ) -> dict | None:
+        result = await self._session.execute(
+            sa.update(CandidatePipelineModel)
+            .where(
+                CandidatePipelineModel.candidate_id == candidate_id,
+                CandidatePipelineModel.job_id == job_id,
+            )
+            .values(
+                status=new_status,
+                last_moved_by=last_moved_by,
+                updated_at=updated_at,
+            )
+            .returning(
+                CandidatePipelineModel.candidate_id,
+                CandidatePipelineModel.job_id,
+                CandidatePipelineModel.stage,
+                CandidatePipelineModel.status,
+                CandidatePipelineModel.updated_at,
+            )
+        )
+        row = result.mappings().first()
+        return dict(row) if row else None
 
     async def upsert_and_record_transition(
         self,
@@ -395,6 +472,12 @@ class SQLAlchemyPipelineRepository:
                 CandidatePipelineModel.stage,
                 sa.func.count(CandidatePipelineModel.candidate_id).label("cnt"),
                 sa.func.max(CandidatePipelineModel.updated_at).label("latest"),
+            )
+            .where(
+                sa.or_(
+                    CandidatePipelineModel.status.is_(None),
+                    CandidatePipelineModel.status != "transferred",
+                )
             )
             .group_by(CandidatePipelineModel.job_id, CandidatePipelineModel.stage)
         )

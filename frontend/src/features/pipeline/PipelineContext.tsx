@@ -25,7 +25,7 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type PanelTab = "documents" | "analysis" | "ranking" | "history";
+export type PanelTab = "summary" | "score" | "analysis" | "documents" | "history" | "actions";
 
 interface PipelineState {
   // Jobs list — loaded once on mount, shared across all consumers
@@ -106,7 +106,7 @@ const INITIAL_STATE: PipelineState = {
   candidateOverview: null,
   candidateLoading: false,
   candidateError: null,
-  activePanelTab: "ranking",
+  activePanelTab: "summary",
   pollingAnalysisId: null,
   pollingStatus: null,
   candidatesSyncTick: 0,
@@ -377,7 +377,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   // ── Candidate panel ────────────────────────────────────────────────────────
 
-  const openCandidate = useCallback(async (candidateId: string, initialTab: PanelTab = "ranking") => {
+  const openCandidate = useCallback(async (candidateId: string, initialTab: PanelTab = "summary") => {
     selectedCandidateIdRef.current = candidateId;
 
     const cached = candidateCacheRef.current.get(candidateId);

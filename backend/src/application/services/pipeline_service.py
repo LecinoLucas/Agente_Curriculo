@@ -12,7 +12,10 @@ from src.infrastructure.database.models.candidate_pipeline_model import (
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
+from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
 from src.interface.api.schemas.pipeline_schemas import (
+    AddCandidateToJobRequest,
+    AddCandidateToJobResponse,
     CandidatePipelineHistoryResponse,
     JobMatchCandidateResponse,
     MoveCandidateRequest,
@@ -21,6 +24,8 @@ from src.interface.api.schemas.pipeline_schemas import (
     PipelineColumnResponse,
     PipelineJobSummaryResponse,
     StageTransitionResponse,
+    TransferCandidateJobRequest,
+    TransferCandidateJobResponse,
     UpdateCandidateStageRequest,
     UpdateCandidateStageResponse,
 )
@@ -59,6 +64,7 @@ STAGE_TO_CANDIDATE_STATUS: dict[str, str] = {
 }
 
 _TERMINAL_STAGES: frozenset[str] = frozenset({"hired", "rejected"})
+_TRANSFER_ALLOWED_STAGES: frozenset[str] = frozenset({"entry", "screening"})
 
 # Stages that resolve to a terminal outcome status.
 _STAGE_TO_OUTCOME: dict[str, str] = {
@@ -129,6 +135,18 @@ class PipelineInvalidTransitionError(Exception):
 
 class PipelineConcurrentModificationError(Exception):
     """Raised when a concurrent request changed the candidate's stage before this one committed."""
+
+
+class PipelineDuplicateEntryError(Exception):
+    pass
+
+
+class PipelineDestinationJobUnavailableError(Exception):
+    pass
+
+
+class PipelineTransferNotAllowedError(Exception):
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +316,148 @@ class PipelineService:
             updated_at=saved_row["updated_at"],
         )
 
+    async def add_candidate_to_job(
+        self,
+        candidate_id: UUID,
+        body: AddCandidateToJobRequest,
+        moved_by: UUID,
+    ) -> AddCandidateToJobResponse:
+        if body.initial_stage != "entry":
+            raise PipelineInvalidTransitionError("initial_stage deve ser 'entry'")
+
+        await self._ensure_available_job(body.job_id)
+        await self._ensure_active_candidate(candidate_id)
+
+        existing = await self._repository.find_entry(candidate_id, body.job_id)
+        if existing is not None:
+            raise PipelineDuplicateEntryError
+
+        now = datetime.now(UTC)
+        saved_row = await self._repository.create_entry(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            stage=body.initial_stage,
+            status="active",
+            moved_by=moved_by,
+            updated_at=now,
+        )
+        transition = await self._repository.save_transition(
+            PipelineStageTransitionModel(
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                from_stage=None,
+                to_stage=body.initial_stage,
+                moved_by=moved_by,
+                moved_at=now,
+                trigger="manual",
+                reason="Adicionado manualmente a outra vaga",
+            )
+        )
+
+        return AddCandidateToJobResponse(
+            candidate_id=saved_row["candidate_id"],
+            job_id=saved_row["job_id"],
+            stage=saved_row["stage"],  # type: ignore[arg-type]
+            candidate_status=STAGE_TO_CANDIDATE_STATUS[saved_row["stage"]],
+            status=saved_row["status"],  # type: ignore[arg-type]
+            transition_id=transition.id,
+            updated_at=saved_row["updated_at"],
+        )
+
+    async def transfer_candidate_job(
+        self,
+        candidate_id: UUID,
+        body: TransferCandidateJobRequest,
+        moved_by: UUID,
+    ) -> TransferCandidateJobResponse:
+        await self._ensure_active_candidate(candidate_id)
+        await self._ensure_available_job(body.to_job_id)
+
+        source_entry = await self._repository.find_entry(candidate_id, body.from_job_id)
+        if source_entry is None:
+            raise PipelineEntryNotFoundError
+        if source_entry.stage not in _TRANSFER_ALLOWED_STAGES:
+            raise PipelineTransferNotAllowedError
+
+        destination_entry = await self._repository.find_entry(candidate_id, body.to_job_id)
+        if destination_entry is not None:
+            raise PipelineDuplicateEntryError
+
+        now = datetime.now(UTC)
+        source_row = await self._repository.update_entry_status(
+            candidate_id=candidate_id,
+            job_id=body.from_job_id,
+            new_status="transferred",
+            last_moved_by=moved_by,
+            updated_at=now,
+        )
+        if source_row is None:
+            raise PipelineEntryNotFoundError
+
+        source_transition = await self._repository.save_transition(
+            PipelineStageTransitionModel(
+                candidate_id=candidate_id,
+                job_id=body.from_job_id,
+                from_stage=source_entry.stage,
+                to_stage=source_entry.stage,
+                moved_by=moved_by,
+                moved_at=now,
+                trigger="manual",
+                notes=f"Transferido para a vaga {body.to_job_id}",
+                reason=body.reason,
+            )
+        )
+
+        destination_row = await self._repository.create_entry(
+            candidate_id=candidate_id,
+            job_id=body.to_job_id,
+            stage="entry",
+            status="active",
+            moved_by=moved_by,
+            updated_at=now,
+        )
+        destination_transition = await self._repository.save_transition(
+            PipelineStageTransitionModel(
+                candidate_id=candidate_id,
+                job_id=body.to_job_id,
+                from_stage=None,
+                to_stage="entry",
+                moved_by=moved_by,
+                moved_at=now,
+                trigger="manual",
+                reason=body.reason,
+            )
+        )
+
+        await publish_domain_event(
+            DomainEvent(
+                event_type=DomainEventType.CANDIDATE_JOB_TRANSFERRED,
+                entity_id=candidate_id,
+                payload={
+                    "candidate_id": str(candidate_id),
+                    "from_job_id": str(body.from_job_id),
+                    "to_job_id": str(body.to_job_id),
+                    "reason": body.reason,
+                    "moved_by_user_id": str(moved_by),
+                    "timestamp": now.isoformat(),
+                },
+                timestamp=now,
+            )
+        )
+
+        return TransferCandidateJobResponse(
+            candidate_id=candidate_id,
+            from_job_id=body.from_job_id,
+            to_job_id=body.to_job_id,
+            from_stage=source_entry.stage,  # type: ignore[arg-type]
+            to_stage="entry",
+            source_status=source_row["status"],  # type: ignore[arg-type]
+            destination_status=destination_row["status"],  # type: ignore[arg-type]
+            source_transition_id=source_transition.id,
+            destination_transition_id=destination_transition.id,
+            updated_at=destination_row["updated_at"],
+        )
+
     # ------------------------------------------------------------------
     # New: candidate history in a job's pipeline
     # ------------------------------------------------------------------
@@ -386,6 +546,10 @@ class PipelineService:
     async def _ensure_active_job(self, job_id: UUID) -> None:
         if await self._repository.find_active_job(job_id) is None:
             raise PipelineJobNotFoundError
+
+    async def _ensure_available_job(self, job_id: UUID) -> None:
+        if await self._repository.find_available_job(job_id) is None:
+            raise PipelineDestinationJobUnavailableError
 
     async def _ensure_active_candidate(self, candidate_id: UUID) -> None:
         if await self._repository.find_active_candidate(candidate_id) is None:

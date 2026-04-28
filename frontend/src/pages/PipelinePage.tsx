@@ -13,6 +13,7 @@ import { formatContextError } from "../services/errorMessages";
 import { feedback } from "../services/feedback";
 import { HttpError } from "../services/http";
 import { getJobRanking } from "../services/jobsService";
+import { pipelineService } from "../services/pipelineService";
 import type { JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
 import {
   formatJobStatus,
@@ -191,6 +192,7 @@ export function PipelinePage() {
           <button
             type="button"
             onClick={() => setShowNewCandidate(true)}
+            disabled={!activeJobId}
             className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[hsl(var(--primary))]/90"
           >
             Novo candidato
@@ -430,10 +432,12 @@ export function PipelinePage() {
       {/* ── New candidate modal ── */}
       {showNewCandidate && (
         <NewCandidateModal
+          activeJobId={activeJobId}
+          job={selectedJob}
           onClose={() => setShowNewCandidate(false)}
-          onCreated={(id) => {
+          onCreated={async (id) => {
             setShowNewCandidate(false);
-            void openCandidate(id, "documents");
+            await openCandidate(id, "documents");
           }}
         />
       )}
@@ -703,6 +707,9 @@ type NewCandidateFormErrors = {
   form?: string;
 };
 
+type CandidateLinkStatus = "idle" | "created_pending_link" | "linked" | "link_failed";
+type DuplicateJobStatus = "idle" | "checking" | "linked" | "unlinked";
+
 function formatCpfInput(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 11);
   if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
@@ -712,13 +719,17 @@ function formatCpfInput(raw: string): string {
 }
 
 function NewCandidateModal({
+  activeJobId,
+  job,
   onClose,
   onCreated,
 }: {
+  activeJobId: string | null;
+  job: { title: string; status: string; seniority_level: string | null } | null;
   onClose: () => void;
-  onCreated: (candidateId: string) => void;
+  onCreated: (candidateId: string) => Promise<void>;
 }) {
-  const { notifyCandidatesChanged } = usePipeline();
+  const { notifyCandidatesChanged, refreshBoard } = usePipeline();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -726,14 +737,38 @@ function NewCandidateModal({
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<NewCandidateFormErrors>({});
   const [duplicate, setDuplicate] = useState<{ id: string; full_name: string } | null>(null);
+  const [createdCandidate, setCreatedCandidate] = useState<{ id: string; full_name: string } | null>(null);
+  const [linkStatus, setLinkStatus] = useState<CandidateLinkStatus>("idle");
+  const [duplicateJobStatus, setDuplicateJobStatus] = useState<DuplicateJobStatus>("idle");
 
   function clearDuplicate(field?: keyof NewCandidateFormErrors) {
     if (duplicate) setDuplicate(null);
+    if (createdCandidate) {
+      setCreatedCandidate(null);
+      setLinkStatus("idle");
+    }
+    setDuplicateJobStatus("idle");
     setErrors((current) => {
       if (!field && !current.form) return current;
       if (!field) return {};
       return { ...current, [field]: undefined, form: undefined };
     });
+  }
+
+  async function checkCandidateLinkedToActiveJob(candidateId: string): Promise<boolean> {
+    if (!activeJobId) return false;
+    const overview = await candidatesService.getOverview(candidateId);
+    return overview.pipeline_entries.some((entry) => entry.job_id === activeJobId);
+  }
+
+  async function linkCandidateToActiveJob(candidateId: string) {
+    if (!activeJobId) {
+      throw new Error("Selecione uma vaga antes de vincular o candidato.");
+    }
+    setLinkStatus("created_pending_link");
+    await pipelineService.addCandidateToJob(candidateId, { job_id: activeJobId, initial_stage: "entry" });
+    await refreshBoard();
+    setLinkStatus("linked");
   }
 
   function validateForm(): {
@@ -771,6 +806,10 @@ function NewCandidateModal({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!activeJobId || !job) {
+      setErrors({ form: "Selecione uma vaga antes de cadastrar um candidato." });
+      return;
+    }
     const validated = validateForm();
     if (!validated) {
       return;
@@ -780,6 +819,9 @@ function NewCandidateModal({
     setLoading(true);
     setErrors({});
     setDuplicate(null);
+    setCreatedCandidate(null);
+    setLinkStatus("idle");
+    setDuplicateJobStatus("idle");
     feedback.createCandidate.processing();
 
     try {
@@ -792,6 +834,9 @@ function NewCandidateModal({
           id: check.candidate_id,
           full_name: check.full_name ?? "Candidato existente",
         });
+        setDuplicateJobStatus("checking");
+        const isLinked = await checkCandidateLinkedToActiveJob(check.candidate_id);
+        setDuplicateJobStatus(isLinked ? "linked" : "unlinked");
         setErrors({
           form: "Já existe um candidato com este email/CPF",
         });
@@ -805,8 +850,22 @@ function NewCandidateModal({
         cpf: cpfDigits || undefined,
       });
       notifyCandidatesChanged();
+      setCreatedCandidate({ id: candidate.id, full_name: candidate.full_name });
+      try {
+        await linkCandidateToActiveJob(candidate.id);
+        await onCreated(candidate.id);
+      } catch (err: unknown) {
+        setLinkStatus("link_failed");
+        setErrors({
+          form: formatContextError(
+            err,
+            "Candidato criado, mas falhou ao vincular à vaga atual.",
+            "Tente vincular novamente para que ele apareça neste pipeline.",
+          ),
+        });
+        return;
+      }
       feedback.createCandidate.success();
-      onCreated(candidate.id);
     } catch (err: unknown) {
       if (err instanceof HttpError) {
         if (err.status === 409) {
@@ -836,6 +895,89 @@ function NewCandidateModal({
       setLoading(false);
     }
   }
+
+  async function handleRetryLink() {
+    if (!createdCandidate) return;
+    setLoading(true);
+    setErrors({});
+    try {
+      await linkCandidateToActiveJob(createdCandidate.id);
+      await onCreated(createdCandidate.id);
+      feedback.createCandidate.success();
+    } catch (err: unknown) {
+      setLinkStatus("link_failed");
+      setErrors({
+        form: formatContextError(
+          err,
+          "Candidato criado, mas ainda não foi possível vincular à vaga.",
+          "Tente novamente.",
+        ),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleOpenDuplicateCandidate() {
+    if (!duplicate) return;
+    setLoading(true);
+    setErrors({});
+    try {
+      const isLinked =
+        duplicateJobStatus === "linked"
+          ? true
+          : await checkCandidateLinkedToActiveJob(duplicate.id);
+      setDuplicateJobStatus(isLinked ? "linked" : "unlinked");
+      if (!isLinked) {
+        setErrors({
+          form: "Este candidato já existe, mas ainda não está vinculado à vaga ativa.",
+        });
+        return;
+      }
+      await onCreated(duplicate.id);
+    } catch (err: unknown) {
+      setErrors({
+        form: formatContextError(
+          err,
+          "Não foi possível abrir o candidato existente nesta vaga.",
+          "Tente novamente.",
+        ),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLinkDuplicateCandidate() {
+    if (!duplicate) return;
+    setLoading(true);
+    setErrors({});
+    setCreatedCandidate({ id: duplicate.id, full_name: duplicate.full_name });
+    try {
+      await linkCandidateToActiveJob(duplicate.id);
+      setDuplicateJobStatus("linked");
+      await onCreated(duplicate.id);
+    } catch (err: unknown) {
+      setLinkStatus("link_failed");
+      setErrors({
+        form: formatContextError(
+          err,
+          "Falha ao vincular o candidato duplicado à vaga ativa.",
+          "Tente novamente.",
+        ),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const workflowStatus = duplicate
+    ? duplicateJobStatus === "linked"
+      ? "linked"
+      : duplicateJobStatus === "unlinked"
+        ? "link_failed"
+        : "created_pending_link"
+    : linkStatus;
 
   return (
     <>
@@ -867,6 +1009,60 @@ function NewCandidateModal({
           </button>
         </div>
 
+        <div className="mb-5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            Cadastrando para a vaga: {job?.title ?? "Nenhuma vaga selecionada"}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <StatusPill
+              label={formatJobStatus(job?.status)}
+              tone={jobStatusTone(job?.status)}
+            />
+            {job?.seniority_level ? (
+              <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
+                {formatSeniority(job.seniority_level)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {(createdCandidate || duplicate) && workflowStatus !== "idle" ? (
+          <div
+            className={[
+              "mb-4 rounded-xl border px-4 py-3",
+              workflowStatus === "linked"
+                ? "border-[hsl(var(--success))]/20 bg-[hsl(var(--success-soft))]"
+                : workflowStatus === "link_failed"
+                  ? "border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))]"
+                  : "border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))]",
+            ].join(" ")}
+          >
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">
+              {workflowStatus === "linked"
+                ? "Vinculado à vaga"
+                : workflowStatus === "link_failed"
+                  ? "Falha ao vincular"
+                  : "Candidato criado, aguardando vínculo com a vaga"}
+            </p>
+            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+              {workflowStatus === "linked"
+                ? "Este candidato já está contextualizado na vaga ativa."
+                : workflowStatus === "link_failed"
+                  ? "O cadastro existe, mas ele ainda não entrou no pipeline desta vaga."
+                  : "Finalizando a entrada do candidato no pipeline da vaga atual."}
+            </p>
+          </div>
+        ) : null}
+
+        {!activeJobId || !job ? (
+          <div className="mb-4 rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] p-4">
+            <p className="text-sm font-semibold text-[hsl(var(--warning))]">Cadastro bloqueado</p>
+            <p className="mt-0.5 text-sm text-[hsl(var(--warning))]">
+              Selecione uma vaga no pipeline para criar e contextualizar este candidato.
+            </p>
+          </div>
+        ) : null}
+
         {duplicate ? (
           <div className="mb-4 rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] p-4">
             <p className="text-sm font-semibold text-[hsl(var(--warning))]">
@@ -875,13 +1071,26 @@ function NewCandidateModal({
             <p className="mt-0.5 text-sm text-[hsl(var(--warning))]">
               Já existe um candidato com este email/CPF: <strong>{duplicate.full_name}</strong>
             </p>
-            <button
-              type="button"
-              onClick={() => onCreated(duplicate.id)}
-              className="mt-3 rounded-lg bg-[hsl(var(--warning))] px-3 py-1.5 text-sm font-medium text-white transition hover:bg-[hsl(var(--warning))]/90"
-            >
-              Abrir candidato existente
-            </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleOpenDuplicateCandidate()}
+                disabled={!activeJobId || loading || duplicateJobStatus === "checking" || duplicateJobStatus === "unlinked"}
+                className="rounded-lg bg-[hsl(var(--warning))] px-3 py-1.5 text-sm font-medium text-white transition hover:bg-[hsl(var(--warning))]/90 disabled:opacity-50"
+              >
+                {duplicateJobStatus === "checking" ? "Verificando vínculo…" : "Abrir candidato existente"}
+              </button>
+              {duplicateJobStatus === "unlinked" ? (
+                <button
+                  type="button"
+                  onClick={() => void handleLinkDuplicateCandidate()}
+                  disabled={!activeJobId || loading}
+                  className="rounded-lg border border-[hsl(var(--warning))] px-3 py-1.5 text-sm font-medium text-[hsl(var(--warning))] transition hover:bg-[hsl(var(--warning-soft))] disabled:opacity-50"
+                >
+                  Adicionar a esta vaga
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -974,6 +1183,16 @@ function NewCandidateModal({
           ) : null}
 
           <div className="flex justify-end gap-2 pt-1">
+            {createdCandidate && linkStatus === "link_failed" ? (
+              <button
+                type="button"
+                onClick={() => void handleRetryLink()}
+                disabled={loading}
+                className="rounded-lg border border-[hsl(var(--danger))] px-4 py-2 text-sm font-medium text-[hsl(var(--danger))] transition hover:bg-[hsl(var(--danger-soft))] disabled:opacity-50"
+              >
+                Tentar vincular novamente
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onClose}
@@ -983,10 +1202,10 @@ function NewCandidateModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !activeJobId || !job || Boolean(createdCandidate)}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
             >
-              {loading ? "Verificando…" : "Criar e abrir perfil"}
+              {loading ? "Verificando…" : createdCandidate ? "Candidato criado" : "Criar e abrir perfil"}
             </button>
           </div>
         </form>

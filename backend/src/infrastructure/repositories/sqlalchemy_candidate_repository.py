@@ -337,6 +337,10 @@ class SQLAlchemyCandidateRepository:
             .where(
                 CandidatePipelineModel.candidate_id == candidate_id,
                 JobModel.deleted_at.is_(None),
+                sa.or_(
+                    CandidatePipelineModel.status.is_(None),
+                    CandidatePipelineModel.status != "transferred",
+                ),
             )
             .order_by(
                 CandidatePipelineModel.updated_at.desc(),

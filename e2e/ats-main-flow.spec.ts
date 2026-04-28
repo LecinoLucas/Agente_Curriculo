@@ -108,14 +108,14 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
   await test.step("envia currículo e recebe orientação clara sobre a análise", async () => {
     const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
     await drawer.getByRole("button", { name: "Documentos" }).click();
-    await expect(drawer.getByRole("button", { name: "Enviar currículo" })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Enviar currículo" }).last()).toBeVisible();
 
     await drawer.locator('input[type="file"]').setInputFiles({
       name: "backend-profile.pdf",
       mimeType: "application/pdf",
       buffer: resumeBuffer,
     });
-    await drawer.getByRole("button", { name: "Enviar" }).click();
+    await drawer.getByRole("button", { name: "Enviar currículo" }).last().click();
 
     const guidance = await waitForUploadGuidance(page);
 
@@ -132,7 +132,9 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     await expect(drawer.getByText("Análise concluída")).toBeVisible({ timeout: 45_000 });
     await expect(drawer.getByText("Rastreabilidade da execução")).toBeVisible();
     await expect(drawer.getByText(/Usou IA real/)).toBeVisible();
-    await expect(drawer.getByText("Score da IA (análise do currículo)", { exact: true })).toBeVisible();
+    await drawer.getByRole("button", { name: "Score" }).click();
+    await expect(drawer.getByText("Score da IA", { exact: true })).toBeVisible();
+    await expect(drawer.getByText("Ranking da vaga", { exact: true })).toBeVisible();
     await drawer.getByRole("button", { name: "Fechar painel" }).click();
   });
 
@@ -166,12 +168,14 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
     await expect(drawer).toBeVisible();
 
-    await drawer.locator("select").first().selectOption("screening");
+    await drawer.getByRole("button", { name: "Ações" }).click();
+    await drawer.getByRole("combobox").first().selectOption("screening");
+    await drawer.getByRole("button", { name: "Salvar etapa" }).click();
     await page.waitForTimeout(1500);
 
-    await drawer.getByRole("button", { name: "Histórico do pipeline" }).click();
+    await drawer.getByRole("button", { name: "Histórico" }).click();
     await expect(drawer.getByText("Histórico real do pipeline")).toBeVisible();
     await expect(drawer.getByText("Recebido → Triagem")).toBeVisible({ timeout: 20_000 });
-    await expect(drawer.getByText("Movido manualmente")).toBeVisible();
+    await expect(drawer.getByText("Movido manualmente").first()).toBeVisible();
   });
 });

@@ -335,7 +335,7 @@ export type CandidatePipelineHistory = {
   job_id: string;
   job_title: string;
   current_stage: PipelineStage;
-  status: "active" | "hired" | "rejected";
+  status: "active" | "hired" | "rejected" | "transferred";
   match_score: number | null;
   entered_at: string | null;
   updated_at: string;
@@ -353,9 +353,43 @@ export type MovePipelineCandidateResponse = {
   job_id: string;
   stage: PipelineStage;
   candidate_status: string;
-  status: "active" | "hired" | "rejected";
+  status: "active" | "hired" | "rejected" | "transferred";
   match_score: number | null;
   transition_id: string;
+  updated_at: string;
+};
+
+export type AddCandidateToJobPayload = {
+  job_id: string;
+  initial_stage?: PipelineStage;
+};
+
+export type AddCandidateToJobResponse = {
+  candidate_id: string;
+  job_id: string;
+  stage: PipelineStage;
+  candidate_status: string;
+  status: "active" | "hired" | "rejected" | "transferred";
+  transition_id: string;
+  updated_at: string;
+};
+
+export type TransferCandidateJobPayload = {
+  from_job_id: string;
+  to_job_id: string;
+  reason: string;
+};
+
+export type TransferCandidateJobResponse = {
+  candidate_id: string;
+  from_job_id: string;
+  to_job_id: string;
+  from_stage: PipelineStage;
+  to_stage: PipelineStage;
+  source_status: "active" | "hired" | "rejected" | "transferred";
+  destination_status: "active" | "hired" | "rejected" | "transferred";
+  source_transition_id: string;
+  destination_transition_id: string;
   updated_at: string;
 };
 

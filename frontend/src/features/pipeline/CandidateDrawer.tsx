@@ -1,33 +1,38 @@
-import { type MutableRefObject, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type MutableRefObject, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Tabs } from "../../components/common/Tabs";
+import { StatusPill } from "../../components/common/StatusPill";
 import { useAuth } from "../../features/auth/useAuth";
 import { analysisService } from "../../services/analysisService";
 import { candidatesService } from "../../services/candidatesService";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
+import { getJobRanking } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import { resumeService } from "../../services/resumeService";
 import { toast } from "../../services/toast";
 import type {
   AnalysisPipelineStatus,
   AnalysisResult,
-  CandidatePipelineHistory,
   CandidateOverview,
+  CandidatePipelineHistory,
+  Job,
+  JobRankingEntry,
   PipelineStage,
-  PipelineStageTransition,
   PipelineTrigger,
 } from "../../types/domain";
+import { formatJobStatus, formatSeniority, jobStatusTone } from "../../utils/jobFormatters";
+import { getCandidateState, getNextAction, type CandidateState } from "./candidateState";
 import { type PanelTab, usePipeline } from "./PipelineContext";
 import { EditCandidateModal } from "./EditCandidateModal";
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
 const DRAWER_TABS = [
-  { key: "ranking" satisfies PanelTab, label: "Compatibilidade" },
+  { key: "summary" satisfies PanelTab, label: "Resumo" },
+  { key: "score" satisfies PanelTab, label: "Score" },
   { key: "analysis" satisfies PanelTab, label: "Análise IA" },
-  { key: "history" satisfies PanelTab, label: "Histórico do pipeline" },
   { key: "documents" satisfies PanelTab, label: "Documentos" },
+  { key: "history" satisfies PanelTab, label: "Histórico" },
+  { key: "actions" satisfies PanelTab, label: "Ações" },
 ];
 
 const STAGE_OPTIONS: { value: PipelineStage; label: string }[] = [
@@ -41,6 +46,23 @@ const STAGE_OPTIONS: { value: PipelineStage; label: string }[] = [
   { value: "rejected", label: "Reprovado" },
 ];
 
+const STAGE_LABEL: Record<string, string> = {
+  entry: "Recebido",
+  screening: "Triagem",
+  hr_interview: "Entrevista RH",
+  technical_interview: "Entrevista Técnica",
+  final: "Final",
+  offer: "Proposta",
+  hired: "Contratado",
+  rejected: "Reprovado",
+};
+
+const TRIGGER_LABEL: Record<PipelineTrigger, string> = {
+  manual: "Movido manualmente",
+  auto_match: "Entrada automática por compatibilidade",
+  system: "Movido pelo sistema",
+};
+
 const ANALYSIS_STATUS_LABEL: Record<string, string> = {
   pending: "Na fila",
   processing: "Processando",
@@ -49,9 +71,16 @@ const ANALYSIS_STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelada",
 };
 
-const MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024;
+const EXTRACTION_STATUS_LABEL: Record<string, string> = {
+  completed: "Pronto",
+  pending: "Pendente",
+  processing: "Extraindo…",
+  failed: "Falha",
+};
 
-// ── Score helpers ──────────────────────────────────────────────────────────────
+const MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024;
+const TRANSFER_ALLOWED_STAGES: PipelineStage[] = ["entry", "screening"];
+const DANGEROUS_STAGES: PipelineStage[] = ["hired", "rejected"];
 
 function fmtScore(score: number | null | undefined): string {
   if (score == null) return "—";
@@ -90,35 +119,178 @@ function getCompatibilityGuidance(params: {
   if (!params.hasPipelineEntry) {
     return {
       title: "Compatibilidade indisponível",
-      description: "Associe o candidato a esta vaga para calcular a compatibilidade",
+      description: "Associe o candidato a esta vaga para calcular a compatibilidade.",
       tone: "neutral",
     };
   }
   if (!params.hasResume) {
     return {
       title: "Compatibilidade indisponível",
-      description: "Envie um currículo para calcular a compatibilidade",
+      description: "Envie um currículo para calcular a compatibilidade.",
       tone: "neutral",
     };
   }
   if (params.analysisStatus === "pending" || params.analysisStatus === "processing") {
     return {
-      title: "Análise da IA em processamento...",
-      description: "Isso pode levar alguns segundos",
+      title: "Análise da IA em processamento",
+      description: "O cálculo da compatibilidade será atualizado quando a execução terminar.",
       tone: "info",
     };
   }
   if (params.analysisStatus !== "completed") {
     return {
       title: "Compatibilidade indisponível",
-      description: "Execute a análise da IA para ver a compatibilidade",
+      description: "Execute a análise da IA para liberar esta decisão.",
       tone: "neutral",
     };
   }
   return null;
 }
 
-// ── CandidateDrawer ────────────────────────────────────────────────────────────
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function formatOptionalDateTime(value: string | null | undefined): string {
+  return value ? formatDateTime(value) : "—";
+}
+
+function inferAdmissionFields(overview: CandidateOverview): { label: string; value: string }[] {
+  const source = overview.candidate as Record<string, unknown>;
+  const fieldMap: Array<{ key: string; label: string }> = [
+    { key: "admission_status", label: "Status de admissão" },
+    { key: "admission_date", label: "Data de admissão" },
+    { key: "start_date", label: "Data de início" },
+    { key: "hire_date", label: "Data de contratação" },
+    { key: "admission_notes", label: "Observações de admissão" },
+  ];
+
+  return fieldMap
+    .map(({ key, label }) => {
+      const raw = source[key];
+      if (typeof raw !== "string" || !raw.trim()) return null;
+      return { label, value: raw };
+    })
+    .filter((item): item is { label: string; value: string } => item !== null);
+}
+
+function CandidateDrawerHeader({
+  candidate,
+  candidateState,
+  candidateSuggestion,
+  primaryActionLabel,
+  primaryActionLoading,
+  onPrimaryAction,
+  activeJobLabel,
+  currentStage,
+  activeJobCompatibilityScore,
+  linkStatus,
+  candidateLoading,
+  closeCandidate,
+}: {
+  candidate: CandidateOverview["candidate"] | null | undefined;
+  candidateState: CandidateState | null;
+  candidateSuggestion: string | null;
+  primaryActionLabel: string | null;
+  primaryActionLoading: boolean;
+  onPrimaryAction: (() => void) | null;
+  activeJobLabel: string;
+  currentStage: PipelineStage | null;
+  activeJobCompatibilityScore: number | null;
+  linkStatus: string;
+  candidateLoading: boolean;
+  closeCandidate: () => void;
+}) {
+  return (
+    <div className="shrink-0 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {candidateLoading ? (
+            <div className="h-5 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-base font-semibold text-[hsl(var(--text))]">
+                {candidate?.full_name ?? "—"}
+              </p>
+              {candidateState ? <StatusPill label={candidateState.label} tone={candidateState.tone} /> : null}
+            </div>
+          )}
+          {candidateLoading ? (
+            <div className="mt-2 h-3 w-32 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+          ) : (
+            <div className="mt-1">
+              <p className="truncate text-sm text-[hsl(var(--text-muted))]">
+                {[candidate?.email, candidate?.phone].filter(Boolean).join(" · ") || "Sem contato informado"}
+              </p>
+              {candidateSuggestion ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-medium text-[hsl(var(--text-muted))]">{candidateSuggestion}</p>
+                  {primaryActionLabel && onPrimaryAction ? (
+                    <button
+                      type="button"
+                      onClick={onPrimaryAction}
+                      disabled={primaryActionLoading}
+                      className="rounded-lg bg-[hsl(var(--primary))] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-50"
+                    >
+                      {primaryActionLoading ? "Processando…" : primaryActionLabel}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={closeCandidate}
+          className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+          aria-label="Fechar painel"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <HeaderFact label="Vaga atual" value={activeJobLabel} />
+        <HeaderFact
+          label="Etapa atual"
+          value={currentStage ? STAGE_LABEL[currentStage] ?? currentStage : "Não vinculado"}
+        />
+        <HeaderFact
+          label="Compatibilidade"
+          value={fmtScore(activeJobCompatibilityScore)}
+          valueClassName={scoreColorClass(activeJobCompatibilityScore)}
+        />
+        <HeaderFact label="Status do vínculo" value={linkStatus} />
+      </div>
+    </div>
+  );
+}
+
+function HeaderFact({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        {label}
+      </p>
+      <div className={["mt-1 text-sm font-medium text-[hsl(var(--text))]", valueClassName ?? ""].join(" ")}>
+        {value}
+      </div>
+    </div>
+  );
+}
 
 export function CandidateDrawer() {
   const {
@@ -128,42 +300,51 @@ export function CandidateDrawer() {
     candidateError,
     activePanelTab,
     activeJobId,
+    jobs,
     closeCandidate,
     openCandidate,
     switchPanelTab,
+    refreshBoard,
+    syncCandidateOverview,
+    syncAnalysisStart,
+    startPolling,
+    notifyCandidatesChanged,
     moveCandidateStage,
   } = usePipeline();
+  const { user } = useAuth();
+  const canSpendRealTokens = Boolean(user?.real_ai_token_spend_enabled);
 
   const isOpen = selectedCandidateId !== null;
-
-  // ── Local: full AnalysisResult (fetched lazily, cached across tab switches) ──
-  //
-  // CandidateOverview.latest_analysis holds a summary (id + scores + status).
-  // The full result with text fields lives at GET /analyses/:id/result and is
-  // only needed when the Analysis tab is open. We cache per analysisId in a ref
-  // so switching tabs or re-opening the same candidate avoids a repeat fetch.
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisResultLoading, setAnalysisResultLoading] = useState(false);
   const [analysisResultError, setAnalysisResultError] = useState<string | null>(null);
   const analysisResultCacheRef = useRef<Map<string, AnalysisResult>>(new Map());
   const historyCacheRef = useRef<Map<string, CandidatePipelineHistory>>(new Map());
+  const rankingEntryCacheRef = useRef<Map<string, JobRankingEntry | null>>(new Map());
+
+  const [rankingEntry, setRankingEntry] = useState<JobRankingEntry | null>(null);
+  const [rankingEntryLoading, setRankingEntryLoading] = useState(false);
+  const [rankingEntryError, setRankingEntryError] = useState<string | null>(null);
 
   const [stageSaving, setStageSaving] = useState(false);
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [headerActionLoading, setHeaderActionLoading] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [addJobModalOpen, setAddJobModalOpen] = useState(false);
+  const [transferJobModalOpen, setTransferJobModalOpen] = useState(false);
 
-  // Clear local analysis result when the selected candidate changes
   useEffect(() => {
     setAnalysisResult(null);
     setAnalysisResultError(null);
+    setRankingEntry(null);
+    setRankingEntryError(null);
   }, [selectedCandidateId]);
 
-  // Fetch full AnalysisResult when Analysis tab is active and analysis is done
   useEffect(() => {
     if (activePanelTab !== "analysis") return;
 
     const analysisId = candidateOverview?.latest_analysis?.analysis_id;
     const status = candidateOverview?.latest_analysis?.status;
-
     if (!analysisId || status !== "completed") return;
 
     const cached = analysisResultCacheRef.current.get(analysisId);
@@ -197,16 +378,210 @@ export function CandidateDrawer() {
     candidateOverview?.latest_analysis?.status,
   ]);
 
-  // Stage of this candidate inside the currently active job
-  const currentStage = useMemo<PipelineStage | null>(() => {
+  useEffect(() => {
+    if (activePanelTab !== "score") return;
+    if (!activeJobId || !candidateOverview) {
+      setRankingEntry(null);
+      setRankingEntryError(null);
+      setRankingEntryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const cacheKey = `${activeJobId}:${candidateOverview.candidate.id}`;
+    const cached = rankingEntryCacheRef.current.get(cacheKey);
+    if (cached !== undefined) {
+      setRankingEntry(cached);
+      setRankingEntryError(null);
+      setRankingEntryLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setRankingEntryLoading(true);
+    setRankingEntryError(null);
+
+    void getJobRanking(activeJobId)
+      .then((ranking) => {
+        if (cancelled) return;
+        const entry = ranking.candidates.find(
+          (candidate) => candidate.candidate_id === candidateOverview.candidate.id,
+        ) ?? null;
+        rankingEntryCacheRef.current.set(cacheKey, entry);
+        setRankingEntry(entry);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setRankingEntry(null);
+        setRankingEntryError(
+          formatContextError(
+            err,
+            "Não foi possível carregar o score detalhado desta vaga.",
+            "Tente novamente.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setRankingEntryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePanelTab, activeJobId, candidateOverview]);
+
+  const candidate = candidateOverview?.candidate;
+  const activePipelineEntry = useMemo(() => {
     if (!activeJobId || !candidateOverview) return null;
-    return (
-      candidateOverview.pipeline_entries.find((e) => e.job_id === activeJobId)?.stage ?? null
-    );
+    return candidateOverview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null;
   }, [activeJobId, candidateOverview]);
 
+  const currentStage = activePipelineEntry?.stage ?? null;
+  const activeJob = useMemo<Job | null>(
+    () => jobs.find((job) => job.id === activeJobId) ?? null,
+    [jobs, activeJobId],
+  );
+  const activeJobMatch = useMemo(
+    () =>
+      activeJobId && candidateOverview
+        ? candidateOverview.top_matches.find((match) => match.job_id === activeJobId) ?? null
+        : null,
+    [activeJobId, candidateOverview],
+  );
+  const activeJobCompatibilityScore =
+    activePipelineEntry?.match_score ?? activeJobMatch?.match_score ?? null;
+  const candidateState = useMemo(() => {
+    if (!candidateOverview) return null;
+    return getCandidateState({
+      resume_count: candidateOverview.resumes.length,
+      ai_status: candidateOverview.latest_analysis?.status ?? null,
+      pipeline: { stage: activePipelineEntry?.stage ?? null },
+      ranking_available:
+        rankingEntry !== null ||
+        activeJobCompatibilityScore !== null ||
+        activeJobMatch?.match_score != null,
+    });
+  }, [
+    activeJobCompatibilityScore,
+    activeJobMatch?.match_score,
+    activePipelineEntry?.stage,
+    candidateOverview,
+    rankingEntry,
+  ]);
+  const candidateNextAction = useMemo(
+    () => (candidateState ? getNextAction(candidateState) : null),
+    [candidateState],
+  );
+  const linkedJobIds = useMemo(
+    () => new Set((candidateOverview?.pipeline_entries ?? []).map((entry) => entry.job_id)),
+    [candidateOverview],
+  );
+  const availableJobs = useMemo(
+    () => jobs.filter((job) => job.id !== activeJobId && !linkedJobIds.has(job.id)),
+    [jobs, activeJobId, linkedJobIds],
+  );
+  const canTransferCurrentJob = currentStage ? TRANSFER_ALLOWED_STAGES.includes(currentStage) : false;
+  const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
+  const compatibilityGuidance = getCompatibilityGuidance({
+    hasPipelineEntry: activePipelineEntry !== null,
+    hasResume,
+    analysisStatus: candidateOverview?.latest_analysis?.status ?? null,
+  });
+
+  const handleHeaderRequestAnalysis = useCallback(async () => {
+    if (!candidateOverview || headerActionLoading) return;
+
+    const readyResume = candidateOverview.resumes.find(
+      (resume) =>
+        resume.status === "active" &&
+        resume.extraction_status === "completed" &&
+        resume.current_version_id,
+    );
+
+    switchPanelTab("analysis");
+
+    if (!canSpendRealTokens) {
+      toast.warning("Consumo real bloqueado — ative real_ai_token_spend_enabled para analisar.");
+      return;
+    }
+
+    if (!readyResume?.current_version_id) {
+      toast.warning("Nenhum currículo pronto para análise.");
+      return;
+    }
+
+    setHeaderActionLoading(true);
+    feedback.requestAnalysis.processing();
+    try {
+      const response = await analysisService.request(readyResume.current_version_id);
+      await syncAnalysisStart({
+        candidateId: candidateOverview.candidate.id,
+        analysisId: response.analysis_id,
+        status: "pending",
+        resumeId: readyResume.resume_id,
+        resumeTitle: readyResume.title,
+      });
+      startPolling(response.analysis_id, candidateOverview.candidate.id, "pending");
+      feedback.requestAnalysis.success();
+    } catch (err) {
+      feedback.requestAnalysis.error(err);
+    } finally {
+      setHeaderActionLoading(false);
+    }
+  }, [
+    candidateOverview,
+    headerActionLoading,
+    canSpendRealTokens,
+    startPolling,
+    switchPanelTab,
+    syncAnalysisStart,
+  ]);
+
+  const headerPrimaryAction = useMemo(() => {
+    if (!candidateState) return null;
+
+    switch (candidateState.key) {
+      case "no_resume":
+        return {
+          label: "Enviar currículo",
+          onClick: () => switchPanelTab("documents"),
+          loading: false,
+        };
+      case "waiting_analysis":
+        return {
+          label: "Iniciar análise",
+          onClick: () => {
+            void handleHeaderRequestAnalysis();
+          },
+          loading: headerActionLoading,
+        };
+      case "analysis_completed":
+        return {
+          label: "Ver análise",
+          onClick: () => switchPanelTab("analysis"),
+          loading: false,
+        };
+      case "ready_for_decision":
+        return {
+          label: "Mover etapa",
+          onClick: () => switchPanelTab("actions"),
+          loading: false,
+        };
+      case "moved_in_pipeline":
+        return {
+          label: "Ver histórico",
+          onClick: () => switchPanelTab("history"),
+          loading: false,
+        };
+      case "in_analysis":
+      case "finalized":
+        return null;
+    }
+  }, [candidateState, headerActionLoading, handleHeaderRequestAnalysis, switchPanelTab]);
+
   async function handleStageChange(newStage: PipelineStage) {
-    if (!selectedCandidateId || newStage === currentStage) return;
+    if (!selectedCandidateId || !currentStage || newStage === currentStage) return;
     setStageSaving(true);
     feedback.moveCandidate.processing();
     try {
@@ -219,166 +594,63 @@ export function CandidateDrawer() {
     }
   }
 
-  const candidate = candidateOverview?.candidate;
-  const activePipelineEntry = useMemo(() => {
-    if (!activeJobId || !candidateOverview) return null;
-    return candidateOverview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null;
-  }, [activeJobId, candidateOverview]);
+  async function handleLinkToActiveJob() {
+    if (!selectedCandidateId || !activeJobId) return;
+    setLinkSaving(true);
+    try {
+      await pipelineService.addCandidateToJob(selectedCandidateId, {
+        job_id: activeJobId,
+        initial_stage: "entry",
+      });
+      await refreshBoard();
+      await syncCandidateOverview(selectedCandidateId);
+      feedback.moveCandidate.success();
+    } catch (err: unknown) {
+      feedback.moveCandidate.error(err);
+    } finally {
+      setLinkSaving(false);
+    }
+  }
 
-  const activeJobCompatibilityScore = activePipelineEntry?.match_score ?? null;
-  const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
-  const compatibilityGuidance = getCompatibilityGuidance({
-    hasPipelineEntry: activePipelineEntry !== null,
-    hasResume,
-    analysisStatus: candidateOverview?.latest_analysis?.status ?? null,
-  });
+  const activeJobLabel = activeJob?.title ?? activePipelineEntry?.job_title ?? "Nenhuma vaga em contexto";
+  const linkStatus = activePipelineEntry
+    ? "Vinculado à vaga ativa"
+    : linkSaving
+      ? "Vinculando à vaga ativa"
+      : "Não vinculado à vaga ativa";
 
-  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/20"
-          onClick={closeCandidate}
-          aria-hidden="true"
-        />
-      )}
+      {isOpen ? (
+        <div className="fixed inset-0 z-40 bg-black/20" onClick={closeCandidate} aria-hidden="true" />
+      ) : null}
 
-      {/* Drawer panel */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Painel do candidato"
         className={[
-          "fixed inset-y-0 right-0 z-50 flex w-[480px] flex-col bg-[hsl(var(--surface))] shadow-2xl",
+          "fixed inset-y-0 right-0 z-50 flex w-[520px] max-w-full flex-col bg-[hsl(var(--surface))] shadow-2xl",
           "transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
       >
-        {/* Header */}
-        <div className="flex shrink-0 flex-col gap-3 border-b border-[hsl(var(--border))] px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white shadow-sm">
-                {candidate?.full_name?.charAt(0).toUpperCase() ?? "?"}
-              </div>
-              <div className="min-w-0">
-                {candidateLoading ? (
-                  <div className="h-4 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-                ) : (
-                  <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
-                    {candidate?.full_name ?? "—"}
-                  </p>
-                )}
-                {candidateLoading ? (
-                  <div className="mt-1.5 h-3 w-32 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-                ) : (
-                  <p className="truncate text-xs text-[hsl(var(--text-muted))]">
-                    {[candidate?.email, candidate?.location_city, candidate?.location_state]
-                      .filter(Boolean)
-                      .join(" · ") || "Sem contato"}
-                  </p>
-                )}
-              </div>
-            </div>
+        <CandidateDrawerHeader
+          candidate={candidate}
+          candidateState={candidateState}
+          candidateSuggestion={candidateNextAction?.suggestion ?? null}
+          primaryActionLabel={headerPrimaryAction?.label ?? null}
+          primaryActionLoading={headerPrimaryAction?.loading ?? false}
+          onPrimaryAction={headerPrimaryAction?.onClick ?? null}
+          activeJobLabel={activeJobLabel}
+          currentStage={currentStage}
+          activeJobCompatibilityScore={activeJobCompatibilityScore}
+          linkStatus={linkStatus}
+          candidateLoading={candidateLoading}
+          closeCandidate={closeCandidate}
+        />
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setEditModalOpen(true)}
-                className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
-                aria-label="Editar dados do candidato"
-              >
-                ✎ Editar
-              </button>
-              <button
-                type="button"
-                onClick={closeCandidate}
-                className="shrink-0 rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
-                aria-label="Fechar painel"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {!candidateLoading && candidate?.tags && candidate.tags.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {candidate.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[11px] text-[hsl(var(--text-muted))]"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          {activeJobId && !candidateLoading ? (
-            <>
-              <div className="rounded-xl border border-[hsl(var(--primary))]/14 bg-[hsl(var(--accent-soft))] px-3 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--primary))]">
-                      Compatibilidade com a vaga
-                    </p>
-                    <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                      {compatibilityGuidance?.description ?? "Principal indicador para decidir o avanço nesta vaga."}
-                    </p>
-                  </div>
-                  {compatibilityGuidance ? (
-                    <div
-                      className={[
-                        "max-w-[14rem] rounded-2xl border px-3 py-2 text-right text-xs font-medium leading-relaxed shadow-sm",
-                        compatibilityGuidance.tone === "info"
-                          ? "border-[hsl(var(--primary))]/18 bg-[hsl(var(--surface))] text-[hsl(var(--primary))]"
-                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))]",
-                      ].join(" ")}
-                    >
-                      <div className="flex items-center justify-end gap-2">
-                        {compatibilityGuidance.tone === "info" ? (
-                          <span className="inline-flex h-2 w-2 rounded-full bg-[hsl(var(--primary))] animate-pulse" aria-hidden="true" />
-                        ) : null}
-                        <span>{compatibilityGuidance.title}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      className={`inline-flex min-w-[5rem] items-center justify-center rounded-2xl px-3 py-2 text-2xl font-extrabold tabular-nums ring-1 ${scoreBgClass(activeJobCompatibilityScore)} ${scoreColorClass(activeJobCompatibilityScore)}`}
-                    >
-                      {fmtScore(activeJobCompatibilityScore)}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="shrink-0 text-xs font-medium text-[hsl(var(--text-muted))]">Etapa:</span>
-                {currentStage ? (
-                  <select
-                    value={currentStage}
-                    onChange={(e) => void handleStageChange(e.target.value as PipelineStage)}
-                    disabled={stageSaving}
-                    className="ui-input h-7 rounded-lg px-2 text-xs disabled:opacity-50"
-                  >
-                    {STAGE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {stageSaving && currentStage === opt.value ? "Salvando…" : opt.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className="text-xs text-[hsl(var(--text-muted))]">Não vinculado a esta vaga</span>
-                )}
-              </div>
-            </>
-          ) : null}
-        </div>
-
-        {/* Tab bar */}
-        <div className="shrink-0">
+        <div className="shrink-0 bg-[hsl(var(--surface))]">
           <Tabs
             tabs={DRAWER_TABS}
             active={activePanelTab}
@@ -386,14 +658,13 @@ export function CandidateDrawer() {
           />
         </div>
 
-        {/* Tab content */}
         <div className="flex-1 overflow-y-auto">
           {candidateLoading ? (
             <div className="p-5">
               <div className="mb-4 rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3">
                 <p className="text-sm font-semibold text-[hsl(var(--text))]">Carregando candidato…</p>
                 <p className="mt-1 text-xs text-[hsl(var(--primary))]">
-                  Buscando documentos, análise e histórico do pipeline.
+                  Buscando dados, análise, documentos e histórico.
                 </p>
               </div>
               <LoadingSkeleton />
@@ -402,7 +673,7 @@ export function CandidateDrawer() {
 
           {!candidateLoading && candidateError ? (
             <div className="m-5 rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-4 text-sm text-[hsl(var(--danger))]">
-              <p className="font-semibold text-[hsl(var(--danger))]">Não foi possível abrir este candidato.</p>
+              <p className="font-semibold">Não foi possível abrir este candidato.</p>
               <p className="mt-1">{candidateError}</p>
               {selectedCandidateId ? (
                 <button
@@ -418,25 +689,63 @@ export function CandidateDrawer() {
 
           {!candidateLoading && !candidateError && candidateOverview ? (
             <>
-              {activePanelTab === "ranking" && (
-                <CompatibilityTab overview={candidateOverview} activeJobId={activeJobId} />
-              )}
-              {activePanelTab === "analysis" && (
+              {activePanelTab === "summary" ? (
+                <SummaryTab
+                  overview={candidateOverview}
+                  activeJob={activeJob}
+                  activePipelineEntry={activePipelineEntry}
+                  onEdit={() => setEditModalOpen(true)}
+                />
+              ) : null}
+
+              {activePanelTab === "score" ? (
+                <ScoreTab
+                  overview={candidateOverview}
+                  activeJobId={activeJobId}
+                  activeJobMatch={activeJobMatch}
+                  activePipelineEntry={activePipelineEntry}
+                  rankingEntry={rankingEntry}
+                  loading={rankingEntryLoading}
+                  error={rankingEntryError}
+                  compatibilityGuidance={compatibilityGuidance}
+                />
+              ) : null}
+
+              {activePanelTab === "analysis" ? (
                 <AnalysisTab
                   overview={candidateOverview}
                   result={analysisResult}
                   loading={analysisResultLoading}
                   error={analysisResultError}
                 />
-              )}
-              {activePanelTab === "history" && (
+              ) : null}
+
+              {activePanelTab === "documents" ? <DocumentsTab overview={candidateOverview} /> : null}
+
+              {activePanelTab === "history" ? (
                 <HistoryTab
                   overview={candidateOverview}
                   activeJobId={activeJobId}
                   cacheRef={historyCacheRef}
                 />
-              )}
-              {activePanelTab === "documents" && <DocumentsTab overview={candidateOverview} />}
+              ) : null}
+
+              {activePanelTab === "actions" ? (
+                <ActionsTab
+                  overview={candidateOverview}
+                  activeJob={activeJob}
+                  activeJobId={activeJobId}
+                  currentStage={currentStage}
+                  availableJobs={availableJobs}
+                  canTransferCurrentJob={canTransferCurrentJob}
+                  stageSaving={stageSaving}
+                  linkSaving={linkSaving}
+                  onStageChange={handleStageChange}
+                  onLinkToActiveJob={handleLinkToActiveJob}
+                  onOpenAddJob={() => setAddJobModalOpen(true)}
+                  onOpenTransferJob={() => setTransferJobModalOpen(true)}
+                />
+              ) : null}
             </>
           ) : null}
         </div>
@@ -446,140 +755,305 @@ export function CandidateDrawer() {
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         candidate={candidate}
-        onSuccess={() => {
-          openCandidate(selectedCandidateId!);
+        onSuccess={async (candidateId) => {
+          await Promise.all([syncCandidateOverview(candidateId), refreshBoard()]);
+          notifyCandidatesChanged();
+        }}
+      />
+
+      <AddToJobModal
+        isOpen={addJobModalOpen}
+        candidateId={candidate?.id ?? null}
+        availableJobs={availableJobs}
+        onClose={() => setAddJobModalOpen(false)}
+        onSuccess={async () => {
+          if (!candidate?.id) return;
+          await syncCandidateOverview(candidate.id);
+          notifyCandidatesChanged();
+          setAddJobModalOpen(false);
+        }}
+      />
+
+      <TransferJobModal
+        isOpen={transferJobModalOpen}
+        candidateId={candidate?.id ?? null}
+        fromJobId={activeJobId}
+        availableJobs={availableJobs}
+        canTransfer={canTransferCurrentJob}
+        onClose={() => setTransferJobModalOpen(false)}
+        onSuccess={async () => {
+          if (!candidate?.id) return;
+          await Promise.all([refreshBoard(), syncCandidateOverview(candidate.id)]);
+          notifyCandidatesChanged();
+          setTransferJobModalOpen(false);
+          closeCandidate();
         }}
       />
     </>
   );
 }
 
-// ── Tab: Compatibilidade ───────────────────────────────────────────────────────
-// Keeps the hiring signal focused on job fit, while AI score stays in Analysis.
+function SummaryTab({
+  overview,
+  activeJob,
+  activePipelineEntry,
+  onEdit,
+}: {
+  overview: CandidateOverview;
+  activeJob: Job | null;
+  activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
+  onEdit: () => void;
+}) {
+  const admissionFields = inferAdmissionFields(overview);
+  const { candidate, resumes, latest_analysis } = overview;
 
-function CompatibilityTab({
+  return (
+    <div className="flex flex-col gap-5 p-5">
+      <Section
+        title="Dados cadastrais"
+        action={
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+          >
+            Editar dados
+          </button>
+        }
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MetaItem label="Nome" value={candidate.full_name} />
+          <MetaItem label="E-mail" value={candidate.email ?? "—"} />
+          <MetaItem label="Telefone" value={candidate.phone ?? "—"} />
+          <MetaItem label="CPF" value={candidate.cpf ?? "—"} />
+          <MetaItem
+            label="Localização"
+            value={[candidate.location_city, candidate.location_state, candidate.location_country].filter(Boolean).join(" · ") || "—"}
+          />
+          <MetaItem label="Criado em" value={formatOptionalDateTime(candidate.created_at)} />
+        </div>
+
+        {(candidate.linkedin_url || candidate.github_url || candidate.portfolio_url) ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <MetaItem label="LinkedIn" value={candidate.linkedin_url ?? "—"} />
+            <MetaItem label="GitHub" value={candidate.github_url ?? "—"} />
+            <MetaItem label="Portfólio" value={candidate.portfolio_url ?? "—"} />
+          </div>
+        ) : null}
+
+        {candidate.tags.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {candidate.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </Section>
+
+      <Section title="Status geral">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <StatusCard
+            label="Vaga ativa"
+            title={activeJob?.title ?? activePipelineEntry?.job_title ?? "Sem vaga ativa"}
+            description={
+              activePipelineEntry
+                ? `${STAGE_LABEL[activePipelineEntry.stage] ?? activePipelineEntry.stage} · ${activePipelineEntry.candidate_status}`
+                : "O candidato não está vinculado à vaga ativa neste contexto."
+            }
+          />
+          <StatusCard
+            label="Análise IA"
+            title={
+              latest_analysis
+                ? ANALYSIS_STATUS_LABEL[latest_analysis.status] ?? latest_analysis.status
+                : "Ainda não solicitada"
+            }
+            description={
+              latest_analysis
+                ? `Última execução: ${latest_analysis.resume_title}`
+                : "Envie um currículo para iniciar o fluxo de análise."
+            }
+          />
+          <StatusCard
+            label="Currículos"
+            title={`${resumes.length} arquivo${resumes.length !== 1 ? "s" : ""}`}
+            description={
+              resumes.length > 0
+                ? `${resumes.filter((resume) => resume.status === "active").length} ativo(s)`
+                : "Nenhum currículo enviado."
+            }
+          />
+          <StatusCard
+            label="Atualização"
+            title={formatOptionalDateTime(candidate.updated_at)}
+            description="Última atualização dos dados cadastrais."
+          />
+        </div>
+      </Section>
+
+      <Section title="Informações de admissão">
+        {admissionFields.length > 0 ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {admissionFields.map((field) => (
+              <MetaItem key={field.label} label={field.label} value={field.value} />
+            ))}
+          </div>
+        ) : (
+          <EmptyTab
+            title="Informações de admissão ainda não disponíveis"
+            description="Este espaço já está preparado para exibir dados de admissão quando eles vierem no payload atual."
+            compact
+          />
+        )}
+      </Section>
+    </div>
+  );
+}
+
+function ScoreTab({
   overview,
   activeJobId,
+  activeJobMatch,
+  activePipelineEntry,
+  rankingEntry,
+  loading,
+  error,
+  compatibilityGuidance,
 }: {
   overview: CandidateOverview;
   activeJobId: string | null;
+  activeJobMatch: CandidateOverview["top_matches"][number] | null;
+  activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
+  rankingEntry: JobRankingEntry | null;
+  loading: boolean;
+  error: string | null;
+  compatibilityGuidance: ReturnType<typeof getCompatibilityGuidance>;
 }) {
-  const { latest_analysis, latest_analysis_pipeline, top_matches } = overview;
-  const activeJobMatch = activeJobId
-    ? top_matches.find((match) => match.job_id === activeJobId) ?? null
-    : null;
+  const compatibilityScore = activePipelineEntry?.match_score ?? activeJobMatch?.match_score ?? null;
+  const aiScore = overview.latest_analysis?.overall_score ?? null;
+  const hasRankingDetails =
+    Boolean(rankingEntry?.explanation_text) ||
+    Boolean(rankingEntry && rankingEntry.reason_codes.length > 0) ||
+    Boolean(rankingEntry?.score_breakdown);
 
-  if (!latest_analysis) {
+  if (!activeJobId) {
     return (
       <EmptyTab
-        title="Ainda não há análise para este candidato"
-        description='Envie um currículo e solicite uma análise na aba "Análise IA" para liberar a compatibilidade.'
+        title="Selecione uma vaga para ver o score"
+        description="Esta aba sempre mostra apenas os sinais de decisão da vaga ativa."
       />
     );
   }
 
   return (
-    <div className="flex flex-col gap-6 p-5">
-      <div className="rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--primary))]">
-          Posição entre candidatos
-        </p>
-        <p className="mt-1 text-xs text-[hsl(var(--text))]">
-          O ranking da vaga continua disponível como contexto no painel lateral. Aqui o foco é a
-          compatibilidade com a vaga selecionada.
-        </p>
-      </div>
+    <div className="flex flex-col gap-5 p-5">
+      <Section title="Indicadores da vaga ativa">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <DecisionCard
+            label="Compatibilidade"
+            value={compatibilityGuidance ? compatibilityGuidance.title : fmtScore(compatibilityScore)}
+            description={compatibilityGuidance?.description ?? "Aderência do candidato à vaga ativa."}
+            valueClassName={compatibilityGuidance ? "text-[hsl(var(--text))]" : scoreColorClass(compatibilityScore)}
+          />
+          <DecisionCard
+            label="Score da IA"
+            value={fmtScore(aiScore)}
+            description={
+              overview.latest_analysis?.status === "completed"
+                ? "Leitura do currículo pela IA."
+                : "Aguardando análise concluída para mostrar este indicador."
+            }
+            valueClassName={scoreColorClass(aiScore)}
+          />
+          <DecisionCard
+            label="Ranking da vaga"
+            value={rankingEntry ? `#${rankingEntry.rank} · ${fmtScore(rankingEntry.final_score)}` : "—"}
+            description={
+              rankingEntry
+                ? "Posição atual do candidato no ranking desta vaga."
+                : "Ainda não há posição persistida para este candidato nesta vaga."
+            }
+            valueClassName={rankingEntry ? scoreColorClass(rankingEntry.final_score) : undefined}
+          />
+        </div>
+      </Section>
 
-      {activeJobMatch ? (
-        <Section title="Compatibilidade com a vaga">
-          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
-                  {activeJobMatch.job_title}
-                </p>
-                {activeJobMatch.recommendation ? (
-                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                    {activeJobMatch.recommendation}
-                  </p>
-                ) : null}
-              </div>
-              <div className="ml-3 shrink-0 text-right">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                  Compatibilidade com a vaga
-                </div>
-                <span
-                  className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-sm font-bold tabular-nums ring-1 ${scoreBgClass(activeJobMatch.match_score)} ${scoreColorClass(activeJobMatch.match_score)}`}
-                >
-                  {fmtScore(activeJobMatch.match_score)}
-                </span>
-              </div>
+      <Section title="Detalhamento do ranking">
+        {loading ? <LoadingSkeleton /> : null}
+        {error ? (
+          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
+            {error}
+          </div>
+        ) : null}
+
+        {!loading && !error && rankingEntry ? (
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <MetaItem label="Posição" value={`#${rankingEntry.rank}`} />
+              <MetaItem label="Ranking da vaga" value={fmtScore(rankingEntry.final_score)} />
+              <MetaItem label="Etapa no ranking" value={rankingEntry.stage || "—"} />
+              <MetaItem label="Status do pipeline" value={rankingEntry.pipeline_status || "—"} />
             </div>
-          </div>
-        </Section>
-      ) : null}
 
-      {latest_analysis_pipeline ? (
-        <Section title="Compatibilidade com vagas publicadas">
-          <div className="grid grid-cols-3 gap-2">
-            <StatBox label="Publicadas" value={latest_analysis_pipeline.published_jobs_total} />
-            <StatBox
-              label="Compatíveis"
-              value={latest_analysis_pipeline.matched_jobs_count}
-              tone="success"
-            />
-            <StatBox
-              label="Pendentes"
-              value={latest_analysis_pipeline.pending_jobs_count}
-              tone="neutral"
-            />
-          </div>
-        </Section>
-      ) : null}
-
-      {top_matches.length > 0 ? (
-        <Section title="Compatibilidade por vaga">
-          <div className="flex flex-col gap-2">
-            {top_matches.map((match) => (
-              <div
-                key={`${match.analysis_id}-${match.job_id}`}
-                className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-[hsl(var(--text))]">{match.job_title}</p>
-                  {match.recommendation ? (
-                    <p className="truncate text-[11px] text-[hsl(var(--text-muted))]">{match.recommendation}</p>
-                  ) : null}
-                </div>
-                <div className="ml-3 shrink-0 text-right">
-                  <div className="text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                    Compatibilidade com a vaga
-                  </div>
-                  <span
-                    className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
-                  >
-                    {fmtScore(match.match_score)}
-                  </span>
-                </div>
+            {rankingEntry.score_breakdown ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <BreakdownItem label="Skills" value={rankingEntry.score_breakdown.skill_match_score} />
+                <BreakdownItem label="Experiência" value={rankingEntry.score_breakdown.experience_match_score} />
+                <BreakdownItem label="Senioridade" value={rankingEntry.score_breakdown.seniority_match_score} />
+                <BreakdownItem label="Educação" value={rankingEntry.score_breakdown.education_score} />
+                <BreakdownItem label="Confiança da IA" value={rankingEntry.score_breakdown.ai_confidence_score} />
+                <BreakdownItem label="Penalidade" value={rankingEntry.score_breakdown.penalty_score} />
               </div>
-            ))}
+            ) : null}
+
+            {rankingEntry.reason_codes.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {rankingEntry.reason_codes.map((reason, index) => (
+                  <span
+                    key={`${reason.type}-${reason.field}-${index}`}
+                    className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]"
+                  >
+                    {reason.description}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {rankingEntry.explanation_text ? (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  Explicação
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">
+                  {rankingEntry.explanation_text}
+                </p>
+              </div>
+            ) : null}
+
+            {!hasRankingDetails ? (
+              <p className="text-sm text-[hsl(var(--text-muted))]">
+                O detalhamento do ranking ainda não está disponível neste contexto.
+              </p>
+            ) : null}
           </div>
-        </Section>
-      ) : (
-        <EmptyTab
-          title="Ainda não há vagas compatíveis"
-          description="Conclua uma análise com vagas publicadas para preencher esta comparação."
-          compact
-        />
-      )}
+        ) : null}
+
+        {!loading && !error && !rankingEntry ? (
+          <EmptyTab
+            title="O detalhamento do ranking ainda não está disponível neste contexto."
+            description="A vaga ativa ainda não tem uma entrada persistida de ranking para este candidato."
+            compact
+          />
+        ) : null}
+      </Section>
     </div>
   );
 }
-
-// ── Tab: Análise IA ────────────────────────────────────────────────────────────
-// Shows request form, progress bar, pipeline matching, and full analysis result.
-// AnalysisResult is fetched lazily by CandidateDrawer and passed as props (cached
-// across tab switches via a ref that lives in the parent).
 
 function AnalysisTab({
   overview,
@@ -603,8 +1077,10 @@ function AnalysisTab({
 
   const { latest_analysis } = overview;
   const analysisId = latest_analysis?.analysis_id ?? null;
+  const readyResumes = overview.resumes.filter(
+    (resume) => resume.status === "active" && resume.extraction_status === "completed" && resume.current_version_id,
+  );
 
-  // Fetch pipeline status when analysisId is available
   useEffect(() => {
     if (!analysisId) {
       setPipelineStatus(null);
@@ -613,12 +1089,11 @@ function AnalysisTab({
     setPipelineLoading(true);
     void analysisService
       .pipeline(analysisId)
-      .then((ps) => setPipelineStatus(ps))
+      .then((status) => setPipelineStatus(status))
       .catch(() => setPipelineStatus(null))
       .finally(() => setPipelineLoading(false));
   }, [analysisId]);
 
-  // Refresh pipeline status after polling reaches a terminal state
   useEffect(() => {
     if (!pollingStatus || pollingAnalysisId !== analysisId || !analysisId) return;
     const isTerminal =
@@ -628,7 +1103,7 @@ function AnalysisTab({
     if (!isTerminal) return;
     void analysisService
       .pipeline(analysisId)
-      .then((ps) => setPipelineStatus(ps))
+      .then((status) => setPipelineStatus(status))
       .catch(() => {});
   }, [pollingStatus, pollingAnalysisId, analysisId]);
 
@@ -661,9 +1136,7 @@ function AnalysisTab({
   const effectiveStartedAt =
     isCurrentlyPolling && pollingStatus ? pollingStatus.started_at : latest_analysis?.started_at;
   const effectiveCompletedAt =
-    isCurrentlyPolling && pollingStatus
-      ? pollingStatus.completed_at
-      : latest_analysis?.completed_at;
+    isCurrentlyPolling && pollingStatus ? pollingStatus.completed_at : latest_analysis?.completed_at;
   const effectiveFailedAt =
     isCurrentlyPolling && pollingStatus ? pollingStatus.failed_at : latest_analysis?.failed_at;
   const effectiveFailureReason =
@@ -680,35 +1153,31 @@ function AnalysisTab({
         : effectiveStatus === "pending"
           ? 22
           : 0;
-
-  const readyResumes = overview.resumes.filter(
-    (r) => r.status === "active" && r.extraction_status === "completed" && r.current_version_id,
-  );
   const shouldShowManualStart =
     readyResumes.length > 0 &&
     (!latest_analysis || latest_analysis.status === "failed" || latest_analysis.status === "cancelled");
 
   return (
     <div className="flex flex-col gap-5 p-5">
-      {/* Request form */}
       <Section title="Solicitar análise">
         {!canSpendRealTokens ? (
           <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
             Consumo real bloqueado — ative <code>real_ai_token_spend_enabled</code> para analisar.
           </div>
         ) : null}
+
         {readyResumes.length > 0 ? (
           <div className="flex items-center gap-2">
             <select
               value={selectedVersionId}
-              onChange={(e) => setSelectedVersionId(e.target.value)}
+              onChange={(event) => setSelectedVersionId(event.target.value)}
               disabled={isRequesting}
-              className="h-8 flex-1 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200 disabled:opacity-50"
+              className="ui-input h-10 flex-1 rounded-lg px-3 text-sm disabled:opacity-50"
             >
               <option value="">Selecione um currículo</option>
-              {readyResumes.map((r) => (
-                <option key={r.current_version_id} value={r.current_version_id!}>
-                  {r.title} · v{r.current_version}
+              {readyResumes.map((resume) => (
+                <option key={resume.current_version_id} value={resume.current_version_id!}>
+                  {resume.title} · v{resume.current_version}
                 </option>
               ))}
             </select>
@@ -716,7 +1185,7 @@ function AnalysisTab({
               type="button"
               onClick={() => void handleRequestAnalysis()}
               disabled={!selectedVersionId || !canSpendRealTokens || isRequesting}
-              className="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+              className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
             >
               {isRequesting ? "Iniciando…" : "Iniciar análise da IA"}
             </button>
@@ -728,8 +1197,9 @@ function AnalysisTab({
             compact
           />
         )}
+
         {shouldShowManualStart ? (
-          <p className="mt-2 text-[11px] text-gray-500">
+          <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
             Se a análise não começou automaticamente após o upload, selecione o currículo e inicie manualmente.
           </p>
         ) : null}
@@ -737,17 +1207,17 @@ function AnalysisTab({
 
       <Section title="Rastreabilidade da execução">
         {!latest_analysis ? (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-            <p className="text-sm font-semibold text-gray-900">Análise ainda não solicitada</p>
-            <p className="mt-1 text-xs text-gray-500">
-              Selecione um currículo e clique em Analisar para gerar a primeira execução.
+          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Análise ainda não solicitada</p>
+            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+              Selecione um currículo e clique em iniciar análise.
             </p>
           </div>
         ) : (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900">
+                <p className="text-sm font-semibold text-[hsl(var(--text))]">
                   {effectiveStatus === "processing"
                     ? "Análise em processamento"
                     : effectiveStatus === "completed"
@@ -758,7 +1228,7 @@ function AnalysisTab({
                           ? "Análise cancelada"
                           : "Análise na fila"}
                 </p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
                   Última execução vinculada ao currículo {latest_analysis.resume_title}.
                 </p>
               </div>
@@ -776,19 +1246,19 @@ function AnalysisTab({
               </span>
             </div>
 
-            {latest_analysis.status === "completed" ? (
-              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                  Score da IA (análise do currículo)
-                </p>
-                <p className="mt-1 text-xs text-blue-900">
-                  {fmtScore(latest_analysis.overall_score)} ·{" "}
-                  {latest_analysis.seniority_level ?? "Senioridade não identificada"}
-                </p>
-              </div>
-            ) : null}
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[hsl(var(--border))]">
+              <div
+                className={[
+                  "h-full rounded-full transition-all duration-500",
+                  effectiveStatus === "failed" || effectiveStatus === "cancelled"
+                    ? "bg-[hsl(var(--danger))]"
+                    : "bg-[hsl(var(--primary))]",
+                ].join(" ")}
+                style={{ width: `${progressValue}%` }}
+              />
+            </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <MetaItem label="Solicitada em" value={formatOptionalDateTime(latest_analysis.created_at)} />
               <MetaItem label="Iniciada em" value={formatOptionalDateTime(effectiveStartedAt)} />
               <MetaItem label="Concluída em" value={formatOptionalDateTime(effectiveCompletedAt)} />
@@ -804,14 +1274,12 @@ function AnalysisTab({
                 }
               />
               <MetaItem label="Worker" value={latest_analysis.worker_id ?? "Não informado"} />
-              <MetaItem label="Task" value={latest_analysis.task_id ?? "Não informada"} />
-              <MetaItem label="Atualizada em" value={formatOptionalDateTime(latest_analysis.updated_at)} />
             </div>
 
             {effectiveFailureReason ? (
               <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700">
-                  Motivo da falha
+                  Erro da análise
                 </p>
                 <p className="mt-1 text-xs text-red-800">{effectiveFailureReason}</p>
               </div>
@@ -820,198 +1288,131 @@ function AnalysisTab({
         )}
       </Section>
 
-      {/* Progress bar */}
-      {latest_analysis ? (
-        <Section title="Progresso">
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="truncate text-xs text-gray-600">{latest_analysis.resume_title}</span>
-              <span
-                className={[
-                  "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
-                  effectiveStatus === "completed"
-                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                    : effectiveStatus === "failed" || effectiveStatus === "cancelled"
-                      ? "bg-red-50 text-red-700 ring-red-200"
-                      : "bg-amber-50 text-amber-700 ring-amber-200",
-                ].join(" ")}
-              >
-                {ANALYSIS_STATUS_LABEL[effectiveStatus ?? ""] ?? effectiveStatus}
-              </span>
-            </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200">
-              <div
-                className={[
-                  "h-full rounded-full transition-all duration-500",
-                  effectiveStatus === "failed" || effectiveStatus === "cancelled"
-                    ? "bg-red-500"
-                    : "bg-blue-600",
-                ].join(" ")}
-                style={{ width: `${progressValue}%` }}
-              />
-            </div>
-            <div className="mt-1.5 flex justify-between text-[10px] text-gray-400">
-              <span className={progressValue >= 22 ? "font-medium text-gray-700" : ""}>
-                Solicitada
-              </span>
-              <span className={progressValue >= 68 ? "font-medium text-gray-700" : ""}>
-                Processando
-              </span>
-              <span className={progressValue >= 100 ? "font-medium text-gray-700" : ""}>
-                {effectiveStatus === "failed" || effectiveStatus === "cancelled"
-                  ? "Encerrada"
-                  : "Concluída"}
-              </span>
-            </div>
-            {effectiveFailureReason ? (
-              <p className="mt-2 text-[11px] text-red-600">{effectiveFailureReason}</p>
-            ) : null}
-            {isCurrentlyPolling && (pollingStatus?.retry_count ?? 0) > 0 ? (
-              <p className="mt-1 text-[11px] text-gray-500">
-                Tentativas: {pollingStatus!.retry_count}
-              </p>
-            ) : null}
+      {pipelineLoading ? (
+        <Section title="Processamento">
+          <LoadingSkeleton />
+        </Section>
+      ) : null}
+
+      {pipelineStatus ? (
+        <Section title="Processamento">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <MetaItem label="Matching" value={pipelineStatus.matching_status} />
+            <MetaItem label="Vagas analisadas" value={String(pipelineStatus.published_jobs_total)} />
+            <MetaItem label="Matches recentes" value={String(pipelineStatus.matched_jobs_count)} />
           </div>
         </Section>
       ) : null}
 
-      {/* Pipeline compatibility */}
-      {!pipelineLoading && pipelineStatus ? (
-        <Section title="Compatibilidade com vagas">
-          <div className="grid grid-cols-3 gap-2">
-            <StatBox label="Publicadas" value={pipelineStatus.published_jobs_total} />
-            <StatBox label="Com compatibilidade" value={pipelineStatus.matched_jobs_count} tone="success" />
-            <StatBox label="Pendentes" value={pipelineStatus.pending_jobs_count} />
-          </div>
-          {pipelineStatus.recent_matches.length > 0 ? (
-            <div className="mt-3 flex flex-col gap-2">
-              {pipelineStatus.recent_matches.map((match) => (
-                <div
-                  key={match.job_id}
-                  className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-gray-900">{match.job_title}</p>
-                    <p className="text-[10px] text-gray-400">{match.job_status}</p>
-                  </div>
-                  {match.match_score != null ? (
-                    <div className="ml-2 shrink-0 text-right">
-                      <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                        Compatibilidade com a vaga
-                      </div>
-                      <span
-                        className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
-                      >
-                        {fmtScore(match.match_score)}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="ml-2 text-[11px] text-gray-400">—</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyTab
-              title="Ainda não há compatibilidade com vagas"
-              description="Quando a análise terminar, esta seção mostrará a compatibilidade encontrada."
-              compact
-            />
-          )}
-        </Section>
-      ) : null}
-
-      {/* Full analysis result (only when completed and fetched) */}
       {latest_analysis?.status === "completed" ? (
         <>
-          {loading ? <LoadingSkeleton /> : null}
+          {loading ? (
+            <Section title="Leitura do currículo">
+              <LoadingSkeleton />
+            </Section>
+          ) : null}
+
           {error ? (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           ) : null}
+
           {result ? (
             <>
-              {result.candidate_summary ? (
-                <Section title="Resumo do candidato">
-                  <p className="text-sm leading-relaxed text-gray-700">{result.candidate_summary}</p>
-                </Section>
-              ) : null}
+              <Section title="Resumo">
+                <p className="text-sm leading-relaxed text-[hsl(var(--text))]">
+                  {result.candidate_summary ?? "A IA ainda não gerou um resumo para este currículo."}
+                </p>
+              </Section>
 
-              <Section title="Detalhamento do Score da IA">
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { label: "Técnico", value: result.technical_score },
-                      { label: "Experiência", value: result.experience_score },
-                      { label: "Educação", value: result.education_score },
-                      { label: "Comunicação", value: result.communication_score },
-                      { label: "Liderança", value: result.leadership_score },
-                    ] as { label: string; value: number | null }[]
-                  ).map(({ label, value }) => (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
-                    >
-                      <span className="text-xs text-gray-600">{label}</span>
-                      <span className={`text-xs font-bold tabular-nums ${scoreColorClass(value)}`}>
-                        {fmtScore(value)}
-                      </span>
+              <Section title="Leitura do currículo">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <MetaItem
+                    label="Senioridade"
+                    value={result.seniority_level ?? latest_analysis.seniority_level ?? "Não identificada"}
+                  />
+                  <MetaItem
+                    label="Experiência total"
+                    value={
+                      result.total_experience_years != null
+                        ? `${result.total_experience_years} ano(s)`
+                        : latest_analysis.total_experience_years != null
+                          ? `${latest_analysis.total_experience_years} ano(s)`
+                          : "Não identificada"
+                    }
+                  />
+                  <MetaItem label="Currículo" value={result.resume_title ?? latest_analysis.resume_title ?? "—"} />
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    Skills
+                  </p>
+                  {result.keywords.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {result.keywords.map((keyword) => (
+                        <span
+                          key={keyword}
+                          className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]"
+                        >
+                          {keyword}
+                        </span>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
+                      A IA ainda não listou skills identificadas neste currículo.
+                    </p>
+                  )}
                 </div>
               </Section>
 
-              {result.strengths.length > 0 ? (
-                <Section title="Pontos fortes">
-                  <ul className="flex flex-col gap-1.5">
-                    {result.strengths.map((s) => (
-                      <li key={s} className="flex items-start gap-2 text-sm text-gray-700">
-                        <span className="mt-px shrink-0 text-emerald-500">✓</span>
-                        {s}
+              <Section title="Pontos fortes">
+                {result.strengths.length > 0 ? (
+                  <ul className="flex flex-col gap-2">
+                    {result.strengths.map((item) => (
+                      <li key={item} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-sm text-[hsl(var(--text))]">
+                        {item}
                       </li>
                     ))}
                   </ul>
-                </Section>
-              ) : null}
+                ) : (
+                  <EmptyTab
+                    title="Nenhum ponto forte retornado"
+                    description="A IA concluiu a análise, mas não listou pontos fortes nesta execução."
+                    compact
+                  />
+                )}
+              </Section>
 
-              {result.weaknesses.length > 0 ? (
-                <Section title="Pontos de atenção">
-                  <ul className="flex flex-col gap-1.5">
-                    {result.weaknesses.map((w) => (
-                      <li key={w} className="flex items-start gap-2 text-sm text-gray-700">
-                        <span className="mt-px shrink-0 text-amber-500">⚠</span>
-                        {w}
+              <Section title="Pontos fracos">
+                {result.weaknesses.length > 0 ? (
+                  <ul className="flex flex-col gap-2">
+                    {result.weaknesses.map((item) => (
+                      <li key={item} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-sm text-[hsl(var(--text))]">
+                        {item}
                       </li>
                     ))}
                   </ul>
-                </Section>
-              ) : null}
+                ) : (
+                  <EmptyTab
+                    title="Nenhum ponto fraco retornado"
+                    description="A IA concluiu a análise, mas não listou pontos fracos nesta execução."
+                    compact
+                  />
+                )}
+              </Section>
 
               {result.recommendations.length > 0 ? (
-                <Section title="Recomendações">
-                  <ul className="flex flex-col gap-1.5">
-                    {result.recommendations.map((r) => (
-                      <li key={r} className="text-sm text-gray-700">
-                        · {r}
+                <Section title="Observações da IA">
+                  <ul className="flex flex-col gap-2">
+                    {result.recommendations.map((item) => (
+                      <li key={item} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-sm text-[hsl(var(--text))]">
+                        {item}
                       </li>
                     ))}
                   </ul>
-                </Section>
-              ) : null}
-
-              {result.keywords.length > 0 ? (
-                <Section title="Palavras-chave identificadas">
-                  <div className="flex flex-wrap gap-1">
-                    {result.keywords.map((kw) => (
-                      <span
-                        key={kw}
-                        className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-600"
-                      >
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
                 </Section>
               ) : null}
             </>
@@ -1021,243 +1422,6 @@ function AnalysisTab({
     </div>
   );
 }
-
-// ── Tab: Histórico ─────────────────────────────────────────────────────────────
-// Shows real stage transitions from GET /pipeline/{job_id}/{candidate_id}/history.
-
-const STAGE_LABEL: Record<string, string> = {
-  entry: "Recebido",
-  screening: "Triagem",
-  hr_interview: "Entrevista RH",
-  technical_interview: "Entrevista Técnica",
-  final: "Final",
-  offer: "Proposta",
-  hired: "Contratado",
-  rejected: "Reprovado",
-};
-
-const TRIGGER_LABEL: Record<PipelineTrigger, string> = {
-  manual: "Movido manualmente",
-  auto_match: "Entrada automática por compatibilidade",
-  system: "Movido pelo sistema",
-};
-
-function HistoryTab({
-  overview,
-  activeJobId,
-  cacheRef,
-}: {
-  overview: CandidateOverview;
-  activeJobId: string | null;
-  cacheRef: MutableRefObject<Map<string, CandidatePipelineHistory>>;
-}) {
-  const [history, setHistory] = useState<CandidatePipelineHistory | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-
-  const currentEntry = useMemo(
-    () =>
-      activeJobId
-        ? overview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null
-        : null,
-    [activeJobId, overview.pipeline_entries],
-  );
-
-  useEffect(() => {
-    if (!activeJobId) {
-      setHistory(null);
-      setHistoryError(null);
-      setHistoryLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    const cacheKey = `${overview.candidate.id}:${activeJobId}:${currentEntry?.updated_at ?? "none"}`;
-    const cached = cacheRef.current.get(cacheKey);
-    if (cached) {
-      setHistory(cached);
-      setHistoryError(null);
-      setHistoryLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setHistoryLoading(true);
-    setHistoryError(null);
-
-    void pipelineService
-      .getCandidateHistory(activeJobId, overview.candidate.id)
-      .then((result) => {
-        if (cancelled) return;
-        cacheRef.current.set(cacheKey, result);
-        setHistory(result);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setHistory(null);
-        setHistoryError(
-          formatContextError(
-            err,
-            "Não foi possível carregar o histórico deste candidato.",
-            "Tente novamente.",
-          ),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeJobId, overview.candidate.id, currentEntry?.updated_at]);
-
-  if (!activeJobId) {
-    return (
-      <EmptyTab
-        title="Selecione uma vaga para ver o histórico"
-        description="Abra este candidato a partir do pipeline para acompanhar as movimentações reais."
-      />
-    );
-  }
-
-  if (historyLoading) {
-    return (
-      <div className="p-5">
-        <LoadingSkeleton />
-      </div>
-    );
-  }
-
-  if (historyError) {
-    return (
-      <div className="flex flex-col gap-4 p-5">
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {historyError}
-        </div>
-        {currentEntry ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-              Estado atual nesta vaga
-            </p>
-            <p className="mt-1 text-sm text-amber-900">
-              {STAGE_LABEL[currentEntry.stage] ?? currentEntry.stage} · {currentEntry.candidate_status}
-            </p>
-            <p className="mt-1 text-[11px] text-amber-800">
-              Este bloco e apenas um fallback de estado atual. O histórico real não pôde ser carregado.
-            </p>
-          </div>
-        ) : (
-          <p className="text-xs text-gray-500">
-            O candidato não possui estado atual visível nesta vaga.
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  if (!history) {
-    return (
-      <EmptyTab
-        title="Ainda não há histórico para esta vaga"
-        description="Movimente o candidato no pipeline para gerar as primeiras entradas."
-      />
-    );
-  }
-
-  if (history.transitions.length === 0) {
-    return (
-      <div className="flex flex-col gap-4 p-5">
-        <EmptyTab
-          title="Ainda não há movimentações registradas"
-          description="Movimente o candidato no pipeline para gerar o histórico desta vaga."
-        />
-        <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Estado atual
-          </p>
-          <p className="mt-1 text-sm text-gray-900">
-            {STAGE_LABEL[history.current_stage] ?? history.current_stage}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3 p-5">
-      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-          Histórico real do pipeline
-        </p>
-        <p className="mt-1 text-[11px] text-blue-900">
-          Eventos registrados de movimentação para {history.job_title}.
-        </p>
-      </div>
-
-      {history.transitions.map((transition) => (
-        <div
-          key={transition.id}
-          className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-900">
-                {transition.from_stage
-                  ? `${STAGE_LABEL[transition.from_stage] ?? transition.from_stage} → ${STAGE_LABEL[transition.to_stage] ?? transition.to_stage}`
-                  : `Entrada em ${STAGE_LABEL[transition.to_stage] ?? transition.to_stage}`}
-              </p>
-              <p className="mt-1 text-[11px] text-gray-500">{TRIGGER_LABEL[transition.trigger]}</p>
-              {transition.moved_by_name ? (
-                <p className="mt-1 text-[11px] text-gray-500">
-                  Por {transition.moved_by_name}
-                </p>
-              ) : null}
-            </div>
-            <p className="shrink-0 text-[11px] text-gray-400">
-              {formatDateTime(transition.moved_at)}
-            </p>
-          </div>
-
-          {transition.reason ? (
-            <p className="mt-3 text-xs text-gray-700">
-              <span className="font-semibold text-gray-900">Motivo:</span> {transition.reason}
-            </p>
-          ) : null}
-
-          {transition.notes ? (
-            <p className="mt-2 text-xs text-gray-600">
-              <span className="font-semibold text-gray-900">Notas:</span> {transition.notes}
-            </p>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
-
-function formatOptionalDateTime(value: string | null | undefined): string {
-  return value ? formatDateTime(value) : "—";
-}
-
-// ── Tab: Documentos ────────────────────────────────────────────────────────────
-// Shows upload form and resume list with per-resume CRUD and analyze actions.
-// Mutations call refreshCandidateOverview() so the list stays in sync.
-
-const EXTRACTION_STATUS_LABEL: Record<string, string> = {
-  completed: "Pronto",
-  pending: "Pendente",
-  processing: "Extraindo…",
-  failed: "Falha",
-};
 
 function DocumentsTab({ overview }: { overview: CandidateOverview }) {
   const {
@@ -1270,24 +1434,19 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
   } = usePipeline();
   const { user } = useAuth();
   const canSpendRealTokens = Boolean(user?.real_ai_token_spend_enabled);
-  const { resumes } = overview;
+  const { resumes, latest_analysis } = overview;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
-
   const [editingResumeId, setEditingResumeId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editSaving, setEditSaving] = useState(false);
-
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  // Tracks which resume_id triggered the currently-in-flight analysis request
   const [analyzingResumeId, setAnalyzingResumeId] = useState<string | null>(null);
 
-  // When context polling stops (terminal or cancelled), clear per-resume tracking
   useEffect(() => {
     if (pollingAnalysisId === null) setAnalyzingResumeId(null);
   }, [pollingAnalysisId]);
@@ -1313,10 +1472,6 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       return;
     }
     setSelectedFile(file);
-  }
-
-  function openFilePicker() {
-    fileInputRef.current?.click();
   }
 
   async function handleUpload() {
@@ -1446,42 +1601,64 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
 
   return (
     <div className="flex flex-col gap-5 p-5">
+      <Section title="Fluxo currículo → análise IA">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <StatusCard
+            label="Última análise"
+            title={
+              latest_analysis
+                ? ANALYSIS_STATUS_LABEL[latest_analysis.status] ?? latest_analysis.status
+                : "Ainda não solicitada"
+            }
+            description={
+              latest_analysis
+                ? `Currículo: ${latest_analysis.resume_title}`
+                : "Envie um currículo para iniciar o fluxo de análise."
+            }
+          />
+          <StatusCard
+            label="Processamento do currículo"
+            title={resumes[0]?.extraction_status ? EXTRACTION_STATUS_LABEL[resumes[0].extraction_status] ?? resumes[0].extraction_status : "Sem currículo"}
+            description="Upload, extração do PDF e disponibilidade para análise."
+          />
+        </div>
+      </Section>
+
       {!canSpendRealTokens ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
           Consumo real bloqueado — ative <code>real_ai_token_spend_enabled</code> para analisar currículos.
         </div>
       ) : null}
 
-      {/* Upload form */}
       <Section title="Enviar currículo">
         <input
           type="file"
           accept="application/pdf,.pdf"
           ref={fileInputRef}
           disabled={uploadLoading}
-          onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
+          onChange={(event) => handleFileSelect(event.target.files?.[0] ?? null)}
           className="hidden"
         />
         <button
           type="button"
-          onClick={openFilePicker}
-          onDragEnter={(e) => {
-            e.preventDefault();
+          onClick={() => fileInputRef.current?.click()}
+          onDragEnter={(event) => {
+            event.preventDefault();
             if (!uploadLoading) setIsDragActive(true);
           }}
-          onDragOver={(e) => {
-            e.preventDefault();
+          onDragOver={(event) => {
+            event.preventDefault();
             if (!uploadLoading) setIsDragActive(true);
           }}
-          onDragLeave={(e) => {
-            e.preventDefault();
+          onDragLeave={(event) => {
+            event.preventDefault();
             setIsDragActive(false);
           }}
-          onDrop={(e) => {
-            e.preventDefault();
+          onDrop={(event) => {
+            event.preventDefault();
             setIsDragActive(false);
             if (uploadLoading) return;
-            handleFileSelect(e.dataTransfer.files?.[0] ?? null);
+            handleFileSelect(event.dataTransfer.files?.[0] ?? null);
           }}
           disabled={uploadLoading}
           className={[
@@ -1508,7 +1685,7 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
             type="button"
             onClick={() => void handleUpload()}
             disabled={uploadLoading || !selectedFile}
-            className="shrink-0 rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
+            className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
           >
             {uploadLoading ? "Enviando currículo…" : "Enviar currículo"}
           </button>
@@ -1523,6 +1700,7 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
             </button>
           ) : null}
         </div>
+
         {selectedFile ? (
           <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
             {selectedFile.name} ({Math.ceil(selectedFile.size / 1024)} KB)
@@ -1530,234 +1708,1004 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
         ) : null}
       </Section>
 
-      {/* Resume list */}
+      <Section title="Documentos de admissão">
+        <EmptyTab
+          title="Documentos de admissão ainda não disponíveis"
+          description="Este espaço será preenchido quando houver documentos de admissão no payload atual."
+          compact
+        />
+      </Section>
+
       {resumes.length === 0 ? (
         <EmptyTab
           title="Ainda não há currículos enviados"
           description="Envie o currículo para iniciar a análise da IA."
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          {resumes.map((resume) => {
-            const isEditing = editingResumeId === resume.resume_id;
-            const isDeleting = deletingId === resume.resume_id;
-            const isAnalyzing = analyzingResumeId === resume.resume_id;
-            const canAnalyze =
-              Boolean(resume.current_version_id) && resume.extraction_status === "completed";
+        <Section title="Currículos">
+          <div className="flex flex-col gap-3">
+            {resumes.map((resume) => {
+              const isEditing = editingResumeId === resume.resume_id;
+              const isDeleting = deletingId === resume.resume_id;
+              const isAnalyzing = analyzingResumeId === resume.resume_id;
+              const canAnalyze =
+                Boolean(resume.current_version_id) && resume.extraction_status === "completed";
 
-            return (
-              <div
-                key={resume.resume_id}
-                className={[
-                  "rounded-xl border border-gray-200 bg-white px-4 py-3 transition-opacity",
-                  isDeleting ? "opacity-40" : "",
-                ].join(" ")}
-              >
-                {/* Title row */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    {isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="h-7 flex-1 rounded-lg border border-blue-300 px-2 text-xs text-gray-900 outline-none focus:ring-1 focus:ring-blue-200"
-                          // eslint-disable-next-line jsx-a11y/no-autofocus
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleEditSave();
-                            if (e.key === "Escape") setEditingResumeId(null);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handleEditSave()}
-                          disabled={editSaving || !editTitle.trim()}
-                          className="rounded-lg bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-40"
-                        >
-                          {editSaving ? "…" : "OK"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingResumeId(null)}
-                          className="text-[11px] text-gray-400 hover:text-gray-600"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="truncate text-xs font-semibold text-gray-900">{resume.title}</p>
-                    )}
-                    {resume.current_file_name ? (
-                      <p className="mt-0.5 truncate text-[11px] text-gray-500">
-                        {resume.current_file_name}
-                      </p>
-                    ) : null}
+              return (
+                <div
+                  key={resume.resume_id}
+                  className={[
+                    "rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 transition-opacity",
+                    isDeleting ? "opacity-40" : "",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={editTitle}
+                            onChange={(event) => setEditTitle(event.target.value)}
+                            className="ui-input h-8 flex-1 rounded-lg px-3 text-sm"
+                            autoFocus
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") void handleEditSave();
+                              if (event.key === "Escape") setEditingResumeId(null);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleEditSave()}
+                            disabled={editSaving || !editTitle.trim()}
+                            className="rounded-lg bg-[hsl(var(--primary))] px-2 py-1 text-[11px] font-medium text-white disabled:opacity-40"
+                          >
+                            {editSaving ? "…" : "OK"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingResumeId(null)}
+                            className="text-[11px] text-[hsl(var(--text-muted))]"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">{resume.title}</p>
+                      )}
+
+                      {resume.current_file_name ? (
+                        <p className="mt-0.5 truncate text-[11px] text-[hsl(var(--text-muted))]">
+                          {resume.current_file_name}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span
+                        className={[
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
+                          resume.status === "active"
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                            : "bg-gray-100 text-gray-500 ring-gray-200",
+                        ].join(" ")}
+                      >
+                        {resume.status === "active" ? "Ativo" : "Arquivado"}
+                      </span>
+                      <span
+                        className={[
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
+                          resume.extraction_status === "completed"
+                            ? "bg-blue-50 text-blue-700 ring-blue-200"
+                            : resume.extraction_status === "failed"
+                              ? "bg-red-50 text-red-700 ring-red-200"
+                              : "bg-gray-50 text-gray-500 ring-gray-200",
+                        ].join(" ")}
+                      >
+                        {EXTRACTION_STATUS_LABEL[resume.extraction_status ?? ""] ??
+                          (resume.extraction_status ?? "—")}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span
-                      className={[
-                        "rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
-                        resume.status === "active"
-                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                          : "bg-gray-100 text-gray-500 ring-gray-200",
-                      ].join(" ")}
-                    >
-                      {resume.status === "active" ? "Ativo" : "Arquivado"}
-                    </span>
-                    <span
-                      className={[
-                        "rounded-full px-2 py-0.5 text-[11px] font-medium ring-1",
-                        resume.extraction_status === "completed"
-                          ? "bg-blue-50 text-blue-700 ring-blue-200"
-                          : resume.extraction_status === "failed"
-                            ? "bg-red-50 text-red-700 ring-red-200"
-                            : "bg-gray-50 text-gray-500 ring-gray-200",
-                      ].join(" ")}
-                    >
-                      {EXTRACTION_STATUS_LABEL[resume.extraction_status ?? ""] ??
-                        (resume.extraction_status ?? "—")}
-                    </span>
+
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-[hsl(var(--text-muted))]">
+                    <span>v{resume.current_version}</span>
+                    <span>{new Date(resume.updated_at).toLocaleDateString("pt-BR")}</span>
                   </div>
-                </div>
 
-                {/* Meta */}
-                <div className="mt-1.5 flex items-center justify-between text-[11px] text-gray-400">
-                  <span>v{resume.current_version}</span>
-                  <span>{new Date(resume.updated_at).toLocaleDateString("pt-BR")}</span>
-                </div>
-
-                {/* Actions */}
-                {!isEditing ? (
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingResumeId(resume.resume_id);
-                        setEditTitle(resume.title);
-                      }}
-                      className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition hover:bg-gray-50"
-                    >
-                      Editar título
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleToggleStatus(resume.resume_id, resume.status)}
-                      className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition hover:bg-gray-50"
-                    >
-                      {resume.status === "active" ? "Arquivar" : "Reativar"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(resume.resume_id)}
-                      className="rounded-lg border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-50"
-                    >
-                      Excluir
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void handleAnalyze(resume.resume_id, resume.current_version_id!)
-                      }
-                      disabled={!canAnalyze || isAnalyzing || pollingAnalysisId !== null || !canSpendRealTokens}
-                      title={
-                        !canSpendRealTokens
-                          ? "Consumo real bloqueado"
-                          : !canAnalyze
-                            ? "Disponível após extração concluída"
-                            : pollingAnalysisId !== null && !isAnalyzing
-                              ? "Outra análise em andamento"
-                              : undefined
-                      }
-                      className="rounded-lg bg-blue-600 px-2 py-1 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
-                    >
-                      {isAnalyzing ? "Solicitando…" : "Análise manual"}
-                    </button>
-                  </div>
-                ) : null}
-
-                {!isEditing && canAnalyze ? (
-                  <p className="mt-2 text-[11px] text-gray-400">
-                    Atalho manual. O acompanhamento da execução fica na aba Análise IA.
-                  </p>
-                ) : null}
-
-                {/* Delete confirmation */}
-                {confirmDeleteId === resume.resume_id ? (
-                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                    <p className="text-xs text-red-700">Confirmar exclusão deste currículo?</p>
-                    <div className="mt-2 flex gap-2">
+                  {!isEditing ? (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
                       <button
                         type="button"
-                        onClick={() => void handleDelete()}
-                        className="rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-red-700"
+                        onClick={() => {
+                          setEditingResumeId(resume.resume_id);
+                          setEditTitle(resume.title);
+                        }}
+                        className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))]"
+                      >
+                        Editar título
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleStatus(resume.resume_id, resume.status)}
+                        className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))]"
+                      >
+                        {resume.status === "active" ? "Arquivar" : "Reativar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(resume.resume_id)}
+                        className="rounded-lg border border-red-200 px-2.5 py-1 text-[11px] font-medium text-red-600 transition hover:bg-red-50"
                       >
                         Excluir
                       </button>
                       <button
                         type="button"
-                        onClick={() => setConfirmDeleteId(null)}
-                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-600 transition hover:bg-gray-50"
+                        onClick={() => void handleAnalyze(resume.resume_id, resume.current_version_id!)}
+                        disabled={!canAnalyze || isAnalyzing || pollingAnalysisId !== null || !canSpendRealTokens}
+                        className="rounded-lg bg-[hsl(var(--primary))] px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
                       >
-                        Cancelar
+                        {isAnalyzing ? "Solicitando…" : "Análise manual"}
                       </button>
                     </div>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+                  ) : null}
+
+                  {!isEditing && canAnalyze ? (
+                    <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
+                      Atalho manual. O acompanhamento da execução fica na aba Análise IA.
+                    </p>
+                  ) : null}
+
+                  {confirmDeleteId === resume.resume_id ? (
+                    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                      <p className="text-xs text-red-700">Confirmar exclusão deste currículo?</p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete()}
+                          className="rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-red-700"
+                        >
+                          Excluir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))]"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </Section>
       )}
     </div>
   );
 }
 
-// ── Shared sub-components ──────────────────────────────────────────────────────
+function HistoryTab({
+  overview,
+  activeJobId,
+  cacheRef,
+}: {
+  overview: CandidateOverview;
+  activeJobId: string | null;
+  cacheRef: MutableRefObject<Map<string, CandidatePipelineHistory>>;
+}) {
+  const [history, setHistory] = useState<CandidatePipelineHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+  const currentEntry = useMemo(
+    () =>
+      activeJobId
+        ? overview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null
+        : null,
+    [activeJobId, overview.pipeline_entries],
+  );
+
+  useEffect(() => {
+    if (!activeJobId) {
+      setHistory(null);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const cacheKey = `${overview.candidate.id}:${activeJobId}:${currentEntry?.updated_at ?? "none"}`;
+    const cached = cacheRef.current.get(cacheKey);
+    if (cached) {
+      setHistory(cached);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    void pipelineService
+      .getCandidateHistory(activeJobId, overview.candidate.id)
+      .then((result) => {
+        if (cancelled) return;
+        cacheRef.current.set(cacheKey, result);
+        setHistory(result);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setHistory(null);
+        setHistoryError(
+          formatContextError(
+            err,
+            "Não foi possível carregar o histórico deste candidato.",
+            "Tente novamente.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeJobId, overview.candidate.id, currentEntry?.updated_at, cacheRef]);
+
+  if (!activeJobId) {
+    return (
+      <EmptyTab
+        title="Selecione uma vaga para ver o histórico"
+        description="Abra este candidato a partir do pipeline para acompanhar as movimentações reais."
+      />
+    );
+  }
+
+  if (historyLoading) {
+    return (
+      <div className="p-5">
+        <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (historyError) {
+    return (
+      <div className="flex flex-col gap-4 p-5">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {historyError}
+        </div>
+        {currentEntry ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+              Estado atual nesta vaga
+            </p>
+            <p className="mt-1 text-sm text-amber-900">
+              {STAGE_LABEL[currentEntry.stage] ?? currentEntry.stage} · {currentEntry.candidate_status}
+            </p>
+            <p className="mt-1 text-[11px] text-amber-800">
+              Este bloco é apenas um fallback de estado atual. O histórico real não pôde ser carregado.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-[hsl(var(--text-muted))]">
+            O candidato não possui estado atual visível nesta vaga.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (!history) {
+    return (
+      <EmptyTab
+        title="Ainda não há histórico para esta vaga"
+        description="Movimente o candidato no pipeline para gerar as primeiras entradas."
+      />
+    );
+  }
+
+  if (history.transitions.length === 0) {
+    return (
+      <div className="flex flex-col gap-4 p-5">
+        <EmptyTab
+          title="Ainda não há movimentações registradas"
+          description="Movimente o candidato no pipeline para gerar o histórico desta vaga."
+        />
+        <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            Estado atual
+          </p>
+          <p className="mt-1 text-sm text-[hsl(var(--text))]">
+            {STAGE_LABEL[history.current_stage] ?? history.current_stage}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
-      {children}
+    <div className="flex flex-col gap-3 p-5">
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+          Histórico real do pipeline
+        </p>
+        <p className="mt-1 text-[11px] text-blue-900">
+          Eventos registrados de movimentação para {history.job_title}.
+        </p>
+      </div>
+
+      {history.transitions.map((transition) => (
+        <div
+          key={transition.id}
+          className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-[hsl(var(--text))]">
+                {transition.from_stage
+                  ? `${STAGE_LABEL[transition.from_stage] ?? transition.from_stage} → ${STAGE_LABEL[transition.to_stage] ?? transition.to_stage}`
+                  : `Entrada em ${STAGE_LABEL[transition.to_stage] ?? transition.to_stage}`}
+              </p>
+              <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">
+                {TRIGGER_LABEL[transition.trigger]}
+              </p>
+              {transition.moved_by_name ? (
+                <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">
+                  Por {transition.moved_by_name}
+                </p>
+              ) : null}
+            </div>
+            <p className="shrink-0 text-[11px] text-[hsl(var(--text-muted))]">
+              {formatDateTime(transition.moved_at)}
+            </p>
+          </div>
+
+          {transition.reason ? (
+            <p className="mt-3 text-xs text-[hsl(var(--text))]">
+              <span className="font-semibold">Motivo:</span> {transition.reason}
+            </p>
+          ) : null}
+
+          {transition.notes ? (
+            <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">
+              <span className="font-semibold text-[hsl(var(--text))]">Notas:</span> {transition.notes}
+            </p>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
 
-function StatBox({
-  label,
-  value,
-  tone = "neutral",
+function ActionsTab({
+  overview,
+  activeJob,
+  activeJobId,
+  currentStage,
+  availableJobs,
+  canTransferCurrentJob,
+  stageSaving,
+  linkSaving,
+  onStageChange,
+  onLinkToActiveJob,
+  onOpenAddJob,
+  onOpenTransferJob,
 }: {
-  label: string;
-  value: number;
-  tone?: "success" | "neutral";
+  overview: CandidateOverview;
+  activeJob: Job | null;
+  activeJobId: string | null;
+  currentStage: PipelineStage | null;
+  availableJobs: Job[];
+  canTransferCurrentJob: boolean;
+  stageSaving: boolean;
+  linkSaving: boolean;
+  onStageChange: (stage: PipelineStage) => Promise<void>;
+  onLinkToActiveJob: () => Promise<void>;
+  onOpenAddJob: () => void;
+  onOpenTransferJob: () => void;
+}) {
+  const activeEntry = activeJobId
+    ? overview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null
+    : null;
+  const [selectedStage, setSelectedStage] = useState<PipelineStage>("entry");
+  const [confirmStage, setConfirmStage] = useState<PipelineStage | null>(null);
+
+  useEffect(() => {
+    setSelectedStage(currentStage ?? "entry");
+    setConfirmStage(null);
+  }, [currentStage, activeJobId]);
+
+  async function submitStage(stage: PipelineStage) {
+    await onStageChange(stage);
+    setConfirmStage(null);
+  }
+
+  if (!activeJobId || !activeJob) {
+    return (
+      <EmptyTab
+        title="Selecione uma vaga para ver as ações"
+        description="Abra o candidato com uma vaga ativa para mover etapa, adicionar a outra vaga ou transferir contexto."
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5 p-5">
+      {!activeEntry ? (
+        <Section title="Vínculo com a vaga ativa">
+          <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">
+              Candidato criado, aguardando vínculo com a vaga
+            </p>
+            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+              Ele ainda não aparece neste pipeline. Vincule novamente para recuperar o fluxo.
+            </p>
+            <button
+              type="button"
+              onClick={() => void onLinkToActiveJob()}
+              disabled={linkSaving}
+              className="mt-3 rounded-lg border border-[hsl(var(--warning))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--warning))] transition hover:bg-[hsl(var(--warning-soft))] disabled:opacity-50"
+            >
+              {linkSaving ? "Vinculando…" : "Adicionar a esta vaga"}
+            </button>
+          </div>
+        </Section>
+      ) : null}
+
+      <Section title="Mover etapa">
+        {activeEntry ? (
+          <>
+            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">{activeJob.title}</p>
+                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                    {STAGE_LABEL[activeEntry.stage] ?? activeEntry.stage} · {activeEntry.candidate_status}
+                  </p>
+                </div>
+                <StatusPill label={formatJobStatus(activeJob.status)} tone={jobStatusTone(activeJob.status)} />
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="flex gap-2">
+                <select
+                  value={selectedStage}
+                  onChange={(event) => {
+                    const nextStage = event.target.value as PipelineStage;
+                    setSelectedStage(nextStage);
+                    setConfirmStage(null);
+                  }}
+                  disabled={stageSaving}
+                  className="ui-input h-10 flex-1 rounded-lg px-3 text-sm disabled:opacity-50"
+                >
+                  {STAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={stageSaving || selectedStage === currentStage}
+                  onClick={() => {
+                    if (DANGEROUS_STAGES.includes(selectedStage)) {
+                      setConfirmStage(selectedStage);
+                      return;
+                    }
+                    void submitStage(selectedStage);
+                  }}
+                  className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
+                >
+                  {stageSaving ? "Salvando…" : "Salvar etapa"}
+                </button>
+              </div>
+
+              {confirmStage ? (
+                <DangerZone
+                  title={confirmStage === "rejected" ? "Confirmar reprovação" : "Confirmar contratação"}
+                  description={
+                    confirmStage === "rejected"
+                      ? "Esta ação move o candidato para Reprovado na vaga ativa."
+                      : "Esta ação move o candidato para Contratado na vaga ativa."
+                  }
+                  confirmLabel={confirmStage === "rejected" ? "Confirmar reprovação" : "Confirmar contratação"}
+                  loading={stageSaving}
+                  onConfirm={() => void submitStage(confirmStage)}
+                  onCancel={() => setConfirmStage(null)}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <EmptyTab
+            title="O candidato ainda não está vinculado à vaga ativa"
+            description="Vincule o candidato primeiro para liberar movimentações de etapa."
+            compact
+          />
+        )}
+      </Section>
+
+      <Section title="Ações rápidas">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={!activeEntry || currentStage === "rejected" || stageSaving}
+            onClick={() => setConfirmStage("rejected")}
+            className="rounded-xl border border-[hsl(var(--danger))]/25 bg-[hsl(var(--danger-soft))] px-4 py-3 text-left transition disabled:opacity-50"
+          >
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Reprovar candidato</p>
+            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+              Move o candidato para a etapa Reprovado com confirmação.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            disabled={!activeEntry || currentStage === "hired" || stageSaving}
+            onClick={() => setConfirmStage("hired")}
+            className="rounded-xl border border-[hsl(var(--success))]/25 bg-[hsl(var(--success-soft))] px-4 py-3 text-left transition disabled:opacity-50"
+          >
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Marcar contratado</p>
+            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+              Move o candidato para a etapa Contratado com confirmação.
+            </p>
+          </button>
+        </div>
+      </Section>
+
+      <Section title="Gestão de vaga">
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={onOpenAddJob}
+            disabled={availableJobs.length === 0}
+            className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 text-left transition hover:border-[hsl(var(--primary))]/35 hover:bg-[hsl(var(--accent-soft))] disabled:opacity-50"
+          >
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Adicionar a outra vaga</p>
+            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+              Mantém o candidato na vaga atual e cria um novo vínculo com outra vaga.
+            </p>
+          </button>
+
+          {canTransferCurrentJob ? (
+            <button
+              type="button"
+              onClick={onOpenTransferJob}
+              disabled={availableJobs.length === 0}
+              className="rounded-xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning-soft))] px-4 py-3 text-left transition hover:border-[hsl(var(--warning))] disabled:opacity-50"
+            >
+              <p className="text-sm font-semibold text-[hsl(var(--text))]">Transferir/corrigir vaga</p>
+              <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                Remove o candidato do pipeline atual e cria o vínculo na vaga destino.
+              </p>
+              <p className="mt-2 text-[11px] font-medium text-[hsl(var(--warning))]">
+                Aviso de impacto: o vínculo atual será desativado na vaga ativa.
+              </p>
+            </button>
+          ) : (
+            <div className="rounded-xl border border-[hsl(var(--warning))]/25 bg-[hsl(var(--warning-soft))] px-4 py-3">
+              <p className="text-sm font-semibold text-[hsl(var(--text))]">Transferência bloqueada</p>
+              <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                Este candidato já avançou no processo. Para preservar o histórico, adicione-o a outra vaga em vez de transferir.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {availableJobs.length === 0 ? (
+          <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
+            Não há outras vagas disponíveis para esta ação.
+          </p>
+        ) : null}
+      </Section>
+    </div>
+  );
+}
+
+function AddToJobModal({
+  isOpen,
+  candidateId,
+  availableJobs,
+  onClose,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  candidateId: string | null;
+  availableJobs: Job[];
+  onClose: () => void;
+  onSuccess: () => Promise<void>;
+}) {
+  const [jobId, setJobId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setJobId(availableJobs[0]?.id ?? "");
+    setSaving(false);
+    setError(null);
+  }, [isOpen, availableJobs]);
+
+  if (!isOpen) return null;
+
+  async function handleSubmit() {
+    if (!candidateId || !jobId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await pipelineService.addCandidateToJob(candidateId, { job_id: jobId, initial_stage: "entry" });
+      toast.success("Candidato adicionado a outra vaga");
+      await onSuccess();
+    } catch (err: unknown) {
+      setError(
+        formatContextError(
+          err,
+          "Não foi possível adicionar o candidato à vaga selecionada.",
+          "Tente novamente.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} aria-hidden="true" />
+      <div className="ui-card fixed left-1/2 top-1/2 z-[70] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-[hsl(var(--text))]">Adicionar a outra vaga</h2>
+            <p className="ui-text-muted mt-0.5 text-sm">
+              O candidato permanecerá na vaga atual e será incluído na vaga destino em triagem inicial.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-[hsl(var(--text))]">Vaga destino</span>
+          <select
+            value={jobId}
+            onChange={(event) => setJobId(event.target.value)}
+            disabled={saving || availableJobs.length === 0}
+            className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
+          >
+            {availableJobs.length === 0 ? (
+              <option value="">Nenhuma vaga disponível</option>
+            ) : (
+              availableJobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.title}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        {error ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={saving || !jobId}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+          >
+            {saving ? "Adicionando…" : "Confirmar"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function TransferJobModal({
+  isOpen,
+  candidateId,
+  fromJobId,
+  availableJobs,
+  canTransfer,
+  onClose,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  candidateId: string | null;
+  fromJobId: string | null;
+  availableJobs: Job[];
+  canTransfer: boolean;
+  onClose: () => void;
+  onSuccess: () => Promise<void>;
+}) {
+  const [jobId, setJobId] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setJobId(availableJobs[0]?.id ?? "");
+    setReason("");
+    setSaving(false);
+    setError(null);
+  }, [isOpen, availableJobs]);
+
+  if (!isOpen) return null;
+
+  async function handleSubmit() {
+    if (!candidateId || !fromJobId || !jobId) return;
+    if (!reason.trim()) {
+      setError("Informe o motivo da transferência.");
+      return;
+    }
+    if (!canTransfer) {
+      setError("Este candidato já avançou no processo. Para preservar o histórico, adicione-o a outra vaga em vez de transferir.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await pipelineService.transferCandidateJob(candidateId, {
+        from_job_id: fromJobId,
+        to_job_id: jobId,
+        reason: reason.trim(),
+      });
+      toast.success("Candidato transferido para outra vaga");
+      await onSuccess();
+    } catch (err: unknown) {
+      setError(
+        formatContextError(
+          err,
+          "Não foi possível transferir o candidato para a vaga selecionada.",
+          "Tente novamente.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} aria-hidden="true" />
+      <div className="ui-card fixed left-1/2 top-1/2 z-[70] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-[hsl(var(--text))]">Transferir/corrigir vaga</h2>
+            <p className="ui-text-muted mt-0.5 text-sm">
+              O vínculo atual será desativado e o candidato entrará em <code>entry</code> na vaga destino.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning-soft))] px-4 py-3">
+          <p className="text-sm font-semibold text-[hsl(var(--text))]">Aviso de impacto</p>
+          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+            Esta ação retira o candidato do pipeline atual. Use apenas para corrigir o contexto da vaga.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-[hsl(var(--text))]">Vaga destino</span>
+            <select
+              value={jobId}
+              onChange={(event) => setJobId(event.target.value)}
+              disabled={saving || availableJobs.length === 0}
+              className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
+            >
+              {availableJobs.length === 0 ? (
+                <option value="">Nenhuma vaga disponível</option>
+              ) : (
+                availableJobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.title}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-[hsl(var(--text))]">Motivo da transferência</span>
+            <textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              rows={4}
+              disabled={saving}
+              placeholder="Explique o impacto desta correção de vaga."
+              className="ui-input rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+            />
+          </label>
+        </div>
+
+        {error ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={saving || !jobId || !reason.trim()}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+          >
+            {saving ? "Transferindo…" : "Confirmar"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div
-      className={[
-        "rounded-xl border p-3 text-center",
-        tone === "success" ? "border-emerald-200 bg-emerald-50" : "border-gray-200 bg-gray-50",
-      ].join(" ")}
-    >
-      <p
-        className={[
-          "text-xl font-bold tabular-nums",
-          tone === "success" ? "text-emerald-700" : "text-gray-900",
-        ].join(" ")}
-      >
+    <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-semibold text-[hsl(var(--text))]">{title}</h3>
+        {action}
+      </div>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function StatusCard({
+  label,
+  title,
+  description,
+}: {
+  label: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-[hsl(var(--text))]">{title}</p>
+      <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{description}</p>
+    </div>
+  );
+}
+
+function DecisionCard({
+  label,
+  value,
+  description,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  description: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        {label}
+      </p>
+      <p className={["mt-1 text-lg font-extrabold tabular-nums text-[hsl(var(--text))]", valueClassName ?? ""].join(" ")}>
         {value}
       </p>
-      <p className="mt-0.5 text-[11px] text-gray-500">{label}</p>
+      <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{description}</p>
+    </div>
+  );
+}
+
+function BreakdownItem({ label, value }: { label: string; value: number | null | undefined }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2">
+      <span className="text-xs text-[hsl(var(--text-muted))]">{label}</span>
+      <span className={["text-xs font-semibold tabular-nums", scoreColorClass(value)].join(" ")}>
+        {fmtScore(value)}
+      </span>
     </div>
   );
 }
 
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
-      <p className="mt-1 text-xs text-gray-800">{value}</p>
+    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        {label}
+      </div>
+      <div className="mt-1 text-sm text-[hsl(var(--text))]">{value}</div>
+    </div>
+  );
+}
+
+function DangerZone({
+  title,
+  description,
+  confirmLabel,
+  loading,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  loading: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+      <p className="text-sm font-semibold text-red-700">{title}</p>
+      <p className="mt-1 text-xs text-red-700">{description}</p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={loading}
+          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-red-700 disabled:opacity-40"
+        >
+          {loading ? "Salvando…" : confirmLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={loading}
+          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-40"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
   );
 }
@@ -1768,31 +2716,29 @@ function EmptyTab({
   compact = false,
 }: {
   title: string;
-  description?: string;
+  description: string;
   compact?: boolean;
 }) {
   return (
     <div
       className={[
-        "flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-center",
-        compact ? "gap-1.5 px-4 py-5" : "gap-2 p-10",
+        "rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-center",
+        compact ? "px-4 py-4" : "mx-5 my-5 px-5 py-8",
       ].join(" ")}
     >
-      <p className="text-sm font-medium text-gray-700">{title}</p>
-      {description ? <p className="max-w-sm text-xs text-gray-500">{description}</p> : null}
+      <p className="text-sm font-semibold text-[hsl(var(--text))]">{title}</p>
+      <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{description}</p>
     </div>
   );
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="flex flex-col gap-3 p-5">
-      {[75, 55, 85, 45, 65].map((w, i) => (
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, index) => (
         <div
-          // eslint-disable-next-line react/no-array-index-key
-          key={i}
-          className="animate-pulse rounded bg-gray-100"
-          style={{ height: 13, width: `${w}%` }}
+          key={index}
+          className="h-24 animate-pulse rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]"
         />
       ))}
     </div>

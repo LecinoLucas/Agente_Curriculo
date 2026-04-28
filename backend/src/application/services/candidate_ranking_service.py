@@ -262,6 +262,10 @@ class CandidateRankingService:
             .where(
                 CandidatePipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
+                sa.or_(
+                    CandidatePipelineModel.status.is_(None),
+                    CandidatePipelineModel.status != "transferred",
+                ),
             )
         )
         return [dict(row) for row in result.mappings().all()]
@@ -297,6 +301,10 @@ class CandidateRankingService:
                 CandidateJobScoreModel.job_id == job_id,
                 CandidateJobScoreModel.version_id == version_id,
                 CandidateModel.deleted_at.is_(None),
+                sa.or_(
+                    CandidatePipelineModel.status.is_(None),
+                    CandidatePipelineModel.status != "transferred",
+                ),
             )
             .order_by(CandidateJobScoreModel.final_score.desc())
         )

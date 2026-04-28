@@ -1,8 +1,12 @@
 import type {
+  AddCandidateToJobPayload,
+  AddCandidateToJobResponse,
   CandidatePipelineHistory,
   MovePipelineCandidatePayload,
   MovePipelineCandidateResponse,
   PipelineStageTransition,
+  TransferCandidateJobPayload,
+  TransferCandidateJobResponse,
 } from "../types/domain";
 import { httpRequest } from "./http";
 
@@ -63,6 +67,56 @@ export const pipelineService = {
       status: item?.status ?? "active",
       match_score: item?.match_score != null ? Number(item.match_score) : null,
       transition_id: item?.transition_id ?? "",
+      updated_at: item?.updated_at ?? new Date(0).toISOString(),
+    };
+  },
+
+  async addCandidateToJob(
+    candidateId: string,
+    payload: AddCandidateToJobPayload,
+  ): Promise<AddCandidateToJobResponse> {
+    const item = await httpRequest<any>(`/api/v1/pipeline/${candidateId}/add-to-job`, {
+      method: "POST",
+      body: {
+        job_id: payload.job_id,
+        initial_stage: payload.initial_stage ?? "entry",
+      },
+    });
+
+    return {
+      candidate_id: item?.candidate_id ?? candidateId,
+      job_id: item?.job_id ?? payload.job_id,
+      stage: item?.stage ?? (payload.initial_stage ?? "entry"),
+      candidate_status: item?.candidate_status ?? "Recebido",
+      status: item?.status ?? "active",
+      transition_id: item?.transition_id ?? "",
+      updated_at: item?.updated_at ?? new Date(0).toISOString(),
+    };
+  },
+
+  async transferCandidateJob(
+    candidateId: string,
+    payload: TransferCandidateJobPayload,
+  ): Promise<TransferCandidateJobResponse> {
+    const item = await httpRequest<any>(`/api/v1/pipeline/${candidateId}/transfer-job`, {
+      method: "PATCH",
+      body: {
+        from_job_id: payload.from_job_id,
+        to_job_id: payload.to_job_id,
+        reason: payload.reason,
+      },
+    });
+
+    return {
+      candidate_id: item?.candidate_id ?? candidateId,
+      from_job_id: item?.from_job_id ?? payload.from_job_id,
+      to_job_id: item?.to_job_id ?? payload.to_job_id,
+      from_stage: item?.from_stage ?? "entry",
+      to_stage: item?.to_stage ?? "entry",
+      source_status: item?.source_status ?? "transferred",
+      destination_status: item?.destination_status ?? "active",
+      source_transition_id: item?.source_transition_id ?? "",
+      destination_transition_id: item?.destination_transition_id ?? "",
       updated_at: item?.updated_at ?? new Date(0).toISOString(),
     };
   },

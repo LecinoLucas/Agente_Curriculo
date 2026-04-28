@@ -84,11 +84,11 @@ export function KanbanCard({
         </div>
         <div className="shrink-0 text-right">
           <div className="text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Compatibilidade
+            Score nesta vaga
           </div>
           <span
             className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${SCORE_CLS[variant]}`}
-            title="Compatibilidade com a vaga"
+            title="Compatibilidade com a vaga ativa"
           >
             {fmt(candidate.match_score)}
           </span>

@@ -22,6 +22,7 @@ class DomainEventType(StrEnum):
     AI_PROCESSING_COMPLETED = "AIProcessingCompleted"
     AI_PROCESSING_FAILED = "AIProcessingFailed"
     ADMISSION_STATUS_CHANGED = "AdmissionStatusChanged"
+    CANDIDATE_JOB_TRANSFERRED = "CandidateJobTransferred"
 
 
 @dataclass(frozen=True)

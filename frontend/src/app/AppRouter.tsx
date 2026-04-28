@@ -23,6 +23,20 @@ function RouteFallback() {
   );
 }
 
+/**
+ * App Router with User-Candidate Boundary
+ *
+ * See: docs/user-candidate-boundary.md
+ *
+ * Route Access Rules:
+ * ───────────────────
+ * - Internal routes (pipeline, admin, vagas, etc): ADMIN/RECRUITER/VIEWER only
+ * - Profile route (/perfil): All authenticated users (including role="candidate")
+ * - role="candidate" is NOT an internal user; it's a portal access marker
+ *
+ * Future Portal Candidates:
+ *   Phase 20.3+ will add /candidate-portal/* routes
+ */
 export function AppRouter() {
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -41,10 +55,13 @@ export function AppRouter() {
         >
           <Route index element={<Navigate to="/pipeline" replace />} />
 
+          {/* INTERNAL ROUTES: Blocked for role="candidate" */}
+
           <Route
             path="pipeline"
             element={
               <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
+                {/* role="candidate" BLOCKED: No portal access yet */}
                 <PipelinePage />
               </ProtectedRoute>
             }
@@ -53,6 +70,7 @@ export function AppRouter() {
             path="pipeline/:jobId"
             element={
               <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
+                {/* role="candidate" BLOCKED: No portal access yet */}
                 <PipelinePage />
               </ProtectedRoute>
             }
@@ -62,39 +80,51 @@ export function AppRouter() {
             path="candidatos"
             element={
               <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
+                {/* role="candidate" BLOCKED: Candidates are managed by recruiters */}
                 <CandidatesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="analises-ia"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter"]}>
-                <AnalisesIaPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="vagas"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
-                <VagasPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="perfil"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter", "candidate", "viewer"]}>
-                <ProfilePage />
               </ProtectedRoute>
             }
           />
 
           <Route
+            path="analises-ia"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "recruiter"]}>
+                {/* role="candidate" BLOCKED: AI analysis is recruiter-only */}
+                <AnalisesIaPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="vagas"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
+                {/* role="candidate" BLOCKED: Jobs are internal catalog */}
+                <VagasPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* PORTAL ROUTES: Accessible to all authenticated users */}
+
+          <Route
+            path="perfil"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "recruiter", "candidate", "viewer"]}>
+                {/* role="candidate" ALLOWED: Edit own user profile */}
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ADMIN ROUTES: Admin only */}
+
+          <Route
             path="admin"
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
+                {/* role="candidate" BLOCKED: Admin panel */}
                 <AdminPage />
               </ProtectedRoute>
             }
@@ -103,6 +133,7 @@ export function AppRouter() {
             path="admin/usuarios"
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
+                {/* role="candidate" BLOCKED: User management */}
                 <UsersPage />
               </ProtectedRoute>
             }

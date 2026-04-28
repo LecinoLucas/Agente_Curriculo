@@ -4,26 +4,33 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.pipeline_service import (
+    PipelineDestinationJobUnavailableError,
     PipelineCandidateNotFoundError,
     PipelineConcurrentModificationError,
+    PipelineDuplicateEntryError,
     PipelineEntryNotFoundError,
     PipelineInvalidTransitionError,
     PipelineJobNotFoundError,
     PipelineSameStageError,
     PipelineService,
     PipelineTerminalStageError,
+    PipelineTransferNotAllowedError,
 )
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.pipeline_schemas import (
+    AddCandidateToJobRequest,
+    AddCandidateToJobResponse,
     CandidatePipelineHistoryResponse,
     MoveCandidateByJobBody,
     MoveCandidateRequest,
     MoveCandidateResponse,
     PipelineBoardResponse,
     PipelineJobSummaryResponse,
+    TransferCandidateJobRequest,
+    TransferCandidateJobResponse,
 )
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -54,10 +61,25 @@ def _handle(exc: Exception) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Candidato está em um estágio terminal e não pode ser movido",
         )
+    if isinstance(exc, PipelineTransferNotAllowedError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este candidato já avançou no processo. Para preservar o histórico, adicione-o a outra vaga em vez de transferir.",
+        )
     if isinstance(exc, PipelineSameStageError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Candidato já está neste estágio",
+        )
+    if isinstance(exc, PipelineDuplicateEntryError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato já está vinculado à vaga destino",
+        )
+    if isinstance(exc, PipelineDestinationJobUnavailableError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A vaga destino precisa estar ativa/publicada",
         )
     if isinstance(exc, PipelineInvalidTransitionError):
         raise HTTPException(
@@ -175,6 +197,54 @@ async def move_candidate_stage(
 ) -> MoveCandidateResponse:
     try:
         result = await _service(db).move_candidate(
+            candidate_id=candidate_id,
+            body=body,
+            moved_by=current_user.id,
+        )
+        await db.commit()
+        return result
+    except Exception as exc:
+        await db.rollback()
+        _handle(exc)
+        raise
+
+
+@router.post(
+    "/{candidate_id}/add-to-job",
+    response_model=AddCandidateToJobResponse,
+)
+async def add_candidate_to_job(
+    candidate_id: UUID,
+    body: AddCandidateToJobRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AddCandidateToJobResponse:
+    try:
+        result = await _service(db).add_candidate_to_job(
+            candidate_id=candidate_id,
+            body=body,
+            moved_by=current_user.id,
+        )
+        await db.commit()
+        return result
+    except Exception as exc:
+        await db.rollback()
+        _handle(exc)
+        raise
+
+
+@router.patch(
+    "/{candidate_id}/transfer-job",
+    response_model=TransferCandidateJobResponse,
+)
+async def transfer_candidate_job(
+    candidate_id: UUID,
+    body: TransferCandidateJobRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> TransferCandidateJobResponse:
+    try:
+        result = await _service(db).transfer_candidate_job(
             candidate_id=candidate_id,
             body=body,
             moved_by=current_user.id,

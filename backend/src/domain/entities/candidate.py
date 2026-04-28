@@ -6,12 +6,24 @@ from uuid import UUID, uuid4
 
 @dataclass
 class Candidate:
+    """
+    Candidate - External entity representing a person being evaluated.
+
+    User-Candidate Relationship (Phase 20.2):
+    ──────────────────────────────────────────
+    - Most candidates have user_id = NULL (anonymous)
+    - Some candidates have user_id = UUID (can login to candidate portal)
+    - user_id, when set, references a User with role="candidate"
+    - This is a bridge mechanism; Phase 20.3+ will use separate CandidateAccount
+
+    See: docs/user-candidate-boundary.md
+    """
     id: UUID
     full_name: str
     created_by: UUID
     created_at: datetime
     updated_at: datetime
-    user_id: Optional[UUID] = None
+    user_id: Optional[UUID] = None  # Bridge to candidate portal (Phase 20.2)
     email: Optional[str] = None
     phone: Optional[str] = None
     location_city: Optional[str] = None

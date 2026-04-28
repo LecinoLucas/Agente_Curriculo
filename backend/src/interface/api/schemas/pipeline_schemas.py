@@ -23,7 +23,7 @@ PipelineStage = Literal[
 PipelineTrigger = Literal["manual", "auto_match", "system"]
 
 # Outcome status — independent of stage position.
-CandidateOutcomeStatus = Literal["active", "hired", "rejected"]
+CandidateOutcomeStatus = Literal["active", "hired", "rejected", "transferred"]
 
 # AI analysis processing status — completely independent of pipeline stage.
 # Controlled exclusively by the analysis worker; never set by stage moves.
@@ -109,6 +109,40 @@ class MoveCandidateByJobBody(BaseModel):
     stage: PipelineStage
     notes: str | None = Field(default=None, max_length=2000)
     reason: str | None = Field(default=None, max_length=500)
+
+
+class AddCandidateToJobRequest(BaseModel):
+    job_id: UUID
+    initial_stage: PipelineStage = "entry"
+
+
+class AddCandidateToJobResponse(BaseModel):
+    candidate_id: UUID
+    job_id: UUID
+    stage: PipelineStage
+    candidate_status: str
+    status: CandidateOutcomeStatus
+    transition_id: UUID
+    updated_at: datetime
+
+
+class TransferCandidateJobRequest(BaseModel):
+    from_job_id: UUID
+    to_job_id: UUID
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class TransferCandidateJobResponse(BaseModel):
+    candidate_id: UUID
+    from_job_id: UUID
+    to_job_id: UUID
+    from_stage: PipelineStage
+    to_stage: PipelineStage
+    source_status: CandidateOutcomeStatus
+    destination_status: CandidateOutcomeStatus
+    source_transition_id: UUID
+    destination_transition_id: UUID
+    updated_at: datetime
 
 
 # ---------------------------------------------------------------------------
