@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dtos.user_dtos import CreateUserCommand
@@ -11,6 +12,7 @@ from src.application.services.user_admin_service import (
     UserNotFoundError,
 )
 from src.application.services.user_profile_service import (
+    InvalidAvatarError,
     InvalidProfileTextError,
     UserProfileService,
 )
@@ -26,6 +28,7 @@ from src.interface.api.schemas.user_schemas import (
     PatchMyProfileRequest,
     PatchUserRequest,
     UserResponse,
+    UserStatsResponse,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -83,6 +86,8 @@ async def create_user(
         role=result.role,
         status=result.status,
         real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        last_login_at=None,
+        created_at=None,
     )
 
 
@@ -95,6 +100,9 @@ async def get_me(current_user: CurrentUser) -> UserResponse:
         role=current_user.role,
         status=current_user.status,
         real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        last_login_at=current_user.last_login_at,
+        created_at=current_user.created_at,
+        avatar_url=current_user.avatar_url,
     )
 
 
@@ -115,11 +123,67 @@ async def patch_me(
             role=updated.role,
             status=updated.status,
             real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+            last_login_at=updated.last_login_at,
+            created_at=updated.created_at,
+            avatar_url=updated.avatar_url,
         )
     except Exception as exc:
         await db.rollback()
         _handle_user_profile_error(exc)
         raise
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    service = UserProfileService(SQLAlchemyUserRepository(db))
+    try:
+        content = await file.read()
+        content_type = file.content_type or "application/octet-stream"
+        updated = await service.upload_avatar(current_user, content, content_type)
+        await db.commit()
+        return UserResponse(
+            id=updated.id,
+            email=updated.email,
+            full_name=updated.full_name,
+            role=updated.role,
+            status=updated.status,
+            real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+            last_login_at=updated.last_login_at,
+            created_at=updated.created_at,
+            avatar_url=updated.avatar_url,
+        )
+    except InvalidAvatarError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        await db.rollback()
+        raise
+
+
+@router.delete("/me/avatar", response_model=UserResponse)
+async def delete_avatar(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    repo = SQLAlchemyUserRepository(db)
+    current_user.avatar_url = None
+    current_user.updated_at = datetime.now(timezone.utc)
+    updated = await repo.save(current_user)
+    await db.commit()
+    return UserResponse(
+        id=updated.id,
+        email=updated.email,
+        full_name=updated.full_name,
+        role=updated.role,
+        status=updated.status,
+        real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        last_login_at=updated.last_login_at,
+        created_at=updated.created_at,
+        avatar_url=updated.avatar_url,
+    )
 
 
 @router.get("", response_model=PaginatedResponse[UserResponse])
@@ -129,9 +193,10 @@ async def list_users(
     page_size: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None, description="Busca por nome ou e-mail"),
     role: str | None = Query(default=None),
+    status: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[UserResponse]:
-    users, total_items = await _user_admin_service(db).list(page, page_size, search, role)
+    users, total_items = await _user_admin_service(db).list(page, page_size, search, role, status)
 
     return PaginatedResponse[UserResponse](
         data=[UserResponse.model_validate(u) for u in users],
@@ -140,6 +205,15 @@ async def list_users(
         page_size=page_size,
         total_pages=max(1, (total_items + page_size - 1) // page_size),
     )
+
+
+@router.get("/stats", response_model=UserStatsResponse)
+async def get_user_stats(
+    current_user: AdminOnly,
+    db: AsyncSession = Depends(get_db),
+) -> UserStatsResponse:
+    stats = await _user_admin_service(db).get_stats()
+    return UserStatsResponse(**stats)
 
 
 @router.get("/{user_id}", response_model=UserResponse)

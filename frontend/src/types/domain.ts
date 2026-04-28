@@ -128,6 +128,9 @@ export type UserSummary = {
   full_name: string;
   role: string;
   status: string;
+  last_login_at: string | null;
+  created_at: string | null;
+  avatar_url?: string | null;
 };
 
 export type AIModel = {

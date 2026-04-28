@@ -1,26 +1,27 @@
 import type { CSSProperties } from "react";
 import type { AIAnalysisStatus, JobCandidate } from "../../types/domain";
+import { formatSeniority } from "../../utils/jobFormatters";
 
 const SCORE_CLS = {
-  high: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  mid: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  low: "bg-red-50 text-red-700 ring-1 ring-red-200",
+  high: "ui-badge-success ring-1 ring-[hsl(var(--success))]/25",
+  mid: "ui-badge-warning ring-1 ring-[hsl(var(--warning))]/25",
+  low: "ui-badge-danger ring-1 ring-[hsl(var(--danger))]/25",
 } as const;
 
 const AI_STATUS_CLS: Record<AIAnalysisStatus, string> = {
-  completed:  "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  processing: "bg-blue-50   text-blue-700   ring-1 ring-blue-200",
-  pending:    "bg-amber-50  text-amber-700  ring-1 ring-amber-200",
-  failed:     "bg-red-50    text-red-700    ring-1 ring-red-200",
-  cancelled:  "bg-gray-100  text-gray-500   ring-1 ring-gray-200",
+  completed:  "ui-badge-success ring-1 ring-[hsl(var(--success))]/25",
+  processing: "ui-badge-info ring-1 ring-[hsl(var(--primary))]/20",
+  pending:    "ui-badge-warning ring-1 ring-[hsl(var(--warning))]/25",
+  failed:     "ui-badge-danger ring-1 ring-[hsl(var(--danger))]/25",
+  cancelled:  "ui-badge-neutral ring-1 ring-[hsl(var(--border))]",
 };
 
 const AI_STATUS_LABEL: Record<AIAnalysisStatus, string> = {
-  completed:  "IA concluida",
-  processing: "IA processando",
-  pending:    "IA na fila",
-  failed:     "IA falhou",
-  cancelled:  "IA cancelada",
+  completed:  "Concluída",
+  processing: "Processando",
+  pending:    "Na fila",
+  failed:     "Falhou",
+  cancelled:  "Cancelada",
 };
 
 function scoreVariant(score: number | null | undefined): keyof typeof SCORE_CLS {
@@ -50,15 +51,21 @@ export function KanbanCard({
   const variant = scoreVariant(candidate.match_score);
   const skills = (candidate.top_skills ?? []).slice(0, 3);
   const aiStatus = candidate.ai_status ?? null;
+  const seniority = candidate.seniority_level ? formatSeniority(candidate.seniority_level) : null;
+  const experience =
+    typeof candidate.total_experience_years === "number"
+      ? `${candidate.total_experience_years} ano${candidate.total_experience_years === 1 ? "" : "s"}`
+      : null;
+  const meta = [seniority, experience].filter(Boolean);
 
   return (
     <div
       onClick={onCardClick}
       className={[
-        "select-none rounded-lg border bg-white p-3 shadow-sm",
-        "transition-all duration-150 hover:shadow-md hover:border-gray-300",
+        "ui-card select-none rounded-2xl p-3.5 transition-all duration-150",
+        "hover:border-[hsl(var(--border-strong))] hover:shadow-md",
         isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
-        onCardClick ? "hover:ring-2 hover:ring-blue-200" : "",
+        onCardClick ? "hover:ring-2 hover:ring-[hsl(var(--primary))]/20" : "",
         "kanban-card-enter",
       ]
         .filter(Boolean)
@@ -67,12 +74,17 @@ export function KanbanCard({
     >
       {/* Name + compatibility score */}
       <div className="flex items-start justify-between gap-2">
-        <span className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900">
-          {candidate.candidate_name}
-        </span>
+        <div className="min-w-0">
+          <span className="line-clamp-2 text-sm font-semibold leading-snug text-[hsl(var(--text))]">
+            {candidate.candidate_name}
+          </span>
+          {meta.length > 0 ? (
+            <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">{meta.join(" · ")}</p>
+          ) : null}
+        </div>
         <div className="shrink-0 text-right">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-            Compat.
+          <div className="text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            Compatibilidade
           </div>
           <span
             className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${SCORE_CLS[variant]}`}
@@ -85,11 +97,11 @@ export function KanbanCard({
 
       {/* Top skills */}
       {skills.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="mt-3 flex flex-wrap gap-1.5">
           {skills.map((skill) => (
             <span
               key={skill}
-              className="rounded-full border border-gray-100 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-500"
+              className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]"
             >
               {skill}
             </span>
@@ -98,22 +110,24 @@ export function KanbanCard({
       ) : null}
 
       {/* Footer: saving state OR ai_status badge */}
-      <div className="mt-1.5 flex items-center justify-between gap-2">
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-[hsl(var(--border))]/80 pt-2.5">
         {isSaving ? (
-          <span className="text-[10px] text-gray-400">Salvando…</span>
+          <span className="text-[10px] text-[hsl(var(--text-muted))]">Salvando…</span>
         ) : (
           <>
-            <span className="text-[10px] text-gray-400" />
+            <span className="text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+              Status da IA
+            </span>
             {aiStatus ? (
               <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${AI_STATUS_CLS[aiStatus]}`}
-                title={AI_STATUS_LABEL[aiStatus]}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums ${AI_STATUS_CLS[aiStatus]}`}
+                title={`Status da IA: ${AI_STATUS_LABEL[aiStatus]}`}
               >
                 {AI_STATUS_LABEL[aiStatus]}
               </span>
             ) : (
-              <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium text-gray-400 ring-1 ring-gray-200">
-                Sem IA
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))] ring-1 ring-[hsl(var(--border))]">
+                Sem status
               </span>
             )}
           </>

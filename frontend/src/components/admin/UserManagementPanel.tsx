@@ -3,55 +3,121 @@ import { useEffect, useState } from "react";
 import { ActionMenu } from "../common/ActionMenu";
 import { CrudPage } from "../common/CrudPage";
 import { Modal } from "../common/Modal";
-import { StatusPill } from "../common/StatusPill";
 import { usersService, CreateUserPayload, PatchUserPayload } from "../../services/usersService";
 import { toast } from "../../services/toast";
 import { Paginated } from "../../types/api";
 import { UserSummary } from "../../types/domain";
 import { UserRole, UserStatus } from "../../types/auth";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer"];
-const STATUSES: UserStatus[] = ["pending_verification", "active", "suspended", "inactive"];
+// ── Constants ──────────────────────────────────────────────────────────
+const ROLES: UserRole[] = ["admin", "recruiter", "viewer", "candidate"];
+const STATUSES: UserStatus[] = ["active", "pending_verification", "suspended", "inactive"];
 
-const EMPTY_CREATE: CreateUserPayload = { email: "", password: "", full_name: "", role: "candidate" };
+const ROLE_LABEL: Record<string, string> = {
+  admin: "Administrador",
+  recruiter: "Recrutador",
+  candidate: "Candidato",
+  viewer: "Leitor",
+};
 
-function formatRole(role: string) {
-  const labels: Record<string, string> = {
-    admin: "Administrador",
-    recruiter: "Recrutador",
-    candidate: "Candidato",
-    viewer: "Leitor",
-  };
-  return labels[role] ?? role;
+const ROLE_CLASS: Record<string, string> = {
+  admin:     "bg-indigo-50 text-indigo-700 border-indigo-200",
+  recruiter: "bg-purple-50 text-purple-700 border-purple-200",
+  viewer:    "bg-gray-100 text-gray-600 border-gray-200",
+  candidate: "bg-green-50 text-green-700 border-green-200",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  active:               "Ativo",
+  pending_verification: "Aguardando validação",
+  suspended:            "Suspenso",
+  inactive:             "Inativo",
+};
+
+const STATUS_CLASS: Record<string, string> = {
+  active:               "bg-green-50 text-green-700 border-green-200",
+  pending_verification: "bg-amber-50 text-amber-700 border-amber-200",
+  suspended:            "bg-red-50 text-red-700 border-red-200",
+  inactive:             "bg-gray-100 text-gray-500 border-gray-200",
+};
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold", ROLE_CLASS[role] ?? "bg-gray-100 text-gray-600 border-gray-200")}>
+      {ROLE_LABEL[role] ?? role}
+    </span>
+  );
 }
 
-function formatStatus(status: string) {
-  const labels: Record<string, string> = {
-    active: "Ativo",
-    pending_verification: "Aguardando validacao",
-    suspended: "Suspenso",
-    inactive: "Inativo",
-  };
-  return labels[status] ?? status;
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold", STATUS_CLASS[status] ?? "bg-gray-100 text-gray-500 border-gray-200")}>
+      {STATUS_LABEL[status] ?? status}
+    </span>
+  );
 }
 
-function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
-  if (status === "active") return "success";
-  if (status === "pending_verification") return "warning";
-  if (status === "suspended") return "danger";
-  return "neutral";
+function Initials({ name }: { name: string }) {
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-bold text-white">
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
 }
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(iso));
+}
+
+// ── Field components ───────────────────────────────────────────────────
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900 dark:text-gray-100">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+const inputCls =
+  "h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100";
+
+const selectCls =
+  "h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100";
+
+const filterSelectCls =
+  "h-9 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100";
+
+function InlineError({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <span className="font-bold">!</span>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+// ── Types ──────────────────────────────────────────────────────────────
+const EMPTY_CREATE: CreateUserPayload = { email: "", password: "", full_name: "", role: "recruiter" };
 
 type UserManagementPanelProps = {
   showSummaryCards?: boolean;
 };
 
+// ── Main component ─────────────────────────────────────────────────────
 export function UserManagementPanel({ showSummaryCards = true }: UserManagementPanelProps) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [data, setData] = useState<Paginated<UserSummary> | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -72,7 +138,15 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
     setLoading(true);
     setLoadError(null);
     try {
-      setData(await usersService.list(page, 20, search || undefined, roleFilter || undefined));
+      setData(
+        await usersService.list(
+          page,
+          20,
+          search || undefined,
+          roleFilter || undefined,
+          statusFilter || undefined,
+        ),
+      );
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Falha ao carregar usuários");
     } finally {
@@ -82,12 +156,20 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
 
   useEffect(() => {
     void load();
-  }, [page, search, roleFilter]);
+  }, [page, search, roleFilter, statusFilter]);
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
     setPage(1);
     setSearch(searchInput);
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setSearchInput("");
+    setRoleFilter("");
+    setStatusFilter("");
+    setPage(1);
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -115,11 +197,14 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
     setEditError(null);
     try {
       const payload: PatchUserPayload = {};
-      if (editForm.full_name) payload.full_name = editForm.full_name;
-      if (editForm.role) payload.role = editForm.role;
-      if (editForm.status) payload.status = editForm.status;
+      if (editForm.full_name && editForm.full_name !== editingUser.full_name) {
+        payload.full_name = editForm.full_name;
+      }
+      if (editForm.role && editForm.role !== editingUser.role) {
+        payload.role = editForm.role;
+      }
       if (Object.keys(payload).length === 0) {
-        setEditError("Nenhuma alteração informada.");
+        setEditError("Nenhuma alteração detectada.");
         return;
       }
       const updated = await usersService.patch(editingUser.id, payload);
@@ -170,92 +255,74 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
   const items = data?.data ?? [];
-  const hasFilters = !!(search || roleFilter);
+  const hasFilters = !!(search || roleFilter || statusFilter);
 
-  const activeCount = items.filter((user) => user.status === "active").length;
-  const adminCount = items.filter((user) => user.role === "admin").length;
+  const activeCount = items.filter((u) => u.status === "active").length;
+  const adminCount  = items.filter((u) => u.role === "admin").length;
 
   return (
     <div className="space-y-6">
+      {/* ── Summary cards ──────────────────────────────────────── */}
       {showSummaryCards ? (
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Usuários</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-900">{total}</div>
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ativos na página</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-900">{activeCount}</div>
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Admins na página</div>
-            <div className="mt-1 text-2xl font-semibold text-gray-900">{adminCount}</div>
-          </div>
+          <SummaryCard label="Total de usuários" value={total} />
+          <SummaryCard label="Ativos nesta página" value={activeCount} />
+          <SummaryCard label="Admins nesta página" value={adminCount} />
         </div>
       ) : null}
 
+      {/* ── Create modal ───────────────────────────────────────── */}
       {showCreateForm ? (
-        <Modal title="Criar usuário" onClose={() => setShowCreateForm(false)}>
+        <Modal title="Novo usuário" onClose={() => setShowCreateForm(false)}>
           <form onSubmit={(e) => void handleCreate(e)} className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
-              Nome completo *
+            <FormField label="Nome completo *">
               <input
                 required
                 value={createForm.full_name}
-                onChange={(e) => setCreateForm((form) => ({ ...form, full_name: e.target.value }))}
+                onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
                 placeholder="Nome completo"
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className={inputCls}
               />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
-              E-mail *
+            </FormField>
+            <FormField label="E-mail *">
               <input
                 required
                 type="email"
                 value={createForm.email}
-                onChange={(e) => setCreateForm((form) => ({ ...form, email: e.target.value }))}
+                onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="email@empresa.com"
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className={inputCls}
               />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
-              Senha *
+            </FormField>
+            <FormField label="Senha *">
               <input
                 required
                 type="password"
                 minLength={8}
                 value={createForm.password}
-                onChange={(e) => setCreateForm((form) => ({ ...form, password: e.target.value }))}
+                onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                 placeholder="Mínimo 8 caracteres"
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className={inputCls}
               />
               {createForm.password && createForm.password.length < 8 ? (
-                <span className="text-xs text-red-600">Senha deve ter pelo menos 8 caracteres</span>
+                <span className="text-xs text-red-600">Mínimo 8 caracteres</span>
               ) : null}
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
-              Perfil
+            </FormField>
+            <FormField label="Perfil">
               <select
                 value={createForm.role}
-                onChange={(e) => setCreateForm((form) => ({ ...form, role: e.target.value }))}
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
+                className={selectCls}
               >
-                {ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {formatRole(role)}
-                  </option>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABEL[r]}</option>
                 ))}
               </select>
-            </label>
-            {createError ? (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                <span className="font-bold">X</span>
-                <span>{createError}</span>
-              </div>
-            ) : null}
+            </FormField>
+            {createError ? <InlineError message={createError} /> : null}
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button type="submit" disabled={createSaving}>
-                {createSaving ? "Salvando..." : "Criar usuário"}
+                {createSaving ? "Criando..." : "Criar usuário"}
               </Button>
               <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
                 Cancelar
@@ -265,54 +332,33 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
         </Modal>
       ) : null}
 
+      {/* ── Edit modal ─────────────────────────────────────────── */}
       {editingUser ? (
         <Modal title={`Editar: ${editingUser.full_name}`} onClose={() => setEditingUser(null)}>
           <form onSubmit={(e) => void handleEdit(e)} className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
-              Nome completo
+            <FormField label="Nome completo">
               <input
                 value={editForm.full_name ?? ""}
-                onChange={(e) => setEditForm((form) => ({ ...form, full_name: e.target.value }))}
+                onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
                 placeholder={editingUser.full_name}
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className={inputCls}
               />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
-              Perfil
+            </FormField>
+            <FormField label="Perfil de acesso">
               <select
-                value={editForm.role ?? ""}
-                onChange={(e) => setEditForm((form) => ({ ...form, role: e.target.value || undefined }))}
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                value={editForm.role ?? editingUser.role}
+                onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
+                className={selectCls}
               >
-                <option value="">- sem alteração -</option>
-                {ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {formatRole(role)}
-                  </option>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABEL[r]}</option>
                 ))}
               </select>
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
-              Status
-              <select
-                value={editForm.status ?? ""}
-                onChange={(e) => setEditForm((form) => ({ ...form, status: e.target.value || undefined }))}
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                <option value="">- sem alteração -</option>
-                {STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {formatStatus(status)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {editError ? (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                <span className="font-bold">X</span>
-                <span>{editError}</span>
-              </div>
-            ) : null}
+            </FormField>
+            <p className="text-xs text-gray-400">
+              Para ativar ou desativar o usuário, use a opção correspondente no menu de ações da tabela.
+            </p>
+            {editError ? <InlineError message={editError} /> : null}
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button type="submit" disabled={editSaving}>
                 {editSaving ? "Salvando..." : "Salvar alterações"}
@@ -325,20 +371,24 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
         </Modal>
       ) : null}
 
+      {/* ── Delete confirm ─────────────────────────────────────── */}
       {confirmDeleteId ? (
         <Modal title="Confirmar exclusão" onClose={() => setConfirmDeleteId(null)}>
-          <p className="text-sm text-gray-600">Tem certeza que deseja excluir este usuário? Esta ação é irreversível.</p>
-          <div className="flex flex-wrap items-center gap-2 pt-2">
+          <p className="text-sm text-gray-600">
+            Tem certeza que deseja excluir este usuário? Esta ação é irreversível.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-3">
             <Button type="button" variant="outline" onClick={() => setConfirmDeleteId(null)}>
               Cancelar
             </Button>
             <Button type="button" variant="destructive" onClick={() => void handleDelete()}>
-              Excluir
+              Excluir permanentemente
             </Button>
           </div>
         </Modal>
       ) : null}
 
+      {/* ── Table ──────────────────────────────────────────────── */}
       <CrudPage<UserSummary>
         onNew={() => {
           setShowCreateForm(true);
@@ -349,28 +399,31 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
         onSearchSubmit={handleSearchSubmit}
-        onSearchClear={hasFilters ? () => {
-          setSearch("");
-          setSearchInput("");
-          setRoleFilter("");
-          setPage(1);
-        } : undefined}
+        onSearchClear={hasFilters ? clearFilters : undefined}
         searchPlaceholder="Buscar por nome ou e-mail..."
         filters={
-          <select
-            value={roleFilter}
-            onChange={(e) => {
-              setRoleFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">Todos os perfis</option>
-            {ROLES.map((role) => (
-              <option key={role} value={role}>
-                {formatRole(role)}
-              </option>
-            ))}
-          </select>
+          <>
+            <select
+              value={roleFilter}
+              onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+              className={filterSelectCls}
+            >
+              <option value="">Todos os perfis</option>
+              {ROLES.map((r) => (
+                <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+              className={filterSelectCls}
+            >
+              <option value="">Todos os status</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+          </>
         }
         loading={loading}
         error={loadError}
@@ -385,15 +438,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
         }
         emptyAction={
           hasFilters
-            ? {
-                label: "Limpar filtros",
-                onClick: () => {
-                  setSearch("");
-                  setSearchInput("");
-                  setRoleFilter("");
-                  setPage(1);
-                },
-              }
+            ? { label: "Limpar filtros", onClick: clearFilters }
             : {
                 label: "+ Novo usuário",
                 onClick: () => {
@@ -403,37 +448,69 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
                 },
               }
         }
-        columns={["Pessoa", "Perfil", "Status", "Ações"]}
+        columns={[
+          "Usuário",
+          { header: "Perfil",       className: "w-36" },
+          { header: "Status",       className: "w-40" },
+          { header: "Criado em",    className: "w-32 hidden lg:table-cell" },
+          { header: "Último acesso", className: "w-32 hidden xl:table-cell" },
+          { header: "Ações",         className: "w-20 text-right" },
+        ]}
         items={items}
         renderRow={(user) => (
-          <tr key={user.id} className="border-b border-gray-200 transition-colors even:bg-gray-50/50 hover:bg-gray-100">
+          <tr
+            key={user.id}
+            className="border-b border-gray-100 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50"
+          >
+            {/* Usuário */}
             <td className="px-4 py-3">
-              <div className="space-y-1">
-                <div className="font-semibold text-gray-900">{user.full_name}</div>
-                <div className="text-xs text-gray-500">{user.email}</div>
+              <div className="flex items-center gap-3">
+                <Initials name={user.full_name} />
+                <div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {user.full_name}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
+                </div>
               </div>
             </td>
+
+            {/* Perfil */}
             <td className="px-4 py-3">
-              <StatusPill label={formatRole(user.role)} tone="neutral" />
+              <RoleBadge role={user.role} />
             </td>
+
+            {/* Status */}
             <td className="px-4 py-3">
-              <StatusPill label={formatStatus(user.status)} tone={statusTone(user.status)} />
+              <StatusBadge status={user.status} />
             </td>
+
+            {/* Criado em */}
+            <td className="hidden px-4 py-3 text-sm text-gray-500 lg:table-cell">
+              {formatDate(user.created_at)}
+            </td>
+
+            {/* Último acesso */}
+            <td className="hidden px-4 py-3 text-sm text-gray-500 xl:table-cell">
+              {formatDate(user.last_login_at)}
+            </td>
+
+            {/* Ações */}
             <td className="px-4 py-3 text-right">
               <ActionMenu
                 buttonLabel={`Ações de ${user.full_name}`}
                 items={[
                   {
-                    label: "Editar",
+                    label: "Editar nome / perfil",
                     onClick: () => {
                       setEditingUser(user);
-                      setEditForm({ full_name: user.full_name, role: user.role, status: user.status });
+                      setEditForm({ full_name: user.full_name, role: user.role });
                       setEditError(null);
                     },
                   },
                   user.status !== "active"
-                    ? { label: "Ativar", onClick: () => void handleActivate(user.id) }
-                    : { label: "Desativar", onClick: () => void handleDeactivate(user.id) },
+                    ? { label: "Ativar conta", onClick: () => void handleActivate(user.id) }
+                    : { label: "Desativar conta", onClick: () => void handleDeactivate(user.id) },
                   { label: "Excluir", tone: "danger", onClick: () => setConfirmDeleteId(user.id) },
                 ]}
               />
@@ -442,15 +519,16 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
         )}
         footer={
           total > 0 ? (
-            <>
+            <div className="flex w-full items-center justify-between">
               <span className="text-sm text-gray-500">
-                Página {page} de {totalPages} · {total} total
+                Página {page} de {totalPages} · {total} {total === 1 ? "usuário" : "usuários"}
               </span>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
                 >
                   Anterior
@@ -458,16 +536,26 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
                 >
                   Próxima
                 </Button>
               </div>
-            </>
+            </div>
           ) : undefined
         }
       />
+    </div>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</div>
     </div>
   );
 }

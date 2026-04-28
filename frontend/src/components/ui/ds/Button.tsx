@@ -9,10 +9,10 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: "bg-blue-600 hover:bg-blue-700 text-white border border-transparent",
-  secondary: "bg-gray-100 hover:bg-gray-200 text-gray-900 border border-gray-200",
-  ghost: "bg-transparent hover:bg-gray-50 text-gray-900 border border-transparent",
-  danger: "bg-red-600 hover:bg-red-700 text-white border border-transparent",
+  primary: "bg-primary hover:bg-primary/90 text-primary-foreground border border-transparent",
+  secondary: "ui-btn-secondary border",
+  ghost: "bg-transparent hover:bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))] border border-transparent",
+  danger: "bg-[hsl(var(--danger))] hover:bg-[hsl(var(--danger))]/90 text-white border border-transparent",
 };
 
 export default function Button({

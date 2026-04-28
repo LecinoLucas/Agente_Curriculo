@@ -48,7 +48,7 @@ async function login(page: Parameters<typeof test>[0]["page"]) {
   await page.goto("/login");
   await page.getByRole("button", { name: "Entrar no painel" }).click();
   await expect(page).toHaveURL(/\/pipeline(\/|$)/);
-  await expect(page.getByRole("heading", { name: "Pipeline" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Novo candidato" })).toBeVisible();
 }
 
 async function waitForUploadGuidance(page: Parameters<typeof test>[0]["page"]) {
@@ -64,9 +64,9 @@ async function waitForUploadGuidance(page: Parameters<typeof test>[0]["page"]) {
 }
 
 async function waitForCandidateCard(page: Parameters<typeof test>[0]["page"], candidateName: string) {
-  const refreshButton = page.getByRole("button", { name: "Atualizar" });
+  const refreshButton = page.getByRole("button", { name: "Atualizar" }).first();
   const card = page.locator("div").filter({ hasText: new RegExp(candidateName) }).filter({
-    hasText: /IA (concluida|processando|na fila|falhou|cancelada)|Sem IA/,
+    hasText: /Status da IA|Concluída|Processando|Na fila|Falhou|Cancelada|Sem status/,
   }).first();
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -108,7 +108,7 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
   await test.step("envia currículo e recebe orientação clara sobre a análise", async () => {
     const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
     await drawer.getByRole("button", { name: "Documentos" }).click();
-    await expect(drawer.getByText("Enviar currículo")).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Enviar currículo" })).toBeVisible();
 
     await drawer.locator('input[type="file"]').setInputFiles({
       name: "backend-profile.pdf",
@@ -125,21 +125,21 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     if (guidance === "manual") {
       const analysisSelect = drawer.getByRole("combobox").last();
       await analysisSelect.selectOption({ index: 1 });
-      await drawer.getByRole("button", { name: "Analisar" }).click();
+      await drawer.getByRole("button", { name: "Iniciar análise da IA" }).click();
       await expect(page.getByRole("alert").filter({ hasText: "Análise iniciada" })).toBeVisible();
     }
 
     await expect(drawer.getByText("Análise concluída")).toBeVisible({ timeout: 45_000 });
     await expect(drawer.getByText("Rastreabilidade da execução")).toBeVisible();
     await expect(drawer.getByText(/Usou IA real/)).toBeVisible();
-    await expect(drawer.getByText(/Resultado principal/)).toBeVisible();
+    await expect(drawer.getByText("Score da IA (análise do currículo)", { exact: true })).toBeVisible();
     await drawer.getByRole("button", { name: "Fechar painel" }).click();
   });
 
   await test.step("o card do kanban mostra o status real da IA", async () => {
     const card = await waitForCandidateCard(page, candidateName);
-    await expect(card).toContainText("IA concluida");
-    await expect(card).toContainText("Compat.");
+    await expect(card).toContainText("Concluída");
+    await expect(card).toContainText("Compatibilidade");
   });
 
   await test.step("o ranking persistido da vaga aparece ao recalcular scoring", async () => {
@@ -157,7 +157,7 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     expect(scoringResponse.ok()).toBeTruthy();
 
     await page.reload();
-    await expect(page.getByText("Ranking da vaga")).toBeVisible();
+    await expect(page.getByText("Ranking da vaga", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: new RegExp(candidateName) })).toBeVisible();
   });
 
@@ -169,7 +169,7 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     await drawer.locator("select").first().selectOption("screening");
     await page.waitForTimeout(1500);
 
-    await drawer.getByRole("button", { name: "Histórico" }).click();
+    await drawer.getByRole("button", { name: "Histórico do pipeline" }).click();
     await expect(drawer.getByText("Histórico real do pipeline")).toBeVisible();
     await expect(drawer.getByText("Recebido → Triagem")).toBeVisible({ timeout: 20_000 });
     await expect(drawer.getByText("Movido manualmente")).toBeVisible();

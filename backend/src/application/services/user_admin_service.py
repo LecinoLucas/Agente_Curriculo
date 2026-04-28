@@ -3,7 +3,7 @@ from uuid import UUID
 
 from src.domain.entities.user import User, UserStatus
 from src.infrastructure.database.models.user_model import UserModel
-from src.infrastructure.repositories.sqlalchemy_user_admin_repository import SQLAlchemyUserAdminRepository
+from src.infrastructure.repositories.sqlalchemy_user_admin_repository import SQLAlchemyUserAdminRepository, UserStats
 from src.interface.api.schemas.user_schemas import PatchUserRequest
 
 
@@ -23,14 +23,18 @@ class UserAdminService:
     def __init__(self, repository: SQLAlchemyUserAdminRepository) -> None:
         self._repository = repository
 
+    async def get_stats(self) -> UserStats:
+        return await self._repository.get_stats()
+
     async def list(
         self,
         page: int,
         page_size: int,
         search: str | None,
         role: str | None,
+        status: str | None = None,
     ) -> tuple[list[UserModel], int]:
-        return await self._repository.list_active(page, page_size, search, role)
+        return await self._repository.list_active(page, page_size, search, role, status)
 
     async def get(self, user_id: UUID) -> UserModel:
         user = await self._repository.find_active_by_id(user_id)

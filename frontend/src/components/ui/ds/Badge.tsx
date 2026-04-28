@@ -9,10 +9,10 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const VARIANT: Record<Variant, string> = {
-  success: "bg-green-50 text-green-700 border-transparent",
-  warning: "bg-yellow-50 text-yellow-800 border-transparent",
-  danger: "bg-red-50 text-red-700 border-transparent",
-  neutral: "bg-gray-100 text-gray-800 border-transparent",
+  success: "ui-badge-success",
+  warning: "ui-badge-warning",
+  danger: "ui-badge-danger",
+  neutral: "ui-badge-neutral",
 };
 
 export default function Badge({ variant = "neutral", className = "", children, ...props }: BadgeProps) {

@@ -38,11 +38,11 @@ export function DataTable<T>({
   skeletonRows = 6,
 }: DataTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <div className="ui-card overflow-hidden rounded-xl">
       {loading ? <SkeletonRows rows={skeletonRows} /> : null}
 
       {error ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-sm text-red-600">
+        <div className="flex items-center gap-2 px-4 py-6 text-sm text-[hsl(var(--danger))]">
           <span className="font-semibold">!</span>
           <span>{error}</span>
         </div>
@@ -61,10 +61,10 @@ export function DataTable<T>({
         <>
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-gray-50">
-                <TableRow className="hover:bg-gray-50">
+              <TableHeader className="ui-surface-muted">
+                <TableRow className="hover:bg-[hsl(var(--surface-muted))]">
                   {columns.map((col, index) => (
-                    <TableHead key={index} className={cn("text-gray-500", col.className)}>
+                    <TableHead key={index} className={cn("ui-text-muted", col.className)}>
                       {col.header}
                     </TableHead>
                   ))}
@@ -79,7 +79,7 @@ export function DataTable<T>({
               </TableBody>
             </Table>
           </div>
-          {footer ? <div className="border-t border-gray-200 bg-gray-50 px-4 py-3">{footer}</div> : null}
+          {footer ? <div className="ui-surface-muted border-t px-4 py-3">{footer}</div> : null}
         </>
       ) : null}
     </div>

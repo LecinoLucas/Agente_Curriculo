@@ -22,15 +22,15 @@ const PAGE_SIZE = 20;
 // ── Formatters ─────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  pending:    { label: "Aguardando",   cls: "bg-gray-100 text-gray-600" },
-  processing: { label: "Processando",  cls: "bg-blue-100 text-blue-700" },
-  completed:  { label: "Concluída",    cls: "bg-green-100 text-green-700" },
-  failed:     { label: "Falhou",       cls: "bg-red-100 text-red-700" },
-  cancelled:  { label: "Cancelado",    cls: "bg-yellow-100 text-yellow-700" },
+  pending:    { label: "Aguardando",   cls: "ui-badge-neutral" },
+  processing: { label: "Processando",  cls: "ui-badge-info" },
+  completed:  { label: "Concluída",    cls: "ui-badge-success" },
+  failed:     { label: "Falhou",       cls: "ui-badge-danger" },
+  cancelled:  { label: "Cancelado",    cls: "ui-badge-warning" },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const c = STATUS_CONFIG[status] ?? { label: status, cls: "bg-gray-100 text-gray-500" };
+  const c = STATUS_CONFIG[status] ?? { label: status, cls: "ui-badge-neutral" };
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${c.cls}`}>
       {c.label}
@@ -39,23 +39,23 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ScoreCell({ score }: { score: number | null }) {
-  if (score == null) return <span className="text-xs text-gray-400">—</span>;
+  if (score == null) return <span className="ui-text-muted text-xs">—</span>;
   const r = Math.round(score);
   const cls =
-    r >= 80 ? "font-semibold text-green-700" :
-    r >= 60 ? "font-semibold text-yellow-700" :
-    "font-semibold text-red-600";
+    r >= 80 ? "font-semibold text-[hsl(var(--success))]" :
+    r >= 60 ? "font-semibold text-[hsl(var(--warning))]" :
+    "font-semibold text-[hsl(var(--danger))]";
   return <span className={`text-sm ${cls}`}>{r}</span>;
 }
 
 function AiBadge({ used }: { used: boolean | null }) {
-  if (used === null) return <span className="text-xs text-gray-400">—</span>;
+  if (used === null) return <span className="ui-text-muted text-xs">—</span>;
   return used ? (
-    <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+    <span className="ui-badge-info inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
       IA Real
     </span>
   ) : (
-    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+    <span className="ui-badge-neutral inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
       Mock
     </span>
   );
@@ -180,11 +180,13 @@ export function AnalisesIaPage() {
   const items = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
+  const isRefreshing = loading && items.length > 0;
+  const showInitialLoading = loading && items.length === 0 && !error;
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-gray-200 bg-white px-6 py-5">
+      <div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-5">
         <PageHeader
           title="Análises IA"
           subtitle={
@@ -201,7 +203,7 @@ export function AnalisesIaPage() {
               type="button"
               onClick={fetchData}
               disabled={loading}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40"
+              className="ui-btn-secondary flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Atualizar
@@ -211,10 +213,10 @@ export function AnalisesIaPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-white px-6 py-3">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-3">
         <div className="relative min-w-[220px] flex-1">
           <svg
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]"
             fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
           >
             <circle cx="11" cy="11" r="8" />
@@ -225,14 +227,14 @@ export function AnalisesIaPage() {
             placeholder="Buscar por candidato…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="ui-input h-9 w-full rounded-lg pl-9 pr-3 text-sm"
           />
         </div>
 
         <select
           value={statusFilter}
           onChange={(e) => handleStatusFilter(e.target.value as StatusFilter)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="ui-input h-9 rounded-lg px-3 text-sm"
         >
           <option value="all">Todos os status</option>
           <option value="pending">Aguardando</option>
@@ -245,7 +247,7 @@ export function AnalisesIaPage() {
         <select
           value={aiFilter}
           onChange={(e) => handleAiFilter(e.target.value as AiFilter)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="ui-input h-9 rounded-lg px-3 text-sm"
         >
           <option value="all">IA real e mock</option>
           <option value="real">Somente IA real</option>
@@ -256,7 +258,7 @@ export function AnalisesIaPage() {
           <button
             type="button"
             onClick={clearFilters}
-            className="h-9 rounded-lg border border-gray-200 px-3 text-sm text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+            className="ui-btn-secondary h-9 rounded-lg px-3 text-sm"
           >
             Limpar filtros
           </button>
@@ -265,56 +267,61 @@ export function AnalisesIaPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
+        {showInitialLoading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-            <p className="text-sm text-gray-500">Carregando análises…</p>
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent" />
+            <p className="ui-text-muted text-sm">Carregando análises…</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
-            <p className="text-sm text-red-600">{error}</p>
-            <button type="button" onClick={fetchData} className="text-sm text-blue-600 hover:underline">
+            <p className="text-sm text-[hsl(var(--danger))]">{error}</p>
+            <button type="button" onClick={fetchData} className="text-sm text-[hsl(var(--primary))] hover:underline">
               Tentar novamente
             </button>
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
-            <p className="text-lg font-medium text-gray-500">
+            <p className="text-lg font-medium text-[hsl(var(--text-muted))]">
               {hasActiveFilters
                 ? "Nenhuma análise corresponde aos filtros atuais"
                 : "Ainda não há análises registradas"}
             </p>
-            <p className="text-sm text-gray-400">
+            <p className="ui-text-muted text-sm">
               {hasActiveFilters
                 ? "Ajuste ou limpe os filtros para ver outras execuções."
                 : "Envie um currículo e inicie uma análise para acompanhar as execuções aqui."}
             </p>
             {hasActiveFilters ? (
-              <button type="button" onClick={clearFilters} className="mt-1 text-sm text-blue-600 hover:underline">
+              <button type="button" onClick={clearFilters} className="mt-1 text-sm text-[hsl(var(--primary))] hover:underline">
                 Limpar filtros
               </button>
             ) : null}
           </div>
         ) : (
           <>
+            {isRefreshing ? (
+              <div className="border-b border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-6 py-2 text-xs text-[hsl(var(--primary))]">
+                Atualizando as análises…
+              </div>
+            ) : null}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-[200px]">
+                  <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]">
+                    <th className="ui-text-muted w-[200px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
                       Candidato
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="ui-text-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
                       Arquivo
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Status
+                      Status da IA
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Score
+                      Score da IA
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      IA
+                      Uso de IA
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Criado em
@@ -327,7 +334,7 @@ export function AnalisesIaPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
+                <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
                   {items.map((item) => (
                     <AnalysisRow
                       key={item.id}
@@ -344,7 +351,7 @@ export function AnalisesIaPage() {
             </div>
 
             {totalPages > 1 ? (
-              <div className="border-t border-gray-100 px-6 py-4">
+              <div className="border-t border-[hsl(var(--border))] px-6 py-4">
                 <Pagination
                   page={page}
                   totalPages={totalPages}
@@ -380,7 +387,7 @@ function AnalysisRow({
   const hasCandidate = Boolean(item.candidate_id);
 
   return (
-    <tr className="group transition-colors hover:bg-gray-50">
+    <tr className="group transition-colors hover:bg-[hsl(var(--surface-muted))]">
       {/* Candidato */}
       <td className="px-6 py-4">
         <button
@@ -389,11 +396,11 @@ function AnalysisRow({
           onClick={onOpen}
           className="text-left disabled:cursor-default"
         >
-          <div className={`font-medium leading-tight ${hasCandidate ? "text-blue-700 hover:underline cursor-pointer" : "text-gray-900"}`}>
-            {item.candidate_name ?? <span className="text-gray-400 italic">Sem nome</span>}
+          <div className={`font-medium leading-tight ${hasCandidate ? "cursor-pointer text-[hsl(var(--primary))] hover:underline" : "text-[hsl(var(--text))]"}`}>
+            {item.candidate_name ?? <span className="ui-text-muted italic">Sem nome</span>}
           </div>
           {item.candidate_email ? (
-            <div className="mt-0.5 text-xs text-gray-500">{item.candidate_email}</div>
+            <div className="ui-text-muted mt-0.5 text-xs">{item.candidate_email}</div>
           ) : null}
         </button>
       </td>
@@ -401,11 +408,11 @@ function AnalysisRow({
       {/* Arquivo */}
       <td className="px-4 py-4">
         {item.resume_file_name ? (
-          <span className="max-w-[180px] truncate block text-xs text-gray-600" title={item.resume_file_name}>
+          <span className="block max-w-[180px] truncate text-xs text-[hsl(var(--text-muted))]" title={item.resume_file_name}>
             {item.resume_file_name}
           </span>
         ) : (
-          <span className="text-xs text-gray-400">—</span>
+          <span className="ui-text-muted text-xs">—</span>
         )}
       </td>
 
@@ -415,14 +422,14 @@ function AnalysisRow({
           <StatusBadge status={item.status} />
           {isFailed && item.failure_reason ? (
             <span
-              className="max-w-[200px] truncate text-xs text-red-500"
+              className="max-w-[200px] truncate text-xs text-[hsl(var(--danger))]"
               title={item.failure_reason}
             >
               {item.failure_reason}
             </span>
           ) : null}
           {item.retry_count > 0 ? (
-            <span className="text-xs text-gray-400">{item.retry_count} tentativa{item.retry_count !== 1 ? "s" : ""}</span>
+            <span className="ui-text-muted text-xs">{item.retry_count} tentativa{item.retry_count !== 1 ? "s" : ""}</span>
           ) : null}
         </div>
       </td>
@@ -438,12 +445,12 @@ function AnalysisRow({
       </td>
 
       {/* Criado em */}
-      <td className="px-4 py-4 text-xs text-gray-500">
+      <td className="ui-text-muted px-4 py-4 text-xs">
         {fmtDate(item.created_at)}
       </td>
 
       {/* Duração */}
-      <td className="px-4 py-4 text-xs text-gray-500">
+      <td className="ui-text-muted px-4 py-4 text-xs">
         {fmtDuration(item.started_at, item.completed_at ?? item.failed_at)}
       </td>
 
@@ -454,7 +461,7 @@ function AnalysisRow({
             <button
               type="button"
               onClick={onOpen}
-              className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
+              className="ui-btn-secondary rounded-lg px-2.5 py-1 text-xs font-medium"
             >
               Abrir
             </button>
@@ -464,9 +471,9 @@ function AnalysisRow({
               type="button"
               onClick={onReprocess}
               disabled={reprocessing}
-              className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+              className="rounded-lg bg-[hsl(var(--primary))] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
             >
-              {reprocessing ? "…" : "Reprocessar"}
+              {reprocessing ? "Reprocessando…" : "Reprocessar"}
             </button>
           ) : null}
         </div>

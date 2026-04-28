@@ -15,11 +15,24 @@ export type PatchUserPayload = {
   status?: string;
 };
 
+export type UserStats = {
+  total_users: number;
+  active_users: number;
+  inactive_users: number;
+  suspended_users: number;
+  pending_users: number;
+  admins: number;
+  recruiters: number;
+  viewers: number;
+  candidates: number;
+};
+
 export const usersService = {
-  list: (page = 1, pageSize = 20, search?: string, role?: string): Promise<Paginated<UserSummary>> => {
+  list: (page = 1, pageSize = 20, search?: string, role?: string, status?: string): Promise<Paginated<UserSummary>> => {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     if (search) params.set("search", search);
     if (role) params.set("role", role);
+    if (status) params.set("status", status);
     return httpRequest<Paginated<UserSummary>>(`/api/v1/users?${params.toString()}`).then((payload) => ({
       data: Array.isArray(payload?.data) ? payload.data : [],
       total: payload?.total ?? 0,
@@ -43,4 +56,32 @@ export const usersService = {
 
   delete: (id: string): Promise<void> =>
     httpRequest<void>(`/api/v1/users/${id}`, { method: "DELETE" }),
+
+  stats: (): Promise<UserStats> =>
+    httpRequest<UserStats>("/api/v1/users/stats"),
+
+  uploadAvatar: (formData: FormData): Promise<UserSummary> =>
+    fetch("/api/v1/users/me/avatar", {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    }).then(async (response) => {
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Falha ao enviar foto de perfil");
+      }
+      return response.json();
+    }),
+
+  deleteAvatar: (): Promise<UserSummary> =>
+    fetch("/api/v1/users/me/avatar", {
+      method: "DELETE",
+      credentials: "include",
+    }).then(async (response) => {
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Falha ao remover foto de perfil");
+      }
+      return response.json();
+    }),
 };

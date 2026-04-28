@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.core.settings import settings
@@ -80,6 +82,12 @@ app.include_router(skills.router, prefix=_PREFIX)
 app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)
 app.include_router(observability.router, prefix=_PREFIX)
+
+
+# ── Static files ──────────────────────────────────────────────────────────────
+uploads_dir = Path(__file__).parent.parent.parent.parent / "uploads"
+if uploads_dir.exists():
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 
 # ── Exception handlers globais ───────────────────────────────────────────────

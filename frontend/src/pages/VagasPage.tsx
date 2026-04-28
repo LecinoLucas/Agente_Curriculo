@@ -246,17 +246,17 @@ export function VagasPage() {
           onClose={() => { setShowForm(false); setEditingJob(null); setForm(EMPTY_FORM); }}
         >
           <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
               Título *
               <input
                 required
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                 placeholder="Ex: Engenheiro de Software Sênior"
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="ui-input h-10 rounded-md px-3 text-sm"
               />
             </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
               Descrição *
               <textarea
                 required
@@ -264,26 +264,26 @@ export function VagasPage() {
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="Descreva as responsabilidades da vaga…"
-                className="min-h-24 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="ui-input min-h-24 rounded-md px-3 py-2 text-sm"
               />
             </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
               Requisitos
               <textarea
                 rows={2}
                 value={form.requirements}
                 onChange={(e) => setForm((f) => ({ ...f, requirements: e.target.value }))}
                 placeholder="Requisitos técnicos e comportamentais…"
-                className="min-h-20 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="ui-input min-h-20 rounded-md px-3 py-2 text-sm"
               />
             </label>
             <div className="grid gap-3 md:grid-cols-3">
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
                 Status
                 <select
                   value={form.status}
                   onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="ui-input h-10 rounded-md px-3 text-sm"
                 >
                   <option value="draft">Rascunho</option>
                   <option value="published">Publicada</option>
@@ -292,12 +292,12 @@ export function VagasPage() {
                   <option value="cancelled">Cancelada</option>
                 </select>
               </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
                 Senioridade
                 <select
                   value={form.seniority_level}
                   onChange={(e) => setForm((f) => ({ ...f, seniority_level: e.target.value }))}
-                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="ui-input h-10 rounded-md px-3 text-sm"
                 >
                   <option value="">—</option>
                   <option value="intern">Estagiário</option>
@@ -309,12 +309,12 @@ export function VagasPage() {
                   <option value="director">Diretor</option>
                 </select>
               </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
                 Modelo de trabalho
                 <select
                   value={form.work_model}
                   onChange={(e) => setForm((f) => ({ ...f, work_model: e.target.value }))}
-                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="ui-input h-10 rounded-md px-3 text-sm"
                 >
                   <option value="">—</option>
                   <option value="remote">Remoto</option>
@@ -323,17 +323,17 @@ export function VagasPage() {
                 </select>
               </label>
             </div>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
               Localização
               <input
                 value={form.location}
                 onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                 placeholder="São Paulo - SP"
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="ui-input h-10 rounded-md px-3 text-sm"
               />
             </label>
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
                 Salário mínimo (BRL)
                 <input
                   type="number"
@@ -341,10 +341,10 @@ export function VagasPage() {
                   value={form.salary_min ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, salary_min: e.target.value ? Number(e.target.value) : undefined }))}
                   placeholder="10000"
-                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="ui-input h-10 rounded-md px-3 text-sm"
                 />
               </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-900">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
                 Salário máximo (BRL)
                 <input
                   type="number"
@@ -352,12 +352,12 @@ export function VagasPage() {
                   value={form.salary_max ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, salary_max: e.target.value ? Number(e.target.value) : undefined }))}
                   placeholder="15000"
-                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="ui-input h-10 rounded-md px-3 text-sm"
                 />
               </label>
             </div>
             {formError ? (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
                 <span className="font-bold">✕</span>
                 <span>{formError}</span>
               </div>
@@ -380,7 +380,7 @@ export function VagasPage() {
 
       {confirmDeleteId ? (
         <Modal title="Confirmar exclusão" onClose={() => setConfirmDeleteId(null)}>
-          <p className="text-sm text-gray-600">Tem certeza que deseja excluir esta vaga? Esta ação é irreversível.</p>
+          <p className="text-sm text-[hsl(var(--text-muted))]">Tem certeza que deseja excluir esta vaga? Esta ação é irreversível.</p>
           <div className="flex flex-wrap items-center gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setConfirmDeleteId(null)}>Cancelar</Button>
             <Button type="button" variant="destructive" onClick={() => void handleDelete()}>Excluir vaga</Button>
@@ -464,26 +464,26 @@ export function VagasPage() {
                 key={job.id}
                 onClick={() => handleSelectJob(job)}
                 className={[
-                  "border-b border-gray-200 transition-colors",
-                  job.id === selectedJob?.id ? "bg-blue-50/70" : "even:bg-gray-50/50 hover:bg-gray-100",
+                  "border-b border-[hsl(var(--border))] transition-colors",
+                  job.id === selectedJob?.id ? "bg-[hsl(var(--accent-soft))]" : "even:bg-[hsl(var(--surface-muted))]/70 hover:bg-[hsl(var(--surface-muted))]",
                 ].join(" ")}
               >
                 <td className="min-w-[280px] px-4 py-3 align-top">
                   <div className="space-y-1">
-                    <div className="font-semibold text-gray-900">{job.title}</div>
-                    <div className="text-sm leading-5 text-gray-600">{truncate(job.description, 140)}</div>
+                    <div className="font-semibold text-[hsl(var(--text))]">{job.title}</div>
+                    <div className="text-sm leading-5 text-[hsl(var(--text-muted))]">{truncate(job.description, 140)}</div>
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 align-top">
                   <StatusPill label={formatJobStatus(job.status)} tone={jobStatusTone(job.status)} />
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700 align-top">
+                <td className="whitespace-nowrap px-4 py-3 text-sm text-[hsl(var(--text-muted))] align-top">
                   {formatSeniority(job.seniority_level)} · {formatWorkModel(job.work_model)}
                 </td>
                 <td className="min-w-[220px] px-4 py-3 align-top">
                   <div className="space-y-1">
-                    <div className="text-sm font-medium text-gray-800">{job.location ?? "—"}</div>
-                    <div className="text-sm text-gray-600">{formatSalary(job)}</div>
+                    <div className="text-sm font-medium text-[hsl(var(--text))]">{job.location ?? "—"}</div>
+                    <div className="text-sm text-[hsl(var(--text-muted))]">{formatSalary(job)}</div>
                   </div>
                 </td>
                 {canManage ? (
@@ -520,40 +520,40 @@ export function VagasPage() {
         }
       >
         {selectedJob && canManage ? (
-          <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800 shadow-sm">
-            <div className="border-b border-slate-700 px-6 py-4">
-              <h3 className="text-lg font-semibold text-white">{selectedJob.title}</h3>
+          <div className="ui-card overflow-hidden rounded-xl shadow-sm">
+            <div className="border-b border-[hsl(var(--border))] px-6 py-4">
+              <h3 className="text-lg font-semibold text-[hsl(var(--text))]">{selectedJob.title}</h3>
             </div>
 
             <div className="grid gap-4 px-6 py-5 md:grid-cols-[160px_1fr] md:gap-x-6">
-              <span className="text-sm font-medium text-slate-400">Status</span>
+              <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Status</span>
               <span>
                 <StatusPill label={formatJobStatus(selectedJob.status)} tone={jobStatusTone(selectedJob.status)} />
               </span>
-              <span className="text-sm font-medium text-slate-400">Perfil</span>
-              <span className="text-sm text-slate-300">{formatSeniority(selectedJob.seniority_level)} · {formatWorkModel(selectedJob.work_model)}</span>
-              <span className="text-sm font-medium text-slate-400">Localização</span>
-              <span className="text-sm text-slate-300">{selectedJob.location ?? "—"}</span>
-              <span className="text-sm font-medium text-slate-400">Faixa salarial</span>
-              <span className="text-sm text-slate-300">{formatSalary(selectedJob)}</span>
-              <span className="text-sm font-medium text-slate-400">Descrição</span>
-              <span className="text-sm leading-6 text-slate-300">{selectedJob.description}</span>
+              <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Perfil</span>
+              <span className="text-sm text-[hsl(var(--text-muted))]">{formatSeniority(selectedJob.seniority_level)} · {formatWorkModel(selectedJob.work_model)}</span>
+              <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Localização</span>
+              <span className="text-sm text-[hsl(var(--text-muted))]">{selectedJob.location ?? "—"}</span>
+              <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Faixa salarial</span>
+              <span className="text-sm text-[hsl(var(--text-muted))]">{formatSalary(selectedJob)}</span>
+              <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Descrição</span>
+              <span className="text-sm leading-6 text-[hsl(var(--text-muted))]">{selectedJob.description}</span>
               {selectedJob.requirements ? (
                 <>
-                  <span className="text-sm font-medium text-slate-400">Requisitos</span>
-                  <span className="text-sm leading-6 text-slate-300">{selectedJob.requirements}</span>
+                  <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Requisitos</span>
+                  <span className="text-sm leading-6 text-[hsl(var(--text-muted))]">{selectedJob.requirements}</span>
                 </>
               ) : null}
             </div>
 
-            <div className="flex flex-wrap gap-2 border-t border-slate-700 px-6 py-4">
+            <div className="flex flex-wrap gap-2 border-t border-[hsl(var(--border))] px-6 py-4">
               <Button type="button" onClick={() => navigate(`/pipeline/${selectedJob.id}`)}>
                 Abrir pipeline
               </Button>
             </div>
 
-            <div className="border-t border-slate-700 px-6 py-4">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Skills vinculadas</h4>
+            <div className="border-t border-[hsl(var(--border))] px-6 py-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Skills vinculadas</h4>
             </div>
             {jobSkills.length === 0 ? (
               <div className="px-6 pb-6">
@@ -561,27 +561,27 @@ export function VagasPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-700">
-                  <thead className="bg-slate-700/30">
+                <table className="min-w-full divide-y divide-[hsl(var(--border))]">
+                  <thead className="bg-[hsl(var(--surface-muted))]">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Skill</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Obrigatória</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Nível mín.</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Anos mín.</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">Peso</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Skill</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Obrigatória</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Nível mín.</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Anos mín.</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Peso</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-700 bg-slate-800">
+                  <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
                     {jobSkills.map((js) => (
-                      <tr key={js.id} className="hover:bg-slate-700/50">
-                        <td className="px-4 py-3 text-sm font-medium text-white">{js.skill_name}</td>
+                      <tr key={js.id} className="hover:bg-[hsl(var(--surface-muted))]">
+                        <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{js.skill_name}</td>
                         <td className="px-4 py-3">
                           <StatusPill label={js.is_mandatory ? "Obrigatória" : "Opcional"} tone={js.is_mandatory ? "warning" : "neutral"} />
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-300">{js.minimum_level ?? "—"}</td>
-                        <td className="px-4 py-3 text-sm text-slate-300">{js.minimum_years ?? "—"}</td>
-                        <td className="px-4 py-3 text-sm text-slate-300">{js.weight}</td>
+                        <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{js.minimum_level ?? "—"}</td>
+                        <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{js.minimum_years ?? "—"}</td>
+                        <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{js.weight}</td>
                         <td className="px-4 py-3 text-right">
                           <Button variant="destructive" size="sm" type="button" onClick={() => void handleRemoveSkill(js.skill_id)}>
                             Remover
@@ -594,11 +594,11 @@ export function VagasPage() {
               </div>
             )}
 
-            <div className="flex flex-col gap-3 border-t border-slate-700 px-6 py-5 lg:flex-row lg:items-center">
+            <div className="flex flex-col gap-3 border-t border-[hsl(var(--border))] px-6 py-5 lg:flex-row lg:items-center">
               <select
                 value={skillToAdd}
                 onChange={(e) => setSkillToAdd(e.target.value)}
-                className="min-h-10 w-full rounded-md border border-slate-600 bg-slate-700 px-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 lg:min-w-[180px] lg:flex-1"
+                className="ui-input min-h-10 w-full rounded-md px-3 text-sm shadow-sm lg:min-w-[180px] lg:flex-1"
               >
                 <option value="">Selecione uma skill…</option>
                 {availableSkills.map((s) => (
@@ -607,10 +607,10 @@ export function VagasPage() {
                   </option>
                 ))}
               </select>
-              <label className="flex items-center gap-2 text-sm text-slate-300">
+              <label className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-500 text-blue-500 focus:ring-blue-500"
+                  className="h-4 w-4 rounded border-[hsl(var(--border-strong))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
                   checked={isMandatory}
                   onChange={(e) => setIsMandatory(e.target.checked)}
                 />
@@ -622,7 +622,7 @@ export function VagasPage() {
             </div>
 
             {skillError ? (
-              <div className="mx-6 mb-6 flex items-center gap-2 rounded-lg border border-red-700/50 bg-red-900/30 px-4 py-3 text-sm text-red-300">
+              <div className="mx-6 mb-6 flex items-center gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
                 <span className="font-bold">✕</span>
                 <span>{skillError}</span>
               </div>

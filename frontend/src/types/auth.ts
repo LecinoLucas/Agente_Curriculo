@@ -8,6 +8,9 @@ export type AuthUser = {
   role: UserRole;
   status: UserStatus;
   real_ai_token_spend_enabled: boolean;
+  last_login_at: string | null;
+  created_at: string | null;
+  avatar_url?: string | null;
 };
 
 export type LoginPayload = {

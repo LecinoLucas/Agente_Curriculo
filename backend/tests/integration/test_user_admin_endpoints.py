@@ -36,6 +36,66 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
 
 
 @pytest.mark.asyncio
+async def test_user_stats_returns_accurate_counts(client: AsyncClient, db_session: AsyncSession):
+    """GET /users/stats deve retornar contagens reais do banco em uma única query."""
+    # Cria usuários com papéis e status variados
+    admin = await _create_active_user(db_session, "stats-admin@test.com", "password123", UserRole.ADMIN)
+    recruiter = await _create_active_user(db_session, "stats-recruiter@test.com", "password123", UserRole.RECRUITER)
+    viewer = await _create_active_user(db_session, "stats-viewer@test.com", "password123", UserRole.VIEWER)
+    headers = await _auth_headers(client, "stats-admin@test.com", "password123")
+
+    # Snapshot antes da criação dos usuários de teste já inclui os 3 acima
+    r = await client.get("/api/v1/users/stats", headers=headers)
+    assert r.status_code == 200
+    data = r.json()
+
+    # Campos obrigatórios presentes
+    required = {
+        "total_users", "active_users", "inactive_users",
+        "suspended_users", "pending_users",
+        "admins", "recruiters", "viewers", "candidates",
+    }
+    assert required.issubset(data.keys())
+
+    # Todos os valores são inteiros não-negativos
+    for field in required:
+        assert isinstance(data[field], int), f"{field} deve ser int"
+        assert data[field] >= 0, f"{field} não pode ser negativo"
+
+    # Os 3 usuários criados acima devem estar refletidos
+    assert data["total_users"] >= 3
+    assert data["active_users"] >= 3
+    assert data["admins"] >= 1
+    assert data["recruiters"] >= 1
+    assert data["viewers"] >= 1
+
+    # Consistência: soma dos papéis não supera o total (usuários deletados são excluídos)
+    role_sum = data["admins"] + data["recruiters"] + data["viewers"] + data["candidates"]
+    assert role_sum <= data["total_users"]
+
+    # Consistência: soma dos status == total_users
+    status_sum = (
+        data["active_users"]
+        + data["inactive_users"]
+        + data["suspended_users"]
+        + data["pending_users"]
+    )
+    assert status_sum == data["total_users"]
+
+    _ = admin, recruiter, viewer  # evita aviso de variável não usada
+
+
+@pytest.mark.asyncio
+async def test_user_stats_requires_admin(client: AsyncClient, db_session: AsyncSession):
+    """Recrutador não deve acessar /users/stats."""
+    await _create_active_user(db_session, "stats-nonadmin@test.com", "password123", UserRole.RECRUITER)
+    headers = await _auth_headers(client, "stats-nonadmin@test.com", "password123")
+
+    r = await client.get("/api/v1/users/stats", headers=headers)
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_recruiter_cannot_create_user(client: AsyncClient, db_session: AsyncSession):
     await _create_active_user(
         db_session,

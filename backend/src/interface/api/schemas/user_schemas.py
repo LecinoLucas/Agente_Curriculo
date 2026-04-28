@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -20,6 +21,9 @@ class UserResponse(BaseModel):
     role: UserRole
     status: UserStatus
     real_ai_token_spend_enabled: bool = False
+    last_login_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    avatar_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -32,3 +36,15 @@ class PatchUserRequest(BaseModel):
 
 class PatchMyProfileRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+
+
+class UserStatsResponse(BaseModel):
+    total_users: int
+    active_users: int
+    inactive_users: int
+    suspended_users: int
+    pending_users: int
+    admins: int
+    recruiters: int
+    viewers: int
+    candidates: int

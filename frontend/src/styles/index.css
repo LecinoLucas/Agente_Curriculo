@@ -5,32 +5,133 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * LIGHT THEME (default)
+   *
+   * Palette direction:
+   *   --bg            off-white cool (93 % lightness)  → body canvas
+   *   --surface       pure white                        → cards / panels
+   *   --surface-muted near-white (96 %)                → table heads, tags
+   *   --border        warm-gray  (82 %)                → visible separation
+   *   --text          near-black with blue tint         → primary text
+   *   --text-muted    medium gray (40 % lightness)      → secondary text
+   *   --primary       vivid blue                        → CTA / badges / focus
+   *   --accent        very-light blue (96 %)            → shadcn hover bg only
+   *   --nav-bg/text   dark navy                         → header bar
+   */
   :root {
-    --background: 220 38% 97%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 224 84% 56%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 35% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 220 35% 96%;
-    --muted-foreground: 215 18% 46%;
-    --accent: 226 100% 95%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 350 89% 60%;
+    /* ── Core surfaces ─────────────────────────────────────────────── */
+    --bg:             220 22% 93%;
+    --surface:        0 0% 100%;
+    --surface-muted:  220 16% 96%;
+    --border:         214 20% 82%;
+    --border-strong:  214 28% 68%;
+
+    /* ── Typography ────────────────────────────────────────────────── */
+    --text:           222 52% 8%;
+    --text-muted:     215 20% 40%;
+
+    /* ── Semantic colors ───────────────────────────────────────────── */
+    --success:        152 84% 28%;
+    --success-soft:   151 72% 93%;
+    --warning:        33  95% 38%;
+    --warning-soft:   48  88% 92%;
+    --danger:         350 89% 48%;
+    --danger-soft:    356 88% 94%;
+
+    /* ── Accent (vivid blue — used by custom .ui-* classes) ─────────
+       NOTE: --accent is re-defined below for shadcn (as a soft hover
+       bg). Custom components MUST reference --primary, not --accent.   */
+    --accent-soft:     226 100% 95%;
+    --accent-contrast: 0 0% 100%;
+
+    /* ── Nav-specific tokens (dark header in light mode) ───────────── */
+    --nav-bg:         222 42% 14%;
+    --nav-text:       210 30% 93%;
+    --nav-muted:      215 20% 62%;
+    --nav-active-bg:  222 32% 22%;
+    --nav-border:     222 30% 20%;
+
+    /* ── shadcn/radix design-token contract ────────────────────────── */
+    --background:          220 22% 93%;
+    --foreground:          222 52% 8%;
+    --card:                0 0% 100%;
+    --card-foreground:     222 52% 8%;
+    --popover:             0 0% 100%;
+    --popover-foreground:  222 52% 8%;
+    --primary:             224 84% 52%;
+    --primary-foreground:  0 0% 100%;
+    --secondary:           220 16% 96%;
+    --secondary-foreground:222 52% 8%;
+    --muted:               220 16% 96%;
+    --muted-foreground:    215 20% 40%;
+    --accent:              220 16% 96%;   /* shadcn: subtle hover bg */
+    --accent-foreground:   222 52% 8%;
+    --destructive:         350 89% 48%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 28% 89%;
-    --input: 214 28% 89%;
-    --ring: 224 84% 56%;
-    --radius: 0.625rem;
-    --sidebar-start: 224 84% 17%;
-    --sidebar-end: 232 55% 22%;
-    --sidebar-accent: 224 84% 56%;
-    --hero-start: 224 84% 56%;
-    --hero-end: 265 83% 63%;
+    --border:              214 20% 82%;
+    --input:               214 20% 82%;
+    --ring:                224 84% 52%;
+    --radius:              0.625rem;
+    --sidebar-start:       222 42% 14%;
+    --sidebar-end:         222 36% 18%;
+    --sidebar-accent:      224 84% 52%;
+    --hero-start:          224 84% 52%;
+    --hero-end:            265 83% 60%;
+  }
+
+  /* ── DARK THEME ─────────────────────────────────────────────────── */
+  :root[data-theme="dark"] {
+    --bg:             222 40% 8%;
+    --surface:        222 31% 12%;
+    --surface-muted:  222 24% 16%;
+    --border:         222 19% 22%;
+    --border-strong:  222 19% 28%;
+
+    --text:           210 40% 96%;
+    --text-muted:     215 20% 70%;
+
+    --success:        160 84% 72%;
+    --success-soft:   160 40% 18%;
+    --warning:        41  100% 72%;
+    --warning-soft:   38  45% 18%;
+    --danger:         352 84% 72%;
+    --danger-soft:    352 38% 18%;
+
+    --accent-soft:     223 32% 18%;
+    --accent-contrast: 222 47% 11%;
+
+    /* Nav: slightly darker than body for subtle hierarchy */
+    --nav-bg:         222 48% 6%;
+    --nav-text:       210 40% 96%;
+    --nav-muted:      215 20% 65%;
+    --nav-active-bg:  222 31% 14%;
+    --nav-border:     222 22% 14%;
+
+    --background:          222 40% 8%;
+    --foreground:          210 40% 96%;
+    --card:                222 31% 12%;
+    --card-foreground:     210 40% 96%;
+    --popover:             222 31% 12%;
+    --popover-foreground:  210 40% 96%;
+    --primary:             213 94% 68%;
+    --primary-foreground:  222 47% 11%;
+    --secondary:           222 24% 16%;
+    --secondary-foreground:210 40% 96%;
+    --muted:               222 24% 16%;
+    --muted-foreground:    215 20% 70%;
+    --accent:              223 32% 18%;
+    --accent-foreground:   210 40% 96%;
+    --destructive:         352 84% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --border:              222 19% 22%;
+    --input:               222 19% 22%;
+    --ring:                213 94% 68%;
+    --sidebar-start:       222 40% 8%;
+    --sidebar-end:         225 35% 12%;
+    --sidebar-accent:      213 94% 68%;
+    --hero-start:          213 94% 68%;
+    --hero-end:            255 88% 72%;
   }
 
   * {
@@ -38,15 +139,28 @@
     border-color: hsl(var(--border));
   }
 
+  html {
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
   body {
-    background:
-      radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 28%),
-      radial-gradient(circle at top right, rgba(168, 85, 247, 0.10), transparent 24%),
-      linear-gradient(180deg, hsl(var(--background)) 0%, #eef4ff 100%);
-    color: hsl(var(--foreground));
+    background: hsl(var(--bg));
+    color: hsl(var(--text));
     font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  :root[data-theme="dark"] body {
+    background:
+      radial-gradient(circle at top left,  rgba(56, 189, 248, 0.12), transparent 24%),
+      radial-gradient(circle at top right, rgba(129, 140, 248, 0.14), transparent 22%),
+      linear-gradient(180deg, #08111f 0%, #0f172a 52%, #111827 100%);
+    color: hsl(var(--text));
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -57,6 +171,247 @@
   ::selection {
     background: rgba(37, 99, 235, 0.18);
     color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  .ui-surface {
+    background-color: hsl(var(--surface));
+    color: hsl(var(--text));
+    border-color: hsl(var(--border));
+  }
+
+  .ui-surface-muted {
+    background-color: hsl(var(--surface-muted));
+    color: hsl(var(--text));
+    border-color: hsl(var(--border));
+  }
+
+  .ui-card {
+    background-color: hsl(var(--surface));
+    color: hsl(var(--text));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 3px 0 hsl(var(--text) / 0.06), 0 1px 2px -1px hsl(var(--text) / 0.04);
+  }
+
+  .ui-heading {
+    color: hsl(var(--text));
+  }
+
+  .ui-text-muted {
+    color: hsl(var(--text-muted));
+  }
+
+  .ui-input {
+    background-color: hsl(var(--surface));
+    color: hsl(var(--text));
+    border-color: hsl(var(--border));
+  }
+
+  .ui-input::placeholder {
+    color: hsl(var(--text-muted));
+  }
+
+  .ui-input:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.16);
+    outline: none;
+  }
+
+  .ui-btn-secondary {
+    background-color: hsl(var(--surface));
+    color: hsl(var(--text));
+    border: 1px solid hsl(var(--border));
+  }
+
+  .ui-btn-secondary:hover {
+    background-color: hsl(var(--surface-muted));
+  }
+
+  .ui-btn-danger {
+    background-color: hsl(var(--danger-soft));
+    color: hsl(var(--danger));
+    border-color: hsl(var(--danger) / 0.28);
+  }
+
+  .ui-btn-danger:hover {
+    background-color: hsl(var(--danger) / 0.16);
+  }
+
+  /*
+   * Badge classes use --primary (vivid blue) for the info tint,
+   * NOT --accent (which is the shadcn hover bg and may be near-white).
+   */
+  .ui-badge-info {
+    background-color: hsl(var(--accent-soft));
+    color: hsl(var(--primary));
+    border-color: hsl(var(--primary) / 0.28);
+  }
+
+  .ui-badge-success {
+    background-color: hsl(var(--success-soft));
+    color: hsl(var(--success));
+    border-color: hsl(var(--success) / 0.28);
+  }
+
+  .ui-badge-warning {
+    background-color: hsl(var(--warning-soft));
+    color: hsl(var(--warning));
+    border-color: hsl(var(--warning) / 0.30);
+  }
+
+  .ui-badge-danger {
+    background-color: hsl(var(--danger-soft));
+    color: hsl(var(--danger));
+    border-color: hsl(var(--danger) / 0.28);
+  }
+
+  .ui-badge-neutral {
+    background-color: hsl(var(--surface-muted));
+    color: hsl(var(--text-muted));
+    border-color: hsl(var(--border));
+  }
+}
+
+@layer utilities {
+  /* ── Dark-theme overrides for hardcoded Tailwind classes ─────────── */
+  :root[data-theme="dark"] .bg-white {
+    background-color: hsl(var(--surface)) !important;
+  }
+
+  :root[data-theme="dark"] .bg-gray-50,
+  :root[data-theme="dark"] .bg-gray-100,
+  :root[data-theme="dark"] .bg-slate-50,
+  :root[data-theme="dark"] .bg-slate-100 {
+    background-color: hsl(var(--surface-muted)) !important;
+  }
+
+  :root[data-theme="dark"] .bg-blue-50,
+  :root[data-theme="dark"] .bg-indigo-50,
+  :root[data-theme="dark"] .bg-purple-100 {
+    background-color: hsl(var(--accent-soft)) !important;
+  }
+
+  :root[data-theme="dark"] .bg-green-50,
+  :root[data-theme="dark"] .bg-green-100,
+  :root[data-theme="dark"] .bg-emerald-50,
+  :root[data-theme="dark"] .bg-emerald-100 {
+    background-color: hsl(var(--success-soft)) !important;
+  }
+
+  :root[data-theme="dark"] .bg-yellow-50,
+  :root[data-theme="dark"] .bg-yellow-100,
+  :root[data-theme="dark"] .bg-amber-50,
+  :root[data-theme="dark"] .bg-amber-100 {
+    background-color: hsl(var(--warning-soft)) !important;
+  }
+
+  :root[data-theme="dark"] .bg-red-50,
+  :root[data-theme="dark"] .bg-red-100,
+  :root[data-theme="dark"] .bg-rose-100 {
+    background-color: hsl(var(--danger-soft)) !important;
+  }
+
+  :root[data-theme="dark"] .text-gray-950,
+  :root[data-theme="dark"] .text-gray-900,
+  :root[data-theme="dark"] .text-gray-800,
+  :root[data-theme="dark"] .text-slate-950,
+  :root[data-theme="dark"] .text-slate-900,
+  :root[data-theme="dark"] .text-white {
+    color: hsl(var(--text)) !important;
+  }
+
+  :root[data-theme="dark"] .text-gray-700,
+  :root[data-theme="dark"] .text-gray-600,
+  :root[data-theme="dark"] .text-gray-500,
+  :root[data-theme="dark"] .text-gray-400,
+  :root[data-theme="dark"] .text-slate-700,
+  :root[data-theme="dark"] .text-slate-600,
+  :root[data-theme="dark"] .text-slate-500,
+  :root[data-theme="dark"] .text-slate-400 {
+    color: hsl(var(--text-muted)) !important;
+  }
+
+  :root[data-theme="dark"] .text-blue-900,
+  :root[data-theme="dark"] .text-blue-800,
+  :root[data-theme="dark"] .text-blue-700,
+  :root[data-theme="dark"] .text-blue-600,
+  :root[data-theme="dark"] .text-indigo-700,
+  :root[data-theme="dark"] .text-purple-700 {
+    color: hsl(var(--primary)) !important;
+  }
+
+  :root[data-theme="dark"] .text-green-800,
+  :root[data-theme="dark"] .text-green-700,
+  :root[data-theme="dark"] .text-green-600,
+  :root[data-theme="dark"] .text-emerald-700,
+  :root[data-theme="dark"] .text-emerald-600 {
+    color: hsl(var(--success)) !important;
+  }
+
+  :root[data-theme="dark"] .text-yellow-800,
+  :root[data-theme="dark"] .text-yellow-700,
+  :root[data-theme="dark"] .text-amber-800,
+  :root[data-theme="dark"] .text-amber-700,
+  :root[data-theme="dark"] .text-amber-600 {
+    color: hsl(var(--warning)) !important;
+  }
+
+  :root[data-theme="dark"] .text-red-800,
+  :root[data-theme="dark"] .text-red-700,
+  :root[data-theme="dark"] .text-red-600,
+  :root[data-theme="dark"] .text-rose-700 {
+    color: hsl(var(--danger)) !important;
+  }
+
+  :root[data-theme="dark"] .border-gray-100,
+  :root[data-theme="dark"] .border-gray-200,
+  :root[data-theme="dark"] .border-gray-300,
+  :root[data-theme="dark"] .border-slate-200,
+  :root[data-theme="dark"] .border-slate-700,
+  :root[data-theme="dark"] .divide-gray-100,
+  :root[data-theme="dark"] .divide-slate-700 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  :root[data-theme="dark"] .border-blue-100,
+  :root[data-theme="dark"] .border-blue-200,
+  :root[data-theme="dark"] .border-blue-300 {
+    border-color: hsl(var(--primary) / 0.24) !important;
+  }
+
+  :root[data-theme="dark"] .border-red-200 {
+    border-color: hsl(var(--danger) / 0.24) !important;
+  }
+
+  :root[data-theme="dark"] .border-amber-200,
+  :root[data-theme="dark"] .border-yellow-200 {
+    border-color: hsl(var(--warning) / 0.24) !important;
+  }
+
+  :root[data-theme="dark"] .border-green-200,
+  :root[data-theme="dark"] .border-emerald-200 {
+    border-color: hsl(var(--success) / 0.24) !important;
+  }
+
+  :root[data-theme="dark"] .hover\:bg-gray-50:hover,
+  :root[data-theme="dark"] .hover\:bg-gray-100:hover,
+  :root[data-theme="dark"] .hover\:bg-slate-50:hover,
+  :root[data-theme="dark"] .hover\:bg-slate-100:hover,
+  :root[data-theme="dark"] .even\:bg-gray-50\/50:nth-child(even) {
+    background-color: hsl(var(--surface-muted)) !important;
+  }
+
+  :root[data-theme="dark"] .hover\:bg-blue-50:hover,
+  :root[data-theme="dark"] .bg-blue-50\/70,
+  :root[data-theme="dark"] .data-\[state\=selected\]\:bg-blue-50[data-state="selected"] {
+    background-color: hsl(var(--accent-soft)) !important;
+  }
+
+  :root[data-theme="dark"] .shadow-sm,
+  :root[data-theme="dark"] .shadow-lg,
+  :root[data-theme="dark"] .shadow-2xl {
+    box-shadow: 0 18px 46px -30px rgba(0, 0, 0, 0.72) !important;
   }
 }
 

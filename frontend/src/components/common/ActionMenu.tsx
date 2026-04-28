@@ -12,10 +12,11 @@ export type ActionMenuItem = {
 type ActionMenuProps = {
   items: ActionMenuItem[];
   className?: string;
+  buttonClassName?: string;
   buttonLabel?: string;
 };
 
-export function ActionMenu({ items, className, buttonLabel = "Abrir menu" }: ActionMenuProps) {
+export function ActionMenu({ items, className, buttonClassName, buttonLabel = "Abrir menu" }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
 
   const visibleItems = useMemo(() => items.filter(Boolean), [items]);
@@ -26,7 +27,10 @@ export function ActionMenu({ items, className, buttonLabel = "Abrir menu" }: Act
     <div className={cn("relative inline-flex", className)}>
       <button
         type="button"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-white text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+        className={cn(
+          "ui-btn-secondary inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors",
+          buttonClassName,
+        )}
         aria-label={buttonLabel}
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
@@ -42,7 +46,7 @@ export function ActionMenu({ items, className, buttonLabel = "Abrir menu" }: Act
             aria-label="Fechar menu"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-11 z-30 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div className="ui-card absolute right-0 top-11 z-30 w-48 overflow-hidden rounded-xl">
             {visibleItems.map((item) => (
               <button
                 key={item.label}
@@ -53,8 +57,8 @@ export function ActionMenu({ items, className, buttonLabel = "Abrir menu" }: Act
                   item.onClick();
                 }}
                 className={cn(
-                  "flex w-full items-center px-3 py-2.5 text-left text-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50",
-                  item.tone === "danger" ? "text-red-600 hover:bg-red-50" : "text-gray-700"
+                  "flex w-full items-center px-3 py-2.5 text-left text-sm transition-colors hover:bg-[hsl(var(--surface-muted))] disabled:cursor-not-allowed disabled:opacity-50",
+                  item.tone === "danger" ? "text-[hsl(var(--danger))]" : "text-[hsl(var(--text))]"
                 )}
               >
                 {item.label}

@@ -64,7 +64,7 @@ export interface PipelineContextValue extends PipelineState {
   refreshBoard: () => Promise<void>;
 
   // Candidate panel
-  openCandidate: (candidateId: string) => Promise<void>;
+  openCandidate: (candidateId: string, initialTab?: PanelTab) => Promise<void>;
   closeCandidate: () => void;
   switchPanelTab: (tab: PanelTab) => void;
   refreshCandidateOverview: () => Promise<void>;
@@ -377,7 +377,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   // ── Candidate panel ────────────────────────────────────────────────────────
 
-  const openCandidate = useCallback(async (candidateId: string) => {
+  const openCandidate = useCallback(async (candidateId: string, initialTab: PanelTab = "ranking") => {
     selectedCandidateIdRef.current = candidateId;
 
     const cached = candidateCacheRef.current.get(candidateId);
@@ -388,7 +388,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         candidateOverview: cached,
         candidateLoading: false,
         candidateError: null,
-        activePanelTab: "ranking",
+        activePanelTab: initialTab,
       }));
       return;
     }
@@ -399,7 +399,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       candidateOverview: null,
       candidateLoading: true,
       candidateError: null,
-      activePanelTab: "ranking",
+      activePanelTab: initialTab,
     }));
 
     try {

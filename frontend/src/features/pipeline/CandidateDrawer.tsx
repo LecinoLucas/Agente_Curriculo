@@ -24,7 +24,7 @@ import { type PanelTab, usePipeline } from "./PipelineContext";
 const DRAWER_TABS = [
   { key: "ranking" satisfies PanelTab, label: "Compatibilidade" },
   { key: "analysis" satisfies PanelTab, label: "Análise IA" },
-  { key: "history" satisfies PanelTab, label: "Histórico" },
+  { key: "history" satisfies PanelTab, label: "Histórico do pipeline" },
   { key: "documents" satisfies PanelTab, label: "Documentos" },
 ];
 
@@ -57,19 +57,63 @@ function fmtScore(score: number | null | undefined): string {
 }
 
 function scoreColorClass(score: number | null | undefined): string {
-  if (score == null) return "text-gray-400";
+  if (score == null) return "text-[hsl(var(--text-muted))]";
   const n = score > 1 ? score / 100 : score;
-  if (n >= 0.7) return "text-emerald-600";
-  if (n >= 0.4) return "text-amber-600";
-  return "text-red-500";
+  if (n >= 0.7) return "text-[hsl(var(--success))]";
+  if (n >= 0.4) return "text-[hsl(var(--warning))]";
+  return "text-[hsl(var(--danger))]";
 }
 
 function scoreBgClass(score: number | null | undefined): string {
-  if (score == null) return "bg-gray-50 ring-gray-200";
+  if (score == null) return "bg-[hsl(var(--surface-muted))] ring-[hsl(var(--border))]";
   const n = score > 1 ? score / 100 : score;
-  if (n >= 0.7) return "bg-emerald-50 ring-emerald-200";
-  if (n >= 0.4) return "bg-amber-50 ring-amber-200";
-  return "bg-red-50 ring-red-200";
+  if (n >= 0.7) return "bg-[hsl(var(--success-soft))] ring-[hsl(var(--success))]/25";
+  if (n >= 0.4) return "bg-[hsl(var(--warning-soft))] ring-[hsl(var(--warning))]/25";
+  return "bg-[hsl(var(--danger-soft))] ring-[hsl(var(--danger))]/25";
+}
+
+function getCompatibilityGuidance(params: {
+  hasPipelineEntry: boolean;
+  hasResume: boolean;
+  analysisStatus: CandidateOverview["latest_analysis"] extends infer T
+    ? T extends { status: infer S }
+      ? S | null
+      : null
+    : null;
+}): {
+  title: string;
+  description: string;
+  tone: "neutral" | "info";
+} | null {
+  if (!params.hasPipelineEntry) {
+    return {
+      title: "Compatibilidade indisponível",
+      description: "Associe o candidato a esta vaga para calcular a compatibilidade",
+      tone: "neutral",
+    };
+  }
+  if (!params.hasResume) {
+    return {
+      title: "Compatibilidade indisponível",
+      description: "Envie um currículo para calcular a compatibilidade",
+      tone: "neutral",
+    };
+  }
+  if (params.analysisStatus === "pending" || params.analysisStatus === "processing") {
+    return {
+      title: "Análise da IA em processamento...",
+      description: "Isso pode levar alguns segundos",
+      tone: "info",
+    };
+  }
+  if (params.analysisStatus !== "completed") {
+    return {
+      title: "Compatibilidade indisponível",
+      description: "Execute a análise da IA para ver a compatibilidade",
+      tone: "neutral",
+    };
+  }
+  return null;
 }
 
 // ── CandidateDrawer ────────────────────────────────────────────────────────────
@@ -83,6 +127,7 @@ export function CandidateDrawer() {
     activePanelTab,
     activeJobId,
     closeCandidate,
+    openCandidate,
     switchPanelTab,
     moveCandidateStage,
   } = usePipeline();
@@ -172,6 +217,18 @@ export function CandidateDrawer() {
   }
 
   const candidate = candidateOverview?.candidate;
+  const activePipelineEntry = useMemo(() => {
+    if (!activeJobId || !candidateOverview) return null;
+    return candidateOverview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null;
+  }, [activeJobId, candidateOverview]);
+
+  const activeJobCompatibilityScore = activePipelineEntry?.match_score ?? null;
+  const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
+  const compatibilityGuidance = getCompatibilityGuidance({
+    hasPipelineEntry: activePipelineEntry !== null,
+    hasResume,
+    analysisStatus: candidateOverview?.latest_analysis?.status ?? null,
+  });
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -191,13 +248,13 @@ export function CandidateDrawer() {
         aria-modal="true"
         aria-label="Painel do candidato"
         className={[
-          "fixed inset-y-0 right-0 z-50 flex w-[480px] flex-col bg-white shadow-2xl",
+          "fixed inset-y-0 right-0 z-50 flex w-[480px] flex-col bg-[hsl(var(--surface))] shadow-2xl",
           "transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
       >
         {/* Header */}
-        <div className="flex shrink-0 flex-col gap-3 border-b border-gray-100 px-5 py-4">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-[hsl(var(--border))] px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-bold text-white shadow-sm">
@@ -205,16 +262,16 @@ export function CandidateDrawer() {
               </div>
               <div className="min-w-0">
                 {candidateLoading ? (
-                  <div className="h-4 w-40 animate-pulse rounded bg-gray-200" />
+                  <div className="h-4 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
                 ) : (
-                  <p className="truncate text-sm font-semibold text-gray-900">
+                  <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
                     {candidate?.full_name ?? "—"}
                   </p>
                 )}
                 {candidateLoading ? (
-                  <div className="mt-1.5 h-3 w-32 animate-pulse rounded bg-gray-100" />
+                  <div className="mt-1.5 h-3 w-32 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
                 ) : (
-                  <p className="truncate text-xs text-gray-500">
+                  <p className="truncate text-xs text-[hsl(var(--text-muted))]">
                     {[candidate?.email, candidate?.location_city, candidate?.location_state]
                       .filter(Boolean)
                       .join(" · ") || "Sem contato"}
@@ -226,7 +283,7 @@ export function CandidateDrawer() {
             <button
               type="button"
               onClick={closeCandidate}
-              className="shrink-0 rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+              className="shrink-0 rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
               aria-label="Fechar painel"
             >
               ✕
@@ -238,7 +295,7 @@ export function CandidateDrawer() {
               {candidate.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-500"
+                  className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[11px] text-[hsl(var(--text-muted))]"
                 >
                   {tag}
                 </span>
@@ -247,25 +304,63 @@ export function CandidateDrawer() {
           ) : null}
 
           {activeJobId && !candidateLoading ? (
-            <div className="flex items-center gap-2">
-              <span className="shrink-0 text-xs font-medium text-gray-500">Etapa:</span>
-              {currentStage ? (
-                <select
-                  value={currentStage}
-                  onChange={(e) => void handleStageChange(e.target.value as PipelineStage)}
-                  disabled={stageSaving}
-                  className="h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-200 disabled:opacity-50"
-                >
-                  {STAGE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {stageSaving && currentStage === opt.value ? "Salvando…" : opt.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="text-xs text-gray-400">Não vinculado a esta vaga</span>
-              )}
-            </div>
+            <>
+              <div className="rounded-xl border border-[hsl(var(--primary))]/14 bg-[hsl(var(--accent-soft))] px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--primary))]">
+                      Compatibilidade com a vaga
+                    </p>
+                    <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                      {compatibilityGuidance?.description ?? "Principal indicador para decidir o avanço nesta vaga."}
+                    </p>
+                  </div>
+                  {compatibilityGuidance ? (
+                    <div
+                      className={[
+                        "max-w-[14rem] rounded-2xl border px-3 py-2 text-right text-xs font-medium leading-relaxed shadow-sm",
+                        compatibilityGuidance.tone === "info"
+                          ? "border-[hsl(var(--primary))]/18 bg-[hsl(var(--surface))] text-[hsl(var(--primary))]"
+                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))]",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-center justify-end gap-2">
+                        {compatibilityGuidance.tone === "info" ? (
+                          <span className="inline-flex h-2 w-2 rounded-full bg-[hsl(var(--primary))] animate-pulse" aria-hidden="true" />
+                        ) : null}
+                        <span>{compatibilityGuidance.title}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className={`inline-flex min-w-[5rem] items-center justify-center rounded-2xl px-3 py-2 text-2xl font-extrabold tabular-nums ring-1 ${scoreBgClass(activeJobCompatibilityScore)} ${scoreColorClass(activeJobCompatibilityScore)}`}
+                    >
+                      {fmtScore(activeJobCompatibilityScore)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="shrink-0 text-xs font-medium text-[hsl(var(--text-muted))]">Etapa:</span>
+                {currentStage ? (
+                  <select
+                    value={currentStage}
+                    onChange={(e) => void handleStageChange(e.target.value as PipelineStage)}
+                    disabled={stageSaving}
+                    className="ui-input h-7 rounded-lg px-2 text-xs disabled:opacity-50"
+                  >
+                    {STAGE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {stageSaving && currentStage === opt.value ? "Salvando…" : opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-xs text-[hsl(var(--text-muted))]">Não vinculado a esta vaga</span>
+                )}
+              </div>
+            </>
           ) : null}
         </div>
 
@@ -280,17 +375,39 @@ export function CandidateDrawer() {
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto">
-          {candidateLoading ? <LoadingSkeleton /> : null}
+          {candidateLoading ? (
+            <div className="p-5">
+              <div className="mb-4 rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3">
+                <p className="text-sm font-semibold text-[hsl(var(--text))]">Carregando candidato…</p>
+                <p className="mt-1 text-xs text-[hsl(var(--primary))]">
+                  Buscando documentos, análise e histórico do pipeline.
+                </p>
+              </div>
+              <LoadingSkeleton />
+            </div>
+          ) : null}
 
           {!candidateLoading && candidateError ? (
-            <div className="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {candidateError}
+            <div className="m-5 rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-4 text-sm text-[hsl(var(--danger))]">
+              <p className="font-semibold text-[hsl(var(--danger))]">Não foi possível abrir este candidato.</p>
+              <p className="mt-1">{candidateError}</p>
+              {selectedCandidateId ? (
+                <button
+                  type="button"
+                  onClick={() => void openCandidate(selectedCandidateId)}
+                  className="mt-3 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--surface))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--danger))] transition hover:bg-[hsl(var(--danger-soft))]"
+                >
+                  Tentar novamente
+                </button>
+              ) : null}
             </div>
           ) : null}
 
           {!candidateLoading && !candidateError && candidateOverview ? (
             <>
-              {activePanelTab === "ranking" && <ScoreTab overview={candidateOverview} />}
+              {activePanelTab === "ranking" && (
+                <CompatibilityTab overview={candidateOverview} activeJobId={activeJobId} />
+              )}
               {activePanelTab === "analysis" && (
                 <AnalysisTab
                   overview={candidateOverview}
@@ -316,11 +433,19 @@ export function CandidateDrawer() {
 }
 
 // ── Tab: Compatibilidade ───────────────────────────────────────────────────────
-// Shows the latest AI score separately from candidate-job compatibility signals.
-// All data comes from CandidateOverview — zero extra fetch.
+// Keeps the hiring signal focused on job fit, while AI score stays in Analysis.
 
-function ScoreTab({ overview }: { overview: CandidateOverview }) {
+function CompatibilityTab({
+  overview,
+  activeJobId,
+}: {
+  overview: CandidateOverview;
+  activeJobId: string | null;
+}) {
   const { latest_analysis, latest_analysis_pipeline, top_matches } = overview;
+  const activeJobMatch = activeJobId
+    ? top_matches.find((match) => match.job_id === activeJobId) ?? null
+    : null;
 
   if (!latest_analysis) {
     return (
@@ -333,40 +458,44 @@ function ScoreTab({ overview }: { overview: CandidateOverview }) {
 
   return (
     <div className="flex flex-col gap-6 p-5">
-      {/* AI score */}
-      <div className="flex items-center gap-4">
-        <div
-          className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl ring-2 ${scoreBgClass(latest_analysis.overall_score)}`}
-        >
-          <span
-            className={`text-3xl font-extrabold tabular-nums ${scoreColorClass(latest_analysis.overall_score)}`}
-          >
-            {fmtScore(latest_analysis.overall_score)}
-          </span>
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Score da IA</p>
-          <p className="mt-1 text-sm font-medium text-gray-900">
-            {latest_analysis.seniority_level ?? "Senioridade não identificada"}
-          </p>
-          {latest_analysis.total_experience_years != null ? (
-            <p className="mt-0.5 text-xs text-gray-500">
-              {latest_analysis.total_experience_years}{" "}
-              {latest_analysis.total_experience_years === 1 ? "ano" : "anos"} de experiência
-            </p>
-          ) : null}
-        </div>
+      <div className="rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--primary))]">
+          Posição entre candidatos
+        </p>
+        <p className="mt-1 text-xs text-[hsl(var(--text))]">
+          O ranking da vaga continua disponível como contexto no painel lateral. Aqui o foco é a
+          compatibilidade com a vaga selecionada.
+        </p>
       </div>
 
-      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-          Ranking da vaga
-        </p>
-        <p className="mt-1 text-xs text-blue-900">
-          Ainda nao exibido nesta tela. Nesta aba voce ve compatibilidade; o ranking persistido da
-          vaga sera mostrado separadamente.
-        </p>
-      </div>
+      {activeJobMatch ? (
+        <Section title="Compatibilidade com a vaga">
+          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
+                  {activeJobMatch.job_title}
+                </p>
+                {activeJobMatch.recommendation ? (
+                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                    {activeJobMatch.recommendation}
+                  </p>
+                ) : null}
+              </div>
+              <div className="ml-3 shrink-0 text-right">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  Compatibilidade com a vaga
+                </div>
+                <span
+                  className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-sm font-bold tabular-nums ring-1 ${scoreBgClass(activeJobMatch.match_score)} ${scoreColorClass(activeJobMatch.match_score)}`}
+                >
+                  {fmtScore(activeJobMatch.match_score)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </Section>
+      ) : null}
 
       {latest_analysis_pipeline ? (
         <Section title="Compatibilidade com vagas publicadas">
@@ -392,17 +521,17 @@ function ScoreTab({ overview }: { overview: CandidateOverview }) {
             {top_matches.map((match) => (
               <div
                 key={`${match.analysis_id}-${match.job_id}`}
-                className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5"
+                className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-gray-900">{match.job_title}</p>
+                  <p className="truncate text-xs font-medium text-[hsl(var(--text))]">{match.job_title}</p>
                   {match.recommendation ? (
-                    <p className="truncate text-[11px] text-gray-500">{match.recommendation}</p>
+                    <p className="truncate text-[11px] text-[hsl(var(--text-muted))]">{match.recommendation}</p>
                   ) : null}
                 </div>
                 <div className="ml-3 shrink-0 text-right">
-                  <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                    Compatibilidade
+                  <div className="text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    Compatibilidade com a vaga
                   </div>
                   <span
                     className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
@@ -533,6 +662,9 @@ function AnalysisTab({
   const readyResumes = overview.resumes.filter(
     (r) => r.status === "active" && r.extraction_status === "completed" && r.current_version_id,
   );
+  const shouldShowManualStart =
+    readyResumes.length > 0 &&
+    (!latest_analysis || latest_analysis.status === "failed" || latest_analysis.status === "cancelled");
 
   return (
     <div className="flex flex-col gap-5 p-5">
@@ -562,9 +694,9 @@ function AnalysisTab({
               type="button"
               onClick={() => void handleRequestAnalysis()}
               disabled={!selectedVersionId || !canSpendRealTokens || isRequesting}
-              className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+              className="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
             >
-              {isRequesting ? "Solicitando…" : "Analisar"}
+              {isRequesting ? "Iniciando…" : "Iniciar análise da IA"}
             </button>
           </div>
         ) : (
@@ -574,6 +706,11 @@ function AnalysisTab({
             compact
           />
         )}
+        {shouldShowManualStart ? (
+          <p className="mt-2 text-[11px] text-gray-500">
+            Se a análise não começou automaticamente após o upload, selecione o currículo e inicie manualmente.
+          </p>
+        ) : null}
       </Section>
 
       <Section title="Rastreabilidade da execução">
@@ -617,6 +754,18 @@ function AnalysisTab({
               </span>
             </div>
 
+            {latest_analysis.status === "completed" ? (
+              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                  Score da IA (análise do currículo)
+                </p>
+                <p className="mt-1 text-xs text-blue-900">
+                  {fmtScore(latest_analysis.overall_score)} ·{" "}
+                  {latest_analysis.seniority_level ?? "Senioridade não identificada"}
+                </p>
+              </div>
+            ) : null}
+
             <div className="mt-3 grid grid-cols-2 gap-2">
               <MetaItem label="Solicitada em" value={formatOptionalDateTime(latest_analysis.created_at)} />
               <MetaItem label="Iniciada em" value={formatOptionalDateTime(effectiveStartedAt)} />
@@ -643,18 +792,6 @@ function AnalysisTab({
                   Motivo da falha
                 </p>
                 <p className="mt-1 text-xs text-red-800">{effectiveFailureReason}</p>
-              </div>
-            ) : null}
-
-            {latest_analysis.status === "completed" ? (
-              <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                  Resultado principal
-                </p>
-                <p className="mt-1 text-xs text-blue-900">
-                  Score da IA {fmtScore(latest_analysis.overall_score)} ·{" "}
-                  {latest_analysis.seniority_level ?? "Senioridade não identificada"}
-                </p>
               </div>
             ) : null}
           </div>
@@ -716,12 +853,12 @@ function AnalysisTab({
         </Section>
       ) : null}
 
-      {/* Pipeline matching */}
+      {/* Pipeline compatibility */}
       {!pipelineLoading && pipelineStatus ? (
         <Section title="Compatibilidade com vagas">
           <div className="grid grid-cols-3 gap-2">
             <StatBox label="Publicadas" value={pipelineStatus.published_jobs_total} />
-            <StatBox label="Compatíveis" value={pipelineStatus.matched_jobs_count} tone="success" />
+            <StatBox label="Com compatibilidade" value={pipelineStatus.matched_jobs_count} tone="success" />
             <StatBox label="Pendentes" value={pipelineStatus.pending_jobs_count} />
           </div>
           {pipelineStatus.recent_matches.length > 0 ? (
@@ -738,7 +875,7 @@ function AnalysisTab({
                   {match.match_score != null ? (
                     <div className="ml-2 shrink-0 text-right">
                       <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                        Compatibilidade
+                        Compatibilidade com a vaga
                       </div>
                       <span
                         className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ring-1 ${scoreBgClass(match.match_score)} ${scoreColorClass(match.match_score)}`}
@@ -754,8 +891,8 @@ function AnalysisTab({
             </div>
           ) : (
             <EmptyTab
-              title="Ainda não há matches com vagas"
-              description="Quando a análise terminar, esta seção mostrará os vínculos encontrados."
+              title="Ainda não há compatibilidade com vagas"
+              description="Quando a análise terminar, esta seção mostrará a compatibilidade encontrada."
               compact
             />
           )}
@@ -879,7 +1016,7 @@ const STAGE_LABEL: Record<string, string> = {
 
 const TRIGGER_LABEL: Record<PipelineTrigger, string> = {
   manual: "Movido manualmente",
-  auto_match: "Entrada por auto-match",
+  auto_match: "Entrada automática por compatibilidade",
   system: "Movido pelo sistema",
 };
 
@@ -1116,6 +1253,7 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
 
   const [editingResumeId, setEditingResumeId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -1153,6 +1291,10 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       return;
     }
     setSelectedFile(file);
+  }
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
   }
 
   async function handleUpload() {
@@ -1290,26 +1432,77 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
 
       {/* Upload form */}
       <Section title="Enviar currículo">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            ref={fileInputRef}
-            disabled={uploadLoading}
-            onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
-            className="text-xs file:mr-2 file:rounded-lg file:border file:border-gray-200 file:bg-gray-50 file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-100"
-          />
+        <input
+          type="file"
+          accept="application/pdf,.pdf"
+          ref={fileInputRef}
+          disabled={uploadLoading}
+          onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={openFilePicker}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            if (!uploadLoading) setIsDragActive(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!uploadLoading) setIsDragActive(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setIsDragActive(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragActive(false);
+            if (uploadLoading) return;
+            handleFileSelect(e.dataTransfer.files?.[0] ?? null);
+          }}
+          disabled={uploadLoading}
+          className={[
+            "flex w-full flex-col items-center justify-center rounded-2xl border border-dashed px-5 py-6 text-center transition",
+            isDragActive
+              ? "border-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]"
+              : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] hover:border-[hsl(var(--primary))]/45 hover:bg-[hsl(var(--accent-soft))]/60",
+            uploadLoading ? "cursor-wait opacity-70" : "cursor-pointer",
+          ].join(" ")}
+        >
+          <span className="rounded-full bg-[hsl(var(--surface))] px-3 py-1 text-xs font-semibold text-[hsl(var(--primary))] shadow-sm">
+            PDF do currículo
+          </span>
+          <span className="mt-3 text-sm font-semibold text-[hsl(var(--text))]">
+            Envie o currículo para iniciar a análise da IA
+          </span>
+          <span className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+            Clique para selecionar ou arraste o PDF para esta área
+          </span>
+        </button>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => void handleUpload()}
             disabled={uploadLoading || !selectedFile}
-            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
+            className="shrink-0 rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
           >
-            {uploadLoading ? "Enviando…" : "Enviar"}
+            {uploadLoading ? "Enviando currículo…" : "Enviar currículo"}
           </button>
+          {selectedFile ? (
+            <button
+              type="button"
+              onClick={clearFile}
+              disabled={uploadLoading}
+              className="ui-btn-secondary rounded-xl border px-3 py-2 text-sm font-medium disabled:opacity-40"
+            >
+              Remover arquivo
+            </button>
+          ) : null}
         </div>
         {selectedFile ? (
-          <p className="mt-1 text-[11px] text-gray-400">
+          <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
             {selectedFile.name} ({Math.ceil(selectedFile.size / 1024)} KB)
           </p>
         ) : null}
@@ -1319,7 +1512,7 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       {resumes.length === 0 ? (
         <EmptyTab
           title="Ainda não há currículos enviados"
-          description="Envie um PDF para começar a análise deste candidato."
+          description="Envie o currículo para iniciar a análise da IA."
         />
       ) : (
         <div className="flex flex-col gap-3">

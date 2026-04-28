@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
@@ -21,16 +22,16 @@ const PAGE_SIZE = 20;
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 const AI_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  completed:  { label: "Concluída",    cls: "bg-green-100 text-green-700" },
-  processing: { label: "Processando",  cls: "bg-blue-100 text-blue-700" },
-  pending:    { label: "Aguardando",   cls: "bg-yellow-100 text-yellow-700" },
-  failed:     { label: "Falhou",       cls: "bg-red-100 text-red-700" },
-  cancelled:  { label: "Cancelado",    cls: "bg-gray-100 text-gray-500" },
+  completed:  { label: "Concluída",    cls: "ui-badge-success" },
+  processing: { label: "Processando",  cls: "ui-badge-info" },
+  pending:    { label: "Aguardando",   cls: "ui-badge-warning" },
+  failed:     { label: "Falhou",       cls: "ui-badge-danger" },
+  cancelled:  { label: "Cancelado",    cls: "ui-badge-neutral" },
 };
 
 function AiStatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="text-xs text-gray-400">—</span>;
-  const c = AI_STATUS_CONFIG[status] ?? { label: status, cls: "bg-gray-100 text-gray-500" };
+  if (!status) return <span className="ui-text-muted text-xs">—</span>;
+  const c = AI_STATUS_CONFIG[status] ?? { label: status, cls: "ui-badge-neutral" };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${c.cls}`}>
       {c.label}
@@ -39,21 +40,21 @@ function AiStatusBadge({ status }: { status: string | null }) {
 }
 
 function ResumeBadge({ count }: { count: number }) {
-  if (count === 0) return <span className="text-xs text-gray-400">—</span>;
+  if (count === 0) return <span className="ui-text-muted text-xs">—</span>;
   return (
-    <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+    <span className="ui-badge-info inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
       {count} currículo{count !== 1 ? "s" : ""}
     </span>
   );
 }
 
 function ScoreCell({ score }: { score: number | null }) {
-  if (score == null) return <span className="text-xs text-gray-400">—</span>;
+  if (score == null) return <span className="ui-text-muted text-xs">—</span>;
   const rounded = Math.round(score);
   const cls =
-    rounded >= 80 ? "text-green-700 font-semibold" :
-    rounded >= 60 ? "text-yellow-700 font-semibold" :
-    "text-red-600 font-semibold";
+    rounded >= 80 ? "text-[hsl(var(--success))] font-semibold" :
+    rounded >= 60 ? "text-[hsl(var(--warning))] font-semibold" :
+    "text-[hsl(var(--danger))] font-semibold";
   return <span className={`text-sm ${cls}`}>{rounded}</span>;
 }
 
@@ -130,11 +131,13 @@ export function CandidatesPage() {
   const candidates = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
+  const isRefreshing = loading && candidates.length > 0;
+  const showInitialLoading = loading && candidates.length === 0 && !error;
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-gray-200 bg-white px-6 py-5">
+      <div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-5">
         <PageHeader
           title="Candidatos"
           subtitle={
@@ -147,22 +150,33 @@ export function CandidatesPage() {
             `${total} candidato${total !== 1 ? "s" : ""} no total`
           }
           actions={
-            <button
-              type="button"
-              onClick={() => navigate("/pipeline")}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
-            >
-              + Novo candidato
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={fetchCandidates}
+                disabled={loading}
+                className="ui-btn-secondary flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                {loading ? "Atualizando…" : "Atualizar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/pipeline")}
+                className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90"
+              >
+                + Novo candidato
+              </button>
+            </>
           }
         />
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-white px-6 py-3">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-3">
         <div className="relative min-w-[240px] flex-1">
           <svg
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -176,14 +190,14 @@ export function CandidatesPage() {
             placeholder="Buscar por nome ou e-mail…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="ui-input h-9 w-full rounded-lg pl-9 pr-3 text-sm"
           />
         </div>
 
         <select
           value={resumeFilter}
           onChange={(e) => handleResumeFilter(e.target.value as ResumeFilter)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="ui-input h-9 rounded-lg px-3 text-sm"
         >
           <option value="all">Todos os currículos</option>
           <option value="with">Com currículo</option>
@@ -193,7 +207,7 @@ export function CandidatesPage() {
         <select
           value={aiFilter}
           onChange={(e) => handleAiFilter(e.target.value as AiStatusFilter)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="ui-input h-9 rounded-lg px-3 text-sm"
         >
           <option value="all">Todos os status IA</option>
           <option value="completed">IA Concluída</option>
@@ -205,7 +219,7 @@ export function CandidatesPage() {
           <button
             type="button"
             onClick={clearFilters}
-            className="h-9 rounded-lg border border-gray-200 px-3 text-sm text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+            className="ui-btn-secondary h-9 rounded-lg px-3 text-sm"
           >
             Limpar filtros
           </button>
@@ -214,32 +228,32 @@ export function CandidatesPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
+        {showInitialLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-              <p className="text-sm text-gray-500">Carregando candidatos…</p>
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent" />
+              <p className="ui-text-muted text-sm">Carregando candidatos…</p>
             </div>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-[hsl(var(--danger))]">{error}</p>
             <button
               type="button"
               onClick={fetchCandidates}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-sm text-[hsl(var(--primary))] hover:underline"
             >
               Tentar novamente
             </button>
           </div>
         ) : candidates.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <p className="text-lg font-medium text-gray-500">
+            <p className="text-lg font-medium text-[hsl(var(--text-muted))]">
               {hasActiveFilters
                 ? "Nenhum candidato corresponde aos filtros atuais"
                 : "Ainda não há candidatos cadastrados"}
             </p>
-            <p className="text-sm text-gray-400">
+            <p className="ui-text-muted text-sm">
               {hasActiveFilters
                 ? "Ajuste ou limpe os filtros para ver outros perfis."
                 : "Crie um candidato para começar a montar sua base."}
@@ -248,7 +262,7 @@ export function CandidatesPage() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="mt-1 text-sm text-blue-600 hover:underline"
+                className="mt-1 text-sm text-[hsl(var(--primary))] hover:underline"
               >
                 Limpar filtros
               </button>
@@ -256,14 +270,19 @@ export function CandidatesPage() {
           </div>
         ) : (
           <>
+            {isRefreshing ? (
+              <div className="border-b border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-6 py-2 text-xs text-[hsl(var(--primary))]">
+                Atualizando a lista de candidatos…
+              </div>
+            ) : null}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-[280px]">
+                  <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]">
+                    <th className="ui-text-muted w-[280px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
                       Nome
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="ui-text-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
                       E-mail
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -273,17 +292,17 @@ export function CandidatesPage() {
                       Currículo
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Status IA
+                      Status da IA
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Score
+                      Score da IA
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Criado em
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
+                <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
                   {candidates.map((c) => (
                     <CandidateRow
                       key={c.id}
@@ -296,7 +315,7 @@ export function CandidatesPage() {
             </div>
 
             {totalPages > 1 ? (
-              <div className="border-t border-gray-100 px-6 py-4">
+              <div className="border-t border-[hsl(var(--border))] px-6 py-4">
                 <Pagination
                   page={page}
                   totalPages={totalPages}
@@ -328,31 +347,31 @@ function CandidateRow({
   return (
     <tr
       onClick={onOpen}
-      className="cursor-pointer transition-colors hover:bg-blue-50"
+      className="cursor-pointer transition-colors hover:bg-[hsl(var(--accent-soft))]"
     >
       <td className="px-6 py-4">
-        <div className="font-medium text-gray-900 leading-tight">{c.full_name}</div>
+        <div className="font-medium leading-tight text-[hsl(var(--text))]">{c.full_name}</div>
         {c.tags.length > 0 ? (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {c.tags.slice(0, 3).map((t) => (
               <span
                 key={t}
-                className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500"
+                className="rounded bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-xs text-[hsl(var(--text-muted))]"
               >
                 {t}
               </span>
             ))}
             {c.tags.length > 3 ? (
-              <span className="text-xs text-gray-400">+{c.tags.length - 3}</span>
+              <span className="ui-text-muted text-xs">+{c.tags.length - 3}</span>
             ) : null}
           </div>
         ) : null}
       </td>
-      <td className="px-4 py-4 text-gray-600">
-        {c.email ?? <span className="text-gray-400">—</span>}
+      <td className="px-4 py-4 text-[hsl(var(--text-muted))]">
+        {c.email ?? <span className="ui-text-muted">—</span>}
       </td>
-      <td className="px-4 py-4 text-gray-600">
-        {c.phone ?? <span className="text-gray-400">—</span>}
+      <td className="px-4 py-4 text-[hsl(var(--text-muted))]">
+        {c.phone ?? <span className="ui-text-muted">—</span>}
       </td>
       <td className="px-4 py-4">
         <ResumeBadge count={c.resume_count} />
@@ -363,7 +382,7 @@ function CandidateRow({
       <td className="px-4 py-4">
         <ScoreCell score={c.ai_score} />
       </td>
-      <td className="px-4 py-4 text-gray-500 text-xs">
+      <td className="ui-text-muted px-4 py-4 text-xs">
         {new Date(c.created_at).toLocaleDateString("pt-BR", {
           day: "2-digit",
           month: "2-digit",

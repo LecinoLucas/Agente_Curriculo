@@ -16,7 +16,7 @@ type ModalProps = {
 export function Modal({ title, onClose, children }: ModalProps) {
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-[540px]">
+      <DialogContent className="ui-card sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="sr-only">
