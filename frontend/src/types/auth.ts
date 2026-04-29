@@ -8,6 +8,7 @@ export type AuthUser = {
   role: UserRole;
   status: UserStatus;
   real_ai_token_spend_enabled: boolean;
+  must_change_password: boolean;
   last_login_at: string | null;
   created_at: string | null;
   avatar_url?: string | null;
@@ -20,5 +21,6 @@ export type LoginPayload = {
 
 export type LoginResponse = {
   access_token: string;
+  must_change_password: boolean;
   token_type: string;
 };

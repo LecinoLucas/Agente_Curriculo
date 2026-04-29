@@ -9,9 +9,11 @@ from src.domain.entities.user import UserRole, UserStatus
 
 class CreateUserRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    temporary_password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=2, max_length=255)
-    role: UserRole = UserRole.CANDIDATE
+    role: UserRole = UserRole.RECRUITER
+    is_active: bool = True
+    must_change_password: bool = False
 
 
 class UserResponse(BaseModel):
@@ -21,6 +23,7 @@ class UserResponse(BaseModel):
     role: UserRole
     status: UserStatus
     real_ai_token_spend_enabled: bool = False
+    must_change_password: bool = False
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     avatar_url: Optional[str] = None
@@ -29,13 +32,24 @@ class UserResponse(BaseModel):
 
 
 class PatchUserRequest(BaseModel):
+    email: Optional[EmailStr] = None
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
     role: Optional[UserRole] = None
-    status: Optional[UserStatus] = None
+    is_active: Optional[bool] = None
 
 
 class PatchMyProfileRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+
+
+class ResetUserPasswordRequest(BaseModel):
+    temporary_password: str = Field(min_length=8, max_length=128)
+    must_change_password: bool = False
+
+
+class ChangeMyPasswordRequest(BaseModel):
+    current_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class UserStatsResponse(BaseModel):

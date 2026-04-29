@@ -203,15 +203,13 @@ async def test_create_job_persists_deal_breakers(
 
     assert response.status_code == 201
     job = response.json()
-    assert job["deal_breakers"] == [
-        {
-            "field": "location",
-            "operator": "not_equals",
-            "value": "Sao Paulo",
-            "reason": "Localizacao obrigatoria em Sao Paulo",
-            "is_active": True,
-        }
-    ]
+    assert len(job["deal_breakers"]) == 1
+    db = job["deal_breakers"][0]
+    assert db["field"] == "location"
+    assert db["operator"] == "not_equals"
+    assert db["value"] == "Sao Paulo"
+    assert db["reason"] == "Localizacao obrigatoria em Sao Paulo"
+    assert db["is_active"] is True
 
 
 @pytest.mark.asyncio

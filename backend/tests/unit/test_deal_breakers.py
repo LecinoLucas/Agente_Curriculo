@@ -173,6 +173,29 @@ class TestEvaluateDealBreaker:
         assert hit is False  # No explicit data, no deal-breaker hit
         assert reason is None
 
+    def test_falls_back_to_extracted_data_candidate_fields(self) -> None:
+        """Persisted analysis results only keep some fields in extracted_data."""
+        deal_breaker = {
+            "field": "work_model",
+            "operator": "not_equals",
+            "value": "remote",
+            "reason": "Vaga requer trabalho remoto",
+            "is_active": True,
+        }
+        result = MagicMock()
+        result.work_model = None
+        result.extracted_data = {
+            "candidate": {
+                "location": "Sao Paulo",
+                "work_model": "hybrid",
+            }
+        }
+
+        hit, reason = _evaluate_deal_breaker(deal_breaker, result)
+
+        assert hit is True
+        assert "remoto" in reason.lower()
+
 
 def _make_row(skill_name: str, *, is_mandatory: bool) -> SimpleNamespace:
     return SimpleNamespace(

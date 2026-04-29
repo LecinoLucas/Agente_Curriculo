@@ -14,6 +14,7 @@ const CandidatesPage = lazy(() => import("../pages/CandidatesPage").then((m) => 
 const AdminPage = lazy(() => import("../pages/AdminPage").then((m) => ({ default: m.AdminPage })));
 const UsersPage = lazy(() => import("../pages/UsersPage").then((m) => ({ default: m.UsersPage })));
 const AnalisesIaPage = lazy(() => import("../pages/AnalisesIaPage").then((m) => ({ default: m.AnalisesIaPage })));
+const ChangePasswordPage = lazy(() => import("../pages/ChangePasswordPage").then((m) => ({ default: m.ChangePasswordPage })));
 
 function RouteFallback() {
   return (
@@ -42,6 +43,14 @@ export function AppRouter() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/trocar-senha"
+          element={
+            <ProtectedRoute allowedRoles={["admin", "recruiter", "candidate", "viewer"]}>
+              <ChangePasswordPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/"

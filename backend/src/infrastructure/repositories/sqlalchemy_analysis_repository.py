@@ -14,6 +14,7 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
 
 
 class SQLAlchemyAnalysisRepository:
@@ -207,11 +208,29 @@ class SQLAlchemyAnalysisRepository:
 
     async def list_active_job_skill_rows(self, job_id: UUID):
         result = await self._session.execute(
-            sa.select(JobRequiredSkillModel, SkillModel.name.label("skill_name"))
+            sa.select(
+                JobRequiredSkillModel,
+                SkillModel.name.label("skill_name"),
+                SkillModel.aliases.label("skill_aliases"),
+            )
             .join(SkillModel, JobRequiredSkillModel.skill_id == SkillModel.id)
             .where(JobRequiredSkillModel.job_id == job_id, SkillModel.deleted_at.is_(None))
         )
         return result.all()
+
+    async def find_active_score_model_version(self) -> ScoreModelVersionModel | None:
+        """Fetch active ScoreModelVersionModel, fallback to latest if none active."""
+        version = await self._session.scalar(
+            sa.select(ScoreModelVersionModel)
+            .where(ScoreModelVersionModel.is_active.is_(True))
+            .order_by(ScoreModelVersionModel.created_at.desc())
+        )
+        if version is not None:
+            return version
+        # Fallback: return latest version created
+        return await self._session.scalar(
+            sa.select(ScoreModelVersionModel).order_by(ScoreModelVersionModel.created_at.desc())
+        )
 
     async def list_unmatched_published_jobs(
         self,

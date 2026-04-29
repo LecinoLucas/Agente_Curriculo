@@ -32,6 +32,11 @@ class UserModel(Base):
     )
     full_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     avatar_url: Mapped[Optional[str]] = mapped_column(sa.Text)
+    must_change_password: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        server_default=sa.text("false"),
+    )
     last_login_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
     login_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     failed_login_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")

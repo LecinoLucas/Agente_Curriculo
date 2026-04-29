@@ -105,6 +105,19 @@ class SQLAlchemyUserAdminRepository:
             )
         )
 
+    async def exists_active_by_email(self, email: str, exclude_user_id: UUID | None = None) -> bool:
+        filters: list[sa.ColumnElement[bool]] = [
+            UserModel.deleted_at.is_(None),
+            sa.func.lower(UserModel.email) == email.lower().strip(),
+        ]
+        if exclude_user_id is not None:
+            filters.append(UserModel.id != exclude_user_id)
+
+        result = await self._session.scalar(
+            sa.select(sa.exists().where(*filters))
+        )
+        return bool(result)
+
     async def save(self, user: UserModel) -> UserModel:
         await self._session.flush()
         await self._session.refresh(user)

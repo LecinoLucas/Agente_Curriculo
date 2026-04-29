@@ -53,11 +53,12 @@ interface PipelineState {
   // Local invalidation counters for screens with their own fetch state
   candidatesSyncTick: number;
   analysesSyncTick: number;
+  rankingSyncTick: number;
 }
 
 export interface PipelineContextValue extends PipelineState {
   // Jobs
-  loadJobs: () => Promise<void>;
+  loadJobs: (force?: boolean) => Promise<void>;
 
   // Board
   setActiveJob: (jobId: string) => void;
@@ -82,6 +83,8 @@ export interface PipelineContextValue extends PipelineState {
   }) => Promise<void>;
   notifyCandidatesChanged: () => void;
   notifyAnalysesChanged: () => void;
+  invalidateJobState: (jobId?: string | null) => Promise<void>;
+  invalidateRanking: () => void;
 
   // Polling
   startPolling: (
@@ -111,6 +114,7 @@ const INITIAL_STATE: PipelineState = {
   pollingStatus: null,
   candidatesSyncTick: 0,
   analysesSyncTick: 0,
+  rankingSyncTick: 0,
 };
 
 // Backoff: 1.5s → 5s (after 5 identical statuses) → 15s (after 10)
@@ -149,7 +153,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
   const candidateFetchInFlightRef = useRef<Map<string, Promise<CandidateOverview>>>(new Map());
 
   // Fetch deduplication for loadJobs — prevents concurrent or duplicate calls.
-  const jobsFetchInFlightRef = useRef(false);
+  const jobsFetchInFlightRef = useRef<Promise<void> | null>(null);
   const jobsLoadedRef = useRef(false);
 
   // Polling state — all mutable, never need to trigger renders directly.
@@ -168,31 +172,58 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     setState((prev) => ({ ...prev, analysesSyncTick: prev.analysesSyncTick + 1 }));
   }, []);
 
+  const invalidateRanking = useCallback(() => {
+    setState((prev) => ({ ...prev, rankingSyncTick: prev.rankingSyncTick + 1 }));
+  }, []);
+
   // ── Jobs ───────────────────────────────────────────────────────────────────
 
   // Guard: concurrent or redundant calls are no-ops.
   // jobsFetchInFlightRef prevents a second call while one is in flight.
   // jobsLoadedRef prevents re-fetching after a successful load.
   // Both checks are synchronous so no race condition between them and setState.
-  const loadJobs = useCallback(async () => {
-    if (jobsFetchInFlightRef.current || jobsLoadedRef.current) return;
+  const loadJobs = useCallback(async (force = false) => {
+    if (!force && jobsLoadedRef.current) return;
+    if (jobsFetchInFlightRef.current) {
+      await jobsFetchInFlightRef.current;
+      return;
+    }
 
-    jobsFetchInFlightRef.current = true;
     setState((prev) => ({ ...prev, jobsLoading: true, jobsError: null }));
 
-    try {
-      const result = await listJobs(1, 100);
-      jobsLoadedRef.current = true;
-      setState((prev) => ({ ...prev, jobs: result.data, jobsLoading: false }));
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        jobsLoading: false,
-        jobsError: err instanceof Error ? err.message : "Falha ao carregar vagas",
-      }));
-    } finally {
-      jobsFetchInFlightRef.current = false;
-    }
+    const request = (async () => {
+      try {
+        const result = await listJobs(1, 100);
+        jobsLoadedRef.current = true;
+        const activeJobStillExists = activeJobIdRef.current
+          ? result.data.some((job) => job.id === activeJobIdRef.current)
+          : false;
+
+        if (activeJobIdRef.current && !activeJobStillExists) {
+          activeJobIdRef.current = null;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          jobs: result.data,
+          jobsLoading: false,
+          activeJobId: activeJobStillExists ? prev.activeJobId : null,
+          board: activeJobStillExists ? prev.board : null,
+          boardError: activeJobStillExists ? prev.boardError : null,
+        }));
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          jobsLoading: false,
+          jobsError: err instanceof Error ? err.message : "Falha ao carregar vagas",
+        }));
+      } finally {
+        jobsFetchInFlightRef.current = null;
+      }
+    })();
+
+    jobsFetchInFlightRef.current = request;
+    await request;
   }, []); // stable — reads only refs and calls setState (both stable)
 
   // ── Board ──────────────────────────────────────────────────────────────────
@@ -473,6 +504,37 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     }
   }, [fetchCandidateOverview]);
 
+  const invalidateJobState = useCallback(
+    async (jobId?: string | null) => {
+      jobsLoadedRef.current = false;
+
+      if (jobId) {
+        boardCacheRef.current.delete(jobId);
+      } else {
+        boardCacheRef.current.clear();
+      }
+
+      candidateCacheRef.current.clear();
+      candidateFetchInFlightRef.current.clear();
+
+      invalidateRanking();
+      notifyCandidatesChanged();
+
+      await loadJobs(true);
+
+      const activeJobId = activeJobIdRef.current;
+      if (activeJobId && (!jobId || activeJobId === jobId)) {
+        await loadBoard(activeJobId, true);
+      }
+
+      const selectedCandidateId = selectedCandidateIdRef.current;
+      if (selectedCandidateId) {
+        await syncCandidateOverview(selectedCandidateId);
+      }
+    },
+    [invalidateRanking, loadBoard, loadJobs, notifyCandidatesChanged, syncCandidateOverview],
+  );
+
   const syncAnalysisStart = useCallback(
     async ({
       candidateId,
@@ -546,6 +608,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         await pipelineService.moveCandidateStage(jobId, candidateId, { stage: toStage });
         // Invalidate cache: pipeline_entries inside the overview are now stale
         candidateCacheRef.current.delete(candidateId);
+        invalidateRanking();
         if (selectedCandidateIdRef.current === candidateId) {
           void refreshCandidateOverview();
         }
@@ -555,7 +618,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         throw err; // bubble up so the caller (UI) can show a toast
       }
     },
-    [loadBoard, refreshCandidateOverview],
+    [invalidateRanking, loadBoard, refreshCandidateOverview],
   );
 
   // ── Polling ────────────────────────────────────────────────────────────────
@@ -626,6 +689,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         if (isTerminal) {
           // Ensure terminal status is always reflected even if unchanged from prev
           setState((prev) => ({ ...prev, pollingStatus: status }));
+          invalidateRanking();
           stopPolling();
           void refreshCandidateOverview();
           void refreshBoard();
@@ -707,6 +771,8 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       syncAnalysisStart,
       notifyCandidatesChanged,
       notifyAnalysesChanged,
+      invalidateJobState,
+      invalidateRanking,
       startPolling,
       stopPolling,
     }),
@@ -725,6 +791,8 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       syncAnalysisStart,
       notifyCandidatesChanged,
       notifyAnalysesChanged,
+      invalidateJobState,
+      invalidateRanking,
       startPolling,
       stopPolling,
     ],

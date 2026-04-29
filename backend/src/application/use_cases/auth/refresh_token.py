@@ -47,4 +47,8 @@ class RefreshTokenUseCase:
 
         logger.info("user.token_refreshed", user_id=str(user.id))
 
-        return RefreshTokenResult(access_token=new_access_token, refresh_token=new_refresh_token)
+        return RefreshTokenResult(
+            access_token=new_access_token,
+            refresh_token=new_refresh_token,
+            must_change_password=user.must_change_password,
+        )

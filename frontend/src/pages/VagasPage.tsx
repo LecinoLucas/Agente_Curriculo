@@ -23,13 +23,15 @@ import {
 } from "../services/jobsService";
 import { skillsService } from "../services/skillsService";
 import { toast } from "../services/toast";
-import { Job, JobSkill, Skill } from "../types/domain";
+import { Job, JobSkill, Skill, DealBreaker } from "../types/domain";
 import { Paginated } from "../types/api";
 import { useAuth } from "../features/auth/useAuth";
+import { usePipeline } from "../features/pipeline/PipelineContext";
 import {
   formatJobStatus,
   formatSeniority,
   formatWorkModel,
+  formatEducationLevel,
   jobStatusTone,
 } from "../utils/jobFormatters";
 
@@ -39,6 +41,9 @@ type CreateJobPayload = {
   requirements?: string;
   status: string;
   seniority_level?: string;
+  minimum_education_level?: string;
+  minimum_years_experience?: number;
+  deal_breakers?: DealBreaker[];
   work_model?: string;
   location?: string;
   salary_min?: number;
@@ -51,6 +56,9 @@ const EMPTY_FORM: CreateJobPayload = {
   requirements: "",
   status: "draft",
   seniority_level: "",
+  minimum_education_level: "",
+  minimum_years_experience: undefined,
+  deal_breakers: [],
   work_model: "",
   location: "",
 };
@@ -92,8 +100,18 @@ export function VagasPage() {
   const [addingSkill, setAddingSkill] = useState(false);
   const [skillError, setSkillError] = useState<string | null>(null);
 
+  const [newDealBreaker, setNewDealBreaker] = useState<Partial<DealBreaker>>({
+    field: "",
+    operator: "equals",
+    value: "",
+    reason: "",
+    is_active: true,
+  });
+  const [dealBreakerError, setDealBreakerError] = useState<string | null>(null);
+
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { invalidateJobState } = usePipeline();
   const canManage = user?.role === "admin" || user?.role === "recruiter";
 
   function openCreateForm() {
@@ -124,6 +142,9 @@ export function VagasPage() {
       };
       if (form.requirements) payload.requirements = form.requirements;
       if (form.seniority_level) payload.seniority_level = form.seniority_level;
+      if (form.minimum_education_level) payload.minimum_education_level = form.minimum_education_level;
+      if (form.minimum_years_experience !== undefined) payload.minimum_years_experience = form.minimum_years_experience;
+      if (form.deal_breakers && form.deal_breakers.length > 0) payload.deal_breakers = form.deal_breakers;
       if (form.work_model) payload.work_model = form.work_model;
       if (form.location) payload.location = form.location;
       if (form.salary_min) payload.salary_min = form.salary_min;
@@ -131,9 +152,14 @@ export function VagasPage() {
 
       if (editingJob) {
         const updated = await updateJob(editingJob.id, payload);
+        await invalidateJobState(updated.id);
+        if (selectedJob?.id === updated.id) {
+          setSelectedJob(updated);
+        }
         toast.success(`Vaga atualizada: ${updated.title}`);
       } else {
         const created = await createJob(payload);
+        await invalidateJobState(created.id);
         toast.success(`Vaga criada: ${created.title}`);
       }
       setForm(EMPTY_FORM);
@@ -152,7 +178,11 @@ export function VagasPage() {
     setTransitioning(jobId);
     try {
       const fns = { publish: publishJob, pause: pauseJob, close: closeJob, cancel: cancelJob };
-      await fns[action](jobId);
+      const updated = await fns[action](jobId);
+      await invalidateJobState(updated.id);
+      if (selectedJob?.id === updated.id) {
+        setSelectedJob(updated);
+      }
       void run(() => listJobs(page, pageSize));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Falha ao executar ação "${action}"`);
@@ -166,6 +196,11 @@ export function VagasPage() {
     const job = (data?.data ?? []).find((j) => j.id === confirmDeleteId);
     try {
       await deleteJob(confirmDeleteId);
+      await invalidateJobState(confirmDeleteId);
+      if (selectedJob?.id === confirmDeleteId) {
+        setSelectedJob(null);
+        setJobSkills([]);
+      }
       toast.success(`Vaga "${job?.title ?? ""}" excluída`);
       void run(() => listJobs(1, pageSize));
     } catch (err) {
@@ -223,6 +258,45 @@ export function VagasPage() {
     } catch (err) {
       setSkillError(err instanceof Error ? err.message : "Falha ao remover skill");
     }
+  }
+
+  function handleAddDealBreaker() {
+    setDealBreakerError(null);
+    if (!newDealBreaker.field || !newDealBreaker.reason) {
+      setDealBreakerError("Campo e motivo são obrigatórios");
+      return;
+    }
+    if (!newDealBreaker.value && newDealBreaker.operator !== "in") {
+      setDealBreakerError("Valor é obrigatório");
+      return;
+    }
+    const dealBreaker: DealBreaker = {
+      field: newDealBreaker.field!,
+      operator: newDealBreaker.operator as DealBreaker["operator"],
+      value: newDealBreaker.operator === "in" ? undefined : newDealBreaker.value,
+      values: newDealBreaker.operator === "in" ? (newDealBreaker.value?.split(",").map((v) => v.trim()) ?? []) : undefined,
+      reason: newDealBreaker.reason!,
+      is_active: newDealBreaker.is_active ?? true,
+    };
+    setForm((f) => ({
+      ...f,
+      deal_breakers: [...(f.deal_breakers ?? []), dealBreaker],
+    }));
+    setNewDealBreaker({ field: "", operator: "equals", value: "", reason: "", is_active: true });
+  }
+
+  function handleRemoveDealBreaker(index: number) {
+    setForm((f) => ({
+      ...f,
+      deal_breakers: (f.deal_breakers ?? []).filter((_, i) => i !== index),
+    }));
+  }
+
+  function handleToggleDealBreaker(index: number) {
+    setForm((f) => ({
+      ...f,
+      deal_breakers: (f.deal_breakers ?? []).map((db, i) => (i === index ? { ...db, is_active: !db.is_active } : db)),
+    }));
   }
 
   const total = data?.total ?? 0;
@@ -323,6 +397,37 @@ export function VagasPage() {
                 </select>
               </label>
             </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                Educação mínima
+                <select
+                  value={form.minimum_education_level}
+                  onChange={(e) => setForm((f) => ({ ...f, minimum_education_level: e.target.value }))}
+                  className="ui-input h-10 rounded-md px-3 text-sm"
+                >
+                  <option value="">—</option>
+                  <option value="none">Nenhuma</option>
+                  <option value="high_school">Ensino Médio</option>
+                  <option value="technical">Técnico</option>
+                  <option value="bachelor">Graduação</option>
+                  <option value="postgraduate">Pós-Graduação</option>
+                  <option value="master">Mestrado</option>
+                  <option value="phd">Doutorado</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                Anos mínimos de experiência
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={form.minimum_years_experience ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, minimum_years_experience: e.target.value ? Number(e.target.value) : undefined }))}
+                  placeholder="Ex: 5"
+                  className="ui-input h-10 rounded-md px-3 text-sm"
+                />
+              </label>
+            </div>
             <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
               Localização
               <input
@@ -356,6 +461,112 @@ export function VagasPage() {
                 />
               </label>
             </div>
+
+            <div className="border-t border-[hsl(var(--border))] pt-4">
+              <h3 className="mb-3 text-sm font-semibold text-[hsl(var(--text))]">Critérios eliminatórios (Deal-breakers)</h3>
+
+              <div className="grid gap-3 mb-3 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                  Campo
+                  <input
+                    value={newDealBreaker.field ?? ""}
+                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, field: e.target.value }))}
+                    placeholder="Ex: location, experience_years"
+                    className="ui-input h-10 rounded-md px-3 text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                  Operador
+                  <select
+                    value={newDealBreaker.operator ?? "equals"}
+                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, operator: e.target.value as any }))}
+                    className="ui-input h-10 rounded-md px-3 text-sm"
+                  >
+                    <option value="equals">Igual a</option>
+                    <option value="not_equals">Diferente de</option>
+                    <option value="contains">Contém</option>
+                    <option value="in">Em lista (valores separados por vírgula)</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-3 mb-3 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                  Valor
+                  <textarea
+                    value={newDealBreaker.value ?? ""}
+                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, value: e.target.value }))}
+                    placeholder={newDealBreaker.operator === "in" ? "São Paulo, Rio de Janeiro, Belo Horizonte" : "Ex: São Paulo"}
+                    rows={2}
+                    className="ui-input rounded-md px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                  Motivo da eliminação
+                  <textarea
+                    value={newDealBreaker.reason ?? ""}
+                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, reason: e.target.value }))}
+                    placeholder="Explique por que este critério é eliminatório"
+                    rows={2}
+                    className="ui-input rounded-md px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-4">
+                <Button type="button" onClick={() => handleAddDealBreaker()}>
+                  + Adicionar critério
+                </Button>
+              </div>
+
+              {dealBreakerError ? (
+                <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))] mb-3">
+                  <span className="font-bold">✕</span>
+                  <span>{dealBreakerError}</span>
+                </div>
+              ) : null}
+
+              {(form.deal_breakers ?? []).length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-[hsl(var(--border))] text-sm">
+                    <thead className="bg-[hsl(var(--surface-muted))]">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Campo</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Operador</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Valor</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Ativo</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[hsl(var(--border))]">
+                      {(form.deal_breakers ?? []).map((db, idx) => (
+                        <tr key={idx} className="hover:bg-[hsl(var(--surface-muted))]">
+                          <td className="px-3 py-2 text-[hsl(var(--text))]">{db.field}</td>
+                          <td className="px-3 py-2 text-[hsl(var(--text-muted))]">
+                            {db.operator === "equals" ? "=" : db.operator === "not_equals" ? "≠" : db.operator === "contains" ? "⊃" : "∈"}
+                          </td>
+                          <td className="px-3 py-2 text-[hsl(var(--text-muted))] text-xs">{db.value || db.values?.join(", ") || "—"}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              checked={db.is_active}
+                              onChange={() => handleToggleDealBreaker(idx)}
+                              className="h-4 w-4 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <Button type="button" size="sm" variant="destructive" onClick={() => handleRemoveDealBreaker(idx)}>
+                              Remover
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+
             {formError ? (
               <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
                 <span className="font-bold">✕</span>
@@ -413,6 +624,9 @@ export function VagasPage() {
                     requirements: job.requirements ?? "",
                     status: job.status,
                     seniority_level: job.seniority_level ?? "",
+                    minimum_education_level: job.minimum_education_level ?? "",
+                    minimum_years_experience: job.minimum_years_experience ?? undefined,
+                    deal_breakers: job.deal_breakers ?? [],
                     work_model: job.work_model ?? "",
                     location: job.location ?? "",
                     salary_min: job.salary_min ?? undefined,
@@ -532,6 +746,10 @@ export function VagasPage() {
               </span>
               <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Perfil</span>
               <span className="text-sm text-[hsl(var(--text-muted))]">{formatSeniority(selectedJob.seniority_level)} · {formatWorkModel(selectedJob.work_model)}</span>
+              <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Educação mínima</span>
+              <span className="text-sm text-[hsl(var(--text-muted))]">{selectedJob.minimum_education_level ? formatEducationLevel(selectedJob.minimum_education_level) : "—"}</span>
+              <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Experiência mínima</span>
+              <span className="text-sm text-[hsl(var(--text-muted))]">{selectedJob.minimum_years_experience !== null && selectedJob.minimum_years_experience !== undefined ? `${selectedJob.minimum_years_experience} ano${selectedJob.minimum_years_experience === 1 ? "" : "s"}` : "—"}</span>
               <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Localização</span>
               <span className="text-sm text-[hsl(var(--text-muted))]">{selectedJob.location ?? "—"}</span>
               <span className="text-sm font-medium text-[hsl(var(--text-muted))]">Faixa salarial</span>
@@ -551,6 +769,42 @@ export function VagasPage() {
                 Abrir pipeline
               </Button>
             </div>
+
+            {selectedJob.deal_breakers && selectedJob.deal_breakers.length > 0 ? (
+              <>
+                <div className="border-t border-[hsl(var(--border))] px-6 py-4">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Critérios eliminatórios</h4>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-[hsl(var(--border))]">
+                    <thead className="bg-[hsl(var(--surface-muted))]">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Campo</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Operador</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Valor</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Motivo</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+                      {selectedJob.deal_breakers.map((db, idx) => (
+                        <tr key={idx} className="hover:bg-[hsl(var(--surface-muted))]">
+                          <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{db.field}</td>
+                          <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                            {db.operator === "equals" ? "=" : db.operator === "not_equals" ? "≠" : db.operator === "contains" ? "⊃" : "∈"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{db.value || db.values?.join(", ") || "—"}</td>
+                          <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{db.reason}</td>
+                          <td className="px-4 py-3">
+                            <StatusPill label={db.is_active ? "Ativo" : "Inativo"} tone={db.is_active ? "success" : "neutral"} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
 
             <div className="border-t border-[hsl(var(--border))] px-6 py-4">
               <h4 className="text-sm font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Skills vinculadas</h4>

@@ -14,10 +14,14 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
     ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import SkillModel
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.application.ports.ai_service import AIAnalysisResponse
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 from src.interface.workers.analysis_tasks import (
+    _process_analysis_async,
     _mark_analysis_failed,
     _mark_analysis_retry_scheduled,
 )
@@ -67,6 +71,141 @@ def _job_payload(**overrides) -> dict:
     }
     payload.update(overrides)
     return payload
+
+
+@pytest.mark.asyncio
+async def test_process_analysis_prefers_active_prompt_from_db_over_fallback_file(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.AsyncSessionFactory",
+        TestSessionFactory,
+    )
+
+    requested_user = await _create_active_user(
+        db_session,
+        "candidate-worker-db-prompt@test.com",
+        "password123",
+        UserRole.CANDIDATE,
+    )
+
+    candidate = CandidateModel(
+        user_id=requested_user.id,
+        full_name="Candidate Worker DB Prompt",
+        email="candidate-worker-db-prompt@test.com",
+        created_by=requested_user.id,
+    )
+    db_session.add(candidate)
+    await db_session.flush()
+
+    resume = ResumeModel(
+        candidate_id=candidate.id,
+        title="Currículo principal",
+        created_by=requested_user.id,
+    )
+    db_session.add(resume)
+    await db_session.flush()
+
+    version = ResumeVersionModel(
+        resume_id=resume.id,
+        version_number=1,
+        s3_bucket="test-bucket",
+        s3_key="resume/test.pdf",
+        original_file_name="test.pdf",
+        file_size_bytes=1234,
+        file_hash_sha256="a" * 64,
+        mime_type="application/pdf",
+        extracted_text="Python FastAPI PostgreSQL",
+        extraction_status="completed",
+        uploaded_by=requested_user.id,
+    )
+    db_session.add(version)
+
+    ai_model = AIModelModel(
+        provider="anthropic",
+        model_id=f"claude-db-prompt-{uuid4()}",
+        model_name="Claude DB Prompt Test",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        name="full_analysis",
+        version=7,
+        template_type="full_analysis",
+        system_prompt="DB SYSTEM PROMPT",
+        user_prompt_template="DB TEMPLATE\nResume:\n{resume_text}\nContext:\n{job_context}",
+        is_active=True,
+        created_by=requested_user.id,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.flush()
+
+    analysis = AnalysisModel(
+        id=uuid4(),
+        resume_version_id=version.id,
+        ai_model_id=ai_model.id,
+        prompt_template_id=prompt.id,
+        status="pending",
+        requested_by=requested_user.id,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db_session.add(analysis)
+    await db_session.commit()
+
+    captured: dict[str, object] = {}
+    log_events: list[tuple[str, dict]] = []
+
+    class FakeAIService:
+        async def analyze(self, request):
+            captured["system_prompt"] = request.system_prompt
+            captured["prompt_template"] = request.prompt_template
+            captured["max_tokens"] = request.max_tokens
+            captured["temperature"] = request.temperature
+            return AIAnalysisResponse(
+                content='{"personal_info":{"name":"Ana","email":"ana@example.com","phone":null,"location":"Sao Paulo"},"experience":[],"skills":[{"name":"Python","proficiency":"advanced"}],"leadership":{"has_management":false,"has_project_lead":false,"has_mentoring":false,"has_cross_team":false},"education":[],"languages":[],"employment_gaps":[],"cv_quality_score":{"total":80}}',
+                input_tokens=10,
+                output_tokens=20,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                processing_time_ms=123,
+            )
+
+    def fake_create(provider: str, model_id: str):
+        return FakeAIService()
+
+    def fake_log_info(event, **kwargs):
+        log_events.append((event, kwargs))
+
+    async def fake_enqueue_matching_pipeline(analysis_id: str) -> None:
+        return None
+
+    monkeypatch.setattr("src.interface.workers.analysis_tasks._provider_api_key_is_configured", lambda provider: True)
+    monkeypatch.setattr("src.interface.workers.analysis_tasks._real_ai_calls_allowed", lambda: True)
+    monkeypatch.setattr("src.infrastructure.ai.factory.AIServiceFactory.create", fake_create)
+    monkeypatch.setattr("src.interface.workers.analysis_tasks._enqueue_matching_pipeline", fake_enqueue_matching_pipeline)
+    monkeypatch.setattr("src.interface.workers.analysis_tasks.logger.info", fake_log_info)
+
+    result = await _process_analysis_async(analysis.id, "task-db-prompt")
+
+    assert result["status"] == "completed"
+    assert captured["system_prompt"] == "DB SYSTEM PROMPT"
+    assert captured["prompt_template"] == "DB TEMPLATE\nResume:\nPython FastAPI PostgreSQL\nContext:\n"
+    assert captured["max_tokens"] == int(prompt.max_tokens)
+    assert captured["temperature"] == float(prompt.temperature)
+
+    persisted_result = await db_session.scalar(
+        sa.select(AnalysisResultModel).where(AnalysisResultModel.analysis_id == analysis.id)
+    )
+    assert persisted_result is not None
+    assert persisted_result.prompt_version_used == "7"
+
+    assert any(
+        event == "analysis.prompt_source_selected"
+        and payload.get("prompt_source") == "db"
+        and payload.get("prompt_version") == "7"
+        for event, payload in log_events
+    )
 
 
 @pytest.mark.asyncio

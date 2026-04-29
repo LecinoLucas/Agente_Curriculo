@@ -50,7 +50,10 @@ async def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message)
 
     _set_refresh_cookie(response, result.refresh_token)
-    return TokenResponse(access_token=result.access_token)
+    return TokenResponse(
+        access_token=result.access_token,
+        must_change_password=result.must_change_password,
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -76,7 +79,10 @@ async def refresh(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message)
 
     _set_refresh_cookie(response, result.refresh_token)
-    return TokenResponse(access_token=result.access_token)
+    return TokenResponse(
+        access_token=result.access_token,
+        must_change_password=result.must_change_password,
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

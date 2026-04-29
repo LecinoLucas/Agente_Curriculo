@@ -23,8 +23,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
-  { to: "/admin",          label: "Painel admin", caption: "Visão geral",    roles: ["admin"] },
-  { to: "/admin/usuarios", label: "Usuários",     caption: "Contas e acessos", roles: ["admin"] },
+  { to: "/admin",          label: "Painel admin",     caption: "Visão geral",       roles: ["admin"] },
+  { to: "/admin/usuarios", label: "Usuários internos", caption: "Equipe e acessos", roles: ["admin"] },
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {

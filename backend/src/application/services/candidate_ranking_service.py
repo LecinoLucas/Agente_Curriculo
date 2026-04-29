@@ -76,6 +76,7 @@ class CandidateRankingService:
 
         for row in rows:
             bd = _compute_breakdown(row, weights)
+            _apply_validation_guardrails(row, bd)
             decision = _decide(bd["final_score"], threshold_high, threshold_low)
             matched = _coerce_list(row.get("matched_skills"))
             missing = _coerce_list(row.get("missing_skills"))
@@ -204,6 +205,8 @@ class CandidateRankingService:
                 ResumeJobMatchModel.seniority_match_score,
                 ResumeJobMatchModel.matched_skills,
                 ResumeJobMatchModel.missing_skills,
+                ResumeJobMatchModel.validation_status,
+                ResumeJobMatchModel.rejection_reasons,
                 AnalysisResultModel.overall_score,
                 AnalysisResultModel.education_score,
                 AnalysisResultModel.total_experience_years,
@@ -246,6 +249,8 @@ class CandidateRankingService:
                 best_match.c.seniority_match_score,
                 best_match.c.matched_skills,
                 best_match.c.missing_skills,
+                best_match.c.validation_status,
+                best_match.c.rejection_reasons,
                 best_match.c.overall_score,
                 best_match.c.education_score,
                 best_match.c.total_experience_years,
@@ -346,8 +351,24 @@ def _compute_breakdown(row: dict, weights: dict[str, Decimal]) -> dict[str, Deci
         "education_score":        education.quantize(q),
         "ai_confidence_score":    ai_confidence.quantize(q),
         "penalty_score":          penalty.quantize(q),
+        "validation_penalty_score": Decimal("0.00"),
         "final_score":            final.quantize(q),
     }
+
+
+def _apply_validation_guardrails(row: dict, bd: dict[str, Decimal]) -> None:
+    q = Decimal("0.01")
+    validation_status = row.get("validation_status")
+
+    if validation_status == "fail":
+        bd["validation_penalty_score"] = bd["final_score"].quantize(q)
+        bd["final_score"] = Decimal("0.00")
+        return
+
+    if validation_status == "unknown":
+        penalty = (bd["final_score"] * Decimal("0.10")).quantize(q)
+        bd["validation_penalty_score"] = penalty
+        bd["final_score"] = max(Decimal("0.00"), bd["final_score"] - penalty).quantize(q)
 
 
 def _decide(final_score: Decimal, threshold_high: Decimal, threshold_low: Decimal) -> str:
@@ -397,6 +418,31 @@ def _build_reason_codes(
             "field": skill.lower(),
             "impact": -float(_MISSING_SKILL_PENALTY),
             "description": f"Skill ausente: {skill}",
+        })
+
+    validation_status = row.get("validation_status")
+    rejection_reasons = _coerce_list(row.get("rejection_reasons"))
+    if validation_status == "fail":
+        codes.append({
+            "type": "validation",
+            "field": "hard_reject",
+            "impact": -float(bd["validation_penalty_score"]),
+            "description": (
+                rejection_reasons[0]
+                if rejection_reasons
+                else "Candidato reprovado nas validações obrigatórias"
+            ),
+        })
+    elif validation_status == "unknown":
+        codes.append({
+            "type": "validation",
+            "field": "manual_review",
+            "impact": -float(bd["validation_penalty_score"]),
+            "description": (
+                rejection_reasons[0]
+                if rejection_reasons
+                else "Evidências insuficientes; revisão manual necessária"
+            ),
         })
 
     seniority_score = bd["seniority_match_score"]
@@ -489,11 +535,25 @@ def _build_explanation(
 
     matched_part = f"Habilidades compatíveis: {', '.join(matched[:3])}. " if matched else ""
     missing_part = f"Gaps identificados: {', '.join(missing[:3])}. " if missing else ""
+    validation_status = row.get("validation_status")
+    rejection_reasons = _coerce_list(row.get("rejection_reasons"))
+    validation_part = ""
+    if validation_status == "fail":
+        validation_part = (
+            f"Reprovado por validação obrigatória: "
+            f"{rejection_reasons[0] if rejection_reasons else 'sem detalhe adicional'}. "
+        )
+    elif validation_status == "unknown":
+        validation_part = (
+            f"Requer revisão manual: "
+            f"{rejection_reasons[0] if rejection_reasons else 'evidência insuficiente'}. "
+        )
 
     return (
         f"{name} obteve score {score:.1f}/100. "
         f"{matched_part}"
         f"{missing_part}"
+        f"{validation_part}"
         f"Perfil: {seniority}, {years_str}. "
         f"{decision_label}."
     )

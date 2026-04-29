@@ -21,4 +21,10 @@ export const authService = {
       method: "PATCH",
       body: payload,
     }),
+
+  updateMyPassword: (payload: { current_password: string; new_password: string }) =>
+    httpRequest<AuthUser>("/api/v1/users/me/password", {
+      method: "PATCH",
+      body: payload,
+    }),
 };

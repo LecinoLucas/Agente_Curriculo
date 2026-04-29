@@ -4,6 +4,7 @@ from src.interface.api.routers import (
     auth,
     candidates,
     document_ai,
+    internal_users,
     jobs,
     observability,
     pipeline,
@@ -23,5 +24,6 @@ __all__ = [
     "skills",
     "ai_models",
     "document_ai",
+    "internal_users",
     "observability",
 ]

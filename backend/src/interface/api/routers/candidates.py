@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.candidate_service import (
     CandidateCpfConflictError,
     CandidateEmailConflictError,
+    CandidateNotAllowedUserIdError,
     CandidateNotFoundError,
     CandidateService,
     InvalidCandidateCpfError,
@@ -87,6 +88,11 @@ def _handle_candidate_service_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="CPF deve conter 11 dígitos",
+        )
+    if isinstance(exc, CandidateNotAllowedUserIdError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Não é permitido especificar user_id durante criação de candidato",
         )
     if isinstance(exc, PipelineCandidateNotFoundError):
         raise HTTPException(

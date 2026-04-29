@@ -71,6 +71,7 @@ class SQLAlchemyUserRepository(UserRepository):
             updated_at=model.updated_at,
             email_verified_at=model.email_verified_at,
             avatar_url=model.avatar_url,
+            must_change_password=model.must_change_password,
             last_login_at=model.last_login_at,
             login_count=model.login_count,
             failed_login_count=model.failed_login_count,
@@ -89,6 +90,7 @@ class SQLAlchemyUserRepository(UserRepository):
             full_name=user.full_name,
             email_verified_at=user.email_verified_at,
             avatar_url=user.avatar_url,
+            must_change_password=user.must_change_password,
             last_login_at=user.last_login_at,
             login_count=user.login_count,
             failed_login_count=user.failed_login_count,
@@ -107,6 +109,7 @@ class SQLAlchemyUserRepository(UserRepository):
         model.full_name = user.full_name
         model.email_verified_at = user.email_verified_at
         model.avatar_url = user.avatar_url
+        model.must_change_password = user.must_change_password
         model.last_login_at = user.last_login_at
         model.login_count = user.login_count
         model.failed_login_count = user.failed_login_count

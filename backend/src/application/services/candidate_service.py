@@ -41,11 +41,38 @@ class InvalidCandidateCpfError(Exception):
     pass
 
 
+class CandidateNotAllowedUserIdError(Exception):
+    pass
+
+
 class CandidateService:
     def __init__(self, repository: SQLAlchemyCandidateRepository) -> None:
         self._repository = repository
 
     async def create(self, body: CreateCandidateRequest, created_by: UUID) -> CandidateModel:
+        """
+        Create a new Candidate.
+
+        Guardrail (Phase 20.3):
+        ──────────────────────
+        The user_id field in CreateCandidateRequest is RESERVED for future portal use.
+        Currently, it MUST be NULL. Creating Candidates with user_id requires explicit
+        linking via CandidateAccount (Phase 20.3+), not during Candidate creation.
+
+        This prevents:
+        - Accidental User creation when Candidate is created
+        - Mixing User and Candidate creation flows
+        - Race conditions between User and Candidate
+
+        See: docs/user-candidate-boundary.md
+        """
+        # GUARDRAIL: Reject user_id in candidate creation
+        if body.user_id is not None:
+            raise CandidateNotAllowedUserIdError(
+                "Não é permitido especificar user_id durante criação de candidato. "
+                "O vínculo com usuário será feito via portal do candidato (Phase 20.3+)."
+            )
+
         email = self._clean_email(body.email)
         if await self._repository.find_active_by_email(email):
             raise CandidateEmailConflictError
@@ -67,7 +94,7 @@ class CandidateService:
             portfolio_url=body.portfolio_url,
             internal_notes=body.internal_notes,
             tags=self._clean_tags(body.tags),
-            user_id=body.user_id,
+            user_id=None,  # GUARDRAIL: Always NULL; user_id will be set via CandidateAccount
             created_by=created_by,
         )
         return await self._repository.create(candidate)

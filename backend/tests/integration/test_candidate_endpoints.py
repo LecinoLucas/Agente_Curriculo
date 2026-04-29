@@ -393,3 +393,43 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
     assert len(body["top_matches"]) >= 1
     assert body["top_matches"][0]["job_id"] == job_id
     assert body["top_matches"][0]["recommendation"] in {"strong_match", "good_match"}
+
+
+@pytest.mark.asyncio
+async def test_candidate_user_id_must_be_unique_when_linked_to_portal_user(
+    db_session: AsyncSession,
+):
+    candidate_user = await _create_active_user(
+        db_session,
+        "candidate-link@test.com",
+        "password123",
+        UserRole.CANDIDATE,
+    )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-link@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+
+    db_session.add(
+        CandidateModel(
+            full_name="Candidate One",
+            email="candidate-one@test.com",
+            user_id=candidate_user.id,
+            created_by=recruiter.id,
+        )
+    )
+    await db_session.flush()
+
+    db_session.add(
+        CandidateModel(
+            full_name="Candidate Two",
+            email="candidate-two@test.com",
+            user_id=candidate_user.id,
+            created_by=recruiter.id,
+        )
+    )
+
+    with pytest.raises(sa.exc.IntegrityError):
+        await db_session.flush()

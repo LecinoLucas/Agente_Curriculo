@@ -2,9 +2,11 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from src.domain.entities.user import User, UserStatus
+from src.domain.exceptions import ConflictException
+from src.infrastructure.security.password_service import hash_password
 from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.sqlalchemy_user_admin_repository import SQLAlchemyUserAdminRepository, UserStats
-from src.interface.api.schemas.user_schemas import PatchUserRequest
+from src.interface.api.schemas.user_schemas import PatchUserRequest, ResetUserPasswordRequest
 
 
 class UserNotFoundError(Exception):
@@ -45,13 +47,27 @@ class UserAdminService:
     async def patch(self, user_id: UUID, body: PatchUserRequest) -> UserModel:
         user = await self.get(user_id)
 
+        if body.email is not None:
+            email = body.email.lower().strip()
+            if email != user.email and await self._repository.exists_active_by_email(email, exclude_user_id=user.id):
+                raise ConflictException("Email já está em uso")
+            user.email = email
         if body.role is not None:
             user.role = body.role.value
-        if body.status is not None:
-            user.status = body.status.value
+        if body.is_active is not None:
+            user.status = UserStatus.ACTIVE.value if body.is_active else UserStatus.INACTIVE.value
+            if body.is_active and user.email_verified_at is None:
+                user.email_verified_at = datetime.now(timezone.utc)
         if body.full_name is not None:
             user.full_name = self._clean_required_text(body.full_name)
 
+        user.updated_at = datetime.now(timezone.utc)
+        return await self._repository.save(user)
+
+    async def reset_password(self, user_id: UUID, body: ResetUserPasswordRequest) -> UserModel:
+        user = await self.get(user_id)
+        user.password_hash = hash_password(body.temporary_password)
+        user.must_change_password = body.must_change_password
         user.updated_at = datetime.now(timezone.utc)
         return await self._repository.save(user)
 

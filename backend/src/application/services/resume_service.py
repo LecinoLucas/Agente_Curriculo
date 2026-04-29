@@ -246,33 +246,53 @@ class ResumeService:
         current_user: User,
         candidate_id: UUID | None,
     ) -> CandidateModel:
+        """
+        Resolve which Candidate should receive the resume upload.
+
+        Access Control:
+        ───────────────
+        - ADMIN/RECRUITER: Must explicitly provide candidate_id
+        - role="candidate": Can upload for own linked Candidate (via Candidate.user_id)
+
+        Guardrail (Phase 20.3):
+        ──────────────────────
+        role="candidate" CANNOT auto-create Candidate. This prevents mixing Candidate
+        creation logic into portal access flow. Candidates are created only by
+        admin/recruiter via POST /candidates endpoint.
+
+        See: docs/user-candidate-boundary.md
+        """
         if candidate_id is not None:
             candidate = await self._repository.find_candidate_by_id(candidate_id)
             if candidate is None:
                 raise ResumeUploadCandidateNotFoundError
 
             if self._can_manage_all(current_user):
+                # Internal user (recruiter/admin): can upload for any candidate
                 return candidate
 
+            # Portal access (role="candidate"): can only upload for own candidate
             owner_candidate = await self._repository.find_candidate_by_user_id(current_user.id)
             if owner_candidate is None or owner_candidate.id != candidate_id:
                 raise ResumeUploadCandidateNotFoundError
             return candidate
 
+        # No candidate_id provided
         if self._can_manage_all(current_user):
+            # Internal user MUST provide candidate_id
             raise ResumeUploadCandidateRequiredError
 
+        # Portal access (role="candidate"): try to find own candidate
         candidate = await self._repository.find_candidate_by_user_id(current_user.id)
         if candidate is not None:
+            # GUARDRAIL: role="candidate" can use existing linked Candidate only
             return candidate
 
-        return await self._repository.create_candidate(
-            CandidateModel(
-                user_id=current_user.id,
-                full_name=current_user.full_name,
-                email=current_user.email,
-                created_by=current_user.id,
-            )
+        # GUARDRAIL: role="candidate" CANNOT auto-create Candidate
+        # Candidates are created only by admin/recruiter via POST /candidates
+        raise ResumeUploadCandidateRequiredError(
+            "User com role=candidate não tem Candidate vinculado. "
+            "Solicite ao recrutador para criar ou vincular um candidato."
         )
 
     @staticmethod

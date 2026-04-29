@@ -63,6 +63,14 @@ class CandidateModel(Base):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
 
     __table_args__ = (
+        sa.Index("idx_candidates_user_id", "user_id"),
+        sa.Index(
+            "uq_candidates_user_id_not_null",
+            "user_id",
+            unique=True,
+            postgresql_where=sa.text("user_id IS NOT NULL"),
+            sqlite_where=sa.text("user_id IS NOT NULL"),
+        ),
         sa.Index("idx_candidates_email", "email"),
         sa.Index("idx_candidates_cpf", "cpf"),
     )

@@ -301,6 +301,7 @@ export function CandidateDrawer() {
     activePanelTab,
     activeJobId,
     jobs,
+    rankingSyncTick,
     closeCandidate,
     openCandidate,
     switchPanelTab,
@@ -310,6 +311,7 @@ export function CandidateDrawer() {
     startPolling,
     notifyCandidatesChanged,
     moveCandidateStage,
+    invalidateJobState,
   } = usePipeline();
   const { user } = useAuth();
   const canSpendRealTokens = Boolean(user?.real_ai_token_spend_enabled);
@@ -339,6 +341,12 @@ export function CandidateDrawer() {
     setRankingEntry(null);
     setRankingEntryError(null);
   }, [selectedCandidateId]);
+
+  useEffect(() => {
+    rankingEntryCacheRef.current.clear();
+    setRankingEntry(null);
+    setRankingEntryError(null);
+  }, [rankingSyncTick]);
 
   useEffect(() => {
     if (activePanelTab !== "analysis") return;
@@ -478,7 +486,13 @@ export function CandidateDrawer() {
     [candidateOverview],
   );
   const availableJobs = useMemo(
-    () => jobs.filter((job) => job.id !== activeJobId && !linkedJobIds.has(job.id)),
+    () =>
+      jobs.filter(
+        (job) =>
+          job.id !== activeJobId &&
+          !linkedJobIds.has(job.id) &&
+          (job.status === "published" || job.status === "paused"),
+      ),
     [jobs, activeJobId, linkedJobIds],
   );
   const canTransferCurrentJob = currentStage ? TRANSFER_ALLOWED_STAGES.includes(currentStage) : false;
@@ -602,8 +616,7 @@ export function CandidateDrawer() {
         job_id: activeJobId,
         initial_stage: "entry",
       });
-      await refreshBoard();
-      await syncCandidateOverview(selectedCandidateId);
+      await invalidateJobState();
       feedback.moveCandidate.success();
     } catch (err: unknown) {
       feedback.moveCandidate.error(err);
@@ -768,8 +781,7 @@ export function CandidateDrawer() {
         onClose={() => setAddJobModalOpen(false)}
         onSuccess={async () => {
           if (!candidate?.id) return;
-          await syncCandidateOverview(candidate.id);
-          notifyCandidatesChanged();
+          await invalidateJobState();
           setAddJobModalOpen(false);
         }}
       />
@@ -783,8 +795,7 @@ export function CandidateDrawer() {
         onClose={() => setTransferJobModalOpen(false)}
         onSuccess={async () => {
           if (!candidate?.id) return;
-          await Promise.all([refreshBoard(), syncCandidateOverview(candidate.id)]);
-          notifyCandidatesChanged();
+          await invalidateJobState();
           setTransferJobModalOpen(false);
           closeCandidate();
         }}

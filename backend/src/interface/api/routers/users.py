@@ -16,14 +16,16 @@ from src.application.services.user_profile_service import (
     InvalidProfileTextError,
     UserProfileService,
 )
+from src.application.services.user_security_service import PasswordReuseError, UserSecurityService
 from src.application.use_cases.users.create_user import CreateUserUseCase
 from src.core.settings import settings
-from src.domain.exceptions import ConflictException
+from src.domain.exceptions import ConflictException, UnauthorizedException
 from src.infrastructure.repositories.sqlalchemy_user_admin_repository import SQLAlchemyUserAdminRepository
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.interface.api.dependencies import AdminOnly, CurrentUser, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.user_schemas import (
+    ChangeMyPasswordRequest,
     CreateUserRequest,
     PatchMyProfileRequest,
     PatchUserRequest,
@@ -45,6 +47,8 @@ def _handle_user_admin_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Não é possível modificar o próprio usuário nesta ação")
     if isinstance(exc, InvalidUserTextError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Nome não pode estar em branco")
+    if isinstance(exc, ConflictException):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.message)
     raise exc
 
 
@@ -65,9 +69,11 @@ async def create_user(
         result = await use_case.execute(
             CreateUserCommand(
                 email=body.email,
-                password=body.password,
+                temporary_password=body.temporary_password,
                 full_name=body.full_name,
                 role=body.role,
+                is_active=body.is_active,
+                must_change_password=body.must_change_password,
             )
         )
     except ConflictException as exc:
@@ -86,6 +92,7 @@ async def create_user(
         role=result.role,
         status=result.status,
         real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        must_change_password=result.must_change_password,
         last_login_at=None,
         created_at=None,
     )
@@ -100,6 +107,7 @@ async def get_me(current_user: CurrentUser) -> UserResponse:
         role=current_user.role,
         status=current_user.status,
         real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        must_change_password=current_user.must_change_password,
         last_login_at=current_user.last_login_at,
         created_at=current_user.created_at,
         avatar_url=current_user.avatar_url,
@@ -123,6 +131,7 @@ async def patch_me(
             role=updated.role,
             status=updated.status,
             real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+            must_change_password=updated.must_change_password,
             last_login_at=updated.last_login_at,
             created_at=updated.created_at,
             avatar_url=updated.avatar_url,
@@ -152,6 +161,7 @@ async def upload_avatar(
             role=updated.role,
             status=updated.status,
             real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+            must_change_password=updated.must_change_password,
             last_login_at=updated.last_login_at,
             created_at=updated.created_at,
             avatar_url=updated.avatar_url,
@@ -180,10 +190,48 @@ async def delete_avatar(
         role=updated.role,
         status=updated.status,
         real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        must_change_password=updated.must_change_password,
         last_login_at=updated.last_login_at,
         created_at=updated.created_at,
         avatar_url=updated.avatar_url,
     )
+
+
+@router.patch("/me/password", response_model=UserResponse)
+async def change_my_password(
+    body: ChangeMyPasswordRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    service = UserSecurityService(SQLAlchemyUserRepository(db))
+    try:
+        updated = await service.change_my_password(
+            current_user,
+            current_password=body.current_password,
+            new_password=body.new_password,
+        )
+        await db.commit()
+        return UserResponse(
+            id=updated.id,
+            email=updated.email,
+            full_name=updated.full_name,
+            role=updated.role,
+            status=updated.status,
+            real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+            must_change_password=updated.must_change_password,
+            last_login_at=updated.last_login_at,
+            created_at=updated.created_at,
+            avatar_url=updated.avatar_url,
+        )
+    except UnauthorizedException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message)
+    except PasswordReuseError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
+    except Exception:
+        await db.rollback()
+        raise
 
 
 @router.get("", response_model=PaginatedResponse[UserResponse])

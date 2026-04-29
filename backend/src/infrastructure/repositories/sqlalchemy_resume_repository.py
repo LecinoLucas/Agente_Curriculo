@@ -21,7 +21,7 @@ class SQLAlchemyResumeRepository:
         with role="candidate" to access their linked Candidate profile and resumes.
 
         Invariants:
-        - Assumes at most 1 Candidate per user_id (recommend UNIQUE constraint)
+        - Assumes at most 1 Candidate per user_id (enforced by partial UNIQUE index)
         - Used by ResumeService to filter access for candidate portal users
         - Will be replaced by separate CandidateAccount table in Phase 20.3+
 

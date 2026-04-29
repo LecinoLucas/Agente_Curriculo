@@ -10,6 +10,12 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.domain.entities.user import User, UserRole
+from src.infrastructure.ai.prompts.v2_full_analysis import (
+    NAME as PROMPT_NAME,
+    SYSTEM_PROMPT,
+    USER_PROMPT_TEMPLATE,
+    VERSION as PROMPT_VERSION,
+)
 from src.infrastructure.database.connection import AsyncSessionFactory, engine
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
@@ -46,6 +52,23 @@ async def main() -> None:
         await session.execute(
             text(
                 """
+                UPDATE prompt_templates
+                SET is_active = false,
+                    deactivated_at = NOW()
+                WHERE template_type = :template_type
+                  AND is_active = true
+                  AND version <> :version
+                """
+            ),
+            {
+                "template_type": "full_analysis",
+                "version": PROMPT_VERSION,
+            },
+        )
+
+        await session.execute(
+            text(
+                """
                 INSERT INTO prompt_templates (
                     name,
                     version,
@@ -72,16 +95,26 @@ async def main() -> None:
                     NOW(),
                     :created_by
                 )
-                ON CONFLICT (name, version) DO NOTHING
+                ON CONFLICT (name, version) DO UPDATE
+                SET description = EXCLUDED.description,
+                    template_type = EXCLUDED.template_type,
+                    system_prompt = EXCLUDED.system_prompt,
+                    user_prompt_template = EXCLUDED.user_prompt_template,
+                    max_tokens = EXCLUDED.max_tokens,
+                    temperature = EXCLUDED.temperature,
+                    is_active = true,
+                    activated_at = NOW(),
+                    deactivated_at = NULL,
+                    created_by = EXCLUDED.created_by
                 """
             ),
             {
-                "name": "full_analysis",
-                "version": 1,
-                "description": "Template padrao de analise para ambiente de desenvolvimento",
+                "name": PROMPT_NAME,
+                "version": PROMPT_VERSION,
+                "description": "Template padrao de analise de curriculos para ambiente de desenvolvimento",
                 "template_type": "full_analysis",
-                "system_prompt": "Analise o curriculo e retorne um parecer objetivo.",
-                "user_prompt_template": "Curriculo:\n{{resume_text}}",
+                "system_prompt": SYSTEM_PROMPT,
+                "user_prompt_template": USER_PROMPT_TEMPLATE,
                 "max_tokens": 2048,
                 "temperature": 0.1,
                 "created_by": user_id,
@@ -90,7 +123,7 @@ async def main() -> None:
         await session.commit()
 
     await engine.dispose()
-    print("Prompt template padrao garantido: full_analysis v1")
+    print(f"Prompt template padrao garantido: {PROMPT_NAME} v{PROMPT_VERSION}")
 
 
 if __name__ == "__main__":

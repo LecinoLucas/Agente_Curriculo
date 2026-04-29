@@ -160,8 +160,16 @@ def _evaluate_deal_breaker(
     if not field or value is None:
         return False, None
 
-    # Get candidate value from result (explicit data only)
+    # Prefer explicit persisted fields, but fall back to extracted_data when
+    # the matching phase is running from an AnalysisResultModel loaded from DB.
     candidate_value = getattr(candidate_result, field, None)
+    if candidate_value is None:
+        extracted = getattr(candidate_result, "extracted_data", None) or {}
+        candidate_section = extracted.get("candidate") if isinstance(extracted, dict) else None
+        if isinstance(candidate_section, dict) and field in candidate_section:
+            candidate_value = candidate_section.get(field)
+        elif isinstance(extracted, dict):
+            candidate_value = extracted.get(field)
 
     # No explicit data = no deal-breaker hit
     if candidate_value is None:
@@ -666,8 +674,12 @@ class AnalysisService:
             result.highest_education_level, job.minimum_education_level
         )
         experience_result = _validate_experience(
-            Decimal(str(result.total_experience_years)) if result.total_experience_years else None,
-            Decimal(str(job.minimum_years_experience)) if job.minimum_years_experience else None,
+            Decimal(str(result.total_experience_years))
+            if result.total_experience_years is not None
+            else None,
+            Decimal(str(job.minimum_years_experience))
+            if job.minimum_years_experience is not None
+            else None,
         )
 
         # Track validation status and missing evidence

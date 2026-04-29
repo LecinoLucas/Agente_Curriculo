@@ -54,6 +54,7 @@ export function PipelinePage() {
     board,
     boardLoading,
     boardError,
+    rankingSyncTick,
     setActiveJob,
     refreshBoard,
     openCandidate,
@@ -95,6 +96,11 @@ export function PipelinePage() {
   }
 
   useEffect(() => {
+    rankingCacheRef.current.clear();
+    rankingFetchInFlightRef.current.clear();
+  }, [rankingSyncTick]);
+
+  useEffect(() => {
     if (!activeJobId) {
       setRanking(null);
       setRankingError(null);
@@ -129,7 +135,7 @@ export function PipelinePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeJobId]);
+  }, [activeJobId, rankingSyncTick]);
 
   // ── Effect 2: auto-redirect when no jobId in URL ──────────────────────────
   // /pipeline (no :jobId) is a valid entry point. Once jobs are ready,
@@ -139,6 +145,19 @@ export function PipelinePage() {
     if (jobIdParam) return;
     if (jobsLoading || jobs.length === 0) return;
     navigate(`/pipeline/${jobs[0].id}`, { replace: true });
+  }, [jobIdParam, jobsLoading, jobs, navigate]);
+
+  useEffect(() => {
+    if (!jobIdParam || jobsLoading) return;
+    const exists = jobs.some((job) => job.id === jobIdParam);
+    if (exists) return;
+
+    if (jobs.length > 0) {
+      navigate(`/pipeline/${jobs[0].id}`, { replace: true });
+      return;
+    }
+
+    navigate("/pipeline", { replace: true });
   }, [jobIdParam, jobsLoading, jobs, navigate]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
@@ -166,8 +185,10 @@ export function PipelinePage() {
   const isBoardRefreshing = boardLoading && board !== null;
   const showInitialBoardLoading = boardLoading && board === null;
   const isRankingRefreshing = rankingLoading && ranking !== null;
+  const activeJobAcceptsCandidates =
+    selectedJob?.status === "published" || selectedJob?.status === "paused";
   const boardLayoutClass = rankingCollapsed
-    ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_88px]"
+    ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)]"
     : "grid gap-6 xl:grid-cols-[minmax(0,1fr)_clamp(18rem,24vw,21rem)]";
 
   // ── Handler ───────────────────────────────────────────────────────────────
@@ -192,7 +213,7 @@ export function PipelinePage() {
           <button
             type="button"
             onClick={() => setShowNewCandidate(true)}
-            disabled={!activeJobId}
+            disabled={!activeJobId || !activeJobAcceptsCandidates}
             className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[hsl(var(--primary))]/90"
           >
             Novo candidato
@@ -264,6 +285,12 @@ export function PipelinePage() {
               </div>
             ) : null}
           </div>
+
+          {selectedJob && !activeJobAcceptsCandidates ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Esta vaga está em status <strong>{formatJobStatus(selectedJob.status)}</strong>. Novos candidatos e vínculos de pipeline só são permitidos para vagas publicadas ou pausadas.
+            </div>
+          ) : null}
 
           {activeJobId ? (
             <button
@@ -393,39 +420,41 @@ export function PipelinePage() {
             ) : null}
           </div>
 
-          <RankingPanel
-            collapsed={rankingCollapsed}
-            jobTitle={selectedJob?.title ?? "vaga selecionada"}
-            preview={rankingPreview}
-            totalActive={totalActive}
-            ranking={ranking}
-            loading={rankingLoading}
-            isRefreshing={isRankingRefreshing}
-            error={rankingError}
-            onToggle={() => setRankingCollapsed((current) => !current)}
-            onOpenCandidate={openCandidate}
-            onRefresh={
-              activeJobId
-                ? () => {
-                    setRankingLoading(true);
-                    setRankingError(null);
-                    void loadRanking(activeJobId, true)
-                      .then((result) => setRanking(result))
-                      .catch((err: unknown) => {
-                        setRanking(null);
-                        setRankingError(
-                          formatContextError(
-                            err,
-                            "Não foi possível carregar o ranking desta vaga.",
-                            "Tente atualizar novamente.",
-                          ),
-                        );
-                      })
-                      .finally(() => setRankingLoading(false));
-                  }
-                : undefined
-            }
-          />
+          {!rankingCollapsed ? (
+            <RankingPanel
+              collapsed={rankingCollapsed}
+              jobTitle={selectedJob?.title ?? "vaga selecionada"}
+              preview={rankingPreview}
+              totalActive={totalActive}
+              ranking={ranking}
+              loading={rankingLoading}
+              isRefreshing={isRankingRefreshing}
+              error={rankingError}
+              onToggle={() => setRankingCollapsed((current) => !current)}
+              onOpenCandidate={openCandidate}
+              onRefresh={
+                activeJobId
+                  ? () => {
+                      setRankingLoading(true);
+                      setRankingError(null);
+                      void loadRanking(activeJobId, true)
+                        .then((result) => setRanking(result))
+                        .catch((err: unknown) => {
+                          setRanking(null);
+                          setRankingError(
+                            formatContextError(
+                              err,
+                              "Não foi possível carregar o ranking desta vaga.",
+                              "Tente atualizar novamente.",
+                            ),
+                          );
+                        })
+                        .finally(() => setRankingLoading(false));
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -729,7 +758,7 @@ function NewCandidateModal({
   onClose: () => void;
   onCreated: (candidateId: string) => Promise<void>;
 }) {
-  const { notifyCandidatesChanged, refreshBoard } = usePipeline();
+  const { notifyCandidatesChanged, invalidateJobState } = usePipeline();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -765,9 +794,12 @@ function NewCandidateModal({
     if (!activeJobId) {
       throw new Error("Selecione uma vaga antes de vincular o candidato.");
     }
+    if (!job || (job.status !== "published" && job.status !== "paused")) {
+      throw new Error("A vaga ativa precisa estar publicada ou pausada para receber candidatos.");
+    }
     setLinkStatus("created_pending_link");
     await pipelineService.addCandidateToJob(candidateId, { job_id: activeJobId, initial_stage: "entry" });
-    await refreshBoard();
+    await invalidateJobState(activeJobId);
     setLinkStatus("linked");
   }
 
@@ -808,6 +840,10 @@ function NewCandidateModal({
     e.preventDefault();
     if (!activeJobId || !job) {
       setErrors({ form: "Selecione uma vaga antes de cadastrar um candidato." });
+      return;
+    }
+    if (job.status !== "published" && job.status !== "paused") {
+      setErrors({ form: "A vaga ativa precisa estar publicada ou pausada para receber novos candidatos." });
       return;
     }
     const validated = validateForm();

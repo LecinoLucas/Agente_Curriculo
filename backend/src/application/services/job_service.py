@@ -39,12 +39,16 @@ class JobService:
         self._validate_salary_range(body.salary_min, body.salary_max)
         title = self._clean_required_text(body.title)
         description = self._clean_required_text(body.description)
+        deal_breakers = [db.model_dump(exclude_none=True) for db in body.deal_breakers] if body.deal_breakers else []
         job = JobModel(
             title=title,
             description=description,
             requirements=body.requirements.strip() if body.requirements else None,
             status=body.status,
             seniority_level=body.seniority_level,
+            minimum_education_level=body.minimum_education_level,
+            minimum_years_experience=body.minimum_years_experience,
+            deal_breakers=deal_breakers,
             work_model=body.work_model,
             location=body.location,
             salary_min=body.salary_min,
@@ -75,6 +79,9 @@ class JobService:
             "requirements",
             "status",
             "seniority_level",
+            "minimum_education_level",
+            "minimum_years_experience",
+            "deal_breakers",
             "work_model",
             "location",
             "salary_min",
@@ -87,6 +94,8 @@ class JobService:
                     val = self._clean_required_text(val)
                 if field_name == "salary_currency" and isinstance(val, str):
                     val = val.upper()
+                if field_name == "deal_breakers" and isinstance(val, list):
+                    val = [db.model_dump(exclude_none=True) for db in val]
                 setattr(job, field_name, val)
 
         if body.status is not None:

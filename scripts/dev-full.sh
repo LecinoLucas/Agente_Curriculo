@@ -25,7 +25,16 @@ print_error() {
   printf '[ERROR] %s\n' "$1" >&2
 }
 
-# Verifica se arquivo foi modificado desde o stamp
+get_local_ip() {
+  if command -v ipconfig >/dev/null 2>&1; then
+    ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || printf '127.0.0.1'
+  elif command -v hostname >/dev/null 2>&1; then
+    hostname -I 2>/dev/null | awk '{print $1}'
+  else
+    printf '127.0.0.1'
+  fi
+}
+
 needs_install() {
   stamp_file=$1
   shift
@@ -43,8 +52,6 @@ needs_install() {
   return 1
 }
 
-# ===== INSTALAÇÃO DE DEPENDÊNCIAS (OTIMIZADO) =====
-
 ensure_root_dependencies() {
   if [ ! -d "$ROOT_DIR/node_modules" ] || needs_install "$ROOT_DEPS_STAMP" "$ROOT_DIR/package.json" "$ROOT_DIR/package-lock.json"; then
     print_info "Instalando dependencias da raiz"
@@ -56,7 +63,7 @@ ensure_root_dependencies() {
     return 0
   fi
 
-  print_ok "Dependencias da raiz prontas (cache valido)"
+  print_ok "Dependencias da raiz prontas"
 }
 
 ensure_frontend_dependencies() {
@@ -70,7 +77,7 @@ ensure_frontend_dependencies() {
     return 0
   fi
 
-  print_ok "Dependencias do frontend prontas (cache valido)"
+  print_ok "Dependencias do frontend prontas"
 }
 
 ensure_backend_dependencies() {
@@ -94,10 +101,8 @@ ensure_backend_dependencies() {
     return 0
   fi
 
-  print_ok "Dependencias do backend prontas (cache valido)"
+  print_ok "Dependencias do backend prontas"
 }
-
-# ===== LEITURA DE CONFIGURAÇÃO (OTIMIZADO) =====
 
 read_frontend_api_url() {
   if [ -n "${VITE_API_BASE_URL:-}" ]; then
@@ -144,12 +149,9 @@ extract_port() {
   [ "$port" != "$url" ] && printf '%s\n' "$port" || printf '%s\n' "8000"
 }
 
-# ===== LIMPEZA DE PORTAS (OTIMIZADO) =====
-
 kill_port() {
   port=$1
-  
-  # Usar fuser é mais rápido que lsof em alguns sistemas
+
   if command -v fuser >/dev/null 2>&1; then
     fuser -k "$port/tcp" 2>/dev/null || true
   elif command -v lsof >/dev/null 2>&1; then
@@ -157,7 +159,7 @@ kill_port() {
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
       sleep 0.5
-      
+
       remaining=$(lsof -ti tcp:"$port" 2>/dev/null || true)
       if [ -n "$remaining" ]; then
         kill -9 $remaining 2>/dev/null || true
@@ -169,25 +171,21 @@ kill_port() {
 kill_port_range() {
   start_port=$1
   end_port=$2
-  
-  # Matar portas em paralelo (melhor performance)
+
   for port in $(seq "$start_port" "$end_port"); do
     kill_port "$port" &
   done
+
   wait
 }
 
-# ===== INICIALIZAÇÃO DO BANCO (OTIMIZADO) =====
-
 bootstrap_database() {
   cd "$ROOT_DIR"
-  
-  # Executar seeds em paralelo quando possível
+
   print_info "Preparando schema do banco para desenvolvimento"
   npm run --silent backend:bootstrap
   print_ok "Schema pronto"
 
-  # Paralelizar se houver múltiplas seeds
   (
     (print_info "Garantindo usuario admin de desenvolvimento" && npm run --silent backend:seed-admin && print_ok "Usuario admin pronto") &
     (print_info "Inserindo vagas de desenvolvimento" && npm run --silent backend:seed-jobs && print_ok "Vagas de desenvolvimento prontas") &
@@ -196,62 +194,54 @@ bootstrap_database() {
   )
 }
 
-# ===== MAIN =====
-
-# Validações iniciais (rápidas)
 if [ ! -f "$BACKEND_DIR/.env" ]; then
   print_error "Arquivo $BACKEND_DIR/.env nao encontrado."
   echo "Crie esse arquivo antes de rodar o ambiente completo."
   exit 1
 fi
 
-if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ] 2>/dev/null; then
-  # Apenas aviso, será criado nas dependências
-  :
-fi
-
-# Ler configurações uma única vez
-EXPECTED_API_URL=$(read_frontend_api_url)
-BACKEND_PORT=$(extract_port "$EXPECTED_API_URL")
+RAW_API_URL=$(read_frontend_api_url)
+BACKEND_PORT=$(extract_port "$RAW_API_URL")
 FRONTEND_PORT=$(read_frontend_port)
-EXPECTED_API_URL="http://127.0.0.1:$BACKEND_PORT"
+LOCAL_IP=$(get_local_ip)
+
+EXPECTED_API_URL="http://$LOCAL_IP:$BACKEND_PORT"
 
 print_section "Ambiente"
-printf 'frontend: http://localhost:%s\n' "$FRONTEND_PORT"
-printf 'backend : http://127.0.0.1:%s\n' "$BACKEND_PORT"
-printf 'api url : %s\n' "$EXPECTED_API_URL"
+printf 'frontend local : http://localhost:%s\n' "$FRONTEND_PORT"
+printf 'frontend rede  : http://%s:%s\n' "$LOCAL_IP" "$FRONTEND_PORT"
+printf 'backend local  : http://127.0.0.1:%s\n' "$BACKEND_PORT"
+printf 'backend rede   : http://%s:%s\n' "$LOCAL_IP" "$BACKEND_PORT"
+printf 'api url        : %s\n' "$EXPECTED_API_URL"
 
-# Instalar dependências (pode executar raiz + frontend em paralelo)
 print_section "Dependencias"
 (
   ensure_root_dependencies &
   ensure_frontend_dependencies &
   wait
 )
+
 ensure_backend_dependencies
 
-# Verificar uvicorn após instalar dependências
 if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
   print_error "uvicorn nao encontrado em $BACKEND_DIR/.venv/bin/uvicorn mesmo apos instalar dependencias."
   exit 1
 fi
 
-# Liberar portas (paralelizado)
 print_section "Portas"
 kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
 kill_port "$BACKEND_PORT" &
 wait
 
-# Setup do banco
 print_section "Banco"
 bootstrap_database
 
-# Iniciar serviços
 export FRONTEND_PORT
 export BACKEND_PORT
-export VITE_API_BASE_URL="$EXPECTED_API_URL"
+export HOST="0.0.0.0"
+export VITE_API_BASE_URL="${VITE_API_BASE_URL:-$EXPECTED_API_URL}"
 
 print_section "Servicos"
-print_info "Subindo frontend e backend"
+print_info "Subindo frontend e backend para acesso local e rede"
 cd "$ROOT_DIR"
 exec npm run --silent dev

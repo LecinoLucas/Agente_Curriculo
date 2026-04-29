@@ -9,12 +9,11 @@ export function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isDev = import.meta.env.DEV;
 
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/pipeline";
 
-  const [email, setEmail] = useState("admin@resume.ai");
-  const [password, setPassword] = useState("Admin123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -129,14 +128,6 @@ export function LoginPage() {
             <p className="text-center text-xs text-gray-500">
               Seu acesso define quais áreas da plataforma estarão disponíveis.
             </p>
-
-            {isDev ? (
-              <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 px-4 py-3">
-                <p className="mb-1 text-xs font-semibold text-amber-800">Acesso de desenvolvimento</p>
-                <p className="text-xs text-amber-700">E-mail: admin@resume.ai</p>
-                <p className="text-xs text-amber-700">Senha: Admin123!</p>
-              </div>
-            ) : null}
           </div>
         </section>
       </div>

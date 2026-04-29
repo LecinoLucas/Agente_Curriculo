@@ -1,18 +1,27 @@
 import { UserSummary } from "../types/domain";
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
+import { tokenStorage } from "../utils/storage";
 
 export type CreateUserPayload = {
   email: string;
-  password: string;
+  temporary_password: string;
   full_name: string;
   role: string;
+  is_active: boolean;
+  must_change_password: boolean;
 };
 
 export type PatchUserPayload = {
+  email?: string;
   full_name?: string;
   role?: string;
-  status?: string;
+  is_active?: boolean;
+};
+
+export type ResetUserPasswordPayload = {
+  temporary_password: string;
+  must_change_password: boolean;
 };
 
 export type UserStats = {
@@ -48,6 +57,12 @@ export const usersService = {
   patch: (id: string, payload: PatchUserPayload): Promise<UserSummary> =>
     httpRequest<UserSummary>(`/api/v1/users/${id}`, { method: "PATCH", body: payload }),
 
+  resetPassword: (id: string, payload: ResetUserPasswordPayload): Promise<UserSummary> =>
+    httpRequest<UserSummary>(`/api/v1/internal-users/${id}/password`, {
+      method: "PATCH",
+      body: payload,
+    }),
+
   activate: (id: string): Promise<UserSummary> =>
     httpRequest<UserSummary>(`/api/v1/users/${id}/activate`, { method: "PATCH" }),
 
@@ -60,9 +75,13 @@ export const usersService = {
   stats: (): Promise<UserStats> =>
     httpRequest<UserStats>("/api/v1/users/stats"),
 
-  uploadAvatar: (formData: FormData): Promise<UserSummary> =>
-    fetch("/api/v1/users/me/avatar", {
+  uploadAvatar: (formData: FormData): Promise<UserSummary> => {
+    const headers = new Headers();
+    const token = tokenStorage.get();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch("/api/v1/users/me/avatar", {
       method: "POST",
+      headers,
       body: formData,
       credentials: "include",
     }).then(async (response) => {
@@ -71,11 +90,16 @@ export const usersService = {
         throw new Error(error.detail || "Falha ao enviar foto de perfil");
       }
       return response.json();
-    }),
+    });
+  },
 
-  deleteAvatar: (): Promise<UserSummary> =>
-    fetch("/api/v1/users/me/avatar", {
+  deleteAvatar: (): Promise<UserSummary> => {
+    const headers = new Headers();
+    const token = tokenStorage.get();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch("/api/v1/users/me/avatar", {
       method: "DELETE",
+      headers,
       credentials: "include",
     }).then(async (response) => {
       if (!response.ok) {
@@ -83,5 +107,6 @@ export const usersService = {
         throw new Error(error.detail || "Falha ao remover foto de perfil");
       }
       return response.json();
-    }),
+    });
+  },
 };

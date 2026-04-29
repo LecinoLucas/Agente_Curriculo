@@ -14,6 +14,7 @@ class LoginCommand:
 class LoginResult:
     access_token: str
     refresh_token: str
+    must_change_password: bool
     token_type: str = "bearer"
 
 
@@ -28,6 +29,7 @@ class RefreshTokenCommand:
 class RefreshTokenResult:
     access_token: str
     refresh_token: str
+    must_change_password: bool
     token_type: str = "bearer"
 
 

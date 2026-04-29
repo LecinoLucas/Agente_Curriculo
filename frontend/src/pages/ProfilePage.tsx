@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ActivitySquare,
   Bell,
@@ -153,6 +154,7 @@ function AvatarBadge({
 
 export function ProfilePage() {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
   const [fullName, setFullName] = useState(user?.full_name ?? "");
@@ -301,9 +303,11 @@ export function ProfilePage() {
               <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Alterar senha</p>
                 <p className="mt-1 text-xs text-gray-400">
-                  A alteração de senha por autoatendimento será disponibilizada em breve.
-                  Entre em contato com o administrador da plataforma caso precise redefinir suas credenciais.
+                  Abra a tela de segurança para trocar sua senha sem exibir nenhuma credencial atual.
                 </p>
+                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => navigate("/trocar-senha")}>
+                  Alterar senha
+                </Button>
               </div>
 
               <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">

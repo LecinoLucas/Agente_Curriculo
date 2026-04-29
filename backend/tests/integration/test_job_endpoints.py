@@ -15,6 +15,7 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
     ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import SkillModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
@@ -153,6 +154,16 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     candidate_headers = await _auth_headers(client, "candidate-ranking@test.com", "password123")
     recruiter_headers = await _auth_headers(client, "recruiter-ranking@test.com", "password123")
 
+    db_session.add(
+        CandidateModel(
+            user_id=candidate.id,
+            full_name="Candidate Ranking",
+            email="candidate-ranking@test.com",
+            created_by=candidate.id,
+        )
+    )
+    await db_session.commit()
+
     resume_upload = await client.post("/api/v1/resumes", headers=candidate_headers)
     assert resume_upload.status_code == 202
     resume_version_id = UUID(resume_upload.json()["version_id"])
@@ -263,5 +274,107 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert ranking.status_code == 200
     candidates = ranking.json()["candidates"]
     assert len(candidates) == 1
-    assert candidates[0]["candidate_name"] == candidate.full_name
+    assert candidates[0]["candidate_name"] == "Candidate Ranking"
     assert candidates[0]["recommendation"] == match.json()["recommendation"]
+
+
+@pytest.mark.asyncio
+async def test_updating_job_does_not_mix_pipeline_candidates_between_jobs(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-pipeline-isolation@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-pipeline-isolation@test.com", "password123")
+
+    candidate_response = await client.post(
+        "/api/v1/candidates",
+        json={
+            "full_name": "Pipeline Isolation Candidate",
+            "email": f"pipeline-isolation-{uuid4().hex[:8]}@test.com",
+        },
+        headers=headers,
+    )
+    assert candidate_response.status_code == 201
+    candidate_id = candidate_response.json()["id"]
+
+    job_a_response = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(title="Job A"),
+        headers=headers,
+    )
+    assert job_a_response.status_code == 201
+    job_a_id = job_a_response.json()["id"]
+
+    job_b_response = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(title="Job B"),
+        headers=headers,
+    )
+    assert job_b_response.status_code == 201
+    job_b_id = job_b_response.json()["id"]
+
+    for job_id in (job_a_id, job_b_id):
+        publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
+        assert publish.status_code == 200
+
+    add_to_job = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        json={"job_id": job_a_id, "initial_stage": "entry"},
+        headers=headers,
+    )
+    assert add_to_job.status_code == 200
+
+    board_a = await client.get(f"/api/v1/pipeline/{job_a_id}", headers=headers)
+    assert board_a.status_code == 200
+    candidate_ids_a = {
+        candidate["candidate_id"]
+        for column in board_a.json()["columns"]
+        for candidate in column["candidates"]
+    }
+    assert candidate_id in candidate_ids_a
+
+    board_b = await client.get(f"/api/v1/pipeline/{job_b_id}", headers=headers)
+    assert board_b.status_code == 200
+    candidate_ids_b = {
+        candidate["candidate_id"]
+        for column in board_b.json()["columns"]
+        for candidate in column["candidates"]
+    }
+    assert candidate_id not in candidate_ids_b
+
+    update_job_a = await client.patch(
+        f"/api/v1/jobs/{job_a_id}",
+        json={"title": "Job A Updated"},
+        headers=headers,
+    )
+    assert update_job_a.status_code == 200
+    assert update_job_a.json()["title"] == "Job A Updated"
+
+    board_a_after_update = await client.get(f"/api/v1/pipeline/{job_a_id}", headers=headers)
+    assert board_a_after_update.status_code == 200
+    candidate_ids_a_after_update = {
+        candidate["candidate_id"]
+        for column in board_a_after_update.json()["columns"]
+        for candidate in column["candidates"]
+    }
+    assert candidate_id in candidate_ids_a_after_update
+
+    board_b_after_update = await client.get(f"/api/v1/pipeline/{job_b_id}", headers=headers)
+    assert board_b_after_update.status_code == 200
+    candidate_ids_b_after_update = {
+        candidate["candidate_id"]
+        for column in board_b_after_update.json()["columns"]
+        for candidate in column["candidates"]
+    }
+    assert candidate_id not in candidate_ids_b_after_update
+
+    overview = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert overview.status_code == 200
+    pipeline_entries = overview.json()["pipeline_entries"]
+    assert len(pipeline_entries) == 1
+    assert pipeline_entries[0]["job_id"] == job_a_id

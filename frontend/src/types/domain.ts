@@ -128,6 +128,7 @@ export type UserSummary = {
   full_name: string;
   role: string;
   status: string;
+  must_change_password: boolean;
   last_login_at: string | null;
   created_at: string | null;
   avatar_url?: string | null;
@@ -210,6 +211,15 @@ export type ResumeSummary = {
   updated_at: string;
 };
 
+export type DealBreaker = {
+  field: string;
+  operator: "equals" | "not_equals" | "contains" | "in";
+  value?: string | null;
+  values?: string[] | null;
+  reason: string;
+  is_active: boolean;
+};
+
 export type Job = {
   id: string;
   title: string;
@@ -217,6 +227,9 @@ export type Job = {
   requirements: string | null;
   status: string;
   seniority_level: string | null;
+  minimum_education_level: string | null;
+  minimum_years_experience: number | null;
+  deal_breakers: DealBreaker[];
   work_model: string | null;
   location: string | null;
   salary_min: number | null;

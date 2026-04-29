@@ -16,6 +16,10 @@ _PLACEHOLDER_RESUME = (
 )
 
 
+def _has_valid_prompt_value(value: str | None) -> bool:
+    return bool(value and value.strip())
+
+
 def _provider_api_key_is_configured(provider: str) -> bool:
     normalized = provider.strip().lower()
 
@@ -154,18 +158,38 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
     else:
         from src.application.ports.ai_service import AIAnalysisRequest
         from src.infrastructure.ai.factory import AIServiceFactory
-        from src.infrastructure.ai.prompts.v1_full_analysis import (
+        from src.infrastructure.ai.prompts.v2_full_analysis import (
             JOB_CONTEXT_TEMPLATE,
             SYSTEM_PROMPT,
             USER_PROMPT_TEMPLATE,
         )
-        from src.infrastructure.ai.prompts.v1_full_analysis import (
+        from src.infrastructure.ai.prompts.v2_full_analysis import (
             NAME as PROMPT_NAME,
         )
-        from src.infrastructure.ai.prompts.v1_full_analysis import (
+        from src.infrastructure.ai.prompts.v2_full_analysis import (
             VERSION as PROMPT_VERSION,
         )
         from src.infrastructure.ai.response_parser import parse_analysis_response
+
+        prompt_source = "db"
+        system_prompt = prompt_tpl.system_prompt
+        user_prompt_template = prompt_tpl.user_prompt_template
+        prompt_version = str(prompt_tpl.version)
+
+        if not _has_valid_prompt_value(system_prompt) or not _has_valid_prompt_value(
+            user_prompt_template
+        ):
+            prompt_source = "fallback_file"
+            system_prompt = SYSTEM_PROMPT
+            user_prompt_template = USER_PROMPT_TEMPLATE
+            prompt_version = f"{PROMPT_NAME}_v{PROMPT_VERSION}"
+
+        logger.info(
+            "analysis.prompt_source_selected",
+            analysis_id=analysis_id,
+            prompt_source=prompt_source,
+            prompt_version=prompt_version,
+        )
 
         job_context = ""
         if analysis.job_id:
@@ -177,14 +201,14 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
                 if job and job.description:
                     job_context = JOB_CONTEXT_TEMPLATE.format(job_description=job.description)
 
-        user_prompt = USER_PROMPT_TEMPLATE.format(
+        user_prompt = user_prompt_template.format(
             resume_text=resume_text,
             job_context=job_context,
         )
 
         ai_request = AIAnalysisRequest(
             resume_text=resume_text,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             prompt_template=user_prompt,
             max_tokens=int(prompt_tpl.max_tokens),
             temperature=float(prompt_tpl.temperature),
@@ -203,7 +227,6 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
 
         result_fields = parse_analysis_response(ai_response.content)
         raw_response = ai_response.content
-        prompt_version = f"{PROMPT_NAME}_v{PROMPT_VERSION}"
         input_tokens = ai_response.input_tokens
         output_tokens = ai_response.output_tokens
         cache_read = ai_response.cache_read_tokens

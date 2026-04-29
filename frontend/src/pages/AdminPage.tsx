@@ -13,7 +13,7 @@ type Role = "admin" | "recruiter" | "candidate" | "viewer";
 const ROLES: { key: Role; label: string; description: string }[] = [
   { key: "admin",     label: "Administrador", description: "Acesso total à plataforma" },
   { key: "recruiter", label: "Recrutador",    description: "Operação de recrutamento" },
-  { key: "candidate", label: "Candidato",     description: "Acesso às próprias informações" },
+  { key: "candidate", label: "Candidato",     description: "Portal futuro (Phase 20.3+)" },
   { key: "viewer",    label: "Leitor",         description: "Somente leitura" },
 ];
 
@@ -57,15 +57,15 @@ export function AdminPage() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
               <Users className="h-4 w-4 text-blue-600" />
-              Gerenciar usuários
+              Gerenciar usuários internos
             </CardTitle>
             <CardDescription>
-              Crie contas, ajuste perfis de acesso e ative ou desative usuários diretamente na tabela.
+              Crie contas internas (admin, recrutador, leitor) e gerencie perfis de acesso da equipe.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={() => navigate("/admin/usuarios")}>
-              Abrir gestão de usuários
+              Abrir gestão de usuários internos
             </Button>
           </CardContent>
         </Card>

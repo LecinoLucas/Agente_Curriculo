@@ -9,16 +9,6 @@ from pydantic import BaseModel
 
 DecisionStatus = Literal["approved", "review", "rejected_suggested"]
 
-ReasonCodeType = Literal[
-    "skill_match",
-    "missing_skill",
-    "seniority",
-    "experience",
-    "strength",
-    "weakness",
-]
-
-
 class ReasonCode(BaseModel):
     """Filterable, auditable scoring signal with a quantified impact.
 
@@ -27,7 +17,7 @@ class ReasonCode(BaseModel):
     the candidate's total advantage/disadvantage contribution.
     """
 
-    type: ReasonCodeType
+    type: str
     field: str
     impact: float
     description: str
@@ -40,6 +30,7 @@ class ScoreBreakdownResponse(BaseModel):
     education_score: Decimal
     ai_confidence_score: Decimal
     penalty_score: Decimal
+    validation_penalty_score: Decimal
     final_score: Decimal
 
 

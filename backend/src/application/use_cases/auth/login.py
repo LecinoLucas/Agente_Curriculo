@@ -50,4 +50,8 @@ class LoginUseCase:
 
         logger.info("user.login", user_id=str(user.id), ip=command.ip_address)
 
-        return LoginResult(access_token=access_token, refresh_token=refresh_token)
+        return LoginResult(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            must_change_password=user.must_change_password,
+        )

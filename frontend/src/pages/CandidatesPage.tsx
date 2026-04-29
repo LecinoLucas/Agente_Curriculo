@@ -170,6 +170,9 @@ export function CandidatesPage() {
             </>
           }
         />
+        <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
+          Candidatos são perfis externos gerenciados pelo sistema. Eles não possuem acesso ao sistema interno.
+        </p>
       </div>
 
       {/* Filters */}
