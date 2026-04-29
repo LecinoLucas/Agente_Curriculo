@@ -298,12 +298,22 @@ async def test_candidate_upload_pdf_can_auto_request_analysis_when_ai_is_configu
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    candidate = await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-upload-auto-analysis@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-upload-auto-analysis@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    candidate = candidate_user
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     headers = await _auth_headers(client, "candidate-upload-auto-analysis@test.com", "password123")
 
     upload = await client.post("/api/v1/resumes", headers=headers)
@@ -360,12 +370,22 @@ async def test_candidate_upload_pdf_falls_back_when_auto_enqueue_fails(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    candidate = await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-upload-enqueue-fails@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-upload-enqueue-fails@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    candidate = candidate_user
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     headers = await _auth_headers(client, "candidate-upload-enqueue-fails@test.com", "password123")
 
     upload = await client.post("/api/v1/resumes", headers=headers)
@@ -424,12 +444,21 @@ async def test_candidate_cannot_request_analysis_before_text_extraction(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-analysis-not-ready@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-analysis-not-ready@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     headers = await _auth_headers(client, "candidate-analysis-not-ready@test.com", "password123")
 
     upload = await client.post("/api/v1/resumes", headers=headers)
@@ -450,12 +479,21 @@ async def test_candidate_cannot_upload_pdf_larger_than_limit(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-pdf-too-large@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-pdf-too-large@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     headers = await _auth_headers(client, "candidate-pdf-too-large@test.com", "password123")
 
     upload = await client.post("/api/v1/resumes", headers=headers)
@@ -483,12 +521,22 @@ async def test_candidate_can_view_operational_analysis_status(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    candidate = await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-analysis-status@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-analysis-status@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    candidate = candidate_user
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     headers = await _auth_headers(client, "candidate-analysis-status@test.com", "password123")
 
     upload = await client.post("/api/v1/resumes", headers=headers)
@@ -550,18 +598,22 @@ async def test_candidate_can_view_matching_pipeline_summary(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    candidate = await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-pipeline-status@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
-    await _create_active_user(
+    recruiter = await _create_active_user(
         db_session,
         "recruiter-pipeline-status@test.com",
         "password123",
         UserRole.RECRUITER,
     )
+    candidate = candidate_user
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     candidate_headers = await _auth_headers(
         client,
         "candidate-pipeline-status@test.com",
@@ -688,18 +740,28 @@ async def test_candidate_cannot_access_another_candidate_resume(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_active_user(
+    owner_user = await _create_active_user(
         db_session,
         "resume-owner@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
-    await _create_active_user(
+    intruder_user = await _create_active_user(
         db_session,
         "resume-intruder@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-resume@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _create_linked_candidate(db_session, owner_user, recruiter.id)
+    await _create_linked_candidate(db_session, intruder_user, recruiter.id)
+    await db_session.commit()
+
     owner_headers = await _auth_headers(client, "resume-owner@test.com", "password123")
     intruder_headers = await _auth_headers(client, "resume-intruder@test.com", "password123")
 
@@ -720,18 +782,21 @@ async def test_candidate_cannot_access_another_candidate_resume(
 
 @pytest.mark.asyncio
 async def test_recruiter_can_access_candidate_resume(client: AsyncClient, db_session: AsyncSession):
-    await _create_active_user(
+    owner_user = await _create_active_user(
         db_session,
         "resume-visible-owner@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
-    await _create_active_user(
+    recruiter_user = await _create_active_user(
         db_session,
         "resume-recruiter@test.com",
         "password123",
         UserRole.RECRUITER,
     )
+    await _create_linked_candidate(db_session, owner_user, recruiter_user.id)
+    await db_session.commit()
+
     owner_headers = await _auth_headers(client, "resume-visible-owner@test.com", "password123")
     recruiter_headers = await _auth_headers(client, "resume-recruiter@test.com", "password123")
 
