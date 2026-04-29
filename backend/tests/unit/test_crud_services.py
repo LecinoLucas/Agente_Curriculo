@@ -18,6 +18,7 @@ class FakeCandidateRepository:
     def __init__(self) -> None:
         self.by_email: dict[str, CandidateModel] = {}
         self.saved: CandidateModel | None = None
+        self.summary_rows: list[dict] = []
 
     async def find_active_by_email(self, email: str) -> CandidateModel | None:
         return self.by_email.get(email)
@@ -30,6 +31,16 @@ class FakeCandidateRepository:
         if candidate.email:
             self.by_email[candidate.email] = candidate
         return candidate
+
+    async def list_summaries(
+        self,
+        page: int,
+        page_size: int,
+        search: str | None = None,
+        has_resume: bool | None = None,
+        ai_status_filter: list[str] | None = None,
+    ) -> tuple[list[dict], int]:
+        return self.summary_rows, len(self.summary_rows)
 
 
 class FakeSkillRepository:
@@ -107,6 +118,32 @@ async def test_candidate_create_rejects_duplicate_email():
 
 
 @pytest.mark.asyncio
+async def test_candidate_list_summaries_includes_linked_job_count():
+    repo = FakeCandidateRepository()
+    repo.summary_rows = [
+        {
+            "id": uuid4(),
+            "full_name": "Ana Silva",
+            "email": "ana@example.com",
+            "phone": None,
+            "cpf": None,
+            "tags": [],
+            "created_at": datetime.now(timezone.utc),
+            "resume_count": 2,
+            "linked_job_count": 3,
+            "ai_status": "completed",
+            "ai_score": Decimal("87.5"),
+        }
+    ]
+    service = CandidateService(repo)  # type: ignore[arg-type]
+
+    items, total = await service.list_summaries(1, 20)
+
+    assert total == 1
+    assert items[0].linked_job_count == 3
+
+
+@pytest.mark.asyncio
 async def test_skill_create_rejects_duplicate_normalized_name():
     repo = FakeSkillRepository()
     repo.by_name["python"] = SkillModel(id=uuid4(), name="Python", normalized_name="python", aliases=[])
@@ -150,3 +187,50 @@ async def test_job_create_trims_required_text_and_uppercases_currency():
     assert job.title == "Backend Engineer"
     assert job.description == "Build APIs and services"
     assert job.salary_currency == "USD"
+
+
+@pytest.mark.asyncio
+async def test_job_update_allows_clearing_optional_fields_when_explicitly_sent():
+    job = JobModel(
+        id=uuid4(),
+        title="Backend",
+        description="Backend role",
+        requirements="Python and FastAPI",
+        status="draft",
+        seniority_level="senior",
+        minimum_education_level="bachelor",
+        minimum_years_experience=Decimal("5.0"),
+        deal_breakers=[{"field": "location", "operator": "equals", "value": "São Paulo", "reason": "Presencial", "is_active": True}],
+        work_model="remote",
+        location="São Paulo",
+        salary_min=Decimal("10000.00"),
+        salary_max=Decimal("15000.00"),
+        salary_currency="BRL",
+        created_by=uuid4(),
+    )
+    service = JobService(FakeJobRepository(job))  # type: ignore[arg-type]
+
+    updated = await service.update(
+        job.id,
+        UpdateJobRequest(
+            requirements=None,
+            seniority_level=None,
+            minimum_education_level=None,
+            minimum_years_experience=None,
+            deal_breakers=[],
+            work_model=None,
+            location=None,
+            salary_min=None,
+            salary_max=None,
+        ),
+    )
+
+    assert updated.requirements is None
+    assert updated.seniority_level is None
+    assert updated.minimum_education_level is None
+    assert updated.minimum_years_experience is None
+    assert updated.deal_breakers == []
+    assert updated.work_model is None
+    assert updated.location is None
+    assert updated.salary_min is None
+    assert updated.salary_max is None

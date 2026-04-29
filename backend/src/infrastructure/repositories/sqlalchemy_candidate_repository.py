@@ -99,6 +99,20 @@ class SQLAlchemyCandidateRepository:
             .correlate(CandidateModel)
             .scalar_subquery()
         )
+        linked_job_count_sq = (
+            sa.select(sa.func.count(sa.distinct(CandidatePipelineModel.job_id)))
+            .join(JobModel, JobModel.id == CandidatePipelineModel.job_id)
+            .where(
+                CandidatePipelineModel.candidate_id == CandidateModel.id,
+                JobModel.deleted_at.is_(None),
+                sa.or_(
+                    CandidatePipelineModel.status.is_(None),
+                    CandidatePipelineModel.status != "transferred",
+                ),
+            )
+            .correlate(CandidateModel)
+            .scalar_subquery()
+        )
         ai_status_sq = (
             sa.select(AnalysisModel.status)
             .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
@@ -165,6 +179,7 @@ class SQLAlchemyCandidateRepository:
                 CandidateModel.tags,
                 CandidateModel.created_at,
                 resume_count_sq.label("resume_count"),
+                linked_job_count_sq.label("linked_job_count"),
                 ai_status_sq.label("ai_status"),
                 ai_score_sq.label("ai_score"),
             )

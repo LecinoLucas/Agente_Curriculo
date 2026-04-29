@@ -1,4 +1,5 @@
 from src.interface.api.routers import (
+    admin_data_quality,
     ai_models,
     analyses,
     auth,
@@ -14,6 +15,7 @@ from src.interface.api.routers import (
 )
 
 __all__ = [
+    "admin_data_quality",
     "auth",
     "users",
     "candidates",

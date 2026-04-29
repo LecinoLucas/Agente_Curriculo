@@ -22,6 +22,7 @@ from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
     ScoreModelVersionModel,
 )
+from src.domain.services.deal_breaker_evaluator import evaluate_deal_breakers
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -63,6 +64,7 @@ class CandidateRankingService:
         Raises NoActiveScoreVersionError if no active score model version exists.
         """
         await self._assert_job_exists(job_id)
+        job = await self._load_job_with_deal_breakers(job_id)
         version = await self._load_active_version()
 
         weights = {k: Decimal(str(v)) for k, v in version.weights.items()}
@@ -77,10 +79,12 @@ class CandidateRankingService:
         for row in rows:
             bd = _compute_breakdown(row, weights)
             _apply_validation_guardrails(row, bd)
+            deal_breaker_violations = evaluate_deal_breakers(job.deal_breakers, row)
+            _apply_deal_breaker_guardrails(bd, deal_breaker_violations)
             decision = _decide(bd["final_score"], threshold_high, threshold_low)
             matched = _coerce_list(row.get("matched_skills"))
             missing = _coerce_list(row.get("missing_skills"))
-            reason_codes = _build_reason_codes(row, bd, matched, missing)
+            reason_codes = _build_reason_codes(row, bd, matched, missing, deal_breaker_violations)
             explanation = _build_explanation(row, bd, decision, matched, missing)
 
             # Serialize Decimal values for JSONB storage
@@ -139,31 +143,41 @@ class CandidateRankingService:
         for rank, row in enumerate(rows, start=1):
             breakdown_raw: dict = row["breakdown"]
             reason_codes_raw: list = row["reason_codes"]
+
+            # data_quality_status should never be None due to server_default="unknown"
+            # But as defensive programming, fall back to "unknown" if missing
+            dq_status = row.get("data_quality_status", "unknown")
+
             entries.append({
                 "rank": rank,
                 "candidate_id": row["candidate_id"],
                 "candidate_name": row["candidate_name"],
                 "stage": row["stage"],
                 "pipeline_status": row["pipeline_status"],
-                "score_breakdown": {
-                    k: Decimal(str(v)) for k, v in breakdown_raw.items()
-                },
+                # Persisted JSON may come from older scoring versions. Fill in
+                # missing fields so the API stays backward compatible.
+                "score_breakdown": _normalize_score_breakdown(breakdown_raw),
                 "decision_suggestion": row["decision_suggestion"],
-                "reason_codes": reason_codes_raw,
+                "reason_codes": _normalize_reason_codes(reason_codes_raw),
                 "explanation_text": row["explanation_text"],
                 "final_score": Decimal(str(row["final_score"])),
                 "entered_at": row.get("entered_at"),
                 "computed_at": row["computed_at"],
                 "version": version.version,
+                "data_quality_status": dq_status,
             })
+
+        # Get accurate stats directly from database (not from already-filtered entries)
+        stats = await self._calculate_data_quality_stats(job_id)
 
         return {
             "job_id": job_id,
             "total_candidates": len(entries),
-            "threshold_high": Decimal(str(version.thresholds["high"])),
-            "threshold_low": Decimal(str(version.thresholds["low"])),
+            "threshold_high": Decimal(str(version.thresholds.get("high", 70))),
+            "threshold_low": Decimal(str(version.thresholds.get("low", 45))),
             "score_version": version.version,
             "candidates": entries,
+            "data_quality_stats": stats,
         }
 
     # ------------------------------------------------------------------
@@ -179,6 +193,17 @@ class CandidateRankingService:
         )
         if job is None:
             raise RankingJobNotFoundError
+
+    async def _load_job_with_deal_breakers(self, job_id: UUID) -> JobModel:
+        job = await self._session.scalar(
+            sa.select(JobModel).where(
+                JobModel.id == job_id,
+                JobModel.deleted_at.is_(None),
+            )
+        )
+        if job is None:
+            raise RankingJobNotFoundError
+        return job
 
     async def _load_active_version(self) -> ScoreModelVersionModel:
         version = await self._session.scalar(
@@ -289,6 +314,7 @@ class CandidateRankingService:
                 CandidateJobScoreModel.explanation_text,
                 CandidateJobScoreModel.computed_at,
                 CandidateModel.full_name.label("candidate_name"),
+                CandidateModel.data_quality_status,
                 CandidatePipelineModel.stage,
                 CandidatePipelineModel.status.label("pipeline_status"),
                 CandidatePipelineModel.entered_at,
@@ -306,6 +332,8 @@ class CandidateRankingService:
                 CandidateJobScoreModel.job_id == job_id,
                 CandidateJobScoreModel.version_id == version_id,
                 CandidateModel.deleted_at.is_(None),
+                # Exclude invalid candidates based on data quality
+                CandidateModel.data_quality_status.in_(["valid", "unknown"]),
                 sa.or_(
                     CandidatePipelineModel.status.is_(None),
                     CandidatePipelineModel.status != "transferred",
@@ -314,6 +342,76 @@ class CandidateRankingService:
             .order_by(CandidateJobScoreModel.final_score.desc())
         )
         return [dict(row) for row in result.mappings().all()]
+
+    async def _get_filtered_candidates_count(self, job_id: UUID) -> int:
+        """Count how many candidates were filtered due to data quality issues."""
+        result = await self._session.scalar(
+            sa.select(sa.func.count(CandidateJobScoreModel.candidate_id))
+            .select_from(CandidateJobScoreModel)
+            .join(CandidateModel, CandidateModel.id == CandidateJobScoreModel.candidate_id)
+            .where(
+                CandidateJobScoreModel.job_id == job_id,
+                CandidateModel.deleted_at.is_(None),
+                # Count only the invalid ones (not valid and not unknown)
+                ~CandidateModel.data_quality_status.in_(["valid", "unknown"]),
+            )
+        )
+        return result or 0
+
+    async def _calculate_data_quality_stats(self, job_id: UUID) -> dict[str, int]:
+        """Calculate data quality statistics directly from database.
+
+        Returns accurate counts by querying the bank independently from filtered ranking.
+        Breakdown:
+        - valid: Successfully classified with data
+        - unknown: Not yet classified (legitimate pending state)
+        - invalid: Explicitly marked as invalid (no_resume, empty_resume, parsing_failed, invalid_manual)
+        - filtered: Invalid candidates excluded from ranking
+        """
+        result = await self._session.execute(
+            sa.select(
+                CandidateModel.data_quality_status,
+                sa.func.count(CandidateJobScoreModel.candidate_id).label("count"),
+            )
+            .select_from(CandidateJobScoreModel)
+            .join(CandidateModel, CandidateModel.id == CandidateJobScoreModel.candidate_id)
+            .where(
+                CandidateJobScoreModel.job_id == job_id,
+                CandidateModel.deleted_at.is_(None),
+            )
+            .group_by(CandidateModel.data_quality_status)
+        )
+
+        counts: dict[str, int] = {
+            "valid": 0,
+            "unknown": 0,
+            "no_resume": 0,
+            "empty_resume": 0,
+            "parsing_failed": 0,
+            "invalid_manual": 0,
+        }
+
+        for row in result.mappings().all():
+            status = row["data_quality_status"] or "unknown"  # Defensive: treat NULL as unknown
+            if status in counts:
+                counts[status] = row["count"]
+
+        # Calculate derived counts
+        total = sum(counts.values())
+        valid = counts["valid"]
+        unknown = counts["unknown"]
+        invalid = sum(counts[k] for k in ["no_resume", "empty_resume", "parsing_failed", "invalid_manual"])
+
+        # In ranking, only valid + unknown are shown
+        filtered = invalid
+
+        return {
+            "total_candidates": total,
+            "valid_candidates": valid,
+            "unknown_candidates": unknown,
+            "invalid_candidates": invalid,
+            "filtered_candidates": filtered,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +450,7 @@ def _compute_breakdown(row: dict, weights: dict[str, Decimal]) -> dict[str, Deci
         "ai_confidence_score":    ai_confidence.quantize(q),
         "penalty_score":          penalty.quantize(q),
         "validation_penalty_score": Decimal("0.00"),
+        "deal_breaker_penalty_score": Decimal("0.00"),
         "final_score":            final.quantize(q),
     }
 
@@ -371,6 +470,17 @@ def _apply_validation_guardrails(row: dict, bd: dict[str, Decimal]) -> None:
         bd["final_score"] = max(Decimal("0.00"), bd["final_score"] - penalty).quantize(q)
 
 
+def _apply_deal_breaker_guardrails(bd: dict[str, Decimal], violations: list[dict]) -> None:
+    """Apply deal-breaker violations as hard rejections.
+
+    If any deal-breaker is violated, score becomes 0 (hard rejection).
+    """
+    q = Decimal("0.01")
+    if violations:
+        bd["deal_breaker_penalty_score"] = bd["final_score"].quantize(q)
+        bd["final_score"] = Decimal("0.00")
+
+
 def _decide(final_score: Decimal, threshold_high: Decimal, threshold_low: Decimal) -> str:
     if final_score >= threshold_high:
         return "approved"
@@ -388,6 +498,7 @@ def _build_reason_codes(
     bd: dict[str, Decimal],
     matched: list[str],
     missing: list[str],
+    deal_breaker_violations: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Return structured reason codes with explicit type, field, impact, and description.
 
@@ -396,6 +507,10 @@ def _build_reason_codes(
     negative = penalizing.
     """
     codes: list[dict[str, Any]] = []
+
+    # Add deal-breaker violations first (highest priority)
+    if deal_breaker_violations:
+        codes.extend(deal_breaker_violations)
 
     # Per-skill impact is approximated as the skill_match contribution divided
     # evenly across matched skills, capped to avoid inflating single-skill matches.
@@ -567,6 +682,39 @@ def _to_decimal(value: Any) -> Decimal:
     if value is None:
         return Decimal("0")
     return Decimal(str(value))
+
+
+def _normalize_score_breakdown(raw: Any) -> dict[str, Decimal]:
+    breakdown = raw if isinstance(raw, dict) else {}
+    q = Decimal("0.01")
+
+    return {
+        "skill_match_score": _to_decimal(breakdown.get("skill_match_score")).quantize(q),
+        "experience_match_score": _to_decimal(breakdown.get("experience_match_score")).quantize(q),
+        "seniority_match_score": _to_decimal(breakdown.get("seniority_match_score")).quantize(q),
+        "education_score": _to_decimal(breakdown.get("education_score")).quantize(q),
+        "ai_confidence_score": _to_decimal(breakdown.get("ai_confidence_score")).quantize(q),
+        "penalty_score": _to_decimal(breakdown.get("penalty_score")).quantize(q),
+        "validation_penalty_score": _to_decimal(breakdown.get("validation_penalty_score")).quantize(q),
+        "final_score": _to_decimal(breakdown.get("final_score")).quantize(q),
+    }
+
+
+def _normalize_reason_codes(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        normalized_item = dict(item)
+        normalized_item["type"] = str(item.get("type") or "")
+        normalized_item["field"] = str(item.get("field") or "")
+        normalized_item["impact"] = float(item.get("impact") or 0)
+        normalized_item["description"] = str(item.get("description") or "")
+        normalized.append(normalized_item)
+    return normalized
 
 
 def _coerce_list(value: Any) -> list[str]:

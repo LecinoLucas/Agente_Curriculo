@@ -128,6 +128,7 @@ class CandidateService:
                 tags=row["tags"] or [],
                 created_at=row["created_at"],
                 resume_count=int(row["resume_count"] or 0),
+                linked_job_count=int(row["linked_job_count"] or 0),
                 ai_status=row["ai_status"],
                 ai_score=float(row["ai_score"]) if row["ai_score"] is not None else None,
             )

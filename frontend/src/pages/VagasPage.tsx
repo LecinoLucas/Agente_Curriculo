@@ -10,16 +10,21 @@ import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
 import { StatusPill } from "../components/common/StatusPill";
 import { useAsyncState } from "../hooks/useAsyncState";
+import { useJobConfigurationAlerts } from "../hooks/useJobConfigurationAlerts";
+import { JobConfigurationPreview } from "../components/job/JobConfigurationPreview";
 import { Button } from "@/components/ui/button";
 import {
   listJobs,
   createJob,
   updateJob,
+  getJobRanking,
   deleteJob,
   publishJob,
   pauseJob,
   closeJob,
   cancelJob,
+  type CreateJobRequestPayload,
+  type UpdateJobRequestPayload,
 } from "../services/jobsService";
 import { skillsService } from "../services/skillsService";
 import { toast } from "../services/toast";
@@ -35,7 +40,7 @@ import {
   jobStatusTone,
 } from "../utils/jobFormatters";
 
-type CreateJobPayload = {
+type JobFormValues = {
   title: string;
   description: string;
   requirements?: string;
@@ -50,7 +55,12 @@ type CreateJobPayload = {
   salary_max?: number;
 };
 
-const EMPTY_FORM: CreateJobPayload = {
+type RankingFreshness = {
+  isStale: boolean;
+  latestComputedAt: string | null;
+};
+
+const EMPTY_FORM: JobFormValues = {
   title: "",
   description: "",
   requirements: "",
@@ -61,6 +71,31 @@ const EMPTY_FORM: CreateJobPayload = {
   deal_breakers: [],
   work_model: "",
   location: "",
+};
+
+const TEST_JOB_FORM: JobFormValues = {
+  title: "Vaga Teste - Backend Pleno",
+  description:
+    "Buscamos uma pessoa desenvolvedora backend pleno para atuar na evolucao de APIs, integracoes e rotinas de processamento. A pessoa vai trabalhar em parceria com produto e dados para construir servicos confiaveis, monitorados e preparados para escala.",
+  requirements:
+    "Experiencia com Python, PostgreSQL e Docker. Vivencia com APIs REST, testes automatizados, versionamento com Git e boas praticas de observabilidade.",
+  status: "draft",
+  seniority_level: "mid",
+  minimum_education_level: "bachelor",
+  minimum_years_experience: 3,
+  deal_breakers: [
+    {
+      field: "work_model",
+      operator: "not_equals",
+      value: "remote",
+      reason: "Esta vaga e somente remota.",
+      is_active: true,
+    },
+  ],
+  work_model: "remote",
+  location: "Remoto",
+  salary_min: undefined,
+  salary_max: undefined,
 };
 
 function formatSalary(job: Job): string {
@@ -76,6 +111,138 @@ function truncate(value: string, max = 100): string {
   return value.length <= max ? value : `${value.slice(0, max).trim()}…`;
 }
 
+function formatDealBreakerValue(rule: DealBreaker): string {
+  const rawValue = rule.value || rule.values?.join(", ") || "—";
+
+  if (rule.field === "work_model") {
+    return rule.values?.length
+      ? rule.values.map((value) => formatWorkModel(value)).join(", ")
+      : formatWorkModel(rule.value ?? null);
+  }
+
+  if (rule.field === "seniority_level") {
+    return rule.values?.length
+      ? rule.values.map((value) => formatSeniority(value)).join(", ")
+      : formatSeniority(rule.value ?? null);
+  }
+
+  if (rule.field === "highest_education_level" || rule.field === "education_level") {
+    return rule.values?.length
+      ? rule.values.map((value) => formatEducationLevel(value)).join(", ")
+      : formatEducationLevel(rule.value ?? null);
+  }
+
+  if (rule.field === "total_experience_years" || rule.field === "experience_years") {
+    return rule.values?.length
+      ? rule.values.map((value) => `${value} ano${value === "1" ? "" : "s"}`).join(", ")
+      : rule.value
+        ? `${rule.value} ano${rule.value === "1" ? "" : "s"}`
+        : rawValue;
+  }
+
+  return rawValue;
+}
+
+function getDealBreakerFieldLabel(field: string): string {
+  const fieldLabels: Record<string, string> = {
+    work_model: "Modelo de trabalho",
+    location: "Localização",
+    seniority_level: "Senioridade",
+    highest_education_level: "Educação",
+    education_level: "Educação",
+    total_experience_years: "Experiência",
+    experience_years: "Experiência",
+  };
+
+  return fieldLabels[field] ?? field;
+}
+
+function getDealBreakerOperatorLabel(operator: DealBreaker["operator"]): string {
+  const operatorLabels: Record<string, string> = {
+    equals: "igual a",
+    not_equals: "diferente de",
+    contains: "contém",
+    in: "está em",
+  };
+
+  return operatorLabels[operator] ?? operator;
+}
+
+function formatDealBreakerLabel(rule: DealBreaker): string {
+  const fieldLabel = getDealBreakerFieldLabel(rule.field);
+  const operatorLabel = getDealBreakerOperatorLabel(rule.operator);
+  const valueLabel = formatDealBreakerValue(rule);
+
+  return `${fieldLabel} ${operatorLabel} ${valueLabel}`;
+}
+
+function trimToNull(value?: string): string | null {
+  const normalized = value?.trim() ?? "";
+  return normalized ? normalized : null;
+}
+
+function buildCreateJobPayload(form: JobFormValues): CreateJobRequestPayload {
+  const payload: CreateJobRequestPayload = {
+    title: form.title,
+    description: form.description,
+    status: form.status,
+  };
+
+  const requirements = trimToNull(form.requirements);
+  const seniorityLevel = trimToNull(form.seniority_level);
+  const minimumEducationLevel = trimToNull(form.minimum_education_level);
+  const workModel = trimToNull(form.work_model);
+  const location = trimToNull(form.location);
+
+  if (requirements) payload.requirements = requirements;
+  if (seniorityLevel) payload.seniority_level = seniorityLevel;
+  if (minimumEducationLevel) payload.minimum_education_level = minimumEducationLevel;
+  if (form.minimum_years_experience !== undefined) payload.minimum_years_experience = form.minimum_years_experience;
+  if ((form.deal_breakers ?? []).length > 0) payload.deal_breakers = form.deal_breakers;
+  if (workModel) payload.work_model = workModel;
+  if (location) payload.location = location;
+  if (form.salary_min !== undefined) payload.salary_min = form.salary_min;
+  if (form.salary_max !== undefined) payload.salary_max = form.salary_max;
+
+  return payload;
+}
+
+function buildUpdateJobPayload(form: JobFormValues): UpdateJobRequestPayload {
+  return {
+    title: form.title,
+    description: form.description,
+    status: form.status,
+    requirements: trimToNull(form.requirements),
+    seniority_level: trimToNull(form.seniority_level),
+    minimum_education_level: trimToNull(form.minimum_education_level),
+    minimum_years_experience: form.minimum_years_experience ?? null,
+    deal_breakers: form.deal_breakers ?? [],
+    work_model: trimToNull(form.work_model),
+    location: trimToNull(form.location),
+    salary_min: form.salary_min ?? null,
+    salary_max: form.salary_max ?? null,
+  };
+}
+
+function getLatestRankingComputedAt(computedAtValues: string[]): string | null {
+  if (computedAtValues.length === 0) return null;
+
+  return computedAtValues.reduce((latest, current) =>
+    new Date(current).getTime() > new Date(latest).getTime() ? current : latest
+  );
+}
+
+function getRankingFreshness(job: Job, latestComputedAt: string | null): RankingFreshness {
+  if (!latestComputedAt) {
+    return { isStale: false, latestComputedAt: null };
+  }
+
+  return {
+    isStale: new Date(job.updated_at).getTime() > new Date(latestComputedAt).getTime(),
+    latestComputedAt,
+  };
+}
+
 export function VagasPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -85,7 +252,7 @@ export function VagasPage() {
   useEffect(() => { setPage(1); }, [pageSize]);
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CreateJobPayload>(EMPTY_FORM);
+  const [form, setForm] = useState<JobFormValues>(EMPTY_FORM);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -93,6 +260,7 @@ export function VagasPage() {
   const [transitioning, setTransitioning] = useState<string | null>(null);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [rankingFreshnessByJobId, setRankingFreshnessByJobId] = useState<Record<string, RankingFreshness>>({});
   const [jobSkills, setJobSkills] = useState<JobSkill[]>([]);
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const [skillToAdd, setSkillToAdd] = useState("");
@@ -114,10 +282,52 @@ export function VagasPage() {
   const { invalidateJobState } = usePipeline();
   const canManage = user?.role === "admin" || user?.role === "recruiter";
 
+  // Load ranking freshness only after the selected job state exists.
+  useEffect(() => {
+    if (!selectedJob) return;
+
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        const ranking = await getJobRanking(selectedJob.id);
+        if (isCancelled) return;
+
+        const latestComputedAt = getLatestRankingComputedAt(
+          ranking.candidates.map((candidate) => candidate.computed_at).filter(Boolean),
+        );
+        const freshness = getRankingFreshness(selectedJob, latestComputedAt);
+
+        setRankingFreshnessByJobId((prev) => ({
+          ...prev,
+          [selectedJob.id]: freshness,
+        }));
+      } catch {
+        // Silently ignore ranking fetch errors
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedJob?.id, selectedJob?.updated_at]);
+
   function openCreateForm() {
     setEditingJob(null);
     setForm(EMPTY_FORM);
     setFormError(null);
+    setShowForm(true);
+  }
+
+  function openTestCreateForm() {
+    setEditingJob(null);
+    setForm({
+      ...TEST_JOB_FORM,
+      deal_breakers: TEST_JOB_FORM.deal_breakers?.map((rule) => ({ ...rule })) ?? [],
+    });
+    setNewDealBreaker({ field: "", operator: "equals", value: "", reason: "", is_active: true });
+    setFormError(null);
+    setDealBreakerError(null);
     setShowForm(true);
   }
 
@@ -135,22 +345,8 @@ export function VagasPage() {
       return;
     }
     try {
-      const payload: Record<string, unknown> = {
-        title: form.title,
-        description: form.description,
-        status: form.status,
-      };
-      if (form.requirements) payload.requirements = form.requirements;
-      if (form.seniority_level) payload.seniority_level = form.seniority_level;
-      if (form.minimum_education_level) payload.minimum_education_level = form.minimum_education_level;
-      if (form.minimum_years_experience !== undefined) payload.minimum_years_experience = form.minimum_years_experience;
-      if (form.deal_breakers && form.deal_breakers.length > 0) payload.deal_breakers = form.deal_breakers;
-      if (form.work_model) payload.work_model = form.work_model;
-      if (form.location) payload.location = form.location;
-      if (form.salary_min) payload.salary_min = form.salary_min;
-      if (form.salary_max) payload.salary_max = form.salary_max;
-
       if (editingJob) {
+        const payload = buildUpdateJobPayload(form);
         const updated = await updateJob(editingJob.id, payload);
         await invalidateJobState(updated.id);
         if (selectedJob?.id === updated.id) {
@@ -158,6 +354,7 @@ export function VagasPage() {
         }
         toast.success(`Vaga atualizada: ${updated.title}`);
       } else {
+        const payload = buildCreateJobPayload(form);
         const created = await createJob(payload);
         await invalidateJobState(created.id);
         toast.success(`Vaga criada: ${created.title}`);
@@ -262,14 +459,27 @@ export function VagasPage() {
 
   function handleAddDealBreaker() {
     setDealBreakerError(null);
-    if (!newDealBreaker.field || !newDealBreaker.reason) {
-      setDealBreakerError("Campo e motivo são obrigatórios");
+    if (!newDealBreaker.field) {
+      setDealBreakerError("Campo é obrigatório");
+      return;
+    }
+    if (!newDealBreaker.operator) {
+      setDealBreakerError("Operador é obrigatório");
+      return;
+    }
+    if (!newDealBreaker.reason) {
+      setDealBreakerError("Motivo é obrigatório");
       return;
     }
     if (!newDealBreaker.value && newDealBreaker.operator !== "in") {
       setDealBreakerError("Valor é obrigatório");
       return;
     }
+    if (newDealBreaker.operator === "in" && !newDealBreaker.value) {
+      setDealBreakerError("Valores são obrigatórios para operador 'Em lista'");
+      return;
+    }
+
     const dealBreaker: DealBreaker = {
       field: newDealBreaker.field!,
       operator: newDealBreaker.operator as DealBreaker["operator"],
@@ -299,6 +509,18 @@ export function VagasPage() {
     }));
   }
 
+  // Configuration preview section
+  function ConfigurationPreviewSection({ form, editingJob }: { form: JobFormValues; editingJob: Job | null }) {
+    const { alerts, summary } = useJobConfigurationAlerts(form);
+    return (
+      <JobConfigurationPreview
+        alerts={alerts}
+        summary={summary}
+        jobTitle={editingJob ? "Salvar alterações" : "Criar vaga"}
+      />
+    );
+  }
+
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
   const items = data?.data ?? [];
@@ -312,278 +534,453 @@ export function VagasPage() {
       <PageHeader
         title="Vagas"
         subtitle="Gestão das oportunidades abertas"
+        actions={
+          user?.role === "admin" ? (
+            <Button type="button" variant="outline" onClick={openTestCreateForm}>
+              Criar vaga teste
+            </Button>
+          ) : null
+        }
       />
 
       {showForm ? (
         <Modal
           title={editingJob ? "Editar vaga" : "Criar vaga"}
           onClose={() => { setShowForm(false); setEditingJob(null); setForm(EMPTY_FORM); }}
+          contentClassName="flex w-full max-w-[800px] max-h-[90vh] overflow-hidden p-0"
         >
-          <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-              Título *
-              <input
-                required
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                placeholder="Ex: Engenheiro de Software Sênior"
-                className="ui-input h-10 rounded-md px-3 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-              Descrição *
-              <textarea
-                required
-                rows={3}
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Descreva as responsabilidades da vaga…"
-                className="ui-input min-h-24 rounded-md px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-              Requisitos
-              <textarea
-                rows={2}
-                value={form.requirements}
-                onChange={(e) => setForm((f) => ({ ...f, requirements: e.target.value }))}
-                placeholder="Requisitos técnicos e comportamentais…"
-                className="ui-input min-h-20 rounded-md px-3 py-2 text-sm"
-              />
-            </label>
-            <div className="grid gap-3 md:grid-cols-3">
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                Status
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  className="ui-input h-10 rounded-md px-3 text-sm"
-                >
-                  <option value="draft">Rascunho</option>
-                  <option value="published">Publicada</option>
-                  <option value="paused">Pausada</option>
-                  <option value="closed">Encerrada</option>
-                  <option value="cancelled">Cancelada</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                Senioridade
-                <select
-                  value={form.seniority_level}
-                  onChange={(e) => setForm((f) => ({ ...f, seniority_level: e.target.value }))}
-                  className="ui-input h-10 rounded-md px-3 text-sm"
-                >
-                  <option value="">—</option>
-                  <option value="intern">Estagiário</option>
-                  <option value="junior">Júnior</option>
-                  <option value="mid">Pleno</option>
-                  <option value="senior">Sênior</option>
-                  <option value="lead">Lead</option>
-                  <option value="principal">Principal</option>
-                  <option value="director">Diretor</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                Modelo de trabalho
-                <select
-                  value={form.work_model}
-                  onChange={(e) => setForm((f) => ({ ...f, work_model: e.target.value }))}
-                  className="ui-input h-10 rounded-md px-3 text-sm"
-                >
-                  <option value="">—</option>
-                  <option value="remote">Remoto</option>
-                  <option value="hybrid">Híbrido</option>
-                  <option value="onsite">Presencial</option>
-                </select>
-              </label>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                Educação mínima
-                <select
-                  value={form.minimum_education_level}
-                  onChange={(e) => setForm((f) => ({ ...f, minimum_education_level: e.target.value }))}
-                  className="ui-input h-10 rounded-md px-3 text-sm"
-                >
-                  <option value="">—</option>
-                  <option value="none">Nenhuma</option>
-                  <option value="high_school">Ensino Médio</option>
-                  <option value="technical">Técnico</option>
-                  <option value="bachelor">Graduação</option>
-                  <option value="postgraduate">Pós-Graduação</option>
-                  <option value="master">Mestrado</option>
-                  <option value="phd">Doutorado</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                Anos mínimos de experiência
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={form.minimum_years_experience ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, minimum_years_experience: e.target.value ? Number(e.target.value) : undefined }))}
-                  placeholder="Ex: 5"
-                  className="ui-input h-10 rounded-md px-3 text-sm"
-                />
-              </label>
-            </div>
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-              Localização
-              <input
-                value={form.location}
-                onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-                placeholder="São Paulo - SP"
-                className="ui-input h-10 rounded-md px-3 text-sm"
-              />
-            </label>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                Salário mínimo (BRL)
-                <input
-                  type="number"
-                  min={0}
-                  value={form.salary_min ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, salary_min: e.target.value ? Number(e.target.value) : undefined }))}
-                  placeholder="10000"
-                  className="ui-input h-10 rounded-md px-3 text-sm"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                Salário máximo (BRL)
-                <input
-                  type="number"
-                  min={0}
-                  value={form.salary_max ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, salary_max: e.target.value ? Number(e.target.value) : undefined }))}
-                  placeholder="15000"
-                  className="ui-input h-10 rounded-md px-3 text-sm"
-                />
-              </label>
+          <form onSubmit={(e) => void handleSave(e)} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex flex-col gap-6">
+                <ConfigurationPreviewSection form={form} editingJob={editingJob} />
+
+                <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-[hsl(var(--text))]">Informações básicas</h3>
+                    <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">Defina o contexto principal da vaga para facilitar entendimento e publicação.</p>
+                  </div>
+                  <div className="grid gap-4">
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Título *
+                      <input
+                        required
+                        value={form.title}
+                        onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                        placeholder="Ex: Engenheiro de Software Sênior"
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Descrição *
+                      <textarea
+                        required
+                        rows={4}
+                        value={form.description}
+                        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                        placeholder="Descreva as responsabilidades da vaga…"
+                        className="ui-input min-h-28 rounded-md px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Requisitos
+                      <textarea
+                        rows={3}
+                        value={form.requirements}
+                        onChange={(e) => setForm((f) => ({ ...f, requirements: e.target.value }))}
+                        placeholder="Requisitos técnicos e comportamentais…"
+                        className="ui-input min-h-24 rounded-md px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-[hsl(var(--text))]">Configuração da vaga</h3>
+                    <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">Ajuste perfil, formato de trabalho e critérios objetivos da oportunidade.</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Status
+                      <select
+                        value={form.status}
+                        onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      >
+                        <option value="draft">Rascunho</option>
+                        <option value="published">Publicada</option>
+                        <option value="paused">Pausada</option>
+                        <option value="closed">Encerrada</option>
+                        <option value="cancelled">Cancelada</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Senioridade
+                      <select
+                        value={form.seniority_level}
+                        onChange={(e) => setForm((f) => ({ ...f, seniority_level: e.target.value }))}
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      >
+                        <option value="">—</option>
+                        <option value="intern">Estagiário</option>
+                        <option value="junior">Júnior</option>
+                        <option value="mid">Pleno</option>
+                        <option value="senior">Sênior</option>
+                        <option value="lead">Lead</option>
+                        <option value="principal">Principal</option>
+                        <option value="director">Diretor</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Modelo de trabalho
+                      <select
+                        value={form.work_model}
+                        onChange={(e) => setForm((f) => ({ ...f, work_model: e.target.value }))}
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      >
+                        <option value="">—</option>
+                        <option value="remote">Remoto</option>
+                        <option value="hybrid">Híbrido</option>
+                        <option value="onsite">Presencial</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Localização
+                      <input
+                        value={form.location}
+                        onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                        placeholder="São Paulo - SP"
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Educação mínima
+                      <select
+                        value={form.minimum_education_level}
+                        onChange={(e) => setForm((f) => ({ ...f, minimum_education_level: e.target.value }))}
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      >
+                        <option value="">—</option>
+                        <option value="none">Nenhuma</option>
+                        <option value="high_school">Ensino Médio</option>
+                        <option value="technical">Técnico</option>
+                        <option value="bachelor">Graduação</option>
+                        <option value="postgraduate">Pós-Graduação</option>
+                        <option value="master">Mestrado</option>
+                        <option value="phd">Doutorado</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Anos mínimos de experiência
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={form.minimum_years_experience ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, minimum_years_experience: e.target.value ? Number(e.target.value) : undefined }))}
+                        placeholder="Ex: 5"
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-[hsl(var(--text))]">Salário</h3>
+                    <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">Informe uma faixa salarial clara para orientar alinhamento com candidatos.</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Salário mínimo (BRL)
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.salary_min ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, salary_min: e.target.value ? Number(e.target.value) : undefined }))}
+                        placeholder="10000"
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Salário máximo (BRL)
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.salary_max ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, salary_max: e.target.value ? Number(e.target.value) : undefined }))}
+                        placeholder="15000"
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-[hsl(var(--text))]">Critérios eliminatórios</h3>
+                    <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">Defina regras que eliminam candidatos automaticamente quando um requisito não é atendido.</p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Campo *
+                      <select
+                        value={newDealBreaker.field ?? ""}
+                        onChange={(e) => setNewDealBreaker((db) => ({ ...db, field: e.target.value as any, operator: "equals" }))}
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      >
+                        <option value="">Selecione um campo</option>
+                        <option value="location">Localização</option>
+                        <option value="work_model">Modelo de Trabalho</option>
+                        <option value="education_level">Nível de Educação</option>
+                        <option value="experience_years">Anos de Experiência</option>
+                        <option value="skill">Skill</option>
+                        <option value="language">Idioma</option>
+                        <option value="availability">Disponibilidade</option>
+                        <option value="custom_text">Texto Personalizado</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Operador *
+                      <select
+                        value={newDealBreaker.operator ?? "equals"}
+                        onChange={(e) => setNewDealBreaker((db) => ({ ...db, operator: e.target.value as any }))}
+                        className="ui-input h-10 rounded-md px-3 text-sm"
+                      >
+                        {(() => {
+                          const field = newDealBreaker.field as string;
+                          const opMap: Record<string, { label: string; value: string }[]> = {
+                            location: [
+                              { label: "Igual a", value: "equals" },
+                              { label: "Diferente de", value: "not_equals" },
+                              { label: "Contém", value: "contains" },
+                              { label: "Em lista", value: "in" },
+                            ],
+                            work_model: [
+                              { label: "Igual a", value: "equals" },
+                              { label: "Diferente de", value: "not_equals" },
+                            ],
+                            education_level: [
+                              { label: "Exatamente", value: "equals" },
+                              { label: "Mínimo (>=)", value: ">=" },
+                            ],
+                            experience_years: [
+                              { label: "Igual a", value: "equals" },
+                              { label: "Mínimo (>=)", value: ">=" },
+                              { label: "Máximo (<=)", value: "<=" },
+                            ],
+                            skill: [
+                              { label: "Tem skill", value: "contains" },
+                              { label: "Não tem skill", value: "not_contains" },
+                            ],
+                            language: [
+                              { label: "Exatamente", value: "equals" },
+                              { label: "Contém", value: "contains" },
+                            ],
+                            availability: [
+                              { label: "Exatamente", value: "equals" },
+                            ],
+                            custom_text: [
+                              { label: "Contém", value: "contains" },
+                            ],
+                          };
+                          const options = opMap[field] || [];
+                          return options.length > 0 ? (
+                            options.map((op) => (
+                              <option key={op.value} value={op.value}>
+                                {op.label}
+                              </option>
+                            ))
+                          ) : (
+                            <option disabled>Selecione um campo</option>
+                          );
+                        })()}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      {newDealBreaker.operator === "in" ? "Valores *" : "Valor *"}
+                      {newDealBreaker.operator === "in" ? (
+                        <textarea
+                          value={newDealBreaker.value ?? ""}
+                          onChange={(e) => setNewDealBreaker((db) => ({ ...db, value: e.target.value }))}
+                          placeholder={(() => {
+                            const field = newDealBreaker.field as string;
+                            const examples: Record<string, string> = {
+                              location: "São Paulo, Rio de Janeiro, Belo Horizonte",
+                              work_model: "remote, hybrid",
+                              skill: "Python, Java",
+                              language: "English, Spanish",
+                            };
+                            return examples[field] || "Valor1, Valor2, Valor3";
+                          })()}
+                          rows={3}
+                          className="ui-input min-h-24 rounded-md px-3 py-2 text-sm"
+                        />
+                      ) : newDealBreaker.field === "experience_years" ? (
+                        <input
+                          type="number"
+                          value={newDealBreaker.value ?? ""}
+                          onChange={(e) => setNewDealBreaker((db) => ({ ...db, value: e.target.value }))}
+                          placeholder="Ex: 5"
+                          className="ui-input h-10 rounded-md px-3 text-sm"
+                        />
+                      ) : (
+                        <textarea
+                          value={newDealBreaker.value ?? ""}
+                          onChange={(e) => setNewDealBreaker((db) => ({ ...db, value: e.target.value }))}
+                          placeholder={(() => {
+                            const field = newDealBreaker.field as string;
+                            const examples: Record<string, string> = {
+                              location: "São Paulo",
+                              work_model: "remote",
+                              education_level: "bachelor",
+                              skill: "Python",
+                              language: "English",
+                              availability: "immediate",
+                              custom_text: "required keyword",
+                            };
+                            return examples[field] || "Digite um valor";
+                          })()}
+                          rows={3}
+                          className="ui-input min-h-24 rounded-md px-3 py-2 text-sm"
+                        />
+                      )}
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                      Motivo da eliminação *
+                      <textarea
+                        value={newDealBreaker.reason ?? ""}
+                        onChange={(e) => setNewDealBreaker((db) => ({ ...db, reason: e.target.value }))}
+                        placeholder="Explique por que este critério é eliminatório"
+                        rows={3}
+                        className="ui-input min-h-24 rounded-md px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => handleAddDealBreaker()}>
+                      + Adicionar critério
+                    </Button>
+                  </div>
+
+                  {dealBreakerError ? (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
+                      <span className="font-bold">✕</span>
+                      <span>{dealBreakerError}</span>
+                    </div>
+                  ) : null}
+
+                  {(form.deal_breakers ?? []).length > 0 ? (
+                    <div className="mt-4 overflow-hidden rounded-xl border border-[hsl(var(--border))]">
+                      <div className="max-h-[250px] overflow-y-auto">
+                        <div className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))] md:hidden">
+                          {(form.deal_breakers ?? []).map((db, idx) => (
+                            <div key={idx} className="space-y-3 px-4 py-4">
+                              <div className="grid grid-cols-1 gap-3">
+                                <div>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Campo</div>
+                                  <div className="mt-1 text-sm font-medium text-[hsl(var(--text))]">{getDealBreakerFieldLabel(db.field)}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Operador</div>
+                                  <div className="mt-1 text-sm text-[hsl(var(--text))]">{getDealBreakerOperatorLabel(db.operator)}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Valor</div>
+                                  <div className="mt-1 text-sm text-[hsl(var(--text))] break-words">{formatDealBreakerValue(db)}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Motivo</div>
+                                  <div className="mt-1 text-sm text-[hsl(var(--text))] break-words">{db.reason}</div>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Status</div>
+                                  <div className="mt-1">
+                                    <StatusPill label={db.is_active ? "Ativo" : "Inativo"} tone={db.is_active ? "success" : "neutral"} />
+                                  </div>
+                                </div>
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                  <label className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text))]">
+                                    <input
+                                      type="checkbox"
+                                      checked={db.is_active}
+                                      onChange={() => handleToggleDealBreaker(idx)}
+                                      className="h-4 w-4 rounded"
+                                    />
+                                    Ativo
+                                  </label>
+                                  <Button type="button" size="sm" variant="destructive" className="min-h-10" onClick={() => handleRemoveDealBreaker(idx)}>
+                                    Remover
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <table className="hidden min-w-full divide-y divide-[hsl(var(--border))] text-sm md:table">
+                          <thead className="sticky top-0 bg-[hsl(var(--surface-muted))]">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Regra</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Ativo</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+                            {(form.deal_breakers ?? []).map((db, idx) => (
+                              <tr key={idx} className="hover:bg-[hsl(var(--surface-muted))]">
+                                <td className="px-3 py-3">
+                                  <div className="text-sm font-medium text-[hsl(var(--text))]">{formatDealBreakerLabel(db)}</div>
+                                  <div className="mt-1 text-xs text-[hsl(var(--text-muted))]">Motivo: {db.reason}</div>
+                                </td>
+                                <td className="px-3 py-3 align-top">
+                                  <input
+                                    type="checkbox"
+                                    checked={db.is_active}
+                                    onChange={() => handleToggleDealBreaker(idx)}
+                                    className="mt-1 h-4 w-4 rounded"
+                                  />
+                                </td>
+                                <td className="px-3 py-3 align-top">
+                                  <Button type="button" size="sm" variant="destructive" onClick={() => handleRemoveDealBreaker(idx)}>
+                                    Remover
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+              </div>
             </div>
 
-            <div className="border-t border-[hsl(var(--border))] pt-4">
-              <h3 className="mb-3 text-sm font-semibold text-[hsl(var(--text))]">Critérios eliminatórios (Deal-breakers)</h3>
-
-              <div className="grid gap-3 mb-3 md:grid-cols-2">
-                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                  Campo
-                  <input
-                    value={newDealBreaker.field ?? ""}
-                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, field: e.target.value }))}
-                    placeholder="Ex: location, experience_years"
-                    className="ui-input h-10 rounded-md px-3 text-sm"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                  Operador
-                  <select
-                    value={newDealBreaker.operator ?? "equals"}
-                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, operator: e.target.value as any }))}
-                    className="ui-input h-10 rounded-md px-3 text-sm"
+            <div className="shrink-0 border-t border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-3">
+                {formError ? (
+                  <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
+                    <span className="font-bold">✕</span>
+                    <span>{formError}</span>
+                  </div>
+                ) : null}
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setShowForm(false); setEditingJob(null); setForm(EMPTY_FORM); }}
                   >
-                    <option value="equals">Igual a</option>
-                    <option value="not_equals">Diferente de</option>
-                    <option value="contains">Contém</option>
-                    <option value="in">Em lista (valores separados por vírgula)</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="grid gap-3 mb-3 md:grid-cols-2">
-                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                  Valor
-                  <textarea
-                    value={newDealBreaker.value ?? ""}
-                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, value: e.target.value }))}
-                    placeholder={newDealBreaker.operator === "in" ? "São Paulo, Rio de Janeiro, Belo Horizonte" : "Ex: São Paulo"}
-                    rows={2}
-                    className="ui-input rounded-md px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-                  Motivo da eliminação
-                  <textarea
-                    value={newDealBreaker.reason ?? ""}
-                    onChange={(e) => setNewDealBreaker((db) => ({ ...db, reason: e.target.value }))}
-                    placeholder="Explique por que este critério é eliminatório"
-                    rows={2}
-                    className="ui-input rounded-md px-3 py-2 text-sm"
-                  />
-                </label>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                <Button type="button" onClick={() => handleAddDealBreaker()}>
-                  + Adicionar critério
-                </Button>
-              </div>
-
-              {dealBreakerError ? (
-                <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))] mb-3">
-                  <span className="font-bold">✕</span>
-                  <span>{dealBreakerError}</span>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={saving || !form.title || !form.description}>
+                    {saving ? "Salvando…" : editingJob ? "Salvar alterações" : "Criar vaga"}
+                  </Button>
                 </div>
-              ) : null}
-
-              {(form.deal_breakers ?? []).length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-[hsl(var(--border))] text-sm">
-                    <thead className="bg-[hsl(var(--surface-muted))]">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Campo</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Operador</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Valor</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Ativo</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--text-muted))]">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[hsl(var(--border))]">
-                      {(form.deal_breakers ?? []).map((db, idx) => (
-                        <tr key={idx} className="hover:bg-[hsl(var(--surface-muted))]">
-                          <td className="px-3 py-2 text-[hsl(var(--text))]">{db.field}</td>
-                          <td className="px-3 py-2 text-[hsl(var(--text-muted))]">
-                            {db.operator === "equals" ? "=" : db.operator === "not_equals" ? "≠" : db.operator === "contains" ? "⊃" : "∈"}
-                          </td>
-                          <td className="px-3 py-2 text-[hsl(var(--text-muted))] text-xs">{db.value || db.values?.join(", ") || "—"}</td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="checkbox"
-                              checked={db.is_active}
-                              onChange={() => handleToggleDealBreaker(idx)}
-                              className="h-4 w-4 rounded"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <Button type="button" size="sm" variant="destructive" onClick={() => handleRemoveDealBreaker(idx)}>
-                              Remover
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-            </div>
-
-            {formError ? (
-              <div className="flex items-start gap-2 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
-                <span className="font-bold">✕</span>
-                <span>{formError}</span>
               </div>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button type="submit" disabled={saving || !form.title || !form.description}>
-                {saving ? "Salvando…" : editingJob ? "Salvar alterações" : "Criar vaga"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => { setShowForm(false); setEditingJob(null); setForm(EMPTY_FORM); }}
-              >
-                Cancelar
-              </Button>
             </div>
           </form>
         </Modal>
@@ -684,8 +1081,16 @@ export function VagasPage() {
               >
                 <td className="min-w-[280px] px-4 py-3 align-top">
                   <div className="space-y-1">
-                    <div className="font-semibold text-[hsl(var(--text))]">{job.title}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-semibold text-[hsl(var(--text))]">{job.title}</div>
+                      {rankingFreshnessByJobId[job.id]?.isStale ? (
+                        <StatusPill label="Ranking desatualizado" tone="warning" />
+                      ) : null}
+                    </div>
                     <div className="text-sm leading-5 text-[hsl(var(--text-muted))]">{truncate(job.description, 140)}</div>
+                    {rankingFreshnessByJobId[job.id]?.isStale ? (
+                      <div className="text-xs text-[hsl(var(--warning))]">Será recalculado automaticamente.</div>
+                    ) : null}
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 align-top">
@@ -736,7 +1141,15 @@ export function VagasPage() {
         {selectedJob && canManage ? (
           <div className="ui-card overflow-hidden rounded-xl shadow-sm">
             <div className="border-b border-[hsl(var(--border))] px-6 py-4">
-              <h3 className="text-lg font-semibold text-[hsl(var(--text))]">{selectedJob.title}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-semibold text-[hsl(var(--text))]">{selectedJob.title}</h3>
+                {rankingFreshnessByJobId[selectedJob.id]?.isStale ? (
+                  <StatusPill label="Ranking desatualizado" tone="warning" />
+                ) : null}
+              </div>
+              {rankingFreshnessByJobId[selectedJob.id]?.isStale ? (
+                <p className="mt-2 text-sm text-[hsl(var(--warning))]">Será recalculado automaticamente.</p>
+              ) : null}
             </div>
 
             <div className="grid gap-4 px-6 py-5 md:grid-cols-[160px_1fr] md:gap-x-6">
@@ -779,22 +1192,17 @@ export function VagasPage() {
                   <table className="min-w-full divide-y divide-[hsl(var(--border))]">
                     <thead className="bg-[hsl(var(--surface-muted))]">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Campo</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Operador</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Valor</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Motivo</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Regra</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
                       {selectedJob.deal_breakers.map((db, idx) => (
                         <tr key={idx} className="hover:bg-[hsl(var(--surface-muted))]">
-                          <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{db.field}</td>
-                          <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
-                            {db.operator === "equals" ? "=" : db.operator === "not_equals" ? "≠" : db.operator === "contains" ? "⊃" : "∈"}
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-medium text-[hsl(var(--text))]">{formatDealBreakerLabel(db)}</div>
+                            <div className="mt-1 text-sm text-[hsl(var(--text-muted))]">Motivo: {db.reason}</div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{db.value || db.values?.join(", ") || "—"}</td>
-                          <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{db.reason}</td>
                           <td className="px-4 py-3">
                             <StatusPill label={db.is_active ? "Ativo" : "Inativo"} tone={db.is_active ? "success" : "neutral"} />
                           </td>

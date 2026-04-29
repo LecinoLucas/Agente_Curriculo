@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.pipeline_service import (
@@ -90,6 +91,11 @@ def _handle(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
+        )
+    if isinstance(exc, IntegrityError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Não foi possível concluir a operação porque o vínculo já existe ou foi alterado. Recarregue e tente novamente.",
         )
     raise exc
 

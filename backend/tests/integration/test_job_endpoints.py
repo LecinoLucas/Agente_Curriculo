@@ -135,6 +135,77 @@ async def test_recruiter_can_crud_job_and_soft_delete(
 
 
 @pytest.mark.asyncio
+async def test_recruiter_can_clear_optional_job_fields_on_update(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-job-clear@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-job-clear@test.com", "password123")
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(
+            minimum_education_level="bachelor",
+            minimum_years_experience="5.0",
+            deal_breakers=[
+                {
+                    "field": "location",
+                    "operator": "equals",
+                    "value": "Brasil",
+                    "reason": "Precisa atender a região",
+                    "is_active": True,
+                }
+            ],
+        ),
+        headers=headers,
+    )
+    assert create.status_code == 201
+    job_id = create.json()["id"]
+
+    update = await client.patch(
+        f"/api/v1/jobs/{job_id}",
+        json={
+            "requirements": None,
+            "location": None,
+            "work_model": None,
+            "salary_min": None,
+            "salary_max": None,
+            "minimum_education_level": None,
+            "minimum_years_experience": None,
+            "deal_breakers": [],
+        },
+        headers=headers,
+    )
+    assert update.status_code == 200
+    updated = update.json()
+    assert updated["requirements"] is None
+    assert updated["location"] is None
+    assert updated["work_model"] is None
+    assert updated["salary_min"] is None
+    assert updated["salary_max"] is None
+    assert updated["minimum_education_level"] is None
+    assert updated["minimum_years_experience"] is None
+    assert updated["deal_breakers"] == []
+
+    detail = await client.get(f"/api/v1/jobs/{job_id}", headers=headers)
+    assert detail.status_code == 200
+    persisted = detail.json()
+    assert persisted["requirements"] is None
+    assert persisted["location"] is None
+    assert persisted["work_model"] is None
+    assert persisted["salary_min"] is None
+    assert persisted["salary_max"] is None
+    assert persisted["minimum_education_level"] is None
+    assert persisted["minimum_years_experience"] is None
+    assert persisted["deal_breakers"] == []
+
+
+@pytest.mark.asyncio
 async def test_match_endpoint_persists_job_candidate_ranking(
     client: AsyncClient,
     db_session: AsyncSession,

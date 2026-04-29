@@ -16,6 +16,9 @@ export type Candidate = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  data_quality_status?: "valid" | "unknown" | "no_resume" | "empty_resume" | "parsing_failed" | "invalid_manual";
+  data_quality_reason?: string | null;
+  data_quality_marked_at?: string | null;
 };
 
 export type CandidateListSummary = {
@@ -27,6 +30,7 @@ export type CandidateListSummary = {
   tags: string[];
   created_at: string;
   resume_count: number;
+  linked_job_count: number;
   ai_status: string | null;
   ai_score: number | null;
 };
@@ -241,10 +245,13 @@ export type Job = {
 };
 
 export type RankingReasonCode = {
-  type: "skill_match" | "missing_skill" | "seniority" | "experience" | "strength" | "weakness";
+  type: string;
   field: string;
   impact: number;
   description: string;
+  expected?: string | null;
+  actual?: string | null;
+  reason?: string | null;
 };
 
 export type JobRankingBreakdown = {
@@ -271,6 +278,15 @@ export type JobRankingEntry = {
   entered_at: string | null;
   computed_at: string;
   version: string;
+  data_quality_status?: "valid" | "unknown" | "no_resume" | "empty_resume" | "parsing_failed" | "invalid_manual";
+};
+
+export type DataQualityStats = {
+  total_candidates: number;
+  valid_candidates: number;
+  unknown_candidates: number;
+  invalid_candidates: number;
+  filtered_candidates: number;
 };
 
 export type JobRanking = {
@@ -280,6 +296,7 @@ export type JobRanking = {
   threshold_low: number;
   score_version: string;
   candidates: JobRankingEntry[];
+  data_quality_stats?: DataQualityStats;
 };
 
 export type AIAnalysisStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";

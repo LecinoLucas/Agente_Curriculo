@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
+
 from src.application.services.domain_events import CandidateStageChangedEvent, dispatch_event
 from src.infrastructure.database.models.candidate_pipeline_model import (
     CandidatePipelineModel,
@@ -384,50 +386,55 @@ class PipelineService:
             raise PipelineDuplicateEntryError
 
         now = datetime.now(UTC)
-        source_row = await self._repository.update_entry_status(
-            candidate_id=candidate_id,
-            job_id=body.from_job_id,
-            new_status="transferred",
-            last_moved_by=moved_by,
-            updated_at=now,
-        )
-        if source_row is None:
-            raise PipelineEntryNotFoundError
-
-        source_transition = await self._repository.save_transition(
-            PipelineStageTransitionModel(
+        try:
+            source_row = await self._repository.update_entry_status(
                 candidate_id=candidate_id,
                 job_id=body.from_job_id,
-                from_stage=source_entry.stage,
-                to_stage=source_entry.stage,
-                moved_by=moved_by,
-                moved_at=now,
-                trigger="manual",
-                notes=f"Transferido para a vaga {body.to_job_id}",
-                reason=body.reason,
+                new_status="transferred",
+                last_moved_by=moved_by,
+                updated_at=now,
             )
-        )
+            if source_row is None:
+                raise PipelineEntryNotFoundError
 
-        destination_row = await self._repository.create_entry(
-            candidate_id=candidate_id,
-            job_id=body.to_job_id,
-            stage="entry",
-            status="active",
-            moved_by=moved_by,
-            updated_at=now,
-        )
-        destination_transition = await self._repository.save_transition(
-            PipelineStageTransitionModel(
+            source_transition = await self._repository.save_transition(
+                PipelineStageTransitionModel(
+                    candidate_id=candidate_id,
+                    job_id=body.from_job_id,
+                    from_stage=source_entry.stage,
+                    to_stage=source_entry.stage,
+                    moved_by=moved_by,
+                    moved_at=now,
+                    trigger="manual",
+                    notes=f"Transferido para a vaga {body.to_job_id}",
+                    reason=body.reason,
+                )
+            )
+
+            destination_row = await self._repository.create_entry(
                 candidate_id=candidate_id,
                 job_id=body.to_job_id,
-                from_stage=None,
-                to_stage="entry",
+                stage="entry",
+                status="active",
                 moved_by=moved_by,
-                moved_at=now,
-                trigger="manual",
-                reason=body.reason,
+                updated_at=now,
             )
-        )
+            destination_transition = await self._repository.save_transition(
+                PipelineStageTransitionModel(
+                    candidate_id=candidate_id,
+                    job_id=body.to_job_id,
+                    from_stage=None,
+                    to_stage="entry",
+                    moved_by=moved_by,
+                    moved_at=now,
+                    trigger="manual",
+                    reason=body.reason,
+                )
+            )
+        except IntegrityError as exc:
+            raise PipelineConcurrentModificationError(
+                "Não foi possível concluir a transferência. Recarregue e tente novamente."
+            ) from exc
 
         await publish_domain_event(
             DomainEvent(

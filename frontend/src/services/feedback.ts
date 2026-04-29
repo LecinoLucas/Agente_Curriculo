@@ -13,8 +13,8 @@ export const feedback = {
   createCandidate: {
     processing: () =>
       toast.loading("Criando candidato...", { key: FEEDBACK_KEY.createCandidate }),
-    success: () =>
-      toast.success("Candidato criado com sucesso", { key: FEEDBACK_KEY.createCandidate }),
+    success: (message = "Candidato criado com sucesso") =>
+      toast.success(message, { key: FEEDBACK_KEY.createCandidate }),
     error: (error?: unknown) =>
       toast.error(
         formatContextError(

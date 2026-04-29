@@ -61,6 +61,74 @@ async function getAccessToken(page: Parameters<typeof test>[0]["page"]) {
   return token as string;
 }
 
+async function createJobViaApi(
+  page: Parameters<typeof test>[0]["page"],
+  token: string,
+  title: string,
+  dealBreakers: Record<string, unknown>[],
+) {
+  const response = await page.request.post(`${API_BASE_URL}/api/v1/jobs`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      title,
+      description: `Descricao da vaga ${title}`,
+      requirements: "Python, FastAPI, PostgreSQL",
+      status: "published",
+      salary_currency: "BRL",
+      deal_breakers: dealBreakers,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as { id: string };
+}
+
+async function createCandidateViaApi(
+  page: Parameters<typeof test>[0]["page"],
+  token: string,
+  payload: {
+    full_name: string;
+    email: string;
+    location_city?: string;
+    location_state?: string;
+    location_country?: string;
+  },
+) {
+  const response = await page.request.post(`${API_BASE_URL}/api/v1/candidates`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      full_name: payload.full_name,
+      email: payload.email,
+      location_city: payload.location_city ?? "São Paulo",
+      location_state: payload.location_state ?? "SP",
+      location_country: payload.location_country ?? "Brasil",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as { id: string };
+}
+
+async function addCandidateToJobViaApi(
+  page: Parameters<typeof test>[0]["page"],
+  token: string,
+  candidateId: string,
+  jobId: string,
+) {
+  const response = await page.request.post(`${API_BASE_URL}/api/v1/pipeline/${candidateId}/add-to-job`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      job_id: jobId,
+      initial_stage: "entry",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
 async function createPublishedJobViaUi(
   page: Parameters<typeof test>[0]["page"],
   title: string,
@@ -113,7 +181,7 @@ async function waitForCandidateCard(page: Parameters<typeof test>[0]["page"], ca
 }
 
 async function waitForActiveJob(page: Parameters<typeof test>[0]["page"], jobTitle: string) {
-  await expect(page.getByLabel("Vaga")).toHaveValue(/.+/);
+  await expect(page.locator("#pipeline-job-select")).toHaveValue(/.+/);
   await expect(page.locator("h2").filter({ hasText: jobTitle }).first()).toBeVisible();
 }
 
@@ -168,7 +236,7 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
       await expect(page.getByRole("alert").filter({ hasText: "Análise iniciada" })).toBeVisible();
     }
 
-    await expect(drawer.getByText("Análise concluída")).toBeVisible({ timeout: 45_000 });
+    await expect(drawer.locator("p", { hasText: /^Análise concluída$/ })).toBeVisible({ timeout: 45_000 });
     await expect(drawer.getByText("Rastreabilidade da execução")).toBeVisible();
     await expect(drawer.getByText(/Usou IA real/)).toBeVisible();
     await drawer.getByRole("button", { name: "Score" }).click();
@@ -211,11 +279,114 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     await drawer.getByRole("button", { name: "Salvar etapa" }).click();
     await page.waitForTimeout(1500);
 
-    await drawer.getByRole("button", { name: "Histórico" }).click();
+    await drawer.getByRole("button", { name: "Ver histórico", exact: true }).click();
     await expect(drawer.getByText("Histórico real do pipeline")).toBeVisible();
     await expect(drawer.getByText("Recebido → Triagem")).toBeVisible({ timeout: 20_000 });
     await expect(drawer.getByText("Movido manualmente").first()).toBeVisible();
   });
+});
+
+test("ranking destaca candidatos rejeitados por deal-breaker", async ({ page }) => {
+  const suffix = Date.now();
+  const jobTitle = `QA Deal Breaker ${suffix}`;
+  const candidateName = `QA Deal Breaker Candidate ${suffix}`;
+  const candidateEmail = `qa.deal.breaker.${suffix}@example.com`;
+
+  await login(page);
+  const token = await getAccessToken(page);
+
+  const job = await createJobViaApi(page, token, jobTitle, [
+    {
+      field: "location",
+      operator: "equals",
+      value: "São Paulo",
+      reason: "A vaga exige atuação presencial em São Paulo.",
+      is_active: true,
+    },
+  ]);
+  const candidate = await createCandidateViaApi(page, token, {
+    full_name: candidateName,
+    email: candidateEmail,
+    location_city: "Rio de Janeiro",
+    location_state: "RJ",
+    location_country: "Brasil",
+  });
+  await addCandidateToJobViaApi(page, token, candidate.id, job.id);
+
+  const mockedRanking = {
+    job_id: job.id,
+    total_candidates: 1,
+    threshold_high: 70,
+    threshold_low: 45,
+    score_version: "v1",
+    candidates: [
+      {
+        rank: 1,
+        candidate_id: candidate.id,
+        candidate_name: candidateName,
+        stage: "entry",
+        pipeline_status: "active",
+        score_breakdown: {
+          skill_match_score: 0,
+          experience_match_score: 0,
+          seniority_match_score: 0,
+          education_score: 0,
+          ai_confidence_score: 0,
+          penalty_score: 0,
+          final_score: 0,
+        },
+        final_score: 0,
+        decision_suggestion: "rejected_suggested",
+        reason_codes: [
+          {
+            type: "deal_breaker",
+            field: "location",
+            impact: -100,
+            description: "Localização incompatível com a vaga",
+          },
+        ],
+        explanation_text: "Score zerado por regra eliminatória da vaga.",
+        entered_at: null,
+        computed_at: new Date().toISOString(),
+        version: "v1",
+      },
+    ],
+  };
+
+  await page.route(`**/api/v1/jobs/${job.id}/ranking`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(mockedRanking),
+    });
+  });
+
+  await page.goto(`/pipeline/${job.id}`);
+  await waitForActiveJob(page, jobTitle);
+  await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
+
+  const card = await waitForCandidateCard(page, candidateName);
+  await card.click();
+
+  const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button", { name: "Score" }).click();
+
+  const rankingPanel = page.locator("#pipeline-ranking-panel");
+  await expect(rankingPanel.getByText("Critério eliminatório", { exact: true })).toBeVisible();
+  await expect(rankingPanel.getByText("Rejeitado por regra da vaga")).toBeVisible();
+  await expect(rankingPanel.getByText(/Localização: esperado São Paulo/i)).toBeVisible();
+  await expect(rankingPanel.getByText("A vaga exige atuação presencial em São Paulo.")).toBeVisible();
+
+  await expect(drawer.getByRole("heading", { name: "Critérios eliminatórios violados" })).toBeVisible();
+  await expect(drawer.getByText("Localização")).toBeVisible();
+  await expect(drawer.getByText("Esperado")).toBeVisible();
+  await expect(drawer.getByText("Encontrado")).toBeVisible();
+  await expect(drawer.getByText("São Paulo")).toBeVisible();
+  await expect(drawer.getByText(/Rio de Janeiro/i)).toBeVisible();
+  await expect(drawer.getByText("A vaga exige atuação presencial em São Paulo.")).toBeVisible();
+  await expect(drawer.getByText("O score foi zerado porque a regra da vaga não foi atendida.")).toBeVisible();
+  await expect(drawer.getByText("Critério eliminatório", { exact: true })).toBeVisible();
 });
 
 test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page }) => {
@@ -245,7 +416,7 @@ test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page
 
     await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
 
-    await page.getByLabel("Vaga").selectOption({ label: jobBTitle });
+    await page.locator("#pipeline-job-select").selectOption({ label: jobBTitle });
     await waitForActiveJob(page, jobBTitle);
     await expect(page.getByText(candidateName, { exact: true })).toHaveCount(0);
   });
@@ -265,11 +436,11 @@ test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page
     await waitForActiveJob(page, updatedJobATitle);
     await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
 
-    await page.getByLabel("Vaga").selectOption({ label: jobBTitle });
+    await page.locator("#pipeline-job-select").selectOption({ label: jobBTitle });
     await waitForActiveJob(page, jobBTitle);
     await expect(page.getByText(candidateName, { exact: true })).toHaveCount(0);
 
-    await page.getByLabel("Vaga").selectOption({ label: updatedJobATitle });
+    await page.locator("#pipeline-job-select").selectOption({ label: updatedJobATitle });
     await waitForActiveJob(page, updatedJobATitle);
     await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
   });

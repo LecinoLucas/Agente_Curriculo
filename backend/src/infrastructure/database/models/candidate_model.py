@@ -61,6 +61,20 @@ class CandidateModel(Base):
         server_default=sa.text("NOW()"),
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
+    data_quality_status: Mapped[str] = mapped_column(
+        sa.String(50),
+        nullable=False,
+        server_default="unknown",
+        comment="Data quality classification: valid, no_resume, empty_resume, parsing_failed, unknown, invalid"
+    )
+    data_quality_reason: Mapped[Optional[str]] = mapped_column(
+        sa.Text,
+        comment="Explanation of why candidate is marked invalid"
+    )
+    data_quality_marked_at: Mapped[Optional[datetime]] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        comment="When data quality status was last determined"
+    )
 
     __table_args__ = (
         sa.Index("idx_candidates_user_id", "user_id"),
@@ -73,6 +87,7 @@ class CandidateModel(Base):
         ),
         sa.Index("idx_candidates_email", "email"),
         sa.Index("idx_candidates_cpf", "cpf"),
+        sa.Index("idx_candidates_data_quality_status", "data_quality_status"),
     )
 
     resumes: Mapped[list["ResumeModel"]] = relationship(  # type: ignore[name-defined]

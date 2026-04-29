@@ -69,8 +69,9 @@ class JobService:
 
     async def update(self, job_id: UUID, body: UpdateJobRequest) -> JobModel:
         job = await self.get(job_id)
-        salary_min = body.salary_min if body.salary_min is not None else job.salary_min
-        salary_max = body.salary_max if body.salary_max is not None else job.salary_max
+        provided_fields = body.model_fields_set
+        salary_min = body.salary_min if "salary_min" in provided_fields else job.salary_min
+        salary_max = body.salary_max if "salary_max" in provided_fields else job.salary_max
         self._validate_salary_range(salary_min, salary_max)
 
         for field_name in (
@@ -88,17 +89,23 @@ class JobService:
             "salary_max",
             "salary_currency",
         ):
-            val = getattr(body, field_name, None)
-            if val is not None:
-                if field_name in {"title", "description"} and isinstance(val, str):
-                    val = self._clean_required_text(val)
-                if field_name == "salary_currency" and isinstance(val, str):
-                    val = val.upper()
-                if field_name == "deal_breakers" and isinstance(val, list):
-                    val = [db.model_dump(exclude_none=True) for db in val]
-                setattr(job, field_name, val)
+            if field_name not in provided_fields:
+                continue
 
-        if body.status is not None:
+            val = getattr(body, field_name, None)
+            if field_name in {"title", "description"}:
+                if val is None:
+                    continue
+                val = self._clean_required_text(val)
+            if field_name in {"requirements", "location"} and isinstance(val, str):
+                val = val.strip() or None
+            if field_name == "salary_currency" and isinstance(val, str):
+                val = val.upper()
+            if field_name == "deal_breakers" and isinstance(val, list):
+                val = [db.model_dump(exclude_none=True) for db in val]
+            setattr(job, field_name, val)
+
+        if "status" in provided_fields and body.status is not None:
             self._set_status(job, body.status)
 
         job.updated_at = datetime.now(timezone.utc)

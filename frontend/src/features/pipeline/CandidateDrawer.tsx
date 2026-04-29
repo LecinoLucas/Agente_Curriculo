@@ -2,9 +2,12 @@ import { type MutableRefObject, type ReactNode, useCallback, useEffect, useMemo,
 
 import { Tabs } from "../../components/common/Tabs";
 import { StatusPill } from "../../components/common/StatusPill";
+import { Badge } from "../../components/ui/badge";
+import { DataQualitySection } from "../../components/data-quality/DataQualitySection";
 import { useAuth } from "../../features/auth/useAuth";
 import { analysisService } from "../../services/analysisService";
 import { candidatesService } from "../../services/candidatesService";
+import { dataQualityService } from "../../services/dataQualityService";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { getJobRanking } from "../../services/jobsService";
@@ -23,6 +26,10 @@ import type {
 } from "../../types/domain";
 import { formatJobStatus, formatSeniority, jobStatusTone } from "../../utils/jobFormatters";
 import { getCandidateState, getNextAction, type CandidateState } from "./candidateState";
+import {
+  buildDealBreakerViolationDisplay,
+  isDealBreakerReasonCode,
+} from "./dealBreakerDisplay";
 import { type PanelTab, usePipeline } from "./PipelineContext";
 import { EditCandidateModal } from "./EditCandidateModal";
 
@@ -334,6 +341,7 @@ export function CandidateDrawer() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [addJobModalOpen, setAddJobModalOpen] = useState(false);
   const [transferJobModalOpen, setTransferJobModalOpen] = useState(false);
+  const [dataQualityActionLoading, setDataQualityActionLoading] = useState(false);
 
   useEffect(() => {
     setAnalysisResult(null);
@@ -349,7 +357,7 @@ export function CandidateDrawer() {
   }, [rankingSyncTick]);
 
   useEffect(() => {
-    if (activePanelTab !== "analysis") return;
+    if (activePanelTab !== "analysis" && activePanelTab !== "score") return;
 
     const analysisId = candidateOverview?.latest_analysis?.analysis_id;
     const status = candidateOverview?.latest_analysis?.status;
@@ -552,6 +560,36 @@ export function CandidateDrawer() {
     syncAnalysisStart,
   ]);
 
+  const handleDataQualityReprocess = useCallback(async () => {
+    if (!candidateOverview || dataQualityActionLoading) return;
+
+    setDataQualityActionLoading(true);
+    try {
+      await dataQualityService.reprocessCandidate(candidateOverview.candidate.id);
+      toast.success("Candidato enviado para reprocessamento.");
+      syncCandidateOverview(candidateOverview.candidate.id);
+    } catch (err) {
+      toast.error(`Erro ao reprocessar: ${err instanceof Error ? err.message : "erro desconhecido"}`);
+    } finally {
+      setDataQualityActionLoading(false);
+    }
+  }, [candidateOverview, dataQualityActionLoading, syncCandidateOverview]);
+
+  const handleDataQualityMarkValid = useCallback(async () => {
+    if (!candidateOverview || dataQualityActionLoading) return;
+
+    setDataQualityActionLoading(true);
+    try {
+      await dataQualityService.markAsValid(candidateOverview.candidate.id);
+      toast.success("Candidato marcado como válido.");
+      syncCandidateOverview(candidateOverview.candidate.id);
+    } catch (err) {
+      toast.error(`Erro ao marcar como válido: ${err instanceof Error ? err.message : "erro desconhecido"}`);
+    } finally {
+      setDataQualityActionLoading(false);
+    }
+  }, [candidateOverview, dataQualityActionLoading, syncCandidateOverview]);
+
   const headerPrimaryAction = useMemo(() => {
     if (!candidateState) return null;
 
@@ -708,16 +746,21 @@ export function CandidateDrawer() {
                   activeJob={activeJob}
                   activePipelineEntry={activePipelineEntry}
                   onEdit={() => setEditModalOpen(true)}
+                  onReprocess={handleDataQualityReprocess}
+                  onMarkValid={user?.role === "admin" ? handleDataQualityMarkValid : undefined}
+                  isLoading={dataQualityActionLoading}
                 />
               ) : null}
 
               {activePanelTab === "score" ? (
-                <ScoreTab
+              <ScoreTab
                   overview={candidateOverview}
                   activeJobId={activeJobId}
+                  activeJob={activeJob}
                   activeJobMatch={activeJobMatch}
                   activePipelineEntry={activePipelineEntry}
                   rankingEntry={rankingEntry}
+                  analysisResult={analysisResult}
                   loading={rankingEntryLoading}
                   error={rankingEntryError}
                   compatibilityGuidance={compatibilityGuidance}
@@ -809,11 +852,17 @@ function SummaryTab({
   activeJob,
   activePipelineEntry,
   onEdit,
+  onReprocess,
+  onMarkValid,
+  isLoading,
 }: {
   overview: CandidateOverview;
   activeJob: Job | null;
   activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   onEdit: () => void;
+  onReprocess: () => void;
+  onMarkValid?: () => void;
+  isLoading: boolean;
 }) {
   const admissionFields = inferAdmissionFields(overview);
   const { candidate, resumes, latest_analysis } = overview;
@@ -907,6 +956,15 @@ function SummaryTab({
         </div>
       </Section>
 
+      <DataQualitySection
+        status={overview.candidate.data_quality_status ?? "unknown"}
+        reason={overview.candidate.data_quality_reason}
+        markedAt={overview.candidate.data_quality_marked_at}
+        onReprocess={onReprocess}
+        onMarkValid={onMarkValid}
+        isLoading={isLoading}
+      />
+
       <Section title="Informações de admissão">
         {admissionFields.length > 0 ? (
           <div className="grid gap-2 sm:grid-cols-2">
@@ -929,28 +987,43 @@ function SummaryTab({
 function ScoreTab({
   overview,
   activeJobId,
+  activeJob,
   activeJobMatch,
   activePipelineEntry,
   rankingEntry,
+  analysisResult,
   loading,
   error,
   compatibilityGuidance,
 }: {
   overview: CandidateOverview;
   activeJobId: string | null;
+  activeJob: Job | null;
   activeJobMatch: CandidateOverview["top_matches"][number] | null;
   activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   rankingEntry: JobRankingEntry | null;
+  analysisResult: AnalysisResult | null;
   loading: boolean;
   error: string | null;
   compatibilityGuidance: ReturnType<typeof getCompatibilityGuidance>;
 }) {
   const compatibilityScore = activePipelineEntry?.match_score ?? activeJobMatch?.match_score ?? null;
   const aiScore = overview.latest_analysis?.overall_score ?? null;
+  const dealBreakerViolations = rankingEntry?.reason_codes.filter((reason) => isDealBreakerReasonCode(reason)) ?? [];
+  const dealBreakerDetails = dealBreakerViolations.map((reasonCode) =>
+    buildDealBreakerViolationDisplay({
+      reasonCode,
+      jobDealBreakers: activeJob?.deal_breakers ?? [],
+      candidate: overview.candidate,
+      latestAnalysis: overview.latest_analysis,
+      analysisResult,
+    }),
+  );
   const hasRankingDetails =
     Boolean(rankingEntry?.explanation_text) ||
     Boolean(rankingEntry && rankingEntry.reason_codes.length > 0) ||
-    Boolean(rankingEntry?.score_breakdown);
+    Boolean(rankingEntry?.score_breakdown) ||
+    dealBreakerDetails.length > 0;
 
   if (!activeJobId) {
     return (
@@ -1011,6 +1084,15 @@ function ScoreTab({
               <MetaItem label="Status do pipeline" value={rankingEntry.pipeline_status || "—"} />
             </div>
 
+            {dealBreakerDetails.length > 0 ? (
+              <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3">
+                <p className="text-sm font-semibold text-[hsl(var(--danger))]">Score zerado por regra da vaga</p>
+                <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--text))]">
+                  Este candidato foi rejeitado porque um critério eliminatório da vaga não foi atendido.
+                </p>
+              </div>
+            ) : null}
+
             {rankingEntry.score_breakdown ? (
               <div className="grid gap-2 sm:grid-cols-2">
                 <BreakdownItem label="Skills" value={rankingEntry.score_breakdown.skill_match_score} />
@@ -1022,9 +1104,46 @@ function ScoreTab({
               </div>
             ) : null}
 
-            {rankingEntry.reason_codes.length > 0 ? (
+            {dealBreakerDetails.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    Critérios eliminatórios violados
+                  </p>
+                  <p className="mt-1 text-sm text-[hsl(var(--text))]">
+                    O score foi zerado porque a regra da vaga não foi atendida.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {dealBreakerDetails.map((item, index) => (
+                    <div
+                      key={`${index}-${item.fieldLabel}-${item.expected}-${item.actual}`}
+                      className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--surface-muted))] px-4 py-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[hsl(var(--text))]">{item.fieldLabel}</p>
+                          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{item.reason}</p>
+                        </div>
+                        <Badge variant="danger">Critério eliminatório</Badge>
+                      </div>
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <MetaItem label="Esperado" value={item.expected} />
+                        <MetaItem label="Encontrado" value={item.actual} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {rankingEntry.reason_codes.filter((reason) => !isDealBreakerReasonCode(reason)).length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {rankingEntry.reason_codes.map((reason, index) => (
+                {rankingEntry.reason_codes
+                  .filter((reason) => !isDealBreakerReasonCode(reason))
+                  .map((reason, index) => (
                   <span
                     key={`${reason.type}-${reason.field}-${index}`}
                     className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]"
@@ -1033,6 +1152,10 @@ function ScoreTab({
                   </span>
                 ))}
               </div>
+            ) : null}
+
+            {dealBreakerDetails.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum critério eliminatório violado.</p>
             ) : null}
 
             {rankingEntry.explanation_text ? (

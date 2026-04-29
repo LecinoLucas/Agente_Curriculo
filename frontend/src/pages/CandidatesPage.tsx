@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
+import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
 import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
@@ -62,13 +62,13 @@ function ScoreCell({ score }: { score: number | null }) {
 
 export function CandidatesPage() {
   const { openCandidate, candidatesSyncTick } = usePipeline();
-  const navigate = useNavigate();
 
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [resumeFilter, setResumeFilter] = useState<ResumeFilter>("all");
   const [aiFilter, setAiFilter] = useState<AiStatusFilter>("all");
+  const [showNewCandidate, setShowNewCandidate] = useState(false);
   const hasActiveFilters = search || resumeFilter !== "all" || aiFilter !== "all";
 
   const { data, loading, error, run } = useAsyncState<Paginated<CandidateListSummary>>();
@@ -162,7 +162,7 @@ export function CandidatesPage() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate("/pipeline")}
+                onClick={() => setShowNewCandidate(true)}
                 className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90"
               >
                 + Novo candidato
@@ -172,6 +172,9 @@ export function CandidatesPage() {
         />
         <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
           Candidatos são perfis externos gerenciados pelo sistema. Eles não possuem acesso ao sistema interno.
+        </p>
+        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+          Sem vínculo = candidato ainda não associado a nenhuma vaga.
         </p>
       </div>
 
@@ -295,6 +298,12 @@ export function CandidatesPage() {
                       Currículo
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Vínculo
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Vagas
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Status da IA
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -331,6 +340,18 @@ export function CandidatesPage() {
           </>
         )}
       </div>
+
+      {showNewCandidate ? (
+        <NewCandidateModal
+          isOpen={showNewCandidate}
+          defaultJobId={null}
+          onClose={() => setShowNewCandidate(false)}
+          onCreated={async (candidateId) => {
+            setShowNewCandidate(false);
+            await openCandidate(candidateId);
+          }}
+        />
+      ) : null}
 
       <CandidateDrawer />
     </div>
@@ -378,6 +399,21 @@ function CandidateRow({
       </td>
       <td className="px-4 py-4">
         <ResumeBadge count={c.resume_count} />
+      </td>
+      <td className="px-4 py-4">
+        <span
+          className={[
+            "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+            c.linked_job_count > 0
+              ? "border-[hsl(var(--success))]/20 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]"
+              : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]",
+          ].join(" ")}
+        >
+          {c.linked_job_count > 0 ? "Vinculado" : "Sem vínculo"}
+        </span>
+      </td>
+      <td className="px-4 py-4 text-[hsl(var(--text-muted))]">
+        {c.linked_job_count > 0 ? `${c.linked_job_count} vaga${c.linked_job_count !== 1 ? "s" : ""}` : "—"}
       </td>
       <td className="px-4 py-4">
         <AiStatusBadge status={c.ai_status} />

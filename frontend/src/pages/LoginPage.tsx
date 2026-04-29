@@ -41,7 +41,7 @@ export function LoginPage() {
         <section className="hidden flex-col justify-between bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 px-12 py-16 text-white lg:flex">
           <div>
             <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium tracking-wide text-white/90">
-              Resume AI System
+              Marajo RH AI System
             </span>
           </div>
 
@@ -74,7 +74,7 @@ export function LoginPage() {
             </div>
           </div>
 
-          <p className="text-xs text-slate-300">© {new Date().getFullYear()} Resume AI · Todos os direitos reservados</p>
+          <p className="text-xs text-slate-300">© {new Date().getFullYear()} Marajo RH IA · Todos os direitos reservados</p>
         </section>
 
         <section className="flex flex-col justify-center px-6 py-12 sm:px-8 lg:px-12">

@@ -123,7 +123,7 @@ export function AppShell() {
               </div>
               <div className="hidden sm:block">
                 <p className="text-sm font-extrabold tracking-tight text-[hsl(var(--nav-text))]">
-                  Resume AI ATS
+                  Marajo RH AI System
                 </p>
                 <p className="text-[11px] text-[hsl(var(--nav-muted))]">
                   Recrutamento com IA e pipeline operacional

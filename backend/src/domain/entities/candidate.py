@@ -35,6 +35,9 @@ class Candidate:
     internal_notes: Optional[str] = None
     tags: list[str] = field(default_factory=list)
     deleted_at: Optional[datetime] = None
+    data_quality_status: str = "unknown"
+    data_quality_reason: Optional[str] = None
+    data_quality_marked_at: Optional[datetime] = None
 
     @classmethod
     def create(

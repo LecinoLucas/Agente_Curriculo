@@ -112,6 +112,7 @@ class CandidateListSummaryResponse(BaseModel):
     tags: list[str]
     created_at: datetime
     resume_count: int
+    linked_job_count: int = 0
     ai_status: str | None = None
     ai_score: float | None = None
 

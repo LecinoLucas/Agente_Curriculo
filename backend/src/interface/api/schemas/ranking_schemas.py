@@ -48,6 +48,23 @@ class CandidateRankingEntry(BaseModel):
     entered_at: datetime | None
     computed_at: datetime
     version: str
+    data_quality_status: str = "unknown"  # Safe fallback; can be: valid, unknown, data_error, or any invalid status
+
+
+class DataQualityStats(BaseModel):
+    """Data quality statistics for candidates.
+
+    Breakdown:
+    - valid_candidates: Successfully classified with data
+    - unknown_candidates: Not yet classified (legitimate pending state)
+    - invalid_candidates: Explicitly marked as invalid (no_resume, empty_resume, parsing_failed, invalid_manual)
+    - filtered_candidates: Invalid candidates excluded from ranking
+    """
+    total_candidates: int
+    valid_candidates: int
+    unknown_candidates: int
+    invalid_candidates: int
+    filtered_candidates: int
 
 
 class JobRankingResponse(BaseModel):
@@ -57,6 +74,7 @@ class JobRankingResponse(BaseModel):
     threshold_low: Decimal
     score_version: str
     candidates: list[CandidateRankingEntry]
+    data_quality_stats: DataQualityStats | None = None
 
 
 class ScoringComputeResponse(BaseModel):

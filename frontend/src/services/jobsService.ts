@@ -2,6 +2,36 @@ import { Job, JobCandidate, JobPipelineBoard, JobRanking, PipelineStage } from "
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
 
+export type CreateJobRequestPayload = {
+  title: string;
+  description: string;
+  status: string;
+  requirements?: string;
+  seniority_level?: string;
+  minimum_education_level?: string;
+  minimum_years_experience?: number;
+  deal_breakers?: Job["deal_breakers"];
+  work_model?: string;
+  location?: string;
+  salary_min?: number;
+  salary_max?: number;
+};
+
+export type UpdateJobRequestPayload = {
+  title: string;
+  description: string;
+  status: string;
+  requirements?: string | null;
+  seniority_level?: string | null;
+  minimum_education_level?: string | null;
+  minimum_years_experience?: number | null;
+  deal_breakers?: Job["deal_breakers"];
+  work_model?: string | null;
+  location?: string | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+};
+
 function normalizeAiStatus(value: unknown): JobCandidate["ai_status"] {
   if (
     value === "pending" ||
@@ -32,11 +62,11 @@ export async function getJob(jobId: string): Promise<Job> {
   return httpRequest<Job>(`/api/v1/jobs/${jobId}`);
 }
 
-export async function createJob(payload: Record<string, unknown>): Promise<Job> {
+export async function createJob(payload: CreateJobRequestPayload): Promise<Job> {
   return httpRequest<Job>("/api/v1/jobs", { method: "POST", body: payload });
 }
 
-export async function updateJob(jobId: string, payload: Record<string, unknown>): Promise<Job> {
+export async function updateJob(jobId: string, payload: UpdateJobRequestPayload): Promise<Job> {
   return httpRequest<Job>(`/api/v1/jobs/${jobId}`, { method: "PATCH", body: payload });
 }
 
@@ -170,7 +200,17 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
       },
       final_score: toNumber(item?.final_score),
       decision_suggestion: item?.decision_suggestion ?? "review",
-      reason_codes: Array.isArray(item?.reason_codes) ? item.reason_codes : [],
+      reason_codes: Array.isArray(item?.reason_codes)
+        ? item.reason_codes.map((reason: any) => ({
+            type: reason?.type ?? "",
+            field: reason?.field ?? "",
+            impact: reason?.impact != null ? Number(reason.impact) : 0,
+            description: reason?.description ?? "",
+            expected: reason?.expected ?? null,
+            actual: reason?.actual ?? null,
+            reason: reason?.reason ?? null,
+          }))
+        : [],
       explanation_text: item?.explanation_text ?? "",
       entered_at: item?.entered_at ?? null,
       computed_at: item?.computed_at ?? new Date(0).toISOString(),

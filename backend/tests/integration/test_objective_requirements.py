@@ -263,3 +263,265 @@ async def test_all_education_levels(
         assert response.status_code == 201
         job = response.json()
         assert job["minimum_education_level"] == level
+
+
+@pytest.mark.asyncio
+async def test_edit_deal_breakers(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """PATCH /jobs/:id can update deal-breakers."""
+    recruiter = await _create_recruiter(db_session, "recruiter7@test.com")
+    headers = await _login(client, "recruiter7@test.com")
+
+    # Create job with initial deal-breaker
+    create_response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Senior Developer",
+            "description": "Senior role",
+            "status": "draft",
+            "deal_breakers": [
+                {
+                    "field": "location",
+                    "operator": "not_equals",
+                    "value": "Remote",
+                    "reason": "Must be onsite",
+                    "is_active": True,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    job_id = create_response.json()["id"]
+
+    # Update deal-breakers
+    update_response = await client.patch(
+        f"/api/v1/jobs/{job_id}",
+        json={
+            "deal_breakers": [
+                {
+                    "field": "experience_years",
+                    "operator": ">=",
+                    "value": "5",
+                    "reason": "Must have 5+ years",
+                    "is_active": True,
+                }
+            ]
+        },
+        headers=headers,
+    )
+
+    assert update_response.status_code == 200
+    updated_job = update_response.json()
+    assert len(updated_job["deal_breakers"]) == 1
+    db = updated_job["deal_breakers"][0]
+    assert db["field"] == "experience_years"
+    assert db["operator"] == ">="
+
+
+@pytest.mark.asyncio
+async def test_deal_breaker_with_contains_operator(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Test deal-breaker with 'contains' operator on location field."""
+    recruiter = await _create_recruiter(db_session, "recruiter8@test.com")
+    headers = await _login(client, "recruiter8@test.com")
+
+    response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Backend Engineer",
+            "description": "Python specialist",
+            "status": "draft",
+            "deal_breakers": [
+                {
+                    "field": "location",
+                    "operator": "contains",
+                    "value": "office",
+                    "reason": "Must be office-based location",
+                    "is_active": False,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    job = response.json()
+    assert len(job["deal_breakers"]) == 1
+    db = job["deal_breakers"][0]
+    assert db["operator"] == "contains"
+    assert db["is_active"] is False
+
+
+@pytest.mark.asyncio
+async def test_multiple_deal_breakers(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Test job with multiple deal-breakers."""
+    recruiter = await _create_recruiter(db_session, "recruiter9@test.com")
+    headers = await _login(client, "recruiter9@test.com")
+
+    response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Specialist",
+            "description": "Niche role",
+            "status": "draft",
+            "deal_breakers": [
+                {
+                    "field": "location",
+                    "operator": "equals",
+                    "value": "Remote",
+                    "reason": "Location is mandatory",
+                    "is_active": True,
+                },
+                {
+                    "field": "experience_years",
+                    "operator": ">=",
+                    "value": "5",
+                    "reason": "Minimum 5 years",
+                    "is_active": True,
+                },
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    job = response.json()
+    assert len(job["deal_breakers"]) == 2
+    assert job["deal_breakers"][0]["field"] == "location"
+    assert job["deal_breakers"][1]["field"] == "experience_years"
+
+
+@pytest.mark.asyncio
+async def test_invalid_deal_breaker_field(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Test that invalid field is rejected."""
+    recruiter = await _create_recruiter(db_session, "recruiter10@test.com")
+    headers = await _login(client, "recruiter10@test.com")
+
+    response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Test Job",
+            "description": "Test description",
+            "status": "draft",
+            "deal_breakers": [
+                {
+                    "field": "invalid_field",
+                    "operator": "equals",
+                    "value": "test",
+                    "reason": "Invalid field should be rejected",
+                    "is_active": True,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422  # Validation error
+
+
+@pytest.mark.asyncio
+async def test_invalid_operator_for_field(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Test that invalid operator for field is rejected."""
+    recruiter = await _create_recruiter(db_session, "recruiter11@test.com")
+    headers = await _login(client, "recruiter11@test.com")
+
+    response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Test Job",
+            "description": "Test description",
+            "status": "draft",
+            "deal_breakers": [
+                {
+                    "field": "experience_years",
+                    "operator": "contains",  # Invalid: contains not allowed for experience_years
+                    "value": "test",
+                    "reason": "Should reject contains operator for years",
+                    "is_active": True,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422  # Validation error
+
+
+@pytest.mark.asyncio
+async def test_skill_field_with_contains_operator(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Test skill field with correct operators."""
+    recruiter = await _create_recruiter(db_session, "recruiter12@test.com")
+    headers = await _login(client, "recruiter12@test.com")
+
+    response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Developer",
+            "description": "Must have Python",
+            "status": "draft",
+            "deal_breakers": [
+                {
+                    "field": "skill",
+                    "operator": "not_contains",
+                    "value": "Java",
+                    "reason": "Java developers not wanted",
+                    "is_active": True,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    job = response.json()
+    assert job["deal_breakers"][0]["field"] == "skill"
+    assert job["deal_breakers"][0]["operator"] == "not_contains"
+
+
+@pytest.mark.asyncio
+async def test_education_level_with_gte_operator(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Test education_level field with >= operator."""
+    recruiter = await _create_recruiter(db_session, "recruiter13@test.com")
+    headers = await _login(client, "recruiter13@test.com")
+
+    response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Senior Role",
+            "description": "Requires education",
+            "status": "draft",
+            "deal_breakers": [
+                {
+                    "field": "education_level",
+                    "operator": ">=",
+                    "value": "bachelor",
+                    "reason": "Minimum bachelor degree required",
+                    "is_active": True,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    job = response.json()
+    assert job["deal_breakers"][0]["operator"] == ">="
