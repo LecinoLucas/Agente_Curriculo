@@ -258,16 +258,27 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
         "password123",
         UserRole.CANDIDATE,
     )
-    await _create_active_user(
+    recruiter = await _create_active_user(
         db_session,
         "recruiter-overview@test.com",
         "password123",
         UserRole.RECRUITER,
     )
+
+    # Create Candidate linked to candidate_user
+    candidate_model = CandidateModel(
+        full_name=candidate_user.full_name,
+        email=candidate_user.email,
+        user_id=candidate_user.id,
+        created_by=recruiter.id,
+    )
+    db_session.add(candidate_model)
+    await db_session.flush()
+
     candidate_headers = await _auth_headers(client, "candidate-overview@test.com", "password123")
     recruiter_headers = await _auth_headers(client, "recruiter-overview@test.com", "password123")
 
-    resume_upload = await client.post("/api/v1/resumes", headers=candidate_headers)
+    resume_upload = await client.post("/api/v1/resumes", headers=candidate_headers, json={})
     assert resume_upload.status_code == 202
     resume_id = UUID(resume_upload.json()["resume_id"])
     resume_version_id = UUID(resume_upload.json()["version_id"])

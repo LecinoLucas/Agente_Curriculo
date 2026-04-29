@@ -48,6 +48,23 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
+async def _create_linked_candidate(
+    session: AsyncSession,
+    user: User,
+    created_by: UUID,
+) -> CandidateModel:
+    """Create a Candidate model linked to a user via user_id."""
+    candidate = CandidateModel(
+        full_name=user.full_name,
+        email=user.email,
+        user_id=user.id,
+        created_by=created_by,
+    )
+    session.add(candidate)
+    await session.flush()
+    return candidate
+
+
 def _pdf_with_text(text: str) -> bytes:
     stream = f"BT /F1 24 Tf 72 720 Td ({text}) Tj ET"
     objects = [
@@ -86,12 +103,21 @@ async def test_candidate_can_manage_own_resume_lifecycle(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-resume@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-resume@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     headers = await _auth_headers(client, "candidate-resume@test.com", "password123")
 
     upload = await client.post("/api/v1/resumes", headers=headers)
@@ -216,12 +242,21 @@ async def test_candidate_can_upload_pdf_and_extract_text(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_active_user(
+    candidate_user = await _create_active_user(
         db_session,
         "candidate-pdf-upload@test.com",
         "password123",
         UserRole.CANDIDATE,
     )
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-pdf-upload@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    await db_session.commit()
+
     headers = await _auth_headers(client, "candidate-pdf-upload@test.com", "password123")
 
     upload = await client.post("/api/v1/resumes", headers=headers)

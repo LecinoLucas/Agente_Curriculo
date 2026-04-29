@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.analysis_service import (
@@ -113,12 +113,12 @@ async def list_resumes(
 async def initiate_resume_upload(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-    body: ResumeUploadRequest | None = None,
+    body: ResumeUploadRequest = Body(default_factory=ResumeUploadRequest),
 ) -> ResumeUploadResponse:
     try:
         upload = await _resume_service(db).initiate_dev_upload(
             current_user,
-            candidate_id=body.candidate_id if body is not None else None,
+            candidate_id=body.candidate_id if body else None,
         )
         await db.commit()
         return ResumeUploadResponse(
