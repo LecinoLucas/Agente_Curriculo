@@ -302,10 +302,10 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
     assert candidate_model is not None
 
     skill = SkillModel(
-        name="Python Overview",
-        normalized_name=f"python-overview-{uuid4().hex[:8]}",
+        name="Python",
+        normalized_name="python",
         category="backend",
-        aliases=[],
+        aliases=["Py"],
         is_verified=True,
     )
     ai_model = AIModelModel(
