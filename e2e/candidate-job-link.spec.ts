@@ -89,19 +89,18 @@ test("create_candidate_without_job", async ({ page }) => {
   const token = await getToken(page);
   const job = await createJobViaApi(page, token, publishedJobTitle, "published");
 
-  await page.goto("/candidates");
+  await page.goto("/candidatos");
   const modal = await createCandidateViaModal(page, candidateName, candidateEmail);
   await expect(modal.getByText("Sem vaga selecionada")).toBeVisible();
   await modal.getByRole("button", { name: "Criar candidato sem vaga" }).click();
 
   const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByText(candidateName, { exact: true })).toBeVisible();
-  await expect(drawer.getByText("Sem vaga ativa", { exact: true })).toBeVisible();
+  await expect(drawer).toContainText(candidateName);
   await expect(drawer.getByText("Não vinculado à vaga ativa", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "Fechar painel" }).click();
 
-  await page.goto("/candidates");
+  await page.goto("/candidatos");
   const row = await searchCandidate(page, candidateName);
   await expect(row).toContainText("Sem vínculo");
   await expect(row).toContainText("—");
@@ -124,7 +123,7 @@ test("create_candidate_with_job", async ({ page }) => {
   await expect(page.locator("#pipeline-job-select")).toHaveValue(job.id);
 
   const modal = await createCandidateViaModal(page, candidateName, candidateEmail);
-  await expect(modal.getByText(jobTitle, { exact: true })).toBeVisible();
+  await expect(modal).toContainText(jobTitle);
   await modal.getByRole("button", { name: "Criar e adicionar à vaga" }).click();
 
   const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
@@ -138,7 +137,7 @@ test("create_candidate_with_job", async ({ page }) => {
 
   await expect(page.getByText(candidateName, { exact: true })).toBeVisible();
 
-  await page.goto("/candidates");
+  await page.goto("/candidatos");
   const row = await searchCandidate(page, candidateName);
   await expect(row).toContainText("Vinculado");
   await expect(row).toContainText("1 vaga");
@@ -154,22 +153,17 @@ test("create_candidate_with_invalid_job", async ({ page }) => {
   const token = await getToken(page);
   await createJobViaApi(page, token, draftJobTitle, "draft");
 
-  await page.goto("/candidates");
+  await page.goto("/candidatos");
   const modal = await createCandidateViaModal(page, candidateName, candidateEmail);
   await modal.getByLabel("Vaga (opcional)").selectOption({ label: `${draftJobTitle} - Rascunho` });
   await expect(modal.getByText("Para vincular, a vaga precisa estar publicada ou pausada.")).toBeVisible();
   await modal.getByRole("button", { name: "Criar e adicionar à vaga" }).click();
 
-  await expect(page.getByRole("alert").filter({ hasText: "não permite vínculo" })).toBeVisible();
+  await expect(modal.getByText("A vaga selecionada não pode receber novos candidatos.")).toBeVisible();
+  await expect(modal.getByText("Escolha uma vaga publicada ou pausada, ou limpe o campo para criar sem vínculo.")).toBeVisible();
 
-  const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
-  await expect(drawer).toBeVisible();
-  await drawer.getByRole("button", { name: "Fechar painel" }).click();
-
-  await page.goto("/candidates");
-  const row = await searchCandidate(page, candidateName);
-  await expect(row).toContainText("Sem vínculo");
-  await expect(row).toContainText("—");
+  await page.goto("/candidatos");
+  await expect(page.getByRole("row").filter({ hasText: candidateName })).toHaveCount(0);
 });
 
 test("verify_linked_job_count", async ({ page }) => {
@@ -205,6 +199,20 @@ test("verify_linked_job_count", async ({ page }) => {
   );
   expect(oneLinkResponse.ok()).toBeTruthy();
 
+  const multiLinkFirstResponse = await page.request.post(
+    `${API_BASE_URL}/api/v1/pipeline/${multiLinkCandidate.id}/add-to-job`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      data: {
+        job_id: jobA.id,
+        initial_stage: "entry",
+      },
+    },
+  );
+  expect(multiLinkFirstResponse.ok()).toBeTruthy();
+
   const multiLinkResponse = await page.request.post(
     `${API_BASE_URL}/api/v1/pipeline/${multiLinkCandidate.id}/add-to-job`,
     {
@@ -219,7 +227,7 @@ test("verify_linked_job_count", async ({ page }) => {
   );
   expect(multiLinkResponse.ok()).toBeTruthy();
 
-  await page.goto("/candidates");
+  await page.goto("/candidatos");
 
   let row = await searchCandidate(page, noLinkName);
   await expect(row).toContainText("Sem vínculo");
@@ -244,7 +252,7 @@ test("verify_no_pipeline_entry_when_no_job", async ({ page }) => {
   const token = await getToken(page);
   const job = await createJobViaApi(page, token, jobTitle, "published");
 
-  await page.goto("/candidates");
+  await page.goto("/candidatos");
   const modal = await createCandidateViaModal(page, candidateName, candidateEmail);
   await modal.getByRole("button", { name: "Criar candidato sem vaga" }).click();
   await page.getByRole("button", { name: "Fechar painel" }).click();

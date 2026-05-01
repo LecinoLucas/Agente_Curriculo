@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LogOut, Menu, Moon, PanelTop, Sun, UserRound, X } from "lucide-react";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { ChevronDown, LogOut, Menu, Moon, PanelTop, Sun, UserRound, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ActionMenu } from "../common/ActionMenu";
@@ -23,8 +23,12 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
-  { to: "/admin",          label: "Painel admin",     caption: "Visão geral",       roles: ["admin"] },
-  { to: "/admin/usuarios", label: "Usuários internos", caption: "Equipe e acessos", roles: ["admin"] },
+  { to: "/admin",                   label: "Painel admin",           caption: "Visão geral",                roles: ["admin"] },
+  { to: "/admin/usuarios",          label: "Usuários internos",       caption: "Equipe e acessos",           roles: ["admin"] },
+  { to: "/admin/skills",            label: "Skills",                 caption: "Competências e tecnologias", roles: ["admin"] },
+  { to: "/admin/importar-vagas",    label: "Importar vagas",         caption: "JSON inteligente",           roles: ["admin"] },
+  { to: "/admin/comparacao-scores", label: "Comparação de scores",   caption: "Legado vs adaptativo",      roles: ["admin"] },
+  { to: "/admin/qualidade-matching", label: "Qualidade do matching", caption: "Observabilidade e feedback", roles: ["admin"] },
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -37,9 +41,11 @@ const ROLE_LABELS: Record<UserRole, string> = {
 export function AppShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, toggleTheme } = useTheme();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
 
   const visibleItems = useMemo(
     () => NAV_ITEMS.filter((item) => user && item.roles.includes(user.role)),
@@ -48,6 +54,11 @@ export function AppShell() {
   const visibleAdminItems = useMemo(
     () => ADMIN_ITEMS.filter((item) => user && item.roles.includes(user.role)),
     [user],
+  );
+
+  const isAdminActive = useMemo(
+    () => visibleAdminItems.some((item) => location.pathname.startsWith(item.to)),
+    [location.pathname, visibleAdminItems],
   );
 
   useEffect(() => {
@@ -136,10 +147,56 @@ export function AppShell() {
           <nav className="ml-2 hidden flex-1 items-center gap-1 lg:flex">
             {visibleItems.map(renderDesktopLink)}
             {visibleAdminItems.length > 0 ? (
-              <>
-                <div className="mx-2 h-6 w-px bg-[hsl(var(--nav-border))]" />
-                {visibleAdminItems.map(renderDesktopLink)}
-              </>
+              <div className="relative group">
+                <button
+                  type="button"
+                  className={cn(
+                    "group relative flex min-w-[110px] flex-col rounded-xl px-3 py-2 transition-all duration-150",
+                    isAdminActive
+                      ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                      : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+                  )}
+                  onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold tracking-tight">Admin</span>
+                    <ChevronDown className="h-4 w-4 transition-transform group-hover:rotate-180" />
+                  </div>
+                  <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                    Gerenciamento
+                  </span>
+                </button>
+
+                {/* Dropdown menu */}
+                <div
+                  className={cn(
+                    "absolute left-0 top-full mt-2 hidden w-max rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-lg transition-all duration-150 group-hover:block",
+                    adminDropdownOpen && "block",
+                  )}
+                >
+                  {visibleAdminItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === "/admin"}
+                      onClick={() => setAdminDropdownOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex flex-col px-4 py-3 transition-colors first:rounded-t-xl last:rounded-b-xl",
+                          isActive
+                            ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                            : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--text))]",
+                        )
+                      }
+                    >
+                      <span className="text-sm font-semibold tracking-tight">{item.label}</span>
+                      <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                        {item.caption}
+                      </span>
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
             ) : null}
           </nav>
 
@@ -230,10 +287,22 @@ export function AppShell() {
 
               {visibleAdminItems.length > 0 ? (
                 <div className="flex flex-col gap-1">
-                  <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--nav-muted))]">
-                    Administração
-                  </p>
-                  {visibleAdminItems.map(renderMobileLink)}
+                  <button
+                    type="button"
+                    onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                    className="flex items-center justify-between rounded-xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
+                  >
+                    <div className="min-w-0 text-left">
+                      <p className="text-sm font-semibold tracking-tight text-[hsl(var(--nav-text))]">Admin</p>
+                      <p className="mt-0.5 text-xs opacity-70">Gerenciamento</p>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", adminDropdownOpen && "rotate-180")} />
+                  </button>
+                  {adminDropdownOpen ? (
+                    <div className="flex flex-col gap-1 rounded-lg bg-[hsl(var(--nav-active-bg))]/30 p-2">
+                      {visibleAdminItems.map(renderMobileLink)}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 

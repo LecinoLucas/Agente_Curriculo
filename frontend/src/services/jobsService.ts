@@ -1,4 +1,4 @@
-import { Job, JobCandidate, JobPipelineBoard, JobRanking, PipelineStage } from "../types/domain";
+import { Job, JobCandidate, JobPipelineBoard, JobQualityResult, JobRanking, PipelineStage } from "../types/domain";
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
 
@@ -9,12 +9,17 @@ export type CreateJobRequestPayload = {
   requirements?: string;
   seniority_level?: string;
   minimum_education_level?: string;
-  minimum_years_experience?: number;
+  minimum_years_experience?: number | string;
   deal_breakers?: Job["deal_breakers"];
   work_model?: string;
   location?: string;
-  salary_min?: number;
-  salary_max?: number;
+  salary_min?: number | string;
+  salary_max?: number | string;
+  job_area?: string;
+  responsibilities?: string;
+  experience_context?: string;
+  behavioral_requirements?: string[];
+  priority?: "low" | "normal" | "high" | "urgent";
 };
 
 export type UpdateJobRequestPayload = {
@@ -24,12 +29,17 @@ export type UpdateJobRequestPayload = {
   requirements?: string | null;
   seniority_level?: string | null;
   minimum_education_level?: string | null;
-  minimum_years_experience?: number | null;
+  minimum_years_experience?: number | string | null;
   deal_breakers?: Job["deal_breakers"];
   work_model?: string | null;
   location?: string | null;
-  salary_min?: number | null;
-  salary_max?: number | null;
+  salary_min?: number | string | null;
+  salary_max?: number | string | null;
+  job_area?: string | null;
+  responsibilities?: string | null;
+  experience_context?: string | null;
+  behavioral_requirements?: string[];
+  priority?: "low" | "normal" | "high" | "urgent" | null;
 };
 
 function normalizeAiStatus(value: unknown): JobCandidate["ai_status"] {
@@ -217,4 +227,8 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
       version: item?.version ?? "",
     })),
   };
+}
+
+export async function getJobQuality(jobId: string): Promise<JobQualityResult> {
+  return httpRequest<JobQualityResult>(`/api/v1/jobs/${jobId}/quality`);
 }

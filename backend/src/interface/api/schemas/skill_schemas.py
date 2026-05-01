@@ -11,7 +11,7 @@ class SkillResponse(BaseModel):
     name: str
     normalized_name: str
     category: Optional[str] = None
-    aliases: list[str]
+    aliases: list[str] = Field(default_factory=list)
     is_verified: bool
     created_at: datetime
 
@@ -41,12 +41,17 @@ class JobRequiredSkillResponse(BaseModel):
     minimum_years: Optional[Decimal] = None
     weight: Decimal
 
-    model_config = {"from_attributes": True}
+    model_config = {
+        "from_attributes": True,
+        "json_encoders": {
+            Decimal: lambda v: float(v),
+        },
+    }
 
 
 class AddJobSkillRequest(BaseModel):
     skill_id: UUID
     is_mandatory: bool = False
     minimum_level: Optional[str] = Field(default=None, max_length=50)
-    minimum_years: Optional[Decimal] = None
+    minimum_years: Optional[Decimal] = Field(default=None, ge=0, le=80)
     weight: Decimal = Field(default=Decimal("1.00"), ge=0, le=10)

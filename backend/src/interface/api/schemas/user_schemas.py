@@ -14,6 +14,7 @@ class CreateUserRequest(BaseModel):
     role: UserRole = UserRole.RECRUITER
     is_active: bool = True
     must_change_password: bool = False
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
 
 
 class UserResponse(BaseModel):
@@ -22,7 +23,7 @@ class UserResponse(BaseModel):
     full_name: str
     role: UserRole
     status: UserStatus
-    real_ai_token_spend_enabled: bool = False
+    real_ai_token_spend_enabled: bool = True
     must_change_password: bool = False
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -36,10 +37,12 @@ class PatchUserRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
 
 
 class PatchMyProfileRequest(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
 
 
 class ResetUserPasswordRequest(BaseModel):

@@ -1,0 +1,588 @@
+[
+  {
+    "name": "Faturamento",
+    "normalized_name": "faturamento",
+    "category": "Financeiro",
+    "aliases": [
+      "emissao de nota fiscal",
+      "emissao de nf",
+      "emissao de nfe",
+      "rotina de faturamento",
+      "lancamento de nota fiscal"
+    ]
+  },
+  {
+    "name": "Conciliação bancária",
+    "normalized_name": "conciliacao bancaria",
+    "category": "Financeiro",
+    "aliases": [
+      "reconciliacao bancaria",
+      "batimento bancario",
+      "conferencia de extratos",
+      "conferencia bancaria"
+    ]
+  },
+  {
+    "name": "Contas a pagar",
+    "normalized_name": "contas a pagar",
+    "category": "Financeiro",
+    "aliases": [
+      "programacao de pagamentos",
+      "controle de pagamentos",
+      "baixa de pagamentos",
+      "fluxo de pagamentos"
+    ]
+  },
+  {
+    "name": "Contas a receber",
+    "normalized_name": "contas a receber",
+    "category": "Financeiro",
+    "aliases": [
+      "controle de recebiveis",
+      "baixa de recebimentos",
+      "cobranca de clientes",
+      "recebimento de titulos"
+    ]
+  },
+  {
+    "name": "Fluxo de caixa",
+    "normalized_name": "fluxo de caixa",
+    "category": "Financeiro",
+    "aliases": [
+      "controle de caixa",
+      "projecao de caixa",
+      "movimentacao de caixa",
+      "cash flow"
+    ]
+  },
+  {
+    "name": "Tesouraria",
+    "normalized_name": "tesouraria",
+    "category": "Financeiro",
+    "aliases": [
+      "rotinas de tesouraria",
+      "controle de saldos",
+      "movimentacao financeira",
+      "gestao de caixa"
+    ]
+  },
+  {
+    "name": "Conciliação de cartões",
+    "normalized_name": "conciliacao de cartoes",
+    "category": "Financeiro",
+    "aliases": [
+      "recebiveis de cartao",
+      "conciliacao de cartao",
+      "adquirentes",
+      "maquininhas"
+    ]
+  },
+  {
+    "name": "Fechamento financeiro",
+    "normalized_name": "fechamento financeiro",
+    "category": "Financeiro",
+    "aliases": [
+      "rotina de fechamento financeiro",
+      "fechamento mensal financeiro",
+      "consolidacao financeira",
+      "fechamento de caixa"
+    ]
+  },
+  {
+    "name": "Contabilidade",
+    "normalized_name": "contabilidade",
+    "category": "Contábil",
+    "aliases": [
+      "rotinas contabeis",
+      "lancamentos contabeis",
+      "escrituracao contabil",
+      "rotina contabil"
+    ]
+  },
+  {
+    "name": "Fechamento contábil",
+    "normalized_name": "fechamento contabil",
+    "category": "Contábil",
+    "aliases": [
+      "encerramento contabil",
+      "fechamento mensal contabil",
+      "apuracao contabil",
+      "consolidacao contabil"
+    ]
+  },
+  {
+    "name": "Conciliação contábil",
+    "normalized_name": "conciliacao contabil",
+    "category": "Contábil",
+    "aliases": [
+      "reconciliacao contabil",
+      "conciliacao de contas",
+      "conferencia contabil",
+      "batimento contabil"
+    ]
+  },
+  {
+    "name": "Classificação contábil",
+    "normalized_name": "classificacao contabil",
+    "category": "Contábil",
+    "aliases": [
+      "lancamento contabil",
+      "classificacao de contas",
+      "parametrizacao contabil",
+      "plano de contas"
+    ]
+  },
+  {
+    "name": "Auditoria",
+    "normalized_name": "auditoria",
+    "category": "Contábil",
+    "aliases": [
+      "auditoria interna",
+      "checagem de conformidade",
+      "controle interno",
+      "revisao de processos"
+    ]
+  },
+  {
+    "name": "Rotinas fiscais",
+    "normalized_name": "rotinas fiscais",
+    "category": "Fiscal",
+    "aliases": [
+      "apuracao de impostos",
+      "obrigacoes acessorias",
+      "escrituracao fiscal",
+      "fechamento fiscal",
+      "apuracao tributaria",
+      "calculo de impostos"
+    ]
+  },
+  {
+    "name": "SPED",
+    "normalized_name": "sped",
+    "category": "Fiscal",
+    "aliases": [
+      "sped fiscal",
+      "sped contribuicoes",
+      "efd",
+      "escrituracao digital"
+    ]
+  },
+  {
+    "name": "Rotinas administrativas",
+    "normalized_name": "rotinas administrativas",
+    "category": "Administrativo",
+    "aliases": [
+      "apoio administrativo",
+      "suporte administrativo",
+      "rotinas de escritorio",
+      "processos administrativos"
+    ]
+  },
+  {
+    "name": "Organização de documentos",
+    "normalized_name": "organizacao de documentos",
+    "category": "Administrativo",
+    "aliases": [
+      "controle documental",
+      "gestao de documentos",
+      "arquivo de documentos",
+      "documentacao administrativa"
+    ]
+  },
+  {
+    "name": "Controle de agenda",
+    "normalized_name": "controle de agenda",
+    "category": "Administrativo",
+    "aliases": [
+      "gestao de agenda",
+      "organizacao de agenda",
+      "agendamento de compromissos",
+      "controle de compromissos"
+    ]
+  },
+  {
+    "name": "Atendimento interno",
+    "normalized_name": "atendimento interno",
+    "category": "Administrativo",
+    "aliases": [
+      "apoio as areas internas",
+      "suporte as areas",
+      "atendimento as areas",
+      "suporte interno"
+    ]
+  },
+  {
+    "name": "Elaboração de relatórios",
+    "normalized_name": "elaboracao de relatorios",
+    "category": "Administrativo",
+    "aliases": [
+      "confeccao de relatorios",
+      "montagem de relatorios",
+      "relatorios gerenciais",
+      "preparacao de relatorios"
+    ]
+  },
+  {
+    "name": "Controle de estoque",
+    "normalized_name": "controle de estoque",
+    "category": "Operacional",
+    "aliases": [
+      "conferencia de estoque",
+      "gestao de estoque",
+      "inventario",
+      "movimentacao de estoque",
+      "contagem de estoque",
+      "balanco de estoque",
+      "inventario fisico",
+      "ajuste de estoque"
+    ]
+  },
+  {
+    "name": "Recebimento de mercadorias",
+    "normalized_name": "recebimento de mercadorias",
+    "category": "Operacional",
+    "aliases": [
+      "entrada de mercadorias",
+      "conferencia de recebimento",
+      "recebimento de produtos",
+      "checagem de mercadorias"
+    ]
+  },
+  {
+    "name": "Expedição",
+    "normalized_name": "expedicao",
+    "category": "Operacional",
+    "aliases": [
+      "separacao de pedidos",
+      "despacho de mercadorias",
+      "saida de produtos",
+      "embarque de mercadorias"
+    ]
+  },
+  {
+    "name": "Logística",
+    "normalized_name": "logistica",
+    "category": "Operacional",
+    "aliases": [
+      "distribuicao",
+      "roteirizacao",
+      "operacao logistica",
+      "movimentacao logistica"
+    ]
+  },
+  {
+    "name": "Monitoramento de frota",
+    "normalized_name": "monitoramento de frota",
+    "category": "Operacional",
+    "aliases": [
+      "rastreamento de veiculos",
+      "controle de frota",
+      "acompanhamento de rotas",
+      "gestao de frota"
+    ]
+  },
+  {
+    "name": "Gestão de loja",
+    "normalized_name": "gestao de loja",
+    "category": "Operacional",
+    "aliases": [
+      "operacao de loja",
+      "rotina de loja",
+      "indicadores de loja",
+      "padronizacao de loja"
+    ]
+  },
+  {
+    "name": "Departamento pessoal",
+    "normalized_name": "departamento pessoal",
+    "category": "RH",
+    "aliases": [
+      "rotinas trabalhistas",
+      "administracao de pessoal",
+      "processos trabalhistas",
+      "rotinas de pessoal"
+    ]
+  },
+  {
+    "name": "Folha de pagamento",
+    "normalized_name": "folha de pagamento",
+    "category": "RH",
+    "aliases": [
+      "processamento de folha",
+      "calculo de folha",
+      "encargos trabalhistas",
+      "fechamento de folha"
+    ]
+  },
+  {
+    "name": "Admissão e demissão",
+    "normalized_name": "admissao e demissao",
+    "category": "RH",
+    "aliases": [
+      "processo admissional",
+      "processo demissional",
+      "documentacao admissional",
+      "rescisao"
+    ]
+  },
+  {
+    "name": "Controle de ponto",
+    "normalized_name": "controle de ponto",
+    "category": "RH",
+    "aliases": [
+      "apuracao de ponto",
+      "espelho de ponto",
+      "tratativa de ponto",
+      "jornada de trabalho"
+    ]
+  },
+  {
+    "name": "Benefícios",
+    "normalized_name": "beneficios",
+    "category": "RH",
+    "aliases": [
+      "gestao de beneficios",
+      "vale transporte",
+      "vale refeicao",
+      "administracao de beneficios"
+    ]
+  },
+  {
+    "name": "Recrutamento e seleção",
+    "normalized_name": "recrutamento e selecao",
+    "category": "RH",
+    "aliases": [
+      "r&s",
+      "triagem de curriculos",
+      "conducao de entrevistas",
+      "processo seletivo"
+    ]
+  },
+  {
+    "name": "Onboarding",
+    "normalized_name": "onboarding",
+    "category": "RH",
+    "aliases": [
+      "integracao de colaboradores",
+      "ambientacao",
+      "integracao inicial"
+    ]
+  },
+  {
+    "name": "Vendas",
+    "normalized_name": "vendas",
+    "category": "Comercial",
+    "aliases": [
+      "fechamento de vendas",
+      "negociacao comercial",
+      "conversao de vendas",
+      "venda consultiva"
+    ]
+  },
+  {
+    "name": "Prospecção de clientes",
+    "normalized_name": "prospeccao de clientes",
+    "category": "Comercial",
+    "aliases": [
+      "prospeccao ativa",
+      "captacao de clientes",
+      "geracao de leads"
+    ]
+  },
+  {
+    "name": "CRM",
+    "normalized_name": "crm",
+    "category": "Comercial",
+    "aliases": [
+      "gestao de pipeline",
+      "funil de vendas",
+      "gestao de oportunidades"
+    ]
+  },
+  {
+    "name": "Pós-venda",
+    "normalized_name": "pos-venda",
+    "category": "Comercial",
+    "aliases": [
+      "relacionamento pos-venda",
+      "acompanhamento de clientes",
+      "retencao de clientes",
+      "customer success"
+    ]
+  },
+  {
+    "name": "Atendimento ao cliente",
+    "normalized_name": "atendimento ao cliente",
+    "category": "Comercial",
+    "aliases": [
+      "suporte ao cliente",
+      "relacionamento com clientes",
+      "customer service"
+    ]
+  },
+  {
+    "name": "Negociação",
+    "normalized_name": "negociacao",
+    "category": "Comercial",
+    "aliases": [
+      "negociacao comercial",
+      "tratativa comercial",
+      "argumentacao de vendas"
+    ]
+  },
+  {
+    "name": "SQL",
+    "normalized_name": "sql",
+    "category": "Dados",
+    "aliases": [
+      "consultas sql",
+      "query sql",
+      "postgresql",
+      "mysql",
+      "sql server",
+      "t-sql"
+    ]
+  },
+  {
+    "name": "Power BI",
+    "normalized_name": "power bi",
+    "category": "Dados",
+    "aliases": [
+      "dashboards",
+      "relatorios em power bi",
+      "dax"
+    ]
+  },
+  {
+    "name": "Excel avançado",
+    "normalized_name": "excel avancado",
+    "category": "Dados",
+    "aliases": [
+      "tabela dinamica",
+      "power query",
+      "procv",
+      "analise em excel"
+    ]
+  },
+  {
+    "name": "Análise de dados",
+    "normalized_name": "analise de dados",
+    "category": "Dados",
+    "aliases": [
+      "analise de indicadores",
+      "kpis",
+      "relatorios gerenciais",
+      "interpretacao de dados"
+    ]
+  },
+  {
+    "name": "ETL",
+    "normalized_name": "etl",
+    "category": "Dados",
+    "aliases": [
+      "extracao de dados",
+      "transformacao de dados",
+      "carga de dados",
+      "pipeline de dados"
+    ]
+  },
+  {
+    "name": "Modelagem de dados",
+    "normalized_name": "modelagem de dados",
+    "category": "Dados",
+    "aliases": [
+      "estruturacao de dados",
+      "modelo relacional",
+      "desenho de base de dados",
+      "organizacao de dados"
+    ]
+  },
+  {
+    "name": "Protheus",
+    "normalized_name": "protheus",
+    "category": "Tecnologia",
+    "aliases": [
+      "totvs",
+      "erp protheus",
+      "advpl",
+      "tlpp"
+    ]
+  },
+  {
+    "name": "Levantamento de requisitos",
+    "normalized_name": "levantamento de requisitos",
+    "category": "Tecnologia",
+    "aliases": [
+      "mapeamento de requisitos",
+      "entendimento de demanda",
+      "levantamento funcional",
+      "requisitos de negocio"
+    ]
+  },
+  {
+    "name": "Suporte a ERP",
+    "normalized_name": "suporte a erp",
+    "category": "Tecnologia",
+    "aliases": [
+      "sustentacao de erp",
+      "atendimento a chamados de erp",
+      "suporte funcional de sistema",
+      "suporte protheus"
+    ]
+  },
+  {
+    "name": "Parametrização de sistema",
+    "normalized_name": "parametrizacao de sistema",
+    "category": "Tecnologia",
+    "aliases": [
+      "configuracao de sistema",
+      "ajuste de parametros",
+      "customizacao funcional",
+      "parametrizacao de erp"
+    ]
+  },
+  {
+    "name": "Comunicação",
+    "normalized_name": "comunicacao",
+    "category": "Soft Skill",
+    "aliases": [
+      "comunicacao clara",
+      "boa comunicacao",
+      "comunicacao interpessoal",
+      "comunicacao com clientes"
+    ]
+  },
+  {
+    "name": "Organização",
+    "normalized_name": "organizacao",
+    "category": "Soft Skill",
+    "aliases": [
+      "organizacao de rotina",
+      "controle de atividades",
+      "atencao aos detalhes",
+      "gestao de prioridades"
+    ]
+  },
+  {
+    "name": "Resolução de problemas",
+    "normalized_name": "resolucao de problemas",
+    "category": "Soft Skill",
+    "aliases": [
+      "solucao de problemas",
+      "problem solving",
+      "troubleshooting",
+      "analise de problemas"
+    ]
+  },
+  {
+    "name": "Gestão de equipe",
+    "normalized_name": "gestao de equipe",
+    "category": "Soft Skill",
+    "aliases": [
+      "lideranca de equipe",
+      "coordenacao de equipe",
+      "supervisao de equipe",
+      "desenvolvimento de equipe"
+    ]
+  }
+]

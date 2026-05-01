@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "../features/auth/useAuth";
+import { formatErrorDetails, handleApiError } from "../services/errorHandler";
 
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth();
@@ -14,12 +15,17 @@ export function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) navigate(from, { replace: true });
   }, [from, isAuthenticated, navigate]);
+
+  function toFriendlyText(caught: unknown): string {
+    return formatErrorDetails(handleApiError(caught)).join(" ");
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,7 +35,7 @@ export function LoginPage() {
       await login(email, password);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao autenticar");
+      setError(toFriendlyText(err) || "Falha ao autenticar");
     } finally {
       setLoading(false);
     }
@@ -102,15 +108,25 @@ export function LoginPage() {
 
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-gray-900">Senha</span>
-                <input
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20"
-                />
+                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 focus-within:ring-2 focus-within:ring-blue-500/20">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="h-10 flex-1 bg-transparent py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="text-gray-500 transition hover:text-gray-800"
+                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </label>
 
               {error ? (

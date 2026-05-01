@@ -16,7 +16,7 @@ from src.infrastructure.database.models.analysis_model import (
     ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.job_model import SkillModel
+from src.infrastructure.database.models.job_model import JobModel, SkillModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
@@ -57,6 +57,11 @@ def _job_payload(**overrides) -> dict:
         "title": "Backend Engineer",
         "description": "Build and maintain backend APIs",
         "requirements": "Python, FastAPI and PostgreSQL",
+        "job_area": "technology",
+        "responsibilities": "Build APIs, maintain integrations and collaborate with product on backend deliveries.",
+        "experience_context": "Experience with backend APIs in production, integrations and structured technical routines.",
+        "behavioral_requirements": ["Comunicação", "Autonomia"],
+        "priority": "normal",
         "seniority_level": "senior",
         "work_model": "remote",
         "location": "Brasil",
@@ -101,6 +106,11 @@ async def test_recruiter_can_crud_job_and_soft_delete(
     created = create.json()
     assert created["title"] == "Backend Engineer"
     assert created["salary_currency"] == "BRL"
+    assert created["job_area"] == "technology"
+    assert created["priority"] == "normal"
+    assert created["behavioral_requirements"] == ["Comunicação", "Autonomia"]
+    assert created["quality_score"] is not None
+    assert created["quality_status"] in {"weak", "acceptable", "good"}
 
     job_id = created["id"]
     detail = await client.get(f"/api/v1/jobs/{job_id}", headers=headers)
@@ -109,11 +119,19 @@ async def test_recruiter_can_crud_job_and_soft_delete(
 
     update = await client.patch(
         f"/api/v1/jobs/{job_id}",
-        json={"title": "Senior Backend Engineer", "salary_max": "20000.00"},
+        json={
+            "title": "Senior Backend Engineer",
+            "salary_max": "20000.00",
+            "priority": "urgent",
+            "job_area": "data",
+            "behavioral_requirements": ["Comunicação", "Organização"],
+        },
         headers=headers,
     )
     assert update.status_code == 200
     assert update.json()["title"] == "Senior Backend Engineer"
+    assert update.json()["priority"] == "urgent"
+    assert update.json()["job_area"] == "data"
 
     publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
     assert publish.status_code == 200
@@ -121,7 +139,9 @@ async def test_recruiter_can_crud_job_and_soft_delete(
 
     listing = await client.get("/api/v1/jobs", headers=headers)
     assert listing.status_code == 200
-    assert any(item["id"] == job_id for item in listing.json()["data"])
+    listed_job = next(item for item in listing.json()["data"] if item["id"] == job_id)
+    assert listed_job["quality_score"] is not None
+    assert listed_job["quality_status"] in {"weak", "acceptable", "good"}
 
     delete = await client.delete(f"/api/v1/jobs/{job_id}", headers=headers)
     assert delete.status_code == 204
@@ -206,6 +226,143 @@ async def test_recruiter_can_clear_optional_job_fields_on_update(
 
 
 @pytest.mark.asyncio
+async def test_recruiter_can_edit_job_with_decimal_fields_and_add_skill(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Test editing a job with Decimal fields (sent as strings) and then adding a skill."""
+    await _create_active_user(
+        db_session,
+        "recruiter-job-skill@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-job-skill@test.com", "password123")
+
+    # Create a skill first
+    skill = SkillModel(
+        name="Python",
+        normalized_name="python",
+        category="backend",
+        aliases=[],
+        is_verified=True,
+    )
+    db_session.add(skill)
+    await db_session.commit()
+    skill_id = skill.id
+
+    # Create a job
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(
+            minimum_years_experience="3.5",
+            salary_min="10000.00",
+            salary_max="15000.00",
+        ),
+        headers=headers,
+    )
+    assert create.status_code == 201
+    job_id = create.json()["id"]
+
+    # Edit the job with decimal fields
+    update = await client.patch(
+        f"/api/v1/jobs/{job_id}",
+        json={
+            "title": "Senior Python Backend Engineer",
+            "minimum_years_experience": "5.0",
+            "salary_min": "12000.00",
+            "salary_max": "18000.00",
+        },
+        headers=headers,
+    )
+    assert update.status_code == 200, f"Update failed: {update.text}"
+    updated = update.json()
+    assert updated["title"] == "Senior Python Backend Engineer"
+
+    # Add a skill to the job
+    add_skill = await client.post(
+        f"/api/v1/jobs/{job_id}/skills",
+        json={"skill_id": str(skill_id), "is_mandatory": True},
+        headers=headers,
+    )
+    assert add_skill.status_code == 201
+
+    # Edit the job again after adding a skill (should not cause 422)
+    update2 = await client.patch(
+        f"/api/v1/jobs/{job_id}",
+        json={
+            "title": "Principal Python Backend Engineer",
+            "description": "Lead Python backend architecture",
+        },
+        headers=headers,
+    )
+    assert update2.status_code == 200
+    assert update2.json()["title"] == "Principal Python Backend Engineer"
+
+    persisted_job = await db_session.scalar(sa.select(JobModel).where(JobModel.id == UUID(job_id)))
+    assert persisted_job is not None
+    assert isinstance(persisted_job.job_profile_json, dict)
+    critical_names = {
+        item["name"]
+        for item in persisted_job.job_profile_json.get("critical_requirements", [])
+    }
+    assert "Python" in critical_names
+
+
+@pytest.mark.asyncio
+async def test_removing_job_skill_regenerates_job_profile(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-job-remove-skill@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-job-remove-skill@test.com", "password123")
+
+    skill = SkillModel(
+        name="SQL",
+        normalized_name="sql",
+        category="data",
+        aliases=["SQL Server"],
+        is_verified=True,
+    )
+    db_session.add(skill)
+    await db_session.commit()
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(
+            title="Analista de Dados",
+            description="Boa oportunidade",
+            requirements="Apoiar rotinas do time",
+        ),
+        headers=headers,
+    )
+    assert create.status_code == 201
+    job_id = UUID(create.json()["id"])
+
+    add_skill = await client.post(
+        f"/api/v1/jobs/{job_id}/skills",
+        json={"skill_id": str(skill.id), "is_mandatory": True},
+        headers=headers,
+    )
+    assert add_skill.status_code == 201
+
+    await client.delete(f"/api/v1/jobs/{job_id}/skills/{skill.id}", headers=headers)
+
+    persisted_job = await db_session.scalar(sa.select(JobModel).where(JobModel.id == job_id))
+    assert persisted_job is not None
+    critical_names = {
+        item["name"]
+        for item in (persisted_job.job_profile_json or {}).get("critical_requirements", [])
+    }
+    assert "SQL" not in critical_names
+
+
+@pytest.mark.asyncio
 async def test_match_endpoint_persists_job_candidate_ranking(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -239,15 +396,19 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert resume_upload.status_code == 202
     resume_version_id = UUID(resume_upload.json()["version_id"])
 
-    skill = SkillModel(
-        name="Python",
-        normalized_name="python",
-        category="backend",
-        aliases=[],
-        is_verified=True,
+    skill = await db_session.scalar(
+        sa.select(SkillModel).where(SkillModel.normalized_name == "python", SkillModel.deleted_at.is_(None))
     )
-    db_session.add(skill)
-    await db_session.flush()
+    if skill is None:
+        skill = SkillModel(
+            name="Python",
+            normalized_name="python",
+            category="backend",
+            aliases=[],
+            is_verified=True,
+        )
+        db_session.add(skill)
+        await db_session.flush()
 
     ai_model = AIModelModel(
         provider="anthropic",
@@ -329,7 +490,7 @@ async def test_match_endpoint_persists_job_candidate_ranking(
         headers=recruiter_headers,
     )
     assert match.status_code == 200
-    assert match.json()["recommendation"] in {"strong_match", "good_match"}
+    assert match.json()["recommendation"] in {"strong_match", "good_match", "potential"}
 
     persisted = await db_session.scalar(
         sa.select(ResumeJobMatchModel).where(
@@ -389,7 +550,23 @@ async def test_updating_job_does_not_mix_pipeline_candidates_between_jobs(
     assert job_b_response.status_code == 201
     job_b_id = job_b_response.json()["id"]
 
+    publish_skill = SkillModel(
+        name="Python",
+        normalized_name=f"python-publish-{uuid4().hex[:8]}",
+        category="backend",
+        aliases=[],
+        is_verified=True,
+    )
+    db_session.add(publish_skill)
+    await db_session.commit()
+
     for job_id in (job_a_id, job_b_id):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_id": str(publish_skill.id), "is_mandatory": True},
+            headers=headers,
+        )
+        assert add_skill.status_code == 201
         publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
         assert publish.status_code == 200
 

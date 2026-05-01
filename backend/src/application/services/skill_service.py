@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from src.application.services.skill_text_normalizer import normalize_skill_text
 from src.infrastructure.database.models.job_model import SkillModel
 from src.infrastructure.repositories.sqlalchemy_skill_repository import SQLAlchemySkillRepository
 from src.interface.api.schemas.skill_schemas import CreateSkillRequest, UpdateSkillRequest
@@ -78,7 +79,7 @@ class SkillService:
 
     @staticmethod
     def _normalize(value: str) -> str:
-        return value.lower().strip()
+        return normalize_skill_text(value)
 
     @staticmethod
     def _clean_required_text(value: str) -> str:

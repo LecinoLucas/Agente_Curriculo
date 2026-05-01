@@ -31,7 +31,12 @@ class Job:
     created_at: datetime
     updated_at: datetime
     requirements: Optional[str] = None
+    responsibilities: Optional[str] = None
+    experience_context: Optional[str] = None
+    behavioral_requirements: list[str] = field(default_factory=list)
     status: JobStatus = JobStatus.DRAFT
+    job_area: Optional[str] = None
+    priority: str = "normal"
     seniority_level: Optional[SeniorityLevel] = None
     work_model: Optional[WorkModel] = None
     location: Optional[str] = None

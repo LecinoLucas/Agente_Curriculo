@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { candidatesService } from "../../services/candidatesService";
-import { formatContextError } from "../../services/errorMessages";
+import { formatErrorDetails, handleApiError } from "../../services/errorHandler";
 import { HttpError } from "../../services/http";
 import { toast } from "../../services/toast";
 import type { CandidateOverview } from "../../types/domain";
@@ -65,6 +65,11 @@ export function EditCandidateModal({
   );
 
   if (!isOpen || !candidate) return null;
+
+  function toFriendlyText(error: unknown, fallback: string): string {
+    const detail = formatErrorDetails(handleApiError(error)).join(" ");
+    return detail || fallback;
+  }
 
   function validateForm() {
     const trimmedName = fullName.trim();
@@ -150,11 +155,7 @@ export function EditCandidateModal({
       }
 
       setErrors({
-        form: formatContextError(
-          err,
-          "Não foi possível atualizar os dados do candidato.",
-          "Tente novamente.",
-        ),
+        form: toFriendlyText(err, "Não foi possível atualizar os dados do candidato. Tente novamente."),
       });
     } finally {
       setSaving(false);

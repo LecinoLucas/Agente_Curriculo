@@ -58,6 +58,14 @@ class SQLAlchemySkillRepository:
         )
         return list(result.scalars().all())
 
+    async def list_all_active(self) -> list[SkillModel]:
+        result = await self._session.execute(
+            sa.select(SkillModel)
+            .where(SkillModel.deleted_at.is_(None))
+            .order_by(SkillModel.is_verified.desc(), SkillModel.name.asc())
+        )
+        return list(result.scalars().all())
+
     async def save(self, skill: SkillModel) -> SkillModel:
         await self._session.flush()
         await self._session.refresh(skill)

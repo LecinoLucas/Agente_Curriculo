@@ -26,6 +26,7 @@ import { PageHeader } from "../components/common/PageHeader";
 import { useAuth } from "../features/auth/useAuth";
 import { useTheme } from "../hooks/useTheme";
 import { authService } from "../services/authService";
+import { formatErrorDetails, formatErrorForToast, handleApiError } from "../services/errorHandler";
 import { usersService } from "../services/usersService";
 import { toast } from "../services/toast";
 
@@ -166,6 +167,10 @@ export function ProfilePage() {
     setFullName(user?.full_name ?? "");
   }, [user?.full_name]);
 
+  function toFriendlyText(caught: unknown): string {
+    return formatErrorDetails(handleApiError(caught)).join(" ");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -175,7 +180,7 @@ export function ProfilePage() {
       await refreshUser();
       toast.success("Perfil atualizado com sucesso");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao atualizar perfil");
+      setError(toFriendlyText(err) || "Falha ao atualizar perfil");
     } finally {
       setSaving(false);
     }
@@ -203,7 +208,7 @@ export function ProfilePage() {
       await refreshUser();
       toast.success("Foto de perfil removida");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao remover foto");
+      toast.error(formatErrorForToast(handleApiError(err)));
     } finally {
       setUploadingAvatar(false);
     }

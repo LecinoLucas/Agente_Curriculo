@@ -1,5 +1,4 @@
 import logging
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -12,6 +11,11 @@ _SENIORITY_PENALTY_THRESHOLD = 2
 logger = logging.getLogger(__name__)
 
 from src.domain.entities.user import User
+from src.application.services.matching_engine_service import MatchingEngineService
+from src.application.services.skill_text_normalizer import (
+    contains_whole_phrase,
+    normalize_skill_text,
+)
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
@@ -188,9 +192,9 @@ def _evaluate_deal_breaker(
         # Reject if candidate does NOT equal the required value
         if isinstance(candidate_value, str) and isinstance(value, str):
             if candidate_value.lower() != value.lower():
-                return True, reason
+                return True, f"{reason} (condição proibida: {candidate_value})"
         elif candidate_value != value:
-            return True, reason
+            return True, f"{reason} (condição proibida: {candidate_value})"
 
     elif operator == "contains":
         # Reject if value appears in candidate_value (list or string)
@@ -225,6 +229,18 @@ def _evaluate_deal_breaker(
                 return True, reason
 
     return False, None
+
+
+def _adaptive_to_legacy_recommendation(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    mapping = {
+        "strong_match": "strong_match",
+        "interview": "good_match",
+        "maybe": "potential",
+        "reject": "not_recommended",
+        "insufficient_data": "review_manually",
+    }
+    return mapping.get(normalized, "not_recommended")
 
 
 # ── Skill Matching: Exact + Aliases + Levenshtein (for typos only) ─────────────
@@ -263,9 +279,10 @@ def _skill_matches(
     """
     Check if candidate skill matches job skill using multi-strategy approach:
 
-    1. Exact match (case-insensitive)
+    1. Exact match after normalization (case-insensitive, markdown stripped)
     2. Alias lookup from SkillModel.aliases
-    3. Levenshtein distance <= 2 (only for skill names >= 4 chars)
+    3. Token / phrase containment for real-world text variants
+    4. Levenshtein distance <= 2 (only for skill names >= 4 chars)
 
     Args:
         candidate_skill_name: Skill from candidate resume (e.g., "javascript")
@@ -282,26 +299,36 @@ def _skill_matches(
         _skill_matches("Pythn", "Python")           → True (typo, distance=1)
         _skill_matches("Jv", "Java")                → False (too short for Levenshtein)
     """
-    # Normalize: lowercase + strip whitespace
-    cand_norm = candidate_skill_name.lower().strip()
-    job_norm = job_skill_name.lower().strip()
+    candidate_normalized = normalize_skill_text(candidate_skill_name)
+    job_normalized = normalize_skill_text(job_skill_name)
+    if not candidate_normalized or not job_normalized:
+        return False
 
-    # Strategy 1: Exact match (case-insensitive)
-    if cand_norm == job_norm:
+    if candidate_normalized == job_normalized:
         return True
 
-    # Strategy 2: Alias lookup
-    if job_skill_aliases:
-        aliases_norm = {alias.lower().strip() for alias in job_skill_aliases if alias}
-        if cand_norm in aliases_norm:
-            return True
+    aliases = [
+        normalize_skill_text(alias)
+        for alias in (job_skill_aliases or [])
+        if normalize_skill_text(alias)
+    ]
+    if candidate_normalized in aliases:
+        return True
 
-    # Strategy 3: Levenshtein distance <= 2 (only for skill names >= 4 chars)
-    # This prevents "Java" from matching "JS" while allowing "Pythn" to match "Python"
-    if len(job_norm) >= 4 and len(cand_norm) >= 4:
-        distance = _levenshtein_distance(cand_norm, job_norm)
-        if distance <= 2:
-            return True
+    shorter, longer = sorted((candidate_normalized, job_normalized), key=len)
+    if contains_whole_phrase(shorter, longer):
+        return True
+    if any(
+        contains_whole_phrase(*sorted((candidate_normalized, alias), key=len))
+        for alias in aliases
+    ):
+        return True
+
+    comparable_targets = [job_normalized, *aliases]
+    if len(candidate_normalized) >= 4:
+        for target in comparable_targets:
+            if len(target) >= 4 and _levenshtein_distance(candidate_normalized, target) <= 2:
+                return True
 
     return False
 
@@ -531,13 +558,17 @@ class AnalysisService:
             raise JobNotFoundError
 
         job_skills = await self._repository.list_active_job_skill_rows(job_id)
-        candidate_keywords: set[str] = {kw.lower() for kw in (result.keywords or [])}
+        candidate_keywords: set[str] = {
+            normalize_skill_text(kw)
+            for kw in (result.keywords or [])
+            if kw and normalize_skill_text(kw)
+        }
         extracted: dict = result.extracted_data or {}
         raw_skills: list[dict] = extracted.get("skills", [])
         candidate_skill_names: set[str] = {
-            skill.get("name", "").lower()
+            normalize_skill_text(skill.get("name", ""))
             for skill in raw_skills
-            if skill.get("name")
+            if skill.get("name") and normalize_skill_text(skill.get("name", ""))
         }
         all_candidate_skills = candidate_keywords | candidate_skill_names
 
@@ -581,6 +612,65 @@ class AnalysisService:
         total_mandatory = len(mandatory_skills)
         total_optional = len(optional_skills)
 
+        adaptive_match = None
+        adaptive_legacy_recommendation = "not_recommended"
+        adaptive_explanation = None
+        adaptive_strengths: list[str] = []
+        adaptive_gaps: list[str] = []
+        adaptive_risk_points: list[str] = []
+        adaptive_behavioral_indicators: list[str] = []
+        adaptive_score_breakdown: dict[str, object] = {}
+        engine_used = "legacy"
+
+        try:
+            adaptive_match = await MatchingEngineService(self._repository).match_details_to_job(
+                details.analysis,
+                result,
+                job_id,
+            )
+            if adaptive_match.confidence_score < Decimal("50"):
+                logger.info(
+                    "adaptive_matching_engine_low_confidence analysis_id=%s job_id=%s confidence=%s",
+                    str(analysis_id),
+                    str(job_id),
+                    str(adaptive_match.confidence_score),
+                )
+                adaptive_match = None
+            else:
+                adaptive_legacy_recommendation = _adaptive_to_legacy_recommendation(
+                    adaptive_match.recommendation
+                )
+                adaptive_explanation = adaptive_match.explanation
+                adaptive_strengths = list(adaptive_match.strengths)
+                adaptive_gaps = list(adaptive_match.gaps)
+                adaptive_risk_points = list(adaptive_match.risk_points)
+                adaptive_behavioral_indicators = list(adaptive_match.behavioral_indicators)
+                adaptive_score_breakdown = {
+                    "score_final": float(adaptive_match.score_final),
+                    "technical_competencies": float(adaptive_match.technical_competencies),
+                    "practical_experience": float(adaptive_match.practical_experience),
+                    "role_fit": float(adaptive_match.role_fit),
+                    "seniority_alignment": float(adaptive_match.seniority_alignment),
+                    "education": float(adaptive_match.education),
+                    "leadership_evidence": float(adaptive_match.leadership_evidence),
+                    "behavioral_indicators": list(adaptive_match.behavioral_indicators),
+                    "risk_points": list(adaptive_match.risk_points),
+                    "strengths": list(adaptive_match.strengths),
+                    "gaps": list(adaptive_match.gaps),
+                    "recommendation": adaptive_match.recommendation,
+                    "engine_used": adaptive_match.engine_used,
+                    "raw_breakdown": dict(adaptive_match.score_breakdown),
+                }
+                bonus_skill_names = adaptive_match.bonus_signals or bonus_skill_names
+                engine_used = adaptive_match.engine_used
+        except Exception as exc:
+            logger.warning(
+                "adaptive_matching_engine_failed analysis_id=%s job_id=%s error=%s",
+                str(analysis_id),
+                str(job_id),
+                str(exc),
+            )
+
         # Pure-Decimal scores; avoid float arithmetic entirely.
         mandatory_score = (
             Decimal(mandatory_matched) / Decimal(total_mandatory) * Decimal("100")
@@ -603,73 +693,87 @@ class AnalysisService:
         )
         mandatory_threshold = Decimal("60")
 
-        # Load score model version weights (with fallback to hardcoded)
-        weights_source = "fallback_hardcoded"
-        if score_model_version is None:
-            # Load if not provided (e.g., from match_to_job)
-            score_model_version = await self._repository.find_active_score_model_version()
-
-        if score_model_version:
-            weights_dict = score_model_version.weights or {}
-            w_mand = Decimal(str(weights_dict.get("skill_match", "0.40")))
-            w_opt = Decimal(str(weights_dict.get("experience_match", "0.20")))
-            w_sen = Decimal(str(weights_dict.get("seniority_match", "0.20")))
-            w_ai = Decimal(str(weights_dict.get("ai_confidence", "0.20")))
-            weights_source = "score_model_version"
-            logger.debug(
-                f"[WeightAlignment] Using score model version weights: "
-                f"skill_match={w_mand}, experience_match={w_opt}, seniority_match={w_sen}, ai_confidence={w_ai}"
-            )
+        weights_source = "adaptive_engine" if adaptive_match is not None else "fallback_hardcoded"
+        if adaptive_match is not None:
+            overall = adaptive_match.score_final
+            skills_score = adaptive_match.technical_competencies
+            seniority_score = adaptive_match.seniority_alignment
         else:
-            # Fallback to hardcoded defaults
-            w_mand = Decimal("0.40")
-            w_opt = Decimal("0.20")
-            w_sen = Decimal("0.20")
-            w_ai = Decimal("0.20")
-            logger.debug("[WeightAlignment] Using fallback hardcoded weights")
+            # Load score model version weights (with fallback to hardcoded)
+            if score_model_version is None:
+                # Load if not provided (e.g., from match_to_job)
+                score_model_version = await self._repository.find_active_score_model_version()
 
-        # Auto-reweight when a category has no skills.
-        if total_mandatory == 0 and total_optional > 0:
-            w_opt += w_mand
-            w_mand = Decimal("0")
-        elif total_mandatory == 0 and total_optional == 0:
-            half = (w_mand + w_opt) / 2
-            w_sen += half
-            w_ai += half
-            w_mand = Decimal("0")
-            w_opt = Decimal("0")
-        elif total_optional == 0:
-            w_mand += w_opt
-            w_opt = Decimal("0")
+            if score_model_version:
+                weights_dict = score_model_version.weights or {}
+                w_mand = Decimal(str(weights_dict.get("skill_match", "0.40")))
+                w_opt = Decimal(str(weights_dict.get("experience_match", "0.20")))
+                w_sen = Decimal(str(weights_dict.get("seniority_match", "0.20")))
+                w_ai = Decimal(str(weights_dict.get("ai_confidence", "0.20")))
+                weights_source = "score_model_version"
+                logger.debug(
+                    f"[WeightAlignment] Using score model version weights: "
+                    f"skill_match={w_mand}, experience_match={w_opt}, seniority_match={w_sen}, ai_confidence={w_ai}"
+                )
+            else:
+                # Fallback to hardcoded defaults
+                w_mand = Decimal("0.40")
+                w_opt = Decimal("0.20")
+                w_sen = Decimal("0.20")
+                w_ai = Decimal("0.20")
+                logger.debug("[WeightAlignment] Using fallback hardcoded weights")
 
-        seniority_map = {
-            "intern": 0,
-            "junior": 1,
-            "mid": 2,
-            "senior": 3,
-            "lead": 4,
-            "principal": 5,
-            "director": 6,
-        }
-        candidate_sen = seniority_map.get(result.seniority_level or "", 2)
-        job_sen = seniority_map.get(job.seniority_level or "", 2)
-        distance = abs(candidate_sen - job_sen)
-        sen_scores = {0: Decimal("100"), 1: Decimal("75"), 2: Decimal("45"), 3: Decimal("20")}
-        seniority_score = sen_scores.get(distance, Decimal("0"))
-        if candidate_sen > job_sen and distance >= _SENIORITY_PENALTY_THRESHOLD:
-            seniority_score = seniority_score * Decimal("0.90")
+            # Auto-reweight when a category has no skills.
+            if total_mandatory == 0 and total_optional > 0:
+                w_opt += w_mand
+                w_mand = Decimal("0")
+            elif total_mandatory == 0 and total_optional == 0:
+                half = (w_mand + w_opt) / 2
+                w_sen += half
+                w_ai += half
+                w_mand = Decimal("0")
+                w_opt = Decimal("0")
+            elif total_optional == 0:
+                w_mand += w_opt
+                w_opt = Decimal("0")
 
-        raw_ai = result.overall_score
-        if raw_ai is None:
-            ai_score = Decimal("0")
-        elif isinstance(raw_ai, Decimal):
-            ai_score = min(raw_ai, Decimal("100"))
-        else:
-            ai_score = min(Decimal(str(raw_ai)), Decimal("100"))
+            seniority_map = {
+                "intern": 0,
+                "junior": 1,
+                "mid": 2,
+                "senior": 3,
+                "lead": 4,
+                "principal": 5,
+                "director": 6,
+            }
+            candidate_sen = seniority_map.get(result.seniority_level or "", 2)
+            job_sen = seniority_map.get(job.seniority_level or "", 2)
+            distance = abs(candidate_sen - job_sen)
+            sen_scores = {0: Decimal("100"), 1: Decimal("75"), 2: Decimal("45"), 3: Decimal("20")}
+            seniority_score = sen_scores.get(distance, Decimal("0"))
+            if candidate_sen > job_sen and distance >= _SENIORITY_PENALTY_THRESHOLD:
+                seniority_score = seniority_score * Decimal("0.90")
 
-        # ── OBJECTIVE EDUCATION & EXPERIENCE VALIDATION ──────────────────────
-        # Validate against explicit job requirements (not heuristic scores)
-        # Returns: PASS (ok), FAIL (reject), or UNKNOWN (flag for manual review)
+            raw_ai = result.overall_score
+            if raw_ai is None:
+                ai_score = Decimal("0")
+            elif isinstance(raw_ai, Decimal):
+                ai_score = min(raw_ai, Decimal("100"))
+            else:
+                ai_score = min(Decimal(str(raw_ai)), Decimal("100"))
+
+            # ── OBJECTIVE EDUCATION & EXPERIENCE VALIDATION ──────────────────────
+            # Validate against explicit job requirements (not heuristic scores)
+            # Returns: PASS (ok), FAIL (reject), or UNKNOWN (flag for manual review)
+
+            overall = min(
+                mandatory_score * w_mand
+                + optional_score * w_opt
+                + seniority_score * w_sen
+                + ai_score * w_ai,
+                Decimal("100"),
+            ).quantize(Decimal("0.01"))
+
         education_result = _validate_education(
             result.highest_education_level, job.minimum_education_level
         )
@@ -731,14 +835,6 @@ class AnalysisService:
                     f"[Deal-Breaker] {breaker_reason} Candidate REJECTED."
                 )
 
-        overall = min(
-            mandatory_score * w_mand
-            + optional_score * w_opt
-            + seniority_score * w_sen
-            + ai_score * w_ai,
-            Decimal("100"),
-        ).quantize(Decimal("0.01"))
-
         # ── APPLY MANDATORY FILTER & OBJECTIVE VALIDATIONS ───────────────────
         # Decision logic:
         # 1. If FAIL: reject (score <= 39)
@@ -774,36 +870,39 @@ class AnalysisService:
             reason = f"Não atende habilidades obrigatórias ({mandatory_matched}/{total_mandatory})"
             validation_reasons.append(reason)
         else:
-            # Pass mandatory filter or no mandatory skills required
-            enough_mandatory_for_strong = (
-                Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.90")
-                if total_mandatory else True
-            )
-            enough_mandatory_for_good = (
-                Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.75")
-                if total_mandatory else True
-            )
-
-            if overall >= 82 and enough_mandatory_for_strong:
-                recommendation = "strong_match"
-            elif overall >= 65 and enough_mandatory_for_good:
-                recommendation = "good_match"
-            elif overall >= 45:
-                recommendation = "potential"
+            if adaptive_match is not None:
+                recommendation = adaptive_legacy_recommendation
             else:
-                recommendation = "not_recommended"
+                # Pass mandatory filter or no mandatory skills required
+                enough_mandatory_for_strong = (
+                    Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.90")
+                    if total_mandatory else True
+                )
+                enough_mandatory_for_good = (
+                    Decimal(mandatory_matched) / Decimal(total_mandatory) >= Decimal("0.75")
+                    if total_mandatory else True
+                )
+
+                if overall >= 82 and enough_mandatory_for_strong:
+                    recommendation = "strong_match"
+                elif overall >= 65 and enough_mandatory_for_good:
+                    recommendation = "good_match"
+                elif overall >= 45:
+                    recommendation = "potential"
+                else:
+                    recommendation = "not_recommended"
             reason = None
 
-        skills_score = (
-            mandatory_score * Decimal("0.67") + optional_score * Decimal("0.33")
-        ).quantize(Decimal("0.01"))
+        if adaptive_match is None:
+            skills_score = (
+                mandatory_score * Decimal("0.67") + optional_score * Decimal("0.33")
+            ).quantize(Decimal("0.01"))
 
         if reason:
             # Rejected due to mandatory filter
             summary = reason
         else:
-            # Normal summary
-            summary = (
+            summary = adaptive_explanation or (
                 f"{mandatory_matched}/{total_mandatory} skills obrigatórias e "
                 f"{optional_matched}/{total_optional} skills opcionais atendidas."
             )
@@ -815,7 +914,9 @@ class AnalysisService:
         )
         match.match_score = overall
         match.skills_match_score = skills_score
-        match.experience_match_score = result.experience_score
+        match.experience_match_score = (
+            adaptive_match.practical_experience if adaptive_match is not None else result.experience_score
+        )
         match.seniority_match_score = seniority_score.quantize(Decimal("0.01"))
         match.matched_skills = matched_skill_names
         match.missing_skills = missing_skill_names
@@ -851,4 +952,11 @@ class AnalysisService:
             validation_status=validation_status,
             missing_evidence=missing_evidence,
             rejection_reasons=validation_reasons,
+            engine_used=engine_used,
+            score_breakdown=adaptive_score_breakdown,
+            strengths=adaptive_strengths,
+            gaps=adaptive_gaps,
+            risk_points=adaptive_risk_points,
+            explanation=adaptive_explanation,
+            behavioral_indicators=adaptive_behavioral_indicators,
         )

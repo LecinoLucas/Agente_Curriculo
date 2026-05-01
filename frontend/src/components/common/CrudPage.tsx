@@ -6,6 +6,8 @@ import { EmptyState } from "./EmptyState";
 import { SkeletonRows } from "./Skeleton";
 import { DataTable, DataTableColumn } from "./DataTable";
 
+type TableRowElement = React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>, "tr">;
+
 type CrudPageProps<T> = {
   title?: string;
   subtitle?: string;
@@ -27,7 +29,7 @@ type CrudPageProps<T> = {
   emptyAction?: { label: string; onClick: () => void };
   columns: Array<DataTableColumn | string>;
   items: T[];
-  renderRow: (item: T) => React.ReactNode;
+  renderRow: (item: T) => TableRowElement;
   footer?: React.ReactNode;
   children?: React.ReactNode;
 };

@@ -2,6 +2,7 @@ import type {
   ConfigurationAlert,
   AlertLevel,
   PublishReadinessStatus,
+  RestrictivenessLevel,
 } from "../../hooks/useJobConfigurationAlerts";
 
 interface JobConfigurationPreviewProps {
@@ -11,6 +12,7 @@ interface JobConfigurationPreviewProps {
     experienceYears: number | null;
     dealBreakersActive: number;
     publishReadiness: PublishReadinessStatus;
+    restrictiveness: RestrictivenessLevel;
   };
   jobTitle?: string;
 }
@@ -23,6 +25,33 @@ const educationLevelLabels: Record<string, string> = {
   postgraduate: "Pós-Graduação",
   master: "Mestrado",
   phd: "Doutorado",
+};
+
+const restrictivenessLabels: Record<string, { label: string; emoji: string; color: string; bgColor: string }> = {
+  low: {
+    label: "Baixa",
+    emoji: "🟢",
+    color: "text-[hsl(var(--success))]",
+    bgColor: "bg-[hsl(var(--success-soft))]",
+  },
+  moderate: {
+    label: "Moderada",
+    emoji: "🟡",
+    color: "text-[hsl(var(--warning))]",
+    bgColor: "bg-[hsl(var(--warning-soft))]",
+  },
+  high: {
+    label: "Alta",
+    emoji: "🟠",
+    color: "text-[hsl(var(--warning))]",
+    bgColor: "bg-[hsl(var(--warning-soft))]",
+  },
+  very_high: {
+    label: "Muito Alta",
+    emoji: "🔴",
+    color: "text-[hsl(var(--danger))]",
+    bgColor: "bg-[hsl(var(--danger-soft))]",
+  },
 };
 
 function getAlertTone(level: AlertLevel): string {
@@ -104,13 +133,30 @@ export function JobConfigurationPreview({
           <div className="text-[hsl(var(--text-muted))]">Deal-breakers</div>
           <div className="font-semibold text-[hsl(var(--text))] mt-1">{summary.dealBreakersActive}</div>
         </div>
-        <div className="rounded bg-[hsl(var(--surface-muted))] px-3 py-2">
-          <div className="text-[hsl(var(--text-muted))]">Status</div>
-          <div className={`font-semibold mt-1 ${getReadinessTone(summary.publishReadiness)}`}>
-            {getReadinessLabel(summary.publishReadiness)}
+        <div className={`rounded ${restrictivenessLabels[summary.restrictiveness].bgColor} px-3 py-2 border border-current`}>
+          <div className="text-[hsl(var(--text-muted))]">Restritividade</div>
+          <div className={`font-semibold mt-1 ${restrictivenessLabels[summary.restrictiveness].color}`}>
+            {restrictivenessLabels[summary.restrictiveness].emoji} {restrictivenessLabels[summary.restrictiveness].label}
           </div>
         </div>
       </div>
+
+      {/* Restrictiveness Warning Banner */}
+      {(summary.restrictiveness === "high" || summary.restrictiveness === "very_high") && (
+        <div className={`rounded-lg border px-3 py-3 mb-4 ${restrictivenessLabels[summary.restrictiveness].bgColor}`}>
+          <div className={`text-xs font-semibold ${restrictivenessLabels[summary.restrictiveness].color} flex gap-2`}>
+            <span className="flex-shrink-0">⚠️</span>
+            <span>
+              {summary.restrictiveness === "very_high"
+                ? "Essa vaga está MUITO restritiva. Pode resultar em zero candidatos qualificados. Revise educação mínima, anos de experiência e deal-breakers."
+                : "Essa vaga está restritiva. Candidatos fortes podem ser eliminados. Considere se os critérios são realmente obrigatórios."}
+            </span>
+          </div>
+          <div className="text-xs text-[hsl(var(--text-muted))] mt-2 italic">
+            💡 Skills complementares (Git, UX/UI, Idiomas) devem ser desejáveis, não eliminatórios.
+          </div>
+        </div>
+      )}
 
       {/* Alerts */}
       <div className="space-y-2">

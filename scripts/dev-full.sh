@@ -155,17 +155,63 @@ kill_port() {
   if command -v fuser >/dev/null 2>&1; then
     fuser -k "$port/tcp" 2>/dev/null || true
   elif command -v lsof >/dev/null 2>&1; then
-    pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
+    pids=$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
-      sleep 0.5
+      sleep 1
 
-      remaining=$(lsof -ti tcp:"$port" 2>/dev/null || true)
+      remaining=$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)
       if [ -n "$remaining" ]; then
         kill -9 $remaining 2>/dev/null || true
       fi
     fi
   fi
+}
+
+kill_matching_processes() {
+  pattern=$1
+
+  if ! command -v pgrep >/dev/null 2>&1; then
+    return 0
+  fi
+
+  pids=$(pgrep -f "$pattern" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    kill $pids 2>/dev/null || true
+    sleep 1
+
+    remaining=$(pgrep -f "$pattern" 2>/dev/null || true)
+    if [ -n "$remaining" ]; then
+      kill -9 $remaining 2>/dev/null || true
+    fi
+  fi
+}
+
+wait_for_port_free() {
+  port=$1
+  timeout=${2:-10}
+  elapsed=0
+
+  while [ "$elapsed" -lt "$timeout" ]; do
+    if command -v fuser >/dev/null 2>&1; then
+      if ! fuser "$port/tcp" >/dev/null 2>&1; then
+        return 0
+      fi
+    elif command -v lsof >/dev/null 2>&1; then
+      if [ -z "$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)" ]; then
+        return 0
+      fi
+    else
+      sleep 1
+      return 0
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  print_error "Porta $port continua ocupada apos limpeza"
+  exit 1
 }
 
 kill_port_range() {
@@ -229,9 +275,13 @@ if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
 fi
 
 print_section "Portas"
+kill_matching_processes "src.interface.api.main:app"
+kill_matching_processes "vite --host 0.0.0.0"
 kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
 kill_port "$BACKEND_PORT" &
 wait
+wait_for_port_free "$FRONTEND_PORT"
+wait_for_port_free "$BACKEND_PORT"
 
 print_section "Banco"
 bootstrap_database

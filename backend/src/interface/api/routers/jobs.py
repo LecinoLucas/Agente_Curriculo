@@ -1,6 +1,7 @@
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.job_service import (
@@ -12,10 +13,28 @@ from src.application.services.job_service import (
     JobService,
     SkillNotFoundError,
 )
+from src.application.services.job_bulk_import_service import JobBulkImportService
+from src.application.services.job_bulk_payload_normalizer import (
+    BulkJobPayloadNormalizationError,
+    JobBulkPayloadNormalizer,
+)
+from src.application.services.job_bulk_update_service import JobBulkUpdateService
+from src.application.services.job_score_explanation_service import JobScoreExplanationService
+from src.application.services.matching_observability_service import MatchingObservabilityService
+from src.application.services.job_quality_validator_service import (
+    JobQualityValidatorService,
+    JobNotFoundForQualityError,
+)
 from src.application.services.pipeline_service import (
     PipelineJobNotFoundError,
     PipelineService,
 )
+from src.application.services.scoring_comparison_admin_service import (
+    ScoringComparisonAnalysisNotFoundError,
+    ScoringComparisonCandidateNotFoundError,
+    ScoringComparisonJobNotFoundError,
+)
+from src.domain.entities.user import UserRole
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
@@ -25,9 +44,21 @@ from src.application.services.candidate_ranking_service import (
     NoActiveScoreVersionError,
     RankingJobNotFoundError,
 )
-from src.interface.api.dependencies import CurrentUser, RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import CurrentUser, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
-from src.interface.api.schemas.job_schemas import CreateJobRequest, JobResponse, UpdateJobRequest
+from src.interface.api.schemas.job_schemas import (
+    BulkImportJobsRequest,
+    BulkImportJobsResponse,
+    BulkUpdateJobsRequest,
+    BulkUpdateJobsResponse,
+    CandidateScoreExplanationResponse,
+    CreateJobRequest,
+    JobQualityResponse,
+    JobResponse,
+    MatchingFeedbackRequest,
+    MatchingFeedbackResponse,
+    UpdateJobRequest,
+)
 from src.interface.api.schemas.pipeline_schemas import JobMatchCandidateResponse
 from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse
 from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
@@ -39,8 +70,20 @@ def _job_service(db: AsyncSession) -> JobService:
     return JobService(SQLAlchemyJobRepository(db))
 
 
+def _job_bulk_import_service(db: AsyncSession) -> JobBulkImportService:
+    return JobBulkImportService(db)
+
+
+def _job_bulk_update_service(db: AsyncSession) -> JobBulkUpdateService:
+    return JobBulkUpdateService(db)
+
+
 def _pipeline_service(db: AsyncSession) -> PipelineService:
     return PipelineService(SQLAlchemyPipelineRepository(db))
+
+
+def _quality_validator_service(db: AsyncSession) -> JobQualityValidatorService:
+    return JobQualityValidatorService(SQLAlchemyJobRepository(db))
 
 
 def _handle_job_service_error(exc: Exception) -> None:
@@ -65,6 +108,14 @@ def _handle_job_service_error(exc: Exception) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Nenhuma versão de scoring ativa. Configure uma versão ativa antes de calcular.",
         )
+    if isinstance(exc, ScoringComparisonJobNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
+    if isinstance(exc, ScoringComparisonCandidateNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidato não encontrado")
+    if isinstance(exc, ScoringComparisonAnalysisNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análise do candidato não encontrada")
+    if isinstance(exc, JobNotFoundForQualityError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
     raise exc
 
 
@@ -82,6 +133,49 @@ async def create_job(
     except Exception as exc:
         await db.rollback()
         _handle_job_service_error(exc)
+        raise
+
+
+@router.post("/bulk-import", response_model=BulkImportJobsResponse, status_code=status.HTTP_201_CREATED)
+async def bulk_import_jobs(
+    current_user: RecruiterOrAdmin,
+    body: Any = Body(...),
+    db: AsyncSession = Depends(get_db),
+) -> BulkImportJobsResponse:
+    try:
+        import json
+        print(f"RAW BULK IMPORT BODY: {json.dumps(body if isinstance(body, dict) else str(body), indent=2)}")
+        normalized_body = JobBulkPayloadNormalizer.normalize_import_request(body)
+        result = await _job_bulk_import_service(db).import_jobs(normalized_body, current_user.id)
+        if normalized_body.options.dry_run:
+            await db.rollback()
+        else:
+            await db.commit()
+        return result
+    except BulkJobPayloadNormalizationError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.patch("/bulk-update", response_model=BulkUpdateJobsResponse)
+async def bulk_update_jobs(
+    current_user: RecruiterOrAdmin,
+    body: Any = Body(...),
+    db: AsyncSession = Depends(get_db),
+) -> BulkUpdateJobsResponse:
+    try:
+        normalized_body = JobBulkPayloadNormalizer.normalize_update_request(body)
+        result = await _job_bulk_update_service(db).update_jobs(normalized_body)
+        await db.commit()
+        return result
+    except BulkJobPayloadNormalizationError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except Exception:
+        await db.rollback()
         raise
 
 
@@ -116,6 +210,28 @@ async def get_job(
         raise
 
 
+@router.get("/{job_id}/quality", response_model=JobQualityResponse)
+async def get_job_quality(
+    job_id: UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> JobQualityResponse:
+    try:
+        result = await _quality_validator_service(db).validate(job_id)
+        return JobQualityResponse(
+            job_id=job_id,
+            quality_score=result.quality_score,
+            status=result.status,
+            can_publish=result.can_publish,
+            missing_fields=result.missing_fields,
+            suggestions=result.suggestions,
+            warnings=result.warnings,
+        )
+    except Exception as exc:
+        _handle_job_service_error(exc)
+        raise
+
+
 @router.patch("/{job_id}", response_model=JobResponse)
 async def update_job(
     job_id: UUID,
@@ -140,7 +256,41 @@ async def publish_job(
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
-    return await _transition_job_status(job_id, "published", db)
+    try:
+        # Validate job quality before publishing
+        quality = await _quality_validator_service(db).validate(job_id)
+        if not quality.can_publish:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": "Vaga com qualidade insuficiente para publicação",
+                    "quality_score": quality.quality_score,
+                    "status": quality.status,
+                    "suggestions": quality.suggestions,
+                },
+            )
+        # Proceed with publication
+        job = await _transition_job_status(job_id, "published", db)
+
+        # Enqueue matching with existing completed analyses
+        from src.interface.workers.job_dispatcher import enqueue_job_publication_matches
+        matched_count = await enqueue_job_publication_matches(job_id)
+
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.info(
+            "job.published.matching_enqueued",
+            job_id=str(job_id),
+            analyses_enqueued=matched_count,
+        )
+
+        return job
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
 
 
 @router.patch("/{job_id}/pause", response_model=JobResponse)
@@ -304,6 +454,66 @@ async def get_job_ranking(
         result = await CandidateRankingService(db).get_ranking(job_id)
         return JobRankingResponse(**result)
     except Exception as exc:
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.get(
+    "/{job_id}/candidates/{candidate_id}/score-explanation",
+    response_model=CandidateScoreExplanationResponse,
+)
+async def get_job_candidate_score_explanation(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: InternalUser,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateScoreExplanationResponse:
+    try:
+        payload = await JobScoreExplanationService(db).get(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            role=UserRole(current_user.role),
+        )
+        return CandidateScoreExplanationResponse.model_validate(payload.to_dict())
+    except Exception as exc:
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.post(
+    "/{job_id}/candidates/{candidate_id}/matching-feedback",
+    response_model=MatchingFeedbackResponse,
+)
+async def save_job_candidate_matching_feedback(
+    job_id: UUID,
+    candidate_id: UUID,
+    body: MatchingFeedbackRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> MatchingFeedbackResponse:
+    try:
+        explanation = await JobScoreExplanationService(db).get(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            role=UserRole(current_user.role),
+        )
+        observation = await MatchingObservabilityService(db).save_feedback(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            analysis_id=explanation.analysis_id,
+            liked=body.liked,
+            rejected=body.rejected,
+            hired=body.hired,
+            comment=body.comment,
+            feedback_by=current_user.id,
+        )
+        await db.commit()
+        payload = MatchingObservabilityService.feedback_payload(observation)
+        if payload is None:
+            raise RuntimeError("Feedback não pôde ser persistido")
+        return MatchingFeedbackResponse.model_validate(payload.to_dict())
+    except Exception as exc:
+        await db.rollback()
         _handle_job_service_error(exc)
         raise
 

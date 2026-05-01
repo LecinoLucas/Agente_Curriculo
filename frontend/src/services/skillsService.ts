@@ -35,4 +35,14 @@ export const skillsService = {
   async removeJobSkill(jobId: string, skillId: string): Promise<void> {
     return httpRequest<void>(`/api/v1/jobs/${jobId}/skills/${skillId}`, { method: "DELETE" });
   },
+
+  async updateJobSkill(
+    jobId: string,
+    skillId: string,
+    payload: { is_mandatory?: boolean; minimum_level?: string | null; minimum_years?: number | null; weight?: number }
+  ): Promise<JobSkill> {
+    // Backend doesn't have PATCH for job skills, so delete and re-add with new values
+    await this.removeJobSkill(jobId, skillId);
+    return this.addJobSkill(jobId, { skill_id: skillId, ...payload });
+  },
 };

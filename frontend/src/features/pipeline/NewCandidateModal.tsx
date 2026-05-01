@@ -4,7 +4,7 @@ import { Modal } from "../../components/common/Modal";
 import { StatusPill } from "../../components/common/StatusPill";
 import { Badge } from "../../components/ui/badge";
 import { candidatesService } from "../../services/candidatesService";
-import { formatContextError } from "../../services/errorMessages";
+import { formatErrorDetails, handleApiError } from "../../services/errorHandler";
 import { feedback } from "../../services/feedback";
 import { HttpError } from "../../services/http";
 import { pipelineService } from "../../services/pipelineService";
@@ -114,6 +114,11 @@ export function NewCandidateModal({
 
   if (!isOpen) return null;
 
+  function toFriendlyText(error: unknown, fallback: string): string {
+    const detail = formatErrorDetails(handleApiError(error)).join(" ");
+    return detail || fallback;
+  }
+
   function clearDuplicate(field?: keyof NewCandidateFormErrors) {
     if (duplicate) setDuplicate(null);
     if (createdCandidate) {
@@ -189,10 +194,9 @@ export function NewCandidateModal({
       await ensureSelectedJobCanReceiveCandidates();
     } catch (err: unknown) {
       setErrors({
-        form: formatContextError(
+        form: toFriendlyText(
           err,
-          "A vaga selecionada não pode receber novos candidatos.",
-          "Escolha uma vaga publicada ou pausada, ou limpe o campo para criar sem vínculo.",
+          "A vaga selecionada não pode receber novos candidatos. Escolha uma vaga publicada ou pausada, ou limpe o campo para criar sem vínculo.",
         ),
       });
       return;
@@ -245,10 +249,9 @@ export function NewCandidateModal({
         } catch (err: unknown) {
           setLinkStatus("link_failed");
           setErrors({
-            form: formatContextError(
+            form: toFriendlyText(
               err,
-              "Candidato criado, mas falhou ao vinculá-lo à vaga selecionada.",
-              "Tente vincular novamente para concluir o pipeline.",
+              "Candidato criado, mas falhou ao vinculá-lo à vaga selecionada. Tente vincular novamente para concluir o pipeline.",
             ),
           });
           return;
@@ -283,11 +286,7 @@ export function NewCandidateModal({
 
       feedback.createCandidate.error(err);
       setErrors({
-        form: formatContextError(
-          err,
-          "Não foi possível criar o candidato.",
-          "Revise os dados e tente novamente.",
-        ),
+        form: toFriendlyText(err, "Não foi possível criar o candidato. Revise os dados e tente novamente."),
       });
     } finally {
       setLoading(false);
@@ -308,10 +307,9 @@ export function NewCandidateModal({
       }
     } catch (err: unknown) {
       setErrors({
-        form: formatContextError(
+        form: toFriendlyText(
           err,
-          "Não foi possível vincular o candidato à vaga selecionada.",
-          "Escolha uma vaga válida e tente novamente.",
+          "Não foi possível vincular o candidato à vaga selecionada. Escolha uma vaga válida e tente novamente.",
         ),
       });
       return;
@@ -326,10 +324,9 @@ export function NewCandidateModal({
     } catch (err: unknown) {
       setLinkStatus("link_failed");
       setErrors({
-        form: formatContextError(
+        form: toFriendlyText(
           err,
-          "Candidato criado, mas ainda não foi possível vinculá-lo à vaga.",
-          "Tente novamente.",
+          "Candidato criado, mas ainda não foi possível vinculá-lo à vaga. Tente novamente.",
         ),
       });
     } finally {
@@ -346,11 +343,7 @@ export function NewCandidateModal({
       await onCreated(duplicate.id);
     } catch (err: unknown) {
       setErrors({
-        form: formatContextError(
-          err,
-          "Não foi possível abrir o candidato existente.",
-          "Tente novamente.",
-        ),
+        form: toFriendlyText(err, "Não foi possível abrir o candidato existente. Tente novamente."),
       });
     } finally {
       setLoading(false);
@@ -371,10 +364,9 @@ export function NewCandidateModal({
     } catch (err: unknown) {
       setLinkStatus("link_failed");
       setErrors({
-        form: formatContextError(
+        form: toFriendlyText(
           err,
-          "Falha ao vincular o candidato duplicado à vaga selecionada.",
-          "Tente novamente.",
+          "Falha ao vincular o candidato duplicado à vaga selecionada. Tente novamente.",
         ),
       });
     } finally {

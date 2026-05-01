@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../features/auth/useAuth";
 import { authService } from "../services/authService";
+import { formatErrorDetails, handleApiError } from "../services/errorHandler";
 import { toast } from "../services/toast";
 
 function passwordStrengthLabel(password: string): { label: string; tone: string } {
@@ -35,6 +36,10 @@ export function ChangePasswordPage() {
   const isForced = Boolean(user?.must_change_password);
   const strength = useMemo(() => passwordStrengthLabel(newPassword), [newPassword]);
 
+  function toFriendlyText(caught: unknown): string {
+    return formatErrorDetails(handleApiError(caught)).join(" ");
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -59,7 +64,7 @@ export function ChangePasswordPage() {
       toast.success("Senha atualizada com sucesso");
       navigate(user?.role === "candidate" ? "/perfil" : "/pipeline", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao atualizar senha");
+      setError(toFriendlyText(err) || "Falha ao atualizar senha");
     } finally {
       setSaving(false);
     }

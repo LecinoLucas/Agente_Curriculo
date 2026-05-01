@@ -8,12 +8,18 @@ import { useAuth } from "../../features/auth/useAuth";
 import { analysisService } from "../../services/analysisService";
 import { candidatesService } from "../../services/candidatesService";
 import { dataQualityService } from "../../services/dataQualityService";
+import { formatErrorForToast, handleApiError } from "../../services/errorHandler";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { getJobRanking } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import { resumeService } from "../../services/resumeService";
 import { toast } from "../../services/toast";
+import {
+  scoreExplanationService,
+  type ScoreExplanationEvidence,
+  type ScoreExplanationResponse,
+} from "../../services/scoreExplanationService";
 import type {
   AnalysisPipelineStatus,
   AnalysisResult,
@@ -92,6 +98,11 @@ const DANGEROUS_STAGES: PipelineStage[] = ["hired", "rejected"];
 function fmtScore(score: number | null | undefined): string {
   if (score == null) return "—";
   return `${Math.round(score > 1 ? score : score * 100)}%`;
+}
+
+function fmtPercentValue(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `${Math.round(value)}%`;
 }
 
 function scoreColorClass(score: number | null | undefined): string {
@@ -569,7 +580,7 @@ export function CandidateDrawer() {
       toast.success("Candidato enviado para reprocessamento.");
       syncCandidateOverview(candidateOverview.candidate.id);
     } catch (err) {
-      toast.error(`Erro ao reprocessar: ${err instanceof Error ? err.message : "erro desconhecido"}`);
+      toast.error(formatErrorForToast(handleApiError(err)));
     } finally {
       setDataQualityActionLoading(false);
     }
@@ -584,7 +595,7 @@ export function CandidateDrawer() {
       toast.success("Candidato marcado como válido.");
       syncCandidateOverview(candidateOverview.candidate.id);
     } catch (err) {
-      toast.error(`Erro ao marcar como válido: ${err instanceof Error ? err.message : "erro desconhecido"}`);
+      toast.error(formatErrorForToast(handleApiError(err)));
     } finally {
       setDataQualityActionLoading(false);
     }
@@ -1007,8 +1018,14 @@ function ScoreTab({
   error: string | null;
   compatibilityGuidance: ReturnType<typeof getCompatibilityGuidance>;
 }) {
+  const { user } = useAuth();
+  const canSendMatchingFeedback = user?.role === "admin" || user?.role === "recruiter";
   const compatibilityScore = activePipelineEntry?.match_score ?? activeJobMatch?.match_score ?? null;
   const aiScore = overview.latest_analysis?.overall_score ?? null;
+  const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
+  const [feedbackSaving, setFeedbackSaving] = useState<"liked" | "rejected" | "hired" | null>(null);
   const dealBreakerViolations = rankingEntry?.reason_codes.filter((reason) => isDealBreakerReasonCode(reason)) ?? [];
   const dealBreakerDetails = dealBreakerViolations.map((reasonCode) =>
     buildDealBreakerViolationDisplay({
@@ -1019,11 +1036,71 @@ function ScoreTab({
       analysisResult,
     }),
   );
+  const candidateId = overview.candidate.id;
   const hasRankingDetails =
     Boolean(rankingEntry?.explanation_text) ||
     Boolean(rankingEntry && rankingEntry.reason_codes.length > 0) ||
     Boolean(rankingEntry?.score_breakdown) ||
     dealBreakerDetails.length > 0;
+
+  useEffect(() => {
+    if (!activeJobId || !candidateId) {
+      setScoreExplanation(null);
+      setInsightError(null);
+      setInsightLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setInsightLoading(true);
+    setInsightError(null);
+
+    void scoreExplanationService
+      .get(activeJobId, candidateId)
+      .then((payload) => {
+        if (cancelled) return;
+        setScoreExplanation(payload);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setScoreExplanation(null);
+        setInsightError("A explicação detalhada deste score não está disponível no momento.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setInsightLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeJobId, candidateId]);
+
+  const handleMatchingFeedback = useCallback(
+    async (kind: "liked" | "rejected" | "hired") => {
+      if (!activeJobId || !candidateId || !canSendMatchingFeedback) return;
+
+      setFeedbackSaving(kind);
+      try {
+        const payload =
+          kind === "liked"
+            ? { liked: true, rejected: false, hired: false }
+            : kind === "rejected"
+              ? { liked: false, rejected: true, hired: false }
+              : { liked: true, rejected: false, hired: true };
+
+        const saved = await scoreExplanationService.saveFeedback(activeJobId, candidateId, payload);
+        setScoreExplanation((current) => (current ? { ...current, feedback: saved } : current));
+        toast.success("Feedback de matching registrado.");
+      } catch (err) {
+        toast.error(formatErrorForToast(handleApiError(err)));
+      } finally {
+        setFeedbackSaving(null);
+      }
+    },
+    [activeJobId, candidateId, canSendMatchingFeedback],
+  );
 
   if (!activeJobId) {
     return (
@@ -1185,6 +1262,212 @@ function ScoreTab({
           />
         ) : null}
       </Section>
+
+      <Section title="Por que este score?">
+        {insightLoading ? <LoadingSkeleton /> : null}
+
+        {!insightLoading && insightError ? (
+          <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3 text-sm text-[hsl(var(--warning))]">
+            {insightError}
+          </div>
+        ) : null}
+
+        {!insightLoading && !insightError && scoreExplanation ? (
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <MetaItem label="Score considerado" value={fmtScore(scoreExplanation.score)} />
+              <MetaItem label="Motor usado" value={scoreExplanation.engine_used || "—"} />
+              <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.confidence_score)} />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={scoreExplanation.engine_used === "adaptive" ? "success" : "outline"}>
+                {scoreExplanation.engine_used === "adaptive" ? "Motor: Adaptativo" : "Motor: Legado"}
+              </Badge>
+              <Badge variant="outline">Confiança: {fmtPercentValue(scoreExplanation.confidence_score)}</Badge>
+            </div>
+
+            {scoreExplanation.engine_used === "legacy" ? (
+              <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--surface-muted))] px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                Este score foi calculado pelo motor legado; a explicação pode ser limitada.
+              </div>
+            ) : null}
+
+            {canSendMatchingFeedback ? (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                      Feedback humano
+                    </p>
+                    <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                      Registra se o matching ajudou ou não na decisão.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleMatchingFeedback("liked")}
+                      disabled={feedbackSaving !== null}
+                      className={[
+                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                        scoreExplanation.feedback?.liked
+                          ? "border-[hsl(var(--success))]/30 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]"
+                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                        feedbackSaving === "liked" ? "opacity-70" : "",
+                      ].join(" ")}
+                    >
+                      {feedbackSaving === "liked" ? "Salvando…" : "👍 Útil"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleMatchingFeedback("rejected")}
+                      disabled={feedbackSaving !== null}
+                      className={[
+                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                        scoreExplanation.feedback?.rejected
+                          ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]"
+                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                        feedbackSaving === "rejected" ? "opacity-70" : "",
+                      ].join(" ")}
+                    >
+                      {feedbackSaving === "rejected" ? "Salvando…" : "👎 Não ajudou"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleMatchingFeedback("hired")}
+                      disabled={feedbackSaving !== null}
+                      className={[
+                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                        scoreExplanation.feedback?.hired
+                          ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]"
+                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                        feedbackSaving === "hired" ? "opacity-70" : "",
+                      ].join(" ")}
+                    >
+                      {feedbackSaving === "hired" ? "Salvando…" : "Contratado"}
+                    </button>
+                  </div>
+                </div>
+
+                {scoreExplanation.feedback?.feedback_at ? (
+                  <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
+                    Último feedback registrado em {formatOptionalDateTime(scoreExplanation.feedback.feedback_at)}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                Resumo
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">
+                {scoreExplanation.explanation}
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <InsightListBlock
+                title="Motivos do score alto"
+                items={scoreExplanation.high_score_reasons}
+                empty="Sem motivos positivos relevantes."
+              />
+              <InsightListBlock
+                title="Motivos do score baixo"
+                items={scoreExplanation.low_score_reasons}
+                empty="Sem motivos negativos relevantes."
+              />
+              <InsightListBlock
+                title="Riscos de superestimação"
+                items={scoreExplanation.overestimation_risks}
+                empty="Sem sinais de superestimação."
+              />
+              <InsightListBlock
+                title="Perguntas recomendadas"
+                items={scoreExplanation.recommended_questions}
+                empty="Sem perguntas sugeridas."
+              />
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <InsightEvidenceBlock
+                title="Evidências mais fortes"
+                items={scoreExplanation.strongest_evidence}
+                empty="Sem evidências fortes mapeadas."
+              />
+              <InsightEvidenceBlock
+                title="Equivalências encontradas"
+                items={scoreExplanation.matched_equivalences}
+                empty="Sem equivalências encontradas."
+              />
+            </div>
+          </div>
+        ) : null}
+      </Section>
+    </div>
+  );
+}
+
+function InsightListBlock({
+  title,
+  items,
+  empty,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{title}</p>
+      {items.length > 0 ? (
+        <ul className="mt-3 flex flex-col gap-2">
+          {items.map((item) => (
+            <li key={item} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text))]">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
+      )}
+    </div>
+  );
+}
+
+function InsightEvidenceBlock({
+  title,
+  items,
+  empty,
+}: {
+  title: string;
+  items: ScoreExplanationEvidence[];
+  empty: string;
+}) {
+  return (
+    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{title}</p>
+      {items.length > 0 ? (
+        <ul className="mt-3 flex flex-col gap-2">
+          {items.map((item, index) => (
+            <li
+              key={`${title}:${item.requirement}:${item.match_type}:${item.explanation}:${index}`}
+              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2"
+            >
+              <p className="text-sm font-semibold text-[hsl(var(--text))]">{item.requirement}</p>
+              <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                {item.match_type} · {item.evidence_strength} · conf. {item.confidence}
+              </p>
+              {item.evidence_quotes[0] ? (
+                <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">{item.evidence_quotes[0]}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
+      )}
     </div>
   );
 }
@@ -1652,13 +1935,7 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       await refreshCandidateOverview();
       notifyCandidatesChanged();
     } catch (err) {
-      toast.error(
-        formatContextError(
-          err,
-          "Não foi possível atualizar o título do currículo.",
-          "Tente novamente.",
-        ),
-      );
+      toast.error(formatErrorForToast(handleApiError(err)));
     } finally {
       setEditSaving(false);
     }
@@ -1676,13 +1953,7 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       await refreshCandidateOverview();
       notifyCandidatesChanged();
     } catch (err) {
-      toast.error(
-        formatContextError(
-          err,
-          "Não foi possível alterar o status do currículo.",
-          "Tente novamente.",
-        ),
-      );
+      toast.error(formatErrorForToast(handleApiError(err)));
     }
   }
 
@@ -1696,13 +1967,7 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       await refreshCandidateOverview();
       notifyCandidatesChanged();
     } catch (err) {
-      toast.error(
-        formatContextError(
-          err,
-          "Não foi possível excluir o currículo.",
-          "Tente novamente.",
-        ),
-      );
+      toast.error(formatErrorForToast(handleApiError(err)));
     } finally {
       setDeletingId(null);
     }

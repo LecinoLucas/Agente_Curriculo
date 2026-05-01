@@ -253,3 +253,98 @@ class ResumeJobMatchModel(Base):
         sa.Index("idx_resume_job_matches_job_id", "job_id", "match_score"),
         sa.Index("idx_resume_job_matches_analysis_id", "analysis_id"),
     )
+
+
+class MatchingObservationModel(Base):
+    __tablename__ = "matching_observations"
+
+    id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
+    )
+    job_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("jobs.id"),
+        nullable=False,
+    )
+    candidate_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("candidates.id"),
+        nullable=False,
+    )
+    analysis_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("analyses.id"),
+        nullable=True,
+    )
+    engine_used: Mapped[str] = mapped_column(
+        sa.String(50),
+        nullable=False,
+        server_default="unknown",
+    )
+    score: Mapped[Decimal] = mapped_column(
+        sa.Numeric(5, 2),
+        nullable=False,
+        server_default="0",
+    )
+    confidence_score: Mapped[Decimal] = mapped_column(
+        sa.Numeric(5, 2),
+        nullable=False,
+        server_default="0",
+    )
+    matched_skills: Mapped[list] = mapped_column(
+        JSONB_COMPAT,
+        nullable=False,
+        server_default="[]",
+    )
+    missing_skills: Mapped[list] = mapped_column(
+        JSONB_COMPAT,
+        nullable=False,
+        server_default="[]",
+    )
+    equivalences_used: Mapped[list] = mapped_column(
+        JSONB_COMPAT,
+        nullable=False,
+        server_default="[]",
+    )
+    source: Mapped[str] = mapped_column(
+        sa.String(20),
+        nullable=False,
+        server_default="ui",
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+    liked: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+    rejected: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+    hired: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+    feedback_comment: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    feedback_by: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("users.id"),
+        nullable=True,
+    )
+    feedback_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+
+    __table_args__ = (
+        sa.Index("idx_matching_observations_job_candidate", "job_id", "candidate_id"),
+        sa.Index("idx_matching_observations_source", "source", "observed_at"),
+        sa.Index("idx_matching_observations_observed_at", "observed_at"),
+    )

@@ -11,14 +11,17 @@ interface KanbanColumnProps {
   column: PipelineColumn;
   colIndex: number;
   onCardClick?: (candidateId: string) => void;
+  disabled?: boolean;
 }
 
 export function KanbanColumn({
   column,
   colIndex,
   onCardClick,
+  disabled = false,
 }: KanbanColumnProps) {
   const baseCls = COL_CLS[column.stage] ?? "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/72";
+  const disabledCls = disabled ? "opacity-60 pointer-events-none" : "";
 
   return (
     <div
@@ -26,6 +29,7 @@ export function KanbanColumn({
         "flex w-[18rem] shrink-0 flex-col rounded-[1.25rem] border p-3.5 transition-colors duration-150",
         "kanban-column-enter",
         baseCls,
+        disabledCls,
       ]
         .filter(Boolean)
         .join(" ")}

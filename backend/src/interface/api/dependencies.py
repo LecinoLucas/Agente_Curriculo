@@ -61,3 +61,4 @@ def require_roles(*roles: UserRole):
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AdminOnly = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
 RecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.ADMIN))]
+InternalUser = Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.VIEWER))]

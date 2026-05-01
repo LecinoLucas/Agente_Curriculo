@@ -16,6 +16,7 @@ from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
     AnalysisResultModel,
+    MatchingObservationModel,
     PromptTemplateModel,
     ResumeJobMatchModel,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "AnalysisModel",
     "AnalysisResultModel",
     "ResumeJobMatchModel",
+    "MatchingObservationModel",
     "JobModel",
     "JobRequiredSkillModel",
     "SkillModel",

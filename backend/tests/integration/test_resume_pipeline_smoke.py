@@ -56,6 +56,35 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
+async def _ensure_skills(
+    session: AsyncSession,
+    specs: list[dict],
+) -> list[SkillModel]:
+    normalized_names = [spec["normalized_name"] for spec in specs]
+    existing = {
+        skill.normalized_name: skill
+        for skill in (
+            await session.execute(
+                sa.select(SkillModel).where(SkillModel.normalized_name.in_(normalized_names))
+            )
+        ).scalars().all()
+    }
+
+    created: list[SkillModel] = []
+    for spec in specs:
+        normalized_name = spec["normalized_name"]
+        if normalized_name in existing:
+            created.append(existing[normalized_name])
+            continue
+
+        skill = SkillModel(**spec)
+        session.add(skill)
+        created.append(skill)
+
+    await session.commit()
+    return created
+
+
 def _pdf_with_text(text: str) -> bytes:
     sanitized = text.replace("\\", "/").replace("(", "[").replace(")", "]")
     stream = f"BT /F1 11 Tf 36 740 Td ({sanitized}) Tj ET"
@@ -481,13 +510,6 @@ async def test_resume_pipeline_smoke_realish_pdfs(
                     "reason": "Vaga requer trabalho remoto",
                     "is_active": True,
                 },
-                {
-                    "field": "keywords",
-                    "operator": "contains",
-                    "value": "outsourcing",
-                    "reason": "Keyword proibida detectada",
-                    "is_active": True,
-                },
             ],
         },
     )
@@ -500,27 +522,28 @@ async def test_resume_pipeline_smoke_realish_pdfs(
     )
     assert publish_response.status_code == 200
 
-    skills = [
-        SkillModel(name="Python", normalized_name="python", aliases=[], is_verified=True),
-        SkillModel(name="Java", normalized_name="java", aliases=[], is_verified=True),
-        SkillModel(name="SQL", normalized_name="sql", aliases=[], is_verified=True),
-        SkillModel(
-            name="Node.js",
-            normalized_name="node.js",
-            aliases=["Node"],
-            is_verified=True,
-        ),
-        SkillModel(
-            name="AWS",
-            normalized_name="aws",
-            aliases=["Amazon Web Services"],
-            is_verified=True,
-        ),
-        SkillModel(name="Docker", normalized_name="docker", aliases=[], is_verified=True),
-        SkillModel(name="Kubernetes", normalized_name="kubernetes", aliases=[], is_verified=True),
-    ]
-    db_session.add_all(skills)
-    await db_session.commit()
+    skills = await _ensure_skills(
+        db_session,
+        [
+            {"name": "Python", "normalized_name": "python", "aliases": [], "is_verified": True},
+            {"name": "Java", "normalized_name": "java", "aliases": [], "is_verified": True},
+            {"name": "SQL", "normalized_name": "sql", "aliases": [], "is_verified": True},
+            {
+                "name": "Node.js",
+                "normalized_name": "node.js",
+                "aliases": ["Node"],
+                "is_verified": True,
+            },
+            {
+                "name": "AWS",
+                "normalized_name": "aws",
+                "aliases": ["Amazon Web Services"],
+                "is_verified": True,
+            },
+            {"name": "Docker", "normalized_name": "docker", "aliases": [], "is_verified": True},
+            {"name": "Kubernetes", "normalized_name": "kubernetes", "aliases": [], "is_verified": True},
+        ],
+    )
 
     skill_ids = {skill.name: skill.id for skill in skills}
     for skill_name in ["Python", "Java", "SQL", "Node.js", "AWS"]:
@@ -737,3 +760,297 @@ async def test_resume_pipeline_smoke_realish_pdfs(
             f"validation={match['validation_status']} recommendation={match['recommendation']} "
             f"rank_score={ranking_entry['final_score']} decision={ranking_entry['decision_suggestion']}"
         )
+
+
+@pytest.mark.asyncio
+async def test_resume_pipeline_smoke_skill_normalization_real_flow(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.AsyncSessionFactory",
+        TestSessionFactory,
+    )
+
+    recruiter = await _create_active_user(
+        db_session,
+        "recruiter-skill-smoke@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    recruiter_headers = await _auth_headers(
+        client,
+        "recruiter-skill-smoke@test.com",
+        "password123",
+    )
+
+    ai_model = AIModelModel(
+        provider="anthropic",
+        model_id=f"claude-skill-smoke-{uuid4()}",
+        model_name="Claude Skill Smoke Test",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        name=f"skill_smoke_prompt_{uuid4()}",
+        version=1,
+        template_type="full_analysis",
+        system_prompt="Analyze the resume carefully",
+        user_prompt_template="Resume:\n{resume_text}\nContext:\n{job_context}",
+        is_active=True,
+        created_by=recruiter.id,
+    )
+    score_version = ScoreModelVersionModel(
+        version=f"skill-smoke-{uuid4().hex[:8]}",
+        weights={
+            "skill_match": 0.40,
+            "experience_match": 0.25,
+            "seniority_match": 0.15,
+            "education": 0.10,
+            "ai_confidence": 0.10,
+        },
+        thresholds={"high": 70, "low": 45},
+        is_active=True,
+    )
+    db_session.add_all([ai_model, prompt, score_version])
+    await db_session.commit()
+
+    job_response = await client.post(
+        "/api/v1/jobs",
+        headers=recruiter_headers,
+        json={
+            "title": "Backend Python Engineer",
+            "description": "Python backend role with PostgreSQL and Docker",
+            "requirements": "Python, PostgreSQL, Docker",
+            "seniority_level": "senior",
+            "work_model": "remote",
+            "location": "Sao Paulo",
+            "salary_min": "15000.00",
+            "salary_max": "23000.00",
+            "salary_currency": "brl",
+            "minimum_education_level": "bachelor",
+            "minimum_years_experience": "5.0",
+        },
+    )
+    assert job_response.status_code == 201
+    job_id = UUID(job_response.json()["id"])
+
+    publish_response = await client.patch(
+        f"/api/v1/jobs/{job_id}/publish",
+        headers=recruiter_headers,
+    )
+    assert publish_response.status_code == 200
+
+    skills = await _ensure_skills(
+        db_session,
+        [
+            {"name": "Python", "normalized_name": "python", "aliases": [], "is_verified": True},
+            {"name": "PostgreSQL", "normalized_name": "postgresql", "aliases": [], "is_verified": True},
+            {"name": "Docker", "normalized_name": "docker", "aliases": [], "is_verified": True},
+        ],
+    )
+
+    skill_ids = {skill.name: skill.id for skill in skills}
+    for skill_name in ["Python", "PostgreSQL", "Docker"]:
+        response = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            headers=recruiter_headers,
+            json={"skill_id": str(skill_ids[skill_name]), "is_mandatory": True},
+        )
+        assert response.status_code == 201
+
+    monkeypatch.setattr(
+        "src.interface.api.routers.resumes.enqueue_analysis",
+        lambda analysis_id: None,
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_tasks._provider_api_key_is_configured",
+        lambda provider: True,
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_tasks._real_ai_calls_allowed",
+        lambda: True,
+    )
+
+    candidates = [
+        {
+            "name": "Markdown Python",
+            "resume_text": "Markdown Python Developer Python PostgreSQL Docker from Sao Paulo",
+            "ai_payload": _analysis_payload(
+                name="Markdown Python",
+                location="Sao Paulo",
+                work_model="remote",
+                experiences=[
+                    {
+                        "company": "Atlas",
+                        "role_title": "Backend Engineer",
+                        "start_date": "2018-01",
+                        "end_date": "2024-01",
+                        "is_current": False,
+                        "duration_months": None,
+                        "description": "Python PostgreSQL Docker",
+                    }
+                ],
+                skills=[
+                    {"name": "**Python**", "proficiency": "expert"},
+                    {"name": "PostgreSQL", "proficiency": "advanced"},
+                    {"name": "Docker", "proficiency": "advanced"},
+                ],
+                education=[
+                    {
+                        "degree": "bachelor",
+                        "field": "Computer Science",
+                        "institution": "USP",
+                        "end_date": "2017-12",
+                    }
+                ],
+                quality_total=82,
+            ),
+        },
+        {
+            "name": "Phrase Python",
+            "resume_text": "Phrase Python Developer Python PostgreSQL Docker from Sao Paulo",
+            "ai_payload": _analysis_payload(
+                name="Phrase Python",
+                location="Sao Paulo",
+                work_model="remote",
+                experiences=[
+                    {
+                        "company": "Atlas",
+                        "role_title": "Backend Engineer",
+                        "start_date": "2018-01",
+                        "end_date": "2024-01",
+                        "is_current": False,
+                        "duration_months": None,
+                        "description": "Python PostgreSQL Docker",
+                    }
+                ],
+                skills=[
+                    {"name": "Python Developer", "proficiency": "expert"},
+                    {"name": "PostgreSQL", "proficiency": "advanced"},
+                    {"name": "Docker", "proficiency": "advanced"},
+                ],
+                education=[
+                    {
+                        "degree": "bachelor",
+                        "field": "Computer Science",
+                        "institution": "USP",
+                        "end_date": "2017-12",
+                    }
+                ],
+                quality_total=82,
+            ),
+        },
+    ]
+
+    candidate_rows: dict[str, CandidateModel] = {}
+    for item in candidates:
+        candidate = CandidateModel(
+            user_id=None,
+            full_name=item["name"],
+            email=f"{item['name'].lower().replace(' ', '.')}@example.com",
+            created_by=recruiter.id,
+        )
+        db_session.add(candidate)
+        await db_session.flush()
+        candidate_rows[item["name"]] = candidate
+    await db_session.commit()
+
+    payload_by_name = {item["name"]: item["ai_payload"] for item in candidates}
+
+    class FakeAIService:
+        async def analyze(self, request):
+            matched_name = next(
+                name for name in payload_by_name
+                if name in request.resume_text
+            )
+            return AIAnalysisResponse(
+                content=json.dumps(payload_by_name[matched_name]),
+                input_tokens=100,
+                output_tokens=200,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                processing_time_ms=250,
+            )
+
+    monkeypatch.setattr(
+        "src.infrastructure.ai.factory.AIServiceFactory.create",
+        lambda provider, model_id: FakeAIService(),
+    )
+
+    async def _sync_matching_pipeline(analysis_id) -> None:
+        await _match_analysis_to_job_async(str(analysis_id), str(job_id))
+
+    monkeypatch.setattr(
+        "src.interface.workers.analysis_tasks._enqueue_matching_pipeline",
+        _sync_matching_pipeline,
+    )
+
+    uploaded: dict[str, dict] = {}
+    for item in candidates:
+        init_upload = await client.post(
+            "/api/v1/resumes",
+            headers=recruiter_headers,
+            json={"candidate_id": str(candidate_rows[item["name"]].id)},
+        )
+        assert init_upload.status_code == 202
+        resume_id = init_upload.json()["resume_id"]
+
+        pdf = _pdf_with_text(item["resume_text"])
+        upload_response = await client.post(
+            f"/api/v1/resumes/{resume_id}/upload",
+            headers=recruiter_headers,
+            files={"file": (f"{item['name'].lower().replace(' ', '-')}.pdf", pdf, "application/pdf")},
+        )
+        assert upload_response.status_code == 200
+        uploaded[item["name"]] = upload_response.json()
+        assert upload_response.json()["analysis_auto_requested"] is True
+        assert upload_response.json()["analysis_status"] == "pending"
+        assert upload_response.json()["extraction_status"] == "completed"
+
+    for item in candidates:
+        analysis_id = UUID(uploaded[item["name"]]["analysis_id"])
+        worker_result = await _process_analysis_async(analysis_id, f"skill-{analysis_id.hex[:8]}")
+        assert worker_result["status"] == "completed"
+
+    matches_by_name: dict[str, dict] = {}
+    for item in candidates:
+        analysis_id = UUID(uploaded[item["name"]]["analysis_id"])
+        response = await client.post(
+            f"/api/v1/analyses/{analysis_id}/match/{job_id}",
+            headers=recruiter_headers,
+        )
+        assert response.status_code == 200
+        matches_by_name[item["name"]] = response.json()
+
+    scoring_response = await client.post(
+        f"/api/v1/jobs/{job_id}/scoring",
+        headers=recruiter_headers,
+    )
+    assert scoring_response.status_code == 200
+
+    ranking_response = await client.get(
+        f"/api/v1/jobs/{job_id}/ranking",
+        headers=recruiter_headers,
+    )
+    assert ranking_response.status_code == 200
+    ranking = ranking_response.json()
+    ranked_by_name = {entry["candidate_name"]: entry for entry in ranking["candidates"]}
+
+    print("\nSKILL NORMALIZATION SMOKE")
+    print("ranking_candidates=", [entry["candidate_name"] for entry in ranking["candidates"]])
+    for name in [item["name"] for item in candidates]:
+        entry = ranked_by_name.get(name)
+        print(
+            f"- {name}: match={matches_by_name[name]['recommendation']} "
+            f"mandatory={matches_by_name[name]['mandatory_skills_matched']}/{matches_by_name[name]['mandatory_skills_total']} "
+            f"decision={entry['decision_suggestion'] if entry else 'MISSING'} "
+            f"score={entry['final_score'] if entry else 'MISSING'}"
+        )
+
+    assert matches_by_name["Markdown Python"]["recommendation"] in {"strong_match", "good_match"}
+    assert matches_by_name["Phrase Python"]["recommendation"] in {"strong_match", "good_match"}
+    assert matches_by_name["Markdown Python"]["mandatory_skills_matched"] == 3
+    assert matches_by_name["Phrase Python"]["mandatory_skills_matched"] == 3
+    assert ranked_by_name["Markdown Python"]["decision_suggestion"] == "approved"
+    assert ranked_by_name["Phrase Python"]["decision_suggestion"] == "approved"

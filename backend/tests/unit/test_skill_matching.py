@@ -58,11 +58,26 @@ class TestSkillMatches:
         assert _skill_matches("  python  ", "python") is True
         assert _skill_matches("python", "  python  ") is True
 
+    def test_exact_match_with_markdown(self):
+        """Should ignore common markdown emphasis markers."""
+        assert _skill_matches("**Python**", "Python") is True
+        assert _skill_matches("Python", "**Python**") is True
+
     def test_exact_no_match_different_skills(self):
         """Different skills should not match."""
         assert _skill_matches("Java", "JavaScript") is False
         assert _skill_matches("Python", "Ruby") is False
         assert _skill_matches("Go", "Rust") is False
+
+    def test_phrase_and_token_match(self):
+        """Should match real-world skill phrases without changing score rules."""
+        assert _skill_matches("Python", "Python Developer") is True
+        assert _skill_matches("Python Developer", "Python") is True
+
+    def test_phrase_match_does_not_create_false_positive(self):
+        """Substring-like matching must not collapse distinct skills."""
+        assert _skill_matches("Python", "Java") is False
+        assert _skill_matches("Java", "JavaScript") is False
 
     # ── Strategy 2: Alias Match ─────────────────────────────────────────────
 

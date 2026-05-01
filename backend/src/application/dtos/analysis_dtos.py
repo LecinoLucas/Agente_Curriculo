@@ -81,3 +81,4 @@ class MatchResumeToJobResult:
     bonus_skills: list[str]
     match_summary: str
     score_breakdown: dict[str, Any]
+    engine_used: str = "legacy"

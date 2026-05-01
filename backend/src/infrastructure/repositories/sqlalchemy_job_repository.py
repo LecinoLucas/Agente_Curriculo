@@ -28,6 +28,25 @@ class SQLAlchemyJobRepository:
             sa.select(JobModel).where(JobModel.id == job_id, JobModel.deleted_at.is_(None))
         )
 
+    async def find_active_by_identity(
+        self,
+        *,
+        title: str,
+        job_area: str | None,
+        location: str | None,
+    ) -> JobModel | None:
+        normalized_title = title.strip().lower()
+        normalized_job_area = (job_area or "").strip().lower()
+        normalized_location = (location or "").strip().lower()
+        return await self._session.scalar(
+            sa.select(JobModel).where(
+                JobModel.deleted_at.is_(None),
+                sa.func.lower(sa.func.trim(JobModel.title)) == normalized_title,
+                sa.func.lower(sa.func.trim(sa.func.coalesce(JobModel.job_area, ""))) == normalized_job_area,
+                sa.func.lower(sa.func.trim(sa.func.coalesce(JobModel.location, ""))) == normalized_location,
+            )
+        )
+
     async def list_active(self, page: int, page_size: int) -> tuple[list[JobModel], int]:
         total = int(
             (
@@ -59,7 +78,13 @@ class SQLAlchemyJobRepository:
 
     async def list_required_skill_rows(self, job_id: UUID):
         result = await self._session.execute(
-            sa.select(JobRequiredSkillModel, SkillModel.name.label("skill_name"))
+            sa.select(
+                JobRequiredSkillModel,
+                SkillModel.name.label("skill_name"),
+                SkillModel.normalized_name.label("skill_normalized_name"),
+                SkillModel.category.label("skill_category"),
+                SkillModel.aliases.label("skill_aliases"),
+            )
             .join(SkillModel, JobRequiredSkillModel.skill_id == SkillModel.id)
             .where(JobRequiredSkillModel.job_id == job_id, SkillModel.deleted_at.is_(None))
             .order_by(JobRequiredSkillModel.is_mandatory.desc(), SkillModel.name.asc())
@@ -121,3 +146,28 @@ class SQLAlchemyJobRepository:
             .limit(50)
         )
         return [dict(row) for row in result.mappings().all()]
+
+    async def list_completed_unmatched_analyses(
+        self,
+        job_id: UUID,
+        limit: int | None = None,
+    ) -> list[AnalysisModel]:
+        """List all completed analyses that haven't been matched to this job yet."""
+        query = (
+            sa.select(AnalysisModel)
+            .where(
+                AnalysisModel.status == "completed",
+                ~sa.exists(
+                    sa.select(1).where(
+                        ResumeJobMatchModel.analysis_id == AnalysisModel.id,
+                        ResumeJobMatchModel.job_id == job_id,
+                    )
+                ),
+            )
+            .order_by(AnalysisModel.created_at.desc())
+        )
+        if limit:
+            query = query.limit(limit)
+
+        result = await self._session.execute(query)
+        return list(result.scalars().all())

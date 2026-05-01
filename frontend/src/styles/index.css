@@ -274,6 +274,30 @@
 }
 
 @layer utilities {
+  .ui-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border-strong)) hsl(var(--surface-muted));
+  }
+
+  .ui-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .ui-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--surface-muted));
+  }
+
+  .ui-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--border-strong));
+    border: 2px solid hsl(var(--surface-muted));
+    border-radius: 999px;
+  }
+
+  .ui-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--text-muted));
+  }
+
   /* ── Dark-theme overrides for hardcoded Tailwind classes ─────────── */
   :root[data-theme="dark"] .bg-white {
     background-color: hsl(var(--surface)) !important;

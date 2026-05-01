@@ -26,6 +26,8 @@ def enqueue_dev_analysis(analysis_id: UUID) -> None:
     def _log_task_result(done_task: asyncio.Task[None]) -> None:
         try:
             done_task.result()
+        except asyncio.CancelledError:
+            pass
         except Exception as exc:  # pragma: no cover - only for background failures
             logger.exception(
                 "analysis.dev.background_failed",

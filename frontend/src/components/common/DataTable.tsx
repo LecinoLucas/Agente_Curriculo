@@ -9,6 +9,8 @@ export type DataTableColumn = {
   className?: string;
 };
 
+type TableRowElement = React.ReactElement<React.HTMLAttributes<HTMLTableRowElement>, "tr">;
+
 type DataTableProps<T> = {
   columns: DataTableColumn[];
   items: T[];
@@ -20,7 +22,7 @@ type DataTableProps<T> = {
     description?: string;
     action?: { label: string; onClick: () => void };
   };
-  renderRow: (item: T) => React.ReactNode;
+  renderRow: (item: T) => TableRowElement;
   rowKey?: (item: T) => React.Key;
   footer?: React.ReactNode;
   skeletonRows?: number;

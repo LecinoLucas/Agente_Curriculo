@@ -1,5 +1,6 @@
 from src.interface.api.routers import (
     admin_data_quality,
+    admin_scoring_comparison,
     ai_models,
     analyses,
     auth,
@@ -16,6 +17,7 @@ from src.interface.api.routers import (
 
 __all__ = [
     "admin_data_quality",
+    "admin_scoring_comparison",
     "auth",
     "users",
     "candidates",

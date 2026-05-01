@@ -41,12 +41,40 @@ SCHEMA_UPGRADES = (
 )
 
 
+async def ensure_audit_logs_default_partition(connection) -> None:
+    result = await connection.execute(
+        text(
+            """
+            SELECT 1
+            FROM pg_inherits inh
+            JOIN pg_class child ON child.oid = inh.inhrelid
+            JOIN pg_class parent ON parent.oid = inh.inhparent
+            WHERE parent.relname = 'audit_logs'
+              AND child.relname = 'audit_logs_default'
+            LIMIT 1
+            """
+        )
+    )
+
+    if result.scalar() is None:
+        await connection.execute(
+            text(
+                """
+                CREATE TABLE audit_logs_default
+                PARTITION OF audit_logs
+                DEFAULT
+                """
+            )
+        )
+
+
 async def main() -> None:
     async with engine.begin() as connection:
         for statement in EXTENSIONS:
             await connection.execute(text(statement))
 
         await connection.run_sync(Base.metadata.create_all)
+        await ensure_audit_logs_default_partition(connection)
 
         for statement in SCHEMA_UPGRADES:
             await connection.execute(text(statement))

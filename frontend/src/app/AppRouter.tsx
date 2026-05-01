@@ -12,8 +12,18 @@ const PipelinePage = lazy(() => import("../pages/PipelinePage").then((m) => ({ d
 const ProfilePage = lazy(() => import("../pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
 const CandidatesPage = lazy(() => import("../pages/CandidatesPage").then((m) => ({ default: m.CandidatesPage })));
 const AdminPage = lazy(() => import("../pages/AdminPage").then((m) => ({ default: m.AdminPage })));
+const AdminScoringComparisonPage = lazy(() =>
+  import("../pages/AdminScoringComparisonPage").then((m) => ({ default: m.AdminScoringComparisonPage })),
+);
+const AdminMatchingObservabilityPage = lazy(() =>
+  import("../pages/AdminMatchingObservabilityPage").then((m) => ({ default: m.AdminMatchingObservabilityPage })),
+);
+const AdminJobImportPage = lazy(() =>
+  import("../pages/AdminJobImportPage").then((m) => ({ default: m.AdminJobImportPage })),
+);
 const UsersPage = lazy(() => import("../pages/UsersPage").then((m) => ({ default: m.UsersPage })));
 const AnalisesIaPage = lazy(() => import("../pages/AnalisesIaPage").then((m) => ({ default: m.AnalisesIaPage })));
+const SkillsPage = lazy(() => import("../pages/SkillsPage").then((m) => ({ default: m.SkillsPage })));
 const ChangePasswordPage = lazy(() => import("../pages/ChangePasswordPage").then((m) => ({ default: m.ChangePasswordPage })));
 
 function RouteFallback() {
@@ -144,6 +154,40 @@ export function AppRouter() {
               <ProtectedRoute allowedRoles={["admin"]}>
                 {/* role="candidate" BLOCKED: User management */}
                 <UsersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/skills"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                {/* role="candidate" BLOCKED: Skill management */}
+                <SkillsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/comparacao-scores"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                {/* role="candidate" BLOCKED: Admin-only scoring review */}
+                <AdminScoringComparisonPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/qualidade-matching"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminMatchingObservabilityPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/importar-vagas"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <AdminJobImportPage />
               </ProtectedRoute>
             }
           />

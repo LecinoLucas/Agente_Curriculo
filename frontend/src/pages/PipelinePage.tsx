@@ -35,6 +35,11 @@ const MAIN_STAGES: ReadonlyArray<PipelineStage> = [
   "hired",
 ];
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function canUsePipeline(status: string | undefined) {
+  return status === "published" || status === "paused";
+}
+
 // ── PipelinePage ───────────────────────────────────────────────────────────────
 
 export function PipelinePage() {
@@ -188,6 +193,12 @@ export function PipelinePage() {
   const isBoardRefreshing = boardLoading && board !== null;
   const showInitialBoardLoading = boardLoading && board === null;
   const isRankingRefreshing = rankingLoading && ranking !== null;
+
+  // Status flags
+  const isDraft = selectedJob?.status === "draft";
+  const canUse = canUsePipeline(selectedJob?.status);
+  const isReadOnly = selectedJob?.status === "closed";
+
   const activeJobAcceptsCandidates =
     selectedJob?.status === "published" || selectedJob?.status === "paused";
   const boardLayoutClass = rankingCollapsed
@@ -215,8 +226,13 @@ export function PipelinePage() {
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowNewCandidate(true)}
-            className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[hsl(var(--primary))]/90"
+            onClick={() => canUse && setShowNewCandidate(true)}
+            disabled={!canUse}
+            className={`rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition ${
+              canUse
+                ? "bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 cursor-pointer"
+                : "bg-[hsl(var(--primary))]/50 cursor-not-allowed"
+            }`}
           >
             Novo candidato
           </button>
@@ -288,7 +304,7 @@ export function PipelinePage() {
             ) : null}
           </div>
 
-          {selectedJob && !activeJobAcceptsCandidates ? (
+          {selectedJob && !activeJobAcceptsCandidates && !isDraft ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Esta vaga está em status <strong>{formatJobStatus(selectedJob.status)}</strong>. Novos candidatos e vínculos de pipeline só são permitidos para vagas publicadas ou pausadas.
             </div>
@@ -331,8 +347,15 @@ export function PipelinePage() {
 
       {/* ── Board section ── */}
       {activeJobId ? (
-        <div className={boardLayoutClass}>
-          <div className="ui-card overflow-hidden rounded-3xl p-4 sm:p-5">
+        isDraft ? (
+          <EmptyState
+            icon="📝"
+            title="Publique a vaga para iniciar o pipeline"
+            description="Você precisa publicar esta vaga para adicionar candidatos e acompanhá-los no pipeline."
+          />
+        ) : (
+          <div className={boardLayoutClass}>
+            <div className="ui-card overflow-hidden rounded-3xl p-4 sm:p-5">
           {/* Board header */}
             <div className="mb-4 flex flex-col gap-3 border-b border-[hsl(var(--border))] pb-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
@@ -395,6 +418,7 @@ export function PipelinePage() {
                       column={col}
                       colIndex={idx}
                       onCardClick={openCandidate}
+                      disabled={!canUse}
                     />
                   ))}
 
@@ -405,6 +429,7 @@ export function PipelinePage() {
                         column={rejectedCol}
                         colIndex={mainCols.length}
                         onCardClick={openCandidate}
+                        disabled={!canUse}
                       />
                     </>
                   ) : null}
@@ -458,7 +483,8 @@ export function PipelinePage() {
               }
             />
           ) : null}
-        </div>
+          </div>
+        )
       ) : null}
 
       {/* ── New candidate modal ── */}

@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -129,3 +130,10 @@ class AnalysisMatchResponse(BaseModel):
     validation_status: str = "pass"  # "pass" | "fail" | "unknown"
     missing_evidence: list[str] = Field(default_factory=list)  # ["education"] or ["experience"]
     rejection_reasons: list[str] = Field(default_factory=list)  # Detailed failure messages
+    engine_used: str = "legacy"
+    score_breakdown: dict[str, Any] = Field(default_factory=dict)
+    strengths: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    risk_points: list[str] = Field(default_factory=list)
+    explanation: str | None = None
+    behavioral_indicators: list[str] = Field(default_factory=list)

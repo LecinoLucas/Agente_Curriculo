@@ -3,9 +3,12 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.infrastructure.database.base import Base
+
+JSONB_COMPAT = JSONB().with_variant(sa.JSON(), "sqlite")
 
 
 class ResumeModel(Base):
@@ -79,6 +82,8 @@ class ResumeVersionModel(Base):
     extraction_status: Mapped[str] = mapped_column(
         sa.String(50), nullable=False, server_default="pending"
     )
+    candidate_profile_json: Mapped[Optional[dict]] = mapped_column(JSONB_COMPAT)
+    candidate_profile_hash: Mapped[Optional[str]] = mapped_column(sa.String(64))
     extraction_error: Mapped[Optional[str]] = mapped_column(sa.Text)
     page_count: Mapped[Optional[int]] = mapped_column(sa.Integer)
     word_count: Mapped[Optional[int]] = mapped_column(sa.Integer)

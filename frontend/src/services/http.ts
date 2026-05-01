@@ -9,6 +9,8 @@ export class HttpError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    public data?: unknown,
+    public detail?: unknown,
   ) {
     super(message);
     this.name = "HttpError";
@@ -34,16 +36,30 @@ function statusFallback(status: number): string {
 
 function resolveError(status: number, payload: unknown): HttpError {
   if (typeof payload === "object" && payload !== null) {
-    if ("detail" in payload) {
-      const detail = String((payload as { detail: unknown }).detail);
-      return new HttpError(status, detail);
+    if (status === 422) {
+      console.error("[422 Validation Error]", JSON.stringify(payload, null, 2));
     }
-    if ("error" in payload) {
-      const errorObj = (payload as { error: { code?: string; message?: string } }).error;
-      return new HttpError(status, errorObj.message ?? statusFallback(status), errorObj.code);
+
+    const payloadRecord = payload as Record<string, unknown>;
+    const detail = payloadRecord.detail;
+    if (detail !== undefined) {
+      const message = typeof detail === "string" && detail.trim() ? detail : statusFallback(status);
+      return new HttpError(status, message, undefined, payload, detail);
+    }
+
+    if ("error" in payloadRecord) {
+      const errorObj = payloadRecord.error as { code?: string; message?: string; detail?: unknown };
+      return new HttpError(
+        status,
+        errorObj.message ?? statusFallback(status),
+        errorObj.code,
+        payload,
+        errorObj.detail,
+      );
     }
   }
-  return new HttpError(status, statusFallback(status));
+
+  return new HttpError(status, statusFallback(status), undefined, payload);
 }
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -66,7 +82,7 @@ async function refreshToken(): Promise<void> {
 
       if (!response.ok) {
         tokenStorage.clear();
-        throw new HttpError(401, "Sessão expirada. Faça login novamente.");
+        throw new HttpError(401, "Sessão expirada. Faça login novamente.", undefined, null);
       }
 
       const payload = (await response.json()) as { access_token: string };
@@ -108,8 +124,8 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
       credentials: "include",
       body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
     });
-  } catch {
-    throw new HttpError(0, "Sem conexão com o servidor. Verifique sua internet.");
+  } catch (error) {
+    throw new HttpError(0, "Sem conexão com o servidor. Verifique sua internet.", undefined, error);
   }
 
   if (response.status === 401 && withAuth && retryOnUnauthorized && !path.includes("/auth/refresh")) {

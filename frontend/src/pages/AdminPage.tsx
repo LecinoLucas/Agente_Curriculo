@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, ShieldCheck, Users } from "lucide-react";
+import { CheckCircle2, GitCompareArrows, ShieldCheck, Users, Target, FileJson } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,9 @@ const SCREENS: { label: string; path: string; roles: Role[] }[] = [
   { label: "Análises IA",   path: "/analises-ia", roles: ["admin", "recruiter"] },
   { label: "Meu perfil",    path: "/perfil",      roles: ["admin", "recruiter", "candidate", "viewer"] },
   { label: "Administração", path: "/admin",       roles: ["admin"] },
+  { label: "Importar vagas", path: "/admin/importar-vagas", roles: ["admin"] },
+  { label: "Comparação de scores", path: "/admin/comparacao-scores", roles: ["admin"] },
+  { label: "Qualidade do matching", path: "/admin/qualidade-matching", roles: ["admin"] },
 ];
 
 // ── AdminPage ────────────────────────────────────────────────────────
@@ -52,7 +55,7 @@ export function AdminPage() {
       </div>
 
       {/* ── Quick actions ───────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card className="border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm dark:border-indigo-900/30 dark:from-indigo-950/30 dark:to-blue-950/30">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -85,6 +88,57 @@ export function AdminPage() {
             <p className="text-sm text-gray-500">
               Consulte a matriz de permissões abaixo para ver as regras por perfil.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 shadow-sm dark:border-amber-900/30 dark:from-amber-950/30 dark:to-orange-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <GitCompareArrows className="h-4 w-4 text-amber-600" />
+              Comparar scores
+            </CardTitle>
+            <CardDescription>
+              Visualize legado vs adaptativo com um painel auditável para calibração interna.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate("/admin/comparacao-scores")}>
+              Abrir painel de comparação
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-cyan-100 bg-gradient-to-br from-cyan-50 to-sky-50 shadow-sm dark:border-cyan-900/30 dark:from-cyan-950/30 dark:to-sky-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileJson className="h-4 w-4 text-cyan-600" />
+              Importar vagas via JSON
+            </CardTitle>
+            <CardDescription>
+              Cole um JSON de vagas, detecte duplicadas e distribua automaticamente entre criação e atualização.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate("/admin/importar-vagas")}>
+              Abrir importador inteligente
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm dark:border-emerald-900/30 dark:from-emerald-950/30 dark:to-teal-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Target className="h-4 w-4 text-emerald-600" />
+              Qualidade do matching
+            </CardTitle>
+            <CardDescription>
+              Resumo operacional de score, confiança, feedback negativo e equivalências mais frequentes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate("/admin/qualidade-matching")}>
+              Abrir painel de qualidade
+            </Button>
           </CardContent>
         </Card>
       </div>

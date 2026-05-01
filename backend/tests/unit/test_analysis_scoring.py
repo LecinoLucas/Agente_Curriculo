@@ -139,6 +139,16 @@ async def test_exact_skill_match() -> None:
 
 
 @pytest.mark.asyncio
+async def test_skill_match_ignores_markdown_and_role_text() -> None:
+    job = _make_job()
+    rows = [_make_row("Python", is_mandatory=True)]
+    result = _make_result(skills=["**Python** Developer"])
+    service = _make_service(job, rows)
+    resp = await service._match_details_to_job(_make_details(result), job.id)
+    assert resp.mandatory_skills_matched == 1
+
+
+@pytest.mark.asyncio
 async def test_java_does_not_match_javascript() -> None:
     """java in candidate skills must NOT match javascript job requirement."""
     job = _make_job()

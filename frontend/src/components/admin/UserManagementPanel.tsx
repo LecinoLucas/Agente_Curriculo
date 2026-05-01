@@ -10,6 +10,7 @@ import {
   PatchUserPayload,
   ResetUserPasswordPayload,
 } from "../../services/usersService";
+import { formatErrorDetails, formatErrorForToast, handleApiError } from "../../services/errorHandler";
 import { toast } from "../../services/toast";
 import { Paginated } from "../../types/api";
 import { UserSummary } from "../../types/domain";
@@ -309,6 +310,10 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  function toFriendlyText(error: unknown): string {
+    return formatErrorDetails(handleApiError(error)).join(" ");
+  }
+
   async function load() {
     setLoading(true);
     setLoadError(null);
@@ -323,7 +328,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
         ),
       );
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Falha ao carregar usuários");
+      setLoadError(toFriendlyText(err) || "Falha ao carregar usuários");
     } finally {
       setLoading(false);
     }
@@ -418,7 +423,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
       setPage(1);
       await load();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Falha ao criar usuário");
+      setCreateError(toFriendlyText(err) || "Falha ao criar usuário");
     } finally {
       setCreateSaving(false);
     }
@@ -457,7 +462,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
       });
       await load();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : "Falha ao atualizar usuário");
+      setEditError(toFriendlyText(err) || "Falha ao atualizar usuário");
     } finally {
       setEditSaving(false);
     }
@@ -484,7 +489,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
       setResetPasswordVisible(false);
       await load();
     } catch (err) {
-      setResetError(err instanceof Error ? err.message : "Falha ao redefinir senha");
+      setResetError(toFriendlyText(err) || "Falha ao redefinir senha");
     } finally {
       setResetSaving(false);
     }
@@ -496,7 +501,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
       toast.success("Usuário ativado");
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao ativar usuário");
+      toast.error(formatErrorForToast(handleApiError(err)));
     }
   }
 
@@ -506,7 +511,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
       toast.success("Usuário desativado");
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao desativar usuário");
+      toast.error(formatErrorForToast(handleApiError(err)));
     }
   }
 
@@ -519,7 +524,7 @@ export function UserManagementPanel({ showSummaryCards = true }: UserManagementP
       setConfirmDeleteId(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao excluir usuário");
+      toast.error(formatErrorForToast(handleApiError(err)));
       setConfirmDeleteId(null);
     }
   }

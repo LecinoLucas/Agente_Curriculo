@@ -115,6 +115,16 @@ export type Skill = {
   created_at: string;
 };
 
+export type JobQualityResult = {
+  job_id?: string | null;
+  quality_score: number;
+  status: "weak" | "acceptable" | "good";
+  can_publish: boolean;
+  missing_fields: string[];
+  suggestions: string[];
+  warnings: string[];
+};
+
 export type JobSkill = {
   id: string;
   job_id: string;
@@ -239,9 +249,27 @@ export type Job = {
   salary_min: number | null;
   salary_max: number | null;
   salary_currency: string;
+  job_area: string | null;
+  responsibilities: string | null;
+  experience_context: string | null;
+  behavioral_requirements: string[];
+  priority: "low" | "normal" | "high" | "urgent";
+  quality_score: number | null;
+  quality_status: "weak" | "acceptable" | "good" | null;
   created_by: string;
   created_at: string;
   updated_at: string;
+};
+
+export type MatchingFeedback = {
+  job_id: string;
+  candidate_id: string;
+  liked: boolean | null;
+  rejected: boolean | null;
+  hired: boolean | null;
+  comment: string | null;
+  feedback_by: string | null;
+  feedback_at: string | null;
 };
 
 export type RankingReasonCode = {

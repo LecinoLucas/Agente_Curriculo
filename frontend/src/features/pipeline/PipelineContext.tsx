@@ -11,6 +11,7 @@ import {
 
 import { analysisService } from "../../services/analysisService";
 import { candidatesService } from "../../services/candidatesService";
+import { formatErrorDetails, handleApiError } from "../../services/errorHandler";
 import { getJobPipeline, listJobs } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import {
@@ -124,6 +125,11 @@ function pollingDelay(staleCount: number): number {
   return 15000;
 }
 
+function toFriendlyText(error: unknown, fallback: string): string {
+  const detail = formatErrorDetails(handleApiError(error)).join(" ");
+  return detail || fallback;
+}
+
 // ── Context ────────────────────────────────────────────────────────────────────
 
 const PipelineContext = createContext<PipelineContextValue | undefined>(undefined);
@@ -215,7 +221,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         setState((prev) => ({
           ...prev,
           jobsLoading: false,
-          jobsError: err instanceof Error ? err.message : "Falha ao carregar vagas",
+          jobsError: toFriendlyText(err, "Falha ao carregar vagas"),
         }));
       } finally {
         jobsFetchInFlightRef.current = null;
@@ -276,7 +282,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       setState((prev) => ({
         ...prev,
         boardLoading: false,
-        boardError: err instanceof Error ? err.message : "Falha ao carregar pipeline",
+        boardError: toFriendlyText(err, "Falha ao carregar pipeline"),
       }));
     }
   }, [fetchBoard]); // stable
@@ -447,8 +453,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           ? {
               ...prev,
               candidateLoading: false,
-              candidateError:
-                err instanceof Error ? err.message : "Falha ao carregar candidato",
+              candidateError: toFriendlyText(err, "Falha ao carregar candidato"),
             }
           : prev,
       );

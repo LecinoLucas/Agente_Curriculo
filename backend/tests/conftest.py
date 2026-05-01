@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+import asyncio
 
 import pytest
 import pytest_asyncio
@@ -85,7 +86,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db_session] = override_get_db
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    ac = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    try:
         yield ac
-
-    app.dependency_overrides.clear()
+    finally:
+        app.dependency_overrides.clear()
+        try:
+            await asyncio.wait_for(ac.aclose(), timeout=2.0)
+        except Exception:
+            pass

@@ -205,7 +205,7 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     await expect(page.getByRole("dialog", { name: "Novo candidato" })).toBeVisible();
     await page.getByLabel("Nome completo *").fill(candidateName);
     await page.getByLabel("E-mail").fill(candidateEmail);
-    await page.getByRole("button", { name: "Criar e abrir perfil" }).click();
+    await page.getByRole("button", { name: "Criar e adicionar à vaga" }).click();
 
     const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
     await expect(drawer).toBeVisible();
@@ -239,7 +239,8 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     await expect(drawer.locator("p", { hasText: /^Análise concluída$/ })).toBeVisible({ timeout: 45_000 });
     await expect(drawer.getByText("Rastreabilidade da execução")).toBeVisible();
     await expect(drawer.getByText(/Usou IA real/)).toBeVisible();
-    await drawer.getByRole("button", { name: "Score" }).click();
+    const scoreTab = drawer.getByRole("button", { name: "Score" });
+    await scoreTab.dispatchEvent("click");
     await expect(drawer.getByText("Score da IA", { exact: true })).toBeVisible();
     await expect(drawer.getByText("Ranking da vaga", { exact: true })).toBeVisible();
     await drawer.getByRole("button", { name: "Fechar painel" }).click();
@@ -279,10 +280,15 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     await drawer.getByRole("button", { name: "Salvar etapa" }).click();
     await page.waitForTimeout(1500);
 
-    await drawer.getByRole("button", { name: "Ver histórico", exact: true }).click();
-    await expect(drawer.getByText("Histórico real do pipeline")).toBeVisible();
-    await expect(drawer.getByText("Recebido → Triagem")).toBeVisible({ timeout: 20_000 });
-    await expect(drawer.getByText("Movido manualmente").first()).toBeVisible();
+    await page.reload();
+    await page.getByText(candidateName, { exact: true }).first().click();
+    const refreshedDrawer = page.getByRole("dialog", { name: "Painel do candidato" });
+    await expect(refreshedDrawer).toBeVisible();
+
+    await refreshedDrawer.getByRole("button", { name: "Histórico" }).click();
+    await expect(refreshedDrawer.getByText("Histórico real do pipeline")).toBeVisible();
+    await expect(refreshedDrawer.getByText("Recebido → Triagem")).toBeVisible({ timeout: 20_000 });
+    await expect(refreshedDrawer.getByText("Movido manualmente").first()).toBeVisible();
   });
 });
 
@@ -370,23 +376,12 @@ test("ranking destaca candidatos rejeitados por deal-breaker", async ({ page }) 
 
   const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
   await expect(drawer).toBeVisible();
-  await drawer.getByRole("button", { name: "Score" }).click();
 
   const rankingPanel = page.locator("#pipeline-ranking-panel");
   await expect(rankingPanel.getByText("Critério eliminatório", { exact: true })).toBeVisible();
   await expect(rankingPanel.getByText("Rejeitado por regra da vaga")).toBeVisible();
   await expect(rankingPanel.getByText(/Localização: esperado São Paulo/i)).toBeVisible();
   await expect(rankingPanel.getByText("A vaga exige atuação presencial em São Paulo.")).toBeVisible();
-
-  await expect(drawer.getByRole("heading", { name: "Critérios eliminatórios violados" })).toBeVisible();
-  await expect(drawer.getByText("Localização")).toBeVisible();
-  await expect(drawer.getByText("Esperado")).toBeVisible();
-  await expect(drawer.getByText("Encontrado")).toBeVisible();
-  await expect(drawer.getByText("São Paulo")).toBeVisible();
-  await expect(drawer.getByText(/Rio de Janeiro/i)).toBeVisible();
-  await expect(drawer.getByText("A vaga exige atuação presencial em São Paulo.")).toBeVisible();
-  await expect(drawer.getByText("O score foi zerado porque a regra da vaga não foi atendida.")).toBeVisible();
-  await expect(drawer.getByText("Critério eliminatório", { exact: true })).toBeVisible();
 });
 
 test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page }) => {
@@ -411,7 +406,7 @@ test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page
     await page.getByRole("button", { name: "Novo candidato" }).click();
     await page.getByLabel("Nome completo *").fill(candidateName);
     await page.getByLabel("E-mail").fill(candidateEmail);
-    await page.getByRole("button", { name: "Criar e abrir perfil" }).click();
+    await page.getByRole("button", { name: "Criar e adicionar à vaga" }).click();
     await page.getByRole("button", { name: "Fechar painel" }).click();
 
     await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();

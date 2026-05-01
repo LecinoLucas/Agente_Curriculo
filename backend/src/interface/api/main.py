@@ -23,6 +23,8 @@ from src.interface.api.middlewares.audit_middleware import AuditMiddleware
 from src.interface.api.middlewares.request_id_middleware import RequestIDMiddleware
 from src.interface.api.routers import (
     admin_data_quality,
+    admin_matching_observability,
+    admin_scoring_comparison,
     ai_models,
     analyses,
     auth,
@@ -74,6 +76,8 @@ app.add_middleware(
 _PREFIX = "/api/v1"
 
 app.include_router(admin_data_quality.router)
+app.include_router(admin_matching_observability.router)
+app.include_router(admin_scoring_comparison.router)
 app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(users.router, prefix=_PREFIX)
 app.include_router(internal_users.router, prefix=_PREFIX)
