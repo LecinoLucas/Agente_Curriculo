@@ -14,6 +14,7 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
 from src.infrastructure.database.models.job_model import JobModel
@@ -303,7 +304,11 @@ class CandidateRankingService:
     async def _fetch_persisted_scores(
         self, job_id: UUID, version_id: UUID
     ) -> list[dict]:
-        """Return persisted scores for this job + version, ordered by final_score DESC."""
+        """Return persisted scores for this job + version, ordered by final_score DESC.
+
+        Source of truth for candidate-job links: CandidateJobLinkModel.
+        Pipeline stage information is enrichment only (optional outer join).
+        """
         result = await self._session.execute(
             sa.select(
                 CandidateJobScoreModel.candidate_id,
@@ -321,12 +326,23 @@ class CandidateRankingService:
             )
             .select_from(CandidateJobScoreModel)
             .join(CandidateModel, CandidateModel.id == CandidateJobScoreModel.candidate_id)
+            # Source of truth: must have official candidate-job link
+            .join(
+                CandidateJobLinkModel,
+                sa.and_(
+                    CandidateJobLinkModel.candidate_id == CandidateJobScoreModel.candidate_id,
+                    CandidateJobLinkModel.job_id == CandidateJobScoreModel.job_id,
+                    CandidateJobLinkModel.deleted_at.is_(None),
+                ),
+            )
+            # Enrichment: pipeline stage (optional)
             .join(
                 CandidatePipelineModel,
                 sa.and_(
                     CandidatePipelineModel.candidate_id == CandidateJobScoreModel.candidate_id,
                     CandidatePipelineModel.job_id == CandidateJobScoreModel.job_id,
                 ),
+                isouter=True,
             )
             .where(
                 CandidateJobScoreModel.job_id == job_id,
@@ -334,6 +350,7 @@ class CandidateRankingService:
                 CandidateModel.deleted_at.is_(None),
                 # Exclude invalid candidates based on data quality
                 CandidateModel.data_quality_status.in_(["valid", "unknown"]),
+                # If pipeline entry exists, exclude "transferred" status
                 sa.or_(
                     CandidatePipelineModel.status.is_(None),
                     CandidatePipelineModel.status != "transferred",

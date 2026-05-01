@@ -9,6 +9,7 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
 )
+from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_pipeline_model import (
     CandidatePipelineModel,
@@ -148,6 +149,15 @@ class SQLAlchemyPipelineRepository:
                 latest_ai_status.c.ai_status,
             )
             .join(CandidateModel, CandidateModel.id == CandidatePipelineModel.candidate_id)
+            # Validate official candidate-job link exists (source of truth)
+            .join(
+                CandidateJobLinkModel,
+                sa.and_(
+                    CandidateJobLinkModel.candidate_id == CandidatePipelineModel.candidate_id,
+                    CandidateJobLinkModel.job_id == CandidatePipelineModel.job_id,
+                    CandidateJobLinkModel.deleted_at.is_(None),
+                ),
+            )
             .join(
                 latest_keywords,
                 latest_keywords.c.candidate_id == CandidatePipelineModel.candidate_id,
@@ -182,6 +192,30 @@ class SQLAlchemyPipelineRepository:
         candidate_id = await self._resolve_candidate_id_from_analysis(analysis_id)
         if candidate_id is None:
             return
+
+        # CRITICAL: Ensure official candidate-job link exists BEFORE creating pipeline entry
+        # This prevents inconsistency where pipeline exists but candidate_job_links doesn't
+        link = await self._session.scalar(
+            sa.select(CandidateJobLinkModel).where(
+                CandidateJobLinkModel.candidate_id == candidate_id,
+                CandidateJobLinkModel.job_id == job_id,
+                CandidateJobLinkModel.deleted_at.is_(None),
+            )
+        )
+        if not link:
+            # Create official link if it doesn't exist (source of truth)
+            now_link = datetime.now(UTC)
+            self._session.add(
+                CandidateJobLinkModel(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    status="active",
+                    source="ai_match",
+                    created_at=now_link,
+                    updated_at=now_link,
+                )
+            )
+            await self._session.flush()
 
         current = await self.find_entry(candidate_id, job_id)
         now = datetime.now(UTC)
@@ -279,6 +313,30 @@ class SQLAlchemyPipelineRepository:
         moved_by: UUID | None,
         updated_at: datetime,
     ) -> dict:
+        # CRITICAL: Ensure official candidate-job link exists BEFORE creating pipeline entry
+        # This prevents inconsistency where pipeline exists but candidate_job_links doesn't
+        link = await self._session.scalar(
+            sa.select(CandidateJobLinkModel).where(
+                CandidateJobLinkModel.candidate_id == candidate_id,
+                CandidateJobLinkModel.job_id == job_id,
+                CandidateJobLinkModel.deleted_at.is_(None),
+            )
+        )
+        if not link:
+            # Create official link if it doesn't exist (source of truth)
+            now_link = datetime.now(UTC)
+            self._session.add(
+                CandidateJobLinkModel(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    status="active",
+                    source="manual",
+                    created_at=now_link,
+                    updated_at=now_link,
+                )
+            )
+            await self._session.flush()
+
         result = await self._session.execute(
             sa.insert(CandidatePipelineModel)
             .values(
@@ -344,13 +402,38 @@ class SQLAlchemyPipelineRepository:
         When the entry is new, also records a StageTransition with
         trigger='auto_match'. On updates (score refresh), no transition is
         recorded because the stage did not change.
+
+        CRITICAL: Ensures CandidateJobLinkModel exists BEFORE creating pipeline entry
+        to maintain consistency (candidate_job_links is source of truth).
         """
         candidate_id = await self._resolve_candidate_id_from_analysis(analysis_id)
         if candidate_id is None:
             return
 
-        current = await self.find_entry(candidate_id, job_id)
+        # CRITICAL: Ensure official candidate-job link exists BEFORE pipeline entry
+        link = await self._session.scalar(
+            sa.select(CandidateJobLinkModel).where(
+                CandidateJobLinkModel.candidate_id == candidate_id,
+                CandidateJobLinkModel.job_id == job_id,
+                CandidateJobLinkModel.deleted_at.is_(None),
+            )
+        )
         now = datetime.now(UTC)
+        if not link:
+            # Create official link if it doesn't exist (source of truth)
+            self._session.add(
+                CandidateJobLinkModel(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    status="active",
+                    source="ai_match",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await self._session.flush()
+
+        current = await self.find_entry(candidate_id, job_id)
 
         if current is None:
             self._session.add(

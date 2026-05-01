@@ -61,6 +61,10 @@ class MatchingFeedbackPayload:
 class MatchingObservabilityService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        from src.infrastructure.repositories.sqlalchemy_candidate_job_link_repository import (
+            SQLAlchemyCandidateJobLinkRepository,
+        )
+        self._link_repo = SQLAlchemyCandidateJobLinkRepository(session)
 
     async def record_snapshot(
         self,
@@ -110,6 +114,11 @@ class MatchingObservabilityService:
         comment: str | None,
         feedback_by: UUID,
     ) -> MatchingObservationModel:
+        # Validate official candidate-job link exists (source of truth)
+        link = await self._link_repo.get_active_by_candidate_and_job(candidate_id, job_id)
+        if not link:
+            raise ValueError(f"Candidate {candidate_id} is not linked to job {job_id}")
+
         observation = await self._latest_ui_snapshot(job_id, candidate_id)
         now = datetime.now(UTC)
 

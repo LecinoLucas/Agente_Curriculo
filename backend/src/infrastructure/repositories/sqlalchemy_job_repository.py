@@ -8,6 +8,7 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -117,6 +118,11 @@ class SQLAlchemyJobRepository:
         await self._session.flush()
 
     async def list_candidate_ranking(self, job_id: UUID) -> list[dict]:
+        """List candidates linked to a job (official source: candidate_job_links).
+
+        Uses CandidateJobLinkModel as source of truth. Optionally enriches with
+        ResumeJobMatch and AnalysisResult scores if available.
+        """
         result = await self._session.execute(
             sa.select(
                 CandidateModel.id.label("candidate_id"),
@@ -128,18 +134,32 @@ class SQLAlchemyJobRepository:
                 AnalysisResultModel.seniority_level,
                 AnalysisResultModel.total_experience_years,
             )
-            .join(AnalysisModel, AnalysisModel.id == ResumeJobMatchModel.analysis_id)
-            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
-            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-            .join(CandidateModel, CandidateModel.id == ResumeModel.candidate_id)
+            # Source of truth: candidate_job_links
+            .join(CandidateJobLinkModel, (CandidateJobLinkModel.candidate_id == CandidateModel.id) & (CandidateJobLinkModel.job_id == job_id))
+            # Enrichment: latest ResumeJobMatch for this (candidate, job)
+            .join(
+                ResumeJobMatchModel,
+                (ResumeJobMatchModel.job_id == job_id) & (ResumeJobMatchModel.analysis_id == sa.select(AnalysisModel.id)
+                    .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+                    .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+                    .where(ResumeModel.candidate_id == CandidateModel.id)
+                    .order_by(AnalysisModel.updated_at.desc())
+                    .limit(1)
+                    .scalar_subquery()),
+                isouter=True,
+            )
+            .join(
+                AnalysisModel,
+                AnalysisModel.id == ResumeJobMatchModel.analysis_id,
+                isouter=True,
+            )
             .join(
                 AnalysisResultModel,
                 AnalysisResultModel.analysis_id == AnalysisModel.id,
                 isouter=True,
             )
             .where(
-                ResumeJobMatchModel.job_id == job_id,
-                ResumeModel.deleted_at.is_(None),
+                CandidateJobLinkModel.deleted_at.is_(None),
                 CandidateModel.deleted_at.is_(None),
             )
             .order_by(ResumeJobMatchModel.match_score.desc().nulls_last())
@@ -152,9 +172,30 @@ class SQLAlchemyJobRepository:
         job_id: UUID,
         limit: int | None = None,
     ) -> list[AnalysisModel]:
-        """List all completed analyses that haven't been matched to this job yet."""
+        """List all completed analyses that haven't been matched to this job yet.
+
+        CRITICAL: Only returns analyses for candidates with active CandidateJobLinkModel
+        to the specified job (official source of truth for candidate-job linking).
+        """
         query = (
             sa.select(AnalysisModel)
+            .join(
+                ResumeVersionModel,
+                ResumeVersionModel.id == AnalysisModel.resume_version_id,
+            )
+            .join(
+                ResumeModel,
+                ResumeModel.id == ResumeVersionModel.resume_id,
+            )
+            # Validate official candidate-job link exists (source of truth)
+            .join(
+                CandidateJobLinkModel,
+                sa.and_(
+                    CandidateJobLinkModel.candidate_id == ResumeModel.candidate_id,
+                    CandidateJobLinkModel.job_id == job_id,
+                    CandidateJobLinkModel.deleted_at.is_(None),
+                ),
+            )
             .where(
                 AnalysisModel.status == "completed",
                 ~sa.exists(

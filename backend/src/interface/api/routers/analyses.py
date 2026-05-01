@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import sqlalchemy as sa
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +23,7 @@ from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from src.interface.api.dependencies import CurrentUser, RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import CurrentUser, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.analysis_schemas import (
     AnalysisGlobalItemResponse,
     AnalysisMatchResponse,
@@ -31,11 +32,16 @@ from src.interface.api.schemas.analysis_schemas import (
     AnalysisResponse,
     AnalysisResultResponse,
     AnalysisStatusResponse,
+    BulkAnalysisActionRequest,
+    BulkAnalysisActionResponse,
 )
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.workers.analysis_dispatcher import enqueue_analysis
 
 router = APIRouter(prefix="/analyses", tags=["analyses"])
+
+logger = structlog.get_logger(__name__)
+_FORCE_FAIL_REASON = "Encerrada manualmente pelo usuário"
 
 
 def _analysis_service(db: AsyncSession) -> AnalysisService:
@@ -315,3 +321,224 @@ async def match_analysis_to_job(
         await db.rollback()
         _handle_analysis_service_error(exc)
         raise
+
+
+@router.post("/stuck", status_code=status.HTTP_200_OK)
+async def detect_and_mark_stuck_analyses(
+    current_user: InternalUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Detect analyses stuck in processing/pending and mark them as failed.
+
+    This is a housekeeping endpoint to clean up zombie tasks.
+    - Analyses in 'processing' for 30+ minutes are marked failed
+    - Analyses in 'pending' for 2+ hours are marked failed
+    """
+    try:
+        from src.interface.workers.analysis_tasks import mark_stuck_analyses_as_failed
+
+        count = await mark_stuck_analyses_as_failed()
+        return {"success": True, "analyses_marked_failed": count}
+    except Exception as exc:
+        _handle_analysis_service_error(exc)
+        raise
+
+
+@router.post("/bulk-force-fail", response_model=BulkAnalysisActionResponse)
+async def bulk_force_fail_analyses(
+    body: BulkAnalysisActionRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> BulkAnalysisActionResponse:
+    """Force-fail multiple analyses immediately.
+
+    Skips analyses that are already in terminal state (completed, failed, cancelled).
+    """
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    processed = 0
+    skipped = 0
+    TERMINAL = {"completed", "failed", "cancelled"}
+
+    for analysis_id in body.analysis_ids:
+        analysis = await db.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+        )
+        if not analysis or analysis.status in TERMINAL:
+            skipped += 1
+            continue
+
+        analysis.status = "failed"
+        analysis.failure_reason = _FORCE_FAIL_REASON
+        analysis.failed_at = now
+        analysis.updated_at = now
+        processed += 1
+
+    if processed > 0:
+        await db.commit()
+
+    logger.info(
+        "analysis.bulk_force_failed",
+        user_id=str(current_user.id),
+        processed=processed,
+        skipped=skipped,
+    )
+    return BulkAnalysisActionResponse(processed=processed, skipped=skipped)
+
+
+@router.post("/bulk-retry", response_model=BulkAnalysisActionResponse)
+async def bulk_retry_analyses(
+    body: BulkAnalysisActionRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> BulkAnalysisActionResponse:
+    """Retry multiple failed analyses.
+
+    Only processes analyses with status 'failed'.
+    """
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    processed = 0
+    skipped = 0
+    to_enqueue = []
+
+    for analysis_id in body.analysis_ids:
+        analysis = await db.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+        )
+        if not analysis or analysis.status != "failed":
+            skipped += 1
+            continue
+
+        analysis.status = "pending"
+        analysis.failure_reason = None
+        analysis.failed_at = None
+        analysis.started_at = None
+        analysis.retry_count = 0
+        analysis.next_retry_at = None
+        analysis.updated_at = now
+        to_enqueue.append(analysis.id)
+        processed += 1
+
+    if processed > 0:
+        await db.commit()
+        for aid in to_enqueue:
+            enqueue_analysis(aid)
+
+    logger.info(
+        "analysis.bulk_retried",
+        user_id=str(current_user.id),
+        processed=processed,
+        skipped=skipped,
+    )
+    return BulkAnalysisActionResponse(processed=processed, skipped=skipped)
+
+
+@router.post("/{analysis_id}/retry", response_model=AnalysisRequestResponse, status_code=status.HTTP_202_ACCEPTED)
+async def retry_analysis(
+    analysis_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AnalysisRequestResponse:
+    """Reprocess a failed or stuck analysis.
+
+    Can only retry analyses with status 'failed' or 'cancelled'.
+    """
+    try:
+        from src.infrastructure.database.models.analysis_model import AnalysisModel
+        from src.interface.workers.analysis_dispatcher import enqueue_analysis
+
+        analysis = await db.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+        )
+
+        if not analysis:
+            raise AnalysisNotFoundError
+
+        if analysis.status not in {"failed", "cancelled"}:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot retry analysis in status '{analysis.status}'. Only 'failed' or 'cancelled' analyses can be retried.",
+            )
+
+        # Reset to pending and requeue
+        from datetime import UTC, datetime
+        now = datetime.now(UTC)
+        analysis.status = "pending"
+        analysis.failure_reason = None
+        analysis.failed_at = None
+        analysis.started_at = None
+        analysis.retry_count = 0
+        analysis.next_retry_at = None
+        analysis.updated_at = now
+
+        await db.commit()
+        await db.refresh(analysis)
+
+        enqueue_analysis(analysis.id)
+
+        logger.info(
+            "analysis.retried",
+            user_id=str(current_user.id),
+            analysis_id=str(analysis_id),
+        )
+
+        return AnalysisRequestResponse(analysis_id=analysis.id, status=analysis.status)
+    except AnalysisNotFoundError as exc:
+        _handle_analysis_service_error(exc)
+        raise
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await db.rollback()
+        _handle_analysis_service_error(exc)
+        raise
+
+
+@router.post("/{analysis_id}/force-fail", status_code=status.HTTP_200_OK)
+async def force_fail_analysis(
+    analysis_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Force-fail an analysis immediately.
+
+    Cannot force-fail analyses that are already in terminal state (completed, failed, cancelled).
+    """
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+    from datetime import UTC, datetime
+
+    analysis = await db.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+    )
+
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Análise não encontrada.",
+        )
+
+    if analysis.status in {"completed", "failed", "cancelled"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Não é possível encerrar análise com status '{analysis.status}'.",
+        )
+
+    now = datetime.now(UTC)
+    analysis.status = "failed"
+    analysis.failure_reason = _FORCE_FAIL_REASON
+    analysis.failed_at = now
+    analysis.updated_at = now
+    await db.commit()
+
+    logger.info(
+        "analysis.force_failed",
+        user_id=str(current_user.id),
+        analysis_id=str(analysis_id),
+        reason=_FORCE_FAIL_REASON,
+    )
+    return {"status": "failed"}

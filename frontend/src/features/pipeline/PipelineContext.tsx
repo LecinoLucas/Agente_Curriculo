@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { analysisService } from "../../services/analysisService";
+import { candidateJobLinksService } from "../../services/candidateJobLinksService";
 import { candidatesService } from "../../services/candidatesService";
 import { formatErrorDetails, handleApiError } from "../../services/errorHandler";
 import { getJobPipeline, listJobs } from "../../services/jobsService";
@@ -344,10 +345,19 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     const inFlight = candidateFetchInFlightRef.current.get(candidateId);
     if (inFlight) return inFlight;
 
-    const request = candidatesService.getOverview(candidateId)
-      .then((overview) => {
-        candidateCacheRef.current.set(candidateId, overview);
-        return overview;
+    const request = Promise.all([
+      candidatesService.getOverview(candidateId),
+      candidateJobLinksService.getCandidateJobLinks(candidateId).catch(() => null),
+    ])
+      .then(([overview, officialLinks]) => {
+        const links = officialLinks ?? overview.candidate_job_links;
+        const mergedOverview: CandidateOverview = {
+          ...overview,
+          candidate_job_links: links,
+        };
+
+        candidateCacheRef.current.set(candidateId, mergedOverview);
+        return mergedOverview;
       })
       .finally(() => {
         candidateFetchInFlightRef.current.delete(candidateId);
@@ -427,6 +437,17 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         candidateError: null,
         activePanelTab: initialTab,
       }));
+
+      try {
+        const freshOverview = await fetchCandidateOverview(candidateId, true);
+        setState((prev) =>
+          prev.selectedCandidateId === candidateId
+            ? { ...prev, candidateOverview: freshOverview, candidateLoading: false, candidateError: null }
+            : prev,
+        );
+      } catch {
+        // Keep cached data visible if background sync fails
+      }
       return;
     }
 

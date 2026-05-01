@@ -122,7 +122,7 @@ function scoreBgClass(score: number | null | undefined): string {
 }
 
 function getCompatibilityGuidance(params: {
-  hasPipelineEntry: boolean;
+  hasJobLink: boolean;
   hasResume: boolean;
   analysisStatus: CandidateOverview["latest_analysis"] extends infer T
     ? T extends { status: infer S }
@@ -134,7 +134,7 @@ function getCompatibilityGuidance(params: {
   description: string;
   tone: "neutral" | "info";
 } | null {
-  if (!params.hasPipelineEntry) {
+  if (!params.hasJobLink) {
     return {
       title: "Compatibilidade indisponível",
       description: "Associe o candidato a esta vaga para calcular a compatibilidade.",
@@ -204,6 +204,7 @@ function CandidateDrawerHeader({
   onPrimaryAction,
   activeJobLabel,
   currentStage,
+  isOfficiallyLinked,
   activeJobCompatibilityScore,
   linkStatus,
   candidateLoading,
@@ -217,6 +218,7 @@ function CandidateDrawerHeader({
   onPrimaryAction: (() => void) | null;
   activeJobLabel: string;
   currentStage: PipelineStage | null;
+  isOfficiallyLinked: boolean;
   activeJobCompatibilityScore: number | null;
   linkStatus: string;
   candidateLoading: boolean;
@@ -276,7 +278,13 @@ function CandidateDrawerHeader({
         <HeaderFact label="Vaga atual" value={activeJobLabel} />
         <HeaderFact
           label="Etapa atual"
-          value={currentStage ? STAGE_LABEL[currentStage] ?? currentStage : "Não vinculado"}
+          value={
+            currentStage
+              ? STAGE_LABEL[currentStage] ?? currentStage
+              : isOfficiallyLinked
+                ? "Sem etapa no pipeline"
+                : "Não vinculado"
+          }
         />
         <HeaderFact
           label="Compatibilidade"
@@ -463,6 +471,14 @@ export function CandidateDrawer() {
     if (!activeJobId || !candidateOverview) return null;
     return candidateOverview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null;
   }, [activeJobId, candidateOverview]);
+  const activeJobLink = useMemo(() => {
+    if (!activeJobId || !candidateOverview) return null;
+    return (
+      candidateOverview.candidate_job_links.find(
+        (entry) => entry.job_id === activeJobId && entry.status === "active",
+      ) ?? null
+    );
+  }, [activeJobId, candidateOverview]);
 
   const currentStage = activePipelineEntry?.stage ?? null;
   const activeJob = useMemo<Job | null>(
@@ -500,10 +516,10 @@ export function CandidateDrawer() {
     () => (candidateState ? getNextAction(candidateState) : null),
     [candidateState],
   );
-  const linkedJobIds = useMemo(
-    () => new Set((candidateOverview?.pipeline_entries ?? []).map((entry) => entry.job_id)),
-    [candidateOverview],
-  );
+  const linkedJobIds = useMemo(() => {
+    const links = candidateOverview?.candidate_job_links ?? [];
+    return new Set(links.filter((entry) => entry.status === "active").map((entry) => entry.job_id));
+  }, [candidateOverview]);
   const availableJobs = useMemo(
     () =>
       jobs.filter(
@@ -517,7 +533,7 @@ export function CandidateDrawer() {
   const canTransferCurrentJob = currentStage ? TRANSFER_ALLOWED_STAGES.includes(currentStage) : false;
   const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
   const compatibilityGuidance = getCompatibilityGuidance({
-    hasPipelineEntry: activePipelineEntry !== null,
+    hasJobLink: activeJobLink !== null,
     hasResume,
     analysisStatus: candidateOverview?.latest_analysis?.status ?? null,
   });
@@ -674,8 +690,8 @@ export function CandidateDrawer() {
     }
   }
 
-  const activeJobLabel = activeJob?.title ?? activePipelineEntry?.job_title ?? "Nenhuma vaga em contexto";
-  const linkStatus = activePipelineEntry
+  const activeJobLabel = activeJob?.title ?? activeJobLink?.job_title ?? activePipelineEntry?.job_title ?? "Nenhuma vaga em contexto";
+  const linkStatus = activeJobLink
     ? "Vinculado à vaga ativa"
     : linkSaving
       ? "Vinculando à vaga ativa"
@@ -706,6 +722,7 @@ export function CandidateDrawer() {
           onPrimaryAction={headerPrimaryAction?.onClick ?? null}
           activeJobLabel={activeJobLabel}
           currentStage={currentStage}
+          isOfficiallyLinked={activeJobLink !== null}
           activeJobCompatibilityScore={activeJobCompatibilityScore}
           linkStatus={linkStatus}
           candidateLoading={candidateLoading}
@@ -755,6 +772,7 @@ export function CandidateDrawer() {
                 <SummaryTab
                   overview={candidateOverview}
                   activeJob={activeJob}
+                  activeJobLink={activeJobLink}
                   activePipelineEntry={activePipelineEntry}
                   onEdit={() => setEditModalOpen(true)}
                   onReprocess={handleDataQualityReprocess}
@@ -802,6 +820,7 @@ export function CandidateDrawer() {
                   overview={candidateOverview}
                   activeJob={activeJob}
                   activeJobId={activeJobId}
+                  activeJobLink={activeJobLink}
                   currentStage={currentStage}
                   availableJobs={availableJobs}
                   canTransferCurrentJob={canTransferCurrentJob}
@@ -861,6 +880,7 @@ export function CandidateDrawer() {
 function SummaryTab({
   overview,
   activeJob,
+  activeJobLink,
   activePipelineEntry,
   onEdit,
   onReprocess,
@@ -869,6 +889,7 @@ function SummaryTab({
 }: {
   overview: CandidateOverview;
   activeJob: Job | null;
+  activeJobLink: CandidateOverview["candidate_job_links"][number] | null;
   activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   onEdit: () => void;
   onReprocess: () => void;
@@ -930,11 +951,13 @@ function SummaryTab({
         <div className="grid gap-3 sm:grid-cols-2">
           <StatusCard
             label="Vaga ativa"
-            title={activeJob?.title ?? activePipelineEntry?.job_title ?? "Sem vaga ativa"}
+            title={activeJob?.title ?? activeJobLink?.job_title ?? activePipelineEntry?.job_title ?? "Sem vaga ativa"}
             description={
               activePipelineEntry
                 ? `${STAGE_LABEL[activePipelineEntry.stage] ?? activePipelineEntry.stage} · ${activePipelineEntry.candidate_status}`
-                : "O candidato não está vinculado à vaga ativa neste contexto."
+                : activeJobLink
+                  ? "Vinculado oficialmente à vaga ativa, sem etapa de pipeline registrada."
+                  : "O candidato não está vinculado à vaga ativa neste contexto."
             }
           />
           <StatusCard
@@ -965,6 +988,28 @@ function SummaryTab({
             description="Última atualização dos dados cadastrais."
           />
         </div>
+      </Section>
+
+      <Section title="Vagas vinculadas">
+        {overview.candidate_job_links.filter((entry) => entry.status === "active").length > 0 ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {overview.candidate_job_links
+              .filter((entry) => entry.status === "active")
+              .map((entry) => (
+                <MetaItem
+                  key={`${entry.job_id}:${entry.id || entry.created_at}`}
+                  label={entry.job_title ?? "Vaga vinculada"}
+                  value={entry.job_status ? formatJobStatus(entry.job_status) : "Status não informado"}
+                />
+              ))}
+          </div>
+        ) : (
+          <EmptyTab
+            title="Nenhuma vaga vinculada oficialmente"
+            description="Este candidato ainda não possui vínculo ativo em candidate_job_links."
+            compact
+          />
+        )}
       </Section>
 
       <DataQualitySection
@@ -2486,6 +2531,7 @@ function ActionsTab({
   overview,
   activeJob,
   activeJobId,
+  activeJobLink,
   currentStage,
   availableJobs,
   canTransferCurrentJob,
@@ -2499,6 +2545,7 @@ function ActionsTab({
   overview: CandidateOverview;
   activeJob: Job | null;
   activeJobId: string | null;
+  activeJobLink: CandidateOverview["candidate_job_links"][number] | null;
   currentStage: PipelineStage | null;
   availableJobs: Job[];
   canTransferCurrentJob: boolean;
@@ -2540,10 +2587,14 @@ function ActionsTab({
         <Section title="Vínculo com a vaga ativa">
           <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
             <p className="text-sm font-semibold text-[hsl(var(--text))]">
-              Candidato criado, aguardando vínculo com a vaga
+              {activeJobLink
+                ? "Vínculo oficial ativo, sem etapa de pipeline"
+                : "Candidato sem vínculo oficial com a vaga"}
             </p>
             <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-              Ele ainda não aparece neste pipeline. Vincule novamente para recuperar o fluxo.
+              {activeJobLink
+                ? "Ele está vinculado em candidate_job_links, mas ainda não entrou no kanban desta vaga."
+                : "Crie o vínculo oficial e a primeira etapa do pipeline para começar o acompanhamento."}
             </p>
             <button
               type="button"
@@ -2551,7 +2602,11 @@ function ActionsTab({
               disabled={linkSaving}
               className="mt-3 rounded-lg border border-[hsl(var(--warning))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--warning))] transition hover:bg-[hsl(var(--warning-soft))] disabled:opacity-50"
             >
-              {linkSaving ? "Vinculando…" : "Adicionar a esta vaga"}
+              {linkSaving
+                ? "Salvando…"
+                : activeJobLink
+                  ? "Adicionar ao pipeline"
+                  : "Vincular e adicionar ao pipeline"}
             </button>
           </div>
         </Section>
@@ -2624,8 +2679,10 @@ function ActionsTab({
           </>
         ) : (
           <EmptyTab
-            title="O candidato ainda não está vinculado à vaga ativa"
-            description="Vincule o candidato primeiro para liberar movimentações de etapa."
+            title={activeJobLink ? "Candidato ainda não entrou no pipeline desta vaga" : "Candidato não vinculado à vaga ativa"}
+            description={activeJobLink
+              ? "Use a ação acima para criar a etapa inicial no pipeline."
+              : "Vincule o candidato primeiro para liberar movimentações de etapa."}
             compact
           />
         )}

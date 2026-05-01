@@ -69,6 +69,10 @@ class JobScoreExplanationService:
         self._comparison_service = ScoringComparisonAdminService(session)
         self._analysis_repo = SQLAlchemyAnalysisRepository(session)
         self._observability_service = MatchingObservabilityService(session)
+        from src.infrastructure.repositories.sqlalchemy_candidate_job_link_repository import (
+            SQLAlchemyCandidateJobLinkRepository,
+        )
+        self._link_repo = SQLAlchemyCandidateJobLinkRepository(session)
 
     async def get(
         self,
@@ -77,6 +81,11 @@ class JobScoreExplanationService:
         candidate_id: UUID,
         role: UserRole,
     ) -> JobScoreExplanationPayload:
+        # Validate official candidate-job link exists (source of truth)
+        link = await self._link_repo.get_active_by_candidate_and_job(candidate_id, job_id)
+        if not link:
+            raise ValueError(f"Candidate {candidate_id} is not linked to job {job_id}")
+
         comparison = await self._comparison_service.compare(job_id, candidate_id)
         persisted_match = await self._analysis_repo.find_job_match(comparison.analysis_id, job_id)
 

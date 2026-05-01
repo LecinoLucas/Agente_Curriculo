@@ -134,6 +134,30 @@ export const analysisService = {
   result: (analysisId: string) =>
     httpRequest<AnalysisResult>(`/api/v1/analyses/${analysisId}/result`).then(normalizeAnalysisResult),
 
+  retry: (analysisId: string) =>
+    httpRequest<{ analysis_id: string; status: string }>(
+      `/api/v1/analyses/${analysisId}/retry`,
+      { method: "POST" }
+    ),
+
+  forceFail: (analysisId: string) =>
+    httpRequest<{ status: string }>(
+      `/api/v1/analyses/${analysisId}/force-fail`,
+      { method: "POST" }
+    ),
+
+  bulkForceFail: (analysisIds: string[]) =>
+    httpRequest<{ processed: number; skipped: number }>(
+      `/api/v1/analyses/bulk-force-fail`,
+      { method: "POST", body: JSON.stringify({ analysis_ids: analysisIds }) }
+    ),
+
+  bulkRetry: (analysisIds: string[]) =>
+    httpRequest<{ processed: number; skipped: number }>(
+      `/api/v1/analyses/bulk-retry`,
+      { method: "POST", body: JSON.stringify({ analysis_ids: analysisIds }) }
+    ),
+
   listGlobal: (
     page = 1,
     pageSize = 20,

@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Modal } from "../../components/common/Modal";
 import { StatusPill } from "../../components/common/StatusPill";
 import { Badge } from "../../components/ui/badge";
+import { candidateJobLinksService } from "../../services/candidateJobLinksService";
 import { candidatesService } from "../../services/candidatesService";
 import { formatErrorDetails, handleApiError } from "../../services/errorHandler";
 import { feedback } from "../../services/feedback";
@@ -96,8 +97,12 @@ export function NewCandidateModal({
     setDuplicateJobStatus("checking");
 
     void (async () => {
-      const overview = await candidatesService.getOverview(duplicate.id);
-      const linked = overview.pipeline_entries.some((entry) => entry.job_id === selectedJobId);
+      let links = await candidateJobLinksService.getCandidateJobLinks(duplicate.id);
+      if (links.length === 0) {
+        const overview = await candidatesService.getOverview(duplicate.id);
+        links = overview.candidate_job_links;
+      }
+      const linked = links.some((entry) => entry.job_id === selectedJobId && entry.status === "active");
       if (!cancelled) {
         setDuplicateJobStatus(linked ? "linked" : "unlinked");
       }

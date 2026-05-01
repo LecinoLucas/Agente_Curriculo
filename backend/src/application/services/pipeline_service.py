@@ -5,8 +5,10 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.domain_events import CandidateStageChangedEvent, dispatch_event
+from src.application.services.candidate_job_link_service import CandidateJobLinkService
 from src.infrastructure.database.models.candidate_pipeline_model import (
     CandidatePipelineModel,
     PipelineStageTransitionModel,
@@ -157,8 +159,10 @@ class PipelineTransferNotAllowedError(Exception):
 
 
 class PipelineService:
-    def __init__(self, repository: SQLAlchemyPipelineRepository) -> None:
+    def __init__(self, repository: SQLAlchemyPipelineRepository, session: AsyncSession | None = None) -> None:
         self._repository = repository
+        self._session = session
+        self._link_service = CandidateJobLinkService(session) if session else None
 
     # ------------------------------------------------------------------
     # Board (existing — unchanged)
@@ -356,6 +360,10 @@ class PipelineService:
             )
         )
 
+        # Ensure candidate-job link exists with source="pipeline"
+        if self._link_service:
+            await self._link_service.ensure_link(candidate_id, body.job_id, source="pipeline")
+
         return AddCandidateToJobResponse(
             candidate_id=saved_row["candidate_id"],
             job_id=saved_row["job_id"],
@@ -435,6 +443,10 @@ class PipelineService:
             raise PipelineConcurrentModificationError(
                 "Não foi possível concluir a transferência. Recarregue e tente novamente."
             ) from exc
+
+        # Update candidate-job links to reflect the transfer
+        if self._link_service:
+            await self._link_service.transfer_candidate(candidate_id, body.from_job_id, body.to_job_id)
 
         await publish_domain_event(
             DomainEvent(

@@ -47,10 +47,12 @@ from src.application.services.candidate_ranking_service import (
 from src.interface.api.dependencies import CurrentUser, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.job_schemas import (
+    AddCandidateToJobRequest,
     BulkImportJobsRequest,
     BulkImportJobsResponse,
     BulkUpdateJobsRequest,
     BulkUpdateJobsResponse,
+    CandidateJobLinkResponse,
     CandidateScoreExplanationResponse,
     CreateJobRequest,
     JobQualityResponse,
@@ -402,6 +404,53 @@ async def list_job_candidates(
     try:
         return await _job_service(db).list_candidate_ranking(job_id)
     except Exception as exc:
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.post("/{job_id}/candidates", response_model=CandidateJobLinkResponse, status_code=status.HTTP_201_CREATED)
+async def link_candidate_to_job(
+    job_id: UUID,
+    body: AddCandidateToJobRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateJobLinkResponse:
+    """Manually link a candidate to a job (creates official candidate-job link)."""
+    try:
+        from src.application.services.candidate_job_link_service import CandidateJobLinkService
+        service = CandidateJobLinkService(db)
+        link = await service.link_candidate_to_job(body.candidate_id, job_id, source=body.source)
+        await db.commit()
+        return CandidateJobLinkResponse(
+            id=link.id,
+            candidate_id=link.candidate_id,
+            job_id=link.job_id,
+            status=link.status,
+            source=link.source,
+            created_at=link.created_at,
+            updated_at=link.updated_at,
+        )
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.delete("/{job_id}/candidates/{candidate_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_candidate_from_job(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove candidate-job link (soft delete)."""
+    try:
+        from src.application.services.candidate_job_link_service import CandidateJobLinkService
+        service = CandidateJobLinkService(db)
+        await service.unlink_candidate_from_job(candidate_id, job_id)
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
         _handle_job_service_error(exc)
         raise
 

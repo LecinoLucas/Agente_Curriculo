@@ -1,5 +1,6 @@
 import {
   Candidate,
+  CandidateJobLinkOverview,
   CandidateLatestAnalysisOverview,
   CandidateListSummary,
   CandidateOverview,
@@ -91,13 +92,54 @@ function normalizeLatestAnalysis(
 }
 
 function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candidate?: Partial<Candidate> }): CandidateOverview {
+  const rawLinks = (item as Record<string, unknown>).candidate_job_links;
+  const fallbackRawLinks = (item as Record<string, unknown>).job_links;
+  const linksInput = Array.isArray(rawLinks)
+    ? rawLinks
+    : Array.isArray(fallbackRawLinks)
+      ? fallbackRawLinks
+      : [];
+
   return {
     candidate: normalizeCandidate(item.candidate ?? {}),
     resumes: Array.isArray(item.resumes) ? item.resumes : [],
     latest_analysis: item.latest_analysis ? normalizeLatestAnalysis(item.latest_analysis) : null,
     latest_analysis_pipeline: item.latest_analysis_pipeline ?? null,
     top_matches: Array.isArray(item.top_matches) ? item.top_matches : [],
+    candidate_job_links: linksInput.map((entry) => normalizeCandidateJobLink(entry)),
     pipeline_entries: Array.isArray(item.pipeline_entries) ? item.pipeline_entries : [],
+  };
+}
+
+function normalizeCandidateJobLink(item: unknown): CandidateJobLinkOverview {
+  const row = (item ?? {}) as Record<string, unknown>;
+  const statusValue =
+    row.status === "active" ||
+    row.status === "removed" ||
+    row.status === "transferred" ||
+    row.status === "hired" ||
+    row.status === "rejected"
+      ? row.status
+      : "active";
+
+  const sourceValue =
+    row.source === "manual" ||
+    row.source === "pipeline" ||
+    row.source === "ai_match" ||
+    row.source === "import"
+      ? row.source
+      : "manual";
+
+  return {
+    id: typeof row.id === "string" ? row.id : "",
+    candidate_id: typeof row.candidate_id === "string" ? row.candidate_id : "",
+    job_id: typeof row.job_id === "string" ? row.job_id : "",
+    job_title: typeof row.job_title === "string" ? row.job_title : null,
+    job_status: typeof row.job_status === "string" ? row.job_status : null,
+    status: statusValue,
+    source: sourceValue,
+    created_at: typeof row.created_at === "string" ? row.created_at : new Date(0).toISOString(),
+    updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date(0).toISOString(),
   };
 }
 

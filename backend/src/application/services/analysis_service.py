@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 # Penalidade de sobre-qualificação em senioridade só é aplicada quando
 # a diferença de níveis é >= este limiar (configurável).
 _SENIORITY_PENALTY_THRESHOLD = 2
@@ -12,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 from src.domain.entities.user import User
 from src.application.services.matching_engine_service import MatchingEngineService
+from src.application.services.candidate_job_link_service import CandidateJobLinkService
 from src.application.services.skill_text_normalizer import (
     contains_whole_phrase,
     normalize_skill_text,
@@ -936,6 +939,20 @@ class AnalysisService:
             job_id=job_id,
             match_score=overall,
         )
+
+        # Ensure candidate-job link exists with source="ai_match"
+        try:
+            candidate_id = await self._repository.get_candidate_id_from_analysis(analysis_id)
+            if candidate_id:
+                link_service = CandidateJobLinkService(self._repository.session)
+                await link_service.ensure_link(candidate_id, job_id, source="ai_match")
+        except Exception as exc:
+            logger.warning(
+                "Failed to ensure candidate-job link after matching analysis_id=%s job_id=%s error=%s",
+                str(analysis_id),
+                str(job_id),
+                str(exc),
+            )
 
         return AnalysisMatchResponse(
             analysis_id=analysis_id,

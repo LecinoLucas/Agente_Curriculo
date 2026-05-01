@@ -115,8 +115,6 @@ export async function listJobCandidates(
     candidate_name: c.candidate_name,
     email: c.email,
     job_id: response.job_id,
-    stage: "entry",
-    candidate_status: "Recebido",
     match_score: c.match_score != null ? Number(c.match_score) : null,
     recommendation: c.recommendation ?? null,
     overall_score: c.overall_score != null ? Number(c.overall_score) : null,

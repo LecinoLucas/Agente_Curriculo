@@ -92,7 +92,7 @@ export function AnalisesIaPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [aiFilter, setAiFilter] = useState<AiFilter>("all");
-  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
   const hasActiveFilters = search || statusFilter !== "all" || aiFilter !== "all";
 
   const { data, loading, error, run } = useAsyncState<Paginated<AnalysisGlobalItem>>();
@@ -153,12 +153,11 @@ export function AnalisesIaPage() {
     setAiFilter("all");
   }
 
-  async function handleReprocess(item: AnalysisGlobalItem) {
-    if (!item.resume_version_id) return;
-    setReprocessingId(item.id);
+  async function handleRetry(item: AnalysisGlobalItem) {
+    setActionId(item.id);
     feedback.reprocessAnalysis.processing();
     try {
-      const response = await analysisService.request(item.resume_version_id);
+      const response = await analysisService.retry(item.id);
       if (item.candidate_id) {
         await syncAnalysisStart({
           candidateId: item.candidate_id,
@@ -173,7 +172,21 @@ export function AnalisesIaPage() {
     } catch (err) {
       feedback.reprocessAnalysis.error(err);
     } finally {
-      setReprocessingId(null);
+      setActionId(null);
+    }
+  }
+
+  async function handleForceFail(item: AnalysisGlobalItem) {
+    setActionId(item.id);
+    feedback.reprocessAnalysis.processing();
+    try {
+      await analysisService.forceFail(item.id);
+      fetchData();
+      feedback.reprocessAnalysis.success();
+    } catch (err) {
+      feedback.reprocessAnalysis.error(err);
+    } finally {
+      setActionId(null);
     }
   }
 
@@ -339,11 +352,12 @@ export function AnalisesIaPage() {
                     <AnalysisRow
                       key={item.id}
                       item={item}
-                      reprocessing={reprocessingId === item.id}
+                      actionInFlight={actionId === item.id}
                       onOpen={() => {
                         if (item.candidate_id) void openCandidate(item.candidate_id);
                       }}
-                      onReprocess={() => void handleReprocess(item)}
+                      onRetry={() => void handleRetry(item)}
+                      onForceFail={() => void handleForceFail(item)}
                     />
                   ))}
                 </tbody>
@@ -374,16 +388,19 @@ export function AnalisesIaPage() {
 
 function AnalysisRow({
   item,
-  reprocessing,
+  actionInFlight,
   onOpen,
-  onReprocess,
+  onRetry,
+  onForceFail,
 }: {
   item: AnalysisGlobalItem;
-  reprocessing: boolean;
+  actionInFlight: boolean;
   onOpen: () => void;
-  onReprocess: () => void;
+  onRetry: () => void;
+  onForceFail: () => void;
 }) {
   const isFailed = item.status === "failed";
+  const isStuck = item.status === "pending" || item.status === "processing";
   const hasCandidate = Boolean(item.candidate_id);
 
   return (
@@ -466,14 +483,24 @@ function AnalysisRow({
               Abrir
             </button>
           ) : null}
+          {isStuck ? (
+            <button
+              type="button"
+              onClick={onForceFail}
+              disabled={actionInFlight}
+              className="rounded-lg border border-[hsl(var(--danger))]/40 px-2.5 py-1 text-xs font-medium text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger))]/10 disabled:opacity-40"
+            >
+              {actionInFlight ? "Encerrando…" : "Encerrar"}
+            </button>
+          ) : null}
           {isFailed ? (
             <button
               type="button"
-              onClick={onReprocess}
-              disabled={reprocessing}
+              onClick={onRetry}
+              disabled={actionInFlight}
               className="rounded-lg bg-[hsl(var(--primary))] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
             >
-              {reprocessing ? "Reprocessando…" : "Reprocessar"}
+              {actionInFlight ? "Reprocessando…" : "Reprocessar"}
             </button>
           ) : null}
         </div>

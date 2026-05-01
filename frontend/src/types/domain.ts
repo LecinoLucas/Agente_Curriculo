@@ -92,7 +92,23 @@ export type CandidateOverview = {
   latest_analysis: CandidateLatestAnalysisOverview | null;
   latest_analysis_pipeline: CandidateLatestAnalysisPipelineOverview | null;
   top_matches: CandidateJobMatchOverview[];
+  candidate_job_links: CandidateJobLinkOverview[];
   pipeline_entries: CandidatePipelineEntryOverview[];
+};
+
+export type CandidateJobLinkStatus = "active" | "removed" | "transferred" | "hired" | "rejected";
+export type CandidateJobLinkSource = "manual" | "pipeline" | "ai_match" | "import";
+
+export type CandidateJobLinkOverview = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  job_title: string | null;
+  job_status: string | null;
+  status: CandidateJobLinkStatus;
+  source: CandidateJobLinkSource;
+  created_at: string;
+  updated_at: string;
 };
 
 export type CandidatePipelineEntryOverview = {

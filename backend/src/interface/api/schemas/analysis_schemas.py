@@ -137,3 +137,12 @@ class AnalysisMatchResponse(BaseModel):
     risk_points: list[str] = Field(default_factory=list)
     explanation: str | None = None
     behavioral_indicators: list[str] = Field(default_factory=list)
+
+
+class BulkAnalysisActionRequest(BaseModel):
+    analysis_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
+class BulkAnalysisActionResponse(BaseModel):
+    processed: int
+    skipped: int

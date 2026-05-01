@@ -348,6 +348,18 @@ class SQLAlchemyAnalysisRepository:
         await self._session.refresh(match)
         return match
 
+    async def get_candidate_id_from_analysis(self, analysis_id: UUID) -> UUID | None:
+        """Get candidate_id from analysis via resume_version -> resume -> candidate."""
+        result = await self._session.scalar(
+            sa.select(CandidateModel.id).where(
+                AnalysisModel.id == analysis_id,
+                ResumeVersionModel.id == AnalysisModel.resume_version_id,
+                ResumeModel.id == ResumeVersionModel.resume_id,
+                CandidateModel.id == ResumeModel.candidate_id,
+            )
+        )
+        return result
+
     @staticmethod
     def _can_manage_all(user: User) -> bool:
         return user.role.value in {"admin", "recruiter"}

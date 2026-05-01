@@ -540,3 +540,23 @@ class BulkUpdateJobsResponse(BaseModel):
     updated: int
     failed: int
     results: list[BulkUpdateJobResultResponse] = Field(default_factory=list)
+
+
+class AddCandidateToJobRequest(BaseModel):
+    candidate_id: UUID
+    source: Literal["manual", "pipeline", "ai_match", "import"] = "manual"
+
+
+class CandidateJobLinkResponse(BaseModel):
+    id: UUID
+    candidate_id: UUID
+    job_id: UUID
+    status: Literal["active", "removed", "transferred", "hired", "rejected"]
+    source: Literal["manual", "pipeline", "ai_match", "import"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class RemoveCandidateFromJobResponse(BaseModel):
+    success: bool
+    message: str

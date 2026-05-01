@@ -378,6 +378,73 @@ async def _mark_analysis_failed(
         await session.commit()
 
 
+async def mark_stuck_analyses_as_failed() -> int:
+    """Mark analyses stuck in processing/pending as failed (housekeeping task).
+
+    Returns:
+        Number of analyses marked as failed.
+    """
+    from src.infrastructure.database.connection import AsyncSessionFactory
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+
+    marked_count = 0
+    now = datetime.now(UTC)
+
+    async with AsyncSessionFactory() as session:
+        # 1. Mark analyses in 'processing' for more than 30 minutes as failed
+        processing_threshold = now - timedelta(minutes=30)
+        processing_stuck = await session.execute(
+            sa.select(AnalysisModel).where(
+                AnalysisModel.status == "processing",
+                AnalysisModel.started_at < processing_threshold,
+            )
+        )
+
+        for analysis in processing_stuck.scalars().all():
+            analysis.status = "failed"
+            analysis.failure_reason = "Task timeout (processing > 30 min)"
+            analysis.failed_at = now
+            analysis.next_retry_at = None
+            analysis.updated_at = now
+            marked_count += 1
+            logger.info(
+                "analysis.stuck.processing_timeout",
+                analysis_id=str(analysis.id),
+                started_at=analysis.started_at.isoformat() if analysis.started_at else None,
+            )
+
+        # 2. Mark analyses in 'pending' for more than 2 hours as failed
+        pending_threshold = now - timedelta(hours=2)
+        pending_stuck = await session.execute(
+            sa.select(AnalysisModel).where(
+                AnalysisModel.status == "pending",
+                AnalysisModel.created_at < pending_threshold,
+            )
+        )
+
+        for analysis in pending_stuck.scalars().all():
+            analysis.status = "failed"
+            analysis.failure_reason = "Task timeout (pending > 2 hours)"
+            analysis.failed_at = now
+            analysis.next_retry_at = None
+            analysis.updated_at = now
+            marked_count += 1
+            logger.info(
+                "analysis.stuck.pending_timeout",
+                analysis_id=str(analysis.id),
+                created_at=analysis.created_at.isoformat(),
+            )
+
+        if marked_count > 0:
+            await session.commit()
+            logger.warning(
+                "analysis.stuck_analyses_marked_failed",
+                count=marked_count,
+            )
+
+    return marked_count
+
+
 def _dev_fallback_scores(analysis_id: str) -> dict:
     from uuid import UUID
 

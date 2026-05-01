@@ -8,6 +8,7 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
 from src.infrastructure.database.models.job_model import JobModel
@@ -288,6 +289,15 @@ class SQLAlchemyCandidateRepository:
             .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
             .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
             .join(JobModel, JobModel.id == ResumeJobMatchModel.job_id)
+            # Validate official candidate-job link exists (source of truth)
+            .join(
+                CandidateJobLinkModel,
+                sa.and_(
+                    CandidateJobLinkModel.candidate_id == candidate_id,
+                    CandidateJobLinkModel.job_id == ResumeJobMatchModel.job_id,
+                    CandidateJobLinkModel.deleted_at.is_(None),
+                ),
+            )
             .join(
                 AnalysisResultModel,
                 AnalysisResultModel.analysis_id == AnalysisModel.id,
