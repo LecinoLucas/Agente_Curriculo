@@ -14,7 +14,9 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     PromptTemplateModel,
 )
+from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
 from src.infrastructure.database.models.job_model import SkillModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
@@ -373,6 +375,37 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
         headers=recruiter_headers,
     )
     assert add_skill.status_code == 201
+
+    analysis_for_job = await db_session.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+    )
+    assert analysis_for_job is not None
+    analysis_for_job.job_id = UUID(job_id)
+
+    db_session.add(
+        CandidatePipelineModel(
+            candidate_id=candidate_model.id,
+            job_id=UUID(job_id),
+            stage="entry",
+            status="active",
+            is_active=True,
+            entered_at=now,
+            match_score="87.00",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        CandidateJobLinkModel(
+            candidate_id=candidate_model.id,
+            job_id=UUID(job_id),
+            status="active",
+            source="pipeline",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
 
     matched = await AnalysisService(
         SQLAlchemyAnalysisRepository(db_session)

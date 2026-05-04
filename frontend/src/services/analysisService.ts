@@ -6,7 +6,7 @@ import {
   AnalysisStatus,
   AnalysisSummary,
 } from "../types/domain";
-import { httpRequest } from "./http";
+import { HttpError, httpRequest } from "./http";
 
 export type PaginatedResponse<T> = {
   data: T[];
@@ -15,6 +15,34 @@ export type PaginatedResponse<T> = {
   page_size: number;
   total_pages: number;
 };
+
+function formatRetryAfter(seconds: number): string {
+  const rounded = Math.max(1, Math.ceil(seconds));
+  if (rounded < 60) return `${rounded}s`;
+  const minutes = Math.floor(rounded / 60);
+  const remaining = rounded % 60;
+  if (remaining === 0) return `${minutes}min`;
+  return `${minutes}min ${remaining}s`;
+}
+
+function rethrowAnalysisRateLimit(error: unknown): never {
+  if (error instanceof HttpError && error.status === 429) {
+    const base = "🚫 Limite de uso da IA atingido. Aguarde alguns minutos ou troque a chave da API.";
+    const withRetryAfter =
+      typeof error.retryAfterSeconds === "number" && Number.isFinite(error.retryAfterSeconds)
+        ? `${base} Tempo estimado para nova tentativa: ${formatRetryAfter(error.retryAfterSeconds)}.`
+        : base;
+    throw new HttpError(
+      429,
+      withRetryAfter,
+      error.code,
+      error.data,
+      error.detail,
+      error.retryAfterSeconds,
+    );
+  }
+  throw error;
+}
 
 function normalizeAnalysisSummary(item: Partial<AnalysisSummary> & { id?: string }): AnalysisSummary {
   return {
@@ -100,10 +128,18 @@ function normalizeAnalysisResult(item: Partial<AnalysisResult>): AnalysisResult 
 }
 
 export const analysisService = {
-  request: (resumeVersionId: string) =>
-    httpRequest<{ analysis_id: string }>(`/api/v1/analyses?resume_version_id=${resumeVersionId}`, {
+  request: (resumeVersionId: string, jobId: string) => {
+    if (!jobId?.trim()) {
+      throw new Error("job_id é obrigatório para solicitar análise manual");
+    }
+    const params = new URLSearchParams({
+      resume_version_id: resumeVersionId,
+      job_id: jobId,
+    });
+    return httpRequest<{ analysis_id: string }>(`/api/v1/analyses?${params.toString()}`, {
       method: "POST",
-    }),
+    }).catch((error) => rethrowAnalysisRateLimit(error));
+  },
 
   list: (
     page = 1,
@@ -138,7 +174,7 @@ export const analysisService = {
     httpRequest<{ analysis_id: string; status: string }>(
       `/api/v1/analyses/${analysisId}/retry`,
       { method: "POST" }
-    ),
+    ).catch((error) => rethrowAnalysisRateLimit(error)),
 
   forceFail: (analysisId: string) =>
     httpRequest<{ status: string }>(
@@ -156,7 +192,7 @@ export const analysisService = {
     httpRequest<{ processed: number; skipped: number }>(
       `/api/v1/analyses/bulk-retry`,
       { method: "POST", body: JSON.stringify({ analysis_ids: analysisIds }) }
-    ),
+    ).catch((error) => rethrowAnalysisRateLimit(error)),
 
   listGlobal: (
     page = 1,

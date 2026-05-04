@@ -53,7 +53,7 @@ class SQLAlchemyPipelineRepository:
             )
         )
 
-    async def find_entry(
+    async def find_any_entry(
         self,
         candidate_id: UUID,
         job_id: UUID,
@@ -64,6 +64,38 @@ class SQLAlchemyPipelineRepository:
                 CandidatePipelineModel.job_id == job_id,
             )
         )
+
+    async def find_active_entry(
+        self,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidatePipelineModel | None:
+        return await self._session.scalar(
+            sa.select(CandidatePipelineModel).where(
+                CandidatePipelineModel.candidate_id == candidate_id,
+                CandidatePipelineModel.job_id == job_id,
+                CandidatePipelineModel.is_active.is_(True),
+            )
+        )
+
+    async def find_active_entry_by_candidate(
+        self,
+        candidate_id: UUID,
+    ) -> CandidatePipelineModel | None:
+        return await self._session.scalar(
+            sa.select(CandidatePipelineModel).where(
+                CandidatePipelineModel.candidate_id == candidate_id,
+                CandidatePipelineModel.is_active.is_(True),
+            )
+        )
+
+    # Backward-compatible alias for callers not yet migrated.
+    async def find_entry(
+        self,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidatePipelineModel | None:
+        return await self.find_any_entry(candidate_id, job_id)
 
     async def save_entry(self, entry: CandidatePipelineModel) -> CandidatePipelineModel:
         self._session.add(entry)
@@ -171,10 +203,7 @@ class SQLAlchemyPipelineRepository:
             .where(
                 CandidatePipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
-                sa.or_(
-                    CandidatePipelineModel.status.is_(None),
-                    CandidatePipelineModel.status != "transferred",
-                ),
+                CandidatePipelineModel.is_active.is_(True),
             )
             .order_by(
                 CandidatePipelineModel.match_score.desc().nulls_last(),
@@ -217,7 +246,7 @@ class SQLAlchemyPipelineRepository:
             )
             await self._session.flush()
 
-        current = await self.find_entry(candidate_id, job_id)
+        current = await self.find_any_entry(candidate_id, job_id)
         now = datetime.now(UTC)
         if current is None:
             self._session.add(
@@ -225,6 +254,8 @@ class SQLAlchemyPipelineRepository:
                     candidate_id=candidate_id,
                     job_id=job_id,
                     stage="entry",
+                    status="active",
+                    is_active=True,
                     match_score=match_score,
                     created_at=now,
                     updated_at=now,
@@ -346,6 +377,7 @@ class SQLAlchemyPipelineRepository:
                 status=status,
                 entered_at=updated_at,
                 last_moved_by=moved_by,
+                is_active=True,
                 created_at=updated_at,
                 updated_at=updated_at,
             )
@@ -359,6 +391,43 @@ class SQLAlchemyPipelineRepository:
         )
         row = result.mappings().first()
         return dict(row) if row else {}
+
+    async def reactivate_entry(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        stage: str,
+        status: str,
+        moved_by: UUID | None,
+        updated_at: datetime,
+    ) -> dict | None:
+        result = await self._session.execute(
+            sa.update(CandidatePipelineModel)
+            .where(
+                CandidatePipelineModel.candidate_id == candidate_id,
+                CandidatePipelineModel.job_id == job_id,
+                CandidatePipelineModel.is_active.is_(False),
+            )
+            .values(
+                stage=stage,
+                status=status,
+                is_active=True,
+                match_score=None,
+                entered_at=updated_at,
+                last_moved_by=moved_by,
+                updated_at=updated_at,
+            )
+            .returning(
+                CandidatePipelineModel.candidate_id,
+                CandidatePipelineModel.job_id,
+                CandidatePipelineModel.stage,
+                CandidatePipelineModel.status,
+                CandidatePipelineModel.updated_at,
+            )
+        )
+        row = result.mappings().first()
+        return dict(row) if row else None
 
     async def update_entry_status(
         self,
@@ -390,6 +459,28 @@ class SQLAlchemyPipelineRepository:
         )
         row = result.mappings().first()
         return dict(row) if row else None
+
+    async def deactivate_active_entries_for_candidate(
+        self,
+        *,
+        candidate_id: UUID,
+        last_moved_by: UUID | None,
+        updated_at: datetime,
+    ) -> int:
+        result = await self._session.execute(
+            sa.update(CandidatePipelineModel)
+            .where(
+                CandidatePipelineModel.candidate_id == candidate_id,
+                CandidatePipelineModel.is_active.is_(True),
+            )
+            .values(
+                is_active=False,
+                status="transferred",
+                last_moved_by=last_moved_by,
+                updated_at=updated_at,
+            )
+        )
+        return int(result.rowcount or 0)
 
     async def upsert_and_record_transition(
         self,
@@ -433,7 +524,7 @@ class SQLAlchemyPipelineRepository:
             )
             await self._session.flush()
 
-        current = await self.find_entry(candidate_id, job_id)
+        current = await self.find_any_entry(candidate_id, job_id)
 
         if current is None:
             self._session.add(
@@ -441,6 +532,8 @@ class SQLAlchemyPipelineRepository:
                     candidate_id=candidate_id,
                     job_id=job_id,
                     stage="entry",
+                    status="active",
+                    is_active=True,
                     match_score=match_score,
                     entered_at=now,
                     created_at=now,
@@ -557,10 +650,7 @@ class SQLAlchemyPipelineRepository:
                 sa.func.max(CandidatePipelineModel.updated_at).label("latest"),
             )
             .where(
-                sa.or_(
-                    CandidatePipelineModel.status.is_(None),
-                    CandidatePipelineModel.status != "transferred",
-                )
+                CandidatePipelineModel.is_active.is_(True)
             )
             .group_by(CandidatePipelineModel.job_id, CandidatePipelineModel.stage)
         )

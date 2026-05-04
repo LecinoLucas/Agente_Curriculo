@@ -18,7 +18,9 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
     ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
@@ -286,6 +288,29 @@ async def _seed_scoring_case(
         raw_llm_response="{\"ok\": true}",
     )
     session.add(analysis_result)
+    session.add(
+        CandidateJobLinkModel(
+            candidate_id=candidate.id,
+            job_id=job.id,
+            status="active",
+            source="pipeline",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    session.add(
+        CandidatePipelineModel(
+            candidate_id=candidate.id,
+            job_id=job.id,
+            stage="entry",
+            status="active",
+            is_active=True,
+            match_score=Decimal("51.0"),
+            entered_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+    )
 
     if include_ranking_row:
         session.add(

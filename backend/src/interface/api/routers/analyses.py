@@ -1,4 +1,5 @@
 from uuid import UUID
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 import structlog
@@ -6,17 +7,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.analysis_service import (
-    AIModelUnavailableError,
     AnalysisNotCompletedError,
     AnalysisNotFoundError,
     AnalysisResultDetails,
     AnalysisResultNotFoundError,
     AnalysisService,
     JobNotFoundError,
-    PromptTemplateUnavailableError,
-    ResumeVersionNotFoundError,
-    ResumeVersionNotReadyError,
 )
+from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
+from src.application.dtos.analysis_dtos import RequestAnalysisCommand
+from src.domain.exceptions import ValidationException
+from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
@@ -46,6 +47,14 @@ _FORCE_FAIL_REASON = "Encerrada manualmente pelo usuário"
 
 def _analysis_service(db: AsyncSession) -> AnalysisService:
     return AnalysisService(SQLAlchemyAnalysisRepository(db))
+
+
+def _is_rate_limited_analysis_blocked(analysis) -> bool:
+    if analysis.next_retry_at is None:
+        return False
+    if "status_code=429" not in (analysis.failure_reason or ""):
+        return False
+    return analysis.next_retry_at > datetime.now(UTC)
 
 
 async def _resolve_requestor_name(db: AsyncSession, user_id: UUID) -> str | None:
@@ -97,28 +106,13 @@ async def _analysis_response(db: AsyncSession, analysis) -> AnalysisResponse:
 
 
 def _handle_analysis_service_error(exc: Exception) -> None:
+    if isinstance(exc, ValidationException):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
     if isinstance(exc, AnalysisNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análise não encontrada")
-    if isinstance(exc, ResumeVersionNotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Versão de currículo não encontrada",
-        )
-    if isinstance(exc, ResumeVersionNotReadyError):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Currículo ainda não possui texto extraído para análise",
-        )
-    if isinstance(exc, AIModelUnavailableError):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Nenhum modelo de IA disponível",
-        )
-    if isinstance(exc, PromptTemplateUnavailableError):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Nenhum prompt template disponível. Rode o seed de templates.",
-        )
     if isinstance(exc, AnalysisNotCompletedError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -185,14 +179,32 @@ async def _analysis_result_response(
 async def request_analysis(
     resume_version_id: UUID,
     current_user: CurrentUser,
+    job_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisRequestResponse:
+    if job_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="job_id é obrigatório para solicitar análise",
+        )
     try:
-        analysis = await _analysis_service(db).request(resume_version_id, current_user)
+        use_case = RequestAnalysisUseCase(
+            SQLAlchemyAnalysisRepository(db),
+            SQLAlchemyResumeRepository(db),
+        )
+        result = await use_case.execute(
+            RequestAnalysisCommand(
+                resume_version_id=resume_version_id,
+                requested_by=current_user.id,
+                job_id=job_id,
+                force_reanalyze=False,
+                priority=5,
+            )
+        )
         await db.commit()
-        await db.refresh(analysis)
-        enqueue_analysis(analysis.id)
-        return AnalysisRequestResponse(analysis_id=analysis.id, status=analysis.status)
+        if result.enqueue_required and str(result.status) == "pending":
+            enqueue_analysis(result.analysis_id)
+        return AnalysisRequestResponse(analysis_id=result.analysis_id, status=result.status)
     except Exception as exc:
         await db.rollback()
         _handle_analysis_service_error(exc)
@@ -399,8 +411,6 @@ async def bulk_retry_analyses(
     Only processes analyses with status 'failed'.
     """
     from src.infrastructure.database.models.analysis_model import AnalysisModel
-    from datetime import UTC, datetime
-
     now = datetime.now(UTC)
     processed = 0
     skipped = 0
@@ -411,6 +421,9 @@ async def bulk_retry_analyses(
             sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
         )
         if not analysis or analysis.status != "failed":
+            skipped += 1
+            continue
+        if _is_rate_limited_analysis_blocked(analysis):
             skipped += 1
             continue
 
@@ -465,8 +478,13 @@ async def retry_analysis(
                 detail=f"Cannot retry analysis in status '{analysis.status}'. Only 'failed' or 'cancelled' analyses can be retried.",
             )
 
+        if _is_rate_limited_analysis_blocked(analysis):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Já existe bloqueio temporário por limite da IA. Aguarde até o fim da janela de retry.",
+            )
+
         # Reset to pending and requeue
-        from datetime import UTC, datetime
         now = datetime.now(UTC)
         analysis.status = "pending"
         analysis.failure_reason = None

@@ -24,7 +24,6 @@ from src.infrastructure.database.models.analysis_model import MatchingObservatio
 from src.domain.value_objects.adaptive_score_result import AdaptiveScoreResult
 from src.domain.value_objects.candidate_evaluation_insight import CandidateEvaluationInsight
 from src.domain.value_objects.candidate_profile import CandidateProfile
-from src.domain.value_objects.evidence_mapping import EvidenceMapping
 from src.domain.value_objects.job_profile import AREA_WEIGHTS, JobProfile
 
 
@@ -82,16 +81,6 @@ async def test_matching_engine_service_returns_adaptive_payload(monkeypatch: pyt
         confidence="high",
         resume_hash="resume-hash",
     )
-    mapping = EvidenceMapping(
-        job_profile_hash="job-hash",
-        candidate_profile_hash="resume-hash",
-        requirement_matches=[],
-        overall_evidence_strength="high",
-        confidence="high",
-        unmapped_critical_requirements=[],
-        candidate_extra_strengths=["Power BI"],
-        risk_points=[],
-    )
     adaptive_result = AdaptiveScoreResult(
         match_score=84.2,
         confidence_score=78.0,
@@ -126,9 +115,7 @@ async def test_matching_engine_service_returns_adaptive_payload(monkeypatch: pyt
     monkeypatch.setattr(service, "_resolve_ai_service", AsyncMock(return_value=None))
     monkeypatch.setattr(service, "_ensure_job_profile", AsyncMock(return_value=job_profile))
     monkeypatch.setattr(service, "_ensure_candidate_profile", AsyncMock(return_value=candidate_profile))
-    monkeypatch.setattr(service, "_ensure_evidence_mapping", AsyncMock(return_value=mapping))
-    monkeypatch.setattr(service._adaptive_scorer, "score", lambda *args, **kwargs: adaptive_result)
-    monkeypatch.setattr(service._insight_service, "build", lambda *args, **kwargs: insight)
+    monkeypatch.setattr(service, "_build_detached_adaptive_result", lambda *args, **kwargs: adaptive_result)
 
     payload = await service.match_details_to_job(analysis, result, uuid4())
 
@@ -137,7 +124,7 @@ async def test_matching_engine_service_returns_adaptive_payload(monkeypatch: pyt
     assert payload.confidence_score == Decimal("78.00")
     assert payload.recommendation == "interview"
     assert payload.technical_competencies == Decimal("88.00")
-    assert payload.bonus_signals == ["Power BI"]
+    assert payload.bonus_signals == []
 
 
 @pytest.mark.asyncio
@@ -190,16 +177,6 @@ async def test_matching_engine_service_records_engine_observation(
         confidence="high",
         resume_hash="resume-hash",
     )
-    mapping = EvidenceMapping(
-        job_profile_hash="job-hash",
-        candidate_profile_hash="resume-hash",
-        requirement_matches=[],
-        overall_evidence_strength="high",
-        confidence="high",
-        unmapped_critical_requirements=[],
-        candidate_extra_strengths=["Power BI"],
-        risk_points=[],
-    )
     adaptive_result = AdaptiveScoreResult(
         match_score=84.2,
         confidence_score=78.0,
@@ -235,9 +212,7 @@ async def test_matching_engine_service_records_engine_observation(
     monkeypatch.setattr(service, "_resolve_ai_service", AsyncMock(return_value=None))
     monkeypatch.setattr(service, "_ensure_job_profile", AsyncMock(return_value=job_profile))
     monkeypatch.setattr(service, "_ensure_candidate_profile", AsyncMock(return_value=candidate_profile))
-    monkeypatch.setattr(service, "_ensure_evidence_mapping", AsyncMock(return_value=mapping))
-    monkeypatch.setattr(service._adaptive_scorer, "score", lambda *args, **kwargs: adaptive_result)
-    monkeypatch.setattr(service._insight_service, "build", lambda *args, **kwargs: insight)
+    monkeypatch.setattr(service, "_build_detached_adaptive_result", lambda *args, **kwargs: adaptive_result)
     service._observability_service.record_snapshot = AsyncMock()
 
     await service.match_details_to_job(analysis, result, uuid4())

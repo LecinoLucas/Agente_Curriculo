@@ -19,7 +19,7 @@ class RefreshTokenUseCase:
         self._user_repo = user_repository
 
     async def execute(self, command: RefreshTokenCommand) -> RefreshTokenResult:
-        redis = get_redis()
+        redis = await get_redis()
         token_hash = hashlib.sha256(command.refresh_token.encode()).hexdigest()
         redis_key = f"session:refresh:{token_hash}"
 

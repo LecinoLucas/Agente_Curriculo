@@ -3,6 +3,7 @@ import type { AIAnalysisStatus, PipelineStage } from "../../types/domain";
 export type CandidateStateKey =
   | "no_resume"
   | "waiting_analysis"
+  | "waiting_job"
   | "in_analysis"
   | "analysis_completed"
   | "ready_for_decision"
@@ -36,6 +37,11 @@ const CANDIDATE_STATES: Record<CandidateStateKey, CandidateState> = {
   waiting_analysis: {
     key: "waiting_analysis",
     label: "Aguardando análise",
+    tone: "warning",
+  },
+  waiting_job: {
+    key: "waiting_job",
+    label: "Aguardando vaga",
     tone: "warning",
   },
   in_analysis: {
@@ -84,6 +90,7 @@ export function getCandidateState(candidate: CandidateStateInput): CandidateStat
     return CANDIDATE_STATES.in_analysis;
   }
   if (resumeCount === 0) return CANDIDATE_STATES.no_resume;
+  if (pipelineStage == null) return CANDIDATE_STATES.waiting_job;
   if (analysisStatus == null || analysisStatus === "failed" || analysisStatus === "cancelled") {
     return CANDIDATE_STATES.waiting_analysis;
   }
@@ -104,6 +111,11 @@ export function getNextAction(candidateState: CandidateState): CandidateNextActi
       return {
         label: "Ação: Iniciar análise da IA",
         suggestion: "Sugestão: Iniciar análise da IA",
+      };
+    case "waiting_job":
+      return {
+        label: "Ação: Adicionar a uma vaga",
+        suggestion: "Sugestão: Adicionar a uma vaga",
       };
     case "in_analysis":
       return {

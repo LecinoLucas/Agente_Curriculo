@@ -82,6 +82,7 @@ function fmtDuration(startedAt: string | null, completedAt: string | null): stri
 export function AnalisesIaPage() {
   const {
     openCandidate,
+    selectedCandidateId,
     syncAnalysisStart,
     startPolling,
     analysesSyncTick,
@@ -379,7 +380,7 @@ export function AnalisesIaPage() {
         )}
       </div>
 
-      <CandidateDrawer />
+      <CandidateDrawer key={selectedCandidateId ?? "none"} />
     </div>
   );
 }

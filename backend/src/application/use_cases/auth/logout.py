@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 
 class LogoutUseCase:
     async def execute(self, command: LogoutCommand) -> None:
-        redis = get_redis()
+        redis = await get_redis()
         token_hash = hashlib.sha256(command.refresh_token.encode()).hexdigest()
         await redis.delete(f"session:refresh:{token_hash}")
         logger.info("user.logout", user_id=str(command.user_id))

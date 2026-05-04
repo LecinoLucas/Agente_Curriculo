@@ -9,6 +9,14 @@ ROOT_DEPS_STAMP="$ROOT_DIR/node_modules/.deps-stamp"
 FRONTEND_DEPS_STAMP="$FRONTEND_DIR/node_modules/.deps-stamp"
 BACKEND_DEPS_STAMP="$BACKEND_DIR/.venv/.deps-stamp"
 
+# Comandos manuais (rodar apenas quando necessario):
+# Migrations:  cd backend && alembic upgrade head
+# Reset banco: npm run backend:bootstrap
+# Seed admin:  cd backend && python scripts/seed_admin.py
+# Seed vagas:  cd backend && python scripts/seed_jobs.py
+# Seed AI:     cd backend && python scripts/seed_ai_models.py
+# Seed score:  cd backend && python scripts/seed_scoring.py
+
 print_section() {
   printf '\n== %s ==\n' "$1"
 }
@@ -225,20 +233,28 @@ kill_port_range() {
   wait
 }
 
-bootstrap_database() {
-  cd "$ROOT_DIR"
-
-  print_info "Preparando schema do banco para desenvolvimento"
-  npm run --silent backend:bootstrap
-  print_ok "Schema pronto"
-
-  (
-    (print_info "Garantindo usuario admin de desenvolvimento" && npm run --silent backend:seed-admin && print_ok "Usuario admin pronto") &
-    (print_info "Inserindo vagas de desenvolvimento" && npm run --silent backend:seed-jobs && print_ok "Vagas de desenvolvimento prontas") &
-    (print_info "Garantindo versao de scoring ativa" && npm run --silent backend:seed-scoring && print_ok "Versao de scoring pronta") &
-    wait
-  )
+check_redis() {
+  if command -v redis-cli >/dev/null 2>&1; then
+    if redis-cli ping >/dev/null 2>&1; then
+      print_ok "Redis disponivel"
+      return 0
+    fi
+  fi
+  print_error "Redis nao esta rodando. Inicie com: redis-server --daemonize yes"
+  exit 1
 }
+
+cleanup() {
+  print_info "Encerrando servicos..."
+  kill_matching_processes "src.interface.api.main:app"
+  kill_matching_processes "celery -A src.infrastructure.queue.celery_app"
+  kill_matching_processes "vite --host 0.0.0.0"
+  exit 0
+}
+
+# ─────────────────────────────────────────
+# ENTRYPOINT
+# ─────────────────────────────────────────
 
 if [ ! -f "$BACKEND_DIR/.env" ]; then
   print_error "Arquivo $BACKEND_DIR/.env nao encontrado."
@@ -274,8 +290,12 @@ if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
   exit 1
 fi
 
+print_section "Redis"
+check_redis
+
 print_section "Portas"
 kill_matching_processes "src.interface.api.main:app"
+kill_matching_processes "celery -A src.infrastructure.queue.celery_app"
 kill_matching_processes "vite --host 0.0.0.0"
 kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
 kill_port "$BACKEND_PORT" &
@@ -283,15 +303,27 @@ wait
 wait_for_port_free "$FRONTEND_PORT"
 wait_for_port_free "$BACKEND_PORT"
 
-print_section "Banco"
-bootstrap_database
-
 export FRONTEND_PORT
 export BACKEND_PORT
 export HOST="0.0.0.0"
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-$EXPECTED_API_URL}"
 
+trap cleanup INT TERM
+
 print_section "Servicos"
-print_info "Subindo frontend e backend para acesso local e rede"
+print_info "Subindo frontend, backend e worker Celery"
+
+cd "$BACKEND_DIR"
+.venv/bin/celery -A src.infrastructure.queue.celery_app worker \
+  --queues=analysis,matching,document_ai \
+  --loglevel=warning \
+  --concurrency=2 &
+CELERY_PID=$!
+print_ok "Worker Celery iniciado (PID $CELERY_PID)"
+
 cd "$ROOT_DIR"
-exec npm run --silent dev
+npm run --silent dev &
+NPM_PID=$!
+print_ok "Frontend e backend iniciados (PID $NPM_PID)"
+
+wait $CELERY_PID $NPM_PID

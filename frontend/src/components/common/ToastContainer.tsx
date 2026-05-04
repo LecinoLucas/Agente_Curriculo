@@ -50,7 +50,7 @@ export function ToastContainer() {
             )}
           >
             <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", ICON_CLASSES[t.type])} />
-            <span className="text-sm flex-1 leading-snug">{t.message}</span>
+            <span className="text-sm flex-1 leading-snug whitespace-pre-line">{t.message}</span>
             <button
               type="button"
               onClick={() => toast.dismiss(t.id)}

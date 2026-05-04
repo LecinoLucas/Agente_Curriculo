@@ -63,6 +63,7 @@ export function PipelinePage() {
     boardLoading,
     boardError,
     rankingSyncTick,
+    selectedCandidateId,
     setActiveJob,
     refreshBoard,
     openCandidate,
@@ -501,7 +502,7 @@ export function PipelinePage() {
       )}
 
       {/* ── Candidate drawer — position: fixed, always rendered, open via context ── */}
-      <CandidateDrawer />
+      <CandidateDrawer key={selectedCandidateId ?? "none"} />
     </div>
   );
 }

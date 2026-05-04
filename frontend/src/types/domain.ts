@@ -86,12 +86,20 @@ export type CandidateJobMatchOverview = {
   created_at: string;
 };
 
+export type CandidateActiveJobOverview = {
+  id: string;
+  title: string;
+  status: string;
+};
+
 export type CandidateOverview = {
   candidate: Candidate;
   resumes: CandidateResumeOverview[];
   latest_analysis: CandidateLatestAnalysisOverview | null;
   latest_analysis_pipeline: CandidateLatestAnalysisPipelineOverview | null;
   top_matches: CandidateJobMatchOverview[];
+  active_job_id: string | null;
+  active_job: CandidateActiveJobOverview | null;
   candidate_job_links: CandidateJobLinkOverview[];
   pipeline_entries: CandidatePipelineEntryOverview[];
 };

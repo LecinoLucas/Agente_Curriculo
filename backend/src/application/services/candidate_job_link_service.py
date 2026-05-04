@@ -58,7 +58,13 @@ class CandidateJobLinkService:
         existing = await self._repository.get_by_candidate_and_job(candidate_id, job_id)
         if existing:
             if existing.deleted_at is None:
-                # Link already exists and is active — just update source if different
+                # Link row exists (including historical statuses).
+                # Reactivate semantic status and update source when needed.
+                if existing.status != "active":
+                    existing.status = "active"
+                    existing.source = source
+                    existing.updated_at = datetime.now(UTC)
+                    return await self._repository.save(existing)
                 if existing.source != source:
                     existing.source = source
                     existing.updated_at = datetime.now(UTC)

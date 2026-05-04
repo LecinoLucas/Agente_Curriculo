@@ -1,12 +1,18 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+import sqlalchemy as sa
+import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.pipeline_service import (
+    PipelineCandidateAlreadyActiveInAnotherJobError,
+    PipelineCandidateAlreadyActiveInSameJobError,
     PipelineDestinationJobUnavailableError,
     PipelineCandidateNotFoundError,
+    PipelineCandidateWithoutActiveJobError,
     PipelineConcurrentModificationError,
     PipelineDuplicateEntryError,
     PipelineEntryNotFoundError,
@@ -35,10 +41,107 @@ from src.interface.api.schemas.pipeline_schemas import (
 )
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
+logger = structlog.get_logger(__name__)
+
+_ANALYSIS_QUEUE = "analysis"
 
 
 def _service(db: AsyncSession) -> PipelineService:
-    return PipelineService(SQLAlchemyPipelineRepository(db))
+    return PipelineService(SQLAlchemyPipelineRepository(db), db)
+
+
+async def _enqueue_latest_pending_analysis_for_candidate_job(
+    db: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> None:
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+    from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+    from src.interface.workers.analysis_tasks import process_analysis
+
+    query = (
+        sa.select(AnalysisModel)
+        .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+        .where(
+            ResumeModel.candidate_id == candidate_id,
+            AnalysisModel.job_id == job_id,
+            AnalysisModel.status == "pending",
+            AnalysisModel.task_id.is_(None),
+        )
+        .order_by(AnalysisModel.created_at.desc())
+        .limit(1)
+    )
+    latest_analysis = await db.scalar(query)
+
+    if latest_analysis is None:
+        return
+
+    analysis_id = latest_analysis.id
+    queue_name = _ANALYSIS_QUEUE
+    task_id = f"analysis:{analysis_id}"
+
+    logger.info(
+        "analysis_pending_created",
+        analysis_id=str(analysis_id),
+        candidate_id=str(candidate_id),
+        job_id=str(job_id),
+        queue_name=latest_analysis.queue_name,
+        status=latest_analysis.status,
+    )
+
+    try:
+        logger.info(
+            "analysis_enqueue_requested",
+            analysis_id=str(analysis_id),
+            candidate_id=str(candidate_id),
+            job_id=str(job_id),
+            queue_name=queue_name,
+            task_id=task_id,
+        )
+        async_result = process_analysis.apply_async(
+            args=[str(analysis_id)],
+            queue=queue_name,
+            priority=latest_analysis.priority,
+            task_id=task_id,
+        )
+        persisted_task_id = str(async_result.id or task_id)
+        latest_analysis.task_id = persisted_task_id
+        latest_analysis.queue_name = queue_name
+        latest_analysis.updated_at = datetime.now(UTC)
+        latest_analysis.failure_reason = None
+        await db.commit()
+        logger.info(
+            "analysis_enqueue_succeeded",
+            analysis_id=str(analysis_id),
+            candidate_id=str(candidate_id),
+            job_id=str(job_id),
+            queue_name=queue_name,
+            task_id=persisted_task_id,
+        )
+    except Exception as exc:
+        await db.rollback()
+        try:
+            await db.execute(
+                sa.update(AnalysisModel)
+                .where(AnalysisModel.id == analysis_id)
+                .values(
+                    failure_reason=f"enqueue_failed: {exc}",
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        logger.error(
+            "analysis_enqueue_failed",
+            analysis_id=str(analysis_id),
+            candidate_id=str(candidate_id),
+            job_id=str(job_id),
+            queue_name=queue_name,
+            error=str(exc),
+        )
 
 
 def _handle(exc: Exception) -> None:
@@ -66,6 +169,21 @@ def _handle(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Este candidato já avançou no processo. Para preservar o histórico, adicione-o a outra vaga em vez de transferir.",
+        )
+    if isinstance(exc, PipelineCandidateAlreadyActiveInAnotherJobError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato já possui vínculo ativo com outra vaga. Use transferência para mover o candidato.",
+        )
+    if isinstance(exc, PipelineCandidateAlreadyActiveInSameJobError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato já está ativo nesta vaga.",
+        )
+    if isinstance(exc, PipelineCandidateWithoutActiveJobError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato não possui vaga ativa. Use adicionar a uma vaga.",
         )
     if isinstance(exc, PipelineSameStageError):
         raise HTTPException(
@@ -232,6 +350,12 @@ async def add_candidate_to_job(
             moved_by=current_user.id,
         )
         await db.commit()
+        await _enqueue_latest_pending_analysis_for_candidate_job(
+            db,
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+        )
+
         return result
     except Exception as exc:
         await db.rollback()
@@ -256,6 +380,11 @@ async def transfer_candidate_job(
             moved_by=current_user.id,
         )
         await db.commit()
+        await _enqueue_latest_pending_analysis_for_candidate_job(
+            db,
+            candidate_id=candidate_id,
+            job_id=body.to_job_id,
+        )
         return result
     except Exception as exc:
         await db.rollback()

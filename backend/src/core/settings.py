@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     S3_PRESIGNED_URL_EXPIRE_SECONDS: int = 900
 
     # AI
+    AI_PROVIDER: str = "anthropic"
+    AI_MODEL_ID: str = "gemini-2.5-flash"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_DEFAULT_MODEL: str = "claude-sonnet-4-6"
     ANTHROPIC_MAX_TOKENS: int = 4096
@@ -50,6 +52,19 @@ class Settings(BaseSettings):
     # Set to true ONLY in local dev to bypass real AI calls with synthetic scores.
     # Must never be true in staging or production.
     ENABLE_DEV_MOCK: bool = False
+    # AI Provider configuration
+    AI_PROVIDER_TIMEOUT_SECONDS: float = 90.0
+    AI_MAX_TOKENS: int = 4000
+    AI_MAX_RETRIES: int = 3
+    AI_ANALYSIS_MAX_OUTPUT_TOKENS: int = 1200
+    AI_ANALYSIS_MAX_RESUME_CHARS: int = 4500
+    AI_ANALYSIS_MAX_JOB_CHARS: int = 1800
+    AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS: int = 300
+    GEMINI_DEBUG_LOG_FULL_CONTENT: bool = False
+    GEMINI_MAX_CONCURRENT_REQUESTS: int = 2
+    GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS: float = 30.0
+    GEMINI_CONCURRENCY_RETRY_INTERVAL_MS: int = 200
+    GEMINI_CONCURRENCY_SLOT_TTL_SECONDS: int = 300
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
@@ -66,6 +81,15 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"APP_ENV must be one of {allowed}")
         return v
+
+    @field_validator("AI_PROVIDER")
+    @classmethod
+    def validate_ai_provider(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        allowed = {"anthropic", "google"}
+        if normalized not in allowed:
+            raise ValueError(f"AI_PROVIDER must be one of {allowed}")
+        return normalized
 
     def model_post_init(self, __context: object) -> None:
         if self.ENABLE_DEV_MOCK and self.APP_ENV == "production":

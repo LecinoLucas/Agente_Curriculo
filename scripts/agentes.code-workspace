@@ -6,6 +6,7 @@
 	],
 	"settings": {
 		"totvsLanguageServer.welcomePage": false,
-		"totvsLanguageServer.editor.linter.includes": "/Users/lecinolucas/Desktop/projetos/Protheus/protheus/includes"
+		"totvsLanguageServer.editor.linter.includes": "/Users/lecinolucas/Desktop/projetos/Protheus/protheus/includes",
+		"claudeCode.allowDangerouslySkipPermissions": true
 	}
 }

@@ -245,6 +245,15 @@ function dedupe(values: string[]): string[] {
   });
 }
 
+function formatRetryAfter(seconds: number): string {
+  const rounded = Math.max(1, Math.ceil(seconds));
+  if (rounded < 60) return `${rounded}s`;
+  const minutes = Math.floor(rounded / 60);
+  const remaining = rounded % 60;
+  if (remaining === 0) return `${minutes}min`;
+  return `${minutes}min ${remaining}s`;
+}
+
 export function handleApiError(error: unknown): UserFriendlyError {
   const status = getHttpStatus(error);
   const detail = getBackendDetail(error);
@@ -323,6 +332,24 @@ export function handleApiError(error: unknown): UserFriendlyError {
       title: 'Conflito de dados',
       message: 'Registro duplicado ou conflito de dados.',
       severity: 'warning',
+      status,
+      raw: error,
+    };
+  }
+
+  if (status === 429) {
+    const retryAfterSeconds =
+      error instanceof HttpError && typeof error.retryAfterSeconds === "number"
+        ? error.retryAfterSeconds
+        : undefined;
+
+    return {
+      title: "🚫 Limite de uso da IA atingido",
+      message:
+        retryAfterSeconds != null
+          ? `Aguarde alguns minutos ou troque a chave da API. Tempo estimado para nova tentativa: ${formatRetryAfter(retryAfterSeconds)}.`
+          : "Aguarde alguns minutos ou troque a chave da API.",
+      severity: "warning",
       status,
       raw: error,
     };

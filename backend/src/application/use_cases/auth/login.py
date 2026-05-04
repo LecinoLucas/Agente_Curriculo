@@ -38,7 +38,7 @@ class LoginUseCase:
         refresh_token = secrets.token_urlsafe(64)
         token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
 
-        redis = get_redis()
+        redis = await get_redis()
         await redis.setex(
             f"session:refresh:{token_hash}",
             settings.jwt_refresh_expire_seconds,

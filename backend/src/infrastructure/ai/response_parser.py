@@ -1,16 +1,21 @@
 """
-Maps raw Claude JSON output → AnalysisResultModel field values.
+Maps raw AI JSON output → normalized candidate profile data.
 
-Scoring weights:
-  technical   30%  — skill depth/breadth
-  experience  25%  — total months worked
-  education   15%  — highest degree
-  communication 15% — resume quality signals
-  leadership  15%  — management/project indicators
+IMPORTANTE:
+Este arquivo NÃO calcula match com vaga.
+Ele apenas:
+- extrai JSON
+- normaliza formatos antigos/novos
+- calcula dados auxiliares do currículo
+- gera um score interno de qualidade do perfil, NÃO compatibilidade com vaga
+
+O match final deve ser calculado por outro serviço:
+job_profiler + resume_profiler + evidence_matcher + scoring_service.
 """
 
 import json
 import re
+import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,136 +23,225 @@ from typing import Any
 # ── JSON extraction ────────────────────────────────────────────────────────────
 
 def extract_json(text: str) -> dict[str, Any]:
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if match:
-        return json.loads(match.group(1))
+    if not text or not text.strip():
+        raise ValueError("Empty AI response")
+
+    cleaned = text.strip()
+
+    fence_match = re.search(
+        r"```(?:json)?\s*(\{.*?\})\s*```",
+        cleaned,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if fence_match:
+        return json.loads(fence_match.group(1))
 
     try:
-        return json.loads(text)
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return parsed
+        raise ValueError("AI response JSON must be an object")
     except json.JSONDecodeError:
         pass
 
-    start = text.find("{")
+    start = cleaned.find("{")
     if start != -1:
         depth = 0
-        for i, ch in enumerate(text[start:], start):
+        in_string = False
+        escape = False
+
+        for i, ch in enumerate(cleaned[start:], start):
+            if escape:
+                escape = False
+                continue
+
+            if ch == "\\":
+                escape = True
+                continue
+
+            if ch == '"':
+                in_string = not in_string
+                continue
+
+            if in_string:
+                continue
+
             if ch == "{":
                 depth += 1
             elif ch == "}":
                 depth -= 1
                 if depth == 0:
-                    return json.loads(text[start : i + 1])
+                    parsed = json.loads(cleaned[start : i + 1])
+                    if isinstance(parsed, dict):
+                        return parsed
+                    raise ValueError("Extracted JSON must be an object")
 
-    raise ValueError(f"No valid JSON in Claude response: {text[:300]!r}")
-
-
-# ── Individual scorers ─────────────────────────────────────────────────────────
-
-def _education_score(level: str | None) -> float:
-    return {
-        "phd": 100, "master": 90, "postgraduate": 85,
-        "bachelor": 75, "technical": 60, "high_school": 40, "none": 20,
-    }.get(level or "none", 50)
+    raise ValueError(f"No valid JSON in AI response: {cleaned[:300]!r}")
 
 
-def _communication_score(comm: dict[str, Any]) -> float:
-    if not comm:
-        return 60.0
-    vals = [
-        comm.get("structure", 60),
-        comm.get("clarity", 60),
-        comm.get("professionalism", 60),
-        comm.get("completeness", 60),
-    ]
-    return sum(float(v) for v in vals) / len(vals)
+# ── Basic normalization ────────────────────────────────────────────────────────
+
+def _strip_accents(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
-def _clamp_score(value: float) -> float:
-    return max(0.0, min(100.0, value))
+def normalize_text(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    text = str(value).strip().lower()
+    if not text:
+        return None
+
+    text = _strip_accents(text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def make_id(value: Any) -> str | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    return text or None
 
 
 def _coerce_float(value: Any) -> float | None:
     if value is None:
         return None
+
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
 
 
-def _dedupe_keywords(values: list[Any]) -> list[str]:
-    deduped: list[str] = []
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp_score(value: float) -> float:
+    return max(0.0, min(100.0, value))
+
+
+def _dedupe_strings(values: list[Any]) -> list[str]:
+    result: list[str] = []
     seen: set[str] = set()
 
     for value in values:
-        if value is None:
+        text = normalize_text(value)
+        if not text or text in seen:
             continue
-        text = str(value).strip()
-        if not text:
+
+        seen.add(text)
+        result.append(text)
+
+    return result
+
+
+# ── Date / duration helpers ────────────────────────────────────────────────────
+
+def _parse_yyyy_mm(value: Any) -> tuple[int, int] | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+
+    if re.fullmatch(r"\d{4}", text):
+        return int(text), 1
+
+    if not re.fullmatch(r"\d{4}-\d{2}", text):
+        return None
+
+    year, month = text.split("-")
+    y = int(year)
+    m = int(month)
+
+    if not 1 <= m <= 12:
+        return None
+
+    return y, m
+
+
+def _month_index(year: int, month: int) -> int:
+    return year * 12 + (month - 1)
+
+
+def _months_between(start: Any, end: Any) -> int | None:
+    parsed_start = _parse_yyyy_mm(start)
+    parsed_end = _parse_yyyy_mm(end)
+
+    if parsed_start is None or parsed_end is None:
+        return None
+
+    start_idx = _month_index(*parsed_start)
+    end_idx = _month_index(*parsed_end)
+
+    if end_idx < start_idx:
+        return None
+
+    return end_idx - start_idx
+
+
+def _merge_month_ranges(ranges: list[tuple[int, int]]) -> int:
+    if not ranges:
+        return 0
+
+    sorted_ranges = sorted(ranges)
+    current_start, current_end = sorted_ranges[0]
+    total = 0
+
+    for start, end in sorted_ranges[1:]:
+        if start <= current_end:
+            current_end = max(current_end, end)
             continue
-        lowered = text.lower()
-        if lowered in seen:
-            continue
-        seen.add(lowered)
-        deduped.append(text)
 
-    return deduped
+        total += current_end - current_start
+        current_start, current_end = start, end
 
-
-def _leadership_score(indicators: dict[str, Any]) -> float:
-    if not indicators:
-        return 0.0
-    score = 0.0
-    if indicators.get("has_management"):
-        score += 40
-    if indicators.get("has_project_lead"):
-        score += 30
-    if indicators.get("has_mentoring"):
-        score += 20
-    if indicators.get("has_cross_team"):
-        score += 10
-    return score
+    total += current_end - current_start
+    return total
 
 
-def _technical_score(skills: list[dict[str, Any]]) -> float:
-    if not skills:
-        return 50.0
-    level_w = {"expert": 4, "advanced": 3, "intermediate": 2, "basic": 1}
-    target = [s for s in skills if s.get("is_primary")] or skills[:12]
-    total = sum(level_w.get(s.get("proficiency_level", "basic"), 1) for s in target)
-    max_possible = len(target) * 4
-    return round(min(100.0, total / max_possible * 100) if max_possible else 50.0, 2)
+def _calculate_total_experience_months(experiences: list[dict[str, Any]]) -> int:
+    now = datetime.now(UTC)
+    current_month = f"{now.year:04d}-{now.month:02d}"
+
+    ranges: list[tuple[int, int]] = []
+    undated_months = 0
+
+    for exp in experiences:
+        start_date = exp.get("start_date")
+        end_date = current_month if exp.get("is_current") and start_date else exp.get("end_date")
+
+        parsed_start = _parse_yyyy_mm(start_date)
+        parsed_end = _parse_yyyy_mm(end_date)
+
+        if parsed_start and parsed_end:
+            start_idx = _month_index(*parsed_start)
+            end_idx = _month_index(*parsed_end)
+
+            if end_idx >= start_idx:
+                ranges.append((start_idx, end_idx))
+                continue
+
+        duration = _coerce_int(exp.get("duration_months"))
+        if duration is not None and duration > 0 and not start_date and not exp.get("end_date"):
+            undated_months += duration
+
+    return _merge_month_ranges(ranges) + undated_months
 
 
-def _experience_score(months: int) -> float:
-    if months >= 120:
-        return 100.0
-    if months >= 84:
-        return 90.0
-    if months >= 60:
-        return 80.0
-    if months >= 36:
-        return 65.0
-    if months >= 12:
-        return 45.0
-    if months > 0:
-        return 25.0
-    return 10.0
-
-
-def _classify_seniority(months: int, has_leadership: bool) -> str:
-    if months >= 120 or (months >= 84 and has_leadership):
-        return "principal" if has_leadership else "senior"
-    if months >= 72 and has_leadership:
-        return "lead"
-    if months >= 60:
-        return "senior"
-    if months >= 36:
-        return "mid"
-    if months >= 12:
-        return "junior"
-    return "intern"
-
+# ── Education ──────────────────────────────────────────────────────────────────
 
 _EDUCATION_LEVEL_ORDER = {
     "none": 0,
@@ -159,384 +253,432 @@ _EDUCATION_LEVEL_ORDER = {
     "phd": 6,
 }
 
+_DEGREE_ALIASES = {
+    "ensino medio": "high_school",
+    "high school": "high_school",
+    "tecnico": "technical",
+    "technical": "technical",
+    "tecnologo": "technical",
+    "technologist": "technical",
+    "bachelor": "bachelor",
+    "bacharelado": "bachelor",
+    "graduacao": "bachelor",
+    "undergraduate": "bachelor",
+    "postgraduate": "postgraduate",
+    "post graduate": "postgraduate",
+    "pos graduacao": "postgraduate",
+    "mba": "postgraduate",
+    "master": "master",
+    "mestrado": "master",
+    "msc": "master",
+    "phd": "phd",
+    "doctorate": "phd",
+    "doutorado": "phd",
+}
+
 
 def _normalize_degree(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip().lower()
+    text = normalize_text(value)
     if not text:
         return None
 
-    aliases = {
-        "ensino medio": "high_school",
-        "ensino médio": "high_school",
-        "high school": "high_school",
-        "tecnico": "technical",
-        "técnico": "technical",
-        "technical": "technical",
-        "tecnologo": "technical",
-        "tecnólogo": "technical",
-        "technologist": "technical",
-        "bachelor": "bachelor",
-        "bacharelado": "bachelor",
-        "graduacao": "bachelor",
-        "graduação": "bachelor",
-        "undergraduate": "bachelor",
-        "postgraduate": "postgraduate",
-        "post-graduate": "postgraduate",
-        "pos-graduacao": "postgraduate",
-        "pós-graduação": "postgraduate",
-        "mba": "postgraduate",
-        "master": "master",
-        "mestrado": "master",
-        "msc": "master",
-        "phd": "phd",
-        "doctorate": "phd",
-        "doutorado": "phd",
-    }
-
     if text in _EDUCATION_LEVEL_ORDER:
         return text
-    return aliases.get(text)
+
+    return _DEGREE_ALIASES.get(text)
 
 
-def _parse_yyyy_mm(value: Any) -> tuple[int, int] | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not re.fullmatch(r"\d{4}-\d{2}", text):
-        return None
-    year, month = text.split("-")
-    y = int(year)
-    m = int(month)
-    if m < 1 or m > 12:
-        return None
-    return y, m
-
-
-def _months_between(start: str | None, end: str | None) -> int | None:
-    parsed_start = _parse_yyyy_mm(start)
-    parsed_end = _parse_yyyy_mm(end)
-    if parsed_start is None or parsed_end is None:
-        return None
-    start_year, start_month = parsed_start
-    end_year, end_month = parsed_end
-    months = (end_year - start_year) * 12 + (end_month - start_month)
-    return months if months >= 0 else None
-
-
-def _month_index(year: int, month: int) -> int:
-    return year * 12 + (month - 1)
-
-
-def _merge_month_ranges(ranges: list[tuple[int, int]]) -> int:
-    if not ranges:
-        return 0
-
-    merged_months = 0
-    current_start, current_end = sorted(ranges)[0]
-
-    for start, end in sorted(ranges)[1:]:
-        if start <= current_end:
-            current_end = max(current_end, end)
-            continue
-        merged_months += current_end - current_start
-        current_start, current_end = start, end
-
-    merged_months += current_end - current_start
-    return merged_months
-
-
-def _experience_months_from_v2(raw_experiences: list[dict[str, Any]]) -> int:
-    date_ranges: list[tuple[int, int]] = []
-    undated_duration_months = 0
-    now = datetime.now(UTC)
-    current_month = f"{now.year:04d}-{now.month:02d}"
-
-    for item in raw_experiences:
-        start_date = item.get("start_date")
-        end_date = current_month if item.get("is_current") and start_date else item.get("end_date")
-        parsed_start = _parse_yyyy_mm(start_date)
-        parsed_end = _parse_yyyy_mm(end_date)
-
-        if parsed_start is not None and parsed_end is not None:
-            start_idx = _month_index(*parsed_start)
-            end_idx = _month_index(*parsed_end)
-            if end_idx >= start_idx:
-                date_ranges.append((start_idx, end_idx))
-            continue
-
-        # Fall back to explicit durations only when date ranges are absent, not contradictory.
-        if start_date is None and item.get("end_date") is None:
-            duration = item.get("duration_months")
-            if duration is not None:
-                try:
-                    duration_months = int(duration)
-                except (TypeError, ValueError):
-                    continue
-                if duration_months >= 0:
-                    undated_duration_months += duration_months
-
-    return _merge_month_ranges(date_ranges) + undated_duration_months
-
-
-def _normalize_current_data(data: dict[str, Any]) -> dict[str, Any]:
-    experiences = data.get("experiences") or []
-    total_experience_months = int(data.get("total_experience_months") or 0)
-
-    if not total_experience_months:
-        for experience in experiences:
-            duration = experience.get("duration_months")
-            if duration is None:
-                duration = _months_between(experience.get("start_date"), experience.get("end_date"))
-            if duration:
-                total_experience_months += int(duration)
-
-    education = data.get("education") or []
-    normalized_education = []
-    highest_education_level = data.get("highest_education_level")
-    if highest_education_level is not None:
-        highest_education_level = _normalize_degree(highest_education_level) or str(highest_education_level)
-
-    for item in education:
-        degree = _normalize_degree(item.get("degree")) or item.get("degree")
-        normalized_education.append(
-            {
-                "institution": item.get("institution"),
-                "degree": degree,
-                "field": item.get("field"),
-                "graduation_year": item.get("graduation_year"),
-                "is_completed": item.get("is_completed"),
-            }
-        )
-
-    if highest_education_level is None:
-        degree_values = [d.get("degree") for d in normalized_education if d.get("degree")]
-        highest_education_level = max(
-            degree_values,
-            key=lambda degree: _EDUCATION_LEVEL_ORDER.get(str(degree), -1),
-            default="none",
-        )
-
-    return {
-        "candidate": data.get("candidate") or {},
-        "summary": data.get("summary"),
-        "total_experience_months": total_experience_months,
-        "experiences": experiences,
-        "employment_gaps": data.get("employment_gaps") or [],
-        "education": normalized_education,
-        "highest_education_level": highest_education_level or "none",
-        "education_field_relevance": data.get("education_field_relevance") or "medium",
-        "certifications": data.get("certifications") or [],
-        "skills": data.get("skills") or [],
-        "skill_categories": data.get("skill_categories") or [],
-        "languages": data.get("languages") or [],
-        "communication_quality": data.get("communication_quality") or {},
-        "leadership_indicators": data.get("leadership_indicators") or {},
-        "strengths": data.get("strengths") or [],
-        "weaknesses": data.get("weaknesses") or [],
-        "recommendations": data.get("recommendations") or [],
-        "keywords": data.get("keywords") or [],
-    }
-
-
-def _normalize_v2_data(data: dict[str, Any]) -> dict[str, Any]:
-    personal_info = data.get("personal_info") or {}
-    raw_experiences = data.get("experience") or []
-    raw_skills = data.get("skills") or []
-    raw_education = data.get("education") or []
-    raw_languages = data.get("languages") or []
-    raw_gaps = data.get("employment_gaps") or []
-    raw_quality = data.get("cv_quality_score") or {}
-    raw_leadership = data.get("leadership") or {}
-    raw_keywords = data.get("keywords") or []
-
-    experiences: list[dict[str, Any]] = []
-    total_experience_months = _experience_months_from_v2(raw_experiences)
-    keywords: list[str] = []
-
-    for item in raw_experiences:
-        duration = item.get("duration_months")
-        if duration is None:
-            if item.get("is_current") and item.get("start_date"):
-                now = datetime.utcnow()
-                duration = _months_between(item.get("start_date"), f"{now.year:04d}-{now.month:02d}")
-            else:
-                duration = _months_between(item.get("start_date"), item.get("end_date"))
-        experiences.append(
-            {
-                "company": item.get("company"),
-                "role": item.get("role_title"),
-                "start_date": item.get("start_date"),
-                "end_date": item.get("end_date"),
-                "is_current": bool(item.get("is_current")),
-                "duration_months": int(duration) if duration is not None else None,
-                "description": item.get("description"),
-                "is_leadership": False,
-                "technologies": [],
-            }
-        )
-
-    education: list[dict[str, Any]] = []
-    highest_education_level = "none"
-    highest_field: str | None = None
-    for item in raw_education:
-        degree = _normalize_degree(item.get("degree"))
-        if degree and _EDUCATION_LEVEL_ORDER.get(degree, -1) > _EDUCATION_LEVEL_ORDER.get(
-            highest_education_level, -1
-        ):
-            highest_education_level = degree
-            highest_field = item.get("field")
-        education.append(
-            {
-                "institution": item.get("institution"),
-                "degree": degree or item.get("degree"),
-                "field": item.get("field"),
-                "graduation_year": None,
-                "is_completed": item.get("end_date") is not None,
-            }
-        )
-
-    skills: list[dict[str, Any]] = []
-    for item in raw_skills:
-        name = item.get("name")
-        if not name:
-            continue
-        skills.append(
-            {
-                "name": name,
-                "category": "other",
-                "proficiency_level": item.get("proficiency") or "basic",
-                "years_experience": None,
-                "is_primary": False,
-            }
-        )
-        keywords.append(str(name).strip())
-
-    total_quality = _coerce_float(raw_quality.get("total"))
-    if total_quality is not None and 0 <= total_quality <= 100:
-        normalized_quality_total = _clamp_score(total_quality)
-    else:
-        normalized_quality_total = _clamp_score(
-            sum(
-                _coerce_float(raw_quality.get(field)) or 0.0
-                for field in ("structure", "clarity", "professionalism", "completeness")
-            )
-        )
-
-    communication_quality = {
-        "structure": normalized_quality_total,
-        "clarity": normalized_quality_total,
-        "professionalism": normalized_quality_total,
-        "completeness": normalized_quality_total,
-    }
-
-    employment_gaps = [
-        {
-            "from_date": gap.get("start_date"),
-            "to_date": gap.get("end_date"),
-            "duration_months": gap.get("duration_months"),
-        }
-        for gap in raw_gaps
-        if gap.get("start_date") and gap.get("end_date") and gap.get("duration_months") is not None
+def _highest_education_level(education: list[dict[str, Any]]) -> str:
+    levels = [
+        item.get("level") or item.get("degree")
+        for item in education
+        if item.get("level") or item.get("degree")
     ]
 
-    normalized = {
-        "candidate": {
-            "name": personal_info.get("name"),
-            "email": personal_info.get("email"),
-            "phone": personal_info.get("phone"),
-            "location": personal_info.get("location"),
-            "work_model": personal_info.get("work_model"),
-            "linkedin_url": None,
-            "github_url": None,
-        },
-        "summary": None,
-        "total_experience_months": total_experience_months,
+    normalized = [_normalize_degree(level) for level in levels]
+    normalized = [level for level in normalized if level]
+
+    if not normalized:
+        return "none"
+
+    return max(
+        normalized,
+        key=lambda level: _EDUCATION_LEVEL_ORDER.get(level, -1),
+    )
+
+
+# ── Seniority / profile quality ────────────────────────────────────────────────
+
+def _classify_seniority(months: int, leadership_signals: list[str]) -> str:
+    has_leadership = bool(leadership_signals)
+
+    if months >= 120 and has_leadership:
+        return "principal"
+
+    if months >= 84 and has_leadership:
+        return "lead"
+
+    if months >= 60:
+        return "senior"
+
+    if months >= 36:
+        return "mid"
+
+    if months >= 12:
+        return "junior"
+
+    if months > 0:
+        return "intern"
+
+    return "undefined"
+
+
+def _profile_quality_score(canonical: dict[str, Any]) -> float:
+    """
+    Score auxiliar de completude do perfil.
+    NÃO é match com vaga.
+    """
+    score = 0.0
+
+    if canonical.get("current_role"):
+        score += 10
+
+    if canonical.get("experiences"):
+        score += 25
+
+    if canonical.get("skills"):
+        score += 25
+
+    if canonical.get("tools"):
+        score += 10
+
+    if canonical.get("education_level") and canonical.get("education_level") != "none":
+        score += 10
+
+    if canonical.get("total_experience_months"):
+        score += 10
+
+    if canonical.get("impact_signals"):
+        score += 5
+
+    if canonical.get("leadership_signals"):
+        score += 5
+
+    return _clamp_score(score)
+
+
+# ── Normalizers ────────────────────────────────────────────────────────────────
+
+def _normalize_experiences(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    experiences: list[dict[str, Any]] = []
+
+    for item in raw:
+        if isinstance(item, str):
+            role = item
+            company = None
+            duration = None
+            key_activities: list[Any] = []
+            start_date = None
+            end_date = None
+            is_current = False
+        elif isinstance(item, dict):
+            role = item.get("role") or item.get("role_title") or item.get("title")
+            company = item.get("company")
+            duration = item.get("duration_months")
+            start_date = item.get("start_date")
+            end_date = item.get("end_date")
+            is_current = bool(item.get("is_current"))
+            key_activities = (
+                item.get("key_activities")
+                or item.get("activities")
+                or item.get("responsibilities")
+                or []
+            )
+        else:
+            continue
+
+        if duration is None:
+            duration = _months_between(start_date, end_date)
+
+        experiences.append(
+            {
+                "role": normalize_text(role),
+                "company": normalize_text(company),
+                "start_date": start_date,
+                "end_date": end_date,
+                "duration_months": _coerce_int(duration),
+                "is_current": is_current,
+                "activities": _dedupe_strings(key_activities),
+            }
+        )
+
+    return experiences
+
+
+def _normalize_skills(raw: list[Any]) -> list[dict[str, Any]]:
+    skills: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for item in raw:
+        if isinstance(item, str):
+            name = item
+            evidence = []
+            confidence = "medium"
+            source = "skill_mention"
+        else:
+            name = item.get("name")
+            evidence_raw = item.get("evidence") or item.get("evidence_text") or []
+            evidence = evidence_raw if isinstance(evidence_raw, list) else [evidence_raw]
+            confidence = normalize_text(item.get("confidence")) or "medium"
+            source = normalize_text(item.get("source")) or "skill_mention"
+
+        skill_id = make_id(name)
+        skill_name = normalize_text(name)
+
+        if not skill_id or not skill_name or skill_id in seen:
+            continue
+
+        seen.add(skill_id)
+
+        skills.append(
+            {
+                "id": skill_id,
+                "name": skill_name,
+                "confidence": confidence if confidence in {"high", "medium", "low", "very_high"} else "medium",
+                "evidence": _dedupe_strings(evidence),
+                "source": source,
+            }
+        )
+
+    return skills
+
+
+def _normalize_tools(raw_tools: list[Any], raw_skills: list[Any] | None = None) -> list[str]:
+    values: list[Any] = list(raw_tools or [])
+
+    for item in raw_skills or []:
+        if isinstance(item, dict):
+            values.extend(item.get("technologies_used") or [])
+            values.extend(item.get("tools") or [])
+
+    return _dedupe_strings(values)
+
+
+def _normalize_education(raw: Any) -> tuple[str, list[dict[str, Any]]]:
+    if isinstance(raw, str):
+        level = _normalize_degree(raw) or "none"
+        return level, []
+
+    education_list = raw or []
+    normalized: list[dict[str, Any]] = []
+
+    for item in education_list:
+        if isinstance(item, str):
+            level = _normalize_degree(item) or "none"
+            normalized.append(
+                {
+                    "level": level,
+                    "field": None,
+                    "institution": None,
+                    "graduation_year": None,
+                    "is_completed": False,
+                }
+            )
+            continue
+
+        if not isinstance(item, dict):
+            continue
+
+        level = (
+            _normalize_degree(item.get("level"))
+            or _normalize_degree(item.get("degree"))
+            or "none"
+        )
+
+        normalized.append(
+            {
+                "level": level,
+                "field": normalize_text(item.get("field")),
+                "institution": normalize_text(item.get("institution")),
+                "graduation_year": _coerce_int(item.get("graduation_year")),
+                "is_completed": bool(item.get("is_completed")),
+            }
+        )
+
+    return _highest_education_level(normalized), normalized
+
+
+def _normalize_resume_profiler_v2(data: dict[str, Any]) -> dict[str, Any]:
+    experiences = _normalize_experiences(data.get("experiences") or [])
+    skills = _normalize_skills(data.get("skills") or data.get("evidenced_skills") or [])
+    tools = _normalize_tools(data.get("tools") or data.get("tools_and_systems") or [])
+    education_level, education = _normalize_education(
+        data.get("education_level") or data.get("education") or []
+    )
+
+    total_months = _calculate_total_experience_months(experiences)
+    if not total_months:
+        total_months = _coerce_int(data.get("total_experience_months")) or 0
+
+    leadership_signals = _dedupe_strings(
+        data.get("leadership_signals") or data.get("leadership_evidence") or []
+    )
+    impact_signals = _dedupe_strings(
+        data.get("impact_signals") or data.get("business_impact_evidence") or []
+    )
+
+    detected_level = normalize_text(data.get("detected_level"))
+    if detected_level not in {"intern", "junior", "mid", "senior", "lead", "principal", "undefined"}:
+        detected_level = _classify_seniority(total_months, leadership_signals)
+
+    canonical = {
+        "current_role": normalize_text(data.get("current_role")),
+        "professional_area": normalize_text(data.get("professional_area")) or "other",
+        "detected_level": detected_level,
+        "total_experience_months": total_months,
+        "total_experience_years": round(total_months / 12, 1) if total_months else None,
         "experiences": experiences,
-        "employment_gaps": employment_gaps,
-        "education": education,
-        "highest_education_level": highest_education_level,
-        "education_field_relevance": "medium",
-        "certifications": [],
         "skills": skills,
-        "skill_categories": sorted({skill["category"] for skill in skills}),
-        "languages": raw_languages,
-        "communication_quality": communication_quality,
-        "leadership_indicators": {
-            "has_management": bool(raw_leadership.get("has_management")),
-            "has_project_lead": bool(raw_leadership.get("has_project_lead")),
-            "has_mentoring": bool(raw_leadership.get("has_mentoring")),
-            "has_cross_team": bool(raw_leadership.get("has_cross_team")),
-        },
-        "strengths": [],
-        "weaknesses": [],
-        "recommendations": [],
-        "keywords": _dedupe_keywords([*raw_keywords, *keywords])[:15],
+        "tools": tools,
+        "education_level": education_level,
+        "education": education,
+        "leadership_signals": leadership_signals,
+        "impact_signals": impact_signals,
+        "profile_completeness": _coerce_float(data.get("profile_completeness")),
+        "confidence": normalize_text(data.get("confidence")) or "medium",
     }
 
-    if highest_field and normalized["education"]:
-        normalized["education"][0]["field"] = normalized["education"][0].get("field") or highest_field
+    if canonical["profile_completeness"] is None:
+        canonical["profile_completeness"] = round(_profile_quality_score(canonical) / 100, 2)
 
-    return normalized
+    return canonical
 
 
-def _canonicalize_analysis_data(data: dict[str, Any]) -> dict[str, Any]:
-    if "personal_info" in data or "experience" in data or "cv_quality_score" in data:
-        return _normalize_v2_data(data)
-    return _normalize_current_data(data)
+def _normalize_legacy_data(data: dict[str, Any]) -> dict[str, Any]:
+    experiences = _normalize_experiences(data.get("experiences") or data.get("experience") or [])
+    skills = _normalize_skills(data.get("skills") or data.get("evidenced_skills") or [])
+    tools = _normalize_tools(
+        data.get("tools") or data.get("tools_and_systems") or [],
+        data.get("experiences") or [],
+    )
+
+    education_level, education = _normalize_education(
+        data.get("education_level")
+        or data.get("highest_education_level")
+        or data.get("education")
+        or []
+    )
+
+    total_months = (
+        _coerce_int(data.get("total_experience_months"))
+        or _calculate_total_experience_months(experiences)
+        or 0
+    )
+
+    leadership_raw = data.get("leadership_indicators") or {}
+    leadership_signals = _dedupe_strings(
+        data.get("leadership_signals")
+        or data.get("leadership_evidence")
+        or [
+            key
+            for key, value in leadership_raw.items()
+            if value
+        ]
+    )
+
+    impact_signals = _dedupe_strings(
+        data.get("impact_signals")
+        or data.get("business_impact_evidence")
+        or []
+    )
+
+    canonical = {
+        "current_role": normalize_text(data.get("current_role")),
+        "professional_area": normalize_text(data.get("professional_area")) or "other",
+        "detected_level": _classify_seniority(total_months, leadership_signals),
+        "total_experience_months": total_months,
+        "total_experience_years": round(total_months / 12, 1) if total_months else None,
+        "experiences": experiences,
+        "skills": skills,
+        "tools": tools,
+        "education_level": education_level,
+        "education": education,
+        "leadership_signals": leadership_signals,
+        "impact_signals": impact_signals,
+        "profile_completeness": round(_profile_quality_score({
+            "current_role": data.get("current_role"),
+            "experiences": experiences,
+            "skills": skills,
+            "tools": tools,
+            "education_level": education_level,
+            "total_experience_months": total_months,
+            "impact_signals": impact_signals,
+            "leadership_signals": leadership_signals,
+        }) / 100, 2),
+        "confidence": normalize_text(data.get("confidence")) or "medium",
+    }
+
+    return canonical
+
+
+def _canonicalize_candidate_profile(data: dict[str, Any]) -> dict[str, Any]:
+    if (
+        "detected_level" in data
+        or "professional_area" in data
+        or "evidenced_skills" in data
+        or "tools_and_systems" in data
+    ):
+        return _normalize_resume_profiler_v2(data)
+
+    return _normalize_legacy_data(data)
 
 
 # ── Main entry ─────────────────────────────────────────────────────────────────
 
 def parse_analysis_response(raw: str) -> dict[str, Any]:
     data = extract_json(raw)
-    canonical = _canonicalize_analysis_data(data)
+    canonical = _canonicalize_candidate_profile(data)
 
-    months: int = int(canonical.get("total_experience_months") or 0)
-    education_level: str | None = canonical.get("highest_education_level")
-    skills: list[dict[str, Any]] = canonical.get("skills") or []
-    comm: dict[str, Any] = canonical.get("communication_quality") or {}
-    leadership: dict[str, Any] = canonical.get("leadership_indicators") or {}
+    summary = data.get("candidate_summary")
+    strengths = _dedupe_strings(data.get("strengths") or [])
+    weaknesses = _dedupe_strings(data.get("weaknesses") or [])
+    recommendations = _dedupe_strings(data.get("recommendations") or [])
+    explicit_overall = _coerce_float(data.get("overall_score"))
 
-    comm_score = _communication_score(comm)
-    lead_score = _leadership_score(leadership)
-    tech_score = _technical_score(skills)
-    exp_score = _experience_score(months)
-    edu_score = _education_score(education_level)
+    profile_quality = round(float(canonical.get("profile_completeness") or 0) * 100, 2)
+    overall_score = _clamp_score(explicit_overall) if explicit_overall is not None else profile_quality
 
-    has_leadership = bool(leadership.get("has_management") or leadership.get("has_project_lead"))
-    seniority = _classify_seniority(months, has_leadership)
-
-    overall = round(
-        tech_score * 0.30
-        + exp_score * 0.25
-        + edu_score * 0.15
-        + comm_score * 0.15
-        + lead_score * 0.15,
-        2,
-    )
-
-    education_list: list[dict[str, Any]] = canonical.get("education") or []
-    highest_field: str | None = (
-        education_list[0].get("field") if education_list else None
-    )
+    total_exp_years = _coerce_float(data.get("total_experience_years"))
+    if total_exp_years is None:
+        total_exp_years = canonical.get("total_experience_years")
 
     return {
-        "overall_score": overall,
-        "technical_score": round(tech_score, 2),
-        "experience_score": round(exp_score, 2),
-        "education_score": round(edu_score, 2),
-        "communication_score": round(comm_score, 2),
-        "leadership_score": round(lead_score, 2),
-        "candidate_summary": canonical.get("summary"),
-        "seniority_level": seniority,
-        "total_experience_years": round(months / 12, 1) if months else None,
-        "highest_education_level": education_level,
-        "highest_education_field": highest_field,
-        "strengths": (canonical.get("strengths") or [])[:5],
-        "weaknesses": (canonical.get("weaknesses") or [])[:3],
-        "recommendations": (canonical.get("recommendations") or [])[:3],
-        "keywords": (canonical.get("keywords") or [])[:15],
+        # Mantém compatibilidade com campos antigos, mas NÃO é match com vaga.
+        "overall_score": overall_score,
+        "technical_score": _coerce_float(data.get("technical_score")),
+        "experience_score": _coerce_float(data.get("experience_score")),
+        "education_score": _coerce_float(data.get("education_score")),
+        "communication_score": _coerce_float(data.get("communication_score")),
+        "leadership_score": _coerce_float(data.get("leadership_score")),
+
+        "candidate_summary": str(summary).strip() if summary else None,
+        "seniority_level": canonical.get("detected_level"),
+        "total_experience_years": total_exp_years,
+        "highest_education_level": canonical.get("education_level"),
+        "highest_education_field": (
+            canonical.get("education", [{}])[0].get("field")
+            if canonical.get("education")
+            else None
+        ),
+
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "recommendations": recommendations,
+
+        "keywords": [
+            skill["name"]
+            for skill in canonical.get("skills", [])
+        ][:15],
+
         "extracted_data": canonical,
     }

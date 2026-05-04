@@ -12,7 +12,6 @@ from src.application.services.adaptive_scorer_service import AdaptiveScorerServi
 from src.application.services.candidate_evaluation_insight_service import (
     CandidateEvaluationInsightService,
 )
-from src.application.services.evidence_matcher_service import EvidenceMatcherService
 from src.application.services.job_profiler_service import JobProfilerService
 from src.application.services.job_profiler_service import job_skill_from_row
 from src.application.services.matching_observability_service import (
@@ -25,7 +24,6 @@ from src.application.services.scoring_comparison_admin_service import (
 from src.domain.value_objects.adaptive_score_result import AdaptiveScoreResult
 from src.domain.value_objects.candidate_evaluation_insight import CandidateEvaluationInsight
 from src.domain.value_objects.candidate_profile import CandidateProfile
-from src.domain.value_objects.evidence_mapping import EvidenceMapping
 from src.domain.value_objects.job_profile import JobProfile
 from src.infrastructure.ai.factory import AIServiceFactory, UnsupportedAIProviderError
 from src.infrastructure.database.models.analysis_model import AnalysisModel, AnalysisResultModel
@@ -104,14 +102,8 @@ class MatchingEngineService:
             analysis_result=result,
             ai_service=ai_service,
         )
-        evidence_mapping = await self._ensure_evidence_mapping(job_profile, candidate_profile, ai_service)
-        adaptive_result = self._adaptive_scorer.score(job_profile, candidate_profile, evidence_mapping)
-        evaluation_insight = self._insight_service.build(
-            job_profile=job_profile,
-            candidate_profile=candidate_profile,
-            evidence_mapping=evidence_mapping,
-            adaptive_result=adaptive_result,
-        )
+        adaptive_result = self._build_detached_adaptive_result(result, job_profile, candidate_profile)
+        evaluation_insight = CandidateEvaluationInsight()
 
         dimensions = adaptive_result.score_breakdown.get("dimensions") or {}
         behavioral_indicators = [
@@ -140,7 +132,7 @@ class MatchingEngineService:
             score_breakdown=dict(adaptive_result.score_breakdown or {}),
             matched_requirements=list(evaluation_insight.matched_requirements),
             missing_requirements=list(evaluation_insight.missing_critical_requirements),
-            bonus_signals=list(evidence_mapping.candidate_extra_strengths),
+            bonus_signals=[],
             evaluation_insight=evaluation_insight,
         )
 
@@ -276,26 +268,39 @@ class MatchingEngineService:
         await self._session.flush()
         return profile
 
-    async def _ensure_evidence_mapping(
-        self,
+    @staticmethod
+    def _build_detached_adaptive_result(
+        result: AnalysisResultModel,
         job_profile: JobProfile,
         candidate_profile: CandidateProfile,
-        ai_service,
-    ) -> EvidenceMapping:
-        if ai_service is not None:
-            try:
-                return await EvidenceMatcherService(ai_service=ai_service).generate_mapping(
-                    job_profile, candidate_profile
-                )
-            except Exception as exc:
-                logger.warning(
-                    "matching_engine_evidence_mapping_ai_failed",
-                    job_profile_hash=job_profile.description_hash,
-                    candidate_profile_hash=candidate_profile.resume_hash,
-                    error=str(exc),
-                )
+    ) -> AdaptiveScoreResult:
+        try:
+            raw_score = float(result.overall_score or 0.0)
+        except (TypeError, ValueError):
+            raw_score = 0.0
 
-        return self._fallback_builder._build_evidence_mapping(job_profile, candidate_profile)
+        recommendation = "reject"
+        if raw_score >= 82:
+            recommendation = "strong_match"
+        elif raw_score >= 65:
+            recommendation = "interview"
+        elif raw_score >= 45:
+            recommendation = "maybe"
+
+        return AdaptiveScoreResult(
+            match_score=raw_score,
+            confidence_score=0.0,
+            recommendation=recommendation,
+            score_breakdown={"dimensions": {}},
+            strengths=[],
+            gaps=[],
+            risk_points=[],
+            critical_coverage=0.0,
+            desirable_coverage=0.0,
+            area=job_profile.area,
+            target_level=job_profile.target_level,
+            detected_level=candidate_profile.detected_level,
+        )
 
     @staticmethod
     def _dimension_score(dimensions: dict[str, Any], key: str) -> float:

@@ -224,7 +224,11 @@ class SQLAlchemyCandidateRepository:
         )
         return [dict(row) for row in result.mappings().all()]
 
-    async def find_latest_analysis_summary(self, candidate_id: UUID) -> dict | None:
+    async def find_latest_analysis_summary_for_job(
+        self,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> dict | None:
         total_tokens = (
             sa.func.coalesce(AnalysisResultModel.input_tokens, 0)
             + sa.func.coalesce(AnalysisResultModel.output_tokens, 0)
@@ -264,6 +268,7 @@ class SQLAlchemyCandidateRepository:
             .where(
                 ResumeModel.candidate_id == candidate_id,
                 ResumeModel.deleted_at.is_(None),
+                AnalysisModel.job_id == job_id,
             )
             .order_by(AnalysisModel.created_at.desc(), AnalysisModel.updated_at.desc())
             .limit(1)
@@ -296,6 +301,15 @@ class SQLAlchemyCandidateRepository:
                     CandidateJobLinkModel.candidate_id == candidate_id,
                     CandidateJobLinkModel.job_id == ResumeJobMatchModel.job_id,
                     CandidateJobLinkModel.deleted_at.is_(None),
+                    CandidateJobLinkModel.status == "active",
+                ),
+            )
+            .join(
+                CandidatePipelineModel,
+                sa.and_(
+                    CandidatePipelineModel.candidate_id == candidate_id,
+                    CandidatePipelineModel.job_id == ResumeJobMatchModel.job_id,
+                    CandidatePipelineModel.is_active.is_(True),
                 ),
             )
             .join(
@@ -313,6 +327,29 @@ class SQLAlchemyCandidateRepository:
                 ResumeJobMatchModel.created_at.desc(),
             )
             .limit(limit)
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def list_candidate_job_links(self, candidate_id: UUID) -> list[dict]:
+        result = await self._session.execute(
+            sa.select(
+                CandidateJobLinkModel.id,
+                CandidateJobLinkModel.candidate_id,
+                CandidateJobLinkModel.job_id,
+                JobModel.title.label("job_title"),
+                JobModel.status.label("job_status"),
+                CandidateJobLinkModel.status,
+                CandidateJobLinkModel.source,
+                CandidateJobLinkModel.created_at,
+                CandidateJobLinkModel.updated_at,
+            )
+            .join(JobModel, JobModel.id == CandidateJobLinkModel.job_id)
+            .where(
+                CandidateJobLinkModel.candidate_id == candidate_id,
+                CandidateJobLinkModel.deleted_at.is_(None),
+                JobModel.deleted_at.is_(None),
+            )
+            .order_by(CandidateJobLinkModel.created_at.desc())
         )
         return [dict(row) for row in result.mappings().all()]
 
@@ -354,6 +391,7 @@ class SQLAlchemyCandidateRepository:
                 CandidatePipelineModel.candidate_id,
                 CandidatePipelineModel.job_id,
                 JobModel.title.label("job_title"),
+                JobModel.status.label("job_status"),
                 CandidatePipelineModel.stage,
                 CandidatePipelineModel.match_score,
                 CandidatePipelineModel.updated_at,
@@ -361,11 +399,8 @@ class SQLAlchemyCandidateRepository:
             .join(JobModel, JobModel.id == CandidatePipelineModel.job_id)
             .where(
                 CandidatePipelineModel.candidate_id == candidate_id,
+                CandidatePipelineModel.is_active.is_(True),
                 JobModel.deleted_at.is_(None),
-                sa.or_(
-                    CandidatePipelineModel.status.is_(None),
-                    CandidatePipelineModel.status != "transferred",
-                ),
             )
             .order_by(
                 CandidatePipelineModel.updated_at.desc(),

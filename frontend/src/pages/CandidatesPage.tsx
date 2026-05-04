@@ -61,7 +61,7 @@ function ScoreCell({ score }: { score: number | null }) {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export function CandidatesPage() {
-  const { openCandidate, candidatesSyncTick } = usePipeline();
+  const { openCandidate, candidatesSyncTick, selectedCandidateId } = usePipeline();
 
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
@@ -353,7 +353,7 @@ export function CandidatesPage() {
         />
       ) : null}
 
-      <CandidateDrawer />
+      <CandidateDrawer key={selectedCandidateId ?? "none"} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 # Importa todos os modelos para que o Alembic os detecte na autogeneration
-from app.modules.admission.models.admission_models import (
+from src.infrastructure.database.models.admission_model import (
     Admission,
     CandidateDocument,
     DocumentRequirement,
@@ -22,6 +22,9 @@ from src.infrastructure.database.models.analysis_model import (
 )
 from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.candidate_job_link_model import (
+    CandidateJobLinkModel,
+)
 from src.infrastructure.database.models.candidate_pipeline_model import (
     CandidatePipelineModel,
     PipelineStageTransitionModel,
@@ -39,6 +42,7 @@ __all__ = [
     "UserSessionModel",
     "PasswordResetTokenModel",
     "CandidateModel",
+    "CandidateJobLinkModel",
     "CandidatePipelineModel",
     "PipelineStageTransitionModel",
     "ResumeModel",

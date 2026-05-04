@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import sys
 from pathlib import Path
@@ -10,7 +12,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.modules.admission.models.admission_models import Admission, CandidateDocument
+from src.infrastructure.database.models.admission_model import Admission, CandidateDocument
 from src.infrastructure.database.connection import engine
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
@@ -29,36 +31,42 @@ from src.infrastructure.database.models.resume_model import ResumeModel, ResumeV
 from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
 
 
+DRY_RUN = True
+MAX_DELETE = 500
+CHUNK_SIZE = 200
+
+
 class CandidateSnapshot:
-    def __init__(self, candidate_id: UUID, full_name: str, email: str | None, created_at) -> None:
+    def __init__(self, candidate_id: UUID, full_name: str, email: str | None, created_at):
         self.id = candidate_id
         self.full_name = full_name
         self.email = email
         self.created_at = created_at
 
 
-def _rowcount(result: sa.CursorResult[object]) -> int:
-    return int(result.rowcount or 0)
+def _chunked(values: list[UUID], size: int):
+    for i in range(0, len(values), size):
+        yield values[i:i + size]
 
 
-async def _fetch_ids(
-    connection: AsyncConnection,
-    statement: sa.Select[tuple[UUID]],
-) -> list[UUID]:
-    result = await connection.execute(statement)
-    return list(result.scalars().all())
+async def _safe_delete(connection, model, column, ids):
+    if not ids:
+        return 0
+
+    total = 0
+
+    for chunk in _chunked(ids, CHUNK_SIZE):
+        result = await connection.execute(
+            sa.delete(model).where(column.in_(chunk))
+        )
+        total += int(result.rowcount or 0)
+
+    return total
 
 
-def _format_candidate(candidate: CandidateSnapshot) -> str:
-    return (
-        f"id={candidate.id} | nome={candidate.full_name} | "
-        f"email={candidate.email or '-'} | created_at={candidate.created_at.isoformat()}"
-    )
-
-
-async def main() -> None:
+async def main():
     async with engine.begin() as connection:
-        keep_candidate_row = (
+        keep = (
             await connection.execute(
                 sa.select(
                     CandidateModel.id,
@@ -67,179 +75,110 @@ async def main() -> None:
                     CandidateModel.created_at,
                 )
                 .where(CandidateModel.deleted_at.is_(None))
-                .order_by(CandidateModel.created_at.desc(), CandidateModel.id.desc())
+                .order_by(CandidateModel.created_at.desc())
                 .limit(1)
             )
         ).first()
 
-        if keep_candidate_row is None:
-            print("Nenhum candidato ativo encontrado. Nada foi removido.")
+        if not keep:
+            print("Nenhum candidato encontrado")
             return
 
-        keep_candidate = CandidateSnapshot(
-            candidate_id=keep_candidate_row.id,
-            full_name=keep_candidate_row.full_name,
-            email=keep_candidate_row.email,
-            created_at=keep_candidate_row.created_at,
-        )
+        keep_candidate = CandidateSnapshot(*keep)
 
-        candidate_ids_to_delete = await _fetch_ids(
-            connection,
-            sa.select(CandidateModel.id)
-            .where(CandidateModel.deleted_at.is_(None), CandidateModel.id != keep_candidate.id),
-        )
+        candidate_ids = (
+            await connection.execute(
+                sa.select(CandidateModel.id)
+                .where(
+                    CandidateModel.deleted_at.is_(None),
+                    CandidateModel.id != keep_candidate.id,
+                )
+                .limit(MAX_DELETE)
+            )
+        ).scalars().all()
 
-        if not candidate_ids_to_delete:
-            print(f"Candidato mantido: {_format_candidate(keep_candidate)}")
-            print("Nenhum outro candidato ativo encontrado. Nada foi removido.")
+        if not candidate_ids:
+            print("Nada para deletar")
             return
 
-        resume_ids_to_delete = await _fetch_ids(
-            connection,
-            sa.select(ResumeModel.id).where(ResumeModel.candidate_id.in_(candidate_ids_to_delete)),
-        )
+        print(f"⚠️ Vai remover {len(candidate_ids)} candidatos")
+        print(f"DRY_RUN = {DRY_RUN}")
 
-        resume_version_ids_to_delete = await _fetch_ids(
-            connection,
-            sa.select(ResumeVersionModel.id).where(
-                ResumeVersionModel.resume_id.in_(resume_ids_to_delete)
-            ),
-        ) if resume_ids_to_delete else []
+        if DRY_RUN:
+            print("Simulação finalizada. Nada foi removido.")
+            return
 
-        analysis_ids_to_delete = await _fetch_ids(
-            connection,
-            sa.select(AnalysisModel.id).where(
-                AnalysisModel.resume_version_id.in_(resume_version_ids_to_delete)
-            ),
-        ) if resume_version_ids_to_delete else []
+        confirm = input("Digite DELETE para confirmar: ")
+        if confirm != "DELETE":
+            print("Abortado.")
+            return
 
-        admission_ids_to_delete = await _fetch_ids(
-            connection,
-            sa.select(Admission.id).where(Admission.candidate_id.in_(candidate_ids_to_delete)),
-        )
-
-        candidate_document_ids_to_delete = await _fetch_ids(
-            connection,
-            sa.select(CandidateDocument.id).where(
-                CandidateDocument.admission_id.in_(admission_ids_to_delete)
-            ),
-        ) if admission_ids_to_delete else []
-
-        removed_counts: dict[str, int] = {}
-
-        if analysis_ids_to_delete:
-            removed_counts["analysis_results"] = _rowcount(
-                await connection.execute(
-                    sa.delete(AnalysisResultModel).where(
-                        AnalysisResultModel.analysis_id.in_(analysis_ids_to_delete)
-                    )
-                )
-            )
-
-            removed_counts["resume_job_matches"] = _rowcount(
-                await connection.execute(
-                    sa.delete(ResumeJobMatchModel).where(
-                        ResumeJobMatchModel.analysis_id.in_(analysis_ids_to_delete)
-                    )
-                )
-            )
-
-            removed_counts["analyses"] = _rowcount(
-                await connection.execute(
-                    sa.delete(AnalysisModel).where(AnalysisModel.id.in_(analysis_ids_to_delete))
-                )
-            )
-        else:
-            removed_counts["analysis_results"] = 0
-            removed_counts["resume_job_matches"] = 0
-            removed_counts["analyses"] = 0
-
-        if candidate_document_ids_to_delete:
-            removed_counts["document_ai_analyses"] = _rowcount(
-                await connection.execute(
-                    sa.delete(DocumentAIAnalysisModel).where(
-                        DocumentAIAnalysisModel.document_id.in_(candidate_document_ids_to_delete)
-                    )
-                )
-            )
-
-            removed_counts["candidate_documents"] = _rowcount(
-                await connection.execute(
-                    sa.delete(CandidateDocument).where(
-                        CandidateDocument.id.in_(candidate_document_ids_to_delete)
-                    )
-                )
-            )
-        else:
-            removed_counts["document_ai_analyses"] = 0
-            removed_counts["candidate_documents"] = 0
-
-        if admission_ids_to_delete:
-            removed_counts["admissions"] = _rowcount(
-                await connection.execute(
-                    sa.delete(Admission).where(Admission.id.in_(admission_ids_to_delete))
-                )
-            )
-        else:
-            removed_counts["admissions"] = 0
-
-        removed_counts["candidate_job_scores"] = _rowcount(
+        resume_ids = (
             await connection.execute(
-                sa.delete(CandidateJobScoreModel).where(
-                    CandidateJobScoreModel.candidate_id.in_(candidate_ids_to_delete)
-                )
+                sa.select(ResumeModel.id)
+                .where(ResumeModel.candidate_id.in_(candidate_ids))
             )
+        ).scalars().all()
+
+        version_ids = (
+            await connection.execute(
+                sa.select(ResumeVersionModel.id)
+                .where(ResumeVersionModel.resume_id.in_(resume_ids))
+            )
+        ).scalars().all()
+
+        analysis_ids = (
+            await connection.execute(
+                sa.select(AnalysisModel.id)
+                .where(AnalysisModel.resume_version_id.in_(version_ids))
+            )
+        ).scalars().all()
+
+        removed = {}
+
+        removed["analysis_results"] = await _safe_delete(
+            connection, AnalysisResultModel, AnalysisResultModel.analysis_id, analysis_ids
         )
 
-        removed_counts["pipeline_stage_transitions"] = _rowcount(
-            await connection.execute(
-                sa.delete(PipelineStageTransitionModel).where(
-                    PipelineStageTransitionModel.candidate_id.in_(candidate_ids_to_delete)
-                )
-            )
+        removed["resume_job_matches"] = await _safe_delete(
+            connection, ResumeJobMatchModel, ResumeJobMatchModel.analysis_id, analysis_ids
         )
 
-        removed_counts["candidate_pipeline"] = _rowcount(
-            await connection.execute(
-                sa.delete(CandidatePipelineModel).where(
-                    CandidatePipelineModel.candidate_id.in_(candidate_ids_to_delete)
-                )
-            )
+        removed["analyses"] = await _safe_delete(
+            connection, AnalysisModel, AnalysisModel.id, analysis_ids
         )
 
-        if resume_version_ids_to_delete:
-            removed_counts["resume_versions"] = _rowcount(
-                await connection.execute(
-                    sa.delete(ResumeVersionModel).where(
-                        ResumeVersionModel.id.in_(resume_version_ids_to_delete)
-                    )
-                )
-            )
-        else:
-            removed_counts["resume_versions"] = 0
+        removed["resume_versions"] = await _safe_delete(
+            connection, ResumeVersionModel, ResumeVersionModel.id, version_ids
+        )
 
-        if resume_ids_to_delete:
-            removed_counts["resumes"] = _rowcount(
-                await connection.execute(
-                    sa.delete(ResumeModel).where(ResumeModel.id.in_(resume_ids_to_delete))
-                )
-            )
-        else:
-            removed_counts["resumes"] = 0
+        removed["resumes"] = await _safe_delete(
+            connection, ResumeModel, ResumeModel.id, resume_ids
+        )
 
-        removed_counts["candidates"] = _rowcount(
-            await connection.execute(
-                sa.delete(CandidateModel).where(CandidateModel.id.in_(candidate_ids_to_delete))
-            )
+        removed["candidate_pipeline"] = await _safe_delete(
+            connection, CandidatePipelineModel, CandidatePipelineModel.candidate_id, candidate_ids
+        )
+
+        removed["pipeline_stage_transitions"] = await _safe_delete(
+            connection, PipelineStageTransitionModel, PipelineStageTransitionModel.candidate_id, candidate_ids
+        )
+
+        removed["candidate_job_scores"] = await _safe_delete(
+            connection, CandidateJobScoreModel, CandidateJobScoreModel.candidate_id, candidate_ids
+        )
+
+        removed["candidates"] = await _safe_delete(
+            connection, CandidateModel, CandidateModel.id, candidate_ids
         )
 
     await engine.dispose()
 
-    print(f"Candidato mantido: {_format_candidate(keep_candidate)}")
-    total_removed = sum(removed_counts.values())
-    print(f"Total de registros removidos: {total_removed}")
-    for table_name, count in removed_counts.items():
-        print(f"- {table_name}: {count}")
+    print(f"Candidato mantido: {keep_candidate.full_name}")
+    print(f"Total removido: {sum(removed.values())}")
+
+    for k, v in removed.items():
+        print(f"{k}: {v}")
 
 
 if __name__ == "__main__":

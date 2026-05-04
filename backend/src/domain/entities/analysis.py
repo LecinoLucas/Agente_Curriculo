@@ -74,7 +74,7 @@ class Analysis:
     retry_count: int = 0
     max_retries: int = 3
     next_retry_at: Optional[datetime] = None
-    queue_name: str = "analysis.default"
+    queue_name: str = "analysis"
     worker_id: Optional[str] = None
     task_id: Optional[str] = None
 

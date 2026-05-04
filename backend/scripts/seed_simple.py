@@ -1,20 +1,19 @@
-#!/usr/bin/env python3
-"""
-Script simples para popular banco com dados mínimos de teste.
-
-Cria:
-- 5 vagas (diversos status)
-- 20 candidatos
-- 10 vínculos pipeline
-"""
+from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, UTC
+import os
+import sys
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
@@ -23,124 +22,126 @@ from src.infrastructure.database.models.user_model import UserModel
 from src.domain.entities.user import UserRole
 
 
-async def seed_database():
-    """Popula banco com dados mínimos."""
+def get_database_url() -> str:
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL não configurado")
 
-    database_url = "postgresql+asyncpg://LecinoLucas:020219@localhost:5432/resume_ai"
+    if "prod" in url.lower():
+        raise RuntimeError("🚨 Não rode seed em produção")
+
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    return url
+
+
+async def seed_database():
+    database_url = get_database_url()
+
     engine = create_async_engine(database_url, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session() as session:
-        print("🌱 Iniciando seed simples...")
+        print("🌱 Seed profissional iniciado...")
 
-        # 1. Buscar usuários existentes
-        users_result = await session.execute(select(UserModel).limit(5))
-        users = users_result.scalars().all()
+        # 🔍 pegar recruiter
+        users = (await session.execute(select(UserModel))).scalars().all()
 
         if not users:
-            print("❌ Nenhum usuário encontrado.")
-            await engine.dispose()
-            return
+            raise RuntimeError("Nenhum usuário encontrado")
 
         recruiter = next((u for u in users if u.role == UserRole.RECRUITER), users[0])
-        print(f"✓ Usando recruiter: {recruiter.email}")
 
-        # 2. Criar 5 vagas
-        jobs = []
-        job_data = [
-            ("Senior Backend Engineer (Python)", "published", "senior", 5),
-            ("Frontend React Developer", "published", "mid", 3),
-            ("Full Stack Architect", "paused", "senior", 7),
-            ("DevOps Engineer", "closed", "mid", 4),
-            ("Data Scientist", "published", "senior", 6),
+        # 🔒 evita duplicação
+        existing = await session.scalar(select(func.count(JobModel.id)))
+        if existing and existing > 0:
+            print("⚠️ Seed já aplicado. Abortando.")
+            return
+
+        # 🧠 vagas realistas (já normalizadas)
+        jobs_data = [
+            {
+                "title": "Analista de Dados",
+                "job_area": "data",
+                "seniority": "mid",
+                "desc": "Construção de dashboards, SQL, ETL e análise de dados.",
+                "exp": 3,
+            },
+            {
+                "title": "Backend Python Engineer",
+                "job_area": "technology",
+                "seniority": "senior",
+                "desc": "APIs com FastAPI, PostgreSQL, arquitetura backend.",
+                "exp": 5,
+            },
+            {
+                "title": "Assistente Administrativo",
+                "job_area": "administrative",
+                "seniority": "junior",
+                "desc": "Rotinas administrativas, controle de documentos e apoio interno.",
+                "exp": 1,
+            },
         ]
 
-        for title, status, seniority, yoe in job_data:
+        jobs = []
+        for data in jobs_data:
             job = JobModel(
                 id=uuid4(),
-                title=title,
-                description=f"Lorem ipsum dolor sit amet. {title} opportunity.",
-                status=status,
-                seniority_level=seniority,
-                minimum_years_experience=yoe,
+                title=data["title"],
+                description=data["desc"],
+                job_area=data["job_area"],
+                status="published",
+                seniority_level=data["seniority"],
+                minimum_years_experience=data["exp"],
                 created_by=recruiter.id,
             )
             session.add(job)
             jobs.append(job)
 
-        print(f"✓ Criadas {len(jobs)} vagas")
         await session.flush()
 
-        # 3. Criar 20 candidatos
+        # 👥 candidatos variados
         candidates = []
-        names = [
-            "João Silva", "Maria Santos", "Pedro Oliveira", "Ana Costa", "Carlos Ferreira",
-            "Julia Mendes", "Roberto Lima", "Beatriz Rocha", "Fernanda Gomes", "Leonardo Alves",
-            "Sophia Souza", "Gustavo Santos", "Isabella Costa", "Matheus Silva", "Valentina Dias",
-            "Rafael Martins", "Camila Barbosa", "Victor Hugo", "Helena Mendes", "Thiago Oliveira",
-        ]
+        for i in range(20):
+            quality = "valid"
+            if i % 7 == 0:
+                quality = "no_resume"
+            elif i % 9 == 0:
+                quality = "parsing_failed"
 
-        for i, name in enumerate(names):
-            quality_status = "valid"
-            if i == 12:
-                quality_status = "unknown"
-            elif i == 13:
-                quality_status = "no_resume"
-            elif i == 16:
-                quality_status = "parsing_failed"
-
-            # Use UUID in email to guarantee uniqueness
-            unique_id = str(uuid4())[:8]
             candidate = CandidateModel(
                 id=uuid4(),
-                full_name=name,
-                email=f"candidate-{unique_id}@test.com",
-                phone=f"+55 11 9{4000 + i}",
-                location_city="São Paulo",
-                location_state="SP",
-                location_country="Brazil",
-                data_quality_status=quality_status,
+                full_name=f"Candidate {i}",
+                email=f"candidate_{uuid4().hex[:6]}@test.com",
+                data_quality_status=quality,
                 created_by=recruiter.id,
             )
             session.add(candidate)
             candidates.append(candidate)
 
-        print(f"✓ Criados {len(candidates)} candidatos")
         await session.flush()
 
-        # 4. Criar 10 vínculos de pipeline
-        pipeline_links = []
+        # 🔗 pipeline realista
         for i, candidate in enumerate(candidates[:10]):
-            pipeline = CandidatePipelineModel(
-                candidate_id=candidate.id,
-                job_id=jobs[i % len(jobs)].id,
-                stage="screening" if i % 3 == 0 else "hr_interview",
-                status="active",
-                entered_at=datetime.now(UTC) - timedelta(days=i*2),
-                updated_at=datetime.now(UTC),
+            session.add(
+                CandidatePipelineModel(
+                    candidate_id=candidate.id,
+                    job_id=jobs[i % len(jobs)].id,
+                    stage=["screening", "interview", "offer"][i % 3],
+                    status="active",
+                    entered_at=datetime.now(UTC) - timedelta(days=i),
+                    updated_at=datetime.now(UTC),
+                )
             )
-            session.add(pipeline)
-            pipeline_links.append(pipeline)
 
-        print(f"✓ Criados {len(pipeline_links)} vínculos de pipeline")
-
-        # Commit
         await session.commit()
 
-        # 5. Estatísticas finais
-        candidates_count = await session.scalar(select(func.count(CandidateModel.id)))
-        jobs_count = await session.scalar(select(func.count(JobModel.id)))
-        pipeline_count = await session.scalar(select(func.count(CandidatePipelineModel.candidate_id)))
-
-        print("\n" + "="*60)
-        print("✅ SEED SIMPLES CONCLUÍDO!")
-        print("="*60)
-        print(f"📊 Dados criados:")
-        print(f"   Vagas: {jobs_count}")
-        print(f"   Candidatos: {candidates_count}")
-        print(f"   Pipeline links: {pipeline_count}")
-        print("="*60)
-        print("\n💡 Dados prontos para testar ranking e pipeline!")
+        # 📊 stats
+        print("\n✅ Seed concluído")
+        print(f"Jobs: {await session.scalar(select(func.count(JobModel.id)))}")
+        print(f"Candidates: {await session.scalar(select(func.count(CandidateModel.id)))}")
+        print(f"Pipeline: {await session.scalar(select(func.count(CandidatePipelineModel.candidate_id)))}")
 
     await engine.dispose()
 

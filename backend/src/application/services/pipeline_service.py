@@ -4,15 +4,20 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
+import sqlalchemy as sa
+import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.domain_events import CandidateStageChangedEvent, dispatch_event
 from src.application.services.candidate_job_link_service import CandidateJobLinkService
+from src.application.services.deterministic_scorer import DeterministicScorer
 from src.infrastructure.database.models.candidate_pipeline_model import (
     CandidatePipelineModel,
     PipelineStageTransitionModel,
 )
+from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
@@ -68,13 +73,14 @@ STAGE_TO_CANDIDATE_STATUS: dict[str, str] = {
 }
 
 _TERMINAL_STAGES: frozenset[str] = frozenset({"hired", "rejected"})
-_TRANSFER_ALLOWED_STAGES: frozenset[str] = frozenset({"entry", "screening"})
 
 # Stages that resolve to a terminal outcome status.
 _STAGE_TO_OUTCOME: dict[str, str] = {
     "hired": "hired",
     "rejected": "rejected",
 }
+
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +159,18 @@ class PipelineTransferNotAllowedError(Exception):
     pass
 
 
+class PipelineCandidateAlreadyActiveInSameJobError(Exception):
+    pass
+
+
+class PipelineCandidateAlreadyActiveInAnotherJobError(Exception):
+    pass
+
+
+class PipelineCandidateWithoutActiveJobError(Exception):
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
@@ -201,7 +219,7 @@ class PipelineService:
         await self._ensure_active_job(body.job_id)
         await self._ensure_active_candidate(candidate_id)
 
-        entry = await self._repository.find_entry(candidate_id, body.job_id)
+        entry = await self._repository.find_active_entry(candidate_id, body.job_id)
         if entry is None:
             raise PipelineEntryNotFoundError
 
@@ -246,7 +264,7 @@ class PipelineService:
         await self._ensure_active_job(body.job_id)
         await self._ensure_active_candidate(candidate_id)
 
-        entry = await self._repository.find_entry(candidate_id, body.job_id)
+        entry = await self._repository.find_active_entry(candidate_id, body.job_id)
         if entry is None:
             raise PipelineEntryNotFoundError
 
@@ -334,35 +352,55 @@ class PipelineService:
         await self._ensure_available_job(body.job_id)
         await self._ensure_active_candidate(candidate_id)
 
-        existing = await self._repository.find_entry(candidate_id, body.job_id)
-        if existing is not None:
-            raise PipelineDuplicateEntryError
+        active_entry = await self._repository.find_active_entry_by_candidate(candidate_id)
+        if active_entry is not None:
+            if active_entry.job_id == body.job_id:
+                raise PipelineCandidateAlreadyActiveInSameJobError
+            raise PipelineCandidateAlreadyActiveInAnotherJobError
+
+        existing_entry = await self._repository.find_any_entry(candidate_id, body.job_id)
 
         now = datetime.now(UTC)
-        saved_row = await self._repository.create_entry(
-            candidate_id=candidate_id,
-            job_id=body.job_id,
-            stage=body.initial_stage,
-            status="active",
-            moved_by=moved_by,
-            updated_at=now,
-        )
+        if existing_entry is not None:
+            saved_row = await self._repository.reactivate_entry(
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                stage=body.initial_stage,
+                status="active",
+                moved_by=moved_by,
+                updated_at=now,
+            )
+            if saved_row is None:
+                raise PipelineConcurrentModificationError(
+                    "Não foi possível reativar o pipeline desta vaga. Recarregue e tente novamente."
+                )
+        else:
+            saved_row = await self._repository.create_entry(
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                stage=body.initial_stage,
+                status="active",
+                moved_by=moved_by,
+                updated_at=now,
+            )
         transition = await self._repository.save_transition(
             PipelineStageTransitionModel(
                 candidate_id=candidate_id,
                 job_id=body.job_id,
-                from_stage=None,
+                from_stage=existing_entry.stage if existing_entry is not None else None,
                 to_stage=body.initial_stage,
                 moved_by=moved_by,
                 moved_at=now,
                 trigger="manual",
-                reason="Adicionado manualmente a outra vaga",
+                reason="Adicionado manualmente à vaga",
             )
         )
 
         # Ensure candidate-job link exists with source="pipeline"
         if self._link_service:
             await self._link_service.ensure_link(candidate_id, body.job_id, source="pipeline")
+
+        await self._update_match_score_deterministically(candidate_id=candidate_id, job_id=body.job_id)
 
         return AddCandidateToJobResponse(
             candidate_id=saved_row["candidate_id"],
@@ -383,25 +421,25 @@ class PipelineService:
         await self._ensure_active_candidate(candidate_id)
         await self._ensure_available_job(body.to_job_id)
 
-        source_entry = await self._repository.find_entry(candidate_id, body.from_job_id)
+        source_entry = await self._repository.find_active_entry_by_candidate(candidate_id)
         if source_entry is None:
+            raise PipelineCandidateWithoutActiveJobError
+        if source_entry.job_id != body.from_job_id:
             raise PipelineEntryNotFoundError
-        if source_entry.stage not in _TRANSFER_ALLOWED_STAGES:
-            raise PipelineTransferNotAllowedError
 
-        destination_entry = await self._repository.find_entry(candidate_id, body.to_job_id)
-        if destination_entry is not None:
-            raise PipelineDuplicateEntryError
+        destination_active_entry = await self._repository.find_active_entry(candidate_id, body.to_job_id)
+        if destination_active_entry is not None:
+            raise PipelineCandidateAlreadyActiveInSameJobError
+        destination_any_entry = await self._repository.find_any_entry(candidate_id, body.to_job_id)
 
         now = datetime.now(UTC)
         try:
-            source_row = await self._repository.update_entry_status(
+            await self._repository.deactivate_active_entries_for_candidate(
                 candidate_id=candidate_id,
-                job_id=body.from_job_id,
-                new_status="transferred",
                 last_moved_by=moved_by,
                 updated_at=now,
             )
+            source_row = await self._repository.find_any_entry(candidate_id, body.from_job_id)
             if source_row is None:
                 raise PipelineEntryNotFoundError
 
@@ -419,19 +457,33 @@ class PipelineService:
                 )
             )
 
-            destination_row = await self._repository.create_entry(
-                candidate_id=candidate_id,
-                job_id=body.to_job_id,
-                stage="entry",
-                status="active",
-                moved_by=moved_by,
-                updated_at=now,
-            )
+            if destination_any_entry is not None:
+                destination_row = await self._repository.reactivate_entry(
+                    candidate_id=candidate_id,
+                    job_id=body.to_job_id,
+                    stage="entry",
+                    status="active",
+                    moved_by=moved_by,
+                    updated_at=now,
+                )
+                if destination_row is None:
+                    raise PipelineConcurrentModificationError(
+                        "Não foi possível reativar o pipeline da vaga destino. Recarregue e tente novamente."
+                    )
+            else:
+                destination_row = await self._repository.create_entry(
+                    candidate_id=candidate_id,
+                    job_id=body.to_job_id,
+                    stage="entry",
+                    status="active",
+                    moved_by=moved_by,
+                    updated_at=now,
+                )
             destination_transition = await self._repository.save_transition(
                 PipelineStageTransitionModel(
                     candidate_id=candidate_id,
                     job_id=body.to_job_id,
-                    from_stage=None,
+                    from_stage=destination_any_entry.stage if destination_any_entry is not None else None,
                     to_stage="entry",
                     moved_by=moved_by,
                     moved_at=now,
@@ -447,6 +499,8 @@ class PipelineService:
         # Update candidate-job links to reflect the transfer
         if self._link_service:
             await self._link_service.transfer_candidate(candidate_id, body.from_job_id, body.to_job_id)
+
+        await self._update_match_score_deterministically(candidate_id=candidate_id, job_id=body.to_job_id)
 
         await publish_domain_event(
             DomainEvent(
@@ -470,7 +524,7 @@ class PipelineService:
             to_job_id=body.to_job_id,
             from_stage=source_entry.stage,  # type: ignore[arg-type]
             to_stage="entry",
-            source_status=source_row["status"],  # type: ignore[arg-type]
+            source_status=source_row.status,  # type: ignore[arg-type]
             destination_status=destination_row["status"],  # type: ignore[arg-type]
             source_transition_id=source_transition.id,
             destination_transition_id=destination_transition.id,
@@ -573,6 +627,56 @@ class PipelineService:
     async def _ensure_active_candidate(self, candidate_id: UUID) -> None:
         if await self._repository.find_active_candidate(candidate_id) is None:
             raise PipelineCandidateNotFoundError
+
+    async def _update_match_score_deterministically(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> None:
+        if not self._session:
+            return
+
+        job = await self._session.get(JobModel, job_id)
+        if job is None:
+            return
+
+        resume_version = await self._session.scalar(
+            sa.select(ResumeVersionModel)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                ResumeModel.candidate_id == candidate_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .order_by(ResumeVersionModel.uploaded_at.desc())
+            .limit(1)
+        )
+        if resume_version is None:
+            return
+
+        try:
+            if isinstance(job.job_profile_json, str):
+                job_profile = json.loads(job.job_profile_json)
+            else:
+                job_profile = job.job_profile_json or {}
+
+            if isinstance(resume_version.candidate_profile_json, str):
+                candidate_profile = json.loads(resume_version.candidate_profile_json)
+            else:
+                candidate_profile = resume_version.candidate_profile_json or {}
+
+            scorer = DeterministicScorer()
+            score_result = scorer.calculate(job_profile, candidate_profile)
+            entry = await self._repository.find_active_entry(candidate_id, job_id)
+            if entry is None:
+                return
+
+            entry.match_score = Decimal(str(score_result.match_score))
+            entry.updated_at = datetime.now(UTC)
+            await self._repository.save_entry(entry)
+        except Exception:
+            # Falha silenciosa para não bloquear o vínculo/pipeline.
+            return
 
     @staticmethod
     def _row_to_match_response(row: dict) -> JobMatchCandidateResponse:

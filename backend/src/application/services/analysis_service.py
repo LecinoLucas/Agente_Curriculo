@@ -336,22 +336,6 @@ def _skill_matches(
     return False
 
 
-class ResumeVersionNotFoundError(Exception):
-    pass
-
-
-class ResumeVersionNotReadyError(Exception):
-    pass
-
-
-class AIModelUnavailableError(Exception):
-    pass
-
-
-class PromptTemplateUnavailableError(Exception):
-    pass
-
-
 class AnalysisNotFoundError(Exception):
     pass
 
@@ -377,35 +361,6 @@ class AnalysisResultDetails:
 class AnalysisService:
     def __init__(self, repository: SQLAlchemyAnalysisRepository) -> None:
         self._repository = repository
-
-    async def request(self, resume_version_id: UUID, current_user: User) -> AnalysisModel:
-        resume_version = await self._repository.find_resume_version_for_user(
-            resume_version_id,
-            current_user,
-        )
-        if resume_version is None:
-            raise ResumeVersionNotFoundError
-        if resume_version.extraction_status != "completed" or not (
-            resume_version.extracted_text or ""
-        ).strip():
-            raise ResumeVersionNotReadyError
-
-        ai_model = await self._repository.find_preferred_ai_model()
-        if ai_model is None:
-            raise AIModelUnavailableError
-
-        prompt_template = await self._repository.find_preferred_prompt_template()
-        if prompt_template is None:
-            raise PromptTemplateUnavailableError
-
-        analysis = AnalysisModel(
-            resume_version_id=resume_version_id,
-            ai_model_id=ai_model.id,
-            prompt_template_id=prompt_template.id,
-            status="pending",
-            requested_by=current_user.id,
-        )
-        return await self._repository.create(analysis)
 
     async def list(
         self,

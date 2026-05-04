@@ -9,22 +9,29 @@ from sqlalchemy.ext.asyncio import (
 
 from src.core.settings import settings
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    pool_timeout=settings.DATABASE_POOL_TIMEOUT,
-    pool_pre_ping=True,      # verifica conexão antes de usar do pool
-    echo=settings.APP_DEBUG,
-)
+def _make_engine():
+    return create_async_engine(
+        settings.DATABASE_URL,
+        pool_size=settings.DATABASE_POOL_SIZE,
+        max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        pool_timeout=settings.DATABASE_POOL_TIMEOUT,
+        pool_pre_ping=True,
+        echo=settings.APP_DEBUG,
+    )
 
-AsyncSessionFactory = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,  # evita lazy loading após commit em contextos async
-    autocommit=False,
-    autoflush=False,
-)
+
+def get_session_factory():
+    return async_sessionmaker(
+        _make_engine(),
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
+
+engine = _make_engine()
+AsyncSessionFactory = get_session_factory()
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:

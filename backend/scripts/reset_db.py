@@ -1,186 +1,96 @@
 #!/usr/bin/env python3
-"""
-Script de limpeza nuclear do banco de dados - Remove tudo exceto usuários
-
-⚠️ CUIDADO: Este script é destrutivo e remove TODOS os dados operacionais
-⚠️ Preserva APENAS usuários cadastrados
-
-Uso:
-    python scripts/reset_db.py
-
-Opções:
-    --confirm    Executa sem pedir confirmação (use com cuidado!)
-    --dry-run    Mostra o que será removido sem executar
-"""
+from __future__ import annotations
 
 import asyncio
+import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import delete, text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
-# Importar modelos
-from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.resume_model import ResumeModel
-from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
-from src.infrastructure.database.models.analysis_model import AnalysisModel
-from src.infrastructure.database.models.document_ai_analysis_model import DocumentAIAnalysisModel
-from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel, ScoreModelVersionModel
-from src.infrastructure.database.models.pipeline_event_model import PipelineEventModel
-from src.infrastructure.database.models.audit_model import AuditLogModel
+SAFE_MARKERS = ["localhost", "127.0.0.1", "dev", "test"]
+BLOCKED_MARKERS = ["prod", "production", "amazonaws", "render", "railway"]
 
 
-async def count_records(session: AsyncSession) -> dict:
-    """Conta registros em cada tabela."""
-    counts = {}
-
-    models = [
-        ("Usuários", "user"),
-        ("Candidatos", CandidateModel),
-        ("Resumes", ResumeModel),
-        ("Vagas", JobModel),
-        ("Pipeline", CandidatePipelineModel),
-        ("Análises", AnalysisModel),
-        ("Análises DocumentAI", DocumentAIAnalysisModel),
-        ("Scores", CandidateJobScoreModel),
-        ("Versões Score", ScoreModelVersionModel),
-        ("Eventos Pipeline", PipelineEventModel),
-        ("Audit Logs", AuditLogModel),
-    ]
-
-    for label, model in models:
-        try:
-            result = await session.execute(
-                text(f'SELECT COUNT(*) FROM "{model.__tablename__}"')
-                if isinstance(model, str)
-                else text(f'SELECT COUNT(*) FROM "{model.__tablename__}"')
-            )
-            count = result.scalar()
-            counts[label] = count
-        except Exception as e:
-            counts[label] = f"Erro: {str(e)}"
-
-    return counts
+TABLES = [
+    "pipeline_events",
+    "pipeline_stage_transitions",
+    "audit_logs",
+    "document_ai_analyses",
+    "analysis_results",
+    "resume_job_matches",
+    "analyses",
+    "candidate_job_scores",
+    "score_model_versions",
+    "job_required_skills",
+    "candidate_pipeline",
+    "resume_versions",
+    "resumes",
+    "candidate_documents",
+    "admissions",
+    "candidates",
+    "jobs",
+]
 
 
-async def reset_database(database_url: str, dry_run: bool = False, skip_confirm: bool = False):
-    """Executa o reset do banco de dados."""
+def validate_database(url: str):
+    lowered = url.lower()
 
-    engine = create_async_engine(database_url, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    if any(b in lowered for b in BLOCKED_MARKERS):
+        raise RuntimeError("🚨 Banco parece ser produção. Abortado.")
 
-    async with async_session() as session:
-        print("\n" + "="*80)
-        print("🗑️  LIMPEZA NUCLEAR DO BANCO DE DADOS")
-        print("="*80)
-
-        print("\n📊 Estado ANTES da limpeza:")
-        before = await count_records(session)
-        for label, count in before.items():
-            print(f"  {label:.<40} {count}")
-
-        if dry_run:
-            print("\n🔍 DRY-RUN: Nenhuma alteração foi feita.")
-            print("   Execute sem --dry-run para proceder com a limpeza.")
-            await engine.dispose()
-            return
-
-        # Pedir confirmação
-        if not skip_confirm:
-            print("\n" + "!"*80)
-            print("⚠️  ATENÇÃO: Esta ação é IRREVERSÍVEL!")
-            print("⚠️  Serão removidos TODOS os dados, exceto usuários cadastrados")
-            print("!"*80)
-            response = input("\nDigite 'sim, tenho certeza' para proceder: ").strip().lower()
-            if response != "sim, tenho certeza":
-                print("❌ Operação cancelada.")
-                await engine.dispose()
-                return
-
-        print("\n🔄 Executando limpeza...")
-
-        try:
-            # Desabilitar constraints
-            await session.execute(text("ALTER TABLE candidate_pipeline DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE resume DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE candidate_job_score DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE analysis DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE document_ai_analysis DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE job DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE candidate DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE pipeline_event DISABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE audit_log DISABLE TRIGGER ALL;"))
-
-            # Remover dados
-            await session.execute(delete(PipelineEventModel))
-            await session.execute(delete(AuditLogModel))
-            await session.execute(delete(DocumentAIAnalysisModel))
-            await session.execute(delete(AnalysisModel))
-            await session.execute(delete(CandidateJobScoreModel))
-            await session.execute(delete(ScoreModelVersionModel))
-            await session.execute(delete(JobModel))
-            await session.execute(delete(CandidatePipelineModel))
-            await session.execute(delete(ResumeModel))
-            await session.execute(delete(CandidateModel))
-
-            # Reabilitar constraints
-            await session.execute(text("ALTER TABLE candidate_pipeline ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE resume ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE candidate_job_score ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE analysis ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE document_ai_analysis ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE job ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE candidate ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE pipeline_event ENABLE TRIGGER ALL;"))
-            await session.execute(text("ALTER TABLE audit_log ENABLE TRIGGER ALL;"))
-
-            await session.commit()
-
-            print("✅ Limpeza concluída!")
-
-            # Mostrar estado após limpeza
-            await session.refresh(session)
-            print("\n📊 Estado APÓS a limpeza:")
-            after = await count_records(session)
-            for label, count in after.items():
-                print(f"  {label:.<40} {count}")
-
-            # Log da operação
-            timestamp = datetime.now().isoformat()
-            print(f"\n✓ Operação concluída em {timestamp}")
-
-        except Exception as e:
-            print(f"❌ Erro durante limpeza: {str(e)}")
-            await session.rollback()
-            raise
-        finally:
-            await engine.dispose()
+    if not any(s in lowered for s in SAFE_MARKERS):
+        raise RuntimeError("🚨 DATABASE_URL não parece seguro (dev/test).")
 
 
 async def main():
-    from dotenv import load_dotenv
-    import os
-
-    # Carregar .env
-    load_dotenv()
     database_url = os.getenv("DATABASE_URL")
 
     if not database_url:
-        print("❌ DATABASE_URL não encontrada em .env")
+        print("❌ DATABASE_URL não configurado")
         sys.exit(1)
 
-    # Parse argumentos
-    dry_run = "--dry-run" in sys.argv
-    skip_confirm = "--confirm" in sys.argv
+    validate_database(database_url)
+
+    if "--dry-run" in sys.argv:
+        print("DRY RUN - tabelas que seriam limpas:")
+        for t in TABLES:
+            print("-", t)
+        return
+
+    if "--confirm" not in sys.argv:
+        confirm = input("Digite DELETE para confirmar limpeza TOTAL: ")
+        if confirm != "DELETE":
+            print("Abortado.")
+            return
+
+    engine = create_async_engine(database_url, echo=False)
+
+    start = datetime.now(UTC)
 
     try:
-        await reset_database(database_url, dry_run=dry_run, skip_confirm=skip_confirm)
+        async with engine.begin() as conn:
+            tables_sql = ", ".join(f'"{t}"' for t in TABLES)
+
+            await conn.execute(
+                text(f"""
+                TRUNCATE TABLE {tables_sql}
+                RESTART IDENTITY CASCADE
+                """)
+            )
+
+        elapsed = (datetime.now(UTC) - start).total_seconds()
+
+        print("\n✅ Limpeza concluída")
+        print(f"Tempo: {elapsed:.2f}s")
+
     except Exception as e:
         print(f"❌ Erro: {e}")
-        sys.exit(1)
+        raise
+
+    finally:
+        await engine.dispose()
 
 
 if __name__ == "__main__":

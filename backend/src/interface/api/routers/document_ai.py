@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.admission.models.admission_models import CandidateDocument
+from src.infrastructure.database.models.admission_model import CandidateDocument
 from src.infrastructure.database.models.document_ai_analysis_model import (
     DocumentAIAnalysisModel,
 )

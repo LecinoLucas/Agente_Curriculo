@@ -171,7 +171,7 @@ class ScoringComparisonAdminService:
         if candidate is None:
             raise ScoringComparisonCandidateNotFoundError
 
-        latest_summary = await self._candidate_repo.find_latest_analysis_summary(candidate_id)
+        latest_summary = await self._candidate_repo.find_latest_analysis_summary_for_job(candidate_id, job_id)
         if latest_summary is None or latest_summary.get("status") != "completed":
             raise ScoringComparisonAnalysisNotFoundError
 

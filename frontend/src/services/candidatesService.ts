@@ -106,6 +106,18 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
     latest_analysis: item.latest_analysis ? normalizeLatestAnalysis(item.latest_analysis) : null,
     latest_analysis_pipeline: item.latest_analysis_pipeline ?? null,
     top_matches: Array.isArray(item.top_matches) ? item.top_matches : [],
+    active_job_id: typeof item.active_job_id === "string" ? item.active_job_id : null,
+    active_job:
+      item.active_job &&
+      typeof item.active_job.id === "string" &&
+      typeof item.active_job.title === "string" &&
+      typeof item.active_job.status === "string"
+        ? {
+            id: item.active_job.id,
+            title: item.active_job.title,
+            status: item.active_job.status,
+          }
+        : null,
     candidate_job_links: linksInput.map((entry) => normalizeCandidateJobLink(entry)),
     pipeline_entries: Array.isArray(item.pipeline_entries) ? item.pipeline_entries : [],
   };

@@ -261,6 +261,8 @@ export function NewCandidateModal({
           });
           return;
         }
+      } else {
+        setLinkStatus("created_pending_link");
       }
 
       await onCreated(candidate.id);
@@ -269,7 +271,7 @@ export function NewCandidateModal({
           ? selectedJobCanReceiveCandidates
             ? `Candidato adicionado à vaga ${selectedJob.title}`
             : `Candidato criado. A vaga ${selectedJob.title} não permite vínculo.`
-          : "Candidato criado",
+          : "Candidato criado (Aguardando vaga)",
       );
     } catch (err: unknown) {
       if (err instanceof HttpError) {
@@ -449,7 +451,7 @@ export function NewCandidateModal({
           <div className="rounded-xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
             <p className="text-sm font-medium text-[hsl(var(--text))]">Sem vaga selecionada</p>
             <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-              O candidato será cadastrado apenas como pessoa e poderá ser vinculado depois.
+              O candidato será cadastrado com status <strong>Aguardando vaga</strong> e poderá ser vinculado depois.
             </p>
           </div>
         )}
@@ -484,7 +486,9 @@ export function NewCandidateModal({
                   ? "O candidato já foi cadastrado e entrou no pipeline, se a vaga foi selecionada."
                   : linkStatus === "link_failed"
                     ? "O cadastro foi salvo, mas o vínculo com a vaga precisa ser concluído manualmente."
-                    : "Finalizando a criação do candidato."
+                    : selectedJobId
+                      ? "Candidato criado. Finalizando vínculo com a vaga."
+                      : "Candidato criado com status Aguardando vaga."
                 : duplicateJobStatus === "linked"
                   ? "Já existe um candidato com este email/CPF e ele já está vinculado à vaga selecionada."
                   : "Já existe um candidato com este email/CPF."}

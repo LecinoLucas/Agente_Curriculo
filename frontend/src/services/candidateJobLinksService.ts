@@ -91,7 +91,7 @@ export const candidateJobLinksService = {
   async getCandidateJobLinks(candidateId: string): Promise<CandidateJobLinkOverview[]> {
     const paths = [
       `/api/v1/candidates/${candidateId}/job-links`,
-      `/api/v1/candidates/${candidateId}/jobs`,
+      `/api/v1/candidates/${candidateId}/overview`,
     ];
 
     for (const path of paths) {

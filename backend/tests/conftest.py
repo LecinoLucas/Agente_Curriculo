@@ -45,7 +45,7 @@ TestSessionFactory = async_sessionmaker(
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     redis = FakeRedis()
 
-    def _get_redis() -> FakeRedis:
+    async def _get_redis() -> FakeRedis:
         return redis
 
     monkeypatch.setattr("src.infrastructure.cache.redis_client.get_redis", _get_redis)
@@ -84,13 +84,15 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
-    app.dependency_overrides[get_db_session] = override_get_db
+    # app is wrapped by CORSMiddleware, access the underlying FastAPI instance
+    fastapi_app = app.app if hasattr(app, "app") else app
+    fastapi_app.dependency_overrides[get_db_session] = override_get_db
 
     ac = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
     try:
         yield ac
     finally:
-        app.dependency_overrides.clear()
+        fastapi_app.dependency_overrides.clear()
         try:
             await asyncio.wait_for(ac.aclose(), timeout=2.0)
         except Exception:

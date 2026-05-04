@@ -1,200 +1,149 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { PipelineProvider } from "../features/pipeline/PipelineContext";
-
 import { AppShell } from "../components/layout/AppShell";
+import { PipelineProvider } from "../features/pipeline/PipelineContext";
 import { ProtectedRoute } from "./ProtectedRoute";
 
-const LoginPage = lazy(() => import("../pages/LoginPage").then((m) => ({ default: m.LoginPage })));
-const VagasPage = lazy(() => import("../pages/VagasPage").then((m) => ({ default: m.VagasPage })));
-const PipelinePage = lazy(() => import("../pages/PipelinePage").then((m) => ({ default: m.PipelinePage })));
-const ProfilePage = lazy(() => import("../pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
-const CandidatesPage = lazy(() => import("../pages/CandidatesPage").then((m) => ({ default: m.CandidatesPage })));
-const AdminPage = lazy(() => import("../pages/AdminPage").then((m) => ({ default: m.AdminPage })));
-const AdminScoringComparisonPage = lazy(() =>
-  import("../pages/AdminScoringComparisonPage").then((m) => ({ default: m.AdminScoringComparisonPage })),
+const LoginPage = lazy(() =>
+  import("../pages/LoginPage").then((m) => ({ default: m.LoginPage }))
 );
-const AdminMatchingObservabilityPage = lazy(() =>
-  import("../pages/AdminMatchingObservabilityPage").then((m) => ({ default: m.AdminMatchingObservabilityPage })),
-);
-const AdminJobImportPage = lazy(() =>
-  import("../pages/AdminJobImportPage").then((m) => ({ default: m.AdminJobImportPage })),
-);
-const UsersPage = lazy(() => import("../pages/UsersPage").then((m) => ({ default: m.UsersPage })));
-const AnalisesIaPage = lazy(() => import("../pages/AnalisesIaPage").then((m) => ({ default: m.AnalisesIaPage })));
-const SkillsPage = lazy(() => import("../pages/SkillsPage").then((m) => ({ default: m.SkillsPage })));
-const ChangePasswordPage = lazy(() => import("../pages/ChangePasswordPage").then((m) => ({ default: m.ChangePasswordPage })));
 
-function RouteFallback() {
+const PipelinePage = lazy(() =>
+  import("../pages/PipelinePage").then((m) => ({ default: m.PipelinePage }))
+);
+
+const ProfilePage = lazy(() =>
+  import("../pages/ProfilePage").then((m) => ({ default: m.ProfilePage }))
+);
+
+const CandidatesPage = lazy(() =>
+  import("../pages/CandidatesPage").then((m) => ({ default: m.CandidatesPage }))
+);
+
+const VagasPage = lazy(() =>
+  import("../pages/VagasPage").then((m) => ({ default: m.VagasPage }))
+);
+
+const AdminPage = lazy(() =>
+  import("../pages/AdminPage").then((m) => ({ default: m.AdminPage }))
+);
+
+const UsersPage = lazy(() =>
+  import("../pages/UsersPage").then((m) => ({ default: m.UsersPage }))
+);
+
+const SkillsPage = lazy(() =>
+  import("../pages/SkillsPage").then((m) => ({ default: m.SkillsPage }))
+);
+
+const AnalisesIaPage = lazy(() =>
+  import("../pages/AnalisesIaPage").then((m) => ({
+    default: m.AnalisesIaPage,
+  }))
+);
+
+const ChangePasswordPage = lazy(() =>
+  import("../pages/ChangePasswordPage").then((m) => ({
+    default: m.ChangePasswordPage,
+  }))
+);
+
+type UserRole = "admin" | "recruiter" | "candidate" | "viewer";
+
+const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer"];
+const ADMIN_ROLES: UserRole[] = ["admin"];
+const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer"];
+
+function PageLoader() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-500">
-      Carregando tela...
+      Carregando...
     </div>
   );
 }
 
-/**
- * App Router with User-Candidate Boundary
- *
- * See: docs/user-candidate-boundary.md
- *
- * Route Access Rules:
- * ───────────────────
- * - Internal routes (pipeline, admin, vagas, etc): ADMIN/RECRUITER/VIEWER only
- * - Profile route (/perfil): All authenticated users (including role="candidate")
- * - role="candidate" is NOT an internal user; it's a portal access marker
- *
- * Future Portal Candidates:
- *   Phase 20.3+ will add /candidate-portal/* routes
- */
+function withSuspense(element: ReactNode) {
+  return <Suspense fallback={<PageLoader />}>{element}</Suspense>;
+}
+
+function protectedPage(element: ReactNode, roles?: UserRole[]) {
+  return (
+    <ProtectedRoute allowedRoles={roles}>
+      {withSuspense(element)}
+    </ProtectedRoute>
+  );
+}
+
 export function AppRouter() {
   return (
-    <Suspense fallback={<RouteFallback />}>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
+    <Routes>
+      <Route path="/login" element={withSuspense(<LoginPage />)} />
+
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <PipelineProvider>
+              <AppShell />
+            </PipelineProvider>
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="/pipeline" replace />} />
+
         <Route
-          path="/trocar-senha"
-          element={
-            <ProtectedRoute allowedRoles={["admin", "recruiter", "candidate", "viewer"]}>
-              <ChangePasswordPage />
-            </ProtectedRoute>
-          }
+          path="pipeline"
+          element={protectedPage(<PipelinePage />, STAFF_ROLES)}
         />
 
         <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <PipelineProvider>
-                <AppShell />
-              </PipelineProvider>
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="/pipeline" replace />} />
+          path="pipeline/:jobId"
+          element={protectedPage(<PipelinePage />, STAFF_ROLES)}
+        />
 
-          {/* INTERNAL ROUTES: Blocked for role="candidate" */}
+        <Route
+          path="candidatos"
+          element={protectedPage(<CandidatesPage />, STAFF_ROLES)}
+        />
 
-          <Route
-            path="pipeline"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
-                {/* role="candidate" BLOCKED: No portal access yet */}
-                <PipelinePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="pipeline/:jobId"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
-                {/* role="candidate" BLOCKED: No portal access yet */}
-                <PipelinePage />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="vagas"
+          element={protectedPage(<VagasPage />, STAFF_ROLES)}
+        />
 
-          <Route
-            path="candidatos"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
-                {/* role="candidate" BLOCKED: Candidates are managed by recruiters */}
-                <CandidatesPage />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="analises-ia"
+          element={protectedPage(<AnalisesIaPage />, ["admin", "recruiter"])}
+        />
 
-          <Route
-            path="analises-ia"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter"]}>
-                {/* role="candidate" BLOCKED: AI analysis is recruiter-only */}
-                <AnalisesIaPage />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="perfil"
+          element={protectedPage(<ProfilePage />, ALL_AUTH_ROLES)}
+        />
 
-          <Route
-            path="vagas"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter", "viewer"]}>
-                {/* role="candidate" BLOCKED: Jobs are internal catalog */}
-                <VagasPage />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="trocar-senha"
+          element={protectedPage(<ChangePasswordPage />, ALL_AUTH_ROLES)}
+        />
 
-          {/* PORTAL ROUTES: Accessible to all authenticated users */}
+        <Route
+          path="admin"
+          element={protectedPage(<AdminPage />, ADMIN_ROLES)}
+        />
 
-          <Route
-            path="perfil"
-            element={
-              <ProtectedRoute allowedRoles={["admin", "recruiter", "candidate", "viewer"]}>
-                {/* role="candidate" ALLOWED: Edit own user profile */}
-                <ProfilePage />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="admin/usuarios"
+          element={protectedPage(<UsersPage />, ADMIN_ROLES)}
+        />
 
-          {/* ADMIN ROUTES: Admin only */}
+        <Route
+          path="admin/skills"
+          element={protectedPage(<SkillsPage />, ADMIN_ROLES)}
+        />
+      </Route>
 
-          <Route
-            path="admin"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                {/* role="candidate" BLOCKED: Admin panel */}
-                <AdminPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin/usuarios"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                {/* role="candidate" BLOCKED: User management */}
-                <UsersPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin/skills"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                {/* role="candidate" BLOCKED: Skill management */}
-                <SkillsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin/comparacao-scores"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                {/* role="candidate" BLOCKED: Admin-only scoring review */}
-                <AdminScoringComparisonPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin/qualidade-matching"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminMatchingObservabilityPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin/importar-vagas"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminJobImportPage />
-              </ProtectedRoute>
-            }
-          />
-        </Route>
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

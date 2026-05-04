@@ -1,72 +1,103 @@
 #!/usr/bin/env python3
 """Batch classification script for candidate data quality.
 
-Usage:
+Uso:
     python scripts/classify_candidates.py
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 logger = logging.getLogger(__name__)
 
 
-async def run_classification() -> None:
-    """Run batch classification for all candidates."""
-    import os
-    from src.application.services.data_quality_service import DataQualityService
-
-    # Get database URL from environment
-    database_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://user:password@localhost:5432/resume_ai"
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Create async engine
-    engine = create_async_engine(database_url, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+def get_database_url() -> str:
+    database_url = os.getenv("DATABASE_URL")
+
+    if not database_url:
+        raise RuntimeError("DATABASE_URL não configurado.")
+
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    return database_url
+
+
+async def run_classification() -> None:
+    from src.application.services.data_quality_service import DataQualityService
+
+    database_url = get_database_url()
+
+    engine = create_async_engine(
+        database_url,
+        echo=False,
+        pool_pre_ping=True,
+    )
+
+    async_session = sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    start_time = datetime.now(UTC)
 
     try:
         logger.info("Starting candidate classification...")
-        start_time = datetime.now(timezone.utc)
 
         async with async_session() as session:
             service = DataQualityService(session)
             counts = await service.reclassify_all_candidates()
+            await session.commit()
 
-        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+        elapsed = (datetime.now(UTC) - start_time).total_seconds()
 
-        # Print results
         logger.info("=" * 60)
         logger.info("Classification Complete")
         logger.info("=" * 60)
-        logger.info(f"Time elapsed: {elapsed:.1f} seconds")
-        logger.info(f"Total processed: {counts.get('total', 0)}")
-        logger.info(f"  Valid: {counts.get('valid', 0)}")
-        logger.info(f"  No resume: {counts.get('no_resume', 0)}")
-        logger.info(f"  Empty resume: {counts.get('empty_resume', 0)}")
-        logger.info(f"  Parsing failed: {counts.get('parsing_failed', 0)}")
-        logger.info(f"  Invalid (manual): {counts.get('invalid_manual', 0)}")
-        logger.info(f"  Unknown: {counts.get('unknown', 0)}")
-        logger.info(f"  Failed to process: {counts.get('failed', 0)}")
+        logger.info("Time elapsed: %.1f seconds", elapsed)
+        logger.info("Total processed: %s", counts.get("total", 0))
+        logger.info("  Valid: %s", counts.get("valid", 0))
+        logger.info("  No resume: %s", counts.get("no_resume", 0))
+        logger.info("  Empty resume: %s", counts.get("empty_resume", 0))
+        logger.info("  Parsing failed: %s", counts.get("parsing_failed", 0))
+        logger.info("  Invalid manual: %s", counts.get("invalid_manual", 0))
+        logger.info("  Unknown: %s", counts.get("unknown", 0))
+        logger.info("  Failed to process: %s", counts.get("failed", 0))
         logger.info("=" * 60)
 
-    except Exception as e:
-        logger.error(f"Classification failed: {str(e)}", exc_info=True)
-        sys.exit(1)
+    except Exception:
+        logger.exception("Classification failed")
+        raise
+
     finally:
         await engine.dispose()
 
 
 if __name__ == "__main__":
-    asyncio.run(run_classification())
+    configure_logging()
+
+    try:
+        asyncio.run(run_classification())
+    except Exception:
+        sys.exit(1)

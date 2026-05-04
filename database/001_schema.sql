@@ -532,7 +532,7 @@ CREATE TABLE analyses (
     next_retry_at        TIMESTAMPTZ,
 
     -- Rastreamento de infraestrutura
-    queue_name           VARCHAR(100) NOT NULL DEFAULT 'analysis.default',
+    queue_name           VARCHAR(100) NOT NULL DEFAULT 'analysis',
     worker_id            VARCHAR(255),    -- hostname + PID do worker que processou
     task_id              VARCHAR(255),    -- ID da task Celery (para rastrear no broker)
 

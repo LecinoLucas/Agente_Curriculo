@@ -59,7 +59,7 @@ class PromptTemplateModel(Base):
     system_prompt: Mapped[str | None] = mapped_column(sa.Text)
     user_prompt_template: Mapped[str] = mapped_column(sa.Text, nullable=False)
     output_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT)
-    max_tokens: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="4096")
+    max_tokens: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="8192")
     temperature: Mapped[Decimal] = mapped_column(
         sa.Numeric(3, 2),
         nullable=False,
@@ -131,7 +131,7 @@ class AnalysisModel(Base):
     queue_name: Mapped[str] = mapped_column(
         sa.String(100),
         nullable=False,
-        server_default="analysis.default",
+        server_default="analysis",
     )
     worker_id: Mapped[str | None] = mapped_column(sa.String(255))
     task_id: Mapped[str | None] = mapped_column(sa.String(255))

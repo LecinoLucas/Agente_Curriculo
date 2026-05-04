@@ -24,8 +24,8 @@ async def test_dispatcher_enqueues_matching_tasks_for_published_jobs(
     monkeypatch.setattr("src.core.settings.settings.ENABLE_DEV_MOCK", False)
     monkeypatch.setattr("src.core.settings.settings.MATCHING_AUTO_FANOUT_LIMIT", 25)
     monkeypatch.setattr(
-        "src.infrastructure.database.connection.AsyncSessionFactory",
-        lambda: _FakeSessionContext(),
+        "src.infrastructure.database.connection.get_session_factory",
+        lambda: (lambda: _FakeSessionContext()),
     )
 
     async def _fake_list_unmatched_published_jobs(self, analysis_id, limit):
@@ -37,8 +37,8 @@ async def test_dispatcher_enqueues_matching_tasks_for_published_jobs(
         _fake_list_unmatched_published_jobs,
     )
 
-    def _fake_apply_async(*, args, queue):
-        calls.append({"args": args, "queue": queue})
+    def _fake_apply_async(*, args, queue, task_id):
+        calls.append({"args": args, "queue": queue, "task_id": task_id})
 
     monkeypatch.setattr(
         "src.interface.workers.matching_tasks.match_analysis_to_job.apply_async",
@@ -50,8 +50,9 @@ async def test_dispatcher_enqueues_matching_tasks_for_published_jobs(
 
     assert count == 2
     assert len(calls) == 2
-    assert all(call["queue"] == "matching.default" for call in calls)
+    assert all(call["queue"] == "matching" for call in calls)
     assert all(call["args"][0] == str(analysis_id) for call in calls)
+    assert all(call["task_id"].startswith(f"matching:{analysis_id}:") for call in calls)
 
 
 @pytest.mark.asyncio
@@ -61,8 +62,8 @@ async def test_dispatcher_returns_zero_when_no_unmatched_published_jobs(
     monkeypatch.setattr("src.core.settings.settings.ENABLE_DEV_MOCK", False)
     monkeypatch.setattr("src.core.settings.settings.MATCHING_AUTO_FANOUT_LIMIT", 10)
     monkeypatch.setattr(
-        "src.infrastructure.database.connection.AsyncSessionFactory",
-        lambda: _FakeSessionContext(),
+        "src.infrastructure.database.connection.get_session_factory",
+        lambda: (lambda: _FakeSessionContext()),
     )
 
     async def _fake_list_unmatched_published_jobs(self, analysis_id, limit):

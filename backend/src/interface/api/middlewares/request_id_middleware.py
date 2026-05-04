@@ -41,8 +41,10 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         except Exception:
             raise
         finally:
-            clear_correlation_id()
-            structlog.contextvars.clear_contextvars()
+            try:
+                clear_correlation_id()
+            finally:
+                structlog.contextvars.clear_contextvars()
 
         response.headers["X-Request-ID"] = str(request_id)
         response.headers["X-Correlation-ID"] = str(correlation_id)

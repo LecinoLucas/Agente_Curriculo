@@ -28,6 +28,7 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.candidate_schemas import (
     CandidateCheckResponse,
+    CandidateJobLinkResponse,
     CandidateListSummaryResponse,
     CandidateOverviewResponse,
     CandidateResponse,
@@ -48,7 +49,7 @@ def _candidate_service(db: AsyncSession) -> CandidateService:
 
 
 def _pipeline_service(db: AsyncSession) -> PipelineService:
-    return PipelineService(SQLAlchemyPipelineRepository(db))
+    return PipelineService(SQLAlchemyPipelineRepository(db), db)
 
 
 def _handle_candidate_service_error(exc: Exception) -> None:
@@ -203,6 +204,19 @@ async def get_candidate_overview(
 ) -> CandidateOverviewResponse:
     try:
         return await _candidate_service(db).get_overview(candidate_id)
+    except Exception as exc:
+        _handle_candidate_service_error(exc)
+        raise
+
+
+@router.get("/{candidate_id}/job-links", response_model=list[CandidateJobLinkResponse])
+async def list_candidate_job_links(
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> list[CandidateJobLinkResponse]:
+    try:
+        return await _candidate_service(db).list_job_links(candidate_id)
     except Exception as exc:
         _handle_candidate_service_error(exc)
         raise

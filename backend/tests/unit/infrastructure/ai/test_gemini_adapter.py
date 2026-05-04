@@ -84,15 +84,14 @@ class TestGeminiAdapterValidResponse:
 
     @pytest.mark.asyncio
     async def test_multipart_content_concatenation(self, gemini_adapter, valid_request):
-        """Test that multiple content parts are concatenated."""
+        """Test that multiple content parts are concatenated and parsed as JSON."""
         response_with_multipart = {
             "candidates": [
                 {
                     "content": {
                         "parts": [
-                            {"text": "Part 1"},
-                            {"text": "Part 2"},
-                            {"text": "Part 3"},
+                            {"text": '{"part": 1, '},
+                            {"text": '"section": "a"}'},
                         ]
                     }
                 }
@@ -110,7 +109,7 @@ class TestGeminiAdapterValidResponse:
 
             response = await gemini_adapter.analyze(valid_request)
 
-            assert response.content == "Part 1\nPart 2\nPart 3"
+            assert '{"part": 1, "section": "a"}' == response.content
 
 
 class TestGeminiAdapterEmptyResponse:
@@ -338,7 +337,15 @@ class TestGeminiAdapterUsageMetadata:
         """Test handling when usageMetadata is missing."""
         response_data = {
             "candidates": [
-                {"content": {"parts": [{"text": "Analysis result"}]}}
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"analysis": "result", "score": 85}'
+                            }
+                        ]
+                    }
+                }
             ],
         }
 
@@ -349,7 +356,7 @@ class TestGeminiAdapterUsageMetadata:
 
             response = await gemini_adapter.analyze(valid_request)
 
-            assert response.content == "Analysis result"
+            assert response.content == '{"analysis": "result", "score": 85}'
             assert response.input_tokens == 0
             assert response.output_tokens == 0
 
@@ -358,7 +365,15 @@ class TestGeminiAdapterUsageMetadata:
         """Test handling when usageMetadata is incomplete."""
         response_data = {
             "candidates": [
-                {"content": {"parts": [{"text": "Analysis result"}]}}
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"status": "completed"}'
+                            }
+                        ]
+                    }
+                }
             ],
             "usageMetadata": {
                 "promptTokenCount": 100,
@@ -381,7 +396,15 @@ class TestGeminiAdapterUsageMetadata:
         """Test handling when usage tokens are null/None."""
         response_data = {
             "candidates": [
-                {"content": {"parts": [{"text": "Analysis result"}]}}
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"validated": true}'
+                            }
+                        ]
+                    }
+                }
             ],
             "usageMetadata": {
                 "promptTokenCount": None,

@@ -20,6 +20,7 @@ class RequestAnalysisResult:
     analysis_id: UUID
     status: AnalysisStatus
     estimated_wait_seconds: int         # estimativa baseada no tamanho da fila
+    enqueue_required: bool = True
 
 
 @dataclass(frozen=True)

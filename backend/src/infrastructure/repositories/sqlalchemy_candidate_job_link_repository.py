@@ -42,6 +42,7 @@ class SQLAlchemyCandidateJobLinkRepository:
                 CandidateJobLinkModel.candidate_id == candidate_id,
                 CandidateJobLinkModel.job_id == job_id,
                 CandidateJobLinkModel.deleted_at.is_(None),
+                CandidateJobLinkModel.status == "active",
             )
         )
 
@@ -52,6 +53,7 @@ class SQLAlchemyCandidateJobLinkRepository:
             .where(
                 CandidateJobLinkModel.job_id == job_id,
                 CandidateJobLinkModel.deleted_at.is_(None),
+                CandidateJobLinkModel.status == "active",
             )
             .order_by(CandidateJobLinkModel.created_at.desc())
         )
@@ -64,6 +66,7 @@ class SQLAlchemyCandidateJobLinkRepository:
             .where(
                 CandidateJobLinkModel.candidate_id == candidate_id,
                 CandidateJobLinkModel.deleted_at.is_(None),
+                CandidateJobLinkModel.status == "active",
             )
             .order_by(CandidateJobLinkModel.created_at.desc())
         )
@@ -126,6 +129,7 @@ class SQLAlchemyCandidateJobLinkRepository:
             sa.select(sa.func.count(CandidateJobLinkModel.id)).where(
                 CandidateJobLinkModel.job_id == job_id,
                 CandidateJobLinkModel.deleted_at.is_(None),
+                CandidateJobLinkModel.status == "active",
             )
         ) or 0
 
@@ -135,5 +139,6 @@ class SQLAlchemyCandidateJobLinkRepository:
             sa.select(sa.func.count(CandidateJobLinkModel.id)).where(
                 CandidateJobLinkModel.candidate_id == candidate_id,
                 CandidateJobLinkModel.deleted_at.is_(None),
+                CandidateJobLinkModel.status == "active",
             )
         ) or 0

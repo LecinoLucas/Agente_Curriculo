@@ -40,6 +40,8 @@ from src.interface.api.routers import (
 )
 from src.observability.logging import configure_structured_logging
 
+_APP_VERSION = "1.0.0"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
@@ -51,7 +53,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
 
 app = FastAPI(
     title="Resume AI System",
-    version="1.0.0",
+    version=_APP_VERSION,
     description="Sistema de análise inteligente de currículos com IA",
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,
@@ -62,14 +64,11 @@ app = FastAPI(
 # ── Middlewares (ordem importa: executados de baixo para cima no stack) ──────
 app.add_middleware(AuditMiddleware)
 app.add_middleware(RequestIDMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=None if settings.is_production else r"https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?$",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Correlation-ID"],
+
+_cors_allow_origin_regex = (
+    None
+    if settings.is_production
+    else r"https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?$"
 )
 
 # ── Routers ──────────────────────────────────────────────────────────────────
@@ -159,8 +158,21 @@ async def health() -> dict[str, Any]:
     database_connected = await check_database_health()
     return {
         "status": "ok" if database_connected else "degraded",
-        "version": app.version,
+        "version": _APP_VERSION,
         "database": {
             "connected": database_connected,
         },
     }
+
+
+# CORS global wrapper:
+# garante headers CORS inclusive em respostas 500 geradas fora do ExceptionMiddleware.
+app = CORSMiddleware(
+    app=app,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=_cors_allow_origin_regex,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Correlation-ID"],
+)

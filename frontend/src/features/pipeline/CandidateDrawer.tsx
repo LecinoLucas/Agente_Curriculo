@@ -8,7 +8,7 @@ import { useAuth } from "../../features/auth/useAuth";
 import { analysisService } from "../../services/analysisService";
 import { candidatesService } from "../../services/candidatesService";
 import { dataQualityService } from "../../services/dataQualityService";
-import { formatErrorForToast, handleApiError } from "../../services/errorHandler";
+import { formatErrorForToast, getHttpStatus, handleApiError } from "../../services/errorHandler";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { getJobRanking } from "../../services/jobsService";
@@ -37,6 +37,7 @@ import {
   isDealBreakerReasonCode,
 } from "./dealBreakerDisplay";
 import { type PanelTab, usePipeline } from "./PipelineContext";
+import { AddJobModal } from "./AddJobModal";
 import { EditCandidateModal } from "./EditCandidateModal";
 
 const DRAWER_TABS = [
@@ -92,8 +93,45 @@ const EXTRACTION_STATUS_LABEL: Record<string, string> = {
 };
 
 const MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024;
-const TRANSFER_ALLOWED_STAGES: PipelineStage[] = ["entry", "screening"];
 const DANGEROUS_STAGES: PipelineStage[] = ["hired", "rejected"];
+
+function isAnalysisInProgress(status: string | null | undefined): boolean {
+  return status === "pending" || status === "processing";
+}
+
+function showManualAnalysisConflictToast() {
+  toast.info("Já existe uma análise em andamento ou recente para esta vaga.");
+}
+
+async function recoverInFlightAnalysis(params: {
+  candidateId: string;
+  startPolling: (analysisId: string, candidateId?: string | null, initialStatus?: string | null) => void;
+  syncAnalysisStart: (input: {
+    candidateId: string;
+    analysisId: string;
+    status?: string | null;
+    resumeId?: string | null;
+    resumeTitle?: string | null;
+  }) => Promise<void>;
+}): Promise<boolean> {
+  try {
+    const freshOverview = await candidatesService.getOverview(params.candidateId);
+    const latest = freshOverview.latest_analysis;
+    if (!latest?.analysis_id || !isAnalysisInProgress(latest.status)) return false;
+
+    await params.syncAnalysisStart({
+      candidateId: params.candidateId,
+      analysisId: latest.analysis_id,
+      status: latest.status,
+      resumeId: latest.resume_id,
+      resumeTitle: latest.resume_title,
+    });
+    params.startPolling(latest.analysis_id, params.candidateId, latest.status);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function fmtScore(score: number | null | undefined): string {
   if (score == null) return "—";
@@ -136,8 +174,8 @@ function getCompatibilityGuidance(params: {
 } | null {
   if (!params.hasJobLink) {
     return {
-      title: "Compatibilidade indisponível",
-      description: "Associe o candidato a esta vaga para calcular a compatibilidade.",
+      title: "Aguardando vaga",
+      description: "Associe o candidato a uma vaga para calcular a compatibilidade.",
       tone: "neutral",
     };
   }
@@ -325,7 +363,7 @@ export function CandidateDrawer() {
     candidateLoading,
     candidateError,
     activePanelTab,
-    activeJobId,
+    activeJobId: activeBoardJobId,
     jobs,
     rankingSyncTick,
     closeCandidate,
@@ -343,6 +381,8 @@ export function CandidateDrawer() {
   const canSpendRealTokens = Boolean(user?.real_ai_token_spend_enabled);
 
   const isOpen = selectedCandidateId !== null;
+  const candidate = candidateOverview?.candidate;
+  const candidateActiveJobId = candidateOverview?.active_job_id ?? null;
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisResultLoading, setAnalysisResultLoading] = useState(false);
   const [analysisResultError, setAnalysisResultError] = useState<string | null>(null);
@@ -367,7 +407,16 @@ export function CandidateDrawer() {
     setAnalysisResultError(null);
     setRankingEntry(null);
     setRankingEntryError(null);
+    setAddJobModalOpen(false);
+    setTransferJobModalOpen(false);
   }, [selectedCandidateId]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setAddJobModalOpen(false);
+    setTransferJobModalOpen(false);
+    setEditModalOpen(false);
+  }, [isOpen]);
 
   useEffect(() => {
     rankingEntryCacheRef.current.clear();
@@ -415,7 +464,7 @@ export function CandidateDrawer() {
 
   useEffect(() => {
     if (activePanelTab !== "score") return;
-    if (!activeJobId || !candidateOverview) {
+    if (!candidateActiveJobId || !candidateOverview) {
       setRankingEntry(null);
       setRankingEntryError(null);
       setRankingEntryLoading(false);
@@ -423,7 +472,7 @@ export function CandidateDrawer() {
     }
 
     let cancelled = false;
-    const cacheKey = `${activeJobId}:${candidateOverview.candidate.id}`;
+    const cacheKey = `${candidateActiveJobId}:${candidateOverview.candidate.id}`;
     const cached = rankingEntryCacheRef.current.get(cacheKey);
     if (cached !== undefined) {
       setRankingEntry(cached);
@@ -437,7 +486,7 @@ export function CandidateDrawer() {
     setRankingEntryLoading(true);
     setRankingEntryError(null);
 
-    void getJobRanking(activeJobId)
+    void getJobRanking(candidateActiveJobId)
       .then((ranking) => {
         if (cancelled) return;
         const entry = ranking.candidates.find(
@@ -464,51 +513,47 @@ export function CandidateDrawer() {
     return () => {
       cancelled = true;
     };
-  }, [activePanelTab, activeJobId, candidateOverview]);
+  }, [activePanelTab, candidateActiveJobId, candidateOverview]);
 
-  const candidate = candidateOverview?.candidate;
-  const activePipelineEntry = useMemo(() => {
-    if (!activeJobId || !candidateOverview) return null;
-    return candidateOverview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null;
-  }, [activeJobId, candidateOverview]);
+  const primaryPipelineEntry = useMemo(() => {
+    if (!candidateOverview || !candidateActiveJobId) return null;
+    return candidateOverview.pipeline_entries.find((entry) => entry.job_id === candidateActiveJobId) ?? null;
+  }, [candidateOverview, candidateActiveJobId]);
   const activeJobLink = useMemo(() => {
-    if (!activeJobId || !candidateOverview) return null;
+    if (!candidateActiveJobId || !candidateOverview) return null;
     return (
       candidateOverview.candidate_job_links.find(
-        (entry) => entry.job_id === activeJobId && entry.status === "active",
+        (entry) => entry.job_id === candidateActiveJobId && entry.status === "active",
       ) ?? null
     );
-  }, [activeJobId, candidateOverview]);
+  }, [candidateActiveJobId, candidateOverview]);
 
-  const currentStage = activePipelineEntry?.stage ?? null;
+  const currentStage = primaryPipelineEntry?.stage ?? null;
   const activeJob = useMemo<Job | null>(
-    () => jobs.find((job) => job.id === activeJobId) ?? null,
-    [jobs, activeJobId],
+    () => jobs.find((job) => job.id === (candidateActiveJobId ?? "")) ?? null,
+    [jobs, candidateActiveJobId],
   );
-  const activeJobMatch = useMemo(
-    () =>
-      activeJobId && candidateOverview
-        ? candidateOverview.top_matches.find((match) => match.job_id === activeJobId) ?? null
-        : null,
-    [activeJobId, candidateOverview],
-  );
-  const activeJobCompatibilityScore =
-    activePipelineEntry?.match_score ?? activeJobMatch?.match_score ?? null;
+  const activeJobCompatibilityScore = primaryPipelineEntry?.match_score ?? null;
   const candidateState = useMemo(() => {
     if (!candidateOverview) return null;
+    if (primaryPipelineEntry == null) {
+      return {
+        key: "waiting_job",
+        label: "Aguardando vaga",
+        tone: "warning",
+      } as CandidateState;
+    }
     return getCandidateState({
       resume_count: candidateOverview.resumes.length,
       ai_status: candidateOverview.latest_analysis?.status ?? null,
-      pipeline: { stage: activePipelineEntry?.stage ?? null },
+      pipeline: { stage: primaryPipelineEntry?.stage ?? null },
       ranking_available:
         rankingEntry !== null ||
-        activeJobCompatibilityScore !== null ||
-        activeJobMatch?.match_score != null,
+        activeJobCompatibilityScore !== null,
     });
   }, [
     activeJobCompatibilityScore,
-    activeJobMatch?.match_score,
-    activePipelineEntry?.stage,
+    primaryPipelineEntry?.stage,
     candidateOverview,
     rankingEntry,
   ]);
@@ -524,22 +569,23 @@ export function CandidateDrawer() {
     () =>
       jobs.filter(
         (job) =>
-          job.id !== activeJobId &&
+          job.id !== (candidateActiveJobId ?? null) &&
           !linkedJobIds.has(job.id) &&
           (job.status === "published" || job.status === "paused"),
       ),
-    [jobs, activeJobId, linkedJobIds],
+    [jobs, candidateActiveJobId, linkedJobIds],
   );
-  const canTransferCurrentJob = currentStage ? TRANSFER_ALLOWED_STAGES.includes(currentStage) : false;
+  const canTransferCurrentJob = primaryPipelineEntry !== null;
   const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
   const compatibilityGuidance = getCompatibilityGuidance({
-    hasJobLink: activeJobLink !== null,
+    hasJobLink: primaryPipelineEntry !== null,
     hasResume,
     analysisStatus: candidateOverview?.latest_analysis?.status ?? null,
   });
 
   const handleHeaderRequestAnalysis = useCallback(async () => {
     if (!candidateOverview || headerActionLoading) return;
+    const manualJobId = candidateActiveJobId;
 
     const readyResume = candidateOverview.resumes.find(
       (resume) =>
@@ -559,11 +605,29 @@ export function CandidateDrawer() {
       toast.warning("Nenhum currículo pronto para análise.");
       return;
     }
+    if (!manualJobId) {
+      toast.info("Candidato sem vaga ativa. Adicione o candidato a uma vaga antes de solicitar análise.");
+      return;
+    }
+    if (isAnalysisInProgress(candidateOverview.latest_analysis?.status ?? null)) {
+      toast.info("Já existe uma análise em andamento para este candidato.");
+      return;
+    }
+
+    const reusedInFlightAnalysis = await recoverInFlightAnalysis({
+      candidateId: candidateOverview.candidate.id,
+      startPolling,
+      syncAnalysisStart,
+    });
+    if (reusedInFlightAnalysis) {
+      toast.info("Já existe uma análise em andamento para este candidato.");
+      return;
+    }
 
     setHeaderActionLoading(true);
     feedback.requestAnalysis.processing();
     try {
-      const response = await analysisService.request(readyResume.current_version_id);
+      const response = await analysisService.request(readyResume.current_version_id, manualJobId);
       await syncAnalysisStart({
         candidateId: candidateOverview.candidate.id,
         analysisId: response.analysis_id,
@@ -574,6 +638,19 @@ export function CandidateDrawer() {
       startPolling(response.analysis_id, candidateOverview.candidate.id, "pending");
       feedback.requestAnalysis.success();
     } catch (err) {
+      if (getHttpStatus(err) === 409) {
+        const recovered = await recoverInFlightAnalysis({
+          candidateId: candidateOverview.candidate.id,
+          startPolling,
+          syncAnalysisStart,
+        });
+        if (recovered) {
+          toast.info("Uma análise já estava em andamento e foi retomada.");
+          return;
+        }
+        showManualAnalysisConflictToast();
+        return;
+      }
       feedback.requestAnalysis.error(err);
     } finally {
       setHeaderActionLoading(false);
@@ -581,6 +658,7 @@ export function CandidateDrawer() {
   }, [
     candidateOverview,
     headerActionLoading,
+    candidateActiveJobId,
     canSpendRealTokens,
     startPolling,
     switchPanelTab,
@@ -635,6 +713,12 @@ export function CandidateDrawer() {
           },
           loading: headerActionLoading,
         };
+      case "waiting_job":
+        return {
+          label: "Adicionar vaga",
+          onClick: () => switchPanelTab("actions"),
+          loading: false,
+        };
       case "analysis_completed":
         return {
           label: "Ver análise",
@@ -674,11 +758,11 @@ export function CandidateDrawer() {
   }
 
   async function handleLinkToActiveJob() {
-    if (!selectedCandidateId || !activeJobId) return;
+    if (!selectedCandidateId || !activeBoardJobId) return;
     setLinkSaving(true);
     try {
       await pipelineService.addCandidateToJob(selectedCandidateId, {
-        job_id: activeJobId,
+        job_id: activeBoardJobId,
         initial_stage: "entry",
       });
       await invalidateJobState();
@@ -690,12 +774,12 @@ export function CandidateDrawer() {
     }
   }
 
-  const activeJobLabel = activeJob?.title ?? activeJobLink?.job_title ?? activePipelineEntry?.job_title ?? "Nenhuma vaga em contexto";
-  const linkStatus = activeJobLink
-    ? "Vinculado à vaga ativa"
+  const activeJobLabel = activeJob?.title ?? candidateOverview?.active_job?.title ?? "Não vinculado";
+  const linkStatus = primaryPipelineEntry
+    ? "Vínculo ativo no pipeline"
     : linkSaving
       ? "Vinculando à vaga ativa"
-      : "Não vinculado à vaga ativa";
+      : "Não vinculado";
 
   return (
     <>
@@ -773,7 +857,7 @@ export function CandidateDrawer() {
                   overview={candidateOverview}
                   activeJob={activeJob}
                   activeJobLink={activeJobLink}
-                  activePipelineEntry={activePipelineEntry}
+                  activePipelineEntry={primaryPipelineEntry}
                   onEdit={() => setEditModalOpen(true)}
                   onReprocess={handleDataQualityReprocess}
                   onMarkValid={user?.role === "admin" ? handleDataQualityMarkValid : undefined}
@@ -784,10 +868,9 @@ export function CandidateDrawer() {
               {activePanelTab === "score" ? (
               <ScoreTab
                   overview={candidateOverview}
-                  activeJobId={activeJobId}
+                  activeJobId={candidateActiveJobId}
                   activeJob={activeJob}
-                  activeJobMatch={activeJobMatch}
-                  activePipelineEntry={activePipelineEntry}
+                  activePipelineEntry={primaryPipelineEntry}
                   rankingEntry={rankingEntry}
                   analysisResult={analysisResult}
                   loading={rankingEntryLoading}
@@ -799,18 +882,26 @@ export function CandidateDrawer() {
               {activePanelTab === "analysis" ? (
                 <AnalysisTab
                   overview={candidateOverview}
+                  activeJobId={candidateActiveJobId}
+                  activePipelineEntry={primaryPipelineEntry}
                   result={analysisResult}
                   loading={analysisResultLoading}
                   error={analysisResultError}
                 />
               ) : null}
 
-              {activePanelTab === "documents" ? <DocumentsTab overview={candidateOverview} /> : null}
+              {activePanelTab === "documents" ? (
+                <DocumentsTab
+                  overview={candidateOverview}
+                  activeJobId={candidateActiveJobId}
+                  activePipelineEntry={primaryPipelineEntry}
+                />
+              ) : null}
 
               {activePanelTab === "history" ? (
                 <HistoryTab
                   overview={candidateOverview}
-                  activeJobId={activeJobId}
+                  activeJobId={candidateActiveJobId}
                   cacheRef={historyCacheRef}
                 />
               ) : null}
@@ -819,8 +910,9 @@ export function CandidateDrawer() {
                 <ActionsTab
                   overview={candidateOverview}
                   activeJob={activeJob}
-                  activeJobId={activeJobId}
+                  activeJobId={candidateActiveJobId}
                   activeJobLink={activeJobLink}
+                  activePipelineEntry={primaryPipelineEntry}
                   currentStage={currentStage}
                   availableJobs={availableJobs}
                   canTransferCurrentJob={canTransferCurrentJob}
@@ -847,14 +939,16 @@ export function CandidateDrawer() {
         }}
       />
 
-      <AddToJobModal
+      <AddJobModal
         isOpen={addJobModalOpen}
         candidateId={candidate?.id ?? null}
-        availableJobs={availableJobs}
+        jobs={jobs}
+        linkedJobIds={linkedJobIds}
+        excludedJobId={candidateActiveJobId}
         onClose={() => setAddJobModalOpen(false)}
         onSuccess={async () => {
           if (!candidate?.id) return;
-          await invalidateJobState();
+          await invalidateJobState(candidateActiveJobId);
           setAddJobModalOpen(false);
         }}
       />
@@ -862,15 +956,14 @@ export function CandidateDrawer() {
       <TransferJobModal
         isOpen={transferJobModalOpen}
         candidateId={candidate?.id ?? null}
-        fromJobId={activeJobId}
+        fromJobId={primaryPipelineEntry?.job_id ?? null}
         availableJobs={availableJobs}
         canTransfer={canTransferCurrentJob}
         onClose={() => setTransferJobModalOpen(false)}
         onSuccess={async () => {
           if (!candidate?.id) return;
-          await invalidateJobState();
+          await invalidateJobState(primaryPipelineEntry?.job_id ?? null);
           setTransferJobModalOpen(false);
-          closeCandidate();
         }}
       />
     </>
@@ -951,13 +1044,11 @@ function SummaryTab({
         <div className="grid gap-3 sm:grid-cols-2">
           <StatusCard
             label="Vaga ativa"
-            title={activeJob?.title ?? activeJobLink?.job_title ?? activePipelineEntry?.job_title ?? "Sem vaga ativa"}
+            title={activeJob?.title ?? activePipelineEntry?.job_title ?? "Sem vaga ativa"}
             description={
               activePipelineEntry
                 ? `${STAGE_LABEL[activePipelineEntry.stage] ?? activePipelineEntry.stage} · ${activePipelineEntry.candidate_status}`
-                : activeJobLink
-                  ? "Vinculado oficialmente à vaga ativa, sem etapa de pipeline registrada."
-                  : "O candidato não está vinculado à vaga ativa neste contexto."
+                : "O candidato não possui pipeline ativo."
             }
           />
           <StatusCard
@@ -1044,7 +1135,6 @@ function ScoreTab({
   overview,
   activeJobId,
   activeJob,
-  activeJobMatch,
   activePipelineEntry,
   rankingEntry,
   analysisResult,
@@ -1055,7 +1145,6 @@ function ScoreTab({
   overview: CandidateOverview;
   activeJobId: string | null;
   activeJob: Job | null;
-  activeJobMatch: CandidateOverview["top_matches"][number] | null;
   activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   rankingEntry: JobRankingEntry | null;
   analysisResult: AnalysisResult | null;
@@ -1065,8 +1154,9 @@ function ScoreTab({
 }) {
   const { user } = useAuth();
   const canSendMatchingFeedback = user?.role === "admin" || user?.role === "recruiter";
-  const compatibilityScore = activePipelineEntry?.match_score ?? activeJobMatch?.match_score ?? null;
-  const aiScore = overview.latest_analysis?.overall_score ?? null;
+  const compatibilityScore = activePipelineEntry?.match_score ?? null;
+  const latestActiveAnalysis = activeJobId ? overview.latest_analysis : null;
+  const aiScore = analysisResult?.overall_score ?? null;
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
@@ -1077,7 +1167,7 @@ function ScoreTab({
       reasonCode,
       jobDealBreakers: activeJob?.deal_breakers ?? [],
       candidate: overview.candidate,
-      latestAnalysis: overview.latest_analysis,
+      latestAnalysis: latestActiveAnalysis,
       analysisResult,
     }),
   );
@@ -1089,7 +1179,14 @@ function ScoreTab({
     dealBreakerDetails.length > 0;
 
   useEffect(() => {
-    if (!activeJobId || !candidateId) {
+    const hasActiveContext =
+      Boolean(activeJobId) &&
+      Boolean(candidateId) &&
+      activePipelineEntry?.job_id === activeJobId &&
+      latestActiveAnalysis?.status === "completed" &&
+      (activePipelineEntry?.match_score != null || rankingEntry?.final_score != null);
+
+    if (!hasActiveContext || !activeJobId || !candidateId) {
       setScoreExplanation(null);
       setInsightError(null);
       setInsightLoading(false);
@@ -1106,9 +1203,14 @@ function ScoreTab({
         if (cancelled) return;
         setScoreExplanation(payload);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
+        const status = getHttpStatus(err);
         setScoreExplanation(null);
+        if (status === 404 || status === 409) {
+          setInsightError(null);
+          return;
+        }
         setInsightError("A explicação detalhada deste score não está disponível no momento.");
       })
       .finally(() => {
@@ -1120,7 +1222,14 @@ function ScoreTab({
     return () => {
       cancelled = true;
     };
-  }, [activeJobId, candidateId]);
+  }, [
+    activeJobId,
+    candidateId,
+    activePipelineEntry?.job_id,
+    activePipelineEntry?.match_score,
+    latestActiveAnalysis?.status,
+    rankingEntry?.final_score,
+  ]);
 
   const handleMatchingFeedback = useCallback(
     async (kind: "liked" | "rejected" | "hired") => {
@@ -1150,8 +1259,8 @@ function ScoreTab({
   if (!activeJobId) {
     return (
       <EmptyTab
-        title="Selecione uma vaga para ver o score"
-        description="Esta aba sempre mostra apenas os sinais de decisão da vaga ativa."
+        title="Aguardando vaga"
+        description="Associe o candidato a uma vaga para liberar score e sinais de decisão."
       />
     );
   }
@@ -1166,11 +1275,11 @@ function ScoreTab({
             description={compatibilityGuidance?.description ?? "Aderência do candidato à vaga ativa."}
             valueClassName={compatibilityGuidance ? "text-[hsl(var(--text))]" : scoreColorClass(compatibilityScore)}
           />
-          <DecisionCard
+              <DecisionCard
             label="Score da IA"
             value={fmtScore(aiScore)}
             description={
-              overview.latest_analysis?.status === "completed"
+              latestActiveAnalysis?.status === "completed"
                 ? "Leitura do currículo pela IA."
                 : "Aguardando análise concluída para mostrar este indicador."
             }
@@ -1449,6 +1558,14 @@ function ScoreTab({
             </div>
           </div>
         ) : null}
+
+        {!insightLoading && !insightError && !scoreExplanation ? (
+          <EmptyTab
+            title="Explicação ainda não gerada para a vaga ativa"
+            description="O score contextual desta vaga ainda não possui explicação detalhada disponível."
+            compact
+          />
+        ) : null}
       </Section>
     </div>
   );
@@ -1519,11 +1636,15 @@ function InsightEvidenceBlock({
 
 function AnalysisTab({
   overview,
+  activeJobId,
+  activePipelineEntry,
   result,
   loading,
   error,
 }: {
   overview: CandidateOverview;
+  activeJobId: string | null;
+  activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   result: AnalysisResult | null;
   loading: boolean;
   error: string | null;
@@ -1571,10 +1692,30 @@ function AnalysisTab({
 
   async function handleRequestAnalysis() {
     if (!selectedVersionId || !canSpendRealTokens || isRequesting) return;
+    const manualJobId = activeJobId;
+    if (!manualJobId) {
+      toast.info("Candidato sem vaga ativa. Adicione o candidato a uma vaga antes de solicitar análise.");
+      return;
+    }
+    if (isAnalysisInProgress(latest_analysis?.status ?? null)) {
+      toast.info("Já existe uma análise em andamento para este candidato.");
+      return;
+    }
+
+    const reusedInFlightAnalysis = await recoverInFlightAnalysis({
+      candidateId: overview.candidate.id,
+      startPolling,
+      syncAnalysisStart,
+    });
+    if (reusedInFlightAnalysis) {
+      toast.info("Já existe uma análise em andamento para este candidato.");
+      return;
+    }
+
     setIsRequesting(true);
     feedback.requestAnalysis.processing();
     try {
-      const response = await analysisService.request(selectedVersionId);
+      const response = await analysisService.request(selectedVersionId, manualJobId);
       const selectedResume = readyResumes.find((resume) => resume.current_version_id === selectedVersionId);
       await syncAnalysisStart({
         candidateId: overview.candidate.id,
@@ -1586,6 +1727,19 @@ function AnalysisTab({
       startPolling(response.analysis_id, overview.candidate.id, "pending");
       feedback.requestAnalysis.success();
     } catch (err) {
+      if (getHttpStatus(err) === 409) {
+        const recovered = await recoverInFlightAnalysis({
+          candidateId: overview.candidate.id,
+          startPolling,
+          syncAnalysisStart,
+        });
+        if (recovered) {
+          toast.info("Uma análise já estava em andamento e foi retomada.");
+          return;
+        }
+        showManualAnalysisConflictToast();
+        return;
+      }
       feedback.requestAnalysis.error(err);
     } finally {
       setIsRequesting(false);
@@ -1616,6 +1770,7 @@ function AnalysisTab({
           ? 22
           : 0;
   const shouldShowManualStart =
+    Boolean(activeJobId) &&
     readyResumes.length > 0 &&
     (!latest_analysis || latest_analysis.status === "failed" || latest_analysis.status === "cancelled");
 
@@ -1885,7 +2040,15 @@ function AnalysisTab({
   );
 }
 
-function DocumentsTab({ overview }: { overview: CandidateOverview }) {
+function DocumentsTab({
+  overview,
+  activeJobId,
+  activePipelineEntry,
+}: {
+  overview: CandidateOverview;
+  activeJobId: string | null;
+  activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
+}) {
   const {
     refreshCandidateOverview,
     startPolling,
@@ -2019,14 +2182,34 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
   }
 
   async function handleAnalyze(resumeId: string, versionId: string) {
+    const manualJobId = activeJobId;
     if (!canSpendRealTokens) {
       toast.warning("Consumo real bloqueado — ative real_ai_token_spend_enabled para analisar.");
       return;
     }
+    if (!manualJobId) {
+      toast.info("Candidato sem vaga ativa. Adicione o candidato a uma vaga antes de solicitar análise.");
+      return;
+    }
+    if (isAnalysisInProgress(latest_analysis?.status ?? null)) {
+      toast.info("Já existe uma análise em andamento para este candidato.");
+      return;
+    }
+
+    const reusedInFlightAnalysis = await recoverInFlightAnalysis({
+      candidateId: overview.candidate.id,
+      startPolling,
+      syncAnalysisStart,
+    });
+    if (reusedInFlightAnalysis) {
+      toast.info("Já existe uma análise em andamento para este candidato.");
+      return;
+    }
+
     setAnalyzingResumeId(resumeId);
     feedback.requestAnalysis.processing();
     try {
-      const response = await analysisService.request(versionId);
+      const response = await analysisService.request(versionId, manualJobId);
       const resume = resumes.find((item) => item.resume_id === resumeId);
       await syncAnalysisStart({
         candidateId: overview.candidate.id,
@@ -2038,6 +2221,19 @@ function DocumentsTab({ overview }: { overview: CandidateOverview }) {
       startPolling(response.analysis_id, overview.candidate.id, "pending");
       feedback.requestAnalysis.success();
     } catch (err) {
+      if (getHttpStatus(err) === 409) {
+        const recovered = await recoverInFlightAnalysis({
+          candidateId: overview.candidate.id,
+          startPolling,
+          syncAnalysisStart,
+        });
+        if (recovered) {
+          toast.info("Uma análise já estava em andamento e foi retomada.");
+          return;
+        }
+        showManualAnalysisConflictToast();
+        return;
+      }
       feedback.requestAnalysis.error(err);
       setAnalyzingResumeId(null);
     }
@@ -2532,6 +2728,7 @@ function ActionsTab({
   activeJob,
   activeJobId,
   activeJobLink,
+  activePipelineEntry,
   currentStage,
   availableJobs,
   canTransferCurrentJob,
@@ -2546,6 +2743,7 @@ function ActionsTab({
   activeJob: Job | null;
   activeJobId: string | null;
   activeJobLink: CandidateOverview["candidate_job_links"][number] | null;
+  activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   currentStage: PipelineStage | null;
   availableJobs: Job[];
   canTransferCurrentJob: boolean;
@@ -2556,9 +2754,10 @@ function ActionsTab({
   onOpenAddJob: () => void;
   onOpenTransferJob: () => void;
 }) {
-  const activeEntry = activeJobId
+  const contextualEntry = activeJobId
     ? overview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null
     : null;
+  const hasActivePipeline = activePipelineEntry !== null;
   const [selectedStage, setSelectedStage] = useState<PipelineStage>("entry");
   const [confirmStage, setConfirmStage] = useState<PipelineStage | null>(null);
 
@@ -2572,18 +2771,9 @@ function ActionsTab({
     setConfirmStage(null);
   }
 
-  if (!activeJobId || !activeJob) {
-    return (
-      <EmptyTab
-        title="Selecione uma vaga para ver as ações"
-        description="Abra o candidato com uma vaga ativa para mover etapa, adicionar a outra vaga ou transferir contexto."
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col gap-5 p-5">
-      {!activeEntry ? (
+      {activeJobId && activeJob && !contextualEntry ? (
         <Section title="Vínculo com a vaga ativa">
           <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
             <p className="text-sm font-semibold text-[hsl(var(--text))]">
@@ -2612,87 +2802,97 @@ function ActionsTab({
         </Section>
       ) : null}
 
-      <Section title="Mover etapa">
-        {activeEntry ? (
-          <>
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">{activeJob.title}</p>
-                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                    {STAGE_LABEL[activeEntry.stage] ?? activeEntry.stage} · {activeEntry.candidate_status}
-                  </p>
+      {activeJobId && activeJob ? (
+        <Section title="Mover etapa">
+          {contextualEntry ? (
+            <>
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">{activeJob.title}</p>
+                    <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                      {STAGE_LABEL[contextualEntry.stage] ?? contextualEntry.stage} · {contextualEntry.candidate_status}
+                    </p>
+                  </div>
+                  <StatusPill label={formatJobStatus(activeJob.status)} tone={jobStatusTone(activeJob.status)} />
                 </div>
-                <StatusPill label={formatJobStatus(activeJob.status)} tone={jobStatusTone(activeJob.status)} />
               </div>
-            </div>
 
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="flex gap-2">
-                <select
-                  value={selectedStage}
-                  onChange={(event) => {
-                    const nextStage = event.target.value as PipelineStage;
-                    setSelectedStage(nextStage);
-                    setConfirmStage(null);
-                  }}
-                  disabled={stageSaving}
-                  className="ui-input h-10 flex-1 rounded-lg px-3 text-sm disabled:opacity-50"
-                >
-                  {STAGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={stageSaving || selectedStage === currentStage}
-                  onClick={() => {
-                    if (DANGEROUS_STAGES.includes(selectedStage)) {
-                      setConfirmStage(selectedStage);
-                      return;
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <select
+                    value={selectedStage}
+                    onChange={(event) => {
+                      const nextStage = event.target.value as PipelineStage;
+                      setSelectedStage(nextStage);
+                      setConfirmStage(null);
+                    }}
+                    disabled={stageSaving}
+                    className="ui-input h-10 flex-1 rounded-lg px-3 text-sm disabled:opacity-50"
+                  >
+                    {STAGE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={stageSaving || selectedStage === currentStage}
+                    onClick={() => {
+                      if (DANGEROUS_STAGES.includes(selectedStage)) {
+                        setConfirmStage(selectedStage);
+                        return;
+                      }
+                      void submitStage(selectedStage);
+                    }}
+                    className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
+                  >
+                    {stageSaving ? "Salvando…" : "Salvar etapa"}
+                  </button>
+                </div>
+
+                {confirmStage ? (
+                  <DangerZone
+                    title={confirmStage === "rejected" ? "Confirmar reprovação" : "Confirmar contratação"}
+                    description={
+                      confirmStage === "rejected"
+                        ? "Esta ação move o candidato para Reprovado na vaga ativa."
+                        : "Esta ação move o candidato para Contratado na vaga ativa."
                     }
-                    void submitStage(selectedStage);
-                  }}
-                  className="rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
-                >
-                  {stageSaving ? "Salvando…" : "Salvar etapa"}
-                </button>
+                    confirmLabel={confirmStage === "rejected" ? "Confirmar reprovação" : "Confirmar contratação"}
+                    loading={stageSaving}
+                    onConfirm={() => void submitStage(confirmStage)}
+                    onCancel={() => setConfirmStage(null)}
+                  />
+                ) : null}
               </div>
-
-              {confirmStage ? (
-                <DangerZone
-                  title={confirmStage === "rejected" ? "Confirmar reprovação" : "Confirmar contratação"}
-                  description={
-                    confirmStage === "rejected"
-                      ? "Esta ação move o candidato para Reprovado na vaga ativa."
-                      : "Esta ação move o candidato para Contratado na vaga ativa."
-                  }
-                  confirmLabel={confirmStage === "rejected" ? "Confirmar reprovação" : "Confirmar contratação"}
-                  loading={stageSaving}
-                  onConfirm={() => void submitStage(confirmStage)}
-                  onCancel={() => setConfirmStage(null)}
-                />
-              ) : null}
-            </div>
-          </>
-        ) : (
+            </>
+          ) : (
+            <EmptyTab
+              title={activeJobLink ? "Candidato ainda não entrou no pipeline desta vaga" : "Candidato não vinculado à vaga ativa"}
+              description={activeJobLink
+                ? "Use a ação acima para criar a etapa inicial no pipeline."
+                : "Vincule o candidato primeiro para liberar movimentações de etapa."}
+              compact
+            />
+          )}
+        </Section>
+      ) : (
+        <Section title="Mover etapa">
           <EmptyTab
-            title={activeJobLink ? "Candidato ainda não entrou no pipeline desta vaga" : "Candidato não vinculado à vaga ativa"}
-            description={activeJobLink
-              ? "Use a ação acima para criar a etapa inicial no pipeline."
-              : "Vincule o candidato primeiro para liberar movimentações de etapa."}
+            title="Selecione uma vaga para mover etapa"
+            description="As movimentações de etapa dependem da vaga ativa no contexto do pipeline."
             compact
           />
-        )}
-      </Section>
+        </Section>
+      )}
 
       <Section title="Ações rápidas">
         <div className="grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            disabled={!activeEntry || currentStage === "rejected" || stageSaving}
+            disabled={!contextualEntry || currentStage === "rejected" || stageSaving}
             onClick={() => setConfirmStage("rejected")}
             className="rounded-xl border border-[hsl(var(--danger))]/25 bg-[hsl(var(--danger-soft))] px-4 py-3 text-left transition disabled:opacity-50"
           >
@@ -2704,7 +2904,7 @@ function ActionsTab({
 
           <button
             type="button"
-            disabled={!activeEntry || currentStage === "hired" || stageSaving}
+            disabled={!contextualEntry || currentStage === "hired" || stageSaving}
             onClick={() => setConfirmStage("hired")}
             className="rounded-xl border border-[hsl(var(--success))]/25 bg-[hsl(var(--success-soft))] px-4 py-3 text-left transition disabled:opacity-50"
           >
@@ -2718,167 +2918,40 @@ function ActionsTab({
 
       <Section title="Gestão de vaga">
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={onOpenAddJob}
-            disabled={availableJobs.length === 0}
-            className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 text-left transition hover:border-[hsl(var(--primary))]/35 hover:bg-[hsl(var(--accent-soft))] disabled:opacity-50"
-          >
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Adicionar a outra vaga</p>
-            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-              Mantém o candidato na vaga atual e cria um novo vínculo com outra vaga.
-            </p>
-          </button>
-
-          {canTransferCurrentJob ? (
+          {!hasActivePipeline ? (
             <button
               type="button"
-              onClick={onOpenTransferJob}
-              disabled={availableJobs.length === 0}
-              className="rounded-xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning-soft))] px-4 py-3 text-left transition hover:border-[hsl(var(--warning))] disabled:opacity-50"
+              onClick={onOpenAddJob}
+              disabled={availableJobs.length === 0 || linkSaving}
+              className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 text-left transition hover:border-[hsl(var(--primary))]/35 hover:bg-[hsl(var(--accent-soft))] disabled:opacity-50"
             >
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">Transferir/corrigir vaga</p>
+              <p className="text-sm font-semibold text-[hsl(var(--text))]">Adicionar a uma vaga</p>
               <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                Remove o candidato do pipeline atual e cria o vínculo na vaga destino.
-              </p>
-              <p className="mt-2 text-[11px] font-medium text-[hsl(var(--warning))]">
-                Aviso de impacto: o vínculo atual será desativado na vaga ativa.
+                Cria o vínculo oficial e inicia o pipeline na vaga selecionada.
               </p>
             </button>
           ) : (
-            <div className="rounded-xl border border-[hsl(var(--warning))]/25 bg-[hsl(var(--warning-soft))] px-4 py-3">
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">Transferência bloqueada</p>
+            <button
+              type="button"
+              onClick={onOpenTransferJob}
+              disabled={availableJobs.length === 0 || !canTransferCurrentJob}
+              className="rounded-xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning-soft))] px-4 py-3 text-left transition hover:border-[hsl(var(--warning))] disabled:opacity-50"
+            >
+              <p className="text-sm font-semibold text-[hsl(var(--text))]">Transferir para outra vaga</p>
               <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                Este candidato já avançou no processo. Para preservar o histórico, adicione-o a outra vaga em vez de transferir.
+                Encerra o pipeline atual e move o candidato para a vaga destino em triagem inicial.
               </p>
-            </div>
+            </button>
           )}
         </div>
 
         {availableJobs.length === 0 ? (
           <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
-            Não há outras vagas disponíveis para esta ação.
+            Não há vagas disponíveis para esta ação.
           </p>
         ) : null}
       </Section>
     </div>
-  );
-}
-
-function AddToJobModal({
-  isOpen,
-  candidateId,
-  availableJobs,
-  onClose,
-  onSuccess,
-}: {
-  isOpen: boolean;
-  candidateId: string | null;
-  availableJobs: Job[];
-  onClose: () => void;
-  onSuccess: () => Promise<void>;
-}) {
-  const [jobId, setJobId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setJobId(availableJobs[0]?.id ?? "");
-    setSaving(false);
-    setError(null);
-  }, [isOpen, availableJobs]);
-
-  if (!isOpen) return null;
-
-  async function handleSubmit() {
-    if (!candidateId || !jobId) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await pipelineService.addCandidateToJob(candidateId, { job_id: jobId, initial_stage: "entry" });
-      toast.success("Candidato adicionado a outra vaga");
-      await onSuccess();
-    } catch (err: unknown) {
-      setError(
-        formatContextError(
-          err,
-          "Não foi possível adicionar o candidato à vaga selecionada.",
-          "Tente novamente.",
-        ),
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} aria-hidden="true" />
-      <div className="ui-card fixed left-1/2 top-1/2 z-[70] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl">
-        <div className="mb-5 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-[hsl(var(--text))]">Adicionar a outra vaga</h2>
-            <p className="ui-text-muted mt-0.5 text-sm">
-              O candidato permanecerá na vaga atual e será incluído na vaga destino em triagem inicial.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] disabled:opacity-50"
-          >
-            ✕
-          </button>
-        </div>
-
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Vaga destino</span>
-          <select
-            value={jobId}
-            onChange={(event) => setJobId(event.target.value)}
-            disabled={saving || availableJobs.length === 0}
-            className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
-          >
-            {availableJobs.length === 0 ? (
-              <option value="">Nenhuma vaga disponível</option>
-            ) : (
-              availableJobs.map((job) => (
-                <option key={job.id} value={job.id}>
-                  {job.title}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-
-        {error ? (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={saving || !jobId}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-40"
-          >
-            {saving ? "Adicionando…" : "Confirmar"}
-          </button>
-        </div>
-      </div>
-    </>
   );
 }
 
@@ -2921,7 +2994,7 @@ function TransferJobModal({
       return;
     }
     if (!canTransfer) {
-      setError("Este candidato já avançou no processo. Para preservar o histórico, adicione-o a outra vaga em vez de transferir.");
+      setError("Candidato não possui vaga ativa. Use adicionar a uma vaga.");
       return;
     }
 

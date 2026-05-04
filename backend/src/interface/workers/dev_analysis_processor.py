@@ -6,149 +6,328 @@ import sqlalchemy as sa
 import structlog
 
 from src.infrastructure.database.connection import AsyncSessionFactory
-from src.infrastructure.database.models.analysis_model import AnalysisModel, AnalysisResultModel
+from src.infrastructure.database.models.analysis_model import (
+    AnalysisModel,
+    AnalysisResultModel,
+)
 from src.interface.workers.matching_dispatcher import enqueue_published_job_matches
 
 logger = structlog.get_logger(__name__)
+
+
+def _sanitize_prompt_template(template: str | None) -> str | None:
+    if template is None:
+        return None
+
+    placeholders = {
+        "__RESUME_TEXT__": "{resume_text}",
+        "__JOB_CONTEXT__": "{job_context}",
+    }
+
+    sanitized = template
+    for marker, placeholder in placeholders.items():
+        sanitized = sanitized.replace(placeholder, marker)
+
+    sanitized = sanitized.replace("{", "{{").replace("}", "}}")
+
+    for marker, placeholder in placeholders.items():
+        sanitized = sanitized.replace(marker, placeholder)
+
+    return sanitized
 
 
 def enqueue_dev_analysis(analysis_id: UUID) -> None:
     logger.warning(
         "analysis.dev_mock_enqueued",
         analysis_id=str(analysis_id),
-        message=(
-            "[DEV_MOCK] Enqueueing synthetic analysis — scores are NOT real AI output. "
-            "Set ENABLE_DEV_MOCK=false and provide ANTHROPIC_API_KEY for real results."
-        ),
     )
-    task = asyncio.create_task(_process_analysis(analysis_id))
 
-    def _log_task_result(done_task: asyncio.Task[None]) -> None:
-        try:
-            done_task.result()
-        except asyncio.CancelledError:
-            pass
-        except Exception as exc:  # pragma: no cover - only for background failures
-            logger.exception(
-                "analysis.dev.background_failed",
-                analysis_id=str(analysis_id),
-                error=str(exc),
-            )
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_safe_process_analysis(analysis_id))
+    except Exception as e:
+        logger.exception(
+            "analysis.dev.failed",
+            analysis_id=str(analysis_id),
+            error=str(e),
+        )
 
-    task.add_done_callback(_log_task_result)
 
+# ─────────────────────────────────────────
+# SAFE WRAPPER
+# ─────────────────────────────────────────
+
+async def _safe_process_analysis(analysis_id: UUID) -> None:
+    try:
+        await asyncio.wait_for(
+            _process_analysis(analysis_id),
+            timeout=120,
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "analysis.dev.timeout",
+            analysis_id=str(analysis_id),
+        )
+        await _mark_failed(analysis_id, "timeout")
+    except Exception as e:
+        logger.exception(
+            "analysis.dev.crash",
+            analysis_id=str(analysis_id),
+            error=str(e),
+        )
+        await _mark_failed(analysis_id, str(e))
+
+
+# ─────────────────────────────────────────
+# CORE
+# ─────────────────────────────────────────
 
 async def _process_analysis(analysis_id: UUID) -> None:
-    now = datetime.now(UTC)
-    started_at = now
-    worker_id = "dev-inline-worker"
-    task_id = f"inline-{analysis_id}"
+    from src.infrastructure.database.models.analysis_model import (
+        AIModelModel,
+        PromptTemplateModel,
+    )
+    from src.infrastructure.database.models.resume_model import ResumeVersionModel
+    from src.infrastructure.ai.prompts.v2_full_analysis import USER_PROMPT_TEMPLATE as FALLBACK_USER_PROMPT_TEMPLATE
+    from src.interface.workers.analysis_tasks import (
+        _provider_api_key_is_configured,
+        _run_real_ai_analysis,
+    )
 
-    await asyncio.sleep(0.4)
+    now = datetime.now(UTC)
 
     async with AsyncSessionFactory() as session:
-        analysis = await session.scalar(
-            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+        row = await session.execute(
+            sa.select(AnalysisModel, AIModelModel, PromptTemplateModel)
+            .join(AIModelModel, AIModelModel.id == AnalysisModel.ai_model_id)
+            .join(PromptTemplateModel, PromptTemplateModel.id == AnalysisModel.prompt_template_id)
+            .where(AnalysisModel.id == analysis_id)
         )
-        if analysis is None:
-            logger.warning("analysis.dev.not_found", analysis_id=str(analysis_id))
+        fetched = row.first()
+
+        if not fetched:
             return
 
+        analysis, ai_model, prompt_tpl = fetched
+
         if analysis.status != "pending":
-            logger.info(
-                "analysis.dev.skipped",
-                analysis_id=str(analysis_id),
-                status=analysis.status,
-            )
             return
 
         analysis.status = "processing"
-        analysis.started_at = started_at
-        analysis.worker_id = worker_id
-        analysis.task_id = task_id
-        analysis.updated_at = datetime.now(UTC)
+        analysis.started_at = now
+        analysis.worker_id = "dev"
+        analysis.task_id = f"dev-{analysis_id}"
+        analysis.updated_at = now
+
         await session.commit()
 
-    await asyncio.sleep(1.2)
+    await asyncio.sleep(0.5)
 
     async with AsyncSessionFactory() as session:
-        analysis = await session.scalar(
-            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+        row = await session.execute(
+            sa.select(AnalysisModel, AIModelModel, PromptTemplateModel)
+            .join(AIModelModel, AIModelModel.id == AnalysisModel.ai_model_id)
+            .join(PromptTemplateModel, PromptTemplateModel.id == AnalysisModel.prompt_template_id)
+            .where(AnalysisModel.id == analysis_id)
         )
-        if analysis is None:
+        fetched = row.first()
+
+        if not fetched:
             return
+
+        analysis, ai_model, prompt_tpl = fetched
+
         if analysis.status == "cancelled":
             return
 
-        base = 60 + (analysis_id.int % 35)
-        overall = min(98, base)
-        technical = min(99, overall + 3)
-        experience = max(40, overall - 5)
-        education = max(35, overall - 8)
-        communication = min(98, overall + 1)
-        leadership = max(30, overall - 10)
+        version = await session.scalar(
+            sa.select(ResumeVersionModel).where(ResumeVersionModel.id == analysis.resume_version_id)
+        )
+
+        resume_text = (version.extracted_text if version else None) or ""
 
         result = await session.scalar(
-            sa.select(AnalysisResultModel).where(AnalysisResultModel.analysis_id == analysis_id)
-        )
-        if result is None:
-            session.add(
-                AnalysisResultModel(
-                    analysis_id=analysis_id,
-                    overall_score=overall,
-                    technical_score=technical,
-                    experience_score=experience,
-                    education_score=education,
-                    communication_score=communication,
-                    leadership_score=leadership,
-                    candidate_summary=(
-                        "Candidato com perfil técnico consistente para vagas de tecnologia."
-                    ),
-                    seniority_level="mid" if overall < 80 else "senior",
-                    total_experience_years=4.0 if overall < 80 else 6.0,
-                    highest_education_level="bachelor",
-                    highest_education_field="Computação",
-                    strengths=["Fundamentos técnicos", "Boa comunicação"],
-                    weaknesses=["Pouca evidência de liderança formal"],
-                    recommendations=[
-                        "Aprofundar cases de impacto",
-                        "Detalhar resultados por projeto",
-                    ],
-                    keywords=["python", "sql", "api", "backend"],
-                    extracted_data={
-                        "education": [{"level": "bachelor", "field": "Computação"}],
-                        "languages": ["pt", "en"],
-                    },
-                    input_tokens=1200,
-                    output_tokens=450,
-                    cache_read_tokens=0,
-                    cache_write_tokens=0,
-                    processing_time_ms=1600,
-                    raw_llm_response='{"status":"ok","source":"dev_mock","note":"ENABLE_DEV_MOCK=true"}',
-                    prompt_version_used="dev_mock",
-                )
+            sa.select(AnalysisResultModel).where(
+                AnalysisResultModel.analysis_id == analysis_id
             )
+        )
+
+        if not resume_text.strip():
+            raise RuntimeError("Resume text vazio. Extração de PDF ainda não concluída.")
+
+        if not _provider_api_key_is_configured(ai_model.provider):
+            raise RuntimeError(f"Provider '{ai_model.provider}' sem chave configurada.")
+
+        try:
+            (
+                result_fields,
+                raw_response,
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+                processing_time_ms,
+                prompt_version_used,
+            ) = await _run_real_ai_analysis(
+                analysis_id=str(analysis_id),
+                provider=ai_model.provider,
+                model_id=ai_model.model_id,
+                resume_text=resume_text,
+                prompt_system=prompt_tpl.system_prompt,
+                prompt_user_template=_sanitize_prompt_template(
+                    prompt_tpl.user_prompt_template
+                ),
+                prompt_version=str(prompt_tpl.version),
+                prompt_max_tokens=int(prompt_tpl.max_tokens),
+                prompt_temperature=float(prompt_tpl.temperature),
+                job_id=analysis.job_id,
+            )
+        except RuntimeError as exc:
+            if "Prompt template missing variable" not in str(exc):
+                raise
+
+            logger.warning(
+                "analysis.dev.retry_with_fallback_prompt",
+                analysis_id=str(analysis_id),
+                provider=ai_model.provider,
+                model_id=ai_model.model_id,
+                error=str(exc),
+            )
+            (
+                result_fields,
+                raw_response,
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+                processing_time_ms,
+                prompt_version_used,
+            ) = await _run_real_ai_analysis(
+                analysis_id=str(analysis_id),
+                provider=ai_model.provider,
+                model_id=ai_model.model_id,
+                resume_text=resume_text,
+                prompt_system=None,
+                prompt_user_template=_sanitize_prompt_template(FALLBACK_USER_PROMPT_TEMPLATE),
+                prompt_version=str(prompt_tpl.version),
+                prompt_max_tokens=int(prompt_tpl.max_tokens),
+                prompt_temperature=float(prompt_tpl.temperature),
+                job_id=analysis.job_id,
+            )
+
+        result_payload = {
+            "overall_score": result_fields["overall_score"],
+            "technical_score": result_fields["technical_score"],
+            "experience_score": result_fields["experience_score"],
+            "education_score": result_fields["education_score"],
+            "communication_score": result_fields["communication_score"],
+            "leadership_score": result_fields["leadership_score"],
+            "candidate_summary": result_fields["candidate_summary"],
+            "seniority_level": result_fields["seniority_level"],
+            "total_experience_years": result_fields["total_experience_years"],
+            "highest_education_level": result_fields["highest_education_level"],
+            "highest_education_field": result_fields["highest_education_field"],
+            "strengths": result_fields["strengths"],
+            "weaknesses": result_fields["weaknesses"],
+            "recommendations": result_fields["recommendations"],
+            "keywords": result_fields["keywords"],
+            "extracted_data": result_fields["extracted_data"],
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_write_tokens": cache_write_tokens,
+            "processing_time_ms": processing_time_ms,
+            "raw_llm_response": raw_response,
+            "prompt_version_used": prompt_version_used,
+        }
+
+        if not result:
+            session.add(AnalysisResultModel(analysis_id=analysis_id, **result_payload))
+        else:
+            for key, value in result_payload.items():
+                setattr(result, key, value)
 
         analysis.status = "completed"
         analysis.completed_at = datetime.now(UTC)
         analysis.updated_at = datetime.now(UTC)
+
         await session.commit()
 
-    await _enqueue_matching_pipeline(analysis_id)
-    logger.info("analysis.dev.completed", analysis_id=str(analysis_id))
+    # 🚨 NÃO BLOQUEAR
+    asyncio.create_task(_safe_matching(analysis_id))
 
 
-async def _enqueue_matching_pipeline(analysis_id: UUID) -> None:
+# ─────────────────────────────────────────
+# MATCHING SAFE
+# ─────────────────────────────────────────
+
+async def _safe_matching(analysis_id: UUID):
+    from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
+    from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+
     try:
-        matched = await enqueue_published_job_matches(analysis_id)
-        logger.info(
-            "analysis.dev.matching_enqueued",
-            analysis_id=str(analysis_id),
-            matching_jobs=matched,
+        async with AsyncSessionFactory() as session:
+            candidate_id = await session.scalar(
+                sa.select(ResumeModel.candidate_id)
+                .join(ResumeVersionModel, ResumeVersionModel.resume_id == ResumeModel.id)
+                .join(AnalysisModel, AnalysisModel.resume_version_id == ResumeVersionModel.id)
+                .where(AnalysisModel.id == analysis_id)
+            )
+
+            if candidate_id is None:
+                return
+
+            active_pipeline_count = int(
+                (
+                    await session.scalar(
+                        sa.select(sa.func.count())
+                        .select_from(CandidatePipelineModel)
+                        .where(
+                            CandidatePipelineModel.candidate_id == candidate_id,
+                            CandidatePipelineModel.is_active.is_(True),
+                        )
+                    )
+                )
+                or 0
+            )
+
+            if active_pipeline_count > 0:
+                logger.info(
+                    "analysis.dev.matching_skipped_active_pipeline_exists",
+                    analysis_id=str(analysis_id),
+                    candidate_id=str(candidate_id),
+                    active_pipeline_count=active_pipeline_count,
+                )
+                return
+
+        await asyncio.wait_for(
+            enqueue_published_job_matches(analysis_id),
+            timeout=5,
         )
-    except Exception as exc:
-        logger.exception(
-            "analysis.dev.matching_enqueue_failed",
+    except Exception as e:
+        logger.warning(
+            "analysis.dev.matching_failed",
             analysis_id=str(analysis_id),
-            error=str(exc),
+            error=str(e),
         )
+
+
+# ─────────────────────────────────────────
+# FAIL SAFE
+# ─────────────────────────────────────────
+
+async def _mark_failed(analysis_id: UUID, error: str):
+    async with AsyncSessionFactory() as session:
+        analysis = await session.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+        )
+
+        if not analysis:
+            return
+
+        analysis.status = "failed"
+        analysis.failure_reason = error[:300]
+        analysis.failed_at = datetime.now(UTC)
+        analysis.updated_at = datetime.now(UTC)
+
+        await session.commit()

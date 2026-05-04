@@ -19,13 +19,19 @@ from src.application.services.job_bulk_payload_normalizer import (
     JobBulkPayloadNormalizer,
 )
 from src.application.services.job_bulk_update_service import JobBulkUpdateService
-from src.application.services.job_score_explanation_service import JobScoreExplanationService
+from src.application.services.job_score_explanation_service import JobScoreExplanationService, CandidateNotLinkedToJobError
 from src.application.services.matching_observability_service import MatchingObservabilityService
 from src.application.services.job_quality_validator_service import (
     JobQualityValidatorService,
     JobNotFoundForQualityError,
 )
 from src.application.services.pipeline_service import (
+    PipelineCandidateAlreadyActiveInAnotherJobError,
+    PipelineCandidateAlreadyActiveInSameJobError,
+    PipelineCandidateWithoutActiveJobError,
+    PipelineConcurrentModificationError,
+    PipelineDestinationJobUnavailableError,
+    PipelineInvalidTransitionError,
     PipelineJobNotFoundError,
     PipelineService,
 )
@@ -61,11 +67,15 @@ from src.interface.api.schemas.job_schemas import (
     MatchingFeedbackResponse,
     UpdateJobRequest,
 )
-from src.interface.api.schemas.pipeline_schemas import JobMatchCandidateResponse
+from src.interface.api.schemas.pipeline_schemas import (
+    AddCandidateToJobRequest as PipelineAddCandidateToJobRequest,
+    JobMatchCandidateResponse,
+)
 from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse
 from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+_ANALYSIS_QUEUE = "analysis"
 
 
 def _job_service(db: AsyncSession) -> JobService:
@@ -81,7 +91,41 @@ def _job_bulk_update_service(db: AsyncSession) -> JobBulkUpdateService:
 
 
 def _pipeline_service(db: AsyncSession) -> PipelineService:
-    return PipelineService(SQLAlchemyPipelineRepository(db))
+    return PipelineService(SQLAlchemyPipelineRepository(db), db)
+
+
+async def _enqueue_latest_pending_analysis_for_candidate_job(
+    db: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> None:
+    from sqlalchemy import select
+
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+    from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+    from src.interface.workers.analysis_tasks import process_analysis
+
+    query = (
+        select(AnalysisModel)
+        .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+        .where(
+            ResumeModel.candidate_id == candidate_id,
+            AnalysisModel.job_id == job_id,
+        )
+        .order_by(AnalysisModel.created_at.desc())
+        .limit(1)
+    )
+    latest_analysis = await db.scalar(query)
+
+    status_value = getattr(latest_analysis.status, "value", latest_analysis.status) if latest_analysis else None
+    if latest_analysis and status_value == "pending":
+        process_analysis.apply_async(
+            args=[str(latest_analysis.id)],
+            queue=_ANALYSIS_QUEUE,
+            priority=latest_analysis.priority,
+        )
 
 
 def _quality_validator_service(db: AsyncSession) -> JobQualityValidatorService:
@@ -103,6 +147,30 @@ def _handle_job_service_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vínculo não encontrado")
     if isinstance(exc, PipelineJobNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
+    if isinstance(exc, PipelineCandidateAlreadyActiveInAnotherJobError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato já possui vínculo ativo com outra vaga. Use transferência para mover o candidato.",
+        )
+    if isinstance(exc, PipelineCandidateAlreadyActiveInSameJobError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato já está ativo nesta vaga.",
+        )
+    if isinstance(exc, PipelineCandidateWithoutActiveJobError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato não possui vaga ativa. Use adicionar a uma vaga.",
+        )
+    if isinstance(exc, PipelineDestinationJobUnavailableError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A vaga destino precisa estar ativa/publicada",
+        )
+    if isinstance(exc, PipelineInvalidTransitionError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    if isinstance(exc, PipelineConcurrentModificationError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, RankingJobNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
     if isinstance(exc, NoActiveScoreVersionError):
@@ -118,6 +186,8 @@ def _handle_job_service_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análise do candidato não encontrada")
     if isinstance(exc, JobNotFoundForQualityError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
+    if isinstance(exc, CandidateNotLinkedToJobError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Candidato não está vinculado a esta vaga. Adicione o candidato à vaga antes de visualizar o score.")
     raise exc
 
 
@@ -415,12 +485,36 @@ async def link_candidate_to_job(
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> CandidateJobLinkResponse:
-    """Manually link a candidate to a job (creates official candidate-job link)."""
+    """Link candidate via pipeline flow (prevents orphan candidate_job_links)."""
     try:
-        from src.application.services.candidate_job_link_service import CandidateJobLinkService
-        service = CandidateJobLinkService(db)
-        link = await service.link_candidate_to_job(body.candidate_id, job_id, source=body.source)
+        await _pipeline_service(db).add_candidate_to_job(
+            candidate_id=body.candidate_id,
+            body=PipelineAddCandidateToJobRequest(job_id=job_id, initial_stage="entry"),
+            moved_by=current_user.id,
+        )
         await db.commit()
+        try:
+            await _enqueue_latest_pending_analysis_for_candidate_job(
+                db,
+                candidate_id=body.candidate_id,
+                job_id=job_id,
+            )
+        except Exception:
+            pass
+
+        from src.infrastructure.repositories.sqlalchemy_candidate_job_link_repository import (
+            SQLAlchemyCandidateJobLinkRepository,
+        )
+
+        link = await SQLAlchemyCandidateJobLinkRepository(db).get_active_by_candidate_and_job(
+            body.candidate_id,
+            job_id,
+        )
+        if link is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Não foi possível concluir o vínculo do candidato à vaga.",
+            )
         return CandidateJobLinkResponse(
             id=link.id,
             candidate_id=link.candidate_id,

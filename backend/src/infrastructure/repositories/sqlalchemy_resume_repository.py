@@ -116,6 +116,13 @@ class SQLAlchemyResumeRepository:
             )
         )
 
+    async def find_version_by_id(self, version_id: UUID) -> ResumeVersionModel | None:
+        return await self._session.scalar(
+            sa.select(ResumeVersionModel).where(
+                ResumeVersionModel.id == version_id,
+            )
+        )
+
     async def save_resume(self, resume: ResumeModel) -> ResumeModel:
         await self._session.flush()
         await self._session.refresh(resume)

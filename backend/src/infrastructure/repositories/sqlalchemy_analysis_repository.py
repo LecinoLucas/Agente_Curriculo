@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -57,16 +58,24 @@ class SQLAlchemyAnalysisRepository:
             sa.select(AIModelModel).order_by(AIModelModel.created_at.desc())
         )
 
-    async def find_preferred_prompt_template(self) -> PromptTemplateModel | None:
+    async def find_preferred_prompt_template(
+        self,
+        template_type: str,
+    ) -> PromptTemplateModel | None:
+        from src.domain.exceptions import ValidationException
+
         template = await self._session.scalar(
             sa.select(PromptTemplateModel)
-            .where(PromptTemplateModel.is_active.is_(True))
+            .where(
+                PromptTemplateModel.template_type == template_type,
+                PromptTemplateModel.is_active.is_(True),
+            )
             .order_by(PromptTemplateModel.activated_at.desc())
         )
         if template is not None:
             return template
-        return await self._session.scalar(
-            sa.select(PromptTemplateModel).order_by(PromptTemplateModel.created_at.desc())
+        raise ValidationException(
+            f"Nenhum template ativo para tipo '{template_type}'"
         )
 
     async def create(self, analysis: AnalysisModel) -> AnalysisModel:
@@ -74,6 +83,41 @@ class SQLAlchemyAnalysisRepository:
         await self._session.flush()
         await self._session.refresh(analysis)
         return analysis
+
+    async def save(self, analysis: AnalysisModel) -> AnalysisModel:
+        """Alias for create() for backwards compatibility."""
+        return await self.create(analysis)
+
+    async def cancel_in_progress_for_resume_version(self, resume_version_id: UUID) -> int:
+        candidate_id_subquery = (
+            sa.select(ResumeModel.candidate_id)
+            .join(ResumeVersionModel, ResumeVersionModel.resume_id == ResumeModel.id)
+            .where(ResumeVersionModel.id == resume_version_id)
+            .scalar_subquery()
+        )
+        candidate_resume_versions = (
+            sa.select(ResumeVersionModel.id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                ResumeModel.candidate_id == candidate_id_subquery,
+                ResumeModel.deleted_at.is_(None),
+            )
+        )
+        now = datetime.now(UTC)
+        result = await self._session.execute(
+            sa.update(AnalysisModel)
+            .where(
+                AnalysisModel.resume_version_id.in_(candidate_resume_versions),
+                sa.cast(AnalysisModel.status, sa.String).in_(["queued", "pending", "processing"]),
+            )
+            .values(
+                status="cancelled",
+                failure_reason="Cancelled by a new analysis request for the same candidate",
+                failed_at=now,
+                updated_at=now,
+            )
+        )
+        return int(result.rowcount or 0)
 
     async def list_for_user(
         self,
@@ -100,6 +144,53 @@ class SQLAlchemyAnalysisRepository:
             base_query.order_by(AnalysisModel.created_at.desc()).offset(offset).limit(page_size)
         )
         return list(result.scalars().all()), total
+
+    async def find_active_for_version(
+        self,
+        resume_version_id: UUID,
+        job_id: UUID | None,
+    ) -> AnalysisModel | None:
+        conditions = [
+            AnalysisModel.resume_version_id == resume_version_id,
+            sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing"]),
+        ]
+        if job_id:
+            conditions.append(AnalysisModel.job_id == job_id)
+        else:
+            conditions.append(AnalysisModel.job_id.is_(None))
+
+        return await self._session.scalar(
+            sa.select(AnalysisModel).where(*conditions).order_by(AnalysisModel.created_at.desc())
+        )
+
+    async def find_latest_for_version(
+        self,
+        resume_version_id: UUID,
+        job_id: UUID,
+    ) -> AnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(AnalysisModel)
+            .where(
+                AnalysisModel.resume_version_id == resume_version_id,
+                AnalysisModel.job_id == job_id,
+            )
+            .order_by(AnalysisModel.created_at.desc())
+        )
+
+    async def find_latest_completed_for_version(
+        self,
+        resume_version_id: UUID,
+        job_id: UUID,
+    ) -> AnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(AnalysisModel)
+            .where(
+                AnalysisModel.resume_version_id == resume_version_id,
+                AnalysisModel.job_id == job_id,
+                AnalysisModel.status == "completed",
+            )
+            .order_by(AnalysisModel.completed_at.desc().nullslast(), AnalysisModel.created_at.desc())
+        )
 
     async def find_for_user(self, analysis_id: UUID, current_user: User) -> AnalysisModel | None:
         query = sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
@@ -359,6 +450,15 @@ class SQLAlchemyAnalysisRepository:
             )
         )
         return result
+
+    async def count_pending(self) -> int:
+        """Count pending and processing analyses in the queue."""
+        result = await self._session.scalar(
+            sa.select(sa.func.count()).select_from(AnalysisModel).where(
+                sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing"])
+            )
+        )
+        return int(result or 0)
 
     @staticmethod
     def _can_manage_all(user: User) -> bool:

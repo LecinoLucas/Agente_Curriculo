@@ -13,6 +13,7 @@ _STAGE_VALUES = (
     "'entry', 'screening', 'hr_interview', 'technical_interview', "
     "'final', 'offer', 'hired', 'rejected'"
 )
+_STATUS_VALUES = "'active', 'hired', 'rejected', 'transferred'"
 
 
 class CandidatePipelineModel(Base):
@@ -37,6 +38,12 @@ class CandidatePipelineModel(Base):
         sa.String(20),
         nullable=False,
         server_default="active",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=True,
+        server_default=sa.text("true"),
     )
     match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
     # Set once when the candidate first enters the pipeline; never overwritten.
@@ -63,6 +70,25 @@ class CandidatePipelineModel(Base):
         sa.CheckConstraint(
             f"stage IN ({_STAGE_VALUES})",
             name="ck_candidate_pipeline_stage",
+        ),
+        sa.CheckConstraint(
+            f"status IN ({_STATUS_VALUES})",
+            name="ck_candidate_pipeline_status",
+        ),
+        sa.Index(
+            "uq_candidate_pipeline_one_active",
+            "candidate_id",
+            unique=True,
+            postgresql_where=sa.text("is_active = true"),
+            sqlite_where=sa.text("is_active = 1"),
+        ),
+        sa.Index(
+            "uq_candidate_pipeline_candidate_job_active",
+            "candidate_id",
+            "job_id",
+            unique=True,
+            postgresql_where=sa.text("is_active = true"),
+            sqlite_where=sa.text("is_active = 1"),
         ),
         sa.Index("idx_candidate_pipeline_job_stage", "job_id", "stage"),
         sa.Index("idx_candidate_pipeline_job_score", "job_id", "match_score"),

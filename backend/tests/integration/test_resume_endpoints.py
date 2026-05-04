@@ -466,12 +466,12 @@ async def test_candidate_cannot_request_analysis_before_text_extraction(
     version_id = upload.json()["version_id"]
 
     response = await client.post(
-        f"/api/v1/analyses?resume_version_id={version_id}",
+        f"/api/v1/analyses?resume_version_id={version_id}&job_id={uuid4()}",
         headers=headers,
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Currículo ainda não possui texto extraído para análise"
+    assert response.json()["detail"] == "Nenhum modelo de IA ativo configurado"
 
 
 @pytest.mark.asyncio

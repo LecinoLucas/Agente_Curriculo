@@ -1,4 +1,4 @@
-import { createContext, PropsWithChildren, useEffect, useMemo, useState } from "react";
+import { createContext, PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
 
 import { authService } from "../../services/authService";
 import { AuthUser } from "../../types/auth";
@@ -18,6 +18,7 @@ export const AuthContext = createContext<AuthContextValue | undefined>(undefined
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const initRequestedRef = useRef(false);
 
   const refreshUser = async () => {
     const me = await authService.me();
@@ -25,6 +26,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   };
 
   useEffect(() => {
+    if (initRequestedRef.current) return;
+    initRequestedRef.current = true;
+
     void (async () => {
       const token = tokenStorage.get();
       if (!token) {

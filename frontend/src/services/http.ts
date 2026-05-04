@@ -11,6 +11,7 @@ export class HttpError extends Error {
     public code?: string,
     public data?: unknown,
     public detail?: unknown,
+    public retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "HttpError";
@@ -34,7 +35,68 @@ function statusFallback(status: number): string {
   return messages[status] ?? `Não foi possível concluir a solicitação (HTTP ${status})`;
 }
 
-function resolveError(status: number, payload: unknown): HttpError {
+function parseRetryAfterHeader(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+
+  const asNumber = Number(normalized);
+  if (Number.isFinite(asNumber) && asNumber >= 0) {
+    return asNumber;
+  }
+
+  const asDate = Date.parse(normalized);
+  if (!Number.isNaN(asDate)) {
+    const seconds = Math.ceil((asDate - Date.now()) / 1000);
+    return Math.max(0, seconds);
+  }
+
+  return undefined;
+}
+
+function parseRetryAfterFromText(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const retryMatch = value.match(/retry in\s+([0-9]+(?:[.,][0-9]+)?)s/i);
+  if (!retryMatch) return undefined;
+  const parsed = Number(retryMatch[1].replace(",", "."));
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return parsed;
+}
+
+function parseRetryAfterPayload(payload: unknown): number | undefined {
+  if (typeof payload === "string") return parseRetryAfterFromText(payload);
+  if (!payload || typeof payload !== "object") return undefined;
+
+  const record = payload as Record<string, unknown>;
+  const detail = record.detail;
+  if (typeof detail === "string") {
+    const parsed = parseRetryAfterFromText(detail);
+    if (parsed != null) return parsed;
+  }
+
+  const message = typeof record.message === "string" ? record.message : undefined;
+  const parsedMessage = parseRetryAfterFromText(message);
+  if (parsedMessage != null) return parsedMessage;
+
+  const errorObj = record.error;
+  if (errorObj && typeof errorObj === "object") {
+    const errorMessage =
+      typeof (errorObj as Record<string, unknown>).message === "string"
+        ? ((errorObj as Record<string, unknown>).message as string)
+        : undefined;
+    const parsedErrorMessage = parseRetryAfterFromText(errorMessage);
+    if (parsedErrorMessage != null) return parsedErrorMessage;
+  }
+
+  return undefined;
+}
+
+function resolveError(response: Response, payload: unknown): HttpError {
+  const status = response.status;
+  const retryAfterSeconds =
+    parseRetryAfterHeader(response.headers.get("retry-after")) ??
+    parseRetryAfterPayload(payload);
+
   if (typeof payload === "object" && payload !== null) {
     if (status === 422) {
       console.error("[422 Validation Error]", JSON.stringify(payload, null, 2));
@@ -44,7 +106,7 @@ function resolveError(status: number, payload: unknown): HttpError {
     const detail = payloadRecord.detail;
     if (detail !== undefined) {
       const message = typeof detail === "string" && detail.trim() ? detail : statusFallback(status);
-      return new HttpError(status, message, undefined, payload, detail);
+      return new HttpError(status, message, undefined, payload, detail, retryAfterSeconds);
     }
 
     if ("error" in payloadRecord) {
@@ -55,11 +117,12 @@ function resolveError(status: number, payload: unknown): HttpError {
         errorObj.code,
         payload,
         errorObj.detail,
+        retryAfterSeconds,
       );
     }
   }
 
-  return new HttpError(status, statusFallback(status), undefined, payload);
+  return new HttpError(status, statusFallback(status), undefined, payload, undefined, retryAfterSeconds);
 }
 
 async function parseJson(response: Response): Promise<unknown> {
@@ -135,7 +198,7 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
 
   if (!response.ok) {
     const errorPayload = await parseJson(response);
-    throw resolveError(response.status, errorPayload);
+    throw resolveError(response, errorPayload);
   }
 
   if (response.status === 204) return null as T;

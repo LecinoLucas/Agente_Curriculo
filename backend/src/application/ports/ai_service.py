@@ -11,6 +11,7 @@ class AIAnalysisRequest:
     max_tokens: int
     temperature: float
     job_description: str | None = None
+    queue_name: str | None = None
 
 
 @dataclass

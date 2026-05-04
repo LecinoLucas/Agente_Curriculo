@@ -1,5 +1,6 @@
 import { toast } from "./toast";
 import { formatContextError } from "./errorMessages";
+import { HttpError } from "./http";
 
 const FEEDBACK_KEY = {
   createCandidate: "feedback-create-candidate",
@@ -8,6 +9,32 @@ const FEEDBACK_KEY = {
   reprocessAnalysis: "feedback-reprocess-analysis",
   moveCandidate: "feedback-move-candidate",
 } as const;
+
+function formatRetryAfter(seconds: number): string {
+  const rounded = Math.max(1, Math.ceil(seconds));
+  if (rounded < 60) return `${rounded}s`;
+  const minutes = Math.floor(rounded / 60);
+  const remaining = rounded % 60;
+  if (remaining === 0) return `${minutes}min`;
+  return `${minutes}min ${remaining}s`;
+}
+
+function buildAiRateLimitMessage(error?: unknown): string | null {
+  if (!(error instanceof HttpError) || error.status !== 429) {
+    return null;
+  }
+
+  const lines = [
+    "🚫 Limite de uso da IA atingido",
+    "Aguarde alguns minutos ou troque a chave da API.",
+  ];
+
+  if (typeof error.retryAfterSeconds === "number" && Number.isFinite(error.retryAfterSeconds)) {
+    lines.push(`Tempo estimado para nova tentativa: ${formatRetryAfter(error.retryAfterSeconds)}.`);
+  }
+
+  return lines.join(" ");
+}
 
 export const feedback = {
   createCandidate: {
@@ -45,7 +72,12 @@ export const feedback = {
       toast.loading("Iniciando análise...", { key: FEEDBACK_KEY.requestAnalysis }),
     success: () =>
       toast.success("Análise iniciada", { key: FEEDBACK_KEY.requestAnalysis }),
-    error: (error?: unknown) =>
+    error: (error?: unknown) => {
+      const rateLimitMessage = buildAiRateLimitMessage(error);
+      if (rateLimitMessage) {
+        toast.error(rateLimitMessage, { key: FEEDBACK_KEY.requestAnalysis });
+        return;
+      }
       toast.error(
         formatContextError(
           error,
@@ -53,14 +85,20 @@ export const feedback = {
           "Tente novamente em alguns instantes.",
         ),
         { key: FEEDBACK_KEY.requestAnalysis },
-      ),
+      );
+    },
   },
   reprocessAnalysis: {
     processing: () =>
       toast.loading("Reprocessando análise...", { key: FEEDBACK_KEY.reprocessAnalysis }),
     success: () =>
       toast.success("Análise iniciada", { key: FEEDBACK_KEY.reprocessAnalysis }),
-    error: (error?: unknown) =>
+    error: (error?: unknown) => {
+      const rateLimitMessage = buildAiRateLimitMessage(error);
+      if (rateLimitMessage) {
+        toast.error(rateLimitMessage, { key: FEEDBACK_KEY.reprocessAnalysis });
+        return;
+      }
       toast.error(
         formatContextError(
           error,
@@ -68,7 +106,8 @@ export const feedback = {
           "Tente novamente em alguns instantes.",
         ),
         { key: FEEDBACK_KEY.reprocessAnalysis },
-      ),
+      );
+    },
   },
   moveCandidate: {
     processing: () =>
