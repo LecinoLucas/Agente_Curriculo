@@ -22,6 +22,58 @@ BASE_RETRY_DELAY_MS = 800
 HTTP_TIMEOUT_SECONDS = 20.0
 MAX_RESPONSE_CHARS = 20_000
 RATE_LIMIT_DELAY_MULTIPLIER = 2
+_DISTRIBUTED_LOCK_UNAVAILABLE_REASONS = (
+    "session_unavailable_or_loop_mismatch",
+    "redis_unreachable",
+)
+_THINKING_BUDGET_DISABLED = 0
+
+
+class GeminiResponseFormatError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        finish_reason: str | None = None,
+        raw_response: str | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        processing_time_ms: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.finish_reason = finish_reason
+        self.raw_response = raw_response
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.processing_time_ms = processing_time_ms
+
+
+def _safe_float_setting(value: Any, default: float) -> float:
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _safe_int_setting(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return default
+    return default
 
 _ACQUIRE_SLOT_LUA = """
 local key = KEYS[1]
@@ -76,6 +128,13 @@ class GeminiAdapter(AIService):
 
         start_ms = int(time.monotonic() * 1000)
         queue_name = request.queue_name or "unknown"
+        timeout_seconds = max(
+            1.0,
+            _safe_float_setting(
+                getattr(settings, "AI_PROVIDER_TIMEOUT_SECONDS", 90.0),
+                90.0,
+            ),
+        )
 
         url = (
             f"{settings.GEMINI_API_BASE_URL}/models/{self._model_id}:generateContent"
@@ -89,7 +148,7 @@ class GeminiAdapter(AIService):
             model=self._model_id,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            timeout_seconds=settings.AI_PROVIDER_TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
             system_prompt_chars=len(request.system_prompt or ""),
             user_prompt_chars=len(request.prompt_template or ""),
             queue_name=queue_name,
@@ -105,7 +164,7 @@ class GeminiAdapter(AIService):
                         start_ms=start_ms,
                         queue_name=queue_name,
                     ),
-                    timeout=settings.AI_PROVIDER_TIMEOUT_SECONDS,
+                    timeout=timeout_seconds,
                 ),
             )
 
@@ -116,7 +175,7 @@ class GeminiAdapter(AIService):
                 "gemini.global_timeout",
                 model=self._model_id,
                 elapsed_ms=elapsed_ms,
-                timeout_seconds=settings.AI_PROVIDER_TIMEOUT_SECONDS,
+                timeout_seconds=timeout_seconds,
                 queue_name=queue_name,
             )
 
@@ -133,6 +192,19 @@ class GeminiAdapter(AIService):
         await self.close()
 
     def _build_payload(self, request: AIAnalysisRequest) -> dict[str, Any]:
+        generation_config: dict[str, Any] = {
+            "temperature": request.temperature,
+            "maxOutputTokens": request.max_tokens,
+            "responseMimeType": "application/json",
+        }
+
+        # Gemini 2.5 Flash enables dynamic thinking by default. For compact JSON
+        # extraction, that burns tokens before the object is closed.
+        if self._model_id.startswith("gemini-2.5"):
+            generation_config["thinkingConfig"] = {
+                "thinkingBudget": _THINKING_BUDGET_DISABLED,
+            }
+
         return {
             "systemInstruction": {
                 "parts": [{"text": request.system_prompt}],
@@ -143,11 +215,7 @@ class GeminiAdapter(AIService):
                     "parts": [{"text": request.prompt_template}],
                 }
             ],
-            "generationConfig": {
-                "temperature": request.temperature,
-                "maxOutputTokens": request.max_tokens,
-                "responseMimeType": "application/json",
-            },
+            "generationConfig": generation_config,
         }
 
     async def _analyze_with_retries(
@@ -159,14 +227,22 @@ class GeminiAdapter(AIService):
         queue_name: str,
     ) -> AIAnalysisResponse:
         last_error: Exception | None = None
+        configured_max_retries = settings.AI_MAX_RETRIES
+        max_retries = max(
+            1,
+            _safe_int_setting(
+                configured_max_retries,
+                2,
+            ),
+        )
 
-        for attempt in range(settings.AI_MAX_RETRIES + 1):
+        for attempt in range(max_retries + 1):
             elapsed_ms = int(time.monotonic() * 1000) - start_ms
             logger.info(
                 "gemini.retry_attempt",
                 model=self._model_id,
                 attempt=attempt + 1,
-                max_attempts=settings.AI_MAX_RETRIES + 1,
+                max_attempts=max_retries + 1,
                 elapsed_ms=elapsed_ms,
                 queue_name=queue_name,
             )
@@ -187,7 +263,7 @@ class GeminiAdapter(AIService):
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
                 retry_after_seconds = self._extract_retry_after_seconds(e.response)
 
-                if should_retry and attempt < settings.AI_MAX_RETRIES:
+                if should_retry and attempt < max_retries:
                     delay_ms = self._calculate_retry_delay_ms(
                         attempt,
                         is_rate_limit=(status_code == 429),
@@ -199,7 +275,7 @@ class GeminiAdapter(AIService):
                             "gemini.rate_limit_detected",
                             model=self._model_id,
                             attempt=attempt + 1,
-                            max_retries=settings.AI_MAX_RETRIES,
+                            max_retries=max_retries,
                             elapsed_ms=elapsed_ms,
                             delay_ms=delay_ms,
                             retry_after_seconds=retry_after_seconds,
@@ -210,7 +286,7 @@ class GeminiAdapter(AIService):
                         "gemini.retry_scheduled",
                         model=self._model_id,
                         attempt=attempt + 1,
-                        max_retries=settings.AI_MAX_RETRIES,
+                        max_retries=max_retries,
                         status_code=status_code,
                         delay_ms=delay_ms,
                         elapsed_ms=elapsed_ms,
@@ -225,7 +301,7 @@ class GeminiAdapter(AIService):
                         "gemini.final_failure_429",
                         model=self._model_id,
                         attempt=attempt + 1,
-                        max_retries=settings.AI_MAX_RETRIES,
+                        max_retries=max_retries,
                         elapsed_ms=elapsed_ms,
                         retry_after_seconds=retry_after_seconds,
                         queue_name=queue_name,
@@ -241,8 +317,11 @@ class GeminiAdapter(AIService):
                     queue_name=queue_name,
                 )
 
+                if not should_retry:
+                    raise e
+
                 raise RuntimeError(
-                    f"Gemini API HTTP error: status_code={status_code}"
+                    f"Max retries exceeded for Gemini API: status_code={status_code}"
                 ) from e
 
             except (
@@ -254,14 +333,14 @@ class GeminiAdapter(AIService):
                 last_error = e
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
 
-                if attempt < settings.AI_MAX_RETRIES:
+                if attempt < max_retries:
                     delay_ms = self._calculate_retry_delay_ms(attempt)
 
                     logger.info(
                         "gemini.retry_scheduled",
                         model=self._model_id,
                         attempt=attempt + 1,
-                        max_retries=settings.AI_MAX_RETRIES,
+                        max_retries=max_retries,
                         error_type=type(e).__name__,
                         delay_ms=delay_ms,
                         elapsed_ms=elapsed_ms,
@@ -344,6 +423,10 @@ class GeminiAdapter(AIService):
         elapsed_ms: int,
     ) -> AIAnalysisResponse:
         content = self._extract_content(body=body, elapsed_ms=elapsed_ms)
+        finish_reason = self._get_finish_reason(body)
+        usage = body.get("usageMetadata") or {}
+        input_tokens = int(usage.get("promptTokenCount", 0) or 0)
+        output_tokens = int(usage.get("candidatesTokenCount", 0) or 0)
 
         if len(content) > MAX_RESPONSE_CHARS:
             logger.error(
@@ -353,19 +436,29 @@ class GeminiAdapter(AIService):
                 max_response_chars=MAX_RESPONSE_CHARS,
                 elapsed_ms=elapsed_ms,
             )
-            raise RuntimeError("Gemini model response is too large")
+            raise GeminiResponseFormatError(
+                "Gemini model response is too large",
+                finish_reason=finish_reason,
+                raw_response=content[:MAX_RESPONSE_CHARS],
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                processing_time_ms=elapsed_ms,
+            )
 
-        finish_reason = self._get_finish_reason(body)
-
-        parsed = self._safe_parse_json(
-            content,
-            finish_reason=finish_reason,
-        )
-
-        usage = body.get("usageMetadata") or {}
-
-        input_tokens = int(usage.get("promptTokenCount", 0) or 0)
-        output_tokens = int(usage.get("candidatesTokenCount", 0) or 0)
+        try:
+            parsed = self._safe_parse_json(
+                content,
+                finish_reason=finish_reason,
+            )
+        except RuntimeError as exc:
+            raise GeminiResponseFormatError(
+                str(exc),
+                finish_reason=finish_reason,
+                raw_response=content,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                processing_time_ms=elapsed_ms,
+            ) from exc
 
         logger.info(
             "gemini.response_success",
@@ -384,6 +477,7 @@ class GeminiAdapter(AIService):
             cache_read_tokens=0,
             cache_write_tokens=0,
             processing_time_ms=elapsed_ms,
+            finish_reason=finish_reason,
         )
 
     def _extract_content(
@@ -641,7 +735,10 @@ class GeminiAdapter(AIService):
     ) -> AIAnalysisResponse:
         wait_timeout_seconds = max(
             1.0,
-            float(settings.GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS),
+            _safe_float_setting(
+                getattr(settings, "GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS", 30.0),
+                30.0,
+            ),
         )
 
         await asyncio.wait_for(
@@ -654,12 +751,21 @@ class GeminiAdapter(AIService):
         distributed_slot_acquired = False
 
         try:
-            await self._acquire_distributed_slot(
-                lock_key=lock_key,
-                slot_token=slot_token,
-                queue_name=queue_name,
-            )
-            distributed_slot_acquired = True
+            if self._is_distributed_concurrency_enabled():
+                try:
+                    await self._acquire_distributed_slot(
+                        lock_key=lock_key,
+                        slot_token=slot_token,
+                        queue_name=queue_name,
+                    )
+                    distributed_slot_acquired = True
+                except Exception:
+                    logger.warning(
+                        "gemini.distributed_slot_unavailable",
+                        model=self._model_id,
+                        queue_name=queue_name,
+                        reason=_DISTRIBUTED_LOCK_UNAVAILABLE_REASONS[1],
+                    )
             return await run_call()
         finally:
             try:
@@ -667,6 +773,16 @@ class GeminiAdapter(AIService):
                     await self._release_distributed_slot(lock_key=lock_key)
             finally:
                 _LOCAL_GEMINI_SEMAPHORE.release()
+
+    def _is_distributed_concurrency_enabled(self) -> bool:
+        raw = getattr(settings, "GEMINI_DISTRIBUTED_CONCURRENCY_ENABLED", False)
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return raw != 0
+        if isinstance(raw, str):
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+        return False
 
     def _build_concurrency_key(self) -> str:
         return f"gemini:inflight:{self._model_id}"
@@ -678,15 +794,35 @@ class GeminiAdapter(AIService):
         slot_token: str,
         queue_name: str,
     ) -> None:
-        limit = max(1, int(settings.GEMINI_MAX_CONCURRENT_REQUESTS))
-        ttl_ms = max(5_000, int(settings.GEMINI_CONCURRENCY_SLOT_TTL_SECONDS * 1000))
+        limit = max(
+            1,
+            _safe_int_setting(
+                getattr(settings, "GEMINI_MAX_CONCURRENT_REQUESTS", 2),
+                2,
+            ),
+        )
+        ttl_seconds = max(
+            1,
+            _safe_int_setting(
+                getattr(settings, "GEMINI_CONCURRENCY_SLOT_TTL_SECONDS", 300),
+                300,
+            ),
+        )
+        ttl_ms = max(5_000, int(ttl_seconds * 1000))
         retry_interval_seconds = max(
             0.05,
-            settings.GEMINI_CONCURRENCY_RETRY_INTERVAL_MS / 1000,
+            _safe_float_setting(
+                getattr(settings, "GEMINI_CONCURRENCY_RETRY_INTERVAL_MS", 200),
+                200.0,
+            )
+            / 1000,
         )
         wait_timeout_seconds = max(
             1.0,
-            float(settings.GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS),
+            _safe_float_setting(
+                getattr(settings, "GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS", 30.0),
+                30.0,
+            ),
         )
         deadline = time.monotonic() + wait_timeout_seconds
 

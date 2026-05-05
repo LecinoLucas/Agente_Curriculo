@@ -82,8 +82,10 @@ function normalizeAnalysisStatus(item: Partial<AnalysisStatus>): AnalysisStatus 
 function normalizePipelineStatus(item: Partial<AnalysisPipelineStatus>): AnalysisPipelineStatus {
   return {
     analysis_id: item.analysis_id ?? "",
+    job_id: item.job_id ?? null,
     analysis_status: item.analysis_status ?? "pending",
     matching_status: item.matching_status ?? "waiting_analysis",
+    matching_error: item.matching_error ?? null,
     published_jobs_total: item.published_jobs_total ?? 0,
     matched_jobs_count: item.matched_jobs_count ?? 0,
     pending_jobs_count: item.pending_jobs_count ?? 0,

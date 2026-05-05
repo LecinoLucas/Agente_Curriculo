@@ -6,20 +6,16 @@ import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.analysis_service import AnalysisService
 from src.domain.entities.user import User, UserRole
 from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
     AnalysisResultModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, SkillModel
-from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
-    SQLAlchemyAnalysisRepository,
-)
+from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -65,12 +61,36 @@ def _job_payload(**overrides) -> dict:
         "seniority_level": "senior",
         "work_model": "remote",
         "location": "Brasil",
+        "minimum_years_experience": "3.0",
         "salary_min": "12000.00",
         "salary_max": "18000.00",
         "salary_currency": "brl",
     }
     payload.update(overrides)
     return payload
+
+
+async def _create_skill(
+    session: AsyncSession,
+    name: str,
+    normalized_name: str,
+    *,
+    category: str = "backend",
+) -> SkillModel:
+    existing = await session.scalar(sa.select(SkillModel).where(SkillModel.normalized_name == normalized_name))
+    if existing is not None:
+        return existing
+
+    skill = SkillModel(
+        name=name,
+        normalized_name=normalized_name,
+        category=category,
+        aliases=[],
+        is_verified=True,
+    )
+    session.add(skill)
+    await session.commit()
+    return skill
 
 
 @pytest.mark.asyncio
@@ -113,6 +133,9 @@ async def test_recruiter_can_crud_job_and_soft_delete(
     assert created["quality_status"] in {"weak", "acceptable", "good"}
 
     job_id = created["id"]
+    python_skill = await _create_skill(db_session, "Python", "python")
+    postgres_skill = await _create_skill(db_session, "PostgreSQL", "postgresql")
+
     detail = await client.get(f"/api/v1/jobs/{job_id}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["id"] == job_id
@@ -132,6 +155,14 @@ async def test_recruiter_can_crud_job_and_soft_delete(
     assert update.json()["title"] == "Senior Backend Engineer"
     assert update.json()["priority"] == "urgent"
     assert update.json()["job_area"] == "data"
+
+    for skill_id in (python_skill.id, postgres_skill.id):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_id": str(skill_id), "is_mandatory": True},
+            headers=headers,
+        )
+        assert add_skill.status_code == 201
 
     publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
     assert publish.status_code == 200
@@ -310,6 +341,156 @@ async def test_recruiter_can_edit_job_with_decimal_fields_and_add_skill(
 
 
 @pytest.mark.asyncio
+async def test_publish_job_without_structured_skills_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(db_session, "publish-no-skill@test.com", "password123", UserRole.RECRUITER)
+    headers = await _auth_headers(client, "publish-no-skill@test.com", "password123")
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(title="Backend Engineer Sem Skills"),
+        headers=headers,
+    )
+    assert create.status_code == 201
+
+    publish = await client.patch(f"/api/v1/jobs/{create.json()['id']}/publish", headers=headers)
+    assert publish.status_code == 422
+    detail = publish.json()["detail"]
+    assert detail["error"] == "job_publication_validation_failed"
+    assert "mandatory_skills" in detail["missing_fields"]
+
+
+@pytest.mark.asyncio
+async def test_publish_job_without_area_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(db_session, "publish-no-area@test.com", "password123", UserRole.RECRUITER)
+    headers = await _auth_headers(client, "publish-no-area@test.com", "password123")
+    python_skill = await _create_skill(db_session, "Python Publish Area", f"python-publish-area-{uuid4().hex[:8]}")
+    sql_skill = await _create_skill(db_session, "SQL Publish Area", f"sql-publish-area-{uuid4().hex[:8]}", category="data")
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(title="Backend Engineer Sem Área", job_area=None),
+        headers=headers,
+    )
+    assert create.status_code == 201
+    job_id = create.json()["id"]
+
+    for skill_id in (python_skill.id, sql_skill.id):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_id": str(skill_id), "is_mandatory": True},
+            headers=headers,
+        )
+        assert add_skill.status_code == 201
+
+    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
+    assert publish.status_code == 422
+    detail = publish.json()["detail"]
+    assert "job_area" in detail["missing_fields"]
+
+
+@pytest.mark.asyncio
+async def test_publish_job_with_minimum_structure_passes(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(db_session, "publish-pass@test.com", "password123", UserRole.RECRUITER)
+    headers = await _auth_headers(client, "publish-pass@test.com", "password123")
+    python_skill = await _create_skill(db_session, "Python Publish Pass", f"python-publish-pass-{uuid4().hex[:8]}")
+    sql_skill = await _create_skill(db_session, "SQL Publish Pass", f"sql-publish-pass-{uuid4().hex[:8]}", category="data")
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(
+            title="Backend Engineer Publicável",
+            description=(
+                "Build and maintain backend APIs with strong ownership, observability, testing, "
+                "incident response, delivery planning, and engineering collaboration across squads."
+            ),
+            requirements=(
+                "Strong Python and SQL experience, API design, production operations, observability, "
+                "incident handling, and backend delivery in cross-functional teams."
+            ),
+        ),
+        headers=headers,
+    )
+    assert create.status_code == 201
+    job_id = create.json()["id"]
+
+    for skill_id in (python_skill.id, sql_skill.id):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_id": str(skill_id), "is_mandatory": True},
+            headers=headers,
+        )
+        assert add_skill.status_code == 201
+
+    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
+    assert publish.status_code == 200
+    assert publish.json()["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_create_job_with_published_status_without_quality_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(db_session, "create-published-fail@test.com", "password123", UserRole.RECRUITER)
+    headers = await _auth_headers(client, "create-published-fail@test.com", "password123")
+
+    response = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(title="Backend Engineer Published Direto", status="published"),
+        headers=headers,
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["error"] == "job_publication_validation_failed"
+    assert "mandatory_skills" in detail["missing_fields"]
+
+    created_job = await db_session.scalar(
+        sa.select(JobModel).where(JobModel.title == "Backend Engineer Published Direto")
+    )
+    assert created_job is None
+
+
+@pytest.mark.asyncio
+async def test_update_job_to_published_without_quality_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(db_session, "update-published-fail@test.com", "password123", UserRole.RECRUITER)
+    headers = await _auth_headers(client, "update-published-fail@test.com", "password123")
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(title="Backend Engineer Update Publish"),
+        headers=headers,
+    )
+    assert create.status_code == 201
+    job_id = create.json()["id"]
+
+    update = await client.patch(
+        f"/api/v1/jobs/{job_id}",
+        json={"status": "published"},
+        headers=headers,
+    )
+    assert update.status_code == 422
+    detail = update.json()["detail"]
+    assert detail["error"] == "job_publication_validation_failed"
+    assert "mandatory_skills" in detail["missing_fields"]
+
+    persisted = await db_session.get(JobModel, UUID(job_id))
+    assert persisted is not None
+    assert persisted.status == "draft"
+
+
+@pytest.mark.asyncio
 async def test_removing_job_skill_regenerates_job_profile(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -396,19 +577,8 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert resume_upload.status_code == 202
     resume_version_id = UUID(resume_upload.json()["version_id"])
 
-    skill = await db_session.scalar(
-        sa.select(SkillModel).where(SkillModel.normalized_name == "python", SkillModel.deleted_at.is_(None))
-    )
-    if skill is None:
-        skill = SkillModel(
-            name="Python",
-            normalized_name="python",
-            category="backend",
-            aliases=[],
-            is_verified=True,
-        )
-        db_session.add(skill)
-        await db_session.flush()
+    skill = await _create_skill(db_session, "Python", "python")
+    fastapi_skill = await _create_skill(db_session, "FastAPI", "fastapi")
 
     ai_model = AIModelModel(
         provider="anthropic",
@@ -469,21 +639,16 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert job.status_code == 201
     job_id = job.json()["id"]
 
+    for skill_id in (skill.id, fastapi_skill.id):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_id": str(skill_id), "is_mandatory": True},
+            headers=recruiter_headers,
+        )
+        assert add_skill.status_code == 201
+
     publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=recruiter_headers)
     assert publish.status_code == 200
-
-    add_skill = await client.post(
-        f"/api/v1/jobs/{job_id}/skills",
-        json={"skill_id": str(skill.id), "is_mandatory": True},
-        headers=recruiter_headers,
-    )
-    assert add_skill.status_code == 201
-
-    auto_matched = await AnalysisService(
-        SQLAlchemyAnalysisRepository(db_session)
-    ).auto_match_published_jobs(analysis_id)
-    await db_session.commit()
-    assert auto_matched >= 1
 
     match = await client.post(
         f"/api/v1/analyses/{analysis_id}/match/{job_id}",
@@ -493,14 +658,13 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert match.json()["recommendation"] in {"strong_match", "good_match", "potential"}
 
     persisted = await db_session.scalar(
-        sa.select(ResumeJobMatchModel).where(
-            ResumeJobMatchModel.analysis_id == analysis_id,
-            ResumeJobMatchModel.job_id == UUID(job_id),
+        sa.select(CandidateJobMatchModel).where(
+            CandidateJobMatchModel.job_id == UUID(job_id),
         )
     )
     assert persisted is not None
-    assert persisted.matched_skills == ["Python"]
-    assert persisted.missing_skills == []
+    assert set(persisted.matched_skills_json) == {"Python", "FastAPI"}
+    assert persisted.missing_skills_json == []
 
     ranking = await client.get(f"/api/v1/jobs/{job_id}/candidates", headers=recruiter_headers)
     assert ranking.status_code == 200
@@ -557,16 +721,24 @@ async def test_updating_job_does_not_mix_pipeline_candidates_between_jobs(
         aliases=[],
         is_verified=True,
     )
-    db_session.add(publish_skill)
+    secondary_publish_skill = SkillModel(
+        name="FastAPI",
+        normalized_name=f"fastapi-publish-{uuid4().hex[:8]}",
+        category="backend",
+        aliases=[],
+        is_verified=True,
+    )
+    db_session.add_all([publish_skill, secondary_publish_skill])
     await db_session.commit()
 
     for job_id in (job_a_id, job_b_id):
-        add_skill = await client.post(
-            f"/api/v1/jobs/{job_id}/skills",
-            json={"skill_id": str(publish_skill.id), "is_mandatory": True},
-            headers=headers,
-        )
-        assert add_skill.status_code == 201
+        for skill_id in (publish_skill.id, secondary_publish_skill.id):
+            add_skill = await client.post(
+                f"/api/v1/jobs/{job_id}/skills",
+                json={"skill_id": str(skill_id), "is_mandatory": True},
+                headers=headers,
+            )
+            assert add_skill.status_code == 201
         publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
         assert publish.status_code == 200
 

@@ -21,6 +21,7 @@ import pytest
 from src.application.services.resume_profiler_service import (
     InMemoryCandidateProfileCache,
     ResumeProfilerService,
+    _build_resume_ai_context,
 )
 from src.domain.value_objects.candidate_profile import CandidateProfile
 
@@ -736,3 +737,64 @@ async def test_cache_invalidation(mock_ai_service, resume_profiler_service):
     assert mock_ai_service.analyze.call_count == 2
 
     assert profile1.resume_hash == profile2.resume_hash
+
+
+async def test_resume_profiler_envia_contexto_compacto_para_ia(
+    mock_ai_service,
+    resume_profiler_service,
+):
+    resume_text = """
+    Maria Silva
+    Senior Data Engineer
+
+    Skills: Python, SQL, Airflow, dbt, BigQuery, Spark, Kafka
+
+    Experience:
+    DataCorp (2020-present) - Senior Data Engineer
+    - Liderou pipelines de dados e automações
+    - Governança de dados
+
+    Summary:
+    Texto longo irrelevante que não precisa seguir inteiro para a IA.
+    """ + ("Detalhe adicional. " * 80)
+
+    mock_response = AsyncMock()
+    mock_response.content = json.dumps(_mock_ai_response())
+    mock_response.input_tokens = 100
+    mock_response.output_tokens = 500
+    mock_response.cache_read_tokens = 0
+    mock_ai_service.analyze.return_value = mock_response
+
+    await resume_profiler_service.generate_profile(resume_text)
+
+    request = mock_ai_service.analyze.await_args.args[0]
+    expected_context = _build_resume_ai_context(resume_text)
+
+    assert request.resume_text == expected_context
+    assert len(request.resume_text) < len(resume_text)
+    assert "cargo_atual:" in request.resume_text
+    assert "skills:" in request.resume_text
+    assert "experiencias_relevantes:" in request.resume_text
+
+
+def test_build_resume_ai_context_remove_headers_contact_and_location():
+    resume_text = """
+    Lecino Lucas
+    Contato Lecino Lucas
+    Goiânia, Goiás, Brasil
+    linkedin.com/in/lecinolucas
+    Principais competências
+    Senior Systems Analyst
+    Skills: SQL, APIs REST, ERP, Documentação técnica
+    Experience:
+    Empresa X (2020-present) - Senior Systems Analyst
+    """
+
+    context = _build_resume_ai_context(resume_text)
+
+    assert "Contato Lecino Lucas" not in context
+    assert "Goiânia, Goiás, Brasil" not in context
+    assert "linkedin.com" not in context
+    assert "Principais competências" not in context
+    assert "cargo_atual: Senior Systems Analyst" in context
+    assert "SQL, APIs REST, ERP, Documentação técnica" in context

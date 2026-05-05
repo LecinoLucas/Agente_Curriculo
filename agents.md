@@ -23,7 +23,7 @@ Score:
 
 Fonte de verdade:
 - Pipeline ativo = vaga atual
-- candidate_job_links = histórico
+- candidate_job_pipeline_events = histórico
 
 Proibido:
 - Múltiplas vagas ativas
@@ -43,6 +43,6 @@ Transferir → troca pipeline + nova análise
 - Não manter endpoint paralelo criando vínculo fora do pipeline.
 - Não manter teste que espera múltiplas vagas ativas.
 - Não comentar código morto: excluir.
-- Não deixar candidate_job_links decidir vaga atual.
+- Não deixar histórico de eventos decidir vaga atual.
 - Não usar latest_analysis global para score atual.
 - Se a lógica antiga for necessária como histórico, ela deve ser explicitamente marcada como histórico e não pode afetar o estado atual.

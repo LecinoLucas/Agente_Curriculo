@@ -29,6 +29,8 @@ app/
 # Alembic
 alembic/versions/*.py
 !alembic/versions/.gitkeep
+!alembic/versions/2d0c3f6a1b10_create_candidate_job_pipeline_canonical.py
+!alembic/versions/7e0b4c9d2f21_drop_candidate_job_legacy_tables.py
 
 # Logs
 *.log

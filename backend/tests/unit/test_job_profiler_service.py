@@ -31,7 +31,9 @@ from src.application.ports.ai_service import AIAnalysisRequest, AIAnalysisRespon
 from src.application.services.job_profiler_service import (
     InMemoryJobProfileCache,
     JobProfilerService,
+    JobProfileInput,
     StructuredJobSkill,
+    build_job_profile_ai_context,
     _parse_profile,
 )
 from src.domain.value_objects.job_profile import (
@@ -680,3 +682,148 @@ async def test_campos_estruturados_entram_no_job_profile_deterministico():
     assert "comunicação" in [item.casefold() for item in profile.required_capabilities]
     assert "autonomia" in [item.casefold() for item in profile.required_capabilities]
     assert profile.job_completeness_score >= 0.65
+
+
+async def test_job_profiler_envia_contexto_compacto_para_ia():
+    ai = _mock_ai(ANALISTA_DADOS_SENIOR)
+    service = JobProfilerService(ai_service=ai)
+
+    job_description = "Texto grande da vaga. " * 120
+    linked_skills = [
+        StructuredJobSkill(
+            name="SQL",
+            normalized_name="sql",
+            is_mandatory=True,
+            weight=1.5,
+        ),
+        StructuredJobSkill(
+            name="Power BI",
+            normalized_name="power bi",
+            is_mandatory=False,
+            weight=1.0,
+        ),
+    ]
+
+    await service.generate_profile(
+        job_description,
+        title="Analista de Dados",
+        requirements="SQL, Power BI e comunicação",
+        seniority_level="senior",
+        minimum_years_experience=4,
+        minimum_education_level="bachelor",
+        job_area="data",
+        linked_skills=linked_skills,
+    )
+
+    request = ai.analyze.await_args.args[0]
+    expected_context = build_job_profile_ai_context(
+        JobProfileInput(
+            title="Analista de Dados",
+            description=job_description,
+            requirements="SQL, Power BI e comunicação",
+            seniority_level="senior",
+            minimum_years_experience=4.0,
+            minimum_education_level="bachelor",
+            job_area="data",
+            linked_skills=tuple(linked_skills),
+        )
+    )
+
+    assert expected_context in request.prompt_template
+    assert len(expected_context) < len(job_description)
+    assert "skills_obrigatorias: SQL" in request.prompt_template
+
+
+async def test_job_profiler_recovers_required_skills_from_text_when_ai_returns_empty_lists():
+    service = JobProfilerService(
+        ai_service=_mock_ai(
+            {
+                "area": "data",
+                "target_level": "senior",
+                "main_mission": "Analisar dados de supply chain",
+                "critical_requirements": [],
+                "desirable_requirements": [],
+                "responsibilities": [],
+                "required_tools": [],
+                "required_capabilities": [],
+                "seniority_signals": ["senior"],
+                "job_completeness_score": 0.8,
+                "confidence": "medium",
+            }
+        )
+    )
+
+    profile = await service.generate_profile(
+        """
+        Experiência com análise de dados, noções de estatística aplicada e modelagem de dados.
+        Domínio de Excel avançado.
+        Conhecimento em ferramentas de BI (Power BI, Tableau ou similares), ERP SAP – Módulo MM,
+        vivência com KPIs de Supply Chain.
+        Conhecimento em BPMN, utilizando Bizagi Modeler ou similares.
+        Habilidade em SQL para extração de dados.
+        """,
+        title="Analista de Dados Senior",
+        requirements="""
+        SQL, Power BI, Excel avançado, SAP MM, BPMN, KPIs de Supply Chain, Tableau.
+        """,
+        seniority_level="senior",
+    )
+
+    critical_names = {item.name for item in profile.critical_requirements}
+    optional_names = {item.name for item in profile.desirable_requirements}
+
+    assert critical_names
+    assert {"SQL", "Power BI", "Excel"} <= critical_names
+    assert "SAP MM" not in critical_names
+    assert "BPMN" not in critical_names
+    assert "KPIs Supply Chain" not in critical_names
+    assert {"SAP MM", "BPMN", "KPIs Supply Chain", "Tableau"} <= optional_names
+
+
+async def test_job_profiler_replaces_unstructured_requirement_phrases_with_skill_names():
+    service = JobProfilerService(
+        ai_service=_mock_ai(
+            {
+                "area": "data",
+                "target_level": "senior",
+                "main_mission": "Analisar dados de supply chain",
+                "critical_requirements": [
+                    {
+                        "name": "Domínio de Excel avançado",
+                        "description": "Frase longa vinda da IA",
+                        "is_mandatory": True,
+                        "importance_weight": 1.0,
+                    },
+                    {
+                        "name": "Conhecimento em BPMN, utilizando Bizagi Modeler ou similares",
+                        "description": "Frase longa vinda da IA",
+                        "is_mandatory": True,
+                        "importance_weight": 1.0,
+                    },
+                ],
+                "desirable_requirements": [],
+                "responsibilities": [],
+                "required_tools": [],
+                "required_capabilities": [],
+                "seniority_signals": ["senior"],
+                "job_completeness_score": 0.8,
+                "confidence": "medium",
+            }
+        )
+    )
+
+    profile = await service.generate_profile(
+        "Domínio de Excel avançado. Conhecimento em BPMN, utilizando Bizagi Modeler ou similares. Habilidade em SQL para extração de dados.",
+        title="Analista de Dados Senior",
+        requirements="SQL, Excel avançado, BPMN",
+        seniority_level="senior",
+    )
+
+    critical_names = {item.name for item in profile.critical_requirements}
+    optional_names = {item.name for item in profile.desirable_requirements}
+
+    assert "Excel" in critical_names
+    assert "SQL" in critical_names
+    assert "BPMN" in optional_names
+    assert "Domínio de Excel avançado" not in critical_names
+    assert "Conhecimento em BPMN, utilizando Bizagi Modeler ou similares" not in critical_names

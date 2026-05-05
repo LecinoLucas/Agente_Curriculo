@@ -19,6 +19,10 @@ from typing import Any
 import structlog
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIService
+from src.application.services.extraction_fallbacks import (
+    infer_job_nice_to_have_skills,
+    infer_job_required_skills,
+)
 from src.application.services.skill_normalizer_service import contains_whole_phrase, normalize_skill_text
 from src.domain.value_objects.job_profile import (
     AREA_WEIGHTS,
@@ -33,6 +37,9 @@ from src.infrastructure.ai.response_parser import extract_json
 logger = structlog.get_logger(__name__)
 
 _DEFAULT_TTL_SECONDS: int = 86_400
+_MAX_AI_REQUIRED_SKILLS = 10
+_MAX_AI_OPTIONAL_SKILLS = 6
+_MAX_AI_TEXTUAL_REQUIREMENTS = 6
 
 _AREA_KEYWORDS: dict[str, set[str]] = {
     "technology": {"python", "backend", "frontend", "api", "fastapi", "react", "software", "devops"},
@@ -202,7 +209,10 @@ class JobProfilerService:
         logger.info("job_profiler.cache_miss", hash=desc_hash)
 
         if self._ai is None:
-            profile = build_deterministic_job_profile(source)
+            profile = ensure_textual_skill_coverage(
+                build_deterministic_job_profile(source),
+                source,
+            )
             self._cache.set(desc_hash, profile.to_dict())
             return profile
 
@@ -216,6 +226,8 @@ class JobProfilerService:
                 error=str(exc),
             )
             profile = build_deterministic_job_profile(source)
+
+        profile = ensure_textual_skill_coverage(profile, source)
 
         self._cache.set(desc_hash, profile.to_dict())
         return profile
@@ -240,8 +252,10 @@ class JobProfilerService:
         )
 
     async def _call_ai(self, source: JobProfileInput) -> JobProfile:
-        prompt = _prompt.USER_PROMPT_TEMPLATE.format(
-            job_description=source.combined_text,
+        compact_job_context = build_job_profile_ai_context(source)
+        prompt = _safe_prompt_format(
+            _prompt.USER_PROMPT_TEMPLATE,
+            job_description=compact_job_context,
             structured_skills_context=_format_structured_skills_context(source.linked_skills),
         )
         request = AIAnalysisRequest(
@@ -260,6 +274,8 @@ class JobProfilerService:
             area=raw.get("area"),
             target_level=raw.get("target_level"),
             completeness=raw.get("job_completeness_score"),
+            job_chars_original=len(source.combined_text),
+            job_chars_compact=len(compact_job_context),
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
             cache_read_tokens=response.cache_read_tokens,
@@ -320,6 +336,37 @@ def build_job_profile_text(
     if behavioral_text:
         sections.append(f"Requisitos comportamentais:\n{behavioral_text}")
     return "\n\n".join(sections)
+
+
+def build_job_profile_ai_context(source: JobProfileInput) -> str:
+    mandatory_skills = [
+        skill.name for skill in source.linked_skills if skill.is_mandatory and _clean_text(skill.name)
+    ][: _MAX_AI_REQUIRED_SKILLS]
+    optional_skills = [
+        skill.name for skill in source.linked_skills if not skill.is_mandatory and _clean_text(skill.name)
+    ][: _MAX_AI_OPTIONAL_SKILLS]
+    textual_requirements = _extract_textual_requirements(source)[:_MAX_AI_TEXTUAL_REQUIREMENTS]
+
+    sections: list[str] = []
+    if source.title:
+        sections.append(f"titulo: {source.title}")
+    if source.job_area:
+        sections.append(f"area: {source.job_area}")
+    if source.seniority_level:
+        sections.append(f"senioridade: {source.seniority_level}")
+    if source.minimum_years_experience is not None:
+        sections.append(f"experiencia_minima_anos: {source.minimum_years_experience:g}")
+    if source.minimum_education_level:
+        sections.append(f"educacao_minima: {source.minimum_education_level}")
+    sections.append(
+        "skills_obrigatorias: "
+        + (", ".join(mandatory_skills) if mandatory_skills else "nao identificado")
+    )
+    if optional_skills:
+        sections.append("skills_desejaveis: " + ", ".join(optional_skills))
+    if textual_requirements:
+        sections.append("requisitos_textuais: " + ", ".join(textual_requirements))
+    return "\n".join(sections)
 
 
 def build_job_profile_hash(
@@ -529,8 +576,130 @@ def merge_manual_skills_into_profile(profile: JobProfile, source: JobProfileInpu
     )
 
 
+def ensure_textual_skill_coverage(profile: JobProfile, source: JobProfileInput) -> JobProfile:
+    inferred_required = infer_job_required_skills(
+        title=source.title,
+        description=source.description,
+        requirements=source.requirements,
+        responsibilities=source.responsibilities,
+        experience_context=source.experience_context,
+    )
+    inferred_optional = infer_job_nice_to_have_skills(
+        title=source.title,
+        description=source.description,
+        requirements=source.requirements,
+        responsibilities=source.responsibilities,
+        experience_context=source.experience_context,
+    )
+
+    critical = list(profile.critical_requirements)
+    desirable = list(profile.desirable_requirements)
+    if inferred_required:
+        critical = [
+            item for item in critical
+            if _looks_like_structured_requirement_name(item.name)
+        ]
+    if inferred_optional:
+        desirable = [
+            item for item in desirable
+            if _looks_like_structured_requirement_name(item.name)
+        ]
+    required_tools = list(profile.required_tools)
+    critical_keys = {_skill_key(item.name) for item in critical}
+    desirable_keys = {_skill_key(item.name) for item in desirable}
+    tool_keys = {_skill_key(item) for item in required_tools}
+
+    for skill_name in inferred_required:
+        key = _skill_key(skill_name)
+        if not key or key in critical_keys or key in desirable_keys:
+            continue
+        critical.append(
+            JobRequirement(
+                name=skill_name,
+                description=f"Requisito inferido do texto da vaga: {skill_name}",
+                is_mandatory=True,
+                importance_weight=1.2,
+                evidence_examples=[skill_name],
+            )
+        )
+        critical_keys.add(key)
+        if key not in tool_keys:
+            required_tools.append(skill_name)
+            tool_keys.add(key)
+
+    for skill_name in inferred_optional:
+        key = _skill_key(skill_name)
+        if not key or key in critical_keys or key in desirable_keys:
+            continue
+        desirable.append(
+            JobRequirement(
+                name=skill_name,
+                description=f"Diferencial inferido do texto da vaga: {skill_name}",
+                is_mandatory=False,
+                importance_weight=0.6,
+                evidence_examples=[skill_name],
+            )
+        )
+        desirable_keys.add(key)
+        if key not in tool_keys:
+            required_tools.append(skill_name)
+            tool_keys.add(key)
+
+    return JobProfile(
+        area=profile.area,
+        target_level=profile.target_level,
+        main_mission=profile.main_mission,
+        critical_requirements=critical,
+        desirable_requirements=desirable,
+        responsibilities=list(profile.responsibilities),
+        required_tools=_dedupe(required_tools),
+        required_capabilities=list(profile.required_capabilities),
+        seniority_signals=list(profile.seniority_signals),
+        adaptive_weights=dict(profile.adaptive_weights),
+        job_completeness_score=profile.job_completeness_score,
+        confidence=profile.confidence,
+        description_hash=profile.description_hash,
+    )
+
+
+def _looks_like_structured_requirement_name(value: str | None) -> bool:
+    normalized = normalize_skill_text(value or "")
+    if not normalized:
+        return False
+    if len(normalized) > 40 or len(normalized.split()) > 4:
+        return False
+    if any(marker in normalized for marker in (",", ";", ":", " ou ", " and ")):
+        return False
+    if any(phrase in normalized for phrase in ("utilizando", "experiencia em", "conhecimento em", "dominio de")):
+        return False
+
+    generic_tokens = {
+        "requisitos",
+        "requirement",
+        "requirements",
+        "description",
+        "descricao",
+        "responsibilities",
+        "responsabilidades",
+    }
+    if any(token in normalized.split() for token in generic_tokens):
+        return False
+    return True
+
+
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
+def _safe_prompt_format(template: str, **kwargs: str) -> str:
+    """
+    Format template preserving literal JSON braces.
+    Escapes all braces first, then restores known placeholders.
+    """
+    escaped = template.replace("{", "{{").replace("}", "}}")
+    for key in kwargs:
+        escaped = escaped.replace(f"{{{{{key}}}}}", f"{{{key}}}")
+    return escaped.format(**kwargs)
 
 
 def _parse_profile(raw: dict[str, Any], desc_hash: str) -> JobProfile:
@@ -574,6 +743,26 @@ def _parse_profile(raw: dict[str, Any], desc_hash: str) -> JobProfile:
             )
         )
 
+    if not critical and not desirable:
+        for r in (raw.get("requirements") or []):
+            if not isinstance(r, dict):
+                continue
+            name = _clean_text(r.get("name"))
+            if not name:
+                continue
+            is_mandatory = normalize_skill_text(r.get("priority") or "medium") == "high"
+            evidence_hint = _clean_text(r.get("evidence_hint"))
+            target = critical if is_mandatory else desirable
+            target.append(
+                JobRequirement(
+                    name=name,
+                    description=evidence_hint or _clean_text(r.get("type")) or name,
+                    is_mandatory=is_mandatory,
+                    importance_weight=1.2 if is_mandatory else 0.6,
+                    evidence_examples=[evidence_hint] if evidence_hint else [],
+                )
+            )
+
     return JobProfile(
         area=area,
         target_level=_safe_str(raw.get("target_level"), "undefined"),
@@ -581,7 +770,7 @@ def _parse_profile(raw: dict[str, Any], desc_hash: str) -> JobProfile:
         critical_requirements=critical,
         desirable_requirements=desirable,
         responsibilities=_safe_list(raw.get("responsibilities")),
-        required_tools=_safe_list(raw.get("required_tools")),
+        required_tools=_safe_list(raw.get("required_tools") or raw.get("tools")),
         required_capabilities=_safe_list(raw.get("required_capabilities")),
         seniority_signals=_safe_list(raw.get("seniority_signals")),
         adaptive_weights=weights,

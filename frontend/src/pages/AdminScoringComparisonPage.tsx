@@ -14,7 +14,7 @@ import {
   type InsightEvidence,
   type ScoringComparisonResponse,
 } from "../services/scoringComparisonService";
-import { handleApiError, type UserFriendlyError } from "../services/errorHandler";
+import { handleApiError, type UserFriendlyError } from "../shared/utils/errorHandler";
 
 function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;

@@ -247,7 +247,7 @@ export function useJobConfigurationAlerts(form: JobFormData): {
     if (publishReadiness === "ready") {
       alerts.push({
         level: "success",
-        message: `✅ Vaga pronta para publicação. Nível de restritividade: ${restrictiveness.toUpperCase()}${
+        message: `✅ Configuração base concluída. Nível de restritividade: ${restrictiveness.toUpperCase()}${
           restrictiveness === "low" || restrictiveness === "moderate"
             ? " — configuração balanceada"
             : ""

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.job_service import (
     InvalidJobSalaryRangeError,
     InvalidJobTextError,
+    JobPublicationValidationError,
     JobService,
 )
 from src.application.services.job_skill_resolver_service import JobSkillResolverService
@@ -73,6 +74,7 @@ class JobBulkImportService:
         created_by: UUID,
     ) -> BulkImportJobResultResponse:
         warnings: list[str] = []
+        requested_status = item.status if "status" in item.model_fields_set else default_status
 
         duplicate = await self._job_repository.find_active_by_identity(
             title=item.title,
@@ -122,7 +124,7 @@ class JobBulkImportService:
                 title=item.title,
                 description=item.description,
                 requirements=requirements,
-                status=item.status if "status" in item.model_fields_set else default_status,
+                status="draft" if requested_status == "published" else requested_status,
                 seniority_level=item.seniority_level,
                 minimum_education_level=item.minimum_education_level,
                 minimum_years_experience=item.minimum_years_experience,
@@ -156,6 +158,9 @@ class JobBulkImportService:
                 await self._job_service._maybe_generate_job_profile(job)
 
             quality = await self._job_service.refresh_quality(job.id)
+            if requested_status == "published":
+                await self._job_service.transition_status(job.id, "published")
+                quality = await self._job_service.refresh_quality(job.id)
 
             if dry_run:
                 warnings.append("Dry run: vaga validada sem persistência.")
@@ -174,7 +179,7 @@ class JobBulkImportService:
                 errors=[],
                 warnings=warnings + list(quality.warnings),
             )
-        except (InvalidJobSalaryRangeError, InvalidJobTextError) as exc:
+        except (InvalidJobSalaryRangeError, InvalidJobTextError, JobPublicationValidationError) as exc:
             await nested.rollback()
             return BulkImportJobResultResponse(
                 title=item.title,
@@ -201,6 +206,8 @@ class JobBulkImportService:
             return "Título e descrição não podem estar em branco."
         if isinstance(exc, InvalidJobSalaryRangeError):
             return "Faixa salarial inválida: salary_min não pode ser maior que salary_max."
+        if isinstance(exc, JobPublicationValidationError):
+            return "Vaga não atende os critérios mínimos de publicação: " + ", ".join(exc.missing_fields)
         return str(exc)
 
     @staticmethod

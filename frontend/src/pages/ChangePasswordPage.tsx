@@ -6,8 +6,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../features/auth/useAuth";
 import { authService } from "../services/authService";
-import { formatErrorDetails, handleApiError } from "../services/errorHandler";
-import { toast } from "../services/toast";
+import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
+import { toast } from "../shared/utils/toast";
 
 function passwordStrengthLabel(password: string): { label: string; tone: string } {
   let score = 0;

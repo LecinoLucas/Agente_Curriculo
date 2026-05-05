@@ -10,9 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAsyncState } from "../hooks/useAsyncState";
-import { formatErrorDetails, formatErrorForToast, handleApiError } from "../services/errorHandler";
+import { formatErrorDetails, formatErrorForToast, handleApiError } from "../shared/utils/errorHandler";
 import { skillsService } from "../services/skillsService";
-import { toast } from "../services/toast";
+import { toast } from "../shared/utils/toast";
 import { Skill } from "../types/domain";
 
 type SkillFormValues = {

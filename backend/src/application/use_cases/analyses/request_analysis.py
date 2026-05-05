@@ -48,6 +48,13 @@ class RequestAnalysisUseCase:
         if not command.job_id:
             raise ValidationException("job_id é obrigatório para análise")
 
+        if str(getattr(version, "extraction_status", "")).lower() != "completed" or not (
+            (version.extracted_text or "").strip()
+        ):
+            raise ValidationException(
+                "Currículo ainda em processamento. Faça upload do PDF e aguarde extração antes de solicitar análise."
+            )
+
         # 2. Evita retry imediato após rate limit (429)
         latest_for_scope = await self._analysis_repo.find_latest_for_version(
             resume_version_id=command.resume_version_id,

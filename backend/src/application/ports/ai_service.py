@@ -22,6 +22,7 @@ class AIAnalysisResponse:
     cache_read_tokens: int
     cache_write_tokens: int
     processing_time_ms: int
+    finish_reason: str | None = None
     parsed_data: dict[str, Any] | None = None
 
 

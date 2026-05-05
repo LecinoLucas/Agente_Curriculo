@@ -128,6 +128,9 @@ class AnalysisModel(Base):
     retry_count: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="0")
     max_retries: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="3")
     next_retry_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    worker_claim_id: Mapped[str | None] = mapped_column(sa.String(255))
+    claimed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    stale_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     queue_name: Mapped[str] = mapped_column(
         sa.String(100),
         nullable=False,
@@ -151,6 +154,7 @@ class AnalysisModel(Base):
     __table_args__ = (
         sa.Index("idx_analyses_status_created_at", "status", "created_at"),
         sa.Index("idx_analyses_created_at", "created_at"),
+        sa.Index("idx_analyses_claim_state", "status", "claimed_at"),
     )
 
     result: Mapped[AnalysisResultModel | None] = relationship(
@@ -195,6 +199,11 @@ class AnalysisResultModel(Base):
     cache_read_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     cache_write_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     processing_time_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    finish_reason: Mapped[str | None] = mapped_column(sa.String(100))
+    max_tokens_used: Mapped[int | None] = mapped_column(sa.Integer)
+    system_prompt_chars: Mapped[int | None] = mapped_column(sa.Integer)
+    user_prompt_chars: Mapped[int | None] = mapped_column(sa.Integer)
+    prompt_chars_total: Mapped[int | None] = mapped_column(sa.Integer)
     raw_llm_response: Mapped[str | None] = mapped_column(sa.Text)
     prompt_version_used: Mapped[str | None] = mapped_column(sa.String(50))
     created_at: Mapped[datetime] = mapped_column(
@@ -206,52 +215,6 @@ class AnalysisResultModel(Base):
 
     analysis: Mapped[AnalysisModel] = relationship(
         "AnalysisModel", back_populates="result", lazy="noload"
-    )
-
-
-class ResumeJobMatchModel(Base):
-    __tablename__ = "resume_job_matches"
-
-    id: Mapped[UUID] = mapped_column(
-        sa.UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-        server_default=sa.text("uuid_generate_v4()"),
-    )
-    analysis_id: Mapped[UUID] = mapped_column(
-        sa.UUID(as_uuid=True), sa.ForeignKey("analyses.id"), nullable=False
-    )
-    job_id: Mapped[UUID] = mapped_column(
-        sa.UUID(as_uuid=True),
-        sa.ForeignKey("jobs.id"),
-        nullable=False,
-    )
-    match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    skills_match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    experience_match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    seniority_match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    matched_skills: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
-    missing_skills: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
-    bonus_skills: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
-    match_summary: Mapped[str | None] = mapped_column(sa.Text)
-    recommendation: Mapped[str | None] = mapped_column(sa.String(50))
-    weights_source: Mapped[str | None] = mapped_column(sa.String(50), server_default="fallback_hardcoded")
-    score_model_version_id: Mapped[UUID | None] = mapped_column(
-        sa.UUID(as_uuid=True),
-        sa.ForeignKey("score_model_versions.id"),
-        nullable=True,
-    )
-    validation_status: Mapped[str | None] = mapped_column(sa.String(50), server_default="pass")
-    missing_evidence: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
-    rejection_reasons: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
-    created_at: Mapped[datetime] = mapped_column(
-        sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("NOW()")
-    )
-
-    __table_args__ = (
-        sa.UniqueConstraint("analysis_id", "job_id", name="uq_resume_job_match"),
-        sa.Index("idx_resume_job_matches_job_id", "job_id", "match_score"),
-        sa.Index("idx_resume_job_matches_analysis_id", "analysis_id"),
     )
 
 

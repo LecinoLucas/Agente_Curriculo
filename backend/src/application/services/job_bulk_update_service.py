@@ -8,6 +8,7 @@ from src.application.services.job_service import (
     InvalidJobSalaryRangeError,
     InvalidJobTextError,
     JobNotFoundError,
+    JobPublicationValidationError,
     JobService,
 )
 from src.application.services.job_bulk_import_service import JobBulkImportService
@@ -104,7 +105,10 @@ class JobBulkUpdateService:
                 job = await self._job_service.get(job.id)
                 await self._job_service._maybe_generate_job_profile(job)
 
+            job = await self._job_service.get(job.id)
             quality = await self._job_service.refresh_quality(job.id)
+            if job.status == "published":
+                await self._job_service.ensure_publishable(job.id)
             await nested.commit()
             return BulkUpdateJobResultResponse(
                 job_id=job.id,
@@ -114,7 +118,7 @@ class JobBulkUpdateService:
                 errors=[],
                 warnings=warnings + list(quality.warnings),
             )
-        except (InvalidJobSalaryRangeError, InvalidJobTextError, JobNotFoundError) as exc:
+        except (InvalidJobSalaryRangeError, InvalidJobTextError, JobNotFoundError, JobPublicationValidationError) as exc:
             await nested.rollback()
             return BulkUpdateJobResultResponse(
                 job_id=job.id,
@@ -198,4 +202,6 @@ class JobBulkUpdateService:
             return "Faixa salarial inválida: salary_min não pode ser maior que salary_max."
         if isinstance(exc, JobNotFoundError):
             return "Vaga não encontrada."
+        if isinstance(exc, JobPublicationValidationError):
+            return "Vaga não atende os critérios mínimos de publicação: " + ", ".join(exc.missing_fields)
         return str(exc)

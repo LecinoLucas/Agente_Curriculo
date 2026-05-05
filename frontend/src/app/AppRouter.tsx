@@ -25,6 +25,10 @@ const VagasPage = lazy(() =>
   import("../pages/VagasPage").then((m) => ({ default: m.VagasPage }))
 );
 
+const JobFormPage = lazy(() =>
+  import("../pages/JobFormPage").then((m) => ({ default: m.JobFormPage }))
+);
+
 const AdminPage = lazy(() =>
   import("../pages/AdminPage").then((m) => ({ default: m.AdminPage }))
 );
@@ -110,6 +114,16 @@ export function AppRouter() {
         <Route
           path="vagas"
           element={protectedPage(<VagasPage />, STAFF_ROLES)}
+        />
+
+        <Route
+          path="vagas/nova"
+          element={protectedPage(<JobFormPage />, STAFF_ROLES)}
+        />
+
+        <Route
+          path="vagas/:jobId/editar"
+          element={protectedPage(<JobFormPage />, STAFF_ROLES)}
         />
 
         <Route

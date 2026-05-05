@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.analysis_model import (
     MatchingObservationModel,
-    ResumeJobMatchModel,
 )
+from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 
 from .test_admin_scoring_comparison_endpoint import (
     _auth_headers,
@@ -47,7 +47,7 @@ async def test_score_explanation_records_matching_observation_snapshot(
     )
 
     assert observation is not None
-    assert observation.engine_used in {"legacy", "adaptive"}
+    assert observation.engine_used == "canonical"
     assert Decimal(str(observation.score)) >= Decimal("0")
     assert Decimal(str(observation.confidence_score)) >= Decimal("0")
     assert isinstance(observation.matched_skills, list)
@@ -72,9 +72,9 @@ async def test_recruiter_can_save_matching_feedback_without_changing_match_score
     )
 
     persisted_match = await db_session.scalar(
-        sa.select(ResumeJobMatchModel).where(
-            ResumeJobMatchModel.analysis_id == analysis_id,
-            ResumeJobMatchModel.job_id == job_id,
+        sa.select(CandidateJobMatchModel).where(
+            CandidateJobMatchModel.candidate_id == candidate_id,
+            CandidateJobMatchModel.job_id == job_id,
         )
     )
     assert persisted_match is not None
@@ -112,9 +112,9 @@ async def test_recruiter_can_save_matching_feedback_without_changing_match_score
     assert observation.feedback_at is not None
 
     refreshed_match = await db_session.scalar(
-        sa.select(ResumeJobMatchModel).where(
-            ResumeJobMatchModel.analysis_id == analysis_id,
-            ResumeJobMatchModel.job_id == job_id,
+        sa.select(CandidateJobMatchModel).where(
+            CandidateJobMatchModel.candidate_id == candidate_id,
+            CandidateJobMatchModel.job_id == job_id,
         )
     )
     assert refreshed_match is not None

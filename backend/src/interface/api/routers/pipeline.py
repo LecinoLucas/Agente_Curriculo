@@ -55,10 +55,51 @@ async def _enqueue_latest_pending_analysis_for_candidate_job(
     *,
     candidate_id: UUID,
     job_id: UUID,
+    requested_by: UUID,
 ) -> None:
+    from src.application.dtos.analysis_dtos import RequestAnalysisCommand
+    from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
     from src.infrastructure.database.models.analysis_model import AnalysisModel
     from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
-    from src.interface.workers.analysis_tasks import process_analysis
+    from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
+        SQLAlchemyAnalysisRepository,
+    )
+    from src.infrastructure.repositories.sqlalchemy_resume_repository import (
+        SQLAlchemyResumeRepository,
+    )
+    from src.interface.workers.analysis_dispatcher import enqueue_analysis
+
+    latest_resume_version = await db.scalar(
+        sa.select(ResumeVersionModel.id)
+        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+        .where(
+            ResumeModel.candidate_id == candidate_id,
+            ResumeModel.deleted_at.is_(None),
+        )
+        .order_by(ResumeVersionModel.uploaded_at.desc())
+        .limit(1)
+    )
+    if latest_resume_version is None:
+        return
+
+    try:
+        use_case = RequestAnalysisUseCase(
+            SQLAlchemyAnalysisRepository(db),
+            SQLAlchemyResumeRepository(db),
+        )
+        await use_case.execute(
+            RequestAnalysisCommand(
+                resume_version_id=latest_resume_version,
+                requested_by=requested_by,
+                job_id=job_id,
+                force_reanalyze=False,
+                priority=5,
+            )
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        return
 
     query = (
         sa.select(AnalysisModel)
@@ -92,6 +133,12 @@ async def _enqueue_latest_pending_analysis_for_candidate_job(
     )
 
     try:
+        latest_analysis.task_id = task_id
+        latest_analysis.queue_name = queue_name
+        latest_analysis.updated_at = datetime.now(UTC)
+        latest_analysis.failure_reason = None
+        await db.commit()
+
         logger.info(
             "analysis_enqueue_requested",
             analysis_id=str(analysis_id),
@@ -100,28 +147,23 @@ async def _enqueue_latest_pending_analysis_for_candidate_job(
             queue_name=queue_name,
             task_id=task_id,
         )
-        async_result = process_analysis.apply_async(
-            args=[str(analysis_id)],
-            queue=queue_name,
-            priority=latest_analysis.priority,
-            task_id=task_id,
+
+        refetched = await db.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
         )
-        persisted_task_id = str(async_result.id or task_id)
-        latest_analysis.task_id = persisted_task_id
-        latest_analysis.queue_name = queue_name
-        latest_analysis.updated_at = datetime.now(UTC)
-        latest_analysis.failure_reason = None
-        await db.commit()
-        logger.info(
-            "analysis_enqueue_succeeded",
-            analysis_id=str(analysis_id),
-            candidate_id=str(candidate_id),
-            job_id=str(job_id),
-            queue_name=queue_name,
-            task_id=persisted_task_id,
-        )
+        if not refetched:
+            logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(analysis_id))
+        else:
+            enqueue_analysis(analysis_id)
+            logger.info(
+                "analysis_enqueue_succeeded",
+                analysis_id=str(analysis_id),
+                candidate_id=str(candidate_id),
+                job_id=str(job_id),
+                queue_name=queue_name,
+                task_id=task_id,
+            )
     except Exception as exc:
-        await db.rollback()
         try:
             await db.execute(
                 sa.update(AnalysisModel)
@@ -227,9 +269,10 @@ def _handle(exc: Exception) -> None:
 @router.get("/jobs", response_model=list[PipelineJobSummaryResponse])
 async def list_pipeline_jobs(
     current_user: RecruiterOrAdmin,
+    include_closed: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> list[PipelineJobSummaryResponse]:
-    return await _service(db).list_pipeline_jobs()
+    return await _service(db).list_pipeline_jobs(include_closed=include_closed)
 
 
 # ---------------------------------------------------------------------------
@@ -304,35 +347,6 @@ async def move_candidate_stage_v2(
         raise
 
 
-# ---------------------------------------------------------------------------
-# PATCH /pipeline/{candidate_id}/stage — move candidate (legacy, kept for compat)
-# ---------------------------------------------------------------------------
-
-
-@router.patch(
-    "/{candidate_id}/stage",
-    response_model=MoveCandidateResponse,
-)
-async def move_candidate_stage(
-    candidate_id: UUID,
-    body: MoveCandidateRequest,
-    current_user: RecruiterOrAdmin,
-    db: AsyncSession = Depends(get_db),
-) -> MoveCandidateResponse:
-    try:
-        result = await _service(db).move_candidate(
-            candidate_id=candidate_id,
-            body=body,
-            moved_by=current_user.id,
-        )
-        await db.commit()
-        return result
-    except Exception as exc:
-        await db.rollback()
-        _handle(exc)
-        raise
-
-
 @router.post(
     "/{candidate_id}/add-to-job",
     response_model=AddCandidateToJobResponse,
@@ -354,6 +368,7 @@ async def add_candidate_to_job(
             db,
             candidate_id=candidate_id,
             job_id=body.job_id,
+            requested_by=current_user.id,
         )
 
         return result
@@ -384,6 +399,7 @@ async def transfer_candidate_job(
             db,
             candidate_id=candidate_id,
             job_id=body.to_job_id,
+            requested_by=current_user.id,
         )
         return result
     except Exception as exc:

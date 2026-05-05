@@ -171,6 +171,11 @@ async def _analysis_result_response(
         cache_read_tokens=result.cache_read_tokens,
         cache_write_tokens=result.cache_write_tokens,
         processing_time_ms=result.processing_time_ms,
+        finish_reason=result.finish_reason,
+        max_tokens_used=result.max_tokens_used,
+        system_prompt_chars=result.system_prompt_chars,
+        user_prompt_chars=result.user_prompt_chars,
+        prompt_chars_total=result.prompt_chars_total,
         created_at=result.created_at,
     )
 
@@ -203,7 +208,14 @@ async def request_analysis(
         )
         await db.commit()
         if result.enqueue_required and str(result.status) == "pending":
-            enqueue_analysis(result.analysis_id)
+            from src.infrastructure.database.models.analysis_model import AnalysisModel
+            analysis = await db.scalar(
+                sa.select(AnalysisModel).where(AnalysisModel.id == result.analysis_id)
+            )
+            if not analysis:
+                logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(result.analysis_id))
+            else:
+                enqueue_analysis(result.analysis_id)
         return AnalysisRequestResponse(analysis_id=result.analysis_id, status=result.status)
     except Exception as exc:
         await db.rollback()
@@ -347,9 +359,16 @@ async def detect_and_mark_stuck_analyses(
     - Analyses in 'pending' for 2+ hours are marked failed
     """
     try:
+        from src.infrastructure.database.connection import create_celery_async_sessionmaker
         from src.interface.workers.analysis_tasks import mark_stuck_analyses_as_failed
 
-        count = await mark_stuck_analyses_as_failed()
+        celery_engine, celery_sessionmaker = await create_celery_async_sessionmaker()
+        try:
+            count = await mark_stuck_analyses_as_failed(
+                sessionmaker=celery_sessionmaker,
+            )
+        finally:
+            await celery_engine.dispose()
         return {"success": True, "analyses_marked_failed": count}
     except Exception as exc:
         _handle_analysis_service_error(exc)
@@ -439,8 +458,15 @@ async def bulk_retry_analyses(
 
     if processed > 0:
         await db.commit()
+        from src.infrastructure.database.models.analysis_model import AnalysisModel
         for aid in to_enqueue:
-            enqueue_analysis(aid)
+            analysis = await db.scalar(
+                sa.select(AnalysisModel).where(AnalysisModel.id == aid)
+            )
+            if not analysis:
+                logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(aid))
+            else:
+                enqueue_analysis(aid)
 
     logger.info(
         "analysis.bulk_retried",
@@ -497,7 +523,13 @@ async def retry_analysis(
         await db.commit()
         await db.refresh(analysis)
 
-        enqueue_analysis(analysis.id)
+        refetched = await db.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == analysis.id)
+        )
+        if not refetched:
+            logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(analysis.id))
+        else:
+            enqueue_analysis(refetched.id)
 
         logger.info(
             "analysis.retried",

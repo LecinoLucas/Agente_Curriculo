@@ -1,9 +1,9 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { candidatesService } from "../../services/candidatesService";
-import { formatErrorDetails, handleApiError } from "../../services/errorHandler";
+import { formatErrorDetails, handleApiError } from "../../shared/utils/errorHandler";
 import { HttpError } from "../../services/http";
-import { toast } from "../../services/toast";
+import { toast } from "../../shared/utils/toast";
 import type { CandidateOverview } from "../../types/domain";
 
 interface EditCandidateModalProps {

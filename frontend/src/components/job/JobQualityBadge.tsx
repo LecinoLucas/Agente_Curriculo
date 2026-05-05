@@ -37,8 +37,6 @@ export function JobQualityBadge({ quality, loading = false, error = null, compac
     good: "Excelente",
   }[quality.status];
 
-  const canPublishLabel = quality.can_publish ? "Pronta para publicar" : "Não pode publicar";
-
   if (compact) {
     return (
       <div className={`inline-flex items-center gap-2 rounded-full border border-current border-opacity-20 px-2.5 py-1 ${config.bg}`}>
@@ -56,12 +54,9 @@ export function JobQualityBadge({ quality, loading = false, error = null, compac
   return (
     <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-full ${config.bg} border border-current border-opacity-20`}>
       <Icon className={`w-4 h-4 ${config.text}`} />
-      <div className="flex flex-col gap-0.5">
-        <span className={`text-sm font-medium ${config.text}`}>
-          {quality.quality_score}/100 • {statusLabel}
-        </span>
-        <span className={`text-xs ${config.text} opacity-75`}>{canPublishLabel}</span>
-      </div>
+      <span className={`text-sm font-medium ${config.text}`}>
+        {quality.quality_score}/100 • {statusLabel}
+      </span>
     </div>
   );
 }

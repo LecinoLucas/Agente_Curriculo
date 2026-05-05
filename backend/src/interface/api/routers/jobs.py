@@ -1,8 +1,13 @@
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+import sqlalchemy as sa
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = structlog.get_logger(__name__)
 
 from src.application.services.job_service import (
     JobSkillConflictError,
@@ -10,6 +15,7 @@ from src.application.services.job_service import (
     InvalidJobTextError,
     InvalidJobSalaryRangeError,
     JobNotFoundError,
+    JobPublicationValidationError,
     JobService,
     SkillNotFoundError,
 )
@@ -19,7 +25,11 @@ from src.application.services.job_bulk_payload_normalizer import (
     JobBulkPayloadNormalizer,
 )
 from src.application.services.job_bulk_update_service import JobBulkUpdateService
-from src.application.services.job_score_explanation_service import JobScoreExplanationService, CandidateNotLinkedToJobError
+from src.application.services.job_score_explanation_service import (
+    CandidateNotLinkedToJobError,
+    CandidateScoreExplanationNotReadyError,
+    JobScoreExplanationService,
+)
 from src.application.services.matching_observability_service import MatchingObservabilityService
 from src.application.services.job_quality_validator_service import (
     JobQualityValidatorService,
@@ -58,7 +68,6 @@ from src.interface.api.schemas.job_schemas import (
     BulkImportJobsResponse,
     BulkUpdateJobsRequest,
     BulkUpdateJobsResponse,
-    CandidateJobLinkResponse,
     CandidateScoreExplanationResponse,
     CreateJobRequest,
     JobQualityResponse,
@@ -69,6 +78,7 @@ from src.interface.api.schemas.job_schemas import (
 )
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest as PipelineAddCandidateToJobRequest,
+    AddCandidateToJobResponse as PipelineAddCandidateToJobResponse,
     JobMatchCandidateResponse,
 )
 from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse
@@ -99,33 +109,82 @@ async def _enqueue_latest_pending_analysis_for_candidate_job(
     *,
     candidate_id: UUID,
     job_id: UUID,
+    requested_by: UUID,
 ) -> None:
-    from sqlalchemy import select
-
+    from src.application.dtos.analysis_dtos import RequestAnalysisCommand
+    from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
     from src.infrastructure.database.models.analysis_model import AnalysisModel
     from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
-    from src.interface.workers.analysis_tasks import process_analysis
+    from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
+        SQLAlchemyAnalysisRepository,
+    )
+    from src.infrastructure.repositories.sqlalchemy_resume_repository import (
+        SQLAlchemyResumeRepository,
+    )
+    from src.interface.workers.analysis_dispatcher import enqueue_analysis
+
+    latest_resume_version = await db.scalar(
+        sa.select(ResumeVersionModel.id)
+        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+        .where(
+            ResumeModel.candidate_id == candidate_id,
+            ResumeModel.deleted_at.is_(None),
+        )
+        .order_by(ResumeVersionModel.uploaded_at.desc())
+        .limit(1)
+    )
+    if latest_resume_version is None:
+        return
+
+    try:
+        use_case = RequestAnalysisUseCase(
+            SQLAlchemyAnalysisRepository(db),
+            SQLAlchemyResumeRepository(db),
+        )
+        await use_case.execute(
+            RequestAnalysisCommand(
+                resume_version_id=latest_resume_version,
+                requested_by=requested_by,
+                job_id=job_id,
+                force_reanalyze=False,
+                priority=5,
+            )
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        return
 
     query = (
-        select(AnalysisModel)
+        sa.select(AnalysisModel)
         .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
         .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
         .where(
             ResumeModel.candidate_id == candidate_id,
             AnalysisModel.job_id == job_id,
+            AnalysisModel.status == "pending",
+            AnalysisModel.task_id.is_(None),
         )
         .order_by(AnalysisModel.created_at.desc())
         .limit(1)
     )
     latest_analysis = await db.scalar(query)
 
-    status_value = getattr(latest_analysis.status, "value", latest_analysis.status) if latest_analysis else None
-    if latest_analysis and status_value == "pending":
-        process_analysis.apply_async(
-            args=[str(latest_analysis.id)],
-            queue=_ANALYSIS_QUEUE,
-            priority=latest_analysis.priority,
+    if latest_analysis is not None:
+        task_id = f"analysis:{latest_analysis.id}"
+        latest_analysis.task_id = task_id
+        latest_analysis.queue_name = _ANALYSIS_QUEUE
+        latest_analysis.updated_at = datetime.now(UTC)
+        latest_analysis.failure_reason = None
+        await db.commit()
+
+        refetched = await db.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == latest_analysis.id)
         )
+        if not refetched:
+            logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(latest_analysis.id))
+        else:
+            enqueue_analysis(refetched.id)
 
 
 def _quality_validator_service(db: AsyncSession) -> JobQualityValidatorService:
@@ -186,8 +245,26 @@ def _handle_job_service_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análise do candidato não encontrada")
     if isinstance(exc, JobNotFoundForQualityError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
+    if isinstance(exc, JobPublicationValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "job_publication_validation_failed",
+                "message": "Vaga não atende os critérios mínimos para publicação.",
+                "missing_fields": exc.missing_fields,
+                "quality_score": exc.quality_score,
+                "quality_status": exc.quality_status,
+                "suggestions": exc.suggestions,
+                "warnings": exc.warnings,
+            },
+        )
     if isinstance(exc, CandidateNotLinkedToJobError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Candidato não está vinculado a esta vaga. Adicione o candidato à vaga antes de visualizar o score.")
+    if isinstance(exc, CandidateScoreExplanationNotReadyError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A explicação do score ainda não está disponível para esta vaga.",
+        )
     raise exc
 
 
@@ -198,7 +275,10 @@ async def create_job(
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
     try:
-        job = await _job_service(db).create(body, current_user.id)
+        service = _job_service(db)
+        job = await service.create(body, current_user.id)
+        if job.status == "published":
+            await service.ensure_publishable(job.id)
         await db.commit()
         await db.refresh(job)
         return JobResponse.model_validate(job)
@@ -295,6 +375,7 @@ async def get_job_quality(
             quality_score=result.quality_score,
             status=result.status,
             can_publish=result.can_publish,
+            publication_blockers=result.publication_blockers,
             missing_fields=result.missing_fields,
             suggestions=result.suggestions,
             warnings=result.warnings,
@@ -312,7 +393,10 @@ async def update_job(
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
     try:
-        job = await _job_service(db).update(job_id, body)
+        service = _job_service(db)
+        job = await service.update(job_id, body)
+        if job.status == "published":
+            await service.ensure_publishable(job.id)
         await db.commit()
         await db.refresh(job)
         return JobResponse.model_validate(job)
@@ -329,34 +413,7 @@ async def publish_job(
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
     try:
-        # Validate job quality before publishing
-        quality = await _quality_validator_service(db).validate(job_id)
-        if not quality.can_publish:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "error": "Vaga com qualidade insuficiente para publicação",
-                    "quality_score": quality.quality_score,
-                    "status": quality.status,
-                    "suggestions": quality.suggestions,
-                },
-            )
-        # Proceed with publication
-        job = await _transition_job_status(job_id, "published", db)
-
-        # Enqueue matching with existing completed analyses
-        from src.interface.workers.job_dispatcher import enqueue_job_publication_matches
-        matched_count = await enqueue_job_publication_matches(job_id)
-
-        import structlog
-        logger = structlog.get_logger(__name__)
-        logger.info(
-            "job.published.matching_enqueued",
-            job_id=str(job_id),
-            analyses_enqueued=matched_count,
-        )
-
-        return job
+        return await _transition_job_status(job_id, "published", db)
     except HTTPException:
         raise
     except Exception as exc:
@@ -478,16 +535,15 @@ async def list_job_candidates(
         raise
 
 
-@router.post("/{job_id}/candidates", response_model=CandidateJobLinkResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{job_id}/candidates", response_model=PipelineAddCandidateToJobResponse, status_code=status.HTTP_201_CREATED)
 async def link_candidate_to_job(
     job_id: UUID,
     body: AddCandidateToJobRequest,
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
-) -> CandidateJobLinkResponse:
-    """Link candidate via pipeline flow (prevents orphan candidate_job_links)."""
+) -> PipelineAddCandidateToJobResponse:
     try:
-        await _pipeline_service(db).add_candidate_to_job(
+        result = await _pipeline_service(db).add_candidate_to_job(
             candidate_id=body.candidate_id,
             body=PipelineAddCandidateToJobRequest(job_id=job_id, initial_stage="entry"),
             moved_by=current_user.id,
@@ -498,32 +554,12 @@ async def link_candidate_to_job(
                 db,
                 candidate_id=body.candidate_id,
                 job_id=job_id,
+                requested_by=current_user.id,
             )
         except Exception:
             pass
 
-        from src.infrastructure.repositories.sqlalchemy_candidate_job_link_repository import (
-            SQLAlchemyCandidateJobLinkRepository,
-        )
-
-        link = await SQLAlchemyCandidateJobLinkRepository(db).get_active_by_candidate_and_job(
-            body.candidate_id,
-            job_id,
-        )
-        if link is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Não foi possível concluir o vínculo do candidato à vaga.",
-            )
-        return CandidateJobLinkResponse(
-            id=link.id,
-            candidate_id=link.candidate_id,
-            job_id=link.job_id,
-            status=link.status,
-            source=link.source,
-            created_at=link.created_at,
-            updated_at=link.updated_at,
-        )
+        return result
     except Exception as exc:
         await db.rollback()
         _handle_job_service_error(exc)
@@ -537,11 +573,12 @@ async def remove_candidate_from_job(
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Remove candidate-job link (soft delete)."""
     try:
-        from src.application.services.candidate_job_link_service import CandidateJobLinkService
-        service = CandidateJobLinkService(db)
-        await service.unlink_candidate_from_job(candidate_id, job_id)
+        await _pipeline_service(db).remove_candidate_from_job(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            moved_by=current_user.id,
+        )
         await db.commit()
     except Exception as exc:
         await db.rollback()

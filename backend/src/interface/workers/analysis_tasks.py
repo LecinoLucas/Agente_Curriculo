@@ -1,6 +1,7 @@
 import asyncio
 import re
 import socket
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -8,6 +9,7 @@ import sqlalchemy as sa
 import structlog
 
 from src.core.settings import settings
+from src.application.services.extraction_fallbacks import enrich_analysis_result_fields
 from src.infrastructure.queue.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -17,12 +19,11 @@ _PLACEHOLDER_RESUME = (
     "O arquivo PDF ainda não foi carregado ou o texto não foi extraído."
 )
 
-MATCHING_ENQUEUE_TIMEOUT_SECONDS = 10.0
 ANALYSIS_QUEUE = "analysis"
 MAX_RESUME_PROMPT_CHARS = 2500
 MAX_JOB_PROMPT_CHARS = 700
 MAX_PROMPT_TOTAL_CHARS = 4500
-MAX_ANALYSIS_OUTPUT_TOKENS = 300
+CLAIM_STALE_AFTER = timedelta(minutes=20)
 PROMPT_INSTRUCTION = "Analise o candidato e retorne JSON válido"
 PROMPT_SUSPICIOUS_PATTERNS = (
     r"(?i)ignore\s+previous\s+instructions",
@@ -30,6 +31,41 @@ PROMPT_SUSPICIOUS_PATTERNS = (
     r"(?i)system\s*prompt",
     r"(?i)<script",
 )
+
+
+@dataclass(slots=True)
+class AnalysisFailureDetails:
+    finish_reason: str | None = None
+    raw_llm_response: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    processing_time_ms: int | None = None
+    max_tokens_used: int | None = None
+    system_prompt_chars: int | None = None
+    user_prompt_chars: int | None = None
+    prompt_chars_total: int | None = None
+    prompt_version_used: str | None = None
+
+
+class AnalysisExecutionError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: AnalysisFailureDetails,
+    ) -> None:
+        super().__init__(message)
+        self.details = details
+
+    @property
+    def is_non_retryable(self) -> bool:
+        finish_reason = (self.details.finish_reason or "").upper()
+        message = str(self).lower()
+        return finish_reason == "MAX_TOKENS" or "truncated" in message
+
+
 def _normalize_provider(provider: str) -> str:
     return provider.strip().lower()
 
@@ -194,29 +230,22 @@ def _build_minimal_user_prompt(*, resume_text: str, job_context: str) -> str:
     return (
         "INSTRUÇÃO:\n"
         f"{PROMPT_INSTRUCTION}\n\n"
+        "Responda começando diretamente com '{'.\n"
+        "Sem blocos de código. Sem explicação. Sem campos extras.\n"
+        "Use JSON minificado quando possível.\n\n"
         "DADOS:\n"
         "CURRICULO_RESUMIDO:\n"
         f"{resume_text}\n\n"
         "VAGA_RESUMIDA:\n"
         f"{job_context or 'sem contexto de vaga'}\n\n"
         "SAÍDA:\n"
-        "Apenas JSON puro e compacto. Sem texto extra.\n"
-        "Retorne EXATAMENTE estes campos (sem campos extras):\n"
+        "Apenas JSON puro e compacto.\n"
+        "Retorne EXATAMENTE estes campos:\n"
         "{\n"
         '  "overall_score": 0-100,\n'
         '  "professional_area": "technology|data|administrative|accounting|financial|commercial|operational|leadership|other",\n'
-        '  "detected_level": "intern|junior|mid|senior|lead|undefined",\n'
-        '  "education_level": "none|high_school|technical|bachelor|postgraduate|master|phd",\n'
-        '  "total_experience_years": numero,\n'
-        '  "candidate_summary": "texto curto",\n'
-        '  "strengths": ["item1","item2"],\n'
-        '  "weaknesses": ["item1","item2"],\n'
-        '  "recommendations": ["item1","item2"],\n'
-        '  "skills": ["ate 8 itens"],\n'
-        '  "tools": ["ate 8 itens"],\n'
-        '  "experiences": [{"role":"", "company":"", "duration_months":0, "key_activities":[""]}],\n'
-        '  "education": [{"level":"", "field":"", "institution":""}],\n'
-        '  "confidence": "low|medium|high"\n'
+        '  "seniority_level": "intern|junior|mid|senior|lead|undefined",\n'
+        '  "skills": ["maximo 4 skills curtas e normalizadas"]\n'
         "}"
     )
 
@@ -278,6 +307,57 @@ def _run_async(coro):
     return asyncio.run(coro)
 
 
+def _extract_failure_details(exc: Exception) -> AnalysisFailureDetails | None:
+    details = getattr(exc, "details", None)
+    if isinstance(details, AnalysisFailureDetails):
+        return details
+    return None
+
+
+def _normalize_real_ai_result(
+    result: tuple,
+    *,
+    prompt_max_tokens: int,
+    system_prompt_chars: int,
+    user_prompt_chars: int,
+    prompt_chars_total: int,
+) -> tuple[dict, str, int, int, int, int, int, str, str | None, int, int, int, int]:
+    if len(result) == 13:
+        return result
+
+    if len(result) == 8:
+        (
+            result_fields,
+            raw_response,
+            input_tokens,
+            output_tokens,
+            cache_read,
+            cache_write,
+            processing_ms,
+            prompt_version_used,
+        ) = result
+        return (
+            result_fields,
+            raw_response,
+            input_tokens,
+            output_tokens,
+            cache_read,
+            cache_write,
+            processing_ms,
+            prompt_version_used,
+            None,
+            prompt_max_tokens,
+            system_prompt_chars,
+            user_prompt_chars,
+            prompt_chars_total or system_prompt_chars + user_prompt_chars,
+        )
+
+    raise ValueError(
+        "Unexpected _run_real_ai_analysis result shape: "
+        f"expected 8 or 13 items, got {len(result)}"
+    )
+
+
 @celery_app.task(
     bind=True,
     name="src.interface.workers.analysis_tasks.process_analysis",
@@ -289,11 +369,25 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
     task_id = str(self.request.id)
 
     try:
-        return _run_async(_process_analysis_async(analysis_id, task_id))
+        result = _run_async(_process_analysis_async(analysis_id, task_id))
+
+        # Task órfã: análise não encontrada, morre silenciosamente
+        if result.get("status") == "not_found":
+            logger.warning(
+                "analysis.orphaned_task_not_found",
+                analysis_id=analysis_id,
+                task_id=task_id,
+                reason="analysis does not exist in database",
+            )
+            return result
+
+        return result
 
     except Exception as exc:
         error_str = str(exc)
         is_quota_exceeded = "status_code=429" in error_str
+        is_not_found = "not_found" in error_str.lower() or "disappeared" in error_str.lower()
+        failure_details = _extract_failure_details(exc)
 
         logger.exception(
             "analysis.task_failed",
@@ -302,7 +396,18 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
             retries=self.request.retries,
             error=error_str,
             is_quota_exceeded=is_quota_exceeded,
+            is_not_found=is_not_found,
         )
+
+        if is_not_found:
+            # Análise órfã: não existe no banco, não faz retry
+            logger.warning(
+                "analysis.orphaned_task_exception",
+                analysis_id=analysis_id,
+                task_id=task_id,
+                reason="analysis not found in database, no retry",
+            )
+            return {"analysis_id": analysis_id, "status": "not_found"}
 
         if is_quota_exceeded:
             # 429 quota exceeded: mark as failed immediately with retry_after
@@ -311,11 +416,30 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
                 analysis_id=analysis_id,
                 task_id=task_id,
             )
-            _run_async(_mark_analysis_failed(
+            _run_async(_mark_analysis_failed_async(
                 analysis_id=analysis_id,
                 task_id=task_id,
                 error=error_str,
                 retry_count=self.request.retries,
+                failure_details=failure_details,
+                expected_worker_claim_id=task_id,
+            ))
+            raise
+
+        if isinstance(exc, AnalysisExecutionError) and exc.is_non_retryable:
+            logger.warning(
+                "analysis.non_retryable_failure",
+                analysis_id=analysis_id,
+                task_id=task_id,
+                finish_reason=failure_details.finish_reason if failure_details else None,
+            )
+            _run_async(_mark_analysis_failed_async(
+                analysis_id=analysis_id,
+                task_id=task_id,
+                error=error_str,
+                retry_count=self.request.retries,
+                failure_details=failure_details,
+                expected_worker_claim_id=task_id,
             ))
             raise
 
@@ -323,27 +447,52 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
         countdown = min(300, (2**self.request.retries) * 30)
 
         if retry_count > self.max_retries:
-            _run_async(_mark_analysis_failed(
+            _run_async(_mark_analysis_failed_async(
                 analysis_id=analysis_id,
                 task_id=task_id,
                 error=error_str,
                 retry_count=self.request.retries,
+                failure_details=failure_details,
+                expected_worker_claim_id=task_id,
             ))
             raise
 
-        _run_async(_mark_analysis_retry_scheduled(
+        _run_async(_mark_analysis_retry_scheduled_async(
             analysis_id=analysis_id,
             task_id=task_id,
             error=error_str,
             retry_count=retry_count,
             countdown_seconds=countdown,
+            failure_details=failure_details,
+            expected_worker_claim_id=task_id,
         ))
 
         raise self.retry(exc=exc, countdown=countdown) from exc
 
 
 async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
-    from src.infrastructure.database.connection import get_session_factory
+    from src.infrastructure.database.connection import create_celery_async_sessionmaker
+
+    configured_max_tokens = settings.AI_MAX_TOKENS
+    celery_engine, celery_sessionmaker = await create_celery_async_sessionmaker()
+
+    try:
+        return await _process_analysis_with_session(
+            analysis_id=analysis_id,
+            task_id=task_id,
+            sessionmaker=celery_sessionmaker,
+            configured_max_tokens=configured_max_tokens,
+        )
+    finally:
+        await celery_engine.dispose()
+
+
+async def _process_analysis_with_session(
+    analysis_id: str,
+    task_id: str,
+    sessionmaker,
+    configured_max_tokens: int | None = None,
+) -> dict:
     from src.infrastructure.database.models.analysis_model import (
         AIModelModel,
         AnalysisModel,
@@ -357,9 +506,41 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
         raise RuntimeError(f"Invalid analysis_id: {analysis_id}") from exc
 
     worker_id = f"{socket.gethostname()}:{task_id}"
-    SessionFactory = get_session_factory()
 
-    async with SessionFactory() as session:
+    claimed = await _claim_analysis_for_processing(
+        analysis_id=analysis_uuid,
+        task_id=task_id,
+        worker_id=worker_id,
+        sessionmaker=sessionmaker,
+    )
+    if not claimed:
+        current_status = await _load_analysis_status(
+            analysis_id=analysis_uuid,
+            sessionmaker=sessionmaker,
+        )
+        if current_status is None:
+            logger.warning("analysis.not_found", analysis_id=str(analysis_uuid))
+            return {"analysis_id": str(analysis_uuid), "status": "not_found"}
+        if current_status in {"completed", "failed", "cancelled"}:
+            logger.info(
+                "analysis.skipped_terminal",
+                analysis_id=str(analysis_uuid),
+                status=current_status,
+            )
+            return {"analysis_id": str(analysis_uuid), "status": current_status}
+        logger.info(
+            "analysis.claim_skipped",
+            analysis_id=str(analysis_uuid),
+            status=current_status,
+            task_id=task_id,
+        )
+        return {
+            "analysis_id": str(analysis_uuid),
+            "status": "claim_skipped",
+            "current_status": current_status,
+        }
+
+    async with sessionmaker() as session:
         row = await session.execute(
             sa.select(
                 AnalysisModel,
@@ -385,18 +566,14 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
         fetched = row.first()
 
         if fetched is None:
-            logger.warning("analysis.not_found", analysis_id=str(analysis_uuid))
+            logger.warning(
+                "analysis.disappeared_after_claim",
+                analysis_id=str(analysis_uuid),
+                task_id=task_id,
+            )
             return {"analysis_id": str(analysis_uuid), "status": "not_found"}
 
         analysis, version, prompt_tpl, ai_model = fetched
-
-        if analysis.status not in {"pending", "processing"}:
-            logger.info(
-                "analysis.skipped_terminal",
-                analysis_id=str(analysis_uuid),
-                status=analysis.status,
-            )
-            return {"analysis_id": str(analysis_uuid), "status": analysis.status}
 
         resume_text = version.extracted_text
 
@@ -410,26 +587,13 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
                 "Resume text contém placeholder. O PDF ainda não foi extraído."
             )
 
-        now = datetime.now(UTC)
-
-        analysis.status = "processing"
-        analysis.started_at = now
-        analysis.worker_id = worker_id
-        analysis.task_id = task_id
-        analysis.queue_name = ANALYSIS_QUEUE
-        analysis.failure_reason = None
-        analysis.failed_at = None
-        analysis.next_retry_at = None
-        analysis.updated_at = now
-
-        await session.commit()
-
         provider = ai_model.provider
         model_id = ai_model.model_id
         prompt_version = str(prompt_tpl.version)
+        max_tokens_cap = configured_max_tokens or settings.AI_MAX_TOKENS
         prompt_max_tokens = min(
-            int(prompt_tpl.max_tokens or settings.AI_MAX_TOKENS),
-            settings.AI_MAX_TOKENS,
+            int(prompt_tpl.max_tokens or max_tokens_cap),
+            max_tokens_cap,
             settings.AI_ANALYSIS_MAX_OUTPUT_TOKENS,
         )
         prompt_temperature = float(prompt_tpl.temperature)
@@ -465,16 +629,7 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
         raise RuntimeError("ALLOW_AI_TOKEN_SPEND is False. Real AI calls are blocked.")
 
     else:
-        (
-            result_fields,
-            raw_response,
-            input_tokens,
-            output_tokens,
-            cache_read,
-            cache_write,
-            processing_ms,
-            prompt_version_used,
-        ) = await _run_real_ai_analysis(
+        ai_result = await _run_real_ai_analysis(
             analysis_id=str(analysis_uuid),
             provider=provider,
             model_id=model_id,
@@ -484,9 +639,31 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
             prompt_temperature=prompt_temperature,
             job_id=job_id,
             queue_name=queue_name,
+            sessionmaker=sessionmaker,
+        )
+        (
+            result_fields,
+            raw_response,
+            input_tokens,
+            output_tokens,
+            cache_read,
+            cache_write,
+            processing_ms,
+            prompt_version_used,
+            finish_reason,
+            max_tokens_used,
+            system_prompt_chars,
+            user_prompt_chars,
+            prompt_chars_total,
+        ) = _normalize_real_ai_result(
+            ai_result,
+            prompt_max_tokens=prompt_max_tokens,
+            system_prompt_chars=len(PROMPT_INSTRUCTION),
+            user_prompt_chars=0,
+            prompt_chars_total=0,
         )
 
-    await _persist_completed_analysis(
+    persisted = await _persist_completed_analysis(
         analysis_id=analysis_uuid,
         result_fields=result_fields,
         raw_response=raw_response,
@@ -496,19 +673,21 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
         cache_write=cache_write,
         processing_ms=processing_ms,
         prompt_version_used=prompt_version_used,
+        finish_reason=finish_reason,
+        max_tokens_used=max_tokens_used,
+        system_prompt_chars=system_prompt_chars,
+        user_prompt_chars=user_prompt_chars,
+        prompt_chars_total=prompt_chars_total,
+        expected_worker_claim_id=task_id,
+        sessionmaker=sessionmaker,
     )
-
-    try:
-        await asyncio.wait_for(
-            _enqueue_matching_pipeline(str(analysis_uuid)),
-            timeout=MATCHING_ENQUEUE_TIMEOUT_SECONDS,
-        )
-    except Exception as exc:
-        logger.exception(
-            "analysis.matching_enqueue_failed_after_completion",
+    if not persisted:
+        logger.warning(
+            "analysis.persist_skipped_claim_lost",
             analysis_id=str(analysis_uuid),
-            error=str(exc),
+            task_id=task_id,
         )
+        return {"analysis_id": str(analysis_uuid), "status": "claim_lost"}
 
     logger.info(
         "analysis.processing_completed",
@@ -526,6 +705,79 @@ async def _process_analysis_async(analysis_id: str, task_id: str) -> dict:
     return {"analysis_id": str(analysis_uuid), "status": "completed"}
 
 
+async def _claim_analysis_for_processing(
+    *,
+    analysis_id: UUID,
+    task_id: str,
+    worker_id: str,
+    sessionmaker,
+) -> bool:
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+
+    now = datetime.now(UTC)
+    stale_cutoff = now - CLAIM_STALE_AFTER
+
+    async with sessionmaker() as session:
+        claim_result = await session.execute(
+            sa.update(AnalysisModel)
+            .where(
+                AnalysisModel.id == analysis_id,
+                sa.or_(
+                    AnalysisModel.status == "pending",
+                    sa.and_(
+                        AnalysisModel.status == "processing",
+                        sa.or_(
+                            AnalysisModel.claimed_at.is_(None),
+                            AnalysisModel.claimed_at < stale_cutoff,
+                            sa.and_(
+                                AnalysisModel.stale_at.is_not(None),
+                                AnalysisModel.stale_at < now,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            .values(
+                status="processing",
+                started_at=now,
+                claimed_at=now,
+                stale_at=now + CLAIM_STALE_AFTER,
+                worker_claim_id=task_id,
+                worker_id=worker_id,
+                task_id=task_id,
+                queue_name=ANALYSIS_QUEUE,
+                failure_reason=None,
+                failed_at=None,
+                next_retry_at=None,
+                updated_at=now,
+            )
+        )
+        claimed = int(claim_result.rowcount or 0) > 0
+
+        if claimed:
+            await session.commit()
+        else:
+            await session.rollback()
+
+        return claimed
+
+
+async def _load_analysis_status(
+    *,
+    analysis_id: UUID,
+    sessionmaker,
+) -> str | None:
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+
+    async with sessionmaker() as session:
+        analysis = await session.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+        )
+        if analysis is None:
+            return None
+        return str(analysis.status)
+
+
 async def _run_real_ai_analysis(
     *,
     analysis_id: str,
@@ -537,19 +789,18 @@ async def _run_real_ai_analysis(
     prompt_temperature: float,
     job_id,
     queue_name: str,
-) -> tuple[dict, str, int, int, int, int, int, str]:
+    sessionmaker,
+) -> tuple[dict, str, int, int, int, int, int, str, str | None, int, int, int, int]:
     from src.application.ports.ai_service import AIAnalysisRequest
     from src.infrastructure.ai.factory import AIServiceFactory
     from src.infrastructure.ai.response_parser import parse_analysis_response
-    from src.infrastructure.database.connection import get_session_factory
     from src.infrastructure.database.models.job_model import JobModel
 
-    prompt_version_used = f"{prompt_version or 'unknown'}:gemini_safety_minimal_v2"
+    prompt_version_used = f"{prompt_version or 'unknown'}:gemini_minimal_compact_v2"
     compact_job_context = ""
 
     if job_id:
-        SessionFactory = get_session_factory()
-        async with SessionFactory() as session:
+        async with sessionmaker() as session:
             job = await session.scalar(sa.select(JobModel).where(JobModel.id == job_id))
 
             if job is not None:
@@ -586,7 +837,7 @@ async def _run_real_ai_analysis(
         resume_text=compact_resume_text,
         system_prompt=PROMPT_INSTRUCTION,
         prompt_template=user_prompt,
-        max_tokens=min(prompt_max_tokens, MAX_ANALYSIS_OUTPUT_TOKENS),
+        max_tokens=prompt_max_tokens,
         temperature=prompt_temperature,
         job_description=None,
         queue_name=queue_name,
@@ -611,13 +862,37 @@ async def _run_real_ai_analysis(
             timeout=settings.AI_PROVIDER_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
-        raise RuntimeError(
+        raise AnalysisExecutionError(
             f"AI provider call timed out after {settings.AI_PROVIDER_TIMEOUT_SECONDS}s "
-            f"for analysis {analysis_id}"
+            f"for analysis {analysis_id}",
+            details=AnalysisFailureDetails(
+                max_tokens_used=ai_request.max_tokens,
+                system_prompt_chars=len(PROMPT_INSTRUCTION),
+                user_prompt_chars=len(user_prompt),
+                prompt_chars_total=len(PROMPT_INSTRUCTION) + len(user_prompt),
+                prompt_version_used=prompt_version_used,
+            ),
+        ) from exc
+    except Exception as exc:
+        raise AnalysisExecutionError(
+            str(exc),
+            details=AnalysisFailureDetails(
+                finish_reason=getattr(exc, "finish_reason", None),
+                raw_llm_response=getattr(exc, "raw_response", None),
+                input_tokens=getattr(exc, "input_tokens", None),
+                output_tokens=getattr(exc, "output_tokens", None),
+                processing_time_ms=getattr(exc, "processing_time_ms", None),
+                max_tokens_used=ai_request.max_tokens,
+                system_prompt_chars=len(PROMPT_INSTRUCTION),
+                user_prompt_chars=len(user_prompt),
+                prompt_chars_total=len(PROMPT_INSTRUCTION) + len(user_prompt),
+                prompt_version_used=prompt_version_used,
+            ),
         ) from exc
 
     try:
         result_fields = parse_analysis_response(ai_response.content)
+        result_fields = enrich_analysis_result_fields(result_fields, resume_text)
     except Exception as exc:
         logger.exception(
             "analysis.parse_failed",
@@ -625,7 +900,23 @@ async def _run_real_ai_analysis(
             response_preview=(ai_response.content or "")[:500],
             error=str(exc),
         )
-        raise RuntimeError("Failed to parse AI response") from exc
+        raise AnalysisExecutionError(
+            "Failed to parse AI response",
+            details=AnalysisFailureDetails(
+                finish_reason=ai_response.finish_reason,
+                raw_llm_response=ai_response.content,
+                input_tokens=ai_response.input_tokens,
+                output_tokens=ai_response.output_tokens,
+                cache_read_tokens=ai_response.cache_read_tokens,
+                cache_write_tokens=ai_response.cache_write_tokens,
+                processing_time_ms=ai_response.processing_time_ms,
+                max_tokens_used=ai_request.max_tokens,
+                system_prompt_chars=len(PROMPT_INSTRUCTION),
+                user_prompt_chars=len(user_prompt),
+                prompt_chars_total=len(PROMPT_INSTRUCTION) + len(user_prompt),
+                prompt_version_used=prompt_version_used,
+            ),
+        ) from exc
 
     _validate_result_fields(result_fields)
 
@@ -638,6 +929,11 @@ async def _run_real_ai_analysis(
         ai_response.cache_write_tokens,
         ai_response.processing_time_ms,
         prompt_version_used,
+        ai_response.finish_reason,
+        ai_request.max_tokens,
+        len(PROMPT_INSTRUCTION),
+        len(user_prompt),
+        len(PROMPT_INSTRUCTION) + len(user_prompt),
     )
 
 
@@ -680,15 +976,20 @@ async def _persist_completed_analysis(
     cache_write: int,
     processing_ms: int,
     prompt_version_used: str,
-) -> None:
-    from src.infrastructure.database.connection import get_session_factory
+    finish_reason: str | None = None,
+    max_tokens_used: int | None = None,
+    system_prompt_chars: int | None = None,
+    user_prompt_chars: int | None = None,
+    prompt_chars_total: int | None = None,
+    expected_worker_claim_id: str | None = None,
+    sessionmaker,
+) -> bool:
     from src.infrastructure.database.models.analysis_model import (
         AnalysisModel,
         AnalysisResultModel,
     )
 
-    SessionFactory = get_session_factory()
-    async with SessionFactory() as session:
+    async with sessionmaker() as session:
         analysis = await session.scalar(
             sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
         )
@@ -701,14 +1002,26 @@ async def _persist_completed_analysis(
                 "analysis.cancelled_mid_flight",
                 analysis_id=str(analysis_id),
             )
-            return
+            await session.rollback()
+            return False
 
         if analysis.status == "completed":
             logger.warning(
                 "analysis.already_completed_race_condition",
                 analysis_id=str(analysis_id),
             )
-            return
+            await session.rollback()
+            return False
+
+        if expected_worker_claim_id is not None and analysis.worker_claim_id != expected_worker_claim_id:
+            logger.warning(
+                "analysis.persist_claim_mismatch",
+                analysis_id=str(analysis_id),
+                expected_worker_claim_id=expected_worker_claim_id,
+                actual_worker_claim_id=analysis.worker_claim_id,
+            )
+            await session.rollback()
+            return False
 
         existing_result = await session.scalar(
             sa.select(AnalysisResultModel).where(
@@ -738,6 +1051,11 @@ async def _persist_completed_analysis(
             "cache_read_tokens": cache_read,
             "cache_write_tokens": cache_write,
             "processing_time_ms": processing_ms,
+            "finish_reason": finish_reason,
+            "max_tokens_used": max_tokens_used,
+            "system_prompt_chars": system_prompt_chars,
+            "user_prompt_chars": user_prompt_chars,
+            "prompt_chars_total": prompt_chars_total,
             "raw_llm_response": raw_response,
             "prompt_version_used": prompt_version_used,
         }
@@ -760,21 +1078,13 @@ async def _persist_completed_analysis(
         analysis.failure_reason = None
         analysis.failed_at = None
         analysis.next_retry_at = None
+        analysis.worker_claim_id = None
+        analysis.claimed_at = None
+        analysis.stale_at = None
         analysis.updated_at = now
 
         await session.commit()
-
-
-async def _enqueue_matching_pipeline(analysis_id: str) -> None:
-    from src.interface.workers.matching_dispatcher import enqueue_published_job_matches
-
-    matched = await enqueue_published_job_matches(UUID(analysis_id))
-
-    logger.info(
-        "analysis.matching_enqueued",
-        analysis_id=analysis_id,
-        matching_jobs=matched,
-    )
+        return True
 
 
 async def _mark_analysis_retry_scheduled(
@@ -784,35 +1094,64 @@ async def _mark_analysis_retry_scheduled(
     error: str,
     retry_count: int,
     countdown_seconds: int,
-) -> None:
-    from src.infrastructure.database.connection import get_session_factory
+    failure_details: AnalysisFailureDetails | None = None,
+    expected_worker_claim_id: str | None = None,
+    sessionmaker=None,
+) -> bool:
     from src.infrastructure.database.models.analysis_model import AnalysisModel
+    from src.infrastructure.database.connection import get_session_factory
 
+    owns_sessionmaker = sessionmaker is None
     try:
         analysis_uuid = UUID(str(analysis_id))
     except ValueError:
-        return
+        return False
 
-    SessionFactory = get_session_factory()
-    async with SessionFactory() as session:
-        analysis = await session.scalar(
-            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_uuid)
+    if owns_sessionmaker:
+        sessionmaker = get_session_factory()
+
+    try:
+        async with sessionmaker() as session:
+            analysis = await session.scalar(
+                sa.select(AnalysisModel).where(AnalysisModel.id == analysis_uuid)
+            )
+
+            if analysis is None:
+                return False
+
+            if expected_worker_claim_id is not None and analysis.worker_claim_id != expected_worker_claim_id:
+                await session.rollback()
+                return False
+
+            now = datetime.now(UTC)
+            await _upsert_failure_result(
+                session=session,
+                analysis_id=analysis_uuid,
+                failure_details=failure_details,
+            )
+
+            analysis.status = "pending"
+            analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
+            analysis.retry_count = retry_count
+            analysis.failure_reason = error[:1000]
+            analysis.failed_at = None
+            analysis.next_retry_at = now + timedelta(seconds=countdown_seconds)
+            analysis.worker_claim_id = None
+            analysis.claimed_at = None
+            analysis.stale_at = None
+            analysis.updated_at = now
+
+            await session.commit()
+            return True
+    except (RuntimeError, sa.exc.SQLAlchemyError):
+        if not owns_sessionmaker:
+            raise
+        logger.warning(
+            "analysis.retry_state_persist_skipped",
+            analysis_id=analysis_id,
+            task_id=task_id,
         )
-
-        if analysis is None:
-            return
-
-        now = datetime.now(UTC)
-
-        analysis.status = "pending"
-        analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
-        analysis.retry_count = retry_count
-        analysis.failure_reason = error[:1000]
-        analysis.failed_at = None
-        analysis.next_retry_at = now + timedelta(seconds=countdown_seconds)
-        analysis.updated_at = now
-
-        await session.commit()
+        return False
 
 
 async def _mark_analysis_failed(
@@ -821,64 +1160,91 @@ async def _mark_analysis_failed(
     task_id: str | None,
     error: str,
     retry_count: int,
-) -> None:
-    from src.infrastructure.database.connection import get_session_factory
+    failure_details: AnalysisFailureDetails | None = None,
+    expected_worker_claim_id: str | None = None,
+    sessionmaker=None,
+) -> bool:
     from src.infrastructure.database.models.analysis_model import AnalysisModel
+    from src.infrastructure.database.connection import get_session_factory
 
+    owns_sessionmaker = sessionmaker is None
     try:
         analysis_uuid = UUID(str(analysis_id))
     except ValueError:
-        return
+        return False
 
-    SessionFactory = get_session_factory()
-    async with SessionFactory() as session:
-        analysis = await session.scalar(
-            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_uuid)
+    if owns_sessionmaker:
+        sessionmaker = get_session_factory()
+
+    try:
+        async with sessionmaker() as session:
+            analysis = await session.scalar(
+                sa.select(AnalysisModel).where(AnalysisModel.id == analysis_uuid)
+            )
+
+            if analysis is None:
+                return False
+
+            if expected_worker_claim_id is not None and analysis.worker_claim_id != expected_worker_claim_id:
+                await session.rollback()
+                return False
+
+            now = datetime.now(UTC)
+            await _upsert_failure_result(
+                session=session,
+                analysis_id=analysis_uuid,
+                failure_details=failure_details,
+            )
+
+            analysis.status = "failed"
+            analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
+            analysis.queue_name = ANALYSIS_QUEUE
+            analysis.retry_count = retry_count
+
+            # Use friendly message for quota errors, full error for others
+            if "status_code=429" in error:
+                analysis.failure_reason = "Limite de uso da IA atingido. " + error[:500]
+            else:
+                analysis.failure_reason = error[:1000]
+
+            analysis.failed_at = now
+            cooldown_seconds = _extract_rate_limit_retry_after_seconds(error)
+            if cooldown_seconds is not None:
+                analysis.next_retry_at = now + timedelta(seconds=cooldown_seconds)
+            else:
+                analysis.next_retry_at = None
+            analysis.worker_claim_id = None
+            analysis.claimed_at = None
+            analysis.stale_at = None
+            analysis.updated_at = now
+
+            await session.commit()
+            logger.info(
+                "analysis.worker_completed",
+                analysis_id=str(analysis_uuid),
+                task_id=str(task_id) if task_id is not None else None,
+                queue=ANALYSIS_QUEUE,
+                status="failed",
+            )
+            return True
+    except (RuntimeError, sa.exc.SQLAlchemyError):
+        if not owns_sessionmaker:
+            raise
+        logger.warning(
+            "analysis.failed_state_persist_skipped",
+            analysis_id=analysis_id,
+            task_id=task_id,
         )
-
-        if analysis is None:
-            return
-
-        now = datetime.now(UTC)
-
-        analysis.status = "failed"
-        analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
-        analysis.queue_name = ANALYSIS_QUEUE
-        analysis.retry_count = retry_count
-
-        # Use friendly message for quota errors, full error for others
-        if "status_code=429" in error:
-            analysis.failure_reason = "Limite de uso da IA atingido. " + error[:500]
-        else:
-            analysis.failure_reason = error[:1000]
-
-        analysis.failed_at = now
-        cooldown_seconds = _extract_rate_limit_retry_after_seconds(error)
-        if cooldown_seconds is not None:
-            analysis.next_retry_at = now + timedelta(seconds=cooldown_seconds)
-        else:
-            analysis.next_retry_at = None
-        analysis.updated_at = now
-
-        await session.commit()
-        logger.info(
-            "analysis.worker_completed",
-            analysis_id=str(analysis_uuid),
-            task_id=str(task_id) if task_id is not None else None,
-            queue=ANALYSIS_QUEUE,
-            status="failed",
-        )
+        return False
 
 
-async def mark_stuck_analyses_as_failed() -> int:
-    from src.infrastructure.database.connection import get_session_factory
+async def mark_stuck_analyses_as_failed(*, sessionmaker) -> int:
     from src.infrastructure.database.models.analysis_model import AnalysisModel
 
     marked_count = 0
     now = datetime.now(UTC)
 
-    SessionFactory = get_session_factory()
-    async with SessionFactory() as session:
+    async with sessionmaker() as session:
         processing_threshold = now - timedelta(minutes=20)
 
         processing_stuck = await session.execute(
@@ -941,25 +1307,105 @@ async def mark_stuck_analyses_as_failed() -> int:
     return marked_count
 
 
-def _dev_fallback_scores(analysis_id: str) -> dict:
-    seed = UUID(analysis_id).int % 35
-    overall = min(98.0, 60 + seed)
+async def _mark_analysis_retry_scheduled_async(
+    *,
+    analysis_id: str,
+    task_id: str | None,
+    error: str,
+    retry_count: int,
+    countdown_seconds: int,
+    failure_details: AnalysisFailureDetails | None = None,
+    expected_worker_claim_id: str | None = None,
+) -> None:
+    from src.infrastructure.database.connection import create_celery_async_sessionmaker
 
-    return {
-        "overall_score": overall,
-        "technical_score": None,
-        "experience_score": None,
-        "education_score": None,
-        "communication_score": None,
-        "leadership_score": None,
-        "candidate_summary": "[MOCK] Resultado simulado para desenvolvimento. Não representa análise real.",
-        "seniority_level": "mid" if overall < 80 else "senior",
-        "total_experience_years": 4.0 if overall < 80 else 6.0,
-        "highest_education_level": "bachelor",
-        "highest_education_field": "computacao",
-        "strengths": ["mock: fundamentos tecnicos", "mock: boa comunicacao"],
-        "weaknesses": ["mock: pouca evidencia de lideranca formal"],
-        "recommendations": ["mock: revisar com ia real"],
-        "keywords": ["python", "sql", "api", "backend"],
-        "extracted_data": {"source": "dev_fallback"},
+    celery_engine, celery_sessionmaker = await create_celery_async_sessionmaker()
+
+    try:
+        await _mark_analysis_retry_scheduled(
+            analysis_id=analysis_id,
+            task_id=task_id,
+            error=error,
+            retry_count=retry_count,
+            countdown_seconds=countdown_seconds,
+            failure_details=failure_details,
+            expected_worker_claim_id=expected_worker_claim_id,
+            sessionmaker=celery_sessionmaker,
+        )
+    finally:
+        await celery_engine.dispose()
+
+
+async def _mark_analysis_failed_async(
+    *,
+    analysis_id: str,
+    task_id: str | None,
+    error: str,
+    retry_count: int,
+    failure_details: AnalysisFailureDetails | None = None,
+    expected_worker_claim_id: str | None = None,
+) -> None:
+    from src.infrastructure.database.connection import create_celery_async_sessionmaker
+
+    celery_engine, celery_sessionmaker = await create_celery_async_sessionmaker()
+
+    try:
+        await _mark_analysis_failed(
+            analysis_id=analysis_id,
+            task_id=task_id,
+            error=error,
+            retry_count=retry_count,
+            failure_details=failure_details,
+            expected_worker_claim_id=expected_worker_claim_id,
+            sessionmaker=celery_sessionmaker,
+        )
+    finally:
+        await celery_engine.dispose()
+
+
+async def _upsert_failure_result(
+    *,
+    session,
+    analysis_id: UUID,
+    failure_details: AnalysisFailureDetails | None,
+) -> None:
+    from src.infrastructure.database.models.analysis_model import AnalysisResultModel
+
+    if failure_details is None:
+        return
+
+    existing_result = await session.scalar(
+        sa.select(AnalysisResultModel).where(AnalysisResultModel.analysis_id == analysis_id)
+    )
+
+    payload = {
+        "input_tokens": failure_details.input_tokens,
+        "output_tokens": failure_details.output_tokens,
+        "cache_read_tokens": failure_details.cache_read_tokens,
+        "cache_write_tokens": failure_details.cache_write_tokens,
+        "processing_time_ms": failure_details.processing_time_ms,
+        "finish_reason": failure_details.finish_reason,
+        "max_tokens_used": failure_details.max_tokens_used,
+        "system_prompt_chars": failure_details.system_prompt_chars,
+        "user_prompt_chars": failure_details.user_prompt_chars,
+        "prompt_chars_total": failure_details.prompt_chars_total,
+        "raw_llm_response": failure_details.raw_llm_response,
+        "prompt_version_used": failure_details.prompt_version_used,
     }
+
+    if existing_result is None:
+        session.add(
+            AnalysisResultModel(
+                analysis_id=analysis_id,
+                strengths=[],
+                weaknesses=[],
+                recommendations=[],
+                keywords=[],
+                extracted_data={},
+                **payload,
+            )
+        )
+        return
+
+    for key, value in payload.items():
+        setattr(existing_result, key, value)

@@ -1,8 +1,11 @@
 from collections.abc import AsyncGenerator
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
+import sqlalchemy as sa
+from sqlalchemy import event
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -36,9 +39,28 @@ test_engine = create_async_engine(
     poolclass=StaticPool,
 )
 
+
+@event.listens_for(test_engine.sync_engine, "connect")
+def _register_sqlite_functions(dbapi_connection: object, _connection_record: object) -> None:
+    # Emular NOW() do PostgreSQL para defaults server-side nos modelos.
+    if hasattr(dbapi_connection, "create_function"):
+        dbapi_connection.create_function(
+            "NOW",
+            0,
+            lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
 TestSessionFactory = async_sessionmaker(
     test_engine, class_=AsyncSession, expire_on_commit=False
 )
+
+
+async def _clear_database(session: AsyncSession) -> None:
+    # Isola os testes mesmo quando chamam commit(), limpando o estado global
+    # do banco em memória compartilhado pelo StaticPool.
+    for table in reversed(Base.metadata.sorted_tables):
+        await session.execute(sa.delete(table))
+    await session.commit()
 
 
 @pytest.fixture(autouse=True)
@@ -75,8 +97,12 @@ async def create_tables() -> AsyncGenerator[None, None]:
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with TestSessionFactory() as session:
-        yield session
-        await session.rollback()  # cada teste parte de estado limpo
+        await _clear_database(session)
+        try:
+            yield session
+        finally:
+            await session.rollback()
+            await _clear_database(session)
 
 
 @pytest_asyncio.fixture

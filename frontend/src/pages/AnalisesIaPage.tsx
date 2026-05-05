@@ -164,11 +164,12 @@ export function AnalisesIaPage() {
           candidateId: item.candidate_id,
           analysisId: response.analysis_id,
           status: "pending",
+          jobId: item.job_id,
         });
       } else {
         fetchData();
       }
-      startPolling(response.analysis_id, item.candidate_id, "pending");
+      startPolling(response.analysis_id, item.candidate_id, "pending", item.job_id);
       feedback.reprocessAnalysis.success();
     } catch (err) {
       feedback.reprocessAnalysis.error(err);

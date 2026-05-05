@@ -13,7 +13,7 @@ import {
   type MatchingObservabilityJobItem,
   type MatchingObservabilitySummary,
 } from "../services/matchingObservabilityService";
-import { handleApiError, type UserFriendlyError } from "../services/errorHandler";
+import { handleApiError, type UserFriendlyError } from "../shared/utils/errorHandler";
 
 function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;

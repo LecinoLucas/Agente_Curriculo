@@ -477,6 +477,8 @@ async def test_bulk_import_normalizes_job_area_english_value(
     db_session: AsyncSession,
 ):
     """Test that job_area='data' (English) is accepted and stored as 'data'."""
+    await _create_skill(db_session, "Contas a pagar", "contas a pagar")
+    await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
     await _create_active_user(db_session, "bulk-job-area-en@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-job-area-en@test.com", "password123")
 
@@ -507,6 +509,8 @@ async def test_bulk_import_normalizes_job_area_portuguese_value(
     db_session: AsyncSession,
 ):
     """Test that job_area='Dados' (Portuguese) is accepted and normalized to 'data'."""
+    await _create_skill(db_session, "Contas a pagar", "contas a pagar")
+    await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
     await _create_active_user(db_session, "bulk-job-area-pt@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-job-area-pt@test.com", "password123")
 
@@ -537,6 +541,8 @@ async def test_bulk_import_normalizes_job_area_portuguese_lowercase(
     db_session: AsyncSession,
 ):
     """Test that job_area='dados' (lowercase Portuguese) is also normalized to 'data'."""
+    await _create_skill(db_session, "Contas a pagar", "contas a pagar")
+    await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
     await _create_active_user(db_session, "bulk-job-area-pt-lower@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-job-area-pt-lower@test.com", "password123")
 

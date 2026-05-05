@@ -9,7 +9,6 @@ from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
 from src.interface.api.schemas.candidate_schemas import (
     CandidateActiveJobResponse,
     CandidateCheckResponse,
-    CandidateJobLinkResponse,
     CandidateJobMatchSummaryResponse,
     CandidateListSummaryResponse,
     CandidateLatestAnalysisPipelineResponse,
@@ -148,17 +147,13 @@ class CandidateService:
         candidate = await self.get(candidate_id)
         resume_rows = await self._repository.list_resume_summaries(candidate_id)
         match_rows = await self._repository.list_top_job_matches(candidate_id)
-        job_link_rows = await self._repository.list_candidate_job_links(candidate_id)
         pipeline_rows = await self._repository.list_pipeline_entries(candidate_id)
         active_pipeline_row = pipeline_rows[0] if pipeline_rows else None
         active_job_id = active_pipeline_row["job_id"] if active_pipeline_row is not None else None
 
-        latest_analysis_row = None
-        if active_job_id is not None:
-            latest_analysis_row = await self._repository.find_latest_analysis_summary_for_job(
-                candidate_id,
-                active_job_id,
-            )
+        latest_analysis_row = await self._repository.find_latest_analysis_summary(candidate_id)
+        if latest_analysis_row is None and active_job_id is not None:
+            latest_analysis_row = await self._repository.find_latest_analysis_summary_for_job(candidate_id, active_job_id)
 
         latest_analysis = (
             CandidateLatestAnalysisResponse(**latest_analysis_row)
@@ -167,25 +162,36 @@ class CandidateService:
         )
         latest_analysis_pipeline = None
         if latest_analysis is not None:
-            published_jobs_total = await self._repository.count_published_jobs()
-            matched_jobs_count = await self._repository.count_published_matches_for_analysis(
-                latest_analysis.analysis_id
+            target_job_id = latest_analysis.job_id
+            has_persisted_match = False
+            if target_job_id is not None:
+                has_persisted_match = (
+                    await self._repository.find_candidate_job_match_for_analysis(
+                        latest_analysis.analysis_id,
+                        target_job_id,
+                    )
+                ) is not None
+
+            published_jobs_total = 1 if target_job_id is not None else 0
+            matched_jobs_count = 1 if has_persisted_match else 0
+            pending_jobs_count = (
+                1 if target_job_id is not None and not has_persisted_match else 0
             )
-            pending_jobs_count = max(published_jobs_total - matched_jobs_count, 0)
 
             if latest_analysis.status in {"failed", "cancelled"}:
                 matching_status = "blocked"
             elif latest_analysis.status != "completed":
                 matching_status = "waiting_analysis"
-            elif published_jobs_total == 0:
+            elif target_job_id is None:
                 matching_status = "idle"
-            elif pending_jobs_count > 0:
-                matching_status = "processing"
-            else:
+            elif has_persisted_match:
                 matching_status = "completed"
+            else:
+                matching_status = "idle"
 
             latest_analysis_pipeline = CandidateLatestAnalysisPipelineResponse(
                 analysis_id=latest_analysis.analysis_id,
+                job_id=target_job_id,
                 matching_status=matching_status,
                 published_jobs_total=published_jobs_total,
                 matched_jobs_count=matched_jobs_count,
@@ -214,10 +220,6 @@ class CandidateService:
                 if active_pipeline_row is not None
                 else None
             ),
-            candidate_job_links=[
-                CandidateJobLinkResponse(**row)
-                for row in job_link_rows
-            ],
             pipeline_entries=[
                 CandidatePipelineEntryResponse(
                     candidate_id=row["candidate_id"],
@@ -231,11 +233,6 @@ class CandidateService:
                 for row in pipeline_rows
             ],
         )
-
-    async def list_job_links(self, candidate_id: UUID) -> list[CandidateJobLinkResponse]:
-        await self.get(candidate_id)
-        rows = await self._repository.list_candidate_job_links(candidate_id)
-        return [CandidateJobLinkResponse(**row) for row in rows]
 
     async def update(self, candidate_id: UUID, body: UpdateCandidateRequest) -> CandidateModel:
         candidate = await self.get(candidate_id)

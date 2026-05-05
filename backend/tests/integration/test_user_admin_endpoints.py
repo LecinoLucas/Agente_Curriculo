@@ -109,7 +109,7 @@ async def test_recruiter_cannot_create_user(client: AsyncClient, db_session: Asy
         "/api/v1/users",
         json={
             "email": "new-user@test.com",
-            "password": "password123",
+            "temporary_password": "password123",
             "full_name": "New User",
             "role": "viewer",
         },
@@ -133,25 +133,25 @@ async def test_admin_can_manage_user_lifecycle(client: AsyncClient, db_session: 
         "/api/v1/users",
         json={
             "email": "MANAGED.USER@TEST.COM",
-            "password": "password123",
+            "temporary_password": "password123",
             "full_name": "Managed User",
-            "role": "candidate",
+            "role": "viewer",
         },
         headers=headers,
     )
     assert create.status_code == 201
     created = create.json()
     assert created["email"] == "managed.user@test.com"
-    assert created["status"] == "pending_verification"
+    assert created["status"] == "active"
 
     user_id = created["id"]
     duplicate = await client.post(
         "/api/v1/users",
         json={
             "email": "managed.user@test.com",
-            "password": "password123",
+            "temporary_password": "password123",
             "full_name": "Duplicate User",
-            "role": "candidate",
+            "role": "viewer",
         },
         headers=headers,
     )

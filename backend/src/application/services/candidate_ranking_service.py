@@ -9,19 +9,30 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database.models.analysis_model import (
-    AnalysisModel,
-    AnalysisResultModel,
-    ResumeJobMatchModel,
+from src.application.services.analysis_service import (
+    AnalysisService,
+    _calculate_experience_score,
+    _calculate_seniority_score,
+    _canonical_component_weights,
+    _job_has_structured_requirements,
+    _validate_education,
 )
-from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
+from src.application.services.match_confidence_service import (
+    compute_match_confidence,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
-from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
+from src.infrastructure.database.models.profile_analysis_model import (
+    CandidateJobMatchModel,
+    CandidateProfileAnalysisModel,
+)
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
     ScoreModelVersionModel,
+)
+from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
+    SQLAlchemyAnalysisRepository,
 )
 from src.domain.services.deal_breaker_evaluator import evaluate_deal_breakers
 
@@ -56,8 +67,7 @@ class CandidateRankingService:
     # ------------------------------------------------------------------
 
     async def compute_and_persist(self, job_id: UUID) -> int:
-        """Compute multi-factor scores for every pipeline candidate in this job
-        and upsert results into candidate_job_scores.
+        """Persist a ranking snapshot using canonical match_score as source of truth.
 
         Returns the number of candidates scored.
 
@@ -67,26 +77,50 @@ class CandidateRankingService:
         await self._assert_job_exists(job_id)
         job = await self._load_job_with_deal_breakers(job_id)
         version = await self._load_active_version()
-
-        weights = {k: Decimal(str(v)) for k, v in version.weights.items()}
-        thresholds = {k: Decimal(str(v)) for k, v in version.thresholds.items()}
-        threshold_high = thresholds.get("high", Decimal("70"))
-        threshold_low = thresholds.get("low", Decimal("45"))
-
+        threshold_high, threshold_low = _resolve_thresholds(version)
+        job_skill_rows = await self._load_job_skill_rows(job_id)
         rows = await self._fetch_match_rows(job_id)
+        rows = await self._reprocess_outdated_matches_if_needed(
+            job_id=job_id,
+            job=job,
+            job_skill_rows=job_skill_rows,
+            rows=rows,
+        )
         now = datetime.now(UTC)
         count = 0
 
         for row in rows:
-            bd = _compute_breakdown(row, weights)
-            _apply_validation_guardrails(row, bd)
+            outdated = _is_outdated_match_row(
+                row=row,
+                job=job,
+                job_skill_rows=job_skill_rows,
+            )
+            bd = _compute_breakdown(
+                row=row,
+                job=job,
+                job_skill_rows=job_skill_rows,
+                outdated=outdated,
+            )
             deal_breaker_violations = evaluate_deal_breakers(job.deal_breakers, row)
-            _apply_deal_breaker_guardrails(bd, deal_breaker_violations)
             decision = _decide(bd["final_score"], threshold_high, threshold_low)
             matched = _coerce_list(row.get("matched_skills"))
             missing = _coerce_list(row.get("missing_skills"))
-            reason_codes = _build_reason_codes(row, bd, matched, missing, deal_breaker_violations)
-            explanation = _build_explanation(row, bd, decision, matched, missing)
+            reason_codes = _build_reason_codes(
+                row,
+                bd,
+                matched,
+                missing,
+                deal_breaker_violations,
+                outdated=outdated,
+            )
+            explanation = _build_explanation(
+                row,
+                bd,
+                decision,
+                matched,
+                missing,
+                outdated=outdated,
+            )
 
             # Serialize Decimal values for JSONB storage
             serialized_bd = {k: float(v) for k, v in bd.items()}
@@ -137,6 +171,7 @@ class CandidateRankingService:
         """
         await self._assert_job_exists(job_id)
         version = await self._load_active_version()
+        threshold_high, threshold_low = _resolve_thresholds(version)
 
         rows = await self._fetch_persisted_scores(job_id, version.id)
 
@@ -174,8 +209,8 @@ class CandidateRankingService:
         return {
             "job_id": job_id,
             "total_candidates": len(entries),
-            "threshold_high": Decimal(str(version.thresholds.get("high", 70))),
-            "threshold_low": Decimal(str(version.thresholds.get("low", 45))),
+            "threshold_high": threshold_high,
+            "threshold_low": threshold_low,
             "score_version": version.version,
             "candidates": entries,
             "data_quality_stats": stats,
@@ -217,98 +252,150 @@ class CandidateRankingService:
         return version
 
     async def _fetch_match_rows(self, job_id: UUID) -> list[dict]:
-        """Return one row per candidate in the pipeline for this job.
-
-        Uses row_number() to select the most recent completed analysis per candidate.
-        Candidates without a completed analysis are included with NULL scores so they
-        appear in the ranking with final_score=0.
-        """
-        latest_raw = (
+        latest_match = (
             sa.select(
-                ResumeModel.candidate_id.label("candidate_id"),
-                ResumeJobMatchModel.skills_match_score,
-                ResumeJobMatchModel.experience_match_score,
-                ResumeJobMatchModel.seniority_match_score,
-                ResumeJobMatchModel.matched_skills,
-                ResumeJobMatchModel.missing_skills,
-                ResumeJobMatchModel.validation_status,
-                ResumeJobMatchModel.rejection_reasons,
-                AnalysisResultModel.overall_score,
-                AnalysisResultModel.education_score,
-                AnalysisResultModel.total_experience_years,
-                AnalysisResultModel.strengths,
-                AnalysisResultModel.weaknesses,
-                AnalysisResultModel.seniority_level,
+                CandidateJobMatchModel.candidate_id,
+                CandidateJobMatchModel.job_id,
+                CandidateJobMatchModel.resume_version_id,
+                CandidateJobMatchModel.match_score,
+                CandidateJobMatchModel.recommendation,
+                CandidateJobMatchModel.matched_skills_json,
+                CandidateJobMatchModel.missing_skills_json,
+                CandidateProfileAnalysisModel.seniority_level,
+                CandidateProfileAnalysisModel.experience_years,
+                CandidateProfileAnalysisModel.education_level,
+                CandidateProfileAnalysisModel.skills_json,
+                CandidateProfileAnalysisModel.strengths_json,
+                CandidateProfileAnalysisModel.weaknesses_json,
                 sa.func.row_number()
                 .over(
-                    partition_by=ResumeModel.candidate_id,
-                    order_by=AnalysisModel.updated_at.desc(),
+                    partition_by=(
+                        CandidateJobMatchModel.candidate_id,
+                        CandidateJobMatchModel.job_id,
+                    ),
+                    order_by=(
+                        # 1. Match com pipeline ativo vence (NULL por último)
+                        sa.case(
+                            (CandidateJobMatchModel.candidate_job_pipeline_id.isnot(None), 0),
+                            else_=1,
+                        ),
+                        # 2. Mais recente
+                        CandidateJobMatchModel.created_at.desc(),
+                        # 3. Maior id como tiebreaker
+                        CandidateJobMatchModel.id.desc(),
+                    ),
                 )
                 .label("rn"),
             )
-            .select_from(ResumeJobMatchModel)
-            .join(AnalysisModel, AnalysisModel.id == ResumeJobMatchModel.analysis_id)
-            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
-            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-            .outerjoin(AnalysisResultModel, AnalysisResultModel.analysis_id == AnalysisModel.id)
-            .where(
-                ResumeJobMatchModel.job_id == job_id,
-                AnalysisModel.status == "completed",
-                ResumeModel.deleted_at.is_(None),
+            .select_from(CandidateJobMatchModel)
+            .join(
+                CandidateProfileAnalysisModel,
+                CandidateProfileAnalysisModel.id == CandidateJobMatchModel.candidate_profile_analysis_id,
             )
-            .subquery("latest_raw")
-        )
-
-        best_match = (
-            sa.select(latest_raw).where(latest_raw.c.rn == 1).subquery("best_match")
+            .where(CandidateJobMatchModel.job_id == job_id)
+            .subquery("latest_match")
         )
 
         result = await self._session.execute(
+            # CandidateJobMatch currently stores final recommendation; derive validation
+            # state from that canonical signal for ranking guardrails.
+            # - `not_match` => hard fail
+            # - `review_manually` => unknown evidence
+            # - otherwise => pass
             sa.select(
-                CandidatePipelineModel.candidate_id,
+                CandidateJobPipelineModel.candidate_id,
                 CandidateModel.full_name.label("candidate_name"),
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.status.label("pipeline_status"),
-                CandidatePipelineModel.entered_at,
-                best_match.c.skills_match_score,
-                best_match.c.experience_match_score,
-                best_match.c.seniority_match_score,
-                best_match.c.matched_skills,
-                best_match.c.missing_skills,
-                best_match.c.validation_status,
-                best_match.c.rejection_reasons,
-                best_match.c.overall_score,
-                best_match.c.education_score,
-                best_match.c.total_experience_years,
-                best_match.c.strengths,
-                best_match.c.weaknesses,
-                best_match.c.seniority_level,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.pipeline_status,
+                CandidateJobPipelineModel.entered_at,
+                latest_match.c.match_score.label("skills_match_score"),
+                latest_match.c.match_score.label("experience_match_score"),
+                latest_match.c.match_score.label("seniority_match_score"),
+                latest_match.c.matched_skills_json.label("matched_skills"),
+                latest_match.c.missing_skills_json.label("missing_skills"),
+                sa.case(
+                    (latest_match.c.recommendation == "not_match", "fail"),
+                    (latest_match.c.recommendation == "review_manually", "unknown"),
+                    else_="pass",
+                ).label("validation_status"),
+                sa.literal(None).label("rejection_reasons"),
+                latest_match.c.match_score.label("overall_score"),
+                latest_match.c.match_score.label("education_score"),
+                latest_match.c.experience_years.label("total_experience_years"),
+                latest_match.c.skills_json.label("candidate_skills"),
+                latest_match.c.strengths_json.label("strengths"),
+                latest_match.c.weaknesses_json.label("weaknesses"),
+                latest_match.c.seniority_level,
             )
-            .select_from(CandidatePipelineModel)
-            .join(CandidateModel, CandidateModel.id == CandidatePipelineModel.candidate_id)
+            .select_from(CandidateJobPipelineModel)
+            .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
             .outerjoin(
-                best_match,
-                best_match.c.candidate_id == CandidatePipelineModel.candidate_id,
+                latest_match,
+                sa.and_(
+                    latest_match.c.candidate_id == CandidateJobPipelineModel.candidate_id,
+                    latest_match.c.job_id == CandidateJobPipelineModel.job_id,
+                    latest_match.c.rn == 1,
+                ),
             )
             .where(
-                CandidatePipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
-                sa.or_(
-                    CandidatePipelineModel.status.is_(None),
-                    CandidatePipelineModel.status != "transferred",
-                ),
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
         )
         return [dict(row) for row in result.mappings().all()]
 
+    async def _load_job_skill_rows(self, job_id: UUID):
+        result = await self._session.execute(
+            sa.select(
+                JobRequiredSkillModel,
+                SkillModel.name.label("skill_name"),
+                SkillModel.aliases.label("skill_aliases"),
+            )
+            .join(SkillModel, JobRequiredSkillModel.skill_id == SkillModel.id)
+            .where(JobRequiredSkillModel.job_id == job_id, SkillModel.deleted_at.is_(None))
+        )
+        return result.all()
+
+    async def _reprocess_outdated_matches_if_needed(
+        self,
+        *,
+        job_id: UUID,
+        job: JobModel,
+        job_skill_rows: list[Any],
+        rows: list[dict],
+    ) -> list[dict]:
+        outdated_rows = [
+            row
+            for row in rows
+            if _is_outdated_match_row(row=row, job=job, job_skill_rows=job_skill_rows)
+        ]
+        if not outdated_rows:
+            return rows
+
+        repo = SQLAlchemyAnalysisRepository(self._session)
+        analysis_service = AnalysisService(repo)
+        reprocessed = False
+
+        for row in outdated_rows:
+            resume_version_id = row.get("resume_version_id")
+            if resume_version_id is None:
+                continue
+            analysis = await repo.find_latest_completed_for_version(resume_version_id, job_id)
+            if analysis is None:
+                continue
+            await analysis_service.match_completed_analysis_to_job(analysis.id, job_id)
+            reprocessed = True
+
+        if reprocessed:
+            return await self._fetch_match_rows(job_id)
+        return rows
+
     async def _fetch_persisted_scores(
         self, job_id: UUID, version_id: UUID
     ) -> list[dict]:
-        """Return persisted scores for this job + version, ordered by final_score DESC.
-
-        Source of truth for candidate-job links: CandidateJobLinkModel.
-        Pipeline stage information is enrichment only (optional outer join).
-        """
+        """Return persisted scores for this job + version, ordered by final_score DESC."""
         result = await self._session.execute(
             sa.select(
                 CandidateJobScoreModel.candidate_id,
@@ -320,29 +407,20 @@ class CandidateRankingService:
                 CandidateJobScoreModel.computed_at,
                 CandidateModel.full_name.label("candidate_name"),
                 CandidateModel.data_quality_status,
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.status.label("pipeline_status"),
-                CandidatePipelineModel.entered_at,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.pipeline_status,
+                CandidateJobPipelineModel.entered_at,
             )
             .select_from(CandidateJobScoreModel)
             .join(CandidateModel, CandidateModel.id == CandidateJobScoreModel.candidate_id)
-            # Source of truth: must have official candidate-job link
             .join(
-                CandidateJobLinkModel,
+                CandidateJobPipelineModel,
                 sa.and_(
-                    CandidateJobLinkModel.candidate_id == CandidateJobScoreModel.candidate_id,
-                    CandidateJobLinkModel.job_id == CandidateJobScoreModel.job_id,
-                    CandidateJobLinkModel.deleted_at.is_(None),
+                    CandidateJobPipelineModel.candidate_id == CandidateJobScoreModel.candidate_id,
+                    CandidateJobPipelineModel.job_id == CandidateJobScoreModel.job_id,
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                    CandidateJobPipelineModel.link_status == "active",
                 ),
-            )
-            # Enrichment: pipeline stage (optional)
-            .join(
-                CandidatePipelineModel,
-                sa.and_(
-                    CandidatePipelineModel.candidate_id == CandidateJobScoreModel.candidate_id,
-                    CandidatePipelineModel.job_id == CandidateJobScoreModel.job_id,
-                ),
-                isouter=True,
             )
             .where(
                 CandidateJobScoreModel.job_id == job_id,
@@ -350,11 +428,6 @@ class CandidateRankingService:
                 CandidateModel.deleted_at.is_(None),
                 # Exclude invalid candidates based on data quality
                 CandidateModel.data_quality_status.in_(["valid", "unknown"]),
-                # If pipeline entry exists, exclude "transferred" status
-                sa.or_(
-                    CandidatePipelineModel.status.is_(None),
-                    CandidatePipelineModel.status != "transferred",
-                ),
             )
             .order_by(CandidateJobScoreModel.final_score.desc())
         )
@@ -439,36 +512,117 @@ _MISSING_SKILL_PENALTY = Decimal("3")
 _MAX_PENALTY = Decimal("20")
 
 
-def _compute_breakdown(row: dict, weights: dict[str, Decimal]) -> dict[str, Decimal]:
-    skill_match      = _to_decimal(row.get("skills_match_score"))
-    experience_match = _to_decimal(row.get("experience_match_score"))
-    seniority_match  = _to_decimal(row.get("seniority_match_score"))
-    education        = _to_decimal(row.get("education_score"))
-    ai_confidence    = _to_decimal(row.get("overall_score"))
-
-    missing = _coerce_list(row.get("missing_skills"))
-    penalty = min(Decimal(len(missing)) * _MISSING_SKILL_PENALTY, _MAX_PENALTY)
-
-    weighted = (
-        skill_match      * weights.get("skill_match",      Decimal("0.40"))
-        + experience_match * weights.get("experience_match", Decimal("0.25"))
-        + seniority_match  * weights.get("seniority_match",  Decimal("0.15"))
-        + education        * weights.get("education",        Decimal("0.10"))
-        + ai_confidence    * weights.get("ai_confidence",    Decimal("0.10"))
-    )
-    final = max(Decimal("0"), min(Decimal("100"), weighted - penalty))
+def _compute_breakdown(
+    *,
+    row: dict,
+    job: JobModel,
+    job_skill_rows: list[Any],
+    outdated: bool,
+) -> dict[str, Decimal]:
     q = Decimal("0.01")
+    mandatory_names = {
+        str(row.skill_name).strip()
+        for row in job_skill_rows
+        if getattr(row.JobRequiredSkillModel, "is_mandatory", False) and str(row.skill_name).strip()
+    }
+    optional_names = {
+        str(row.skill_name).strip()
+        for row in job_skill_rows
+        if not getattr(row.JobRequiredSkillModel, "is_mandatory", False) and str(row.skill_name).strip()
+    }
+    matched_names = set(_coerce_list(row.get("matched_skills")))
+    missing_names = set(_coerce_list(row.get("missing_skills")))
+
+    mandatory_total = len(mandatory_names)
+    optional_total = len(optional_names)
+    mandatory_matched = len((mandatory_names & matched_names) or set()) if mandatory_total else 0
+    optional_matched = len((optional_names & matched_names) or set()) if optional_total else 0
+
+    mandatory_score = (
+        Decimal(mandatory_matched) / Decimal(mandatory_total) * Decimal("100")
+        if mandatory_total > 0
+        else Decimal("0")
+    )
+    optional_score = (
+        Decimal(optional_matched) / Decimal(optional_total) * Decimal("100")
+        if optional_total > 0
+        else Decimal("0")
+    )
+    skill_match_score = (
+        mandatory_score * Decimal("0.75") + optional_score * Decimal("0.25")
+        if mandatory_total or optional_total
+        else Decimal("0")
+    )
+
+    candidate_years = (
+        Decimal(str(row.get("total_experience_years")))
+        if row.get("total_experience_years") is not None
+        else None
+    )
+    required_years = (
+        Decimal(str(job.minimum_years_experience))
+        if job.minimum_years_experience is not None
+        else None
+    )
+    experience_match = _calculate_experience_score(candidate_years, required_years)
+    seniority_match = _calculate_seniority_score(
+        row.get("seniority_level"),
+        job.seniority_level,
+    )
+    education_result = _validate_education(
+        row.get("education_level"),
+        job.minimum_education_level,
+    )
+    if job.minimum_education_level is None:
+        education = Decimal("50")
+    elif education_result.status == "fail":
+        education = Decimal("0")
+    elif education_result.status == "unknown":
+        education = Decimal("50")
+    else:
+        education = Decimal("100")
+
+    weights = _canonical_component_weights(
+        total_mandatory=mandatory_total,
+        total_optional=optional_total,
+    )
+    reconstructed = (
+        mandatory_score * weights["mandatory"]
+        + optional_score * weights["optional"]
+        + experience_match * weights["experience"]
+        + seniority_match * weights["seniority"]
+    ).quantize(q)
+    confidence_assessment = compute_match_confidence(
+        match_score=row.get("overall_score"),
+        structured_mandatory_skill_count=mandatory_total,
+        structured_total_skill_count=mandatory_total + optional_total,
+        has_job_seniority=bool(job.seniority_level),
+        has_job_min_experience=job.minimum_years_experience is not None,
+        candidate_structured_skill_count=len(_coerce_list(row.get("candidate_skills"))),
+        candidate_has_experience=row.get("total_experience_years") is not None,
+        candidate_has_education=str(row.get("education_level") or "").strip().lower()
+        not in {"", "none", "unknown", "undefined"},
+        used_job_skill_fallback=False,
+    )
+
+    source_score = _to_decimal(row.get("overall_score")).quantize(q)
+    final_score = min(source_score, Decimal("44.00")).quantize(q) if outdated else source_score
+    penalty = max(Decimal("0.00"), reconstructed - final_score).quantize(q)
+    validation_penalty = Decimal("0.00")
+    if row.get("validation_status") in {"fail", "unknown"}:
+        validation_penalty = penalty
 
     return {
-        "skill_match_score":      skill_match.quantize(q),
+        "skill_match_score": skill_match_score.quantize(q),
         "experience_match_score": experience_match.quantize(q),
-        "seniority_match_score":  seniority_match.quantize(q),
-        "education_score":        education.quantize(q),
-        "ai_confidence_score":    ai_confidence.quantize(q),
-        "penalty_score":          penalty.quantize(q),
-        "validation_penalty_score": Decimal("0.00"),
+        "seniority_match_score": seniority_match.quantize(q),
+        "education_score": education.quantize(q),
+        "confidence_score": confidence_assessment.confidence_score.quantize(q),
+        "ai_confidence_score": confidence_assessment.confidence_score.quantize(q),
+        "penalty_score": penalty,
+        "validation_penalty_score": validation_penalty,
         "deal_breaker_penalty_score": Decimal("0.00"),
-        "final_score":            final.quantize(q),
+        "final_score": final_score,
     }
 
 
@@ -516,6 +670,8 @@ def _build_reason_codes(
     matched: list[str],
     missing: list[str],
     deal_breaker_violations: list[dict[str, Any]] | None = None,
+    *,
+    outdated: bool = False,
 ) -> list[dict[str, Any]]:
     """Return structured reason codes with explicit type, field, impact, and description.
 
@@ -528,12 +684,19 @@ def _build_reason_codes(
     # Add deal-breaker violations first (highest priority)
     if deal_breaker_violations:
         codes.extend(deal_breaker_violations)
+    if outdated:
+        codes.append({
+            "type": "outdated_score",
+            "field": "candidate_job_match",
+            "impact": -float(max(Decimal("0.00"), _to_decimal(row.get("overall_score")) - bd["final_score"])),
+            "description": "Score legado rebaixado para respeitar a regra atual de vaga sem requisitos estruturados",
+        })
 
     # Per-skill impact is approximated as the skill_match contribution divided
-    # evenly across matched skills, capped to avoid inflating single-skill matches.
+    # evenly across matched skills.
     n_matched = len(matched) or 1
     per_skill_contribution = float(
-        bd["skill_match_score"] * Decimal("0.40") / Decimal(str(n_matched))
+        bd["skill_match_score"] / Decimal(str(n_matched))
     )
 
     for skill in matched[:5]:
@@ -643,6 +806,15 @@ def _build_reason_codes(
             "description": f"Ponto de atenção: {weakness}",
         })
 
+    confidence_score = bd.get("confidence_score", Decimal("0.00"))
+    if bd["final_score"] >= Decimal("70.00") and confidence_score < Decimal("50.00"):
+        codes.append({
+            "type": "confidence_alert",
+            "field": "matching_confidence",
+            "impact": 0.0,
+            "description": "Score alto com baixa confiança dos dados; revisar vaga e profile antes de decidir.",
+        })
+
     return codes
 
 
@@ -652,6 +824,8 @@ def _build_explanation(
     decision: str,
     matched: list[str],
     missing: list[str],
+    *,
+    outdated: bool = False,
 ) -> str:
     name = row["candidate_name"]
     score = float(bd["final_score"])
@@ -681,11 +855,25 @@ def _build_explanation(
             f"{rejection_reasons[0] if rejection_reasons else 'evidência insuficiente'}. "
         )
 
+    outdated_part = ""
+    if outdated:
+        outdated_part = (
+            "Score legado identificado como inconsistente com a regra atual e limitado no ranking. "
+        )
+    confidence_part = ""
+    confidence_score = bd.get("confidence_score", Decimal("0.00"))
+    if bd["final_score"] >= Decimal("70.00") and confidence_score < Decimal("50.00"):
+        confidence_part = (
+            "O score ficou alto, mas a confiança dos dados usados no matching está baixa. "
+        )
+
     return (
         f"{name} obteve score {score:.1f}/100. "
         f"{matched_part}"
         f"{missing_part}"
         f"{validation_part}"
+        f"{outdated_part}"
+        f"{confidence_part}"
         f"Perfil: {seniority}, {years_str}. "
         f"{decision_label}."
     )
@@ -695,10 +883,35 @@ def _build_explanation(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _to_decimal(value: Any) -> Decimal:
+def _to_decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
     if value is None:
-        return Decimal("0")
+        return default
     return Decimal(str(value))
+
+
+def _resolve_thresholds(version: ScoreModelVersionModel) -> tuple[Decimal, Decimal]:
+    thresholds = {k: Decimal(str(v)) for k, v in version.thresholds.items()}
+    high = thresholds.get("high", Decimal("70"))
+    low = thresholds.get("low", Decimal("55"))
+    return high, low
+
+
+def _is_outdated_match_row(
+    *,
+    row: dict,
+    job: JobModel,
+    job_skill_rows: list[Any],
+) -> bool:
+    has_structured_requirements = _job_has_structured_requirements(
+        total_skills=len(job_skill_rows),
+        seniority_level=job.seniority_level,
+        minimum_years_experience=job.minimum_years_experience,
+        minimum_education_level=job.minimum_education_level,
+        deal_breakers=job.deal_breakers,
+    )
+    if has_structured_requirements:
+        return False
+    return _to_decimal(row.get("overall_score")) > Decimal("44.00")
 
 
 def _normalize_score_breakdown(raw: Any) -> dict[str, Decimal]:
@@ -710,7 +923,12 @@ def _normalize_score_breakdown(raw: Any) -> dict[str, Decimal]:
         "experience_match_score": _to_decimal(breakdown.get("experience_match_score")).quantize(q),
         "seniority_match_score": _to_decimal(breakdown.get("seniority_match_score")).quantize(q),
         "education_score": _to_decimal(breakdown.get("education_score")).quantize(q),
-        "ai_confidence_score": _to_decimal(breakdown.get("ai_confidence_score")).quantize(q),
+        "confidence_score": _to_decimal(
+            breakdown.get("confidence_score", breakdown.get("ai_confidence_score"))
+        ).quantize(q),
+        "ai_confidence_score": _to_decimal(
+            breakdown.get("ai_confidence_score", breakdown.get("confidence_score"))
+        ).quantize(q),
         "penalty_score": _to_decimal(breakdown.get("penalty_score")).quantize(q),
         "validation_penalty_score": _to_decimal(breakdown.get("validation_penalty_score")).quantize(q),
         "final_score": _to_decimal(breakdown.get("final_score")).quantize(q),

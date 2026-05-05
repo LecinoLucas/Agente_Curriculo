@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from src.application.ports.ai_service import AIAnalysisRequest
-from src.infrastructure.ai.gemini_adapter import GeminiAdapter
+from src.infrastructure.ai.gemini_adapter import GeminiAdapter, GeminiResponseFormatError
 
 
 @pytest.fixture
@@ -66,6 +66,16 @@ def valid_gemini_response():
 
 class TestGeminiAdapterValidResponse:
     """Test valid response handling."""
+
+    def test_build_payload_disables_thinking_for_gemini_25(self, gemini_adapter, valid_request):
+        """Gemini 2.5 JSON extraction should not spend budget on hidden thinking."""
+        gemini_adapter._model_id = "gemini-2.5-flash"
+
+        payload = gemini_adapter._build_payload(valid_request)
+
+        assert payload["generationConfig"]["maxOutputTokens"] == 2000
+        assert payload["generationConfig"]["responseMimeType"] == "application/json"
+        assert payload["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
 
     @pytest.mark.asyncio
     async def test_successful_analysis(self, gemini_adapter, valid_request, valid_gemini_response):
@@ -153,6 +163,34 @@ class TestGeminiAdapterEmptyResponse:
 
             with pytest.raises(RuntimeError, match="empty text content"):
                 await gemini_adapter.analyze(valid_request)
+
+    @pytest.mark.asyncio
+    async def test_truncated_json_raises_structured_error(self, gemini_adapter, valid_request):
+        """Test that MAX_TOKENS parse failures preserve metadata for persistence."""
+        with patch.object(
+            gemini_adapter, "_call_gemini_api", new_callable=AsyncMock
+        ) as mock_call:
+            mock_call.return_value = {
+                "candidates": [
+                    {
+                        "finishReason": "MAX_TOKENS",
+                        "content": {"parts": [{"text": '{"overall_score": 82,'}]},
+                    }
+                ],
+                "usageMetadata": {
+                    "promptTokenCount": 321,
+                    "candidatesTokenCount": 300,
+                },
+            }
+
+            with pytest.raises(GeminiResponseFormatError, match="truncated") as exc_info:
+                await gemini_adapter.analyze(valid_request)
+
+            exc = exc_info.value
+            assert exc.finish_reason == "MAX_TOKENS"
+            assert exc.input_tokens == 321
+            assert exc.output_tokens == 300
+            assert exc.raw_response == '{"overall_score": 82,'
 
 
 class TestGeminiAdapterErrorHandling:

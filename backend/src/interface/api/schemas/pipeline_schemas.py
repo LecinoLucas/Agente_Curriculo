@@ -4,6 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+from src.interface.api.schemas.job_schemas import DealBreaker
 
 # ---------------------------------------------------------------------------
 # Shared type aliases
@@ -23,7 +24,7 @@ PipelineStage = Literal[
 PipelineTrigger = Literal["manual", "auto_match", "system"]
 
 # Outcome status — independent of stage position.
-CandidateOutcomeStatus = Literal["active", "hired", "rejected", "transferred"]
+CandidateOutcomeStatus = Literal["active", "removed", "hired", "rejected", "transferred"]
 
 # AI analysis processing status — completely independent of pipeline stage.
 # Controlled exclusively by the analysis worker; never set by stage moves.
@@ -194,6 +195,10 @@ class PipelineJobSummaryResponse(BaseModel):
     job_id: UUID
     job_title: str
     job_status: str
+    seniority_level: str | None = None
+    work_model: str | None = None
+    location: str | None = None
+    deal_breakers: list[DealBreaker] = Field(default_factory=list)
     total_candidates: int
     stage_counts: dict[str, int]
     latest_activity: datetime | None

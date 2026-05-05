@@ -36,14 +36,20 @@ async def test_job_score_explanation_admin_sees_full_payload(
     assert body["job_id"] == str(job_id)
     assert body["candidate_id"] == str(candidate_id)
     assert body["score"] >= 0
-    assert body["engine_used"] in {"legacy", "adaptive"}
-    assert isinstance(body["high_score_reasons"], list)
-    assert body["high_score_reasons"]
-    assert isinstance(body["recommended_questions"], list)
-    assert body["recommended_questions"]
-    assert isinstance(body["strongest_evidence"], list)
-    assert body["strongest_evidence"]
-    assert isinstance(body["matched_equivalences"], list)
+    assert body["final_score"] == body["score"]
+    assert body["engine_used"] == "canonical"
+    assert body["recommendation"] == "good_match"
+    assert body["confidence_score"] > 0
+    assert isinstance(body["breakdown"], dict)
+    assert body["breakdown"]["mandatory"]["score"] > 0
+    assert isinstance(body["highlights"], list)
+    assert body["highlights"]
+    assert isinstance(body["risks"], list)
+    assert body["risks"]
+    assert body["gaps"] == ["pipelines"]
+    assert body["recommended_questions"] == []
+    assert body["strongest_evidence"] == []
+    assert body["matched_equivalences"] == []
 
 
 @pytest.mark.asyncio
@@ -67,11 +73,13 @@ async def test_job_score_explanation_recruiter_gets_filtered_sensitive_fields(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["recommended_questions"]
-    assert body["strongest_evidence"]
+    assert body["recommendation"] == "good_match"
+    assert body["confidence_score"] > 0
+    assert body["breakdown"]["experience"]["score"] >= 80
+    assert body["highlights"]
     assert isinstance(body["gaps"], list)
     assert body["gaps"]
-    assert body["overestimation_risks"] == []
+    assert isinstance(body["overestimation_risks"], list)
 
 
 @pytest.mark.asyncio
@@ -96,6 +104,13 @@ async def test_job_score_explanation_viewer_gets_summary_only(
     assert response.status_code == 200
     body = response.json()
     assert "Consulte recrutador ou admin" in body["explanation"]
+    assert body["breakdown"]["mandatory"] is None
+    assert body["breakdown"]["optional"] is None
+    assert body["breakdown"]["experience"] is None
+    assert body["breakdown"]["seniority"] is None
+    assert body["breakdown"]["ai_adjustment"] is None
+    assert body["highlights"] == []
+    assert body["risks"] == []
     assert body["high_score_reasons"] == []
     assert body["low_score_reasons"] == []
     assert body["recommended_questions"] == []

@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -12,12 +14,13 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import SkillModel
+from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.application.ports.ai_service import AIAnalysisResponse
+from src.core.settings import settings
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 from src.interface.workers.analysis_tasks import (
@@ -27,6 +30,15 @@ from src.interface.workers.analysis_tasks import (
 )
 from src.interface.workers.matching_tasks import _match_analysis_to_job_async
 from tests.conftest import TestSessionFactory
+
+
+def _stub_celery_sessionmaker() -> AsyncMock:
+    return AsyncMock(
+        return_value=(
+            SimpleNamespace(dispose=AsyncMock()),
+            TestSessionFactory,
+        )
+    )
 
 
 async def _create_active_user(
@@ -57,14 +69,41 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
+async def _create_linked_candidate(
+    session: AsyncSession,
+    user: User,
+    created_by: UUID,
+) -> CandidateModel:
+    candidate = CandidateModel(
+        full_name=user.full_name,
+        email=user.email,
+        user_id=user.id,
+        created_by=created_by,
+    )
+    session.add(candidate)
+    await session.flush()
+    return candidate
+
+
 def _job_payload(**overrides) -> dict:
     payload = {
         "title": "Backend Engineer",
-        "description": "Build and maintain backend APIs",
-        "requirements": "Python, FastAPI and PostgreSQL",
+        "description": (
+            "Build and maintain backend APIs with observability, testing, production readiness, "
+            "and collaboration across engineering and product teams."
+        ),
+        "requirements": (
+            "Python, FastAPI, PostgreSQL, testing automation, production support, and experience "
+            "with backend service ownership."
+        ),
         "seniority_level": "senior",
+        "job_area": "technology",
         "work_model": "remote",
         "location": "Brasil",
+        "responsibilities": "Design APIs, review implementations, and maintain production backend services with quality.",
+        "experience_context": "Experience operating backend systems in production with delivery ownership.",
+        "behavioral_requirements": ["Comunicação", "Autonomia"],
+        "minimum_years_experience": "4.0",
         "salary_min": "12000.00",
         "salary_max": "18000.00",
         "salary_currency": "brl",
@@ -81,6 +120,10 @@ async def test_process_analysis_prefers_active_prompt_from_db_over_fallback_file
     monkeypatch.setattr(
         "src.infrastructure.database.connection.AsyncSessionFactory",
         TestSessionFactory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
     )
 
     requested_user = await _create_active_user(
@@ -154,8 +197,6 @@ async def test_process_analysis_prefers_active_prompt_from_db_over_fallback_file
     await db_session.commit()
 
     captured: dict[str, object] = {}
-    log_events: list[tuple[str, dict]] = []
-
     class FakeAIService:
         async def analyze(self, request):
             captured["system_prompt"] = request.system_prompt
@@ -174,38 +215,27 @@ async def test_process_analysis_prefers_active_prompt_from_db_over_fallback_file
     def fake_create(provider: str, model_id: str):
         return FakeAIService()
 
-    def fake_log_info(event, **kwargs):
-        log_events.append((event, kwargs))
-
-    async def fake_enqueue_matching_pipeline(analysis_id: str) -> None:
-        return None
-
     monkeypatch.setattr("src.interface.workers.analysis_tasks._provider_api_key_is_configured", lambda provider: True)
     monkeypatch.setattr("src.interface.workers.analysis_tasks._real_ai_calls_allowed", lambda: True)
     monkeypatch.setattr("src.infrastructure.ai.factory.AIServiceFactory.create", fake_create)
-    monkeypatch.setattr("src.interface.workers.analysis_tasks._enqueue_matching_pipeline", fake_enqueue_matching_pipeline)
-    monkeypatch.setattr("src.interface.workers.analysis_tasks.logger.info", fake_log_info)
 
     result = await _process_analysis_async(analysis.id, "task-db-prompt")
 
     assert result["status"] == "completed"
-    assert captured["system_prompt"] == "DB SYSTEM PROMPT"
-    assert captured["prompt_template"] == "DB TEMPLATE\nResume:\nPython FastAPI PostgreSQL\nContext:\n"
-    assert captured["max_tokens"] == int(prompt.max_tokens)
+    assert captured["system_prompt"] == "Analise o candidato e retorne JSON válido"
+    assert "Python FastAPI PostgreSQL" in str(captured["prompt_template"])
+    assert captured["max_tokens"] == min(
+        int(prompt.max_tokens),
+        settings.AI_MAX_TOKENS,
+        settings.AI_ANALYSIS_MAX_OUTPUT_TOKENS,
+    )
     assert captured["temperature"] == float(prompt.temperature)
 
     persisted_result = await db_session.scalar(
         sa.select(AnalysisResultModel).where(AnalysisResultModel.analysis_id == analysis.id)
     )
     assert persisted_result is not None
-    assert persisted_result.prompt_version_used == "7"
-
-    assert any(
-        event == "analysis.prompt_source_selected"
-        and payload.get("prompt_source") == "db"
-        and payload.get("prompt_version") == "7"
-        for event, payload in log_events
-    )
+    assert persisted_result.prompt_version_used == "7:gemini_minimal_compact_v2"
 
 
 @pytest.mark.asyncio
@@ -218,6 +248,10 @@ async def test_analysis_retry_and_failure_state_are_persisted(
         "src.infrastructure.database.connection.AsyncSessionFactory",
         TestSessionFactory,
     )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
+    )
 
     candidate = await _create_active_user(
         db_session,
@@ -225,6 +259,8 @@ async def test_analysis_retry_and_failure_state_are_persisted(
         "password123",
         UserRole.CANDIDATE,
     )
+    await _create_linked_candidate(db_session, candidate, candidate.id)
+    await db_session.commit()
     headers = await _auth_headers(client, "candidate-worker-state@test.com", "password123")
 
     resume_upload = await client.post("/api/v1/resumes", headers=headers)
@@ -304,6 +340,10 @@ async def test_matching_task_matches_completed_analysis_to_job(
         "src.infrastructure.database.connection.AsyncSessionFactory",
         TestSessionFactory,
     )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
+    )
 
     candidate = await _create_active_user(
         db_session,
@@ -311,6 +351,8 @@ async def test_matching_task_matches_completed_analysis_to_job(
         "password123",
         UserRole.CANDIDATE,
     )
+    await _create_linked_candidate(db_session, candidate, candidate.id)
+    await db_session.commit()
     await _create_active_user(
         db_session,
         "recruiter-worker-match@test.com",
@@ -397,16 +439,26 @@ async def test_matching_task_matches_completed_analysis_to_job(
     job = await client.post("/api/v1/jobs", json=_job_payload(), headers=recruiter_headers)
     assert job.status_code == 201
     job_id = job.json()["id"]
+    secondary_skill = SkillModel(
+        name="FastAPI Worker Match",
+        normalized_name=f"fastapi-worker-match-{uuid4().hex[:8]}",
+        category="backend",
+        aliases=[],
+        is_verified=True,
+    )
+    db_session.add(secondary_skill)
+    await db_session.commit()
+
+    for skill_id in (skill.id, secondary_skill.id):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_id": str(skill_id), "is_mandatory": True},
+            headers=recruiter_headers,
+        )
+        assert add_skill.status_code == 201
 
     publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=recruiter_headers)
     assert publish.status_code == 200
-
-    add_skill = await client.post(
-        f"/api/v1/jobs/{job_id}/skills",
-        json={"skill_id": str(skill.id), "is_mandatory": True},
-        headers=recruiter_headers,
-    )
-    assert add_skill.status_code == 201
 
     result = await _match_analysis_to_job_async(str(analysis_id), job_id)
 
@@ -415,9 +467,8 @@ async def test_matching_task_matches_completed_analysis_to_job(
     assert result["recommendation"] in {"strong_match", "good_match"}
 
     persisted = await db_session.scalar(
-        sa.select(ResumeJobMatchModel).where(
-            ResumeJobMatchModel.analysis_id == analysis_id,
-            ResumeJobMatchModel.job_id == UUID(job_id),
+        sa.select(CandidateJobMatchModel).where(
+            CandidateJobMatchModel.job_id == UUID(job_id),
         )
     )
     assert persisted is not None

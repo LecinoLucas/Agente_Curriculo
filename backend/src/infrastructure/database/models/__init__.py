@@ -8,6 +8,11 @@ from src.infrastructure.database.models.document_ai_analysis_model import (
     DocumentAIAnalysisModel,
 )
 from src.infrastructure.database.models.pipeline_event_model import PipelineEventModel
+from src.infrastructure.database.models.profile_analysis_model import (
+    CandidateJobMatchModel,
+    CandidateProfileAnalysisModel,
+    JobProfileAnalysisModel,
+)
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
     ScoreModelVersionModel,
@@ -18,16 +23,12 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     MatchingObservationModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.candidate_job_link_model import (
-    CandidateJobLinkModel,
-)
-from src.infrastructure.database.models.candidate_pipeline_model import (
-    CandidatePipelineModel,
-    PipelineStageTransitionModel,
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineEventModel,
+    CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -42,16 +43,14 @@ __all__ = [
     "UserSessionModel",
     "PasswordResetTokenModel",
     "CandidateModel",
-    "CandidateJobLinkModel",
-    "CandidatePipelineModel",
-    "PipelineStageTransitionModel",
+    "CandidateJobPipelineModel",
+    "CandidateJobPipelineEventModel",
     "ResumeModel",
     "ResumeVersionModel",
     "AIModelModel",
     "PromptTemplateModel",
     "AnalysisModel",
     "AnalysisResultModel",
-    "ResumeJobMatchModel",
     "MatchingObservationModel",
     "JobModel",
     "JobRequiredSkillModel",
@@ -64,4 +63,7 @@ __all__ = [
     "PipelineEventModel",
     "ScoreModelVersionModel",
     "CandidateJobScoreModel",
+    "CandidateProfileAnalysisModel",
+    "JobProfileAnalysisModel",
+    "CandidateJobMatchModel",
 ]

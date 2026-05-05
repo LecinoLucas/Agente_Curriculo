@@ -49,7 +49,7 @@ function buildPdfBuffer(text: string): Buffer {
 async function login(page: Parameters<typeof test>[0]["page"]) {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(LOGIN_EMAIL);
-  await page.getByLabel("Senha").fill(LOGIN_PASSWORD);
+  await page.locator('input[type="password"]').fill(LOGIN_PASSWORD);
   await page.getByRole("button", { name: "Entrar no painel" }).click();
   await expect(page).toHaveURL(/\/pipeline(\/|$)/);
   await expect(page.getByRole("button", { name: "Novo candidato" })).toBeVisible();
@@ -214,7 +214,7 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
 
   await test.step("envia currículo e recebe orientação clara sobre a análise", async () => {
     const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
-    await drawer.getByRole("button", { name: "Documentos" }).click();
+    await drawer.getByRole("button", { name: "Documentos" }).dispatchEvent("click");
     await expect(drawer.getByRole("button", { name: "Enviar currículo" }).last()).toBeVisible();
 
     await drawer.locator('input[type="file"]').setInputFiles({
@@ -285,7 +285,7 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
     const refreshedDrawer = page.getByRole("dialog", { name: "Painel do candidato" });
     await expect(refreshedDrawer).toBeVisible();
 
-    await refreshedDrawer.getByRole("button", { name: "Histórico" }).click();
+    await refreshedDrawer.getByRole("button", { name: "Histórico" }).dispatchEvent("click");
     await expect(refreshedDrawer.getByText("Histórico real do pipeline")).toBeVisible();
     await expect(refreshedDrawer.getByText("Recebido → Triagem")).toBeVisible({ timeout: 20_000 });
     await expect(refreshedDrawer.getByText("Movido manualmente").first()).toBeVisible();

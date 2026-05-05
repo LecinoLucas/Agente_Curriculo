@@ -31,8 +31,9 @@ class DataQualityService:
         Returns:
             Tuple of (status, reason)
         """
+        candidate_uuid = _as_uuid(candidate_id)
         # Fetch candidate and resumes
-        stmt = select(CandidateModel).where(CandidateModel.id == candidate_id)
+        stmt = select(CandidateModel).where(CandidateModel.id == candidate_uuid)
         result = await self.db.execute(stmt)
         candidate = result.scalar_one_or_none()
 
@@ -41,7 +42,7 @@ class DataQualityService:
 
         # Get resumes for candidate
         resume_stmt = select(ResumeModel).where(
-            ResumeModel.candidate_id == candidate_id
+            ResumeModel.candidate_id == candidate_uuid
         )
         resume_result = await self.db.execute(resume_stmt)
         resumes = resume_result.scalars().all()
@@ -86,7 +87,7 @@ class DataQualityService:
 
         # Update candidate
         await self.mark_candidate(
-            candidate_id=candidate_id,
+            candidate_id=candidate_uuid,
             status=classification.status,
             reason=classification.reason,
         )
@@ -113,9 +114,10 @@ class DataQualityService:
             reason: Explanation of status
             marked_by: UUID of admin who manually marked (if manual)
         """
+        candidate_uuid = _as_uuid(candidate_id)
         stmt = (
             update(CandidateModel)
-            .where(CandidateModel.id == candidate_id)
+            .where(CandidateModel.id == candidate_uuid)
             .values(
                 data_quality_status=status.value,
                 data_quality_reason=reason,
@@ -144,7 +146,7 @@ class DataQualityService:
 
         reason_with_audit = f"[Manual by {marked_by}] {reason}"
         await self.mark_candidate(
-            candidate_id=candidate_id,
+            candidate_id=_as_uuid(candidate_id),
             status=DataQualityStatus.INVALID_MANUAL,
             reason=reason_with_audit,
         )
@@ -248,14 +250,20 @@ class DataQualityService:
             DataQualityStatus.INVALID_MANUAL.value,
         ]
 
+        candidate_uuid_ids = [_as_uuid(candidate_id) for candidate_id in candidate_ids]
+
         stmt = (
             select(CandidateModel.id)
             .where(
                 and_(
-                    CandidateModel.id.in_(candidate_ids),
+                    CandidateModel.id.in_(candidate_uuid_ids),
                     ~CandidateModel.data_quality_status.in_(invalid_statuses)
                 )
             )
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
+
+
+def _as_uuid(value: UUID | str) -> UUID:
+    return value if isinstance(value, UUID) else UUID(str(value))

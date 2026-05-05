@@ -18,6 +18,10 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    viewport: {
+      width: 1600,
+      height: 1400,
+    },
   },
   webServer: {
     command: `FRONTEND_PORT=${FRONTEND_PORT} BACKEND_PORT=${BACKEND_PORT} VITE_API_BASE_URL=${API_URL} npm run dev:full`,

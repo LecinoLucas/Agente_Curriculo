@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { subscribeToasts, toast, ToastItem } from "../../services/toast";
+import { subscribeToasts, toast, ToastItem } from "../../shared/utils/toast";
 
 const ICONS = {
   success: CheckCircle,

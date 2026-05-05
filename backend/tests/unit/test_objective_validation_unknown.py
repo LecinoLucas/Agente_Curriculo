@@ -107,7 +107,16 @@ def _make_job(
 ) -> MagicMock:
     j = MagicMock()
     j.id = uuid4()
+    j.title = "Test Job"
+    j.description = "Test description"
+    j.requirements = "Test requirements"
     j.seniority_level = seniority
+    j.job_area = "technology"
+    j.responsibilities = []
+    j.experience_context = ""
+    j.behavioral_requirements = []
+    j.priority = "normal"
+    j.deal_breakers = []
     j.minimum_education_level = minimum_education_level
     j.minimum_years_experience = minimum_years_experience
     return j
@@ -115,11 +124,21 @@ def _make_job(
 
 def _make_service(job: MagicMock, job_skill_rows: list[SimpleNamespace]) -> AnalysisService:
     repo = MagicMock()
+    candidate_id = uuid4()
+    resume_version_id = uuid4()
     repo.find_active_job = AsyncMock(return_value=job)
     repo.list_active_job_skill_rows = AsyncMock(return_value=job_skill_rows)
     repo.find_active_score_model_version = AsyncMock(return_value=None)
-    repo.find_job_match = AsyncMock(return_value=None)
-    repo.save_job_match = AsyncMock()
+    repo.find_latest_candidate_profile_analysis_for_resume = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.find_preferred_ai_model = AsyncMock(return_value=None)
+    repo.find_job_profile_analysis_by_signature = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.get_candidate_id_from_analysis = AsyncMock(return_value=candidate_id)
+    repo.get_resume_version_id_from_analysis = AsyncMock(return_value=resume_version_id)
+    repo.upsert_candidate_job_match = AsyncMock()
     repo.session = MagicMock()
     repo.session.scalar = AsyncMock(return_value=None)
     return AnalysisService(repository=repo)
@@ -128,6 +147,7 @@ def _make_service(job: MagicMock, job_skill_rows: list[SimpleNamespace]) -> Anal
 def _make_details(result: MagicMock) -> AnalysisResultDetails:
     analysis = MagicMock()
     analysis.id = uuid4()
+    analysis.resume_version_id = uuid4()
     return AnalysisResultDetails(analysis=analysis, result=result)
 
 

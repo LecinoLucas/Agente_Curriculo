@@ -15,8 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.entities.user import User, UserRole
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -164,6 +163,63 @@ async def test_patch_pipeline_stage_v2_endpoint(
     result = move_resp.json()
     assert result["stage"] == "screening"
     assert result["candidate_id"] == str(candidate_id)
+
+
+@pytest.mark.asyncio
+async def test_list_pipeline_jobs_filters_published_by_default(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-pipeline-jobs-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+
+    published_job_id = await _create_job(client, headers, db_session, publish=False, title="Pipeline Published")
+    paused_job_id = await _create_job(client, headers, db_session, publish=False, title="Pipeline Paused")
+    closed_job_id = await _create_job(client, headers, db_session, publish=False, title="Pipeline Closed")
+    draft_job_id = await _create_job(client, headers, db_session, publish=False, title="Pipeline Draft")
+
+    jobs = (
+        await db_session.execute(
+            sa.select(JobModel).where(
+                JobModel.id.in_([published_job_id, paused_job_id, closed_job_id, draft_job_id])
+            )
+        )
+    ).scalars().all()
+    status_by_id = {
+        published_job_id: "published",
+        paused_job_id: "paused",
+        closed_job_id: "closed",
+        draft_job_id: "draft",
+    }
+    for job in jobs:
+        job.status = status_by_id[job.id]
+    await db_session.commit()
+
+    response = await client.get("/api/v1/pipeline/jobs", headers=headers)
+    assert response.status_code == 200, response.text
+
+    returned_ids = {item["job_id"] for item in response.json()}
+    assert str(published_job_id) in returned_ids
+    assert str(paused_job_id) not in returned_ids
+    assert str(closed_job_id) not in returned_ids
+    assert str(draft_job_id) not in returned_ids
+
+    response_with_closed = await client.get(
+        "/api/v1/pipeline/jobs?include_closed=true",
+        headers=headers,
+    )
+    assert response_with_closed.status_code == 200, response_with_closed.text
+
+    returned_ids_with_closed = {item["job_id"] for item in response_with_closed.json()}
+    assert str(published_job_id) in returned_ids_with_closed
+    assert str(paused_job_id) in returned_ids_with_closed
+    assert str(closed_job_id) in returned_ids_with_closed
+    assert str(draft_job_id) in returned_ids_with_closed
 
 
 @pytest.mark.asyncio

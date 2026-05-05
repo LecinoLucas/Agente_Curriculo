@@ -2,6 +2,7 @@ import type {
   AddCandidateToJobPayload,
   AddCandidateToJobResponse,
   CandidatePipelineHistory,
+  Job,
   MovePipelineCandidatePayload,
   MovePipelineCandidateResponse,
   PipelineStageTransition,
@@ -9,6 +10,19 @@ import type {
   TransferCandidateJobResponse,
 } from "../types/domain";
 import { httpRequest } from "./http";
+
+export type PipelineJobSummary = {
+  id: string;
+  title: string;
+  status: string;
+  seniority_level: string | null;
+  work_model: string | null;
+  location: string | null;
+  deal_breakers: Job["deal_breakers"];
+  total_candidates: number;
+  stage_counts: Record<string, number>;
+  latest_activity: string | null;
+};
 
 function normalizeTransition(item: any): PipelineStageTransition {
   return {
@@ -27,6 +41,30 @@ function normalizeTransition(item: any): PipelineStageTransition {
 }
 
 export const pipelineService = {
+  async listPipelineJobs(includeClosed = false): Promise<PipelineJobSummary[]> {
+    const params = new URLSearchParams();
+    if (includeClosed) {
+      params.set("include_closed", "true");
+    }
+
+    const query = params.toString();
+    const response = await httpRequest<any[]>(`/api/v1/pipeline/jobs${query ? `?${query}` : ""}`);
+    const raw = Array.isArray(response) ? response : [];
+
+    return raw.map((item) => ({
+      id: item?.job_id ?? "",
+      title: item?.job_title ?? "",
+      status: item?.job_status ?? "draft",
+      seniority_level: item?.seniority_level ?? null,
+      work_model: item?.work_model ?? null,
+      location: item?.location ?? null,
+      deal_breakers: Array.isArray(item?.deal_breakers) ? item.deal_breakers : [],
+      total_candidates: item?.total_candidates ?? 0,
+      stage_counts: item?.stage_counts ?? {},
+      latest_activity: item?.latest_activity ?? null,
+    }));
+  },
+
   async getCandidateHistory(jobId: string, candidateId: string): Promise<CandidatePipelineHistory> {
     const item = await httpRequest<any>(`/api/v1/pipeline/${jobId}/${candidateId}/history`);
     return {

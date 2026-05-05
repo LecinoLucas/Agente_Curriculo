@@ -76,28 +76,6 @@ function getAlertBgTone(level: AlertLevel): string {
   }
 }
 
-function getReadinessLabel(status: PublishReadinessStatus): string {
-  switch (status) {
-    case "critical":
-      return "Configuração crítica pendente";
-    case "warning":
-      return "Pode publicar com atenção";
-    case "ready":
-      return "Pronta para publicar";
-  }
-}
-
-function getReadinessTone(status: PublishReadinessStatus): string {
-  switch (status) {
-    case "critical":
-      return "text-[hsl(var(--danger))]";
-    case "warning":
-      return "text-[hsl(var(--warning))]";
-    case "ready":
-      return "text-[hsl(var(--success))]";
-  }
-}
-
 export function JobConfigurationPreview({
   alerts,
   summary,
@@ -204,7 +182,7 @@ export function JobConfigurationPreview({
       {/* CTA if ready */}
       {summary.publishReadiness === "ready" && (
         <div className="mt-4 rounded-lg bg-[hsl(var(--success-soft))] border border-[hsl(var(--success))]/20 px-3 py-2 text-xs text-[hsl(var(--success))]">
-          💡 A vaga está pronta! Clique em "{jobTitle ? "Salvar alterações" : "Criar vaga"}" para continuar.
+          💡 A configuração base foi preenchida. Clique em "{jobTitle ? "Salvar alterações" : "Criar vaga"}" para continuar.
         </div>
       )}
     </div>

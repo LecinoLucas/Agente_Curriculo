@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, NAMESPACE_URL, uuid5
 
 import sqlalchemy as sa
 import structlog
@@ -10,16 +10,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.domain_events import CandidateStageChangedEvent, dispatch_event
-from src.application.services.candidate_job_link_service import CandidateJobLinkService
 from src.application.services.deterministic_scorer import DeterministicScorer
-from src.infrastructure.database.models.candidate_pipeline_model import (
-    CandidatePipelineModel,
-    PipelineStageTransitionModel,
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+    CandidateJobPipelineEventModel,
 )
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
+    _candidate_job_pipeline_key,
 )
 from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
 from src.interface.api.schemas.pipeline_schemas import (
@@ -81,6 +81,28 @@ _STAGE_TO_OUTCOME: dict[str, str] = {
 }
 
 logger = structlog.get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Event idempotency key builder
+# ---------------------------------------------------------------------------
+
+def _build_event_idempotency_key(
+    pipeline_id: UUID,
+    event_type: str,
+    from_stage: str | None,
+    to_stage: str | None,
+    actor_id: UUID | None,
+) -> str:
+    """Generate deterministic idempotency key for pipeline events."""
+    return ":".join([
+        "pipeline",
+        str(pipeline_id),
+        event_type,
+        from_stage or "null",
+        to_stage or "null",
+        str(actor_id) if actor_id else "null",
+    ])
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +202,6 @@ class PipelineService:
     def __init__(self, repository: SQLAlchemyPipelineRepository, session: AsyncSession | None = None) -> None:
         self._repository = repository
         self._session = session
-        self._link_service = CandidateJobLinkService(session) if session else None
 
     # ------------------------------------------------------------------
     # Board (existing — unchanged)
@@ -223,15 +244,15 @@ class PipelineService:
         if entry is None:
             raise PipelineEntryNotFoundError
 
-        entry.stage = body.stage
+        entry.pipeline_stage = body.stage
         entry.updated_at = datetime.now(UTC)
         saved = await self._repository.save_entry(entry)
 
         return UpdateCandidateStageResponse(
             candidate_id=saved.candidate_id,
             job_id=saved.job_id,
-            stage=saved.stage,  # type: ignore[arg-type]
-            candidate_status=STAGE_TO_CANDIDATE_STATUS[saved.stage],
+            stage=saved.pipeline_stage,  # type: ignore[arg-type]
+            candidate_status=STAGE_TO_CANDIDATE_STATUS[saved.pipeline_stage],
             match_score=saved.match_score,
             updated_at=saved.updated_at,
         )
@@ -268,7 +289,7 @@ class PipelineService:
         if entry is None:
             raise PipelineEntryNotFoundError
 
-        from_stage = entry.stage
+        from_stage = entry.pipeline_stage
         from_cfg = STAGE_CONFIG[from_stage]
 
         # Task 2: derive terminal check from STAGE_CONFIG — single source of truth.
@@ -304,16 +325,23 @@ class PipelineService:
                 f"Stage was modified concurrently (expected '{from_stage}'). Please retry."
             )
 
-        transition = PipelineStageTransitionModel(
+        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        transition = CandidateJobPipelineEventModel(
             candidate_id=candidate_id,
             job_id=body.job_id,
+            event_type="stage_moved",
             from_stage=from_stage,
             to_stage=body.stage,
-            moved_by=moved_by,
-            moved_at=now,
-            trigger="manual",
-            notes=body.notes,
-            reason=body.reason,
+            actor_id=moved_by,
+            idempotency_key=_build_event_idempotency_key(
+                pipeline_id, "stage_moved", from_stage, body.stage, moved_by
+            ),
+            metadata_payload={
+                "trigger": "manual",
+                "notes": body.notes,
+                "reason": body.reason,
+            },
+            created_at=now,
         )
         saved_transition = await self._repository.save_transition(transition)
 
@@ -383,22 +411,28 @@ class PipelineService:
                 moved_by=moved_by,
                 updated_at=now,
             )
+        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
         transition = await self._repository.save_transition(
-            PipelineStageTransitionModel(
+            CandidateJobPipelineEventModel(
                 candidate_id=candidate_id,
                 job_id=body.job_id,
-                from_stage=existing_entry.stage if existing_entry is not None else None,
+                event_type="candidate_added",
+                from_stage=existing_entry.pipeline_stage if existing_entry is not None else None,
                 to_stage=body.initial_stage,
-                moved_by=moved_by,
-                moved_at=now,
-                trigger="manual",
-                reason="Adicionado manualmente à vaga",
+                actor_id=moved_by,
+                idempotency_key=_build_event_idempotency_key(
+                    pipeline_id, "candidate_added",
+                    existing_entry.pipeline_stage if existing_entry else None,
+                    body.initial_stage,
+                    moved_by,
+                ),
+                metadata_payload={
+                    "trigger": "manual",
+                    "reason": "Adicionado manualmente à vaga",
+                },
+                created_at=now,
             )
         )
-
-        # Ensure candidate-job link exists with source="pipeline"
-        if self._link_service:
-            await self._link_service.ensure_link(candidate_id, body.job_id, source="pipeline")
 
         await self._update_match_score_deterministically(candidate_id=candidate_id, job_id=body.job_id)
 
@@ -443,17 +477,27 @@ class PipelineService:
             if source_row is None:
                 raise PipelineEntryNotFoundError
 
+            source_pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.from_job_id)
             source_transition = await self._repository.save_transition(
-                PipelineStageTransitionModel(
+                CandidateJobPipelineEventModel(
                     candidate_id=candidate_id,
                     job_id=body.from_job_id,
-                    from_stage=source_entry.stage,
-                    to_stage=source_entry.stage,
-                    moved_by=moved_by,
-                    moved_at=now,
-                    trigger="manual",
-                    notes=f"Transferido para a vaga {body.to_job_id}",
-                    reason=body.reason,
+                    event_type="job_transferred_out",
+                    from_stage=source_entry.pipeline_stage,
+                    to_stage=source_entry.pipeline_stage,
+                    from_job_id=body.from_job_id,
+                    to_job_id=body.to_job_id,
+                    actor_id=moved_by,
+                    idempotency_key=_build_event_idempotency_key(
+                        source_pipeline_id, "job_transferred_out",
+                        source_entry.pipeline_stage, source_entry.pipeline_stage, moved_by,
+                    ),
+                    metadata_payload={
+                        "trigger": "manual",
+                        "notes": f"Transferido para a vaga {body.to_job_id}",
+                        "reason": body.reason,
+                    },
+                    created_at=now,
                 )
             )
 
@@ -479,26 +523,33 @@ class PipelineService:
                     moved_by=moved_by,
                     updated_at=now,
                 )
+            dest_pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.to_job_id)
             destination_transition = await self._repository.save_transition(
-                PipelineStageTransitionModel(
+                CandidateJobPipelineEventModel(
                     candidate_id=candidate_id,
                     job_id=body.to_job_id,
-                    from_stage=destination_any_entry.stage if destination_any_entry is not None else None,
+                    event_type="job_transferred_in",
+                    from_stage=destination_any_entry.pipeline_stage if destination_any_entry is not None else None,
                     to_stage="entry",
-                    moved_by=moved_by,
-                    moved_at=now,
-                    trigger="manual",
-                    reason=body.reason,
+                    from_job_id=body.from_job_id,
+                    to_job_id=body.to_job_id,
+                    actor_id=moved_by,
+                    idempotency_key=_build_event_idempotency_key(
+                        dest_pipeline_id, "job_transferred_in",
+                        destination_any_entry.pipeline_stage if destination_any_entry is not None else None,
+                        "entry", moved_by,
+                    ),
+                    metadata_payload={
+                        "trigger": "manual",
+                        "reason": body.reason,
+                    },
+                    created_at=now,
                 )
             )
         except IntegrityError as exc:
             raise PipelineConcurrentModificationError(
                 "Não foi possível concluir a transferência. Recarregue e tente novamente."
             ) from exc
-
-        # Update candidate-job links to reflect the transfer
-        if self._link_service:
-            await self._link_service.transfer_candidate(candidate_id, body.from_job_id, body.to_job_id)
 
         await self._update_match_score_deterministically(candidate_id=candidate_id, job_id=body.to_job_id)
 
@@ -522,13 +573,56 @@ class PipelineService:
             candidate_id=candidate_id,
             from_job_id=body.from_job_id,
             to_job_id=body.to_job_id,
-            from_stage=source_entry.stage,  # type: ignore[arg-type]
+            from_stage=source_entry.pipeline_stage,  # type: ignore[arg-type]
             to_stage="entry",
-            source_status=source_row.status,  # type: ignore[arg-type]
+            source_status=source_row.link_status,  # type: ignore[arg-type]
             destination_status=destination_row["status"],  # type: ignore[arg-type]
             source_transition_id=source_transition.id,
             destination_transition_id=destination_transition.id,
             updated_at=destination_row["updated_at"],
+        )
+
+    async def remove_candidate_from_job(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        moved_by: UUID,
+    ) -> None:
+        await self._ensure_active_candidate(candidate_id)
+        await self._ensure_active_job(job_id)
+
+        entry = await self._repository.find_entry(candidate_id, job_id)
+        if entry is None:
+            raise PipelineEntryNotFoundError
+
+        now = datetime.now(UTC)
+        updated = await self._repository.update_entry_status(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            new_status="removed",
+            last_moved_by=moved_by,
+            updated_at=now,
+        )
+        if updated is None:
+            raise PipelineEntryNotFoundError
+
+        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
+        await self._repository.save_transition(
+            CandidateJobPipelineEventModel(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                event_type="candidate_removed",
+                from_stage=entry.pipeline_stage,
+                to_stage=entry.pipeline_stage,
+                actor_id=moved_by,
+                idempotency_key=_build_event_idempotency_key(
+                    pipeline_id, "candidate_removed",
+                    entry.pipeline_stage, entry.pipeline_stage, moved_by,
+                ),
+                metadata_payload={"trigger": "manual", "reason": "candidate_removed"},
+                created_at=now,
+            )
         )
 
     # ------------------------------------------------------------------
@@ -582,8 +676,8 @@ class PipelineService:
     # New: jobs list with pipeline stats
     # ------------------------------------------------------------------
 
-    async def list_pipeline_jobs(self) -> list[PipelineJobSummaryResponse]:
-        jobs = await self._repository.list_active_jobs()
+    async def list_pipeline_jobs(self, *, include_closed: bool = False) -> list[PipelineJobSummaryResponse]:
+        jobs = await self._repository.list_pipeline_jobs(include_closed=include_closed)
         stage_count_rows = await self._repository.list_pipeline_stage_counts()
 
         # Build a lookup: job_id → {stage: count, latest: datetime}
@@ -605,6 +699,10 @@ class PipelineService:
                 job_id=job["job_id"],
                 job_title=job["job_title"],
                 job_status=job["job_status"],
+                seniority_level=job.get("seniority_level"),
+                work_model=job.get("work_model"),
+                location=job.get("location"),
+                deal_breakers=job.get("deal_breakers") or [],
                 total_candidates=sum(job_stats.get(job["job_id"], {}).get("counts", {}).values()),
                 stage_counts=job_stats.get(job["job_id"], {}).get("counts", {}),
                 latest_activity=job_stats.get(job["job_id"], {}).get("latest"),

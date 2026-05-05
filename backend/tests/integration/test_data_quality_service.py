@@ -1,7 +1,7 @@
 """Integration tests for data quality service."""
 
 import pytest
-from uuid import uuid4
+from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import User, UserRole
@@ -28,7 +28,7 @@ async def _create_user(db: AsyncSession, email: str) -> User:
     return user
 
 
-async def _create_candidate(db: AsyncSession, created_by: str) -> str:
+async def _create_candidate(db: AsyncSession, created_by: str) -> UUID:
     """Create a test candidate."""
     repo = SQLAlchemyCandidateRepository(db)
     candidate = Candidate.create(
@@ -38,7 +38,7 @@ async def _create_candidate(db: AsyncSession, created_by: str) -> str:
     )
     await repo.save(candidate)
     await db.commit()
-    return str(candidate.id)
+    return candidate.id
 
 
 @pytest.mark.asyncio

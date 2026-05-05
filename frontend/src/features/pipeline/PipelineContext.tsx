@@ -9,10 +9,9 @@ import {
   useState,
 } from "react";
 
-import { analysisService } from "../../services/analysisService";
-import { candidateJobLinksService } from "../../services/candidateJobLinksService";
+import { analysisService, matchToJob } from "../../services/analysisService";
 import { candidatesService } from "../../services/candidatesService";
-import { formatErrorDetails, handleApiError } from "../../services/errorHandler";
+import { formatErrorDetails, handleApiError } from "../../shared/utils/errorHandler";
 import { getJobPipeline, listJobs } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import {
@@ -80,8 +79,14 @@ export interface PipelineContextValue extends PipelineState {
     candidateId: string;
     analysisId: string;
     status?: AIAnalysisStatus | null;
+    jobId?: string | null;
     resumeId?: string | null;
     resumeTitle?: string | null;
+  }) => Promise<void>;
+  ensureAnalysisMatch: (input: {
+    analysisId: string;
+    candidateId: string;
+    jobId: string;
   }) => Promise<void>;
   notifyCandidatesChanged: () => void;
   notifyAnalysesChanged: () => void;
@@ -93,6 +98,7 @@ export interface PipelineContextValue extends PipelineState {
     analysisId: string,
     candidateId?: string | null,
     initialStatus?: AnalysisStatus["status"] | null,
+    jobId?: string | null,
   ) => void;
   stopPolling: () => void;
 }
@@ -167,9 +173,13 @@ export function PipelineProvider({ children }: PropsWithChildren) {
   const pollingTimerRef = useRef<number | null>(null);
   const pollingAnalysisIdRef = useRef<string | null>(null);
   const pollingCandidateIdRef = useRef<string | null>(null);
+  const pollingJobIdRef = useRef<string | null>(null);
   const pollingPrevStatusRef = useRef<string | null>(null);
   const pollingStaleCountRef = useRef(0);
   const isPageVisibleRef = useRef(true);
+  const matchingAttemptRef = useRef<Map<string, { status: "in_flight" | "completed" | "failed"; error?: string }>>(
+    new Map(),
+  );
 
   const notifyCandidatesChanged = useCallback(() => {
     setState((prev) => ({ ...prev, candidatesSyncTick: prev.candidatesSyncTick + 1 }));
@@ -345,19 +355,11 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     const inFlight = candidateFetchInFlightRef.current.get(candidateId);
     if (inFlight) return inFlight;
 
-    const request = Promise.all([
-      candidatesService.getOverview(candidateId),
-      candidateJobLinksService.getCandidateJobLinks(candidateId).catch(() => null),
-    ])
-      .then(([overview, officialLinks]) => {
-        const links = officialLinks ?? overview.candidate_job_links;
-        const mergedOverview: CandidateOverview = {
-          ...overview,
-          candidate_job_links: links,
-        };
-
-        candidateCacheRef.current.set(candidateId, mergedOverview);
-        return mergedOverview;
+    const request = candidatesService
+      .getOverview(candidateId)
+      .then((overview) => {
+        candidateCacheRef.current.set(candidateId, overview);
+        return overview;
       })
       .finally(() => {
         candidateFetchInFlightRef.current.delete(candidateId);
@@ -372,6 +374,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       candidateId: string,
       payload: {
         analysisId: string;
+        jobId?: string | null;
         status: AIAnalysisStatus;
         resumeId?: string | null;
         resumeTitle?: string | null;
@@ -386,6 +389,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         ...cached,
         latest_analysis: {
           analysis_id: payload.analysisId,
+          job_id: payload.jobId ?? latest?.job_id ?? cached.active_job_id ?? null,
           resume_id: payload.resumeId ?? latest?.resume_id ?? "",
           resume_title: payload.resumeTitle ?? latest?.resume_title ?? "",
           status: payload.status,
@@ -406,10 +410,71 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           ? {
               ...cached.latest_analysis_pipeline,
               analysis_id: payload.analysisId,
-              matching_status:
-                payload.status === "processing" ? "processing" : "waiting_analysis",
+              job_id:
+                payload.jobId ??
+                cached.latest_analysis_pipeline.job_id ??
+                cached.active_job_id ??
+                null,
+              matching_status: "waiting_analysis",
+              matching_error: null,
             }
-          : cached.latest_analysis_pipeline,
+          : {
+              analysis_id: payload.analysisId,
+              job_id: payload.jobId ?? cached.active_job_id ?? null,
+              matching_status: "waiting_analysis",
+              matching_error: null,
+              published_jobs_total: payload.jobId ? 1 : 0,
+              matched_jobs_count: 0,
+              pending_jobs_count: payload.jobId ? 1 : 0,
+            },
+      };
+
+      candidateCacheRef.current.set(candidateId, nextOverview);
+      setState((prev) =>
+        prev.selectedCandidateId === candidateId
+          ? { ...prev, candidateOverview: nextOverview, candidateError: null }
+          : prev,
+      );
+    },
+    [],
+  );
+
+  const patchCandidateOverviewMatching = useCallback(
+    (
+      candidateId: string,
+      payload: {
+        analysisId: string;
+        jobId: string;
+        status: "processing" | "completed" | "blocked";
+        error?: string | null;
+      },
+    ) => {
+      const cached = candidateCacheRef.current.get(candidateId);
+      if (!cached) return;
+
+      const existingPipeline = cached.latest_analysis_pipeline;
+      const nextPipeline = {
+        analysis_id: payload.analysisId,
+        job_id: payload.jobId,
+        matching_status: payload.status,
+        matching_error: payload.error ?? null,
+        published_jobs_total: 1,
+        matched_jobs_count: payload.status === "completed" ? 1 : 0,
+        pending_jobs_count: payload.status === "processing" ? 1 : 0,
+      };
+
+      const nextOverview: CandidateOverview = {
+        ...cached,
+        latest_analysis: cached.latest_analysis
+          ? {
+              ...cached.latest_analysis,
+              analysis_id: payload.analysisId,
+              job_id: payload.jobId,
+            }
+          : cached.latest_analysis,
+        latest_analysis_pipeline: existingPipeline
+          ? { ...existingPipeline, ...nextPipeline }
+          : nextPipeline,
       };
 
       candidateCacheRef.current.set(candidateId, nextOverview);
@@ -561,17 +626,97 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     [invalidateRanking, loadBoard, loadJobs, notifyCandidatesChanged, syncCandidateOverview],
   );
 
+  const ensureAnalysisMatch = useCallback(
+    async ({
+      analysisId,
+      candidateId,
+      jobId,
+    }: {
+      analysisId: string;
+      candidateId: string;
+      jobId: string;
+    }) => {
+      const key = `${analysisId}:${jobId}`;
+      const existingAttempt = matchingAttemptRef.current.get(key);
+      if (
+        existingAttempt?.status === "in_flight" ||
+        existingAttempt?.status === "completed" ||
+        existingAttempt?.status === "failed"
+      ) {
+        return;
+      }
+
+      const currentPipeline = await analysisService.pipeline(analysisId).catch(() => null);
+      if (currentPipeline?.job_id && currentPipeline.job_id !== jobId) {
+        return;
+      }
+      if (currentPipeline?.matching_status === "completed") {
+        matchingAttemptRef.current.set(key, { status: "completed" });
+        patchCandidateOverviewMatching(candidateId, {
+          analysisId,
+          jobId,
+          status: "completed",
+          error: null,
+        });
+        await invalidateJobState(jobId);
+        return;
+      }
+
+      matchingAttemptRef.current.set(key, { status: "in_flight" });
+      patchCandidateOverviewMatching(candidateId, {
+        analysisId,
+        jobId,
+        status: "processing",
+        error: null,
+      });
+      notifyCandidatesChanged();
+
+      try {
+        await matchToJob(analysisId, jobId);
+        matchingAttemptRef.current.set(key, { status: "completed" });
+        patchCandidateOverviewMatching(candidateId, {
+          analysisId,
+          jobId,
+          status: "completed",
+          error: null,
+        });
+        notifyCandidatesChanged();
+        notifyAnalysesChanged();
+        await invalidateJobState(jobId);
+      } catch (err) {
+        const message = toFriendlyText(err, "Falha ao persistir o matching explícito.");
+        matchingAttemptRef.current.set(key, { status: "failed", error: message });
+        patchCandidateOverviewMatching(candidateId, {
+          analysisId,
+          jobId,
+          status: "blocked",
+          error: message,
+        });
+        notifyCandidatesChanged();
+        notifyAnalysesChanged();
+      }
+    },
+    [
+      invalidateJobState,
+      notifyAnalysesChanged,
+      notifyCandidatesChanged,
+      patchCandidateOverviewMatching,
+    ],
+  );
+
   const syncAnalysisStart = useCallback(
     async ({
       candidateId,
       analysisId,
       status = "pending",
+      jobId,
       resumeId,
       resumeTitle,
     }: {
       candidateId: string;
       analysisId: string;
       status?: AIAnalysisStatus | null;
+      jobId?: string | null;
       resumeId?: string | null;
       resumeTitle?: string | null;
     }) => {
@@ -579,6 +724,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       setCandidateAiStatus(candidateId, nextStatus);
       patchCandidateOverviewAnalysis(candidateId, {
         analysisId,
+        jobId,
         status: nextStatus,
         resumeId,
         resumeTitle,
@@ -660,6 +806,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     clearPollingTimer();
     pollingAnalysisIdRef.current = null;
     pollingCandidateIdRef.current = null;
+    pollingJobIdRef.current = null;
     pollingPrevStatusRef.current = null;
     pollingStaleCountRef.current = 0;
     setState((prev) => ({ ...prev, pollingAnalysisId: null, pollingStatus: null }));
@@ -715,11 +862,25 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         if (isTerminal) {
           // Ensure terminal status is always reflected even if unchanged from prev
           setState((prev) => ({ ...prev, pollingStatus: status }));
-          invalidateRanking();
-          stopPolling();
-          void refreshCandidateOverview();
-          void refreshBoard();
-          return;
+          if (
+            status.status === "completed" &&
+            pollingCandidateIdRef.current &&
+            pollingJobIdRef.current
+          ) {
+            await ensureAnalysisMatch({
+              analysisId,
+              candidateId: pollingCandidateIdRef.current,
+              jobId: pollingJobIdRef.current,
+            });
+            stopPolling();
+            return;
+          } else {
+            invalidateRanking();
+            stopPolling();
+            void refreshCandidateOverview();
+            void refreshBoard();
+            return;
+          }
         }
 
         schedulePollRef.current(
@@ -741,6 +902,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       analysisId: string,
       candidateId?: string | null,
       initialStatus?: AnalysisStatus["status"] | null,
+      jobId?: string | null,
     ) => {
       // No-op if already polling the same analysis
       if (pollingAnalysisIdRef.current === analysisId) return;
@@ -748,6 +910,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       clearPollingTimer();
       pollingAnalysisIdRef.current = analysisId;
       pollingCandidateIdRef.current = candidateId ?? null;
+      pollingJobIdRef.current = jobId ?? null;
       pollingPrevStatusRef.current = initialStatus ?? null;
       pollingStaleCountRef.current = 0;
       setState((prev) => ({ ...prev, pollingAnalysisId: analysisId, pollingStatus: null }));
@@ -795,6 +958,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       moveCandidateStage,
       setCandidateAiStatus,
       syncAnalysisStart,
+      ensureAnalysisMatch,
       notifyCandidatesChanged,
       notifyAnalysesChanged,
       invalidateJobState,
@@ -815,6 +979,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       moveCandidateStage,
       setCandidateAiStatus,
       syncAnalysisStart,
+      ensureAnalysisMatch,
       notifyCandidatesChanged,
       notifyAnalysesChanged,
       invalidateJobState,

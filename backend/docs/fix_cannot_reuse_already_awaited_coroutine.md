@@ -63,10 +63,6 @@ def _run_async(coro):
 - **`src/interface/workers/matching_tasks.py`** (Line 17)
   - Already uses `asyncio.run()` correctly ✅
 
-- **`src/interface/workers/dev_analysis_processor.py`**
-  - Uses `asyncio.get_running_loop()` and `create_task()` correctly ✅
-  - No changes needed
-
 ## Tests Added
 
 **File:** `tests/integration/test_run_async_no_coroutine_reuse.py`

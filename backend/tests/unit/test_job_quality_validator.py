@@ -164,7 +164,7 @@ async def test_good_vaga_with_all_criteria(service, mock_repository):
 
 @pytest.mark.asyncio
 async def test_acceptable_vaga_with_warnings(service, mock_repository):
-    """Test that mid-quality vaga is acceptable and can publish."""
+    """Test that mid-quality vaga can still be blocked from publication."""
     job = _create_job(
         title="Python Developer",
         description="We are hiring a Python developer for our team.",  # > 50 but < 100
@@ -180,8 +180,9 @@ async def test_acceptable_vaga_with_warnings(service, mock_repository):
     result = await service.validate(job.id)
 
     assert result.status == "acceptable"
-    assert result.can_publish
+    assert not result.can_publish
     assert 50 <= result.quality_score < 75
+    assert "mandatory_skills" in result.publication_blockers
 
 
 @pytest.mark.asyncio
@@ -273,6 +274,39 @@ async def test_missing_structural_fields_reduce_quality(service, mock_repository
     assert "responsibilities" in result.missing_fields
     assert "experience_context" in result.missing_fields
     assert any("comportamentais" in warning.lower() for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_missing_publication_blockers_prevent_publish_even_with_good_score(service, mock_repository):
+    job = _create_job(
+        job_area=None,
+        minimum_years_experience=None,
+    )
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "PostgreSQL", is_mandatory=True, weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert not result.can_publish
+    assert "job_area" in result.publication_blockers
+    assert "minimum_years_experience" in result.publication_blockers
+
+
+@pytest.mark.asyncio
+async def test_two_mandatory_skills_are_required_for_publication(service, mock_repository):
+    job = _create_job()
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert not result.can_publish
+    assert "mandatory_skills" in result.publication_blockers
 
 
 @pytest.mark.asyncio

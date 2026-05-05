@@ -8,16 +8,15 @@ import { useAuth } from "../../features/auth/useAuth";
 import { analysisService } from "../../services/analysisService";
 import { candidatesService } from "../../services/candidatesService";
 import { dataQualityService } from "../../services/dataQualityService";
-import { formatErrorForToast, getHttpStatus, handleApiError } from "../../services/errorHandler";
+import { formatErrorForToast, getHttpStatus, handleApiError } from "../../shared/utils/errorHandler";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { getJobRanking } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import { resumeService } from "../../services/resumeService";
-import { toast } from "../../services/toast";
+import { toast } from "../../shared/utils/toast";
 import {
   scoreExplanationService,
-  type ScoreExplanationEvidence,
   type ScoreExplanationResponse,
 } from "../../services/scoreExplanationService";
 import type {
@@ -85,6 +84,14 @@ const ANALYSIS_STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelada",
 };
 
+const MATCHING_STATUS_LABEL: Record<string, string> = {
+  waiting_analysis: "Aguardando análise",
+  processing: "Em andamento",
+  completed: "Concluído",
+  blocked: "Erro no matching",
+  idle: "Pronto para gerar match",
+};
+
 const EXTRACTION_STATUS_LABEL: Record<string, string> = {
   completed: "Pronto",
   pending: "Pendente",
@@ -110,6 +117,7 @@ async function recoverInFlightAnalysis(params: {
     candidateId: string;
     analysisId: string;
     status?: string | null;
+    jobId?: string | null;
     resumeId?: string | null;
     resumeTitle?: string | null;
   }) => Promise<void>;
@@ -123,10 +131,11 @@ async function recoverInFlightAnalysis(params: {
       candidateId: params.candidateId,
       analysisId: latest.analysis_id,
       status: latest.status,
+      jobId: latest.job_id,
       resumeId: latest.resume_id,
       resumeTitle: latest.resume_title,
     });
-    params.startPolling(latest.analysis_id, params.candidateId, latest.status);
+    params.startPolling(latest.analysis_id, params.candidateId, latest.status, latest.job_id);
     return true;
   } catch {
     return false;
@@ -372,6 +381,7 @@ export function CandidateDrawer() {
     refreshBoard,
     syncCandidateOverview,
     syncAnalysisStart,
+    ensureAnalysisMatch,
     startPolling,
     notifyCandidatesChanged,
     moveCandidateStage,
@@ -417,6 +427,35 @@ export function CandidateDrawer() {
     setTransferJobModalOpen(false);
     setEditModalOpen(false);
   }, [isOpen]);
+
+  useEffect(() => {
+    const latestAnalysis = candidateOverview?.latest_analysis;
+    if (!candidateOverview || !latestAnalysis?.analysis_id) return;
+    if (!isAnalysisInProgress(latestAnalysis.status)) return;
+
+    startPolling(
+      latestAnalysis.analysis_id,
+      candidateOverview.candidate.id,
+      latestAnalysis.status,
+      latestAnalysis.job_id,
+    );
+  }, [candidateOverview, startPolling]);
+
+  useEffect(() => {
+    const latestAnalysis = candidateOverview?.latest_analysis;
+    const pipelineStatus = candidateOverview?.latest_analysis_pipeline;
+    if (!candidateOverview || !latestAnalysis?.analysis_id || !latestAnalysis.job_id) return;
+    if (latestAnalysis.status !== "completed") return;
+    if (pipelineStatus?.matching_status === "completed" || pipelineStatus?.matching_status === "processing") {
+      return;
+    }
+
+    void ensureAnalysisMatch({
+      analysisId: latestAnalysis.analysis_id,
+      candidateId: candidateOverview.candidate.id,
+      jobId: latestAnalysis.job_id,
+    });
+  }, [candidateOverview, ensureAnalysisMatch]);
 
   useEffect(() => {
     rankingEntryCacheRef.current.clear();
@@ -519,14 +558,6 @@ export function CandidateDrawer() {
     if (!candidateOverview || !candidateActiveJobId) return null;
     return candidateOverview.pipeline_entries.find((entry) => entry.job_id === candidateActiveJobId) ?? null;
   }, [candidateOverview, candidateActiveJobId]);
-  const activeJobLink = useMemo(() => {
-    if (!candidateActiveJobId || !candidateOverview) return null;
-    return (
-      candidateOverview.candidate_job_links.find(
-        (entry) => entry.job_id === candidateActiveJobId && entry.status === "active",
-      ) ?? null
-    );
-  }, [candidateActiveJobId, candidateOverview]);
 
   const currentStage = primaryPipelineEntry?.stage ?? null;
   const activeJob = useMemo<Job | null>(
@@ -562,8 +593,8 @@ export function CandidateDrawer() {
     [candidateState],
   );
   const linkedJobIds = useMemo(() => {
-    const links = candidateOverview?.candidate_job_links ?? [];
-    return new Set(links.filter((entry) => entry.status === "active").map((entry) => entry.job_id));
+    const entries = candidateOverview?.pipeline_entries ?? [];
+    return new Set(entries.map((entry) => entry.job_id));
   }, [candidateOverview]);
   const availableJobs = useMemo(
     () =>
@@ -632,10 +663,11 @@ export function CandidateDrawer() {
         candidateId: candidateOverview.candidate.id,
         analysisId: response.analysis_id,
         status: "pending",
+        jobId: manualJobId,
         resumeId: readyResume.resume_id,
         resumeTitle: readyResume.title,
       });
-      startPolling(response.analysis_id, candidateOverview.candidate.id, "pending");
+      startPolling(response.analysis_id, candidateOverview.candidate.id, "pending", manualJobId);
       feedback.requestAnalysis.success();
     } catch (err) {
       if (getHttpStatus(err) === 409) {
@@ -806,7 +838,7 @@ export function CandidateDrawer() {
           onPrimaryAction={headerPrimaryAction?.onClick ?? null}
           activeJobLabel={activeJobLabel}
           currentStage={currentStage}
-          isOfficiallyLinked={activeJobLink !== null}
+          isOfficiallyLinked={primaryPipelineEntry !== null}
           activeJobCompatibilityScore={activeJobCompatibilityScore}
           linkStatus={linkStatus}
           candidateLoading={candidateLoading}
@@ -856,7 +888,6 @@ export function CandidateDrawer() {
                 <SummaryTab
                   overview={candidateOverview}
                   activeJob={activeJob}
-                  activeJobLink={activeJobLink}
                   activePipelineEntry={primaryPipelineEntry}
                   onEdit={() => setEditModalOpen(true)}
                   onReprocess={handleDataQualityReprocess}
@@ -911,7 +942,6 @@ export function CandidateDrawer() {
                   overview={candidateOverview}
                   activeJob={activeJob}
                   activeJobId={candidateActiveJobId}
-                  activeJobLink={activeJobLink}
                   activePipelineEntry={primaryPipelineEntry}
                   currentStage={currentStage}
                   availableJobs={availableJobs}
@@ -973,7 +1003,6 @@ export function CandidateDrawer() {
 function SummaryTab({
   overview,
   activeJob,
-  activeJobLink,
   activePipelineEntry,
   onEdit,
   onReprocess,
@@ -982,7 +1011,6 @@ function SummaryTab({
 }: {
   overview: CandidateOverview;
   activeJob: Job | null;
-  activeJobLink: CandidateOverview["candidate_job_links"][number] | null;
   activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   onEdit: () => void;
   onReprocess: () => void;
@@ -1082,22 +1110,20 @@ function SummaryTab({
       </Section>
 
       <Section title="Vagas vinculadas">
-        {overview.candidate_job_links.filter((entry) => entry.status === "active").length > 0 ? (
+        {overview.pipeline_entries.length > 0 ? (
           <div className="grid gap-2 sm:grid-cols-2">
-            {overview.candidate_job_links
-              .filter((entry) => entry.status === "active")
-              .map((entry) => (
+            {overview.pipeline_entries.map((entry) => (
                 <MetaItem
-                  key={`${entry.job_id}:${entry.id || entry.created_at}`}
-                  label={entry.job_title ?? "Vaga vinculada"}
-                  value={entry.job_status ? formatJobStatus(entry.job_status) : "Status não informado"}
+                  key={`${entry.job_id}:${entry.updated_at}`}
+                  label={entry.job_title}
+                  value={`${STAGE_LABEL[entry.stage] ?? entry.stage} · ${entry.candidate_status}`}
                 />
               ))}
           </div>
         ) : (
           <EmptyTab
-            title="Nenhuma vaga vinculada oficialmente"
-            description="Este candidato ainda não possui vínculo ativo em candidate_job_links."
+            title="Nenhuma vaga vinculada"
+            description="Este candidato ainda não possui entrada ativa no pipeline."
             compact
           />
         )}
@@ -1330,7 +1356,10 @@ function ScoreTab({
                 <BreakdownItem label="Experiência" value={rankingEntry.score_breakdown.experience_match_score} />
                 <BreakdownItem label="Senioridade" value={rankingEntry.score_breakdown.seniority_match_score} />
                 <BreakdownItem label="Educação" value={rankingEntry.score_breakdown.education_score} />
-                <BreakdownItem label="Confiança da IA" value={rankingEntry.score_breakdown.ai_confidence_score} />
+                <BreakdownItem
+                  label="Confiança dos dados"
+                  value={rankingEntry.score_breakdown.confidence_score || rankingEntry.score_breakdown.ai_confidence_score}
+                />
                 <BreakdownItem label="Penalidade" value={rankingEntry.score_breakdown.penalty_score} />
               </div>
             ) : null}
@@ -1428,22 +1457,29 @@ function ScoreTab({
 
         {!insightLoading && !insightError && scoreExplanation ? (
           <div className="flex flex-col gap-4">
-            <div className="grid gap-2 sm:grid-cols-3">
-              <MetaItem label="Score considerado" value={fmtScore(scoreExplanation.score)} />
+            <div className="grid gap-2 sm:grid-cols-4">
+              <MetaItem label="Score final" value={fmtScore(scoreExplanation.final_score)} />
+              <MetaItem label="Recommendation" value={scoreExplanation.recommendation || "—"} />
               <MetaItem label="Motor usado" value={scoreExplanation.engine_used || "—"} />
               <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.confidence_score)} />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={scoreExplanation.engine_used === "adaptive" ? "success" : "outline"}>
-                {scoreExplanation.engine_used === "adaptive" ? "Motor: Adaptativo" : "Motor: Legado"}
+              <Badge variant={scoreExplanation.engine_used === "canonical" ? "success" : "outline"}>
+                {scoreExplanation.engine_used === "canonical" ? "Motor: Canônico" : `Motor: ${scoreExplanation.engine_used}`}
               </Badge>
+              <Badge variant="outline">Recommendation: {scoreExplanation.recommendation || "—"}</Badge>
               <Badge variant="outline">Confiança: {fmtPercentValue(scoreExplanation.confidence_score)}</Badge>
             </div>
 
-            {scoreExplanation.engine_used === "legacy" ? (
-              <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--surface-muted))] px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
-                Este score foi calculado pelo motor legado; a explicação pode ser limitada.
+            {scoreExplanation.overestimation_risks.length > 0 ? (
+              <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
+                <p className="text-sm font-semibold text-[hsl(var(--warning))]">Alerta de confiança</p>
+                <div className="mt-1 flex flex-col gap-1 text-xs leading-relaxed text-[hsl(var(--text))]">
+                  {scoreExplanation.overestimation_risks.map((risk) => (
+                    <p key={risk}>{risk}</p>
+                  ))}
+                </div>
               </div>
             ) : null}
 
@@ -1522,38 +1558,28 @@ function ScoreTab({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <InsightListBlock
-                title="Motivos do score alto"
-                items={scoreExplanation.high_score_reasons}
-                empty="Sem motivos positivos relevantes."
-              />
-              <InsightListBlock
-                title="Motivos do score baixo"
-                items={scoreExplanation.low_score_reasons}
-                empty="Sem motivos negativos relevantes."
-              />
-              <InsightListBlock
-                title="Riscos de superestimação"
-                items={scoreExplanation.overestimation_risks}
-                empty="Sem sinais de superestimação."
-              />
-              <InsightListBlock
-                title="Perguntas recomendadas"
-                items={scoreExplanation.recommended_questions}
-                empty="Sem perguntas sugeridas."
-              />
-            </div>
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 lg:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  Breakdown do score
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <ExplanationBreakdownItem label="Obrigatórias" item={scoreExplanation.breakdown.mandatory ?? null} />
+                  <ExplanationBreakdownItem label="Opcionais" item={scoreExplanation.breakdown.optional ?? null} />
+                  <ExplanationBreakdownItem label="Experiência" item={scoreExplanation.breakdown.experience ?? null} />
+                  <ExplanationBreakdownItem label="Senioridade" item={scoreExplanation.breakdown.seniority ?? null} />
+                  <ExplanationBreakdownItem label="Ajuste IA" item={scoreExplanation.breakdown.ai_adjustment ?? null} />
+                </div>
+              </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <InsightEvidenceBlock
-                title="Evidências mais fortes"
-                items={scoreExplanation.strongest_evidence}
-                empty="Sem evidências fortes mapeadas."
+              <InsightListBlock
+                title="Destaques"
+                items={scoreExplanation.highlights}
+                empty="Sem destaques relevantes."
               />
-              <InsightEvidenceBlock
-                title="Equivalências encontradas"
-                items={scoreExplanation.matched_equivalences}
-                empty="Sem equivalências encontradas."
+              <InsightListBlock
+                title="Riscos"
+                items={scoreExplanation.risks}
+                empty="Sem riscos relevantes."
               />
             </div>
           </div>
@@ -1598,38 +1624,25 @@ function InsightListBlock({
   );
 }
 
-function InsightEvidenceBlock({
-  title,
-  items,
-  empty,
+function ExplanationBreakdownItem({
+  label,
+  item,
 }: {
-  title: string;
-  items: ScoreExplanationEvidence[];
-  empty: string;
+  label: string;
+  item: { score: number; weight: number; contribution: number } | null;
 }) {
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{title}</p>
-      {items.length > 0 ? (
-        <ul className="mt-3 flex flex-col gap-2">
-          {items.map((item, index) => (
-            <li
-              key={`${title}:${item.requirement}:${item.match_type}:${item.explanation}:${index}`}
-              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2"
-            >
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">{item.requirement}</p>
-              <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                {item.match_type} · {item.evidence_strength} · conf. {item.confidence}
-              </p>
-              {item.evidence_quotes[0] ? (
-                <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">{item.evidence_quotes[0]}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
-      )}
+    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        {label}
+      </p>
+      <p className={["mt-2 text-lg font-extrabold tabular-nums", scoreColorClass(item?.score ?? null)].join(" ")}>
+        {fmtScore(item?.score ?? null)}
+      </p>
+      <div className="mt-2 flex flex-col gap-1 text-xs text-[hsl(var(--text-muted))]">
+        <span>Peso: {item ? `${Math.round(item.weight * 100)}%` : "—"}</span>
+        <span>Contribuição: {fmtScore(item?.contribution ?? null)}</span>
+      </div>
     </div>
   );
 }
@@ -1659,6 +1672,7 @@ function AnalysisTab({
   const [pipelineLoading, setPipelineLoading] = useState(false);
 
   const { latest_analysis } = overview;
+  const overviewPipelineStatus = overview.latest_analysis_pipeline;
   const analysisId = latest_analysis?.analysis_id ?? null;
   const readyResumes = overview.resumes.filter(
     (resume) => resume.status === "active" && resume.extraction_status === "completed" && resume.current_version_id,
@@ -1689,6 +1703,44 @@ function AnalysisTab({
       .then((status) => setPipelineStatus(status))
       .catch(() => {});
   }, [pollingStatus, pollingAnalysisId, analysisId]);
+
+  const effectivePipelineStatus = useMemo<AnalysisPipelineStatus | null>(() => {
+    const base =
+      pipelineStatus ??
+      (overviewPipelineStatus && latest_analysis
+        ? {
+            analysis_id: overviewPipelineStatus.analysis_id,
+            job_id: overviewPipelineStatus.job_id,
+            analysis_status: latest_analysis.status,
+            matching_status: overviewPipelineStatus.matching_status,
+            matching_error: overviewPipelineStatus.matching_error ?? null,
+            published_jobs_total: overviewPipelineStatus.published_jobs_total,
+            matched_jobs_count: overviewPipelineStatus.matched_jobs_count,
+            pending_jobs_count: overviewPipelineStatus.pending_jobs_count,
+            recent_matches: [],
+          }
+        : null);
+
+    if (!base) return null;
+    if (
+      overviewPipelineStatus &&
+      overviewPipelineStatus.analysis_id === base.analysis_id &&
+      (overviewPipelineStatus.matching_status === "processing" ||
+        overviewPipelineStatus.matching_status === "blocked")
+    ) {
+      return {
+        ...base,
+        job_id: overviewPipelineStatus.job_id,
+        matching_status: overviewPipelineStatus.matching_status,
+        matching_error: overviewPipelineStatus.matching_error ?? null,
+        published_jobs_total: overviewPipelineStatus.published_jobs_total,
+        matched_jobs_count: overviewPipelineStatus.matched_jobs_count,
+        pending_jobs_count: overviewPipelineStatus.pending_jobs_count,
+      };
+    }
+
+    return base;
+  }, [pipelineStatus, overviewPipelineStatus, latest_analysis]);
 
   async function handleRequestAnalysis() {
     if (!selectedVersionId || !canSpendRealTokens || isRequesting) return;
@@ -1721,10 +1773,11 @@ function AnalysisTab({
         candidateId: overview.candidate.id,
         analysisId: response.analysis_id,
         status: "pending",
+        jobId: manualJobId,
         resumeId: selectedResume?.resume_id ?? null,
         resumeTitle: selectedResume?.title ?? null,
       });
-      startPolling(response.analysis_id, overview.candidate.id, "pending");
+      startPolling(response.analysis_id, overview.candidate.id, "pending", manualJobId);
       feedback.requestAnalysis.success();
     } catch (err) {
       if (getHttpStatus(err) === 409) {
@@ -1817,7 +1870,7 @@ function AnalysisTab({
 
         {shouldShowManualStart ? (
           <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
-            Se a análise não começou automaticamente após o upload, selecione o currículo e inicie manualmente.
+            O upload não dispara IA. Selecione o currículo e solicite a análise manualmente para esta vaga.
           </p>
         ) : null}
       </Section>
@@ -1911,13 +1964,33 @@ function AnalysisTab({
         </Section>
       ) : null}
 
-      {pipelineStatus ? (
+      {effectivePipelineStatus ? (
         <Section title="Processamento">
           <div className="grid gap-2 sm:grid-cols-3">
-            <MetaItem label="Matching" value={pipelineStatus.matching_status} />
-            <MetaItem label="Vagas analisadas" value={String(pipelineStatus.published_jobs_total)} />
-            <MetaItem label="Matches recentes" value={String(pipelineStatus.matched_jobs_count)} />
+            <MetaItem
+              label="Matching"
+              value={
+                MATCHING_STATUS_LABEL[effectivePipelineStatus.matching_status] ??
+                effectivePipelineStatus.matching_status
+              }
+            />
+            <MetaItem
+              label="Vaga alvo"
+              value={effectivePipelineStatus.job_id ? "Vinculada" : "Não informada"}
+            />
+            <MetaItem
+              label="Persistência"
+              value={`${effectivePipelineStatus.matched_jobs_count}/${effectivePipelineStatus.published_jobs_total}`}
+            />
           </div>
+          {effectivePipelineStatus.matching_error ? (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700">
+                Erro no matching
+              </p>
+              <p className="mt-1 text-xs text-red-800">{effectivePipelineStatus.matching_error}</p>
+            </div>
+          ) : null}
         </Section>
       ) : null}
 
@@ -2119,10 +2192,16 @@ function DocumentsTab({
           candidateId: overview.candidate.id,
           analysisId: uploaded.analysis_id,
           status: uploaded.analysis_status ?? "pending",
+          jobId: activeJobId,
           resumeId: uploaded.resume_id,
           resumeTitle: selectedFile.name,
         });
-        startPolling(uploaded.analysis_id, overview.candidate.id, uploaded.analysis_status ?? "pending");
+        startPolling(
+          uploaded.analysis_id,
+          overview.candidate.id,
+          uploaded.analysis_status ?? "pending",
+          activeJobId,
+        );
       } else {
         notifyCandidatesChanged();
       }
@@ -2215,10 +2294,11 @@ function DocumentsTab({
         candidateId: overview.candidate.id,
         analysisId: response.analysis_id,
         status: "pending",
+        jobId: manualJobId,
         resumeId,
         resumeTitle: resume?.title ?? null,
       });
-      startPolling(response.analysis_id, overview.candidate.id, "pending");
+      startPolling(response.analysis_id, overview.candidate.id, "pending", manualJobId);
       feedback.requestAnalysis.success();
     } catch (err) {
       if (getHttpStatus(err) === 409) {
@@ -2727,7 +2807,6 @@ function ActionsTab({
   overview,
   activeJob,
   activeJobId,
-  activeJobLink,
   activePipelineEntry,
   currentStage,
   availableJobs,
@@ -2742,7 +2821,6 @@ function ActionsTab({
   overview: CandidateOverview;
   activeJob: Job | null;
   activeJobId: string | null;
-  activeJobLink: CandidateOverview["candidate_job_links"][number] | null;
   activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   currentStage: PipelineStage | null;
   availableJobs: Job[];
@@ -2776,15 +2854,9 @@ function ActionsTab({
       {activeJobId && activeJob && !contextualEntry ? (
         <Section title="Vínculo com a vaga ativa">
           <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">
-              {activeJobLink
-                ? "Vínculo oficial ativo, sem etapa de pipeline"
-                : "Candidato sem vínculo oficial com a vaga"}
-            </p>
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Candidato fora da vaga ativa</p>
             <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-              {activeJobLink
-                ? "Ele está vinculado em candidate_job_links, mas ainda não entrou no kanban desta vaga."
-                : "Crie o vínculo oficial e a primeira etapa do pipeline para começar o acompanhamento."}
+              Adicione o candidato à vaga ativa para criar a etapa inicial e começar o acompanhamento no kanban.
             </p>
             <button
               type="button"
@@ -2792,11 +2864,7 @@ function ActionsTab({
               disabled={linkSaving}
               className="mt-3 rounded-lg border border-[hsl(var(--warning))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--warning))] transition hover:bg-[hsl(var(--warning-soft))] disabled:opacity-50"
             >
-              {linkSaving
-                ? "Salvando…"
-                : activeJobLink
-                  ? "Adicionar ao pipeline"
-                  : "Vincular e adicionar ao pipeline"}
+              {linkSaving ? "Salvando…" : "Adicionar à vaga ativa"}
             </button>
           </div>
         </Section>
@@ -2870,10 +2938,8 @@ function ActionsTab({
             </>
           ) : (
             <EmptyTab
-              title={activeJobLink ? "Candidato ainda não entrou no pipeline desta vaga" : "Candidato não vinculado à vaga ativa"}
-              description={activeJobLink
-                ? "Use a ação acima para criar a etapa inicial no pipeline."
-                : "Vincule o candidato primeiro para liberar movimentações de etapa."}
+              title="Candidato não vinculado à vaga ativa"
+              description="Adicione o candidato à vaga ativa para liberar movimentações de etapa."
               compact
             />
           )}

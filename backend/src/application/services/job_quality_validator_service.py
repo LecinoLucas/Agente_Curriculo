@@ -27,6 +27,7 @@ class JobQualityResult:
     quality_score: int                      # 0-100
     status: str                             # "weak" | "acceptable" | "good"
     can_publish: bool
+    publication_blockers: list[str] = field(default_factory=list)
     missing_fields: list[str] = field(default_factory=list)
     suggestions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -224,9 +225,19 @@ class JobQualityValidatorService:
             # Optional, but good practice
             pass
 
+        publication_blockers: list[str] = []
+        if not job.job_area:
+            publication_blockers.append("job_area")
+        if not job.seniority_level:
+            publication_blockers.append("seniority_level")
+        if job.minimum_years_experience is None or job.minimum_years_experience <= 0:
+            publication_blockers.append("minimum_years_experience")
+        if len(mandatory_skills) < 2:
+            publication_blockers.append("mandatory_skills")
+
         # Determine status and can_publish
         status = "weak" if score < 50 else ("acceptable" if score < 75 else "good")
-        can_publish = score >= 50
+        can_publish = score >= 50 and not publication_blockers
 
         # Additional warnings/suggestions based on total skills
         if total_skills > 12:
@@ -236,6 +247,7 @@ class JobQualityValidatorService:
             quality_score=min(100, score),  # Cap at 100
             status=status,
             can_publish=can_publish,
+            publication_blockers=publication_blockers,
             missing_fields=missing_fields,
             suggestions=suggestions,
             warnings=warnings,

@@ -183,7 +183,7 @@ async def test_create_com_campos_estruturados_repassa_para_profiler(
     await service.create(request, user_id)
 
     kwargs = mock_profiler_service.generate_profile.call_args.kwargs
-    assert kwargs["job_area"] == "Dados"
+    assert kwargs["job_area"] == "data"
     assert kwargs["responsibilities"] == "Construir dashboards e acompanhar indicadores."
     assert kwargs["experience_context"] == "Experiência em analytics, BI e operação de dados."
     assert kwargs["behavioral_requirements"] == ["Comunicação", "Autonomia"]

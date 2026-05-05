@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,10 +10,14 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
+from src.infrastructure.database.models.profile_analysis_model import (
+    CandidateJobMatchModel,
+    CandidateProfileAnalysisModel,
+    JobProfileAnalysisModel,
+)
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
 
@@ -266,6 +270,7 @@ class SQLAlchemyAnalysisRepository:
         result = await self._session.execute(
             sa.select(
                 AnalysisModel.id,
+                AnalysisModel.job_id,
                 AnalysisModel.resume_version_id,
                 AnalysisModel.status,
                 AnalysisModel.failure_reason,
@@ -328,6 +333,26 @@ class SQLAlchemyAnalysisRepository:
         analysis_id: UUID,
         limit: int | None = None,
     ) -> list[JobModel]:
+        analysis_context = await self._session.execute(
+            sa.select(
+                ResumeModel.candidate_id.label("candidate_id"),
+                AnalysisModel.resume_version_id.label("resume_version_id"),
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                AnalysisModel.id == analysis_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        context = analysis_context.mappings().first()
+        if context is None:
+            return []
+
+        candidate_id = context["candidate_id"]
+        resume_version_id = context["resume_version_id"]
+
         query = (
             sa.select(JobModel)
             .where(
@@ -335,10 +360,11 @@ class SQLAlchemyAnalysisRepository:
                 JobModel.deleted_at.is_(None),
                 ~sa.exists(
                     sa.select(1)
-                    .select_from(ResumeJobMatchModel)
+                    .select_from(CandidateJobMatchModel)
                     .where(
-                        ResumeJobMatchModel.analysis_id == analysis_id,
-                        ResumeJobMatchModel.job_id == JobModel.id,
+                        CandidateJobMatchModel.candidate_id == candidate_id,
+                        CandidateJobMatchModel.resume_version_id == resume_version_id,
+                        CandidateJobMatchModel.job_id == JobModel.id,
                     )
                 ),
             )
@@ -377,14 +403,33 @@ class SQLAlchemyAnalysisRepository:
         )
 
     async def count_published_matches_for_analysis(self, analysis_id: UUID) -> int:
+        context_sq = (
+            sa.select(
+                ResumeModel.candidate_id.label("candidate_id"),
+                AnalysisModel.resume_version_id.label("resume_version_id"),
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                AnalysisModel.id == analysis_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .subquery()
+        )
         return int(
             (
                 await self._session.scalar(
                     sa.select(sa.func.count())
-                    .select_from(ResumeJobMatchModel)
-                    .join(JobModel, JobModel.id == ResumeJobMatchModel.job_id)
+                    .select_from(CandidateJobMatchModel)
+                    .join(JobModel, JobModel.id == CandidateJobMatchModel.job_id)
+                    .join(
+                        context_sq,
+                        sa.and_(
+                            CandidateJobMatchModel.candidate_id == context_sq.c.candidate_id,
+                            CandidateJobMatchModel.resume_version_id == context_sq.c.resume_version_id,
+                        ),
+                    )
                     .where(
-                        ResumeJobMatchModel.analysis_id == analysis_id,
                         JobModel.status == "published",
                         JobModel.deleted_at.is_(None),
                     )
@@ -398,46 +443,93 @@ class SQLAlchemyAnalysisRepository:
         analysis_id: UUID,
         limit: int = 5,
     ) -> list[dict]:
+        context_sq = (
+            sa.select(
+                ResumeModel.candidate_id.label("candidate_id"),
+                AnalysisModel.resume_version_id.label("resume_version_id"),
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                AnalysisModel.id == analysis_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .subquery()
+        )
         result = await self._session.execute(
             sa.select(
-                ResumeJobMatchModel.job_id,
+                CandidateJobMatchModel.job_id,
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
-                ResumeJobMatchModel.match_score,
-                ResumeJobMatchModel.recommendation,
-                ResumeJobMatchModel.created_at,
+                CandidateJobMatchModel.match_score,
+                CandidateJobMatchModel.recommendation,
+                CandidateJobMatchModel.created_at,
             )
-            .join(JobModel, JobModel.id == ResumeJobMatchModel.job_id)
+            .join(JobModel, JobModel.id == CandidateJobMatchModel.job_id)
+            .join(
+                context_sq,
+                sa.and_(
+                    CandidateJobMatchModel.candidate_id == context_sq.c.candidate_id,
+                    CandidateJobMatchModel.resume_version_id == context_sq.c.resume_version_id,
+                ),
+            )
             .where(
-                ResumeJobMatchModel.analysis_id == analysis_id,
                 JobModel.status == "published",
                 JobModel.deleted_at.is_(None),
             )
             .order_by(
-                ResumeJobMatchModel.match_score.desc().nulls_last(),
-                ResumeJobMatchModel.created_at.desc(),
+                CandidateJobMatchModel.match_score.desc().nulls_last(),
+                CandidateJobMatchModel.created_at.desc(),
             )
             .limit(limit)
         )
         return [dict(row) for row in result.mappings().all()]
 
-    async def find_job_match(
+    async def find_candidate_job_match_for_analysis(
         self,
         analysis_id: UUID,
         job_id: UUID,
-    ) -> ResumeJobMatchModel | None:
-        return await self._session.scalar(
-            sa.select(ResumeJobMatchModel).where(
-                ResumeJobMatchModel.analysis_id == analysis_id,
-                ResumeJobMatchModel.job_id == job_id,
+    ) -> CandidateJobMatchModel | None:
+        context_sq = (
+            sa.select(
+                ResumeModel.candidate_id.label("candidate_id"),
+                AnalysisModel.resume_version_id.label("resume_version_id"),
             )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                AnalysisModel.id == analysis_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .subquery()
+        )
+        return await self._session.scalar(
+            sa.select(CandidateJobMatchModel)
+            .join(
+                context_sq,
+                sa.and_(
+                    CandidateJobMatchModel.candidate_id == context_sq.c.candidate_id,
+                    CandidateJobMatchModel.resume_version_id == context_sq.c.resume_version_id,
+                ),
+            )
+            .where(CandidateJobMatchModel.job_id == job_id)
+            .order_by(CandidateJobMatchModel.created_at.desc())
         )
 
-    async def save_job_match(self, match: ResumeJobMatchModel) -> ResumeJobMatchModel:
-        self._session.add(match)
-        await self._session.flush()
-        await self._session.refresh(match)
-        return match
+    async def find_candidate_job_match_for_candidate_job(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobMatchModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateJobMatchModel)
+            .where(
+                CandidateJobMatchModel.candidate_id == candidate_id,
+                CandidateJobMatchModel.job_id == job_id,
+            )
+            .order_by(CandidateJobMatchModel.created_at.desc())
+        )
 
     async def get_candidate_id_from_analysis(self, analysis_id: UUID) -> UUID | None:
         """Get candidate_id from analysis via resume_version -> resume -> candidate."""
@@ -451,6 +543,192 @@ class SQLAlchemyAnalysisRepository:
         )
         return result
 
+    async def get_resume_version_id_from_analysis(self, analysis_id: UUID) -> UUID | None:
+        return await self._session.scalar(
+            sa.select(AnalysisModel.resume_version_id).where(AnalysisModel.id == analysis_id)
+        )
+
+    async def find_latest_candidate_profile_analysis(
+        self,
+        *,
+        resume_version_id: UUID,
+        provider: str,
+        model_id: str,
+        prompt_version: str,
+    ) -> CandidateProfileAnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateProfileAnalysisModel)
+            .where(
+                CandidateProfileAnalysisModel.resume_version_id == resume_version_id,
+                CandidateProfileAnalysisModel.provider == provider,
+                CandidateProfileAnalysisModel.model_id == model_id,
+                CandidateProfileAnalysisModel.prompt_version == prompt_version,
+            )
+            .order_by(CandidateProfileAnalysisModel.created_at.desc())
+        )
+
+    async def find_latest_candidate_profile_analysis_for_resume(
+        self,
+        resume_version_id: UUID,
+    ) -> CandidateProfileAnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateProfileAnalysisModel)
+            .where(CandidateProfileAnalysisModel.resume_version_id == resume_version_id)
+            .order_by(CandidateProfileAnalysisModel.created_at.desc())
+        )
+
+    async def save_candidate_profile_analysis(
+        self,
+        profile: CandidateProfileAnalysisModel,
+    ) -> CandidateProfileAnalysisModel:
+        self._session.add(profile)
+        await self._session.flush()
+        await self._session.refresh(profile)
+        return profile
+
+    async def find_job_profile_analysis_by_signature(
+        self,
+        *,
+        job_id: UUID,
+        provider: str,
+        model_id: str,
+        prompt_version: str,
+        job_signature_hash: str,
+    ) -> JobProfileAnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(JobProfileAnalysisModel)
+            .where(
+                JobProfileAnalysisModel.job_id == job_id,
+                JobProfileAnalysisModel.provider == provider,
+                JobProfileAnalysisModel.model_id == model_id,
+                JobProfileAnalysisModel.prompt_version == prompt_version,
+                JobProfileAnalysisModel.job_signature_hash == job_signature_hash,
+            )
+            .order_by(JobProfileAnalysisModel.created_at.desc())
+        )
+
+    async def save_job_profile_analysis(
+        self,
+        profile: JobProfileAnalysisModel,
+    ) -> JobProfileAnalysisModel:
+        self._session.add(profile)
+        await self._session.flush()
+        await self._session.refresh(profile)
+        return profile
+
+    async def find_latest_job_profile_analysis_for_job(
+        self,
+        job_id: UUID,
+    ) -> JobProfileAnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(JobProfileAnalysisModel)
+            .where(JobProfileAnalysisModel.job_id == job_id)
+            .order_by(JobProfileAnalysisModel.created_at.desc())
+        )
+
+    async def find_candidate_job_match(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        resume_version_id: UUID,
+        candidate_profile_analysis_id: UUID,
+        job_profile_analysis_id: UUID,
+    ) -> CandidateJobMatchModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateJobMatchModel).where(
+                CandidateJobMatchModel.candidate_id == candidate_id,
+                CandidateJobMatchModel.job_id == job_id,
+                CandidateJobMatchModel.resume_version_id == resume_version_id,
+                CandidateJobMatchModel.candidate_profile_analysis_id == candidate_profile_analysis_id,
+                CandidateJobMatchModel.job_profile_analysis_id == job_profile_analysis_id,
+            )
+        )
+
+    async def upsert_candidate_job_match(
+        self,
+        match: CandidateJobMatchModel,
+    ) -> CandidateJobMatchModel:
+        """UPSERT idempotente para matching candidato×vaga.
+
+        Para PostgreSQL: usa ON CONFLICT DO UPDATE nativo.
+        Para SQLite (testes): usa find → update/insert pattern.
+
+        Garante que múltiplos retries/concorrência não criam duplicatas.
+        """
+        now = datetime.now(UTC)
+
+        if self._is_postgresql():
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+            match_id = match.id if match.id else uuid4()
+            match_created_at = match.created_at if match.created_at else now
+
+            stmt = (
+                pg_insert(CandidateJobMatchModel)
+                .values(
+                    id=match_id,
+                    candidate_id=match.candidate_id,
+                    job_id=match.job_id,
+                    resume_version_id=match.resume_version_id,
+                    candidate_profile_analysis_id=match.candidate_profile_analysis_id,
+                    job_profile_analysis_id=match.job_profile_analysis_id,
+                    candidate_job_pipeline_id=match.candidate_job_pipeline_id,
+                    match_score=match.match_score,
+                    recommendation=match.recommendation,
+                    matched_skills_json=match.matched_skills_json,
+                    missing_skills_json=match.missing_skills_json,
+                    explanation=match.explanation,
+                    created_at=match_created_at,
+                    updated_at=now,
+                )
+                .on_conflict_do_update(
+                    constraint="uq_candidate_job_match_profile_pair",
+                    set_={
+                        "match_score": match.match_score,
+                        "recommendation": match.recommendation,
+                        "matched_skills_json": match.matched_skills_json,
+                        "missing_skills_json": match.missing_skills_json,
+                        "explanation": match.explanation,
+                        "updated_at": now,
+                    },
+                )
+                .returning(CandidateJobMatchModel)
+            )
+            result = await self._session.scalars(stmt)
+            row = result.first()
+            return row
+
+        # Fallback para SQLite (testes): find → update/insert pattern
+        existing = await self.find_candidate_job_match(
+            candidate_id=match.candidate_id,
+            job_id=match.job_id,
+            resume_version_id=match.resume_version_id,
+            candidate_profile_analysis_id=match.candidate_profile_analysis_id,
+            job_profile_analysis_id=match.job_profile_analysis_id,
+        )
+
+        if existing is not None:
+            existing.match_score = match.match_score
+            existing.recommendation = match.recommendation
+            existing.matched_skills_json = match.matched_skills_json
+            existing.missing_skills_json = match.missing_skills_json
+            existing.explanation = match.explanation
+            existing.updated_at = now
+            await self._session.flush()
+            await self._session.refresh(existing)
+            return existing
+
+        match.updated_at = now
+        if not match.id:
+            match.id = uuid4()
+        if not match.created_at:
+            match.created_at = now
+        self._session.add(match)
+        await self._session.flush()
+        await self._session.refresh(match)
+        return match
+
     async def count_pending(self) -> int:
         """Count pending and processing analyses in the queue."""
         result = await self._session.scalar(
@@ -459,6 +737,12 @@ class SQLAlchemyAnalysisRepository:
             )
         )
         return int(result or 0)
+
+    def _is_postgresql(self) -> bool:
+        """Check if the database is PostgreSQL (for UPSERT syntax)."""
+        from src.core.settings import settings
+        url = str(settings.DATABASE_URL)
+        return url.startswith(("postgresql", "postgres"))
 
     @staticmethod
     def _can_manage_all(user: User) -> bool:

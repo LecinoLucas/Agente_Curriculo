@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "../../components/common/Modal";
 import { pipelineService } from "../../services/pipelineService";
-import { toast } from "../../services/toast";
-import { handleApiError } from "../../services/errorHandler";
+import { toast } from "../../shared/utils/toast";
+import { handleApiError } from "../../shared/utils/errorHandler";
 import type { Job } from "../../types/domain";
 import { formatJobStatus, jobStatusTone } from "../../utils/jobFormatters";
 import { StatusPill } from "../../components/common/StatusPill";

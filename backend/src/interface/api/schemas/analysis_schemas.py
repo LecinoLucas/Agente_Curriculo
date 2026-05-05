@@ -34,6 +34,7 @@ class AnalysisPipelineJobMatchResponse(BaseModel):
 
 class AnalysisPipelineResponse(BaseModel):
     analysis_id: UUID
+    job_id: UUID | None = None
     analysis_status: str
     matching_status: str
     published_jobs_total: int
@@ -94,11 +95,17 @@ class AnalysisResultResponse(BaseModel):
     cache_read_tokens: int | None = None
     cache_write_tokens: int | None = None
     processing_time_ms: int | None = None
+    finish_reason: str | None = None
+    max_tokens_used: int | None = None
+    system_prompt_chars: int | None = None
+    user_prompt_chars: int | None = None
+    prompt_chars_total: int | None = None
     created_at: datetime
 
 
 class AnalysisGlobalItemResponse(BaseModel):
     id: UUID
+    job_id: UUID | None = None
     candidate_id: UUID | None = None
     candidate_name: str | None = None
     candidate_email: str | None = None

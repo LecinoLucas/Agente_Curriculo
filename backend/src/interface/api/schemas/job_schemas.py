@@ -326,13 +326,32 @@ class MatchingFeedbackResponse(BaseModel):
     feedback_at: datetime | None = None
 
 
+class CandidateScoreExplanationBreakdownItemResponse(BaseModel):
+    score: float
+    weight: float
+    contribution: float
+
+
+class CandidateScoreExplanationBreakdownResponse(BaseModel):
+    mandatory: CandidateScoreExplanationBreakdownItemResponse | None = None
+    optional: CandidateScoreExplanationBreakdownItemResponse | None = None
+    experience: CandidateScoreExplanationBreakdownItemResponse | None = None
+    seniority: CandidateScoreExplanationBreakdownItemResponse | None = None
+    ai_adjustment: CandidateScoreExplanationBreakdownItemResponse | None = None
+
+
 class CandidateScoreExplanationResponse(BaseModel):
     job_id: UUID
     candidate_id: UUID
     analysis_id: UUID
     score: float
+    final_score: float
+    recommendation: str
     engine_used: str
     explanation: str
+    breakdown: CandidateScoreExplanationBreakdownResponse = Field(default_factory=CandidateScoreExplanationBreakdownResponse)
+    highlights: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
     high_score_reasons: list[str] = Field(default_factory=list)
     low_score_reasons: list[str] = Field(default_factory=list)
     overestimation_risks: list[str] = Field(default_factory=list)
@@ -350,6 +369,7 @@ class JobQualityResponse(BaseModel):
     quality_score: int = Field(ge=0, le=100)
     status: Literal["weak", "acceptable", "good"]
     can_publish: bool
+    publication_blockers: list[str] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -545,16 +565,6 @@ class BulkUpdateJobsResponse(BaseModel):
 class AddCandidateToJobRequest(BaseModel):
     candidate_id: UUID
     source: Literal["manual", "pipeline", "ai_match", "import"] = "manual"
-
-
-class CandidateJobLinkResponse(BaseModel):
-    id: UUID
-    candidate_id: UUID
-    job_id: UUID
-    status: Literal["active", "removed", "transferred", "hired", "rejected"]
-    source: Literal["manual", "pipeline", "ai_match", "import"]
-    created_at: datetime
-    updated_at: datetime
 
 
 class RemoveCandidateFromJobResponse(BaseModel):

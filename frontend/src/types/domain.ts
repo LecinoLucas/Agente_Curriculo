@@ -48,6 +48,7 @@ export type CandidateResumeOverview = {
 
 export type CandidateLatestAnalysisOverview = {
   analysis_id: string;
+  job_id: string | null;
   resume_id: string;
   resume_title: string;
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
@@ -67,7 +68,9 @@ export type CandidateLatestAnalysisOverview = {
 
 export type CandidateLatestAnalysisPipelineOverview = {
   analysis_id: string;
+  job_id: string | null;
   matching_status: "waiting_analysis" | "processing" | "completed" | "blocked" | "idle";
+  matching_error?: string | null;
   published_jobs_total: number;
   matched_jobs_count: number;
   pending_jobs_count: number;
@@ -100,23 +103,7 @@ export type CandidateOverview = {
   top_matches: CandidateJobMatchOverview[];
   active_job_id: string | null;
   active_job: CandidateActiveJobOverview | null;
-  candidate_job_links: CandidateJobLinkOverview[];
   pipeline_entries: CandidatePipelineEntryOverview[];
-};
-
-export type CandidateJobLinkStatus = "active" | "removed" | "transferred" | "hired" | "rejected";
-export type CandidateJobLinkSource = "manual" | "pipeline" | "ai_match" | "import";
-
-export type CandidateJobLinkOverview = {
-  id: string;
-  candidate_id: string;
-  job_id: string;
-  job_title: string | null;
-  job_status: string | null;
-  status: CandidateJobLinkStatus;
-  source: CandidateJobLinkSource;
-  created_at: string;
-  updated_at: string;
 };
 
 export type CandidatePipelineEntryOverview = {
@@ -144,6 +131,7 @@ export type JobQualityResult = {
   quality_score: number;
   status: "weak" | "acceptable" | "good";
   can_publish: boolean;
+  publication_blockers: string[];
   missing_fields: string[];
   suggestions: string[];
   warnings: string[];
@@ -311,6 +299,7 @@ export type JobRankingBreakdown = {
   experience_match_score: number;
   seniority_match_score: number;
   education_score: number;
+  confidence_score: number;
   ai_confidence_score: number;
   penalty_score: number;
   final_score: number;
@@ -498,8 +487,10 @@ export type AnalysisPipelineMatch = {
 
 export type AnalysisPipelineStatus = {
   analysis_id: string;
+  job_id: string | null;
   analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   matching_status: "waiting_analysis" | "processing" | "completed" | "blocked" | "idle";
+  matching_error?: string | null;
   published_jobs_total: number;
   matched_jobs_count: number;
   pending_jobs_count: number;
@@ -562,6 +553,7 @@ export type Resume = {
 
 export type AnalysisGlobalItem = {
   id: string;
+  job_id: string | null;
   candidate_id: string | null;
   candidate_name: string | null;
   candidate_email: string | null;

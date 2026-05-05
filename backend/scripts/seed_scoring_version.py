@@ -14,25 +14,27 @@ from src.infrastructure.database.connection import AsyncSessionFactory, engine
 from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
 
 
-# 🔥 Nova versão alinhada com evidence_matcher + full_analysis
-DEFAULT_VERSION = "v2-evidence-dev"
+# Versão alinhada com o score canônico determinístico atual.
+DEFAULT_VERSION = "v3-canonical-det"
 
 # ⚠️ SOMA PRECISA DAR 1.0
 DEFAULT_WEIGHTS = {
-    "critical_requirements": 0.40,
-    "skill_match": 0.25,
-    "experience_match": 0.15,
-    "seniority_match": 0.10,
-    "education_match": 0.05,
-    "differentials": 0.05,
+    "mandatory_skill_match": 0.500000,
+    "optional_skill_match": 0.166667,
+    "experience_match": 0.222222,
+    "seniority_match": 0.111111,
+    "ai_confidence": 0.000000,
 }
 
 DEFAULT_THRESHOLDS = {
-    "strong_match": 82,
-    "interview": 65,
-    "maybe": 45,
+    "high": 70,
+    "low": 55,
+    "strong_match": 85,
+    "good_match": 70,
+    "potential": 55,
     "not_match": 0,
     "hard_fail_max_score": 39,
+    "mandatory_threshold": 60,
 }
 
 

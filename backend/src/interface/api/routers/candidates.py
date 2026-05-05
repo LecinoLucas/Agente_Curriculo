@@ -17,18 +17,13 @@ from src.application.services.pipeline_service import (
     PipelineCandidateNotFoundError,
     PipelineEntryNotFoundError,
     PipelineJobNotFoundError,
-    PipelineService,
 )
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
 )
-from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
-    SQLAlchemyPipelineRepository,
-)
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.candidate_schemas import (
     CandidateCheckResponse,
-    CandidateJobLinkResponse,
     CandidateListSummaryResponse,
     CandidateOverviewResponse,
     CandidateResponse,
@@ -36,20 +31,12 @@ from src.interface.api.schemas.candidate_schemas import (
     UpdateCandidateRequest,
 )
 from src.interface.api.schemas.common import PaginatedResponse
-from src.interface.api.schemas.pipeline_schemas import (
-    UpdateCandidateStageRequest,
-    UpdateCandidateStageResponse,
-)
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 
 def _candidate_service(db: AsyncSession) -> CandidateService:
     return CandidateService(SQLAlchemyCandidateRepository(db))
-
-
-def _pipeline_service(db: AsyncSession) -> PipelineService:
-    return PipelineService(SQLAlchemyPipelineRepository(db), db)
 
 
 def _handle_candidate_service_error(exc: Exception) -> None:
@@ -95,21 +82,8 @@ def _handle_candidate_service_error(exc: Exception) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Não é permitido especificar user_id durante criação de candidato",
         )
-    if isinstance(exc, PipelineCandidateNotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Candidato não encontrado",
-        )
-    if isinstance(exc, PipelineJobNotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Vaga não encontrada",
-        )
-    if isinstance(exc, PipelineEntryNotFoundError):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Candidato não está no pipeline da vaga",
-        )
+    if isinstance(exc, PipelineCandidateNotFoundError | PipelineJobNotFoundError | PipelineEntryNotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recurso não encontrado")
     raise exc
 
 
@@ -209,19 +183,6 @@ async def get_candidate_overview(
         raise
 
 
-@router.get("/{candidate_id}/job-links", response_model=list[CandidateJobLinkResponse])
-async def list_candidate_job_links(
-    candidate_id: UUID,
-    current_user: RecruiterOrAdmin,
-    db: AsyncSession = Depends(get_db),
-) -> list[CandidateJobLinkResponse]:
-    try:
-        return await _candidate_service(db).list_job_links(candidate_id)
-    except Exception as exc:
-        _handle_candidate_service_error(exc)
-        raise
-
-
 @router.patch("/{candidate_id}", response_model=CandidateResponse)
 async def update_candidate(
     candidate_id: UUID,
@@ -234,23 +195,6 @@ async def update_candidate(
         await db.commit()
         await db.refresh(candidate)
         return CandidateResponse.model_validate(candidate)
-    except Exception as exc:
-        await db.rollback()
-        _handle_candidate_service_error(exc)
-        raise
-
-
-@router.patch("/{candidate_id}/stage", response_model=UpdateCandidateStageResponse)
-async def update_candidate_stage(
-    candidate_id: UUID,
-    body: UpdateCandidateStageRequest,
-    current_user: RecruiterOrAdmin,
-    db: AsyncSession = Depends(get_db),
-) -> UpdateCandidateStageResponse:
-    try:
-        updated = await _pipeline_service(db).update_candidate_stage(candidate_id, body)
-        await db.commit()
-        return updated
     except Exception as exc:
         await db.rollback()
         _handle_candidate_service_error(exc)

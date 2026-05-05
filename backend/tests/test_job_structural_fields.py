@@ -13,19 +13,36 @@ Cobertura:
 
 import pytest
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
 from src.application.services.job_service import JobService
 from src.application.services.job_quality_validator_service import JobQualityValidatorService
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.infrastructure.database.models.user_model import UserModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def _create_creator(db_session: AsyncSession) -> UUID:
+    creator_id = uuid4()
+    db_session.add(
+        UserModel(
+            id=creator_id,
+            email=f"creator-{creator_id}@example.com",
+            password_hash="hash",
+            role="recruiter",
+            status="active",
+            full_name="Creator",
+        )
+    )
+    await db_session.flush()
+    return creator_id
 
 
 @pytest.mark.asyncio
 async def test_create_job_with_all_structural_fields(db_session: AsyncSession):
     """Test creating a job with all new structural fields."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="Senior Data Engineer",
         description="We are seeking a data engineer...",
@@ -54,7 +71,7 @@ async def test_create_job_with_all_structural_fields(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_behavioral_requirements_normalization(db_session: AsyncSession):
     """Test that behavioral_requirements are deduplicated and stripped."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="Test Job",
         description="Test description",
@@ -78,7 +95,7 @@ async def test_behavioral_requirements_normalization(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_update_job_with_new_fields_regenerates_profile(db_session: AsyncSession):
     """Test that updating structural fields regenerates the job profile."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     # Create initial job without job_area
     body = CreateJobRequest(
         title="Data Analyst",
@@ -106,7 +123,7 @@ async def test_update_job_with_new_fields_regenerates_profile(db_session: AsyncS
 @pytest.mark.asyncio
 async def test_quality_score_increases_with_job_area_and_responsibilities(db_session: AsyncSession):
     """Test that job_area and responsibilities improve quality score."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     # Create job without new fields
     body_minimal = CreateJobRequest(
         title="Junior Developer",
@@ -126,7 +143,7 @@ async def test_quality_score_increases_with_job_area_and_responsibilities(db_ses
         responsibilities="Write clean code, participate in code reviews, debug issues",
     )
 
-    job_full = await service.create(body_full, uuid4())
+    job_full = await service.create(body_full, user_id)
     await db_session.refresh(job_full)
     full_score = job_full.quality_score or 0
 
@@ -137,7 +154,7 @@ async def test_quality_score_increases_with_job_area_and_responsibilities(db_ses
 @pytest.mark.asyncio
 async def test_quality_score_capped_at_100(db_session: AsyncSession):
     """Test that quality score never exceeds 100."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="Full Stack Engineer",
         description="We are seeking a full stack engineer with extensive experience...",
@@ -169,7 +186,7 @@ async def test_quality_score_capped_at_100(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_missing_fields_in_quality_report(db_session: AsyncSession):
     """Test that missing job_area is reported in quality validation."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="Product Manager",
         description="We are hiring a product manager...",
@@ -189,7 +206,7 @@ async def test_missing_fields_in_quality_report(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_priority_field_default(db_session: AsyncSession):
     """Test that priority defaults to 'normal'."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="QA Engineer",
         description="Quality assurance engineer position...",
@@ -205,7 +222,7 @@ async def test_priority_field_default(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_update_priority_field(db_session: AsyncSession):
     """Test updating priority field."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="DevOps Engineer",
         description="DevOps engineer for cloud infrastructure...",
@@ -226,7 +243,7 @@ async def test_update_priority_field(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_old_jobs_backward_compatible(db_session: AsyncSession):
     """Test that old jobs without new fields continue to work."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     # Simulate old job by creating with just required fields
     body = CreateJobRequest(
         title="Support Agent",
@@ -254,7 +271,7 @@ async def test_old_jobs_backward_compatible(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_empty_behavioral_requirements(db_session: AsyncSession):
     """Test that empty behavioral_requirements default correctly."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="Intern",
         description="Internship program...",
@@ -271,7 +288,7 @@ async def test_empty_behavioral_requirements(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_responsibilities_text_cleaning(db_session: AsyncSession):
     """Test that responsibilities text is stripped."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="Manager",
         description="Management position...",
@@ -288,7 +305,7 @@ async def test_responsibilities_text_cleaning(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_experience_context_text_cleaning(db_session: AsyncSession):
     """Test that experience_context text is stripped."""
-    user_id = uuid4()
+    user_id = await _create_creator(db_session)
     body = CreateJobRequest(
         title="Consultant",
         description="Consulting position...",

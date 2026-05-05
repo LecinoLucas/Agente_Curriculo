@@ -2,7 +2,7 @@ import { AlertCircle, AlertTriangle, Info, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { formatErrorDetails, type UserFriendlyError } from "../../services/errorHandler";
+import { formatErrorDetails, type UserFriendlyError } from "../../shared/utils/errorHandler";
 
 function severityVariant(error: UserFriendlyError): "destructive" | "warning" | "default" {
   if (error.severity === "warning") return "warning";

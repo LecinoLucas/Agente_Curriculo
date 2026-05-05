@@ -12,9 +12,14 @@ from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.job_model import SkillModel
+from src.infrastructure.database.models.profile_analysis_model import (
+    CandidateJobMatchModel,
+    CandidateProfileAnalysisModel,
+    JobProfileAnalysisModel,
+)
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
@@ -293,10 +298,9 @@ async def test_candidate_can_upload_pdf_and_extract_text(
 
 
 @pytest.mark.asyncio
-async def test_candidate_upload_pdf_can_auto_request_analysis_when_ai_is_configured(
+async def test_candidate_upload_pdf_does_not_request_analysis_even_when_ai_is_configured(
     client: AsyncClient,
     db_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
 ):
     candidate_user = await _create_active_user(
         db_session,
@@ -338,11 +342,6 @@ async def test_candidate_upload_pdf_can_auto_request_analysis_when_ai_is_configu
     db_session.add_all([ai_model, prompt])
     await db_session.commit()
 
-    monkeypatch.setattr(
-        "src.interface.api.routers.resumes.enqueue_analysis",
-        lambda analysis_id: None,
-    )
-
     pdf = _pdf_with_text("Marina Python SQL FastAPI")
     response = await client.post(
         f"/api/v1/resumes/{resume_id}/upload",
@@ -352,20 +351,20 @@ async def test_candidate_upload_pdf_can_auto_request_analysis_when_ai_is_configu
 
     assert response.status_code == 200
     body = response.json()
-    assert body["analysis_auto_requested"] is True
-    assert body["analysis_id"] is not None
-    assert body["analysis_status"] == "pending"
+    assert body["analysis_auto_requested"] is False
+    assert body["analysis_id"] is None
+    assert body["analysis_status"] is None
 
-    analysis = await db_session.scalar(
-        sa.select(AnalysisModel).where(AnalysisModel.id == UUID(body["analysis_id"]))
-    )
-    assert analysis is not None
-    assert analysis.resume_version_id == version_id
-    assert analysis.status == "pending"
+    analyses = (
+        await db_session.execute(
+            sa.select(AnalysisModel).where(AnalysisModel.resume_version_id == version_id)
+        )
+    ).scalars().all()
+    assert analyses == []
 
 
 @pytest.mark.asyncio
-async def test_candidate_upload_pdf_falls_back_when_auto_enqueue_fails(
+async def test_candidate_upload_pdf_does_not_create_analysis_when_enqueue_would_fail(
     client: AsyncClient,
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -415,6 +414,7 @@ async def test_candidate_upload_pdf_falls_back_when_auto_enqueue_fails(
     monkeypatch.setattr(
         "src.interface.api.routers.resumes.enqueue_analysis",
         _raise_enqueue_error,
+        raising=False,
     )
 
     pdf = _pdf_with_text("Marina Python SQL FastAPI")
@@ -427,16 +427,13 @@ async def test_candidate_upload_pdf_falls_back_when_auto_enqueue_fails(
     assert response.status_code == 200
     body = response.json()
     assert body["analysis_auto_requested"] is False
-    assert body["analysis_id"] is not None
-    assert body["analysis_status"] == "failed"
+    assert body["analysis_id"] is None
+    assert body["analysis_status"] is None
 
-    analysis = await db_session.scalar(
-        sa.select(AnalysisModel).where(AnalysisModel.id == UUID(body["analysis_id"]))
-    )
-    assert analysis is not None
-    assert analysis.status == "failed"
-    assert analysis.failure_reason == "Falha ao enfileirar análise automática. Solicite manualmente."
-    assert analysis.failed_at is not None
+    analyses = (
+        await db_session.execute(sa.select(AnalysisModel))
+    ).scalars().all()
+    assert analyses == []
 
 
 @pytest.mark.asyncio
@@ -471,7 +468,9 @@ async def test_candidate_cannot_request_analysis_before_text_extraction(
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Nenhum modelo de IA ativo configurado"
+    assert response.json()["detail"] == (
+        "Currículo ainda em processamento. Faça upload do PDF e aguarde extração antes de solicitar análise."
+    )
 
 
 @pytest.mark.asyncio
@@ -534,7 +533,11 @@ async def test_candidate_can_view_operational_analysis_status(
         UserRole.RECRUITER,
     )
     candidate = candidate_user
-    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    candidate_record = await _create_linked_candidate(
+        db_session,
+        candidate_user,
+        recruiter.id,
+    )
     await db_session.commit()
 
     headers = await _auth_headers(client, "candidate-analysis-status@test.com", "password123")
@@ -611,7 +614,11 @@ async def test_candidate_can_view_matching_pipeline_summary(
         UserRole.RECRUITER,
     )
     candidate = candidate_user
-    await _create_linked_candidate(db_session, candidate_user, recruiter.id)
+    candidate_record = await _create_linked_candidate(
+        db_session,
+        candidate_user,
+        recruiter.id,
+    )
     await db_session.commit()
 
     candidate_headers = await _auth_headers(
@@ -667,9 +674,11 @@ async def test_candidate_can_view_matching_pipeline_summary(
             "title": "Backend Pipeline One",
             "description": "Pipeline test",
             "requirements": "Python",
+            "job_area": "technology",
             "seniority_level": "senior",
             "work_model": "remote",
             "location": "Brasil",
+            "minimum_years_experience": "3.0",
             "salary_min": "10000.00",
             "salary_max": "15000.00",
             "salary_currency": "brl",
@@ -682,9 +691,11 @@ async def test_candidate_can_view_matching_pipeline_summary(
             "title": "Backend Pipeline Two",
             "description": "Pipeline test",
             "requirements": "FastAPI",
+            "job_area": "technology",
             "seniority_level": "senior",
             "work_model": "remote",
             "location": "Brasil",
+            "minimum_years_experience": "3.0",
             "salary_min": "11000.00",
             "salary_max": "16000.00",
             "salary_currency": "brl",
@@ -694,22 +705,78 @@ async def test_candidate_can_view_matching_pipeline_summary(
     assert first_job.status_code == 201
     assert second_job.status_code == 201
     first_job_id = UUID(first_job.json()["id"])
+    second_job_id = UUID(second_job.json()["id"])
+    analysis.job_id = first_job_id
+
+    python_skill = SkillModel(
+        name="Python Resume Pipeline",
+        normalized_name=f"python-resume-pipeline-{uuid4().hex[:8]}",
+        category="backend",
+        aliases=[],
+        is_verified=True,
+    )
+    fastapi_skill = SkillModel(
+        name="FastAPI Resume Pipeline",
+        normalized_name=f"fastapi-resume-pipeline-{uuid4().hex[:8]}",
+        category="backend",
+        aliases=[],
+        is_verified=True,
+    )
+    db_session.add_all([python_skill, fastapi_skill])
+    await db_session.commit()
+
+    for job_id in (first_job_id, second_job_id):
+        for skill_id in (python_skill.id, fastapi_skill.id):
+            add_skill = await client.post(
+                f"/api/v1/jobs/{job_id}/skills",
+                json={"skill_id": str(skill_id), "is_mandatory": True},
+                headers=recruiter_headers,
+            )
+            assert add_skill.status_code == 201
 
     publish_first = await client.patch(
         f"/api/v1/jobs/{first_job_id}/publish",
         headers=recruiter_headers,
     )
     publish_second = await client.patch(
-        f"/api/v1/jobs/{second_job.json()['id']}/publish",
+        f"/api/v1/jobs/{second_job_id}/publish",
         headers=recruiter_headers,
     )
     assert publish_first.status_code == 200
     assert publish_second.status_code == 200
 
+    candidate_profile = CandidateProfileAnalysisModel(
+        candidate_id=candidate_record.id,
+        resume_version_id=version_id,
+        provider=ai_model.provider,
+        model_id=ai_model.model_id,
+        prompt_version=str(prompt.version),
+        skills_json=["python", "fastapi"],
+        strengths_json=[],
+        weaknesses_json=[],
+        raw_response_json={},
+    )
+    job_profile = JobProfileAnalysisModel(
+        job_id=first_job_id,
+        provider=ai_model.provider,
+        model_id=ai_model.model_id,
+        prompt_version=str(prompt.version),
+        job_signature_hash="a" * 64,
+        required_skills_json=["python"],
+        nice_to_have_skills_json=[],
+        responsibilities_json=[],
+        raw_response_json={},
+    )
+    db_session.add_all([candidate_profile, job_profile])
+    await db_session.flush()
+
     db_session.add(
-        ResumeJobMatchModel(
-            analysis_id=analysis.id,
+        CandidateJobMatchModel(
+            candidate_id=candidate_record.id,
             job_id=first_job_id,
+            resume_version_id=version_id,
+            candidate_profile_analysis_id=candidate_profile.id,
+            job_profile_analysis_id=job_profile.id,
             match_score="82.00",
             recommendation="strong_match",
             created_at=now,
@@ -725,11 +792,12 @@ async def test_candidate_can_view_matching_pipeline_summary(
     assert response.status_code == 200
     body = response.json()
     assert body["analysis_id"] == str(analysis.id)
+    assert body["job_id"] == str(first_job_id)
     assert body["analysis_status"] == "completed"
-    assert body["matching_status"] == "processing"
-    assert body["published_jobs_total"] >= 2
+    assert body["matching_status"] == "completed"
+    assert body["published_jobs_total"] == 1
     assert body["matched_jobs_count"] == 1
-    assert body["pending_jobs_count"] == body["published_jobs_total"] - 1
+    assert body["pending_jobs_count"] == 0
     assert len(body["recent_matches"]) == 1
     assert body["recent_matches"][0]["job_id"] == str(first_job_id)
     assert body["recent_matches"][0]["recommendation"] == "strong_match"

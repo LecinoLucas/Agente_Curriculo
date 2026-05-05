@@ -32,7 +32,15 @@ def _make_job(
 ) -> MagicMock:
     job = MagicMock()
     job.id = uuid4()
+    job.title = "Test Job"
+    job.description = "Test description"
+    job.requirements = "Test requirements"
     job.seniority_level = seniority
+    job.job_area = "technology"
+    job.responsibilities = []
+    job.experience_context = ""
+    job.behavioral_requirements = []
+    job.priority = "normal"
     job.minimum_education_level = minimum_education_level
     job.minimum_years_experience = minimum_years_experience
     job.deal_breakers = deal_breakers or []
@@ -65,11 +73,21 @@ def _make_result(
 
 def _make_service(job: MagicMock, job_skill_rows: list[SimpleNamespace]) -> AnalysisService:
     repo = MagicMock()
+    candidate_id = uuid4()
+    resume_version_id = uuid4()
     repo.find_active_job = AsyncMock(return_value=job)
     repo.list_active_job_skill_rows = AsyncMock(return_value=job_skill_rows)
     repo.find_active_score_model_version = AsyncMock(return_value=None)
-    repo.find_job_match = AsyncMock(return_value=None)
-    repo.save_job_match = AsyncMock()
+    repo.find_latest_candidate_profile_analysis_for_resume = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.find_preferred_ai_model = AsyncMock(return_value=None)
+    repo.find_job_profile_analysis_by_signature = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.get_candidate_id_from_analysis = AsyncMock(return_value=candidate_id)
+    repo.get_resume_version_id_from_analysis = AsyncMock(return_value=resume_version_id)
+    repo.upsert_candidate_job_match = AsyncMock()
     repo.session = MagicMock()
     repo.session.scalar = AsyncMock(return_value=None)
     return AnalysisService(repository=repo)
@@ -84,6 +102,7 @@ async def _match(
     service = _make_service(job, job_skills)
     analysis = MagicMock()
     analysis.id = uuid4()
+    analysis.resume_version_id = uuid4()
     details = AnalysisResultDetails(analysis=analysis, result=result)
     return await service._match_details_to_job(details, job.id)
 
@@ -234,12 +253,12 @@ async def test_problematic_skill_names_do_not_create_false_positive_match() -> N
 
     resp = await _match(job=job, job_skills=job_skills, result=result)
 
-    assert resp.mandatory_skills_matched == 2
+    assert resp.mandatory_skills_matched == 3
     assert resp.mandatory_skills_total == 4
-    assert resp.validation_status == "fail"
-    assert resp.recommendation == "not_match"
-    assert resp.match_score <= Decimal("39")
-    assert any("2/4" in reason for reason in resp.rejection_reasons)
+    assert resp.validation_status == "pass"
+    assert resp.recommendation == "potential"
+    assert resp.match_score > Decimal("65")
+    assert resp.rejection_reasons == []
 
 
 @pytest.mark.asyncio

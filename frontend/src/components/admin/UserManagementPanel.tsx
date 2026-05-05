@@ -10,8 +10,8 @@ import {
   PatchUserPayload,
   ResetUserPasswordPayload,
 } from "../../services/usersService";
-import { formatErrorDetails, formatErrorForToast, handleApiError } from "../../services/errorHandler";
-import { toast } from "../../services/toast";
+import { formatErrorDetails, formatErrorForToast, handleApiError } from "../../shared/utils/errorHandler";
+import { toast } from "../../shared/utils/toast";
 import { Paginated } from "../../types/api";
 import { UserSummary } from "../../types/domain";
 import { UserRole, UserStatus } from "../../types/auth";

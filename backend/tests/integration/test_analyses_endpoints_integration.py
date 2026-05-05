@@ -345,9 +345,9 @@ async def test_get_analysis_result_completed(
     # Verify key fields
     assert result["analysis_id"] == str(analysis.id)
     assert result["candidate_name"] == "Test Candidate"
-    assert result["status"] == "completed" or "status" not in result  # May not be in result schema
-    assert result["overall_score"] == pytest.approx(85.5, abs=0.01)
-    assert result["technical_score"] == pytest.approx(82.0, abs=0.01)
+    assert "status" not in result or result["status"] == "completed"  # May not be in result schema
+    assert float(result["overall_score"]) == pytest.approx(85.5, abs=0.01)
+    assert float(result["technical_score"]) == pytest.approx(82.0, abs=0.01)
     assert result["seniority_level"] == "mid"
     assert result["total_experience_years"] == "5.0"
     assert "Python" in result["strengths"]
@@ -689,7 +689,7 @@ async def test_force_fail_analysis_already_completed(
     )
 
     assert fail_resp.status_code == 409
-    assert "não é possível encerrar" in fail_resp.json()["detail"]
+    assert "não é possível encerrar" in fail_resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

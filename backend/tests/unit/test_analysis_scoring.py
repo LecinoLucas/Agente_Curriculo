@@ -36,6 +36,8 @@ def _make_result(
     skills: list[str] | None = None,
     seniority: str = "mid",
     overall_score: Decimal = Decimal("70"),
+    total_experience_years: Decimal | None = None,
+    highest_education_level: str | None = None,
 ) -> MagicMock:
     r = MagicMock()
     r.keywords = keywords or []
@@ -43,38 +45,60 @@ def _make_result(
     r.seniority_level = seniority
     r.overall_score = overall_score
     r.experience_score = Decimal("70")
-    r.highest_education_level = None  # Must be set to avoid Decimal conversion errors
-    r.total_experience_years = None   # Must be set to avoid Decimal conversion errors
+    r.highest_education_level = highest_education_level
+    r.total_experience_years = total_experience_years
     return r
 
 
-def _make_job(seniority: str = "mid") -> MagicMock:
+def _make_job(seniority: str | None = "mid") -> MagicMock:
     j = MagicMock()
     j.id = uuid4()
+    j.title = "Test Job"
+    j.description = "Test description"
+    j.requirements = "Test requirements"
     j.seniority_level = seniority
+    j.job_area = "technology"
+    j.responsibilities = []
+    j.experience_context = ""
+    j.behavioral_requirements = []
+    j.priority = "normal"
     j.minimum_education_level = None  # No strict education requirement by default
     j.minimum_years_experience = None  # No strict experience requirement by default
+    j.deal_breakers = []
     return j
 
 
 def _make_service(job: MagicMock, job_skill_rows: list[SimpleNamespace]) -> AnalysisService:
     repo = MagicMock()
+    candidate_id = uuid4()
+    resume_version_id = uuid4()
     repo.find_active_job = AsyncMock(return_value=job)
     repo.list_active_job_skill_rows = AsyncMock(return_value=job_skill_rows)
     repo.find_active_score_model_version = AsyncMock(return_value=None)  # Fallback to hardcoded weights
-    repo.find_job_match = AsyncMock(return_value=None)
-    repo.save_job_match = AsyncMock()
+    repo.find_latest_candidate_profile_analysis_for_resume = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.find_preferred_ai_model = AsyncMock(return_value=None)
+    repo.find_job_profile_analysis_by_signature = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.get_candidate_id_from_analysis = AsyncMock(return_value=candidate_id)
+    repo.get_resume_version_id_from_analysis = AsyncMock(return_value=resume_version_id)
+    repo.upsert_candidate_job_match = AsyncMock()
     # session is passed to SQLAlchemyPipelineRepository when register_match_entry
     # is called from _match_details_to_job. scalar returns None so the pipeline
     # upsert exits early without further DB interaction.
     repo.session = MagicMock()
     repo.session.scalar = AsyncMock(return_value=None)
+    repo.session.get = AsyncMock(return_value=None)
+    repo.session.flush = AsyncMock()
     return AnalysisService(repository=repo)
 
 
 def _make_details(result: MagicMock) -> AnalysisResultDetails:
     analysis = MagicMock()
     analysis.id = uuid4()
+    analysis.resume_version_id = uuid4()
     return AnalysisResultDetails(analysis=analysis, result=result)
 
 
@@ -111,8 +135,35 @@ async def test_reweight_when_no_mandatory_skills() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fallback_to_job_profile_analysis_skills_when_job_has_no_rows() -> None:
+    job = _make_job(seniority="senior")
+    result = _make_result(
+        skills=["SQL", "Power BI", "Excel", "Python"],
+        seniority="senior",
+        overall_score=Decimal("90"),
+        total_experience_years=Decimal("10"),
+        highest_education_level="bachelor",
+    )
+    service = _make_service(job, [])
+    service._repository.find_job_profile_analysis_by_signature = AsyncMock(
+        return_value=SimpleNamespace(
+            id=uuid4(),
+            required_skills_json=["SQL", "Power BI", "Excel"],
+            nice_to_have_skills_json=["Python"],
+        )
+    )
+
+    resp = await service._match_details_to_job(_make_details(result), job.id)
+
+    assert resp.mandatory_skills_total == 3
+    assert resp.mandatory_skills_matched == 3
+    assert resp.optional_skills_matched == 1
+    assert resp.recommendation in {"good_match", "strong_match"}
+
+
+@pytest.mark.asyncio
 async def test_reweight_when_no_skills_at_all() -> None:
-    """With no skills at all, seniority and ai scores drive the overall score."""
+    """With no skills at all, only deterministic signals drive the overall score."""
     job = _make_job(seniority="senior")
     rows: list[SimpleNamespace] = []
 
@@ -120,9 +171,7 @@ async def test_reweight_when_no_skills_at_all() -> None:
     service = _make_service(job, rows)
     resp = await service._match_details_to_job(_make_details(result), job.id)
 
-    # With perfect seniority match (distance=0 → 100) and ai_score=80, and equal weights:
-    # expected ≈ (100 * 0.40 + 80 * 0.40) ... but exact split doesn't matter;
-    # the score must be > 0 and ≤ 100.
+    # The score must be deterministic and remain in the valid range.
     assert Decimal("0") < resp.match_score <= Decimal("100")
 
 
@@ -210,6 +259,16 @@ async def test_react_does_not_match_reactjs() -> None:
     assert resp.mandatory_skills_matched == 0
 
 
+@pytest.mark.asyncio
+async def test_postgresql_matches_sql_via_skill_normalizer() -> None:
+    job = _make_job()
+    rows = [_make_row("SQL", is_mandatory=True)]
+    result = _make_result(skills=["PostgreSQL"])
+    service = _make_service(job, rows)
+    resp = await service._match_details_to_job(_make_details(result), job.id)
+    assert resp.mandatory_skills_matched == 1
+
+
 # ─── Seniority penalty ────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -282,3 +341,197 @@ async def test_overall_score_never_exceeds_100() -> None:
     service = _make_service(job, rows)
     resp = await service._match_details_to_job(_make_details(result), job.id)
     assert resp.match_score <= Decimal("100")
+
+
+@pytest.mark.asyncio
+async def test_ai_score_does_not_change_canonical_match_score() -> None:
+    job = _make_job(seniority="mid")
+    job.minimum_years_experience = Decimal("5")
+    rows = [_make_row("Python", is_mandatory=True)]
+
+    low_ai = _make_result(
+        skills=["Python"],
+        seniority="mid",
+        overall_score=Decimal("0"),
+        total_experience_years=Decimal("5"),
+    )
+    high_ai = _make_result(
+        skills=["Python"],
+        seniority="mid",
+        overall_score=Decimal("100"),
+        total_experience_years=Decimal("5"),
+    )
+
+    low_resp = await _make_service(job, rows)._match_details_to_job(_make_details(low_ai), job.id)
+    high_resp = await _make_service(job, rows)._match_details_to_job(_make_details(high_ai), job.id)
+
+    assert high_resp.match_score == low_resp.match_score
+
+
+@pytest.mark.asyncio
+async def test_experience_score_uses_years_vs_minimum_requirement() -> None:
+    job = _make_job(seniority=None)
+    job.minimum_years_experience = Decimal("5")
+    rows: list[SimpleNamespace] = []
+
+    result_exact = _make_result(
+        seniority="mid",
+        overall_score=Decimal("70"),
+        total_experience_years=Decimal("5"),
+    )
+    result_above = _make_result(
+        seniority="mid",
+        overall_score=Decimal("70"),
+        total_experience_years=Decimal("8"),
+    )
+
+    resp_exact = await _make_service(job, rows)._match_details_to_job(_make_details(result_exact), job.id)
+    resp_above = await _make_service(job, rows)._match_details_to_job(_make_details(result_above), job.id)
+
+    assert resp_above.match_score > resp_exact.match_score
+
+
+@pytest.mark.asyncio
+async def test_jobs_without_structured_requirements_stay_below_potential_threshold() -> None:
+    job = _make_job(seniority=None)
+    rows: list[SimpleNamespace] = []
+
+    result = _make_result(
+        seniority="senior",
+        overall_score=Decimal("100"),
+        total_experience_years=Decimal("10"),
+    )
+    service = _make_service(job, rows)
+    resp = await service._match_details_to_job(_make_details(result), job.id)
+
+    assert resp.match_score <= Decimal("44.00")
+
+
+@pytest.mark.asyncio
+async def test_job_profile_fallback_does_not_bypass_no_requirements_cap() -> None:
+    job = _make_job(seniority=None)
+    rows: list[SimpleNamespace] = []
+
+    result = _make_result(
+        skills=["Python", "FastAPI", "PostgreSQL"],
+        seniority="senior",
+        overall_score=Decimal("100"),
+        total_experience_years=Decimal("10"),
+    )
+    service = _make_service(job, rows)
+    service._repository.find_job_profile_analysis_by_signature = AsyncMock(
+        return_value=SimpleNamespace(
+            id=uuid4(),
+            required_skills_json=["Python", "FastAPI", "PostgreSQL"],
+            nice_to_have_skills_json=[],
+        )
+    )
+
+    resp = await service._match_details_to_job(_make_details(result), job.id)
+
+    assert resp.mandatory_skills_total == 0
+    assert resp.optional_skills_total == 0
+    assert resp.match_score <= Decimal("44.00")
+
+
+@pytest.mark.asyncio
+async def test_mandatory_soft_penalty_applies_between_sixty_and_eighty_percent() -> None:
+    job = _make_job(seniority="mid")
+    job.minimum_years_experience = Decimal("5")
+    rows = [
+        _make_row("Python", is_mandatory=True),
+        _make_row("FastAPI", is_mandatory=True),
+        _make_row("SQL", is_mandatory=True),
+        _make_row("Docker", is_mandatory=True),
+        _make_row("AWS", is_mandatory=True),
+    ]
+
+    result_sixty = _make_result(
+        skills=["Python", "FastAPI", "SQL"],
+        seniority="mid",
+        overall_score=Decimal("70"),
+        total_experience_years=Decimal("5"),
+    )
+    result_eighty = _make_result(
+        skills=["Python", "FastAPI", "SQL", "Docker"],
+        seniority="mid",
+        overall_score=Decimal("70"),
+        total_experience_years=Decimal("5"),
+    )
+
+    resp_sixty = await _make_service(job, rows)._match_details_to_job(_make_details(result_sixty), job.id)
+    resp_eighty = await _make_service(job, rows)._match_details_to_job(_make_details(result_eighty), job.id)
+
+    assert resp_sixty.match_score > Decimal("39.00")
+    assert resp_sixty.match_score < resp_eighty.match_score
+
+
+@pytest.mark.asyncio
+async def test_recommendation_thresholds_respect_strong_good_potential_bands() -> None:
+    job = _make_job(seniority="mid")
+    job.minimum_years_experience = Decimal("5")
+
+    strong_rows = [
+        _make_row("Python", is_mandatory=True),
+        _make_row("FastAPI", is_mandatory=True),
+        _make_row("SQL", is_mandatory=True),
+        _make_row("Docker", is_mandatory=True),
+    ]
+    strong_result = _make_result(
+        skills=["Python", "FastAPI", "SQL", "Docker"],
+        seniority="mid",
+        overall_score=Decimal("90"),
+        total_experience_years=Decimal("8"),
+    )
+    strong_resp = await _make_service(job, strong_rows)._match_details_to_job(
+        _make_details(strong_result), job.id
+    )
+
+    good_result = _make_result(
+        skills=["Python", "FastAPI", "SQL"],
+        seniority="mid",
+        overall_score=Decimal("70"),
+        total_experience_years=Decimal("5"),
+    )
+    good_resp = await _make_service(job, strong_rows)._match_details_to_job(
+        _make_details(good_result), job.id
+    )
+
+    potential_rows = [
+        _make_row("Python", is_mandatory=True),
+        _make_row("FastAPI", is_mandatory=True),
+        _make_row("SQL", is_mandatory=True),
+        _make_row("Docker", is_mandatory=True),
+        _make_row("AWS", is_mandatory=True),
+    ]
+    potential_result = _make_result(
+        skills=["Python", "FastAPI", "SQL"],
+        seniority="mid",
+        overall_score=Decimal("70"),
+        total_experience_years=Decimal("5"),
+    )
+    potential_resp = await _make_service(job, potential_rows)._match_details_to_job(
+        _make_details(potential_result), job.id
+    )
+
+    low_potential_result = _make_result(
+        skills=["Python", "FastAPI"],
+        seniority="mid",
+        overall_score=Decimal("20"),
+        total_experience_years=Decimal("5"),
+    )
+    low_potential_resp = await _make_service(job, potential_rows)._match_details_to_job(
+        _make_details(low_potential_result), job.id
+    )
+
+    assert strong_resp.match_score >= Decimal("85.00")
+    assert strong_resp.recommendation == "strong_match"
+
+    assert good_resp.match_score >= Decimal("70.00")
+    assert good_resp.recommendation == "good_match"
+
+    assert potential_resp.match_score >= Decimal("55.00")
+    assert potential_resp.recommendation == "potential"
+
+    assert low_potential_resp.match_score < Decimal("55.00")
+    assert low_potential_resp.recommendation == "not_match"

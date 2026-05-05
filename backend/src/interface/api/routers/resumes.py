@@ -143,9 +143,6 @@ async def upload_resume_pdf(
     db: AsyncSession = Depends(get_db),
 ) -> ResumeFileUploadResponse:
     try:
-        analysis_id = None
-        analysis_auto_requested = False
-        analysis_status = None
         uploaded = await _resume_service(db).upload_pdf(
             resume_id,
             file_name=file.filename or "resume.pdf",
@@ -154,14 +151,15 @@ async def upload_resume_pdf(
             current_user=current_user,
         )
         await db.commit()
+
         return ResumeFileUploadResponse(
             resume_id=uploaded.resume.id,
             candidate_id=uploaded.candidate.id,
             candidate_full_name=uploaded.candidate.full_name,
             version_id=uploaded.version.id,
-            analysis_auto_requested=analysis_auto_requested,
-            analysis_id=analysis_id,
-            analysis_status=analysis_status,
+            analysis_auto_requested=False,
+            analysis_id=None,
+            analysis_status=None,
             original_file_name=uploaded.version.original_file_name,
             file_size_bytes=uploaded.version.file_size_bytes,
             file_hash_sha256=uploaded.version.file_hash_sha256,

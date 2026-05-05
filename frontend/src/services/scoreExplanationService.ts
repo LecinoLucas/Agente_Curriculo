@@ -13,13 +13,30 @@ export type ScoreExplanationEvidence = {
   explanation: string;
 };
 
+export type ScoreExplanationBreakdownItem = {
+  score: number;
+  weight: number;
+  contribution: number;
+};
+
 export type ScoreExplanationResponse = {
   job_id: string;
   candidate_id: string;
   analysis_id: string;
   score: number;
+  final_score: number;
+  recommendation: string;
   engine_used: string;
   explanation: string;
+  breakdown: {
+    mandatory?: ScoreExplanationBreakdownItem | null;
+    optional?: ScoreExplanationBreakdownItem | null;
+    experience?: ScoreExplanationBreakdownItem | null;
+    seniority?: ScoreExplanationBreakdownItem | null;
+    ai_adjustment?: ScoreExplanationBreakdownItem | null;
+  };
+  highlights: string[];
+  risks: string[];
   high_score_reasons: string[];
   low_score_reasons: string[];
   overestimation_risks: string[];

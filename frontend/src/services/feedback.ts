@@ -1,4 +1,4 @@
-import { toast } from "./toast";
+import { toast } from "../shared/utils/toast";
 import { formatContextError } from "./errorMessages";
 import { HttpError } from "./http";
 

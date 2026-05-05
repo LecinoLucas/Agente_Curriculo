@@ -434,7 +434,15 @@ async def test_real_world_matching_with_mock_analysis(
     # === SETUP: Create Job ===
     job = MagicMock()
     job.id = uuid4()
+    job.title = "Senior Backend Engineer"
+    job.description = "Build backend APIs"
+    job.requirements = "Python PostgreSQL"
     job.seniority_level = "senior"
+    job.job_area = "technology"
+    job.responsibilities = []
+    job.experience_context = ""
+    job.behavioral_requirements = []
+    job.priority = "normal"
     job.minimum_education_level = "bachelor"
     job.minimum_years_experience = Decimal("5.0")
     job.deal_breakers = [
@@ -457,11 +465,21 @@ async def test_real_world_matching_with_mock_analysis(
 
     # Create service
     repo = MagicMock()
+    candidate_id = uuid4()
+    resume_version_id = uuid4()
     repo.find_active_job = AsyncMock(return_value=job)
     repo.list_active_job_skill_rows = AsyncMock(return_value=job_skills)
     repo.find_active_score_model_version = AsyncMock(return_value=None)
-    repo.find_job_match = AsyncMock(return_value=None)
-    repo.save_job_match = AsyncMock()
+    repo.find_latest_candidate_profile_analysis_for_resume = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.find_preferred_ai_model = AsyncMock(return_value=None)
+    repo.find_job_profile_analysis_by_signature = AsyncMock(
+        return_value=SimpleNamespace(id=uuid4())
+    )
+    repo.get_candidate_id_from_analysis = AsyncMock(return_value=candidate_id)
+    repo.get_resume_version_id_from_analysis = AsyncMock(return_value=resume_version_id)
+    repo.upsert_candidate_job_match = AsyncMock()
     repo.session = MagicMock()
     repo.session.scalar = AsyncMock(return_value=None)
 
@@ -521,6 +539,7 @@ async def test_real_world_matching_with_mock_analysis(
 
         analysis = MagicMock()
         analysis.id = uuid4()
+        analysis.resume_version_id = resume_version_id
 
         details = AnalysisResultDetails(analysis=analysis, result=result)
         match_response = await service._match_details_to_job(details, job.id)

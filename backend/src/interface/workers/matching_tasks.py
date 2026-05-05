@@ -48,7 +48,7 @@ def match_analysis_to_job(self, analysis_id: str, job_id: str):
 
 async def _match_analysis_to_job_async(analysis_id: str, job_id: str) -> dict:
     from src.application.services.analysis_service import AnalysisService
-    from src.infrastructure.database.connection import get_session_factory
+    from src.infrastructure.database.connection import create_celery_async_sessionmaker
     from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
         SQLAlchemyAnalysisRepository,
     )
@@ -65,58 +65,64 @@ async def _match_analysis_to_job_async(analysis_id: str, job_id: str) -> dict:
         )
         raise RuntimeError("Invalid analysis_id or job_id") from exc
 
-    SessionFactory = get_session_factory()
+    # ✅ CELERY-SPECIFIC: Create fresh engine + sessionmaker INSIDE this event loop
+    celery_engine, celery_sessionmaker = await create_celery_async_sessionmaker()
 
-    async with SessionFactory() as session:
-        try:
-            service = AnalysisService(SQLAlchemyAnalysisRepository(session))
+    try:
+        async with celery_sessionmaker() as session:
+            try:
+                service = AnalysisService(SQLAlchemyAnalysisRepository(session))
 
-            match = await asyncio.wait_for(
-                service.match_completed_analysis_to_job(
-                    analysis_uuid,
-                    job_uuid,
-                ),
-                timeout=35,
-            )
+                match = await asyncio.wait_for(
+                    service.match_completed_analysis_to_job(
+                        analysis_uuid,
+                        job_uuid,
+                    ),
+                    timeout=35,
+                )
 
-            await session.commit()
+                await session.commit()
 
-            logger.info(
-                "matching.completed",
-                analysis_id=str(analysis_uuid),
-                job_id=str(job_uuid),
-                score=str(match.match_score),
-                recommendation=match.recommendation,
-            )
+                logger.info(
+                    "matching.completed",
+                    analysis_id=str(analysis_uuid),
+                    job_id=str(job_uuid),
+                    score=str(match.match_score),
+                    recommendation=match.recommendation,
+                )
 
-            return {
-                "status": "completed",
-                "analysis_id": str(analysis_uuid),
-                "job_id": str(job_uuid),
-                "match_score": str(match.match_score),
-                "recommendation": match.recommendation,
-            }
+                return {
+                    "status": "completed",
+                    "analysis_id": str(analysis_uuid),
+                    "job_id": str(job_uuid),
+                    "match_score": str(match.match_score),
+                    "recommendation": match.recommendation,
+                }
 
-        except asyncio.TimeoutError as exc:
-            await session.rollback()
+            except asyncio.TimeoutError as exc:
+                await session.rollback()
 
-            logger.exception(
-                "matching.timeout",
-                analysis_id=str(analysis_uuid),
-                job_id=str(job_uuid),
-                timeout_seconds=35,
-            )
+                logger.exception(
+                    "matching.timeout",
+                    analysis_id=str(analysis_uuid),
+                    job_id=str(job_uuid),
+                    timeout_seconds=35,
+                )
 
-            raise RuntimeError("Matching timed out") from exc
+                raise RuntimeError("Matching timed out") from exc
 
-        except Exception as exc:
-            await session.rollback()
+            except Exception as exc:
+                await session.rollback()
 
-            logger.exception(
-                "matching.failed",
-                analysis_id=str(analysis_uuid),
-                job_id=str(job_uuid),
-                error=str(exc),
-            )
+                logger.exception(
+                    "matching.failed",
+                    analysis_id=str(analysis_uuid),
+                    job_id=str(job_uuid),
+                    error=str(exc),
+                )
 
-            raise
+                raise
+
+    finally:
+        # ✅ CRITICAL: Dispose engine BEFORE event loop exits
+        await celery_engine.dispose()

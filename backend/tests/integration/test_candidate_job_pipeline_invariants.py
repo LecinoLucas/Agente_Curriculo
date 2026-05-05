@@ -1,0 +1,265 @@
+from __future__ import annotations
+
+from uuid import uuid4
+
+import pytest
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.application.services.pipeline_service import (
+    PipelineCandidateAlreadyActiveInAnotherJobError,
+    PipelineService,
+)
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineEventModel,
+    CandidateJobPipelineModel,
+)
+from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.user_model import UserModel
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
+from src.interface.api.schemas.pipeline_schemas import (
+    AddCandidateToJobRequest,
+    MoveCandidateRequest,
+    TransferCandidateJobRequest,
+)
+
+
+async def _seed_user_candidate_job(
+    db_session: AsyncSession,
+    *,
+    job_status: str = "published",
+) -> tuple[UserModel, CandidateModel, JobModel]:
+    user = UserModel(
+        id=uuid4(),
+        email=f"user-{uuid4()}@example.com",
+        password_hash="hash",
+        role="recruiter",
+        status="active",
+        full_name="Recruiter",
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    candidate = CandidateModel(
+        id=uuid4(),
+        full_name="Candidate",
+        email=f"cand-{uuid4()}@example.com",
+        location_country="BR",
+        tags=[],
+        created_by=user.id,
+    )
+    db_session.add(candidate)
+
+    job = JobModel(
+        id=uuid4(),
+        title="Backend Engineer",
+        description="Desc",
+        status=job_status,
+        created_by=user.id,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    return user, candidate, job
+
+
+@pytest.mark.asyncio
+async def test_create_link_creates_single_canonical_row(db_session: AsyncSession) -> None:
+    user, candidate, job = await _seed_user_candidate_job(db_session)
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+
+    await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    rows = (
+        await db_session.execute(
+            sa.select(CandidateJobPipelineModel).where(
+                CandidateJobPipelineModel.candidate_id == candidate.id,
+                CandidateJobPipelineModel.job_id == job.id,
+            )
+        )
+    ).scalars().all()
+
+    assert len(rows) == 1
+    assert rows[0].link_status == "active"
+    assert rows[0].pipeline_status == "active"
+    assert rows[0].pipeline_stage == "entry"
+
+
+@pytest.mark.asyncio
+async def test_stage_move_updates_pipeline_and_creates_event(db_session: AsyncSession) -> None:
+    user, candidate, job = await _seed_user_candidate_job(db_session)
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+
+    await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    await svc.move_candidate(
+        candidate_id=candidate.id,
+        body=MoveCandidateRequest(job_id=job.id, stage="screening"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    row = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate.id,
+            CandidateJobPipelineModel.job_id == job.id,
+        )
+    )
+    assert row is not None
+    assert row.pipeline_stage == "screening"
+    assert row.link_status == "active"
+
+    event = await db_session.scalar(
+        sa.select(CandidateJobPipelineEventModel)
+        .where(
+            CandidateJobPipelineEventModel.candidate_id == candidate.id,
+            CandidateJobPipelineEventModel.job_id == job.id,
+            CandidateJobPipelineEventModel.event_type == "stage_moved",
+        )
+        .order_by(CandidateJobPipelineEventModel.created_at.desc())
+        .limit(1)
+    )
+    assert event is not None
+
+
+@pytest.mark.asyncio
+async def test_transfer_marks_source_terminal_and_destination_active(db_session: AsyncSession) -> None:
+    user, candidate, source_job = await _seed_user_candidate_job(db_session)
+
+    destination_job = JobModel(
+        id=uuid4(),
+        title="New Job",
+        description="Desc",
+        status="published",
+        created_by=user.id,
+    )
+    db_session.add(destination_job)
+    await db_session.commit()
+
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+    await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=source_job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    await svc.transfer_candidate_job(
+        candidate_id=candidate.id,
+        body=TransferCandidateJobRequest(
+            from_job_id=source_job.id,
+            to_job_id=destination_job.id,
+            reason="reposicao",
+        ),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    source = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate.id,
+            CandidateJobPipelineModel.job_id == source_job.id,
+        )
+    )
+    destination = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate.id,
+            CandidateJobPipelineModel.job_id == destination_job.id,
+        )
+    )
+
+    assert source is not None
+    assert source.link_status == "transferred"
+    assert source.pipeline_status == "terminal"
+
+    assert destination is not None
+    assert destination.link_status == "active"
+    assert destination.pipeline_status == "active"
+    assert destination.pipeline_stage == "entry"
+
+
+@pytest.mark.asyncio
+async def test_remove_candidate_marks_terminal_and_inactive(db_session: AsyncSession) -> None:
+    user, candidate, job = await _seed_user_candidate_job(db_session)
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+
+    await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    await svc.remove_candidate_from_job(
+        candidate_id=candidate.id,
+        job_id=job.id,
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    row = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate.id,
+            CandidateJobPipelineModel.job_id == job.id,
+        )
+    )
+    assert row is not None
+    assert row.link_status == "removed"
+    assert row.pipeline_status == "terminal"
+
+
+@pytest.mark.asyncio
+async def test_candidate_has_single_active_state_across_jobs(db_session: AsyncSession) -> None:
+    user, candidate, first_job = await _seed_user_candidate_job(db_session)
+    second_job = JobModel(
+        id=uuid4(),
+        title="Second Job",
+        description="Desc",
+        status="published",
+        created_by=user.id,
+    )
+    db_session.add(second_job)
+    await db_session.commit()
+
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+
+    await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=first_job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    with pytest.raises(PipelineCandidateAlreadyActiveInAnotherJobError):
+        await svc.add_candidate_to_job(
+            candidate_id=candidate.id,
+            body=AddCandidateToJobRequest(job_id=second_job.id, initial_stage="entry"),
+            moved_by=user.id,
+        )
+
+    active_count = int(
+        (
+            await db_session.scalar(
+                sa.select(sa.func.count())
+                .select_from(CandidateJobPipelineModel)
+                .where(
+                    CandidateJobPipelineModel.candidate_id == candidate.id,
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                    CandidateJobPipelineModel.link_status == "active",
+                )
+            )
+        )
+        or 0
+    )
+    assert active_count == 1

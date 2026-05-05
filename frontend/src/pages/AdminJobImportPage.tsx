@@ -20,8 +20,8 @@ import {
   handleApiError,
   safeRequest,
   type UserFriendlyError,
-} from "../services/errorHandler";
-import { toast } from "../services/toast";
+} from "../shared/utils/errorHandler";
+import { toast } from "../shared/utils/toast";
 
 function KpiCard({
   label,

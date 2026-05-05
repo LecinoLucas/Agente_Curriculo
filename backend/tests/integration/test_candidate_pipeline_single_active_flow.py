@@ -13,7 +13,9 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     PromptTemplateModel,
 )
-from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
@@ -171,7 +173,6 @@ async def test_candidate_without_job_starts_waiting_for_job(
     assert payload["latest_analysis"] is None
     assert payload["latest_analysis_pipeline"] is None
     assert payload["pipeline_entries"] == []
-    assert payload["candidate_job_links"] == []
 
 
 @pytest.mark.asyncio
@@ -205,9 +206,6 @@ async def test_candidate_can_be_added_when_no_active_pipeline(
     assert payload["active_job"]["id"] == str(job_id)
     assert len(payload["pipeline_entries"]) == 1
     assert payload["pipeline_entries"][0]["job_id"] == str(job_id)
-    active_links = [row for row in payload["candidate_job_links"] if row["status"] == "active"]
-    assert len(active_links) == 1
-    assert active_links[0]["job_id"] == str(job_id)
 
 
 @pytest.mark.asyncio
@@ -539,21 +537,19 @@ async def test_transferred_link_not_treated_as_active(
     assert transfer_b.status_code == 200
 
     link_a = await db_session.scalar(
-        sa.select(CandidateJobLinkModel).where(
-            CandidateJobLinkModel.candidate_id == candidate_id,
-            CandidateJobLinkModel.job_id == job_a,
-            CandidateJobLinkModel.deleted_at.is_(None),
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_a,
         )
     )
     link_b = await db_session.scalar(
-        sa.select(CandidateJobLinkModel).where(
-            CandidateJobLinkModel.candidate_id == candidate_id,
-            CandidateJobLinkModel.job_id == job_b,
-            CandidateJobLinkModel.deleted_at.is_(None),
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_b,
         )
     )
-    assert link_a is not None and link_a.status == "transferred"
-    assert link_b is not None and link_b.status == "active"
+    assert link_a is not None and link_a.link_status == "transferred"
+    assert link_b is not None and link_b.link_status == "active"
 
     score_old_job = await client.get(
         f"/api/v1/jobs/{job_a}/candidates/{candidate_id}/score-explanation",
@@ -590,7 +586,3 @@ async def test_jobs_link_endpoint_creates_pipeline_not_orphan_link(
     assert overview.status_code == 200
     payload = overview.json()
     assert any(entry["job_id"] == str(job_id) for entry in payload["pipeline_entries"])
-    assert any(
-        entry["job_id"] == str(job_id) and entry["status"] == "active"
-        for entry in payload["candidate_job_links"]
-    )

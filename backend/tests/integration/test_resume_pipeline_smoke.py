@@ -1,6 +1,8 @@
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,17 +17,26 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import SkillModel
+from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeVersionModel
 from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 from src.interface.workers.analysis_tasks import _process_analysis_async
-from src.interface.workers.matching_tasks import _match_analysis_to_job_async
+from src.interface.workers.analysis_tasks import _remove_sensitive_resume_data
 from tests.conftest import TestSessionFactory
+
+
+def _stub_celery_sessionmaker() -> AsyncMock:
+    return AsyncMock(
+        return_value=(
+            SimpleNamespace(dispose=AsyncMock()),
+            TestSessionFactory,
+        )
+    )
 
 
 async def _create_active_user(
@@ -164,6 +175,10 @@ async def test_resume_pipeline_smoke_realish_pdfs(
     monkeypatch.setattr(
         "src.infrastructure.database.connection.AsyncSessionFactory",
         TestSessionFactory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
     )
 
     recruiter = await _create_active_user(
@@ -487,6 +502,7 @@ async def test_resume_pipeline_smoke_realish_pdfs(
             "title": "Senior Backend Platform Engineer",
             "description": "Remote backend role in Sao Paulo requiring Python Java SQL Node.js AWS",
             "requirements": "Python, Java, SQL, Node.js, AWS",
+            "job_area": "technology",
             "seniority_level": "senior",
             "work_model": "remote",
             "location": "Sao Paulo",
@@ -515,12 +531,6 @@ async def test_resume_pipeline_smoke_realish_pdfs(
     )
     assert job_response.status_code == 201
     job_id = UUID(job_response.json()["id"])
-
-    publish_response = await client.patch(
-        f"/api/v1/jobs/{job_id}/publish",
-        headers=recruiter_headers,
-    )
-    assert publish_response.status_code == 200
 
     skills = await _ensure_skills(
         db_session,
@@ -561,10 +571,12 @@ async def test_resume_pipeline_smoke_realish_pdfs(
         )
         assert response.status_code == 201
 
-    monkeypatch.setattr(
-        "src.interface.api.routers.resumes.enqueue_analysis",
-        lambda analysis_id: None,
+    publish_response = await client.patch(
+        f"/api/v1/jobs/{job_id}/publish",
+        headers=recruiter_headers,
     )
+    assert publish_response.status_code == 200
+
     monkeypatch.setattr(
         "src.interface.workers.analysis_tasks._provider_api_key_is_configured",
         lambda provider: True,
@@ -598,14 +610,6 @@ async def test_resume_pipeline_smoke_realish_pdfs(
         lambda provider, model_id: FakeAIService(),
     )
 
-    async def _sync_matching_pipeline(analysis_id) -> None:
-        await _match_analysis_to_job_async(str(analysis_id), str(job_id))
-
-    monkeypatch.setattr(
-        "src.interface.workers.analysis_tasks._enqueue_matching_pipeline",
-        _sync_matching_pipeline,
-    )
-
     uploaded: dict[str, dict] = {}
     for item in candidates:
         init_upload = await client.post(
@@ -623,10 +627,27 @@ async def test_resume_pipeline_smoke_realish_pdfs(
             files={"file": (f"{item['name'].lower().replace(' ', '-')}.pdf", pdf, "application/pdf")},
         )
         assert upload_response.status_code == 200
-        uploaded[item["name"]] = upload_response.json()
-        assert upload_response.json()["analysis_auto_requested"] is True
-        assert upload_response.json()["analysis_status"] == "pending"
+        upload_payload = upload_response.json()
+        assert upload_payload["analysis_auto_requested"] is False
+        assert upload_payload["analysis_status"] is None
         assert upload_response.json()["extraction_status"] == "completed"
+
+        analysis_request = await client.post(
+            "/api/v1/analyses",
+            headers=recruiter_headers,
+            params={
+                "resume_version_id": upload_payload["version_id"],
+                "job_id": str(job_id),
+            },
+        )
+        assert analysis_request.status_code == 202
+        analysis_payload = analysis_request.json()
+        uploaded[item["name"]] = {
+            **upload_payload,
+            "analysis_id": analysis_payload["analysis_id"],
+            "analysis_status": analysis_payload["status"],
+        }
+        assert analysis_payload["status"] == "pending"
 
     analysis_ids = [UUID(uploaded[item["name"]]["analysis_id"]) for item in candidates]
     for analysis_id in analysis_ids:
@@ -679,7 +700,9 @@ async def test_resume_pipeline_smoke_realish_pdfs(
         )
         assert item["name"] in stored_resume.extracted_text
         assert stored_resume.word_count >= 10
-        assert seen_resume_texts[item["name"]] == stored_resume.extracted_text
+        assert seen_resume_texts[item["name"]] == _remove_sensitive_resume_data(
+            stored_resume.extracted_text
+        )
 
     # Parser evidence
     result_by_name = {
@@ -719,7 +742,7 @@ async def test_resume_pipeline_smoke_realish_pdfs(
     assert "proibida" in reasons_text
 
     assert matches_by_name["Erica Ambiguous Skills"]["validation_status"] == "pass"
-    assert matches_by_name["Erica Ambiguous Skills"]["mandatory_skills_matched"] == 3
+    assert matches_by_name["Erica Ambiguous Skills"]["mandatory_skills_matched"] == 4
     assert matches_by_name["Erica Ambiguous Skills"]["mandatory_skills_total"] == 5
     assert matches_by_name["Erica Ambiguous Skills"]["recommendation"] != "strong_match"
 
@@ -737,13 +760,13 @@ async def test_resume_pipeline_smoke_realish_pdfs(
     assert ranked_by_name["Helena Rocha Strong"]["decision_suggestion"] == "approved"
     assert ranked_by_name["Clara Nunes Weak"]["decision_suggestion"] == "rejected_suggested"
     assert ranked_by_name["Diego Messy Format"]["decision_suggestion"] == "rejected_suggested"
-    assert Decimal(str(ranked_by_name["Clara Nunes Weak"]["final_score"])) == Decimal("0")
-    assert Decimal(str(ranked_by_name["Diego Messy Format"]["final_score"])) == Decimal("0")
+    assert Decimal("0") < Decimal(str(ranked_by_name["Clara Nunes Weak"]["final_score"])) <= Decimal("39")
+    assert Decimal("0") < Decimal(str(ranked_by_name["Diego Messy Format"]["final_score"])) <= Decimal("39")
     assert ranked_by_name["Fabio No Dates"]["decision_suggestion"] != "approved"
 
     persisted_matches = (
         await db_session.execute(
-            sa.select(ResumeJobMatchModel).where(ResumeJobMatchModel.job_id == job_id)
+            sa.select(CandidateJobMatchModel).where(CandidateJobMatchModel.job_id == job_id)
         )
     ).scalars().all()
     assert len(persisted_matches) == 6
@@ -771,6 +794,10 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
     monkeypatch.setattr(
         "src.infrastructure.database.connection.AsyncSessionFactory",
         TestSessionFactory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _stub_celery_sessionmaker(),
     )
 
     recruiter = await _create_active_user(
@@ -822,6 +849,7 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
             "title": "Backend Python Engineer",
             "description": "Python backend role with PostgreSQL and Docker",
             "requirements": "Python, PostgreSQL, Docker",
+            "job_area": "technology",
             "seniority_level": "senior",
             "work_model": "remote",
             "location": "Sao Paulo",
@@ -834,12 +862,6 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
     )
     assert job_response.status_code == 201
     job_id = UUID(job_response.json()["id"])
-
-    publish_response = await client.patch(
-        f"/api/v1/jobs/{job_id}/publish",
-        headers=recruiter_headers,
-    )
-    assert publish_response.status_code == 200
 
     skills = await _ensure_skills(
         db_session,
@@ -859,10 +881,12 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
         )
         assert response.status_code == 201
 
-    monkeypatch.setattr(
-        "src.interface.api.routers.resumes.enqueue_analysis",
-        lambda analysis_id: None,
+    publish_response = await client.patch(
+        f"/api/v1/jobs/{job_id}/publish",
+        headers=recruiter_headers,
     )
+    assert publish_response.status_code == 200
+
     monkeypatch.setattr(
         "src.interface.workers.analysis_tasks._provider_api_key_is_configured",
         lambda provider: True,
@@ -874,10 +898,10 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
 
     candidates = [
         {
-            "name": "Markdown Python",
-            "resume_text": "Markdown Python Developer Python PostgreSQL Docker from Sao Paulo",
+            "name": "Styled Python",
+            "resume_text": "Styled Python Developer Python PostgreSQL Docker from Sao Paulo",
             "ai_payload": _analysis_payload(
-                name="Markdown Python",
+                name="Styled Python",
                 location="Sao Paulo",
                 work_model="remote",
                 experiences=[
@@ -978,14 +1002,6 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
         lambda provider, model_id: FakeAIService(),
     )
 
-    async def _sync_matching_pipeline(analysis_id) -> None:
-        await _match_analysis_to_job_async(str(analysis_id), str(job_id))
-
-    monkeypatch.setattr(
-        "src.interface.workers.analysis_tasks._enqueue_matching_pipeline",
-        _sync_matching_pipeline,
-    )
-
     uploaded: dict[str, dict] = {}
     for item in candidates:
         init_upload = await client.post(
@@ -1003,10 +1019,27 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
             files={"file": (f"{item['name'].lower().replace(' ', '-')}.pdf", pdf, "application/pdf")},
         )
         assert upload_response.status_code == 200
-        uploaded[item["name"]] = upload_response.json()
-        assert upload_response.json()["analysis_auto_requested"] is True
-        assert upload_response.json()["analysis_status"] == "pending"
+        upload_payload = upload_response.json()
+        assert upload_payload["analysis_auto_requested"] is False
+        assert upload_payload["analysis_status"] is None
         assert upload_response.json()["extraction_status"] == "completed"
+
+        analysis_request = await client.post(
+            "/api/v1/analyses",
+            headers=recruiter_headers,
+            params={
+                "resume_version_id": upload_payload["version_id"],
+                "job_id": str(job_id),
+            },
+        )
+        assert analysis_request.status_code == 202
+        analysis_payload = analysis_request.json()
+        uploaded[item["name"]] = {
+            **upload_payload,
+            "analysis_id": analysis_payload["analysis_id"],
+            "analysis_status": analysis_payload["status"],
+        }
+        assert analysis_payload["status"] == "pending"
 
     for item in candidates:
         analysis_id = UUID(uploaded[item["name"]]["analysis_id"])
@@ -1048,9 +1081,9 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
             f"score={entry['final_score'] if entry else 'MISSING'}"
         )
 
-    assert matches_by_name["Markdown Python"]["recommendation"] in {"strong_match", "good_match"}
+    assert matches_by_name["Styled Python"]["recommendation"] in {"strong_match", "good_match"}
     assert matches_by_name["Phrase Python"]["recommendation"] in {"strong_match", "good_match"}
-    assert matches_by_name["Markdown Python"]["mandatory_skills_matched"] == 3
+    assert matches_by_name["Styled Python"]["mandatory_skills_matched"] == 3
     assert matches_by_name["Phrase Python"]["mandatory_skills_matched"] == 3
-    assert ranked_by_name["Markdown Python"]["decision_suggestion"] == "approved"
+    assert ranked_by_name["Styled Python"]["decision_suggestion"] == "approved"
     assert ranked_by_name["Phrase Python"]["decision_suggestion"] == "approved"

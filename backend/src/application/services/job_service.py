@@ -44,6 +44,24 @@ class JobSkillLinkNotFoundError(Exception):
     pass
 
 
+class JobPublicationValidationError(Exception):
+    def __init__(
+        self,
+        *,
+        missing_fields: list[str],
+        quality_score: int,
+        quality_status: str,
+        suggestions: list[str],
+        warnings: list[str],
+    ) -> None:
+        self.missing_fields = list(missing_fields)
+        self.quality_score = int(quality_score)
+        self.quality_status = quality_status
+        self.suggestions = list(suggestions)
+        self.warnings = list(warnings)
+        super().__init__("Vaga não atende os critérios mínimos de publicação.")
+
+
 class JobService:
     def __init__(
         self,
@@ -167,6 +185,8 @@ class JobService:
 
     async def transition_status(self, job_id: UUID, next_status: str) -> JobModel:
         job = await self.get(job_id)
+        if next_status == "published":
+            await self.ensure_publishable(job.id)
         self._set_status(job, next_status)
         return await self._repository.save(job)
 
@@ -330,6 +350,20 @@ class JobService:
         job.quality_status = result.status
         await self._repository.save(job)
         return result
+
+    async def ensure_publishable(self, job_id: UUID) -> "JobQualityResult":
+        result = await self.refresh_quality(job_id)
+        if result.can_publish:
+            return result
+
+        missing_fields = list(dict.fromkeys(result.publication_blockers or result.missing_fields))
+        raise JobPublicationValidationError(
+            missing_fields=missing_fields,
+            quality_score=result.quality_score,
+            quality_status=result.status,
+            suggestions=result.suggestions,
+            warnings=result.warnings,
+        )
 
     async def _maybe_refresh_quality(self, job_id: UUID) -> None:
         try:

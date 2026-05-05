@@ -26,9 +26,9 @@ import { PageHeader } from "../components/common/PageHeader";
 import { useAuth } from "../features/auth/useAuth";
 import { useTheme } from "../hooks/useTheme";
 import { authService } from "../services/authService";
-import { formatErrorDetails, formatErrorForToast, handleApiError } from "../services/errorHandler";
+import { formatErrorDetails, formatErrorForToast, handleApiError } from "../shared/utils/errorHandler";
 import { usersService } from "../services/usersService";
-import { toast } from "../services/toast";
+import { toast } from "../shared/utils/toast";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Administrador",

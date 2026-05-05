@@ -45,6 +45,7 @@ class CandidateResumeSummaryResponse(BaseModel):
 
 class CandidateLatestAnalysisResponse(BaseModel):
     analysis_id: UUID
+    job_id: UUID | None = None
     resume_id: UUID
     resume_title: str
     status: str
@@ -64,6 +65,7 @@ class CandidateLatestAnalysisResponse(BaseModel):
 
 class CandidateLatestAnalysisPipelineResponse(BaseModel):
     analysis_id: UUID
+    job_id: UUID | None = None
     matching_status: str
     published_jobs_total: int
     matched_jobs_count: int
@@ -94,18 +96,6 @@ class CandidatePipelineEntryResponse(BaseModel):
     updated_at: datetime
 
 
-class CandidateJobLinkResponse(BaseModel):
-    id: UUID
-    candidate_id: UUID
-    job_id: UUID
-    job_title: str
-    job_status: str
-    status: str
-    source: str
-    created_at: datetime
-    updated_at: datetime
-
-
 class CandidateActiveJobResponse(BaseModel):
     id: UUID
     title: str
@@ -120,7 +110,6 @@ class CandidateOverviewResponse(BaseModel):
     top_matches: list[CandidateJobMatchSummaryResponse]
     active_job_id: UUID | None = None
     active_job: CandidateActiveJobResponse | None = None
-    candidate_job_links: list[CandidateJobLinkResponse] = Field(default_factory=list)
     pipeline_entries: list[CandidatePipelineEntryResponse] = Field(default_factory=list)
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
 import sqlalchemy as sa
@@ -16,12 +16,15 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
-from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.profile_analysis_model import (
+    CandidateJobMatchModel,
+    CandidateProfileAnalysisModel,
+    JobProfileAnalysisModel,
+)
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
@@ -288,23 +291,19 @@ async def _seed_scoring_case(
         raw_llm_response="{\"ok\": true}",
     )
     session.add(analysis_result)
+    candidate_job_pipeline_id = uuid5(NAMESPACE_URL, f"{candidate.id}:{job.id}")
+
     session.add(
-        CandidateJobLinkModel(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=candidate_job_pipeline_id,
             candidate_id=candidate.id,
             job_id=job.id,
-            status="active",
-            source="pipeline",
-            created_at=now,
-            updated_at=now,
-        )
-    )
-    session.add(
-        CandidatePipelineModel(
-            candidate_id=candidate.id,
-            job_id=job.id,
-            stage="entry",
-            status="active",
-            is_active=True,
+            resume_version_id=resume_version.id,
+            pipeline_stage="entry",
+            link_status="active",
+            pipeline_status="active",
+            source="manual",
+            current_analysis_id=analysis.id,
             match_score=Decimal("51.0"),
             entered_at=now,
             created_at=now,
@@ -313,22 +312,62 @@ async def _seed_scoring_case(
     )
 
     if include_ranking_row:
+        candidate_profile_analysis = CandidateProfileAnalysisModel(
+            candidate_id=candidate.id,
+            resume_version_id=resume_version.id,
+            provider=ai_model.provider,
+            model_id=ai_model.model_id,
+            prompt_version=str(prompt_template.version),
+            professional_area=job.job_area,
+            seniority_level=analysis_result.seniority_level,
+            education_level=analysis_result.highest_education_level,
+            experience_years=analysis_result.total_experience_years,
+            skills_json=list(analysis_result.keywords or []),
+            summary=analysis_result.candidate_summary,
+            strengths_json=list(analysis_result.strengths or []),
+            weaknesses_json=list(analysis_result.weaknesses or []),
+            raw_response_json=dict(analysis_result.extracted_data or {}),
+            created_at=now,
+        )
+        session.add(candidate_profile_analysis)
+        await session.flush()
+
+        job_profile_analysis = JobProfileAnalysisModel(
+            job_id=job.id,
+            provider=ai_model.provider,
+            model_id=ai_model.model_id,
+            prompt_version=str(prompt_template.version),
+            job_signature_hash=job.job_profile_hash or f"job-{job.id}",
+            job_area=job.job_area,
+            seniority_required=job.seniority_level,
+            education_required=job.minimum_education_level,
+            experience_required=job.minimum_years_experience,
+            required_skills_json=["SQL", "Power BI", "pipelines"],
+            nice_to_have_skills_json=[],
+            responsibilities_json=(
+                [job.responsibilities]
+                if isinstance(job.responsibilities, str) and job.responsibilities
+                else list(job.responsibilities or [])
+            ),
+            raw_response_json={"source": "test"},
+            created_at=now,
+        )
+        session.add(job_profile_analysis)
+        await session.flush()
+
         session.add(
-            ResumeJobMatchModel(
-                analysis_id=analysis.id,
+            CandidateJobMatchModel(
+                candidate_id=candidate.id,
                 job_id=job.id,
+                resume_version_id=resume_version.id,
+                candidate_profile_analysis_id=candidate_profile_analysis.id,
+                job_profile_analysis_id=job_profile_analysis.id,
+                candidate_job_pipeline_id=candidate_job_pipeline_id,
                 match_score=Decimal("51.0"),
-                skills_match_score=Decimal("50.0"),
-                experience_match_score=Decimal("55.0"),
-                seniority_match_score=Decimal("48.0"),
-                matched_skills=["SQL", "Power BI"],
-                missing_skills=["pipelines"],
-                bonus_skills=["ETL"],
-                match_summary="Ranking legado de teste.",
+                matched_skills_json=["SQL", "Power BI"],
+                missing_skills_json=["pipelines"],
+                explanation="Ranking canônico de teste.",
                 recommendation="good_match",
-                validation_status="pass",
-                missing_evidence=[],
-                rejection_reasons=[],
                 created_at=now,
             )
         )
@@ -337,8 +376,8 @@ async def _seed_scoring_case(
     return job.id, candidate.id, analysis.id
 
 
-async def _count_resume_job_matches(session: AsyncSession) -> int:
-    return int((await session.scalar(sa.select(sa.func.count()).select_from(ResumeJobMatchModel))) or 0)
+async def _count_candidate_job_matches(session: AsyncSession) -> int:
+    return int((await session.scalar(sa.select(sa.func.count()).select_from(CandidateJobMatchModel))) or 0)
 
 
 @pytest.mark.asyncio
@@ -354,7 +393,7 @@ async def test_admin_get_scoring_comparison_returns_audit_payload(
         include_ranking_row=True,
     )
 
-    before_count = await _count_resume_job_matches(db_session)
+    before_count = await _count_candidate_job_matches(db_session)
     response = await client.get(
         f"/api/v1/admin/scoring-comparison/{job_id}/{candidate_id}",
         headers=headers,
@@ -377,7 +416,7 @@ async def test_admin_get_scoring_comparison_returns_audit_payload(
     assert "inferred_matches" in body["evaluation_insight"]
     assert "recommended_interview_questions" in body["evaluation_insight"]
 
-    after_count = await _count_resume_job_matches(db_session)
+    after_count = await _count_candidate_job_matches(db_session)
     assert after_count == before_count
 
 

@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
     ScoreModelVersionModel,
@@ -26,12 +27,25 @@ from src.application.services.candidate_ranking_service import CandidateRankingS
 @pytest.mark.asyncio
 async def test_stats_calculated_from_all_candidates_not_filtered(db_session: AsyncSession, caplog):
     """Stats should count ALL candidates with scores, including invalid ones (which are filtered from ranking)."""
+    creator_id = uuid4()
+    db_session.add(
+        UserModel(
+            id=creator_id,
+            email=f"creator-{creator_id}@example.com",
+            password_hash="hash",
+            role="recruiter",
+            status="active",
+            full_name="Creator",
+        )
+    )
+    await db_session.flush()
+
     job = JobModel(
         id=uuid4(),
         title="Test Job",
         description="Test",
         status="published",
-        created_by=uuid4(),
+        created_by=creator_id,
     )
     db_session.add(job)
 
@@ -50,35 +64,35 @@ async def test_stats_calculated_from_all_candidates_not_filtered(db_session: Asy
             id=uuid4(),
             full_name="Valid 1",
             email="valid1@example.com",
-            created_by=uuid4(),
+            created_by=creator_id,
             data_quality_status="valid",
         ),
         "valid_2": CandidateModel(
             id=uuid4(),
             full_name="Valid 2",
             email="valid2@example.com",
-            created_by=uuid4(),
+            created_by=creator_id,
             data_quality_status="valid",
         ),
         "unknown": CandidateModel(
             id=uuid4(),
             full_name="Unknown",
             email="unknown@example.com",
-            created_by=uuid4(),
+            created_by=creator_id,
             data_quality_status="unknown",
         ),
         "no_resume": CandidateModel(
             id=uuid4(),
             full_name="No Resume",
             email="noresume@example.com",
-            created_by=uuid4(),
+            created_by=creator_id,
             data_quality_status="no_resume",
         ),
         "parsing_failed": CandidateModel(
             id=uuid4(),
             full_name="Parsing Failed",
             email="parsing@example.com",
-            created_by=uuid4(),
+            created_by=creator_id,
             data_quality_status="parsing_failed",
         ),
     }
@@ -90,11 +104,13 @@ async def test_stats_calculated_from_all_candidates_not_filtered(db_session: Asy
 
     # Add all to pipeline
     for key, candidate in candidates.items():
-        pipeline = CandidatePipelineModel(
+        pipeline = CandidateJobPipelineModel(
             candidate_id=candidate.id,
             job_id=job.id,
-            stage="screening",
-            status="active",
+            pipeline_stage="screening",
+            link_status="active",
+            pipeline_status="active",
+            source="manual",
         )
         db_session.add(pipeline)
 
@@ -147,5 +163,3 @@ async def test_stats_calculated_from_all_candidates_not_filtered(db_session: Asy
 
     # Verify breakdown
     assert stats["valid_candidates"] + stats["unknown_candidates"] + stats["invalid_candidates"] == stats["total_candidates"]
-
-

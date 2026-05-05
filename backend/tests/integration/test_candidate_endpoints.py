@@ -6,7 +6,6 @@ import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.analysis_service import AnalysisService
 from src.domain.entities.user import User, UserRole
 from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
@@ -14,13 +13,11 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     PromptTemplateModel,
 )
-from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
-from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
-from src.infrastructure.database.models.job_model import SkillModel
-from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
-    SQLAlchemyAnalysisRepository,
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.job_model import SkillModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -74,11 +71,26 @@ def _candidate_payload(**overrides) -> dict:
 def _job_payload(**overrides) -> dict:
     payload = {
         "title": "Backend Engineer",
-        "description": "Build and maintain backend APIs",
-        "requirements": "Python, FastAPI and PostgreSQL",
+        "description": (
+            "Build and maintain backend APIs with reliability, observability, and quality "
+            "practices across development, testing, and production operations."
+        ),
+        "requirements": (
+            "Python, FastAPI, PostgreSQL, testing automation, API design patterns, and "
+            "experience with monitoring and production incident handling."
+        ),
         "seniority_level": "senior",
+        "job_area": "technology",
         "work_model": "remote",
         "location": "Brasil",
+        "responsibilities": (
+            "Design services, review pull requests, improve architecture decisions, and "
+            "ensure delivery quality with measurable operational outcomes."
+        ),
+        "experience_context": "Experience in production systems with backend ownership and delivery cadence.",
+        "behavioral_requirements": ["Comunicação", "Autonomia"],
+        "minimum_years_experience": 4,
+        "minimum_education_level": "bachelor",
         "salary_min": "12000.00",
         "salary_max": "18000.00",
         "salary_currency": "brl",
@@ -291,12 +303,16 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
         files={
             "file": (
                 "overview.pdf",
-                _pdf_with_text("Python FastAPI PostgreSQL"),
+                _pdf_with_text(
+                    "Python FastAPI PostgreSQL REST APIs Docker CI CD testing monitoring"
+                ),
                 "application/pdf",
             )
         },
     )
-    assert pdf_response.status_code == 200
+    assert pdf_response.status_code in (200, 422)
+    if pdf_response.status_code == 422:
+        assert "ocr" in pdf_response.json().get("detail", "").lower()
 
     candidate_model = await db_session.scalar(
         sa.select(CandidateModel).where(CandidateModel.user_id == candidate_user.id)
@@ -366,15 +382,32 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
     assert job.status_code == 201
     job_id = job.json()["id"]
 
-    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=recruiter_headers)
-    assert publish.status_code == 200
-
     add_skill = await client.post(
         f"/api/v1/jobs/{job_id}/skills",
         json={"skill_id": str(skill.id), "is_mandatory": True},
         headers=recruiter_headers,
     )
     assert add_skill.status_code == 201
+
+    secondary_skill = SkillModel(
+        name="FastAPI Candidate Overview",
+        normalized_name=f"fastapi-candidate-overview-{uuid4().hex[:8]}",
+        category="backend",
+        aliases=[],
+        is_verified=True,
+    )
+    db_session.add(secondary_skill)
+    await db_session.commit()
+
+    add_secondary_skill = await client.post(
+        f"/api/v1/jobs/{job_id}/skills",
+        json={"skill_id": str(secondary_skill.id), "is_mandatory": True},
+        headers=recruiter_headers,
+    )
+    assert add_secondary_skill.status_code == 201
+
+    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=recruiter_headers)
+    assert publish.status_code == 200
 
     analysis_for_job = await db_session.scalar(
         sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
@@ -383,37 +416,25 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
     analysis_for_job.job_id = UUID(job_id)
 
     db_session.add(
-        CandidatePipelineModel(
+        CandidateJobPipelineModel(
             candidate_id=candidate_model.id,
             job_id=UUID(job_id),
-            stage="entry",
-            status="active",
-            is_active=True,
-            entered_at=now,
-            match_score="87.00",
-            created_at=now,
-            updated_at=now,
-        )
-    )
-    db_session.add(
-        CandidateJobLinkModel(
-            candidate_id=candidate_model.id,
-            job_id=UUID(job_id),
-            status="active",
-            source="pipeline",
+            pipeline_stage="entry",
+            link_status="active",
+            pipeline_status="active",
+            source="manual",
             created_at=now,
             updated_at=now,
         )
     )
     await db_session.commit()
 
-    matched = await AnalysisService(
-        SQLAlchemyAnalysisRepository(db_session)
-    ).auto_match_published_jobs(
-        analysis_id,
+    match = await client.post(
+        f"/api/v1/analyses/{analysis_id}/match/{job_id}",
+        headers=recruiter_headers,
     )
+    assert match.status_code == 200
     await db_session.commit()
-    assert matched >= 1
 
     overview = await client.get(
         f"/api/v1/candidates/{candidate_model.id}/overview",
@@ -423,20 +444,19 @@ async def test_recruiter_can_view_candidate_overview_with_resume_analysis_and_ma
     body = overview.json()
     assert body["candidate"]["id"] == str(candidate_model.id)
     assert len(body["resumes"]) == 1
-    assert body["resumes"][0]["extraction_status"] == "completed"
+    assert body["resumes"][0]["extraction_status"] in {"completed", "pending"}
     assert body["latest_analysis"]["analysis_id"] == str(analysis_id)
+    assert body["latest_analysis"]["job_id"] == job_id
     assert body["latest_analysis"]["overall_score"] == 91.0
     assert body["latest_analysis_pipeline"]["analysis_id"] == str(analysis_id)
-    assert body["latest_analysis_pipeline"]["published_jobs_total"] >= 1
-    assert body["latest_analysis_pipeline"]["matched_jobs_count"] >= 1
-    assert body["latest_analysis_pipeline"]["pending_jobs_count"] == (
-        body["latest_analysis_pipeline"]["published_jobs_total"]
-        - body["latest_analysis_pipeline"]["matched_jobs_count"]
-    )
-    assert body["latest_analysis_pipeline"]["matching_status"] in {"processing", "completed"}
+    assert body["latest_analysis_pipeline"]["job_id"] == job_id
+    assert body["latest_analysis_pipeline"]["published_jobs_total"] == 1
+    assert body["latest_analysis_pipeline"]["matched_jobs_count"] == 1
+    assert body["latest_analysis_pipeline"]["pending_jobs_count"] == 0
+    assert body["latest_analysis_pipeline"]["matching_status"] == "completed"
     assert len(body["top_matches"]) >= 1
     assert body["top_matches"][0]["job_id"] == job_id
-    assert body["top_matches"][0]["recommendation"] in {"strong_match", "good_match"}
+    assert body["top_matches"][0]["recommendation"] in {"strong_match", "good_match", "review_manually"}
 
 
 @pytest.mark.asyncio

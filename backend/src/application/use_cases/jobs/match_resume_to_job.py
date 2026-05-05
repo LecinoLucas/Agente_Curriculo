@@ -26,7 +26,10 @@ class MatchResumeToJobUseCase:
             command.analysis_id,
             command.job_id,
         )
-        persisted = await self._analysis_repo.find_job_match(command.analysis_id, command.job_id)
+        persisted = await self._analysis_repo.find_candidate_job_match_for_analysis(
+            command.analysis_id,
+            command.job_id,
+        )
         if persisted is None:
             raise RuntimeError("Match persistido não encontrado após execução do motor principal")
 
@@ -46,11 +49,11 @@ class MatchResumeToJobUseCase:
             job_id=command.job_id,
             match_score=response.match_score,
             recommendation=response.recommendation,
-            matched_skills=list(persisted.matched_skills or []),
-            missing_mandatory_skills=list(persisted.missing_skills or []),
+            matched_skills=list(persisted.matched_skills_json or []),
+            missing_mandatory_skills=list(persisted.missing_skills_json or []),
             missing_optional_skills=[],
-            bonus_skills=list(persisted.bonus_skills or []),
-            match_summary=persisted.match_summary or "",
+            bonus_skills=[],
+            match_summary=persisted.explanation or "",
             score_breakdown=dict(response.score_breakdown or {}),
             engine_used=response.engine_used,
         )

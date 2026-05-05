@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
     ScoreModelVersionModel,
@@ -28,12 +29,25 @@ from src.application.services.candidate_ranking_service import CandidateRankingS
 async def test_get_ranking_with_data_quality_status(db_session: AsyncSession):
     """Test ranking endpoint returns data_quality_status for each candidate."""
     # Setup: Create job, candidates, and scores
+    creator_id = uuid4()
+    db_session.add(
+        UserModel(
+            id=creator_id,
+            email=f"creator-{creator_id}@example.com",
+            password_hash="hash",
+            role="recruiter",
+            status="active",
+            full_name="Creator",
+        )
+    )
+    await db_session.flush()
+
     job = JobModel(
         id=uuid4(),
         title="Test Job",
         description="Test",
         status="published",
-        created_by=uuid4(),
+        created_by=creator_id,
     )
     db_session.add(job)
 
@@ -51,7 +65,7 @@ async def test_get_ranking_with_data_quality_status(db_session: AsyncSession):
         id=uuid4(),
         full_name="Alice Valid",
         email="alice@example.com",
-        created_by=uuid4(),
+        created_by=creator_id,
         data_quality_status="valid",
     )
     db_session.add(candidate_valid)
@@ -61,7 +75,7 @@ async def test_get_ranking_with_data_quality_status(db_session: AsyncSession):
         id=uuid4(),
         full_name="Bob Unknown",
         email="bob@example.com",
-        created_by=uuid4(),
+        created_by=creator_id,
         data_quality_status="unknown",
     )
     db_session.add(candidate_unknown)
@@ -71,7 +85,7 @@ async def test_get_ranking_with_data_quality_status(db_session: AsyncSession):
         id=uuid4(),
         full_name="Charlie Invalid",
         email="charlie@example.com",
-        created_by=uuid4(),
+        created_by=creator_id,
         data_quality_status="parsing_failed",
         data_quality_reason="Resume file was corrupted",
     )
@@ -81,11 +95,13 @@ async def test_get_ranking_with_data_quality_status(db_session: AsyncSession):
 
     # Add all candidates to pipeline
     for candidate in [candidate_valid, candidate_unknown, candidate_invalid]:
-        pipeline = CandidatePipelineModel(
+        pipeline = CandidateJobPipelineModel(
             candidate_id=candidate.id,
             job_id=job.id,
-            stage="screening",
-            status="active",
+            pipeline_stage="screening",
+            link_status="active",
+            pipeline_status="active",
+            source="manual",
         )
         db_session.add(pipeline)
 
@@ -143,5 +159,3 @@ async def test_get_ranking_with_data_quality_status(db_session: AsyncSession):
     assert "Alice Valid" in candidate_names
     assert "Bob Unknown" in candidate_names
     assert "Charlie Invalid" not in candidate_names
-
-

@@ -13,7 +13,8 @@ import { Badge } from "../components/ui/badge";
 import { DataQualityBanner } from "../components/data-quality/DataQualityBanner";
 import { formatContextError } from "../services/errorMessages";
 import { getJobRanking } from "../services/jobsService";
-import type { Job, JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
+import { pipelineService, type PipelineJobSummary } from "../services/pipelineService";
+import type { JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
 import {
   formatJobStatus,
   formatSeniority,
@@ -51,13 +52,13 @@ export function PipelinePage() {
   const [ranking, setRanking] = useState<JobRanking | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingError, setRankingError] = useState<string | null>(null);
+  const [pipelineJobs, setPipelineJobs] = useState<PipelineJobSummary[]>([]);
+  const [pipelineJobsLoading, setPipelineJobsLoading] = useState(true);
+  const [pipelineJobsError, setPipelineJobsError] = useState<string | null>(null);
   const rankingCacheRef = useRef<Map<string, JobRanking>>(new Map());
   const rankingFetchInFlightRef = useRef<Map<string, Promise<JobRanking>>>(new Map());
 
   const {
-    jobs,
-    jobsLoading,
-    jobsError,
     activeJobId,
     board,
     boardLoading,
@@ -68,6 +69,39 @@ export function PipelinePage() {
     refreshBoard,
     openCandidate,
   } = usePipeline();
+
+  useEffect(() => {
+    let cancelled = false;
+    setPipelineJobsLoading(true);
+    setPipelineJobsError(null);
+
+    void pipelineService
+      .listPipelineJobs()
+      .then((items) => {
+        if (cancelled) return;
+        setPipelineJobs(items);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPipelineJobs([]);
+        setPipelineJobsError(
+          formatContextError(
+            err,
+            "Não foi possível carregar as vagas publicadas da pipeline.",
+            "Tente atualizar a página.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPipelineJobsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── Effect 1: URL → context sync ──────────────────────────────────────────
   // URL is the source of truth for which job is active.
@@ -152,27 +186,27 @@ export function PipelinePage() {
   // replace: true prevents the bare /pipeline from polluting browser history.
   useEffect(() => {
     if (jobIdParam) return;
-    if (jobsLoading || jobs.length === 0) return;
-    navigate(`/pipeline/${jobs[0].id}`, { replace: true });
-  }, [jobIdParam, jobsLoading, jobs, navigate]);
+    if (pipelineJobsLoading || pipelineJobs.length === 0) return;
+    navigate(`/pipeline/${pipelineJobs[0].id}`, { replace: true });
+  }, [jobIdParam, pipelineJobsLoading, pipelineJobs, navigate]);
 
   useEffect(() => {
-    if (!jobIdParam || jobsLoading) return;
-    const exists = jobs.some((job) => job.id === jobIdParam);
+    if (!jobIdParam || pipelineJobsLoading) return;
+    const exists = pipelineJobs.some((job) => job.id === jobIdParam);
     if (exists) return;
 
-    if (jobs.length > 0) {
-      navigate(`/pipeline/${jobs[0].id}`, { replace: true });
+    if (pipelineJobs.length > 0) {
+      navigate(`/pipeline/${pipelineJobs[0].id}`, { replace: true });
       return;
     }
 
     navigate("/pipeline", { replace: true });
-  }, [jobIdParam, jobsLoading, jobs, navigate]);
+  }, [jobIdParam, pipelineJobsLoading, pipelineJobs, navigate]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const selectedJob = useMemo(
-    () => jobs.find((j) => j.id === activeJobId) ?? null,
-    [jobs, activeJobId],
+    () => pipelineJobs.find((job) => job.id === activeJobId) ?? null,
+    [pipelineJobs, activeJobId],
   );
 
   const mainCols = useMemo(
@@ -259,22 +293,22 @@ export function PipelinePage() {
               >
                 Vaga
               </label>
-              {jobsError ? (
+              {pipelineJobsError ? (
                 <p className="ui-badge-danger rounded-xl border border-[hsl(var(--danger))]/20 px-3 py-2 text-sm">
-                  {jobsError}
+                  {pipelineJobsError}
                 </p>
               ) : (
                 <select
                   id="pipeline-job-select"
                   value={activeJobId ?? ""}
                   onChange={(e) => handleSelectJob(e.target.value)}
-                  disabled={jobsLoading || jobs.length === 0}
+                  disabled={pipelineJobsLoading || pipelineJobs.length === 0}
                   className="ui-input h-11 w-full rounded-xl px-3 text-sm disabled:opacity-50"
                 >
-                  {jobsLoading ? (
+                  {pipelineJobsLoading ? (
                     <option value="">Carregando vagas…</option>
                   ) : (
-                    jobs.map((job) => (
+                    pipelineJobs.map((job) => (
                       <option key={job.id} value={job.id}>
                         {job.title}
                       </option>
@@ -284,7 +318,7 @@ export function PipelinePage() {
               )}
             </div>
 
-            {jobsLoading ? (
+            {pipelineJobsLoading ? (
               <SkeletonRows rows={2} />
             ) : selectedJob ? (
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -338,7 +372,7 @@ export function PipelinePage() {
       </div>
 
       {/* ── Empty: no jobs at all ── */}
-      {!jobsLoading && jobs.length === 0 && !jobsError ? (
+      {!pipelineJobsLoading && pipelineJobs.length === 0 && !pipelineJobsError ? (
         <EmptyState
           icon="🧭"
           title="Nenhuma vaga publicada ainda"
@@ -523,7 +557,7 @@ function RankingPanel({
 }: {
   collapsed: boolean;
   jobTitle: string;
-  job: Job | null;
+  job: PipelineJobSummary | null;
   preview: JobRankingEntry[];
   totalActive: number;
   ranking: JobRanking | null;
@@ -730,7 +764,7 @@ function RankingCard({
   onOpenCandidate,
 }: {
   entry: JobRankingEntry;
-  job: Job | null;
+  job: PipelineJobSummary | null;
   onOpenCandidate: (candidateId: string) => Promise<void>;
 }) {
   const dealBreakerReason = entry.reason_codes.find((reason) => isDealBreakerReasonCode(reason)) ?? null;

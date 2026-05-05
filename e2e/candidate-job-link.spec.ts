@@ -7,7 +7,7 @@ const LOGIN_PASSWORD = process.env.PLAYWRIGHT_LOGIN_PASSWORD ?? "Admin123!";
 async function login(page: Parameters<typeof test>[0]["page"]) {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(LOGIN_EMAIL);
-  await page.getByLabel("Senha").fill(LOGIN_PASSWORD);
+  await page.locator('input[type="password"]').fill(LOGIN_PASSWORD);
   await page.getByRole("button", { name: "Entrar no painel" }).click();
   await expect(page).toHaveURL(/\/pipeline(\/|$)/);
 }

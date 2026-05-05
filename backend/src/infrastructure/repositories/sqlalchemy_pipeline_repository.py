@@ -1,32 +1,37 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5, uuid4
 
 import sqlalchemy as sa
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
 )
-from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
-from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.candidate_pipeline_model import (
-    CandidatePipelineModel,
-    PipelineStageTransitionModel,
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineEventModel,
+    CandidateJobPipelineModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.user_model import UserModel
+
+
+logger = structlog.get_logger(__name__)
 
 
 class SQLAlchemyPipelineRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    # ------------------------------------------------------------------
-    # Lookups (existing — unchanged)
-    # ------------------------------------------------------------------
+    def _is_postgresql(self) -> bool:
+        """Check if the database is PostgreSQL (for UPSERT syntax)."""
+        # Check the actual database dialect from the session's connection
+        dialect_name = self._session.bind.dialect.name
+        return dialect_name == "postgresql"
 
     async def find_active_job(self, job_id: UUID) -> JobModel | None:
         return await self._session.scalar(
@@ -53,58 +58,43 @@ class SQLAlchemyPipelineRepository:
             )
         )
 
-    async def find_any_entry(
-        self,
-        candidate_id: UUID,
-        job_id: UUID,
-    ) -> CandidatePipelineModel | None:
+    async def find_any_entry(self, candidate_id: UUID, job_id: UUID) -> CandidateJobPipelineModel | None:
         return await self._session.scalar(
-            sa.select(CandidatePipelineModel).where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.job_id == job_id,
+            sa.select(CandidateJobPipelineModel).where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
             )
         )
 
-    async def find_active_entry(
-        self,
-        candidate_id: UUID,
-        job_id: UUID,
-    ) -> CandidatePipelineModel | None:
+    async def find_active_entry(self, candidate_id: UUID, job_id: UUID) -> CandidateJobPipelineModel | None:
         return await self._session.scalar(
-            sa.select(CandidatePipelineModel).where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.job_id == job_id,
-                CandidatePipelineModel.is_active.is_(True),
+            sa.select(CandidateJobPipelineModel).where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
         )
 
-    async def find_active_entry_by_candidate(
-        self,
-        candidate_id: UUID,
-    ) -> CandidatePipelineModel | None:
+    async def find_active_entry_by_candidate(self, candidate_id: UUID) -> CandidateJobPipelineModel | None:
         return await self._session.scalar(
-            sa.select(CandidatePipelineModel).where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.is_active.is_(True),
+            sa.select(CandidateJobPipelineModel).where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
         )
 
-    # Backward-compatible alias for callers not yet migrated.
-    async def find_entry(
-        self,
-        candidate_id: UUID,
-        job_id: UUID,
-    ) -> CandidatePipelineModel | None:
+    async def find_entry(self, candidate_id: UUID, job_id: UUID) -> CandidateJobPipelineModel | None:
         return await self.find_any_entry(candidate_id, job_id)
 
-    async def save_entry(self, entry: CandidatePipelineModel) -> CandidatePipelineModel:
+    async def save_entry(self, entry: CandidateJobPipelineModel) -> CandidateJobPipelineModel:
         self._session.add(entry)
         await self._session.flush()
         await self._session.refresh(entry)
         return entry
 
     async def list_job_matches(self, job_id: UUID) -> list[dict]:
-        # Latest *completed* analysis per candidate — used only for top_skills/keywords.
         latest_completed = (
             sa.select(
                 ResumeModel.candidate_id.label("candidate_id"),
@@ -139,9 +129,6 @@ class SQLAlchemyPipelineRepository:
             .subquery()
         )
 
-        # Latest analysis of *any* status per candidate — used to surface ai_status on the card.
-        # Kept separate from latest_completed so a pending/processing/failed analysis
-        # is visible even when no completed one exists yet.
         latest_any = (
             sa.select(
                 ResumeModel.candidate_id.label("candidate_id"),
@@ -160,113 +147,47 @@ class SQLAlchemyPipelineRepository:
         )
 
         latest_ai_status = (
-            sa.select(
-                latest_any.c.candidate_id,
-                latest_any.c.ai_status,
-            )
+            sa.select(latest_any.c.candidate_id, latest_any.c.ai_status)
             .where(latest_any.c.rn == 1)
             .subquery()
         )
 
         result = await self._session.execute(
             sa.select(
-                CandidatePipelineModel.candidate_id,
+                CandidateJobPipelineModel.candidate_id,
                 CandidateModel.full_name.label("candidate_name"),
-                CandidatePipelineModel.job_id,
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.match_score,
-                CandidatePipelineModel.entered_at,
-                CandidatePipelineModel.updated_at,
+                CandidateJobPipelineModel.job_id,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status.label("status"),
+                CandidateJobPipelineModel.match_score,
+                CandidateJobPipelineModel.entered_at,
+                CandidateJobPipelineModel.updated_at,
                 latest_keywords.c.top_skills,
                 latest_ai_status.c.ai_status,
             )
-            .join(CandidateModel, CandidateModel.id == CandidatePipelineModel.candidate_id)
-            # Validate official candidate-job link exists (source of truth)
-            .join(
-                CandidateJobLinkModel,
-                sa.and_(
-                    CandidateJobLinkModel.candidate_id == CandidatePipelineModel.candidate_id,
-                    CandidateJobLinkModel.job_id == CandidatePipelineModel.job_id,
-                    CandidateJobLinkModel.deleted_at.is_(None),
-                ),
-            )
+            .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
             .join(
                 latest_keywords,
-                latest_keywords.c.candidate_id == CandidatePipelineModel.candidate_id,
+                latest_keywords.c.candidate_id == CandidateJobPipelineModel.candidate_id,
                 isouter=True,
             )
             .join(
                 latest_ai_status,
-                latest_ai_status.c.candidate_id == CandidatePipelineModel.candidate_id,
+                latest_ai_status.c.candidate_id == CandidateJobPipelineModel.candidate_id,
                 isouter=True,
             )
             .where(
-                CandidatePipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
-                CandidatePipelineModel.is_active.is_(True),
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
             .order_by(
-                CandidatePipelineModel.match_score.desc().nulls_last(),
-                CandidatePipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+                CandidateJobPipelineModel.updated_at.desc(),
             )
         )
         return [dict(row) for row in result.mappings().all()]
-
-    async def upsert_from_analysis_match(
-        self,
-        analysis_id: UUID,
-        job_id: UUID,
-        match_score: Decimal,
-    ) -> None:
-        candidate_id = await self._resolve_candidate_id_from_analysis(analysis_id)
-        if candidate_id is None:
-            return
-
-        # CRITICAL: Ensure official candidate-job link exists BEFORE creating pipeline entry
-        # This prevents inconsistency where pipeline exists but candidate_job_links doesn't
-        link = await self._session.scalar(
-            sa.select(CandidateJobLinkModel).where(
-                CandidateJobLinkModel.candidate_id == candidate_id,
-                CandidateJobLinkModel.job_id == job_id,
-                CandidateJobLinkModel.deleted_at.is_(None),
-            )
-        )
-        if not link:
-            # Create official link if it doesn't exist (source of truth)
-            now_link = datetime.now(UTC)
-            self._session.add(
-                CandidateJobLinkModel(
-                    candidate_id=candidate_id,
-                    job_id=job_id,
-                    status="active",
-                    source="ai_match",
-                    created_at=now_link,
-                    updated_at=now_link,
-                )
-            )
-            await self._session.flush()
-
-        current = await self.find_any_entry(candidate_id, job_id)
-        now = datetime.now(UTC)
-        if current is None:
-            self._session.add(
-                CandidatePipelineModel(
-                    candidate_id=candidate_id,
-                    job_id=job_id,
-                    stage="entry",
-                    status="active",
-                    is_active=True,
-                    match_score=match_score,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            await self._session.flush()
-            return
-
-        current.match_score = match_score
-        current.updated_at = now
-        await self._session.flush()
 
     async def _resolve_candidate_id_from_analysis(self, analysis_id: UUID) -> UUID | None:
         return await self._session.scalar(
@@ -280,9 +201,10 @@ class SQLAlchemyPipelineRepository:
             )
         )
 
-    # ------------------------------------------------------------------
-    # New: transition recording
-    # ------------------------------------------------------------------
+    async def _resolve_resume_version_id_from_analysis(self, analysis_id: UUID) -> UUID | None:
+        return await self._session.scalar(
+            sa.select(AnalysisModel.resume_version_id).where(AnalysisModel.id == analysis_id)
+        )
 
     async def update_entry_stage_if_current(
         self,
@@ -294,41 +216,93 @@ class SQLAlchemyPipelineRepository:
         last_moved_by: UUID,
         updated_at: datetime,
     ) -> dict | None:
-        """Atomically updates the pipeline entry stage only if it still matches expected_stage.
-
-        Uses a conditional UPDATE (WHERE stage = expected_stage) so that concurrent
-        requests targeting the same entry cannot both succeed — if another request
-        already changed the stage, this UPDATE matches zero rows and returns None.
-        The caller must treat None as a concurrent-modification conflict (HTTP 409).
-        """
+        pipeline_status = "terminal" if new_status in {"hired", "rejected", "removed", "transferred"} else "active"
         result = await self._session.execute(
-            sa.update(CandidatePipelineModel)
+            sa.update(CandidateJobPipelineModel)
             .where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.job_id == job_id,
-                CandidatePipelineModel.stage == expected_stage,
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.pipeline_stage == expected_stage,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
             .values(
-                stage=new_stage,
-                status=new_status,
+                pipeline_stage=new_stage,
+                link_status=new_status,
+                pipeline_status=pipeline_status,
                 last_moved_by=last_moved_by,
                 updated_at=updated_at,
             )
             .returning(
-                CandidatePipelineModel.candidate_id,
-                CandidatePipelineModel.job_id,
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.status,
-                CandidatePipelineModel.match_score,
-                CandidatePipelineModel.updated_at,
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status.label("status"),
+                CandidateJobPipelineModel.match_score,
+                CandidateJobPipelineModel.updated_at,
             )
         )
         row = result.mappings().first()
         return dict(row) if row else None
 
     async def save_transition(
-        self, transition: PipelineStageTransitionModel
-    ) -> PipelineStageTransitionModel:
+        self, transition: CandidateJobPipelineEventModel
+    ) -> CandidateJobPipelineEventModel:
+        if transition.idempotency_key is None:
+            # Event without idempotency_key: insert normally
+            self._session.add(transition)
+            await self._session.flush()
+            await self._session.refresh(transition)
+            return transition
+
+        # Check for existing event first (works on all databases)
+        existing = await self._session.scalar(
+            sa.select(CandidateJobPipelineEventModel).where(
+                CandidateJobPipelineEventModel.idempotency_key == transition.idempotency_key
+            )
+        )
+        if existing is not None:
+            logger.info(
+                "pipeline_event.idempotent_skip",
+                idempotency_key=transition.idempotency_key,
+            )
+            return existing
+
+        # Try to insert if not already present
+        if self._is_postgresql():
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+            stmt = (
+                pg_insert(CandidateJobPipelineEventModel)
+                .values(
+                    id=transition.id or uuid4(),
+                    candidate_id=transition.candidate_id,
+                    job_id=transition.job_id,
+                    event_type=transition.event_type,
+                    from_stage=transition.from_stage,
+                    to_stage=transition.to_stage,
+                    from_job_id=transition.from_job_id,
+                    to_job_id=transition.to_job_id,
+                    actor_id=transition.actor_id,
+                    idempotency_key=transition.idempotency_key,
+                    metadata_payload=transition.metadata_payload,
+                    created_at=transition.created_at,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["idempotency_key"],
+                    index_where=CandidateJobPipelineEventModel.idempotency_key.isnot(None),
+                )
+                .returning(CandidateJobPipelineEventModel)
+            )
+            result = await self._session.scalars(stmt)
+            row = result.first()
+            if row is None:
+                # Conflict: return existing event (which we already checked above)
+                return existing
+
+            return row
+
+        # SQLite and others: add normally if not already present
         self._session.add(transition)
         await self._session.flush()
         await self._session.refresh(transition)
@@ -344,49 +318,29 @@ class SQLAlchemyPipelineRepository:
         moved_by: UUID | None,
         updated_at: datetime,
     ) -> dict:
-        # CRITICAL: Ensure official candidate-job link exists BEFORE creating pipeline entry
-        # This prevents inconsistency where pipeline exists but candidate_job_links doesn't
-        link = await self._session.scalar(
-            sa.select(CandidateJobLinkModel).where(
-                CandidateJobLinkModel.candidate_id == candidate_id,
-                CandidateJobLinkModel.job_id == job_id,
-                CandidateJobLinkModel.deleted_at.is_(None),
-            )
-        )
-        if not link:
-            # Create official link if it doesn't exist (source of truth)
-            now_link = datetime.now(UTC)
-            self._session.add(
-                CandidateJobLinkModel(
-                    candidate_id=candidate_id,
-                    job_id=job_id,
-                    status="active",
-                    source="manual",
-                    created_at=now_link,
-                    updated_at=now_link,
-                )
-            )
-            await self._session.flush()
-
+        pipeline_status = "terminal" if status in {"hired", "rejected", "removed", "transferred"} else "active"
+        pipeline_key = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
         result = await self._session.execute(
-            sa.insert(CandidatePipelineModel)
+            sa.insert(CandidateJobPipelineModel)
             .values(
+                candidate_job_pipeline_id=pipeline_key,
                 candidate_id=candidate_id,
                 job_id=job_id,
-                stage=stage,
-                status=status,
+                pipeline_stage=stage,
+                link_status=status,
+                pipeline_status=pipeline_status,
+                source="manual",
                 entered_at=updated_at,
                 last_moved_by=moved_by,
-                is_active=True,
                 created_at=updated_at,
                 updated_at=updated_at,
             )
             .returning(
-                CandidatePipelineModel.candidate_id,
-                CandidatePipelineModel.job_id,
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.status,
-                CandidatePipelineModel.updated_at,
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status.label("status"),
+                CandidateJobPipelineModel.updated_at,
             )
         )
         row = result.mappings().first()
@@ -403,27 +357,31 @@ class SQLAlchemyPipelineRepository:
         updated_at: datetime,
     ) -> dict | None:
         result = await self._session.execute(
-            sa.update(CandidatePipelineModel)
+            sa.update(CandidateJobPipelineModel)
             .where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.job_id == job_id,
-                CandidatePipelineModel.is_active.is_(False),
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                sa.or_(
+                    CandidateJobPipelineModel.pipeline_status != "active",
+                    CandidateJobPipelineModel.link_status != "active",
+                ),
             )
             .values(
-                stage=stage,
-                status=status,
-                is_active=True,
+                pipeline_stage=stage,
+                link_status=status,
+                pipeline_status="active",
+                source="manual",
                 match_score=None,
                 entered_at=updated_at,
                 last_moved_by=moved_by,
                 updated_at=updated_at,
             )
             .returning(
-                CandidatePipelineModel.candidate_id,
-                CandidatePipelineModel.job_id,
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.status,
-                CandidatePipelineModel.updated_at,
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status.label("status"),
+                CandidateJobPipelineModel.updated_at,
             )
         )
         row = result.mappings().first()
@@ -438,23 +396,25 @@ class SQLAlchemyPipelineRepository:
         last_moved_by: UUID | None,
         updated_at: datetime,
     ) -> dict | None:
+        pipeline_status = "terminal" if new_status in {"hired", "rejected", "removed", "transferred"} else "active"
         result = await self._session.execute(
-            sa.update(CandidatePipelineModel)
+            sa.update(CandidateJobPipelineModel)
             .where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
             )
             .values(
-                status=new_status,
+                link_status=new_status,
+                pipeline_status=pipeline_status,
                 last_moved_by=last_moved_by,
                 updated_at=updated_at,
             )
             .returning(
-                CandidatePipelineModel.candidate_id,
-                CandidatePipelineModel.job_id,
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.status,
-                CandidatePipelineModel.updated_at,
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status.label("status"),
+                CandidateJobPipelineModel.updated_at,
             )
         )
         row = result.mappings().first()
@@ -468,14 +428,15 @@ class SQLAlchemyPipelineRepository:
         updated_at: datetime,
     ) -> int:
         result = await self._session.execute(
-            sa.update(CandidatePipelineModel)
+            sa.update(CandidateJobPipelineModel)
             .where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.is_active.is_(True),
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
             .values(
-                is_active=False,
-                status="transferred",
+                pipeline_status="terminal",
+                link_status="transferred",
                 last_moved_by=last_moved_by,
                 updated_at=updated_at,
             )
@@ -488,52 +449,27 @@ class SQLAlchemyPipelineRepository:
         job_id: UUID,
         match_score: Decimal,
     ) -> None:
-        """Creates or updates the pipeline entry from a match result.
-
-        When the entry is new, also records a StageTransition with
-        trigger='auto_match'. On updates (score refresh), no transition is
-        recorded because the stage did not change.
-
-        CRITICAL: Ensures CandidateJobLinkModel exists BEFORE creating pipeline entry
-        to maintain consistency (candidate_job_links is source of truth).
-        """
         candidate_id = await self._resolve_candidate_id_from_analysis(analysis_id)
         if candidate_id is None:
             return
 
-        # CRITICAL: Ensure official candidate-job link exists BEFORE pipeline entry
-        link = await self._session.scalar(
-            sa.select(CandidateJobLinkModel).where(
-                CandidateJobLinkModel.candidate_id == candidate_id,
-                CandidateJobLinkModel.job_id == job_id,
-                CandidateJobLinkModel.deleted_at.is_(None),
-            )
-        )
+        resume_version_id = await self._resolve_resume_version_id_from_analysis(analysis_id)
         now = datetime.now(UTC)
-        if not link:
-            # Create official link if it doesn't exist (source of truth)
-            self._session.add(
-                CandidateJobLinkModel(
-                    candidate_id=candidate_id,
-                    job_id=job_id,
-                    status="active",
-                    source="ai_match",
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            await self._session.flush()
-
         current = await self.find_any_entry(candidate_id, job_id)
 
         if current is None:
+            pipeline_key = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
             self._session.add(
-                CandidatePipelineModel(
+                CandidateJobPipelineModel(
+                    candidate_job_pipeline_id=pipeline_key,
                     candidate_id=candidate_id,
                     job_id=job_id,
-                    stage="entry",
-                    status="active",
-                    is_active=True,
+                    resume_version_id=resume_version_id,
+                    pipeline_stage="entry",
+                    link_status="active",
+                    pipeline_status="active",
+                    source="ai_match",
+                    current_analysis_id=analysis_id,
                     match_score=match_score,
                     entered_at=now,
                     created_at=now,
@@ -543,45 +479,50 @@ class SQLAlchemyPipelineRepository:
             await self._session.flush()
 
             self._session.add(
-                PipelineStageTransitionModel(
+                CandidateJobPipelineEventModel(
                     candidate_id=candidate_id,
                     job_id=job_id,
+                    event_type="match_registered",
                     from_stage=None,
                     to_stage="entry",
-                    moved_by=None,
-                    moved_at=now,
-                    trigger="auto_match",
+                    actor_id=None,
+                    idempotency_key=f"pipeline:{pipeline_key}:match_registered:null:entry:null",
+                    metadata_payload={"trigger": "auto_match", "analysis_id": str(analysis_id)},
+                    created_at=now,
                 )
             )
             await self._session.flush()
-        else:
-            current.match_score = match_score
-            current.updated_at = now
-            await self._session.flush()
+            return
 
-    # ------------------------------------------------------------------
-    # New: rich entry lookup (for history endpoint)
-    # ------------------------------------------------------------------
+        current.match_score = match_score
+        if current.candidate_job_pipeline_id is None:
+            current.candidate_job_pipeline_id = _candidate_job_pipeline_key(
+                candidate_id=candidate_id,
+                job_id=job_id,
+            )
+        current.current_analysis_id = analysis_id
+        current.resume_version_id = resume_version_id
+        current.updated_at = now
+        await self._session.flush()
 
-    async def find_entry_with_details(
-        self, candidate_id: UUID, job_id: UUID
-    ) -> dict | None:
+    async def find_entry_with_details(self, candidate_id: UUID, job_id: UUID) -> dict | None:
         result = await self._session.execute(
             sa.select(
-                CandidatePipelineModel.candidate_id,
-                CandidatePipelineModel.job_id,
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.match_score,
-                CandidatePipelineModel.entered_at,
-                CandidatePipelineModel.updated_at,
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status.label("status"),
+                CandidateJobPipelineModel.match_score,
+                CandidateJobPipelineModel.entered_at,
+                CandidateJobPipelineModel.updated_at,
                 CandidateModel.full_name.label("candidate_name"),
                 JobModel.title.label("job_title"),
             )
-            .join(CandidateModel, CandidateModel.id == CandidatePipelineModel.candidate_id)
-            .join(JobModel, JobModel.id == CandidatePipelineModel.job_id)
+            .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
                 JobModel.deleted_at.is_(None),
             )
@@ -589,69 +530,81 @@ class SQLAlchemyPipelineRepository:
         row = result.mappings().first()
         return dict(row) if row else None
 
-    async def list_transitions(
-        self, candidate_id: UUID, job_id: UUID
-    ) -> list[dict]:
+    async def list_transitions(self, candidate_id: UUID, job_id: UUID) -> list[dict]:
         result = await self._session.execute(
             sa.select(
-                PipelineStageTransitionModel.id,
-                PipelineStageTransitionModel.candidate_id,
-                PipelineStageTransitionModel.job_id,
-                PipelineStageTransitionModel.from_stage,
-                PipelineStageTransitionModel.to_stage,
-                PipelineStageTransitionModel.moved_by,
+                CandidateJobPipelineEventModel.id,
+                CandidateJobPipelineEventModel.candidate_id,
+                CandidateJobPipelineEventModel.job_id,
+                CandidateJobPipelineEventModel.from_stage,
+                CandidateJobPipelineEventModel.to_stage,
+                CandidateJobPipelineEventModel.actor_id.label("moved_by"),
                 UserModel.full_name.label("moved_by_name"),
-                PipelineStageTransitionModel.moved_at,
-                PipelineStageTransitionModel.trigger,
-                PipelineStageTransitionModel.notes,
-                PipelineStageTransitionModel.reason,
+                CandidateJobPipelineEventModel.created_at.label("moved_at"),
+                CandidateJobPipelineEventModel.metadata_payload,
+                CandidateJobPipelineEventModel.event_type,
+                CandidateJobPipelineEventModel.from_job_id,
+                CandidateJobPipelineEventModel.to_job_id,
             )
             .join(
                 UserModel,
-                UserModel.id == PipelineStageTransitionModel.moved_by,
+                UserModel.id == CandidateJobPipelineEventModel.actor_id,
                 isouter=True,
             )
             .where(
-                PipelineStageTransitionModel.candidate_id == candidate_id,
-                PipelineStageTransitionModel.job_id == job_id,
+                CandidateJobPipelineEventModel.candidate_id == candidate_id,
+                CandidateJobPipelineEventModel.job_id == job_id,
             )
-            .order_by(PipelineStageTransitionModel.moved_at.asc())
+            .order_by(CandidateJobPipelineEventModel.created_at.asc())
         )
-        return [dict(row) for row in result.mappings().all()]
+        rows: list[dict] = []
+        for row in result.mappings().all():
+            payload = dict(row.get("metadata_payload") or {})
+            item = dict(row)
+            item["trigger"] = payload.get("trigger", "system")
+            item["notes"] = payload.get("notes")
+            item["reason"] = payload.get("reason")
+            rows.append(item)
+        return rows
 
-    # ------------------------------------------------------------------
-    # New: jobs list for pipeline view
-    # ------------------------------------------------------------------
-
-    async def list_active_jobs(self) -> list[dict]:
-        """Returns published and paused jobs ordered by creation date."""
-        result = await self._session.execute(
+    async def list_pipeline_jobs(self, *, include_closed: bool = False) -> list[dict]:
+        query = (
             sa.select(
                 JobModel.id.label("job_id"),
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
+                JobModel.seniority_level,
+                JobModel.work_model,
+                JobModel.location,
+                JobModel.deal_breakers,
                 JobModel.created_at,
             )
-            .where(
-                JobModel.deleted_at.is_(None),
-                JobModel.status.in_(["published", "paused"]),
-            )
+            .where(JobModel.deleted_at.is_(None))
             .order_by(JobModel.created_at.desc())
         )
+
+        if not include_closed:
+            query = query.where(JobModel.status == "published")
+
+        result = await self._session.execute(query)
         return [dict(row) for row in result.mappings().all()]
 
     async def list_pipeline_stage_counts(self) -> list[dict]:
-        """Returns candidate counts grouped by (job_id, stage) for all pipeline entries."""
         result = await self._session.execute(
             sa.select(
-                CandidatePipelineModel.job_id,
-                CandidatePipelineModel.stage,
-                sa.func.count(CandidatePipelineModel.candidate_id).label("cnt"),
-                sa.func.max(CandidatePipelineModel.updated_at).label("latest"),
+                CandidateJobPipelineModel.job_id,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                sa.func.count(CandidateJobPipelineModel.candidate_id).label("cnt"),
+                sa.func.max(CandidateJobPipelineModel.updated_at).label("latest"),
             )
             .where(
-                CandidatePipelineModel.is_active.is_(True)
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
-            .group_by(CandidatePipelineModel.job_id, CandidatePipelineModel.stage)
+            .group_by(CandidateJobPipelineModel.job_id, CandidateJobPipelineModel.pipeline_stage)
         )
         return [dict(row) for row in result.mappings().all()]
+
+
+def _candidate_job_pipeline_key(*, candidate_id: UUID, job_id: UUID) -> UUID:
+    return uuid5(NAMESPACE_URL, f"{candidate_id}:{job_id}")

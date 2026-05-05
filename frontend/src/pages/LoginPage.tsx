@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "../features/auth/useAuth";
-import { formatErrorDetails, handleApiError } from "../services/errorHandler";
+import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
 
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth();

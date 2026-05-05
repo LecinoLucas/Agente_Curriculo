@@ -6,12 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
-    ResumeJobMatchModel,
 )
-from src.infrastructure.database.models.candidate_job_link_model import CandidateJobLinkModel
+from src.domain.entities.candidate import Candidate as CandidateEntity
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.candidate_pipeline_model import CandidatePipelineModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.profile_analysis_model import (
+    CandidateJobMatchModel,
+    CandidateProfileAnalysisModel,
+)
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
 
@@ -101,15 +104,13 @@ class SQLAlchemyCandidateRepository:
             .scalar_subquery()
         )
         linked_job_count_sq = (
-            sa.select(sa.func.count(sa.distinct(CandidatePipelineModel.job_id)))
-            .join(JobModel, JobModel.id == CandidatePipelineModel.job_id)
+            sa.select(sa.func.count(sa.distinct(CandidateJobPipelineModel.job_id)))
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
-                CandidatePipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
                 JobModel.deleted_at.is_(None),
-                sa.or_(
-                    CandidatePipelineModel.status.is_(None),
-                    CandidatePipelineModel.status != "transferred",
-                ),
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
             )
             .correlate(CandidateModel)
             .scalar_subquery()
@@ -191,7 +192,67 @@ class SQLAlchemyCandidateRepository:
         )
         return [dict(row) for row in result.mappings().all()], total
 
-    async def save(self, candidate: CandidateModel) -> CandidateModel:
+    async def save(self, candidate: CandidateModel | CandidateEntity) -> CandidateModel:
+        if isinstance(candidate, CandidateEntity):
+            created_by = candidate.created_by
+            if isinstance(created_by, str):
+                created_by = UUID(created_by)
+            user_id = candidate.user_id
+            if isinstance(user_id, str):
+                user_id = UUID(user_id)
+
+            model = await self._session.scalar(
+                sa.select(CandidateModel).where(CandidateModel.id == candidate.id)
+            )
+            if model is None:
+                model = CandidateModel(
+                    id=candidate.id,
+                    user_id=user_id,
+                    full_name=candidate.full_name,
+                    email=candidate.email,
+                    phone=candidate.phone,
+                    location_city=candidate.location_city,
+                    location_state=candidate.location_state,
+                    location_country=candidate.location_country,
+                    linkedin_url=candidate.linkedin_url,
+                    github_url=candidate.github_url,
+                    portfolio_url=candidate.portfolio_url,
+                    cpf=getattr(candidate, "cpf", None),
+                    internal_notes=candidate.internal_notes,
+                    tags=list(candidate.tags or []),
+                    created_by=created_by,
+                    created_at=candidate.created_at,
+                    updated_at=candidate.updated_at,
+                    deleted_at=candidate.deleted_at,
+                    data_quality_status=getattr(candidate, "data_quality_status", "unknown"),
+                    data_quality_reason=getattr(candidate, "data_quality_reason", None),
+                    data_quality_marked_at=getattr(candidate, "data_quality_marked_at", None),
+                )
+                self._session.add(model)
+            else:
+                model.user_id = user_id
+                model.full_name = candidate.full_name
+                model.email = candidate.email
+                model.phone = candidate.phone
+                model.location_city = candidate.location_city
+                model.location_state = candidate.location_state
+                model.location_country = candidate.location_country
+                model.linkedin_url = candidate.linkedin_url
+                model.github_url = candidate.github_url
+                model.portfolio_url = candidate.portfolio_url
+                model.internal_notes = candidate.internal_notes
+                model.tags = list(candidate.tags or [])
+                model.updated_at = candidate.updated_at
+                model.deleted_at = candidate.deleted_at
+                model.data_quality_status = getattr(candidate, "data_quality_status", model.data_quality_status)
+                model.data_quality_reason = getattr(candidate, "data_quality_reason", model.data_quality_reason)
+                model.data_quality_marked_at = getattr(
+                    candidate,
+                    "data_quality_marked_at",
+                    model.data_quality_marked_at,
+                )
+            candidate = model
+
         await self._session.flush()
         await self._session.refresh(candidate)
         return candidate
@@ -238,6 +299,7 @@ class SQLAlchemyCandidateRepository:
         row = await self._session.execute(
             sa.select(
                 AnalysisModel.id.label("analysis_id"),
+                AnalysisModel.job_id.label("job_id"),
                 ResumeModel.id.label("resume_id"),
                 ResumeModel.title.label("resume_title"),
                 AnalysisModel.status,
@@ -276,42 +338,42 @@ class SQLAlchemyCandidateRepository:
         mapping = row.mappings().first()
         return dict(mapping) if mapping is not None else None
 
-    async def list_top_job_matches(self, candidate_id: UUID, limit: int = 5) -> list[dict]:
-        result = await self._session.execute(
+    async def find_latest_analysis_summary(
+        self,
+        candidate_id: UUID,
+    ) -> dict | None:
+        total_tokens = (
+            sa.func.coalesce(AnalysisResultModel.input_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.output_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.cache_read_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.cache_write_tokens, 0)
+        )
+        row = await self._session.execute(
             sa.select(
-                ResumeJobMatchModel.analysis_id,
-                ResumeJobMatchModel.job_id,
-                JobModel.title.label("job_title"),
-                JobModel.status.label("job_status"),
-                ResumeJobMatchModel.match_score,
-                ResumeJobMatchModel.recommendation,
+                AnalysisModel.id.label("analysis_id"),
+                AnalysisModel.job_id.label("job_id"),
+                ResumeModel.id.label("resume_id"),
+                ResumeModel.title.label("resume_title"),
+                AnalysisModel.status,
+                AnalysisModel.started_at,
+                AnalysisModel.completed_at,
+                AnalysisModel.failed_at,
+                AnalysisModel.failure_reason,
+                AnalysisModel.task_id,
+                AnalysisModel.worker_id,
+                sa.case(
+                    (AnalysisResultModel.id.is_(None), None),
+                    (total_tokens > 0, True),
+                    else_=False,
+                ).label("used_real_ai"),
                 AnalysisResultModel.overall_score,
                 AnalysisResultModel.seniority_level,
                 AnalysisResultModel.total_experience_years,
-                ResumeJobMatchModel.created_at,
+                AnalysisModel.created_at,
+                AnalysisModel.updated_at,
             )
-            .join(AnalysisModel, AnalysisModel.id == ResumeJobMatchModel.analysis_id)
             .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
             .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-            .join(JobModel, JobModel.id == ResumeJobMatchModel.job_id)
-            # Validate official candidate-job link exists (source of truth)
-            .join(
-                CandidateJobLinkModel,
-                sa.and_(
-                    CandidateJobLinkModel.candidate_id == candidate_id,
-                    CandidateJobLinkModel.job_id == ResumeJobMatchModel.job_id,
-                    CandidateJobLinkModel.deleted_at.is_(None),
-                    CandidateJobLinkModel.status == "active",
-                ),
-            )
-            .join(
-                CandidatePipelineModel,
-                sa.and_(
-                    CandidatePipelineModel.candidate_id == candidate_id,
-                    CandidatePipelineModel.job_id == ResumeJobMatchModel.job_id,
-                    CandidatePipelineModel.is_active.is_(True),
-                ),
-            )
             .join(
                 AnalysisResultModel,
                 AnalysisResultModel.analysis_id == AnalysisModel.id,
@@ -320,36 +382,86 @@ class SQLAlchemyCandidateRepository:
             .where(
                 ResumeModel.candidate_id == candidate_id,
                 ResumeModel.deleted_at.is_(None),
+            )
+            .order_by(AnalysisModel.created_at.desc(), AnalysisModel.updated_at.desc())
+            .limit(1)
+        )
+        mapping = row.mappings().first()
+        return dict(mapping) if mapping is not None else None
+
+    async def find_candidate_job_match_for_analysis(
+        self,
+        analysis_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobMatchModel | None:
+        context_sq = (
+            sa.select(
+                ResumeModel.candidate_id.label("candidate_id"),
+                AnalysisModel.resume_version_id.label("resume_version_id"),
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                AnalysisModel.id == analysis_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .subquery()
+        )
+        return await self._session.scalar(
+            sa.select(CandidateJobMatchModel)
+            .join(
+                context_sq,
+                sa.and_(
+                    CandidateJobMatchModel.candidate_id == context_sq.c.candidate_id,
+                    CandidateJobMatchModel.resume_version_id == context_sq.c.resume_version_id,
+                ),
+            )
+            .where(CandidateJobMatchModel.job_id == job_id)
+            .order_by(CandidateJobMatchModel.created_at.desc())
+        )
+
+    async def list_top_job_matches(self, candidate_id: UUID, limit: int = 5) -> list[dict]:
+        result = await self._session.execute(
+            sa.select(
+                CandidateJobPipelineModel.current_analysis_id.label("analysis_id"),
+                CandidateJobMatchModel.job_id,
+                JobModel.title.label("job_title"),
+                JobModel.status.label("job_status"),
+                CandidateJobMatchModel.match_score,
+                CandidateJobMatchModel.recommendation,
+                AnalysisResultModel.overall_score,
+                CandidateProfileAnalysisModel.seniority_level,
+                CandidateProfileAnalysisModel.experience_years.label("total_experience_years"),
+                CandidateJobMatchModel.created_at,
+            )
+            .join(JobModel, JobModel.id == CandidateJobMatchModel.job_id)
+            .join(
+                CandidateJobPipelineModel,
+                sa.and_(
+                    CandidateJobPipelineModel.candidate_id == candidate_id,
+                    CandidateJobPipelineModel.job_id == CandidateJobMatchModel.job_id,
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                    CandidateJobPipelineModel.link_status == "active",
+                ),
+            )
+            .join(
+                CandidateProfileAnalysisModel,
+                CandidateProfileAnalysisModel.id == CandidateJobMatchModel.candidate_profile_analysis_id,
+            )
+            .join(
+                AnalysisResultModel,
+                AnalysisResultModel.analysis_id == CandidateJobPipelineModel.current_analysis_id,
+                isouter=True,
+            )
+            .where(
+                CandidateJobMatchModel.candidate_id == candidate_id,
                 JobModel.deleted_at.is_(None),
             )
             .order_by(
-                ResumeJobMatchModel.match_score.desc().nulls_last(),
-                ResumeJobMatchModel.created_at.desc(),
+                CandidateJobMatchModel.match_score.desc().nulls_last(),
+                CandidateJobMatchModel.created_at.desc(),
             )
             .limit(limit)
-        )
-        return [dict(row) for row in result.mappings().all()]
-
-    async def list_candidate_job_links(self, candidate_id: UUID) -> list[dict]:
-        result = await self._session.execute(
-            sa.select(
-                CandidateJobLinkModel.id,
-                CandidateJobLinkModel.candidate_id,
-                CandidateJobLinkModel.job_id,
-                JobModel.title.label("job_title"),
-                JobModel.status.label("job_status"),
-                CandidateJobLinkModel.status,
-                CandidateJobLinkModel.source,
-                CandidateJobLinkModel.created_at,
-                CandidateJobLinkModel.updated_at,
-            )
-            .join(JobModel, JobModel.id == CandidateJobLinkModel.job_id)
-            .where(
-                CandidateJobLinkModel.candidate_id == candidate_id,
-                CandidateJobLinkModel.deleted_at.is_(None),
-                JobModel.deleted_at.is_(None),
-            )
-            .order_by(CandidateJobLinkModel.created_at.desc())
         )
         return [dict(row) for row in result.mappings().all()]
 
@@ -369,14 +481,33 @@ class SQLAlchemyCandidateRepository:
         )
 
     async def count_published_matches_for_analysis(self, analysis_id: UUID) -> int:
+        context_sq = (
+            sa.select(
+                ResumeModel.candidate_id.label("candidate_id"),
+                AnalysisModel.resume_version_id.label("resume_version_id"),
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                AnalysisModel.id == analysis_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .subquery()
+        )
         return int(
             (
                 await self._session.scalar(
                     sa.select(sa.func.count())
-                    .select_from(ResumeJobMatchModel)
-                    .join(JobModel, JobModel.id == ResumeJobMatchModel.job_id)
+                    .select_from(CandidateJobMatchModel)
+                    .join(JobModel, JobModel.id == CandidateJobMatchModel.job_id)
+                    .join(
+                        context_sq,
+                        sa.and_(
+                            CandidateJobMatchModel.candidate_id == context_sq.c.candidate_id,
+                            CandidateJobMatchModel.resume_version_id == context_sq.c.resume_version_id,
+                        ),
+                    )
                     .where(
-                        ResumeJobMatchModel.analysis_id == analysis_id,
                         JobModel.status == "published",
                         JobModel.deleted_at.is_(None),
                     )
@@ -388,23 +519,24 @@ class SQLAlchemyCandidateRepository:
     async def list_pipeline_entries(self, candidate_id: UUID) -> list[dict]:
         result = await self._session.execute(
             sa.select(
-                CandidatePipelineModel.candidate_id,
-                CandidatePipelineModel.job_id,
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
-                CandidatePipelineModel.stage,
-                CandidatePipelineModel.match_score,
-                CandidatePipelineModel.updated_at,
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.match_score,
+                CandidateJobPipelineModel.updated_at,
             )
-            .join(JobModel, JobModel.id == CandidatePipelineModel.job_id)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
-                CandidatePipelineModel.candidate_id == candidate_id,
-                CandidatePipelineModel.is_active.is_(True),
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
                 JobModel.deleted_at.is_(None),
             )
             .order_by(
-                CandidatePipelineModel.updated_at.desc(),
-                CandidatePipelineModel.match_score.desc().nulls_last(),
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
             )
         )
         return [dict(row) for row in result.mappings().all()]
