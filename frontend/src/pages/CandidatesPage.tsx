@@ -4,6 +4,12 @@ import { RefreshCw } from "lucide-react";
 import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
+import { useCandidatesFilters } from "../features/candidates/hooks/useCandidatesFilters";
+import { CandidateScoreCell } from "../features/candidates/components/CandidateScoreCell";
+import { CandidateAiStatusBadge } from "../features/candidates/components/CandidateAiStatusBadge";
+import { CandidateResumeBadge } from "../features/candidates/components/CandidateResumeBadge";
+import { CandidatesFilters } from "../features/candidates/components/CandidatesFilters";
+import { formatCandidateDate } from "../features/candidates/utils/candidateFormatters";
 import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
 import { candidatesService } from "../services/candidatesService";
@@ -12,51 +18,7 @@ import { CandidateListSummary } from "../types/domain";
 import { Paginated } from "../types/api";
 import { useAsyncState } from "../hooks/useAsyncState";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-type ResumeFilter = "all" | "with" | "without";
-type AiStatusFilter = "all" | "completed" | "processing_or_pending" | "failed";
-
 const PAGE_SIZE = 20;
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-const AI_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  completed:  { label: "Concluída",    cls: "ui-badge-success" },
-  processing: { label: "Processando",  cls: "ui-badge-info" },
-  pending:    { label: "Aguardando",   cls: "ui-badge-warning" },
-  failed:     { label: "Falhou",       cls: "ui-badge-danger" },
-  cancelled:  { label: "Cancelado",    cls: "ui-badge-neutral" },
-};
-
-function AiStatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="ui-text-muted text-xs">—</span>;
-  const c = AI_STATUS_CONFIG[status] ?? { label: status, cls: "ui-badge-neutral" };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${c.cls}`}>
-      {c.label}
-    </span>
-  );
-}
-
-function ResumeBadge({ count }: { count: number }) {
-  if (count === 0) return <span className="ui-text-muted text-xs">—</span>;
-  return (
-    <span className="ui-badge-info inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
-      {count} currículo{count !== 1 ? "s" : ""}
-    </span>
-  );
-}
-
-function ScoreCell({ score }: { score: number | null }) {
-  if (score == null) return <span className="ui-text-muted text-xs">—</span>;
-  const rounded = Math.round(score);
-  const cls =
-    rounded >= 80 ? "text-[hsl(var(--success))] font-semibold" :
-    rounded >= 60 ? "text-[hsl(var(--warning))] font-semibold" :
-    "text-[hsl(var(--danger))] font-semibold";
-  return <span className={`text-sm ${cls}`}>{rounded}</span>;
-}
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
@@ -64,23 +26,20 @@ export function CandidatesPage() {
   const { openCandidate, candidatesSyncTick, selectedCandidateId } = usePipeline();
 
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [resumeFilter, setResumeFilter] = useState<ResumeFilter>("all");
-  const [aiFilter, setAiFilter] = useState<AiStatusFilter>("all");
   const [showNewCandidate, setShowNewCandidate] = useState(false);
-  const hasActiveFilters = search || resumeFilter !== "all" || aiFilter !== "all";
+  const {
+    searchInput,
+    setSearchInput,
+    search,
+    resumeFilter,
+    setResumeFilter,
+    aiFilter,
+    setAiFilter,
+    hasActiveFilters,
+    clearFilters,
+  } = useCandidatesFilters({ setPage });
 
   const { data, loading, error, run } = useAsyncState<Paginated<CandidateListSummary>>();
-
-  // Debounce search input — resets page on new search term
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setSearch(searchInput);
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [searchInput]);
 
   const fetchCandidates = useCallback(() => {
     const hasResume =
@@ -111,22 +70,6 @@ export function CandidatesPage() {
   useEffect(() => {
     fetchCandidates();
   }, [fetchCandidates, candidatesSyncTick]);
-
-  function handleResumeFilter(v: ResumeFilter) {
-    setResumeFilter(v);
-    setPage(1);
-  }
-
-  function handleAiFilter(v: AiStatusFilter) {
-    setAiFilter(v);
-    setPage(1);
-  }
-
-  function clearFilters() {
-    setSearchInput("");
-    setResumeFilter("all");
-    setAiFilter("all");
-  }
 
   const candidates = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -178,59 +121,16 @@ export function CandidatesPage() {
         </p>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-3">
-        <div className="relative min-w-[240px] flex-1">
-          <svg
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path strokeLinecap="round" d="M21 21l-4.35-4.35" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Buscar por nome ou e-mail…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="ui-input h-9 w-full rounded-lg pl-9 pr-3 text-sm"
-          />
-        </div>
-
-        <select
-          value={resumeFilter}
-          onChange={(e) => handleResumeFilter(e.target.value as ResumeFilter)}
-          className="ui-input h-9 rounded-lg px-3 text-sm"
-        >
-          <option value="all">Todos os currículos</option>
-          <option value="with">Com currículo</option>
-          <option value="without">Sem currículo</option>
-        </select>
-
-        <select
-          value={aiFilter}
-          onChange={(e) => handleAiFilter(e.target.value as AiStatusFilter)}
-          className="ui-input h-9 rounded-lg px-3 text-sm"
-        >
-          <option value="all">Todos os status IA</option>
-          <option value="completed">IA Concluída</option>
-          <option value="processing_or_pending">IA Pendente / Processando</option>
-          <option value="failed">IA Falhou</option>
-        </select>
-
-        {hasActiveFilters ? (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="ui-btn-secondary h-9 rounded-lg px-3 text-sm"
-          >
-            Limpar filtros
-          </button>
-        ) : null}
-      </div>
+      <CandidatesFilters
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        resumeFilter={resumeFilter}
+        onResumeFilterChange={setResumeFilter}
+        aiFilter={aiFilter}
+        onAiFilterChange={setAiFilter}
+        hasActiveFilters={hasActiveFilters}
+        onClearFilters={clearFilters}
+      />
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
@@ -398,7 +298,7 @@ function CandidateRow({
         {c.phone ?? <span className="ui-text-muted">—</span>}
       </td>
       <td className="px-4 py-4">
-        <ResumeBadge count={c.resume_count} />
+        <CandidateResumeBadge count={c.resume_count} />
       </td>
       <td className="px-4 py-4">
         <span
@@ -416,17 +316,13 @@ function CandidateRow({
         {c.linked_job_count > 0 ? `${c.linked_job_count} vaga${c.linked_job_count !== 1 ? "s" : ""}` : "—"}
       </td>
       <td className="px-4 py-4">
-        <AiStatusBadge status={c.ai_status} />
+        <CandidateAiStatusBadge status={c.ai_status} />
       </td>
       <td className="px-4 py-4">
-        <ScoreCell score={c.ai_score} />
+        <CandidateScoreCell score={c.ai_score} />
       </td>
       <td className="ui-text-muted px-4 py-4 text-xs">
-        {new Date(c.created_at).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        })}
+        {formatCandidateDate(c.created_at)}
       </td>
     </tr>
   );

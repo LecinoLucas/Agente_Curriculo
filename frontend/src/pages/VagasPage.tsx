@@ -1,138 +1,58 @@
-import { KanbanSquare, Pencil, Plus, RefreshCcw, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Pencil, Plus, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { ActionMenu } from "../components/common/ActionMenu";
-import type { ActionMenuItem } from "../components/common/ActionMenu";
 import { CrudPage } from "../components/common/CrudPage";
 import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
 import { StatusPill } from "../components/common/StatusPill";
 import { JobQualityBadge } from "../components/job/JobQualityBadge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { buildJobQualitySummary, formatSalary } from "../features/jobs/jobFormConfig";
+import { buildJobQualitySummary } from "../features/jobs/jobFormConfig";
 import { useAuth } from "../features/auth/useAuth";
-import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
-import { closeJob, deleteJob, listJobs, pauseJob } from "../services/jobsService";
-import { toast } from "../shared/utils/toast";
-import type { Job } from "../types/domain";
+import { JobDetailPanel } from "../features/jobs/components/JobDetailPanel";
+import { JobsSummaryCard } from "../features/jobs/components/JobsSummaryCard";
+import { useJobsList, type JobStatusFilter } from "../features/jobs/hooks/useJobsList";
 import {
-  formatEducationLevel,
+  buildJobActionItems,
+  qualityNeedsAttention,
+  truncate,
+} from "../features/jobs/utils/jobsPageHelpers";
+import {
   formatJobStatus,
   formatSeniority,
   formatWorkModel,
   jobStatusTone,
 } from "../utils/jobFormatters";
-
-type JobStatusFilter = "all" | "draft" | "published" | "paused" | "closed" | "cancelled";
-
-function truncate(value: string, max = 140): string {
-  return value.length <= max ? value : `${value.slice(0, max).trim()}…`;
-}
-
-function qualityNeedsAttention(job: Job) {
-  return job.quality_status === "weak" || job.quality_status === "acceptable";
-}
+import type { Job } from "../types/domain";
 
 export function VagasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
   const canManage = user?.role === "admin" || user?.role === "recruiter";
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<JobStatusFilter>("all");
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [runningAction, setRunningAction] = useState<string | null>(null);
-
-  async function loadJobs() {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await listJobs(page, pageSize);
-      setJobs(response.data);
-      setTotal(response.total);
-      setTotalPages(response.total_pages);
-      setSelectedJobId((current) =>
-        current && response.data.some((job) => job.id === current)
-          ? current
-          : response.data[0]?.id ?? null,
-      );
-    } catch (loadError: unknown) {
-      setError(formatErrorDetails(handleApiError(loadError))[0] ?? "Falha ao carregar vagas.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadJobs();
-  }, [page, pageSize]);
-
-  const filteredJobs = useMemo(() => {
-    if (statusFilter === "all") return jobs;
-    return jobs.filter((job) => job.status === statusFilter);
-  }, [jobs, statusFilter]);
-
-  const selectedJob = useMemo(
-    () => filteredJobs.find((job) => job.id === selectedJobId) ?? filteredJobs[0] ?? null,
-    [filteredJobs, selectedJobId],
-  );
-
-  const summary = useMemo(() => {
-    const published = jobs.filter((job) => job.status === "published").length;
-    const drafts = jobs.filter((job) => job.status === "draft").length;
-    const attention = jobs.filter((job) => qualityNeedsAttention(job)).length;
-    return { published, drafts, attention };
-  }, [jobs]);
-
-  async function handlePause(jobId: string) {
-    setRunningAction(`pause:${jobId}`);
-    try {
-      await pauseJob(jobId);
-      toast.success("Vaga pausada com sucesso");
-      await loadJobs();
-    } catch (actionError: unknown) {
-      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível pausar a vaga.");
-    } finally {
-      setRunningAction(null);
-    }
-  }
-
-  async function handleClose(jobId: string) {
-    setRunningAction(`close:${jobId}`);
-    try {
-      await closeJob(jobId);
-      toast.success("Vaga encerrada com sucesso");
-      await loadJobs();
-    } catch (actionError: unknown) {
-      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível encerrar a vaga.");
-    } finally {
-      setRunningAction(null);
-    }
-  }
-
-  async function handleDelete(job: Job) {
-    const confirmed = window.confirm(`Excluir a vaga "${job.title}"? Essa ação não pode ser desfeita.`);
-    if (!confirmed) return;
-
-    setRunningAction(`delete:${job.id}`);
-    try {
-      await deleteJob(job.id);
-      toast.success("Vaga excluída com sucesso");
-      await loadJobs();
-    } catch (actionError: unknown) {
-      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível excluir a vaga.");
-    } finally {
-      setRunningAction(null);
-    }
-  }
+  const {
+    loading,
+    error,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    total,
+    totalPages,
+    statusFilter,
+    setStatusFilter,
+    selectedJobId,
+    setSelectedJobId,
+    runningAction,
+    filteredJobs,
+    selectedJob,
+    summary,
+    loadJobs,
+    handlePause,
+    handleClose,
+    handleDelete,
+  } = useJobsList();
 
   return (
     <div className="space-y-6">
@@ -156,41 +76,9 @@ export function VagasPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="border-[hsl(var(--success))]/15 bg-[hsl(var(--success-soft))]/40">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--success))]">
-              Publicadas nesta página
-            </p>
-            <p className="mt-3 text-3xl font-semibold text-[hsl(var(--text))]">{summary.published}</p>
-            <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
-              Pipeline disponível imediatamente para estas vagas.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Rascunhos nesta página
-            </p>
-            <p className="mt-3 text-3xl font-semibold text-[hsl(var(--text))]">{summary.drafts}</p>
-            <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
-              Use a nova página guiada para completar a estrutura e publicar.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-[hsl(var(--warning))]/15 bg-[hsl(var(--warning-soft))]/35">
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--warning))]">
-              Precisam de atenção
-            </p>
-            <p className="mt-3 text-3xl font-semibold text-[hsl(var(--text))]">{summary.attention}</p>
-            <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
-              Vagas com qualidade fraca ou aceitável entre os resultados carregados.
-            </p>
-          </CardContent>
-        </Card>
+        <JobsSummaryCard type="published" value={summary.published} />
+        <JobsSummaryCard type="drafts" value={summary.drafts} />
+        <JobsSummaryCard type="attention" value={summary.attention} />
       </div>
 
       <CrudPage<Job>
@@ -238,49 +126,15 @@ export function VagasPage() {
         renderRow={(job) => {
           const quality = buildJobQualitySummary(job);
           const isSelected = selectedJob?.id === job.id;
-          const actionItems: ActionMenuItem[] = [
-            {
-              label: "Editar",
-              onClick: () => navigate(`/vagas/${job.id}/editar`),
-            },
-            {
-              label: "Abrir pipeline",
-              onClick: () => navigate(`/pipeline/${job.id}`),
-            },
-            ...(job.status === "published"
-              ? [
-                  {
-                    label: "Pausar",
-                    onClick: () => void handlePause(job.id),
-                    disabled: runningAction === `pause:${job.id}`,
-                  },
-                  {
-                    label: "Encerrar",
-                    onClick: () => void handleClose(job.id),
-                    disabled: runningAction === `close:${job.id}`,
-                  },
-                ]
-              : []),
-            ...(job.status === "paused"
-              ? [
-                  {
-                    label: "Encerrar",
-                    onClick: () => void handleClose(job.id),
-                    disabled: runningAction === `close:${job.id}`,
-                  },
-                ]
-              : []),
-            ...(job.status === "draft" || job.status === "cancelled"
-              ? [
-                  {
-                    label: "Excluir",
-                    tone: "danger" as const,
-                    onClick: () => void handleDelete(job),
-                    disabled: runningAction === `delete:${job.id}`,
-                  },
-                ]
-              : []),
-          ];
+          const actionItems = buildJobActionItems(
+            job,
+            runningAction,
+            (jobId) => navigate(`/vagas/${jobId}/editar`),
+            (jobId) => navigate(`/pipeline/${jobId}`),
+            handlePause,
+            handleClose,
+            handleDelete,
+          );
 
           return (
             <tr
@@ -361,133 +215,14 @@ export function VagasPage() {
         }
       >
         {selectedJob ? (
-          <Card className="overflow-hidden rounded-3xl">
-            <CardContent className="p-0">
-              <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-xl font-semibold text-[hsl(var(--text))]">{selectedJob.title}</h3>
-                    <StatusPill
-                      label={formatJobStatus(selectedJob.status)}
-                      tone={jobStatusTone(selectedJob.status)}
-                    />
-                  </div>
-                  <p className="max-w-3xl text-sm leading-6 text-[hsl(var(--text-muted))]">
-                    {selectedJob.description}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => navigate(`/pipeline/${selectedJob.id}`)}>
-                    <KanbanSquare className="mr-2 h-4 w-4" />
-                    Abrir pipeline
-                  </Button>
-                  {canManage ? (
-                    <Button type="button" onClick={() => navigate(`/vagas/${selectedJob.id}/editar`)}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Editar vaga
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="grid gap-4 px-6 py-6 md:grid-cols-2 xl:grid-cols-4">
-                <DetailCard label="Qualidade">
-                  {buildJobQualitySummary(selectedJob) ? (
-                    <JobQualityBadge quality={buildJobQualitySummary(selectedJob)} />
-                  ) : (
-                    <span className="text-sm text-[hsl(var(--text-muted))]">Sem avaliação</span>
-                  )}
-                </DetailCard>
-
-                <DetailCard label="Perfil">
-                  <p>{formatSeniority(selectedJob.seniority_level)}</p>
-                  <p className="text-[hsl(var(--text-muted))]">{formatWorkModel(selectedJob.work_model)}</p>
-                </DetailCard>
-
-                <DetailCard label="Base mínima">
-                  <p>{formatEducationLevel(selectedJob.minimum_education_level)}</p>
-                  <p className="text-[hsl(var(--text-muted))]">
-                    {selectedJob.minimum_years_experience != null
-                      ? `${selectedJob.minimum_years_experience} ano(s) de experiência`
-                      : "Experiência não definida"}
-                  </p>
-                </DetailCard>
-
-                <DetailCard label="Local e faixa">
-                  <p>{selectedJob.location ?? "Localização não definida"}</p>
-                  <p className="text-[hsl(var(--text-muted))]">{formatSalary(selectedJob)}</p>
-                </DetailCard>
-              </div>
-
-              {selectedJob.requirements || selectedJob.responsibilities || selectedJob.experience_context ? (
-                <div className="grid gap-4 border-t border-[hsl(var(--border))] px-6 py-6 lg:grid-cols-3">
-                  {selectedJob.requirements ? (
-                    <NarrativeCard title="Requisitos" text={selectedJob.requirements} />
-                  ) : null}
-                  {selectedJob.responsibilities ? (
-                    <NarrativeCard title="Responsabilidades" text={selectedJob.responsibilities} />
-                  ) : null}
-                  {selectedJob.experience_context ? (
-                    <NarrativeCard title="Contexto de experiência" text={selectedJob.experience_context} />
-                  ) : null}
-                </div>
-              ) : null}
-
-              {selectedJob.behavioral_requirements?.length ? (
-                <div className="border-t border-[hsl(var(--border))] px-6 py-6">
-                  <p className="text-sm font-semibold text-[hsl(var(--text))]">Requisitos comportamentais</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedJob.behavioral_requirements.map((item) => (
-                      <StatusPill key={item} label={item} tone="neutral" />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {qualityNeedsAttention(selectedJob) ? (
-                <div className="border-t border-[hsl(var(--border))] px-6 py-6">
-                  <div className="rounded-2xl border border-[hsl(var(--warning))]/15 bg-[hsl(var(--warning-soft))]/35 px-4 py-4 text-sm text-[hsl(var(--warning))]">
-                    <div className="flex items-start gap-3">
-                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <p className="font-semibold">Vale revisar a estrutura desta vaga</p>
-                        <p className="mt-1 opacity-90">
-                          Use a página de edição para completar requisitos mínimos, skills obrigatórias e checklist de publicação.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+          <JobDetailPanel
+            job={selectedJob}
+            canManage={canManage}
+            onNavigateEdit={(jobId) => navigate(`/vagas/${jobId}/editar`)}
+            onNavigatePipeline={(jobId) => navigate(`/pipeline/${jobId}`)}
+          />
         ) : null}
       </CrudPage>
-    </div>
-  );
-}
-
-function DetailCard({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 px-4 py-4 text-sm text-[hsl(var(--text))]">
-      <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{label}</p>
-      <div className="mt-3 space-y-1">{children}</div>
-    </div>
-  );
-}
-
-function NarrativeCard({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-4">
-      <p className="text-sm font-semibold text-[hsl(var(--text))]">{title}</p>
-      <p className="mt-3 text-sm leading-6 text-[hsl(var(--text-muted))]">{text}</p>
     </div>
   );
 }

@@ -1,0 +1,119 @@
+import { CheckCircle2, ShieldAlert } from "lucide-react";
+import type { JobFormValues, JobQualityResult, JobSkill, PendingJobSkill } from "../../../types/domain";
+import { SectionCard } from "../../../shared/components/layout/SectionCard";
+import { ReviewItem } from "../../../shared/components/data-display/ReviewItem";
+import { SummaryRow } from "../../../shared/components/data-display/SummaryRow";
+import { MessageList } from "../../../shared/components/feedback/MessageList";
+import { PRIORITY_OPTIONS, trimToNull } from "../jobFormConfig";
+import {
+  formatEducationLevel,
+  formatSeniority,
+  formatWorkModel,
+} from "../../../utils/jobFormatters";
+import { formatPublicationBlocker } from "../jobFormConfig";
+
+type JobFormReviewStepProps = {
+  form: JobFormValues;
+  mandatorySkills: Array<JobSkill | PendingJobSkill>;
+  optionalSkills: Array<JobSkill | PendingJobSkill>;
+  jobQuality: JobQualityResult | null;
+  backendPublishErrors: string[];
+};
+
+export function JobFormReviewStep({
+  form,
+  mandatorySkills,
+  optionalSkills,
+  jobQuality,
+  backendPublishErrors,
+}: JobFormReviewStepProps) {
+  return (
+    <div className="space-y-6">
+      <SectionCard
+        title="Resumo da vaga"
+        description="Revise os principais campos antes de salvar ou publicar."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <ReviewItem label="Título" value={form.title || "—"} />
+          <ReviewItem label="Área" value={form.job_area || "—"} />
+          <ReviewItem label="Senioridade" value={formatSeniority(form.seniority_level || null)} />
+          <ReviewItem
+            label="Prioridade"
+            value={PRIORITY_OPTIONS.find((item) => item.value === form.priority)?.label ?? form.priority}
+          />
+          <ReviewItem label="Escolaridade mínima" value={formatEducationLevel(form.minimum_education_level || null)} />
+          <ReviewItem
+            label="Experiência mínima"
+            value={form.minimum_years_experience ? `${form.minimum_years_experience} anos` : "—"}
+          />
+          <ReviewItem label="Modelo de trabalho" value={formatWorkModel(form.work_model || null)} />
+          <ReviewItem label="Localização" value={form.location || "—"} />
+          <ReviewItem label="Skills obrigatórias" value={`${mandatorySkills.length}`} />
+          <ReviewItem label="Skills desejáveis" value={`${optionalSkills.length}`} />
+          <ReviewItem
+            label="Deal breakers"
+            value={`${(form.deal_breakers ?? []).filter((item) => item.is_active).length}`}
+          />
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Checklist de publicação"
+        description="Esses itens precisam estar corretos para a publicação ser liberada."
+      >
+        <div className="space-y-2">
+          {[
+            { ok: trimToNull(form.job_area ?? "") !== null, label: "Área da vaga definida" },
+            { ok: trimToNull(form.seniority_level ?? "") !== null, label: "Senioridade definida" },
+            { ok: (form.minimum_years_experience ?? 0) > 0, label: "Experiência mínima preenchida" },
+            { ok: mandatorySkills.length >= 2, label: "Pelo menos 2 skills obrigatórias" },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--border))] px-4 py-3 text-sm">
+              {item.ok ? (
+                <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+              ) : (
+                <ShieldAlert className="h-4 w-4 text-[hsl(var(--danger))]" />
+              )}
+              <span className={item.ok ? "text-[hsl(var(--text))]" : "text-[hsl(var(--danger))]"}>
+                {item.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Mensagens do backend"
+        description="Aqui aparecem bloqueios reais de publicação e orientações de qualidade."
+      >
+        <div className="space-y-4">
+          {backendPublishErrors.length > 0 ? (
+            <MessageList tone="danger" title="Publicação bloqueada" items={backendPublishErrors} />
+          ) : null}
+
+          {jobQuality?.publication_blockers && jobQuality.publication_blockers.length > 0 ? (
+            <MessageList
+              tone="danger"
+              title="Bloqueios reais"
+              items={jobQuality.publication_blockers.map((blocker) => formatPublicationBlocker(blocker))}
+            />
+          ) : null}
+
+          {jobQuality?.suggestions && jobQuality.suggestions.length > 0 ? (
+            <MessageList tone="warning" title="Sugestões" items={jobQuality.suggestions} />
+          ) : null}
+
+          {jobQuality?.warnings && jobQuality.warnings.length > 0 ? (
+            <MessageList tone="warning" title="Avisos" items={jobQuality.warnings} />
+          ) : null}
+
+          {!jobQuality && backendPublishErrors.length === 0 ? (
+            <p className="text-sm text-[hsl(var(--text-muted))]">
+              Salve ou valide a vaga para carregar mensagens do backend.
+            </p>
+          ) : null}
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
