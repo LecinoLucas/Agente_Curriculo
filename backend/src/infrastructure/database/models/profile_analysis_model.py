@@ -88,6 +88,7 @@ class JobProfileAnalysisModel(Base):
     seniority_required: Mapped[str | None] = mapped_column(sa.String(50))
     education_required: Mapped[str | None] = mapped_column(sa.String(100))
     experience_required: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
+    # DEPRECATED: Use skill_requirements from JobModel instead. Keep for backward compatibility with historical data.
     required_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     nice_to_have_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     responsibilities_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
@@ -158,6 +159,17 @@ class CandidateJobMatchModel(Base):
     matched_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     missing_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     explanation: Mapped[str | None] = mapped_column(sa.Text)
+    eligibility_status: Mapped[str | None] = mapped_column(sa.String(20))
+    strict_score: Mapped[int | None] = mapped_column(sa.Integer)
+    balanced_score: Mapped[int | None] = mapped_column(sa.Integer)
+    score_version: Mapped[str | None] = mapped_column(sa.String(50))
+    skill_evidence_breakdown: Mapped[dict | None] = mapped_column(JSONB_COMPAT)
+    possible_false_negative: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        server_default=sa.text("false"),
+    )
+    score_diff: Mapped[int | None] = mapped_column(sa.Integer)
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
@@ -178,8 +190,24 @@ class CandidateJobMatchModel(Base):
             "job_profile_analysis_id",
             name="uq_candidate_job_match_profile_pair",
         ),
+        sa.CheckConstraint(
+            "eligibility_status IS NULL OR eligibility_status IN ('PASS', 'REVIEW', 'FAIL')",
+            name="ck_candidate_job_match_eligibility_status",
+        ),
+        sa.CheckConstraint(
+            "strict_score IS NULL OR (strict_score >= 0 AND strict_score <= 100)",
+            name="ck_candidate_job_match_strict_score_range",
+        ),
+        sa.CheckConstraint(
+            "balanced_score IS NULL OR (balanced_score >= 0 AND balanced_score <= 100)",
+            name="ck_candidate_job_match_balanced_score_range",
+        ),
         sa.Index("idx_candidate_job_match_job_score", "job_id", "match_score"),
         sa.Index("idx_candidate_job_match_job_created", "job_id", "created_at"),
         sa.Index("idx_candidate_job_match_candidate_job", "candidate_id", "job_id"),
         sa.Index("idx_candidate_job_match_pipeline", "candidate_job_pipeline_id"),
+        sa.Index("idx_candidate_job_match_eligibility_status", "eligibility_status"),
+        sa.Index("idx_candidate_job_match_score_version", "score_version"),
+        sa.Index("idx_candidate_job_match_possible_false_negative", "possible_false_negative"),
+        sa.Index("idx_candidate_job_match_balanced_score", "balanced_score"),
     )

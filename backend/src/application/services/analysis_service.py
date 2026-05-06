@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from inspect import isawaitable
 from types import SimpleNamespace
@@ -29,11 +29,14 @@ logger = logging.getLogger(__name__)
 
 from src.domain.entities.user import User
 from src.application.services.matching_engine_service import MatchingEngineService
+from src.application.services.eligibility_engine_service import EligibilityEngineService
 from src.application.services.job_profiler_service import (
     JobProfilerService,
     build_job_profile_hash,
     job_skill_from_row,
 )
+from src.application.services.skill_fit_score_service import SkillFitScoreService
+from src.application.services.skill_requirements_service import validate_skill_requirements
 from src.application.services.extraction_fallbacks import enrich_analysis_result_fields
 from src.application.services.skill_normalizer_service import (
     candidate_satisfies_job_requirement,
@@ -57,6 +60,9 @@ from src.infrastructure.database.models.scoring_model import ScoreModelVersionMo
 from src.infrastructure.database.models.resume_model import ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_skill_repository import (
+    SQLAlchemySkillRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
@@ -132,6 +138,23 @@ async def _safe_session_flush(session: object | None) -> None:
         await _maybe_await(flush_fn())
     except Exception:
         logger.debug("analysis_service.session_flush_unavailable", exc_info=True)
+
+
+def make_json_safe(value: object) -> object:
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, Decimal):
+        integral_value = value.to_integral_value()
+        return int(value) if value == integral_value else float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): make_json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [make_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [make_json_safe(item) for item in value]
+    return value
 
 
 def _validate_education(
@@ -420,18 +443,6 @@ def _job_has_structured_requirements(
     return False
 
 
-def _adaptive_to_legacy_recommendation(value: str) -> str:
-    normalized = (value or "").strip().lower()
-    mapping = {
-        "strong_match": "strong_match",
-        "interview": "good_match",
-        "maybe": "potential",
-        "reject": "not_recommended",
-        "insufficient_data": "review_manually",
-    }
-    return mapping.get(normalized, "not_recommended")
-
-
 # ── Skill Matching: Exact + Aliases + Levenshtein (for typos only) ─────────────
 
 
@@ -556,6 +567,107 @@ def _fallback_job_skill_rows(job_profile_analysis: JobProfileAnalysisModel) -> l
     return rows
 
 
+def _unique_skill_names(skill_names: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for raw_name in skill_names:
+        name = str(raw_name or "").strip()
+        normalized = normalize_skill_text(name)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(name)
+    return unique
+
+
+def _build_shadow_skill_requirements(
+    job: object,
+    job_skills: list[object],
+    job_profile_analysis: JobProfileAnalysisModel,
+) -> dict[str, list[str]]:
+    raw_job_skill_requirements = getattr(job, "skill_requirements", None)
+    if raw_job_skill_requirements is not None:
+        try:
+            return validate_skill_requirements(raw_job_skill_requirements)
+        except ValueError:
+            logger.warning(
+                "analysis_service.invalid_job_skill_requirements",
+                extra={"job_id": str(getattr(job, "id", ""))},
+            )
+
+    core_required: list[str] = []
+    nice_to_have: list[str] = []
+
+    for row in job_skills:
+        skill_name = str(getattr(row, "skill_name", "") or "").strip()
+        if not _looks_like_structured_skill_name(skill_name):
+            continue
+        job_required_skill = getattr(row, "JobRequiredSkillModel", None)
+        if bool(getattr(job_required_skill, "is_mandatory", False)):
+            core_required.append(skill_name)
+        else:
+            nice_to_have.append(skill_name)
+
+    if not core_required and not nice_to_have:
+        core_required = [
+            str(skill_name).strip()
+            for skill_name in getattr(job_profile_analysis, "required_skills_json", None) or []
+            if _looks_like_structured_skill_name(skill_name)
+        ]
+        nice_to_have = [
+            str(skill_name).strip()
+            for skill_name in getattr(job_profile_analysis, "nice_to_have_skills_json", None) or []
+            if _looks_like_structured_skill_name(skill_name)
+        ]
+
+    return {
+        "critical_required": [],
+        "core_required": _unique_skill_names(core_required),
+        "important": [],
+        "nice_to_have": _unique_skill_names(nice_to_have),
+    }
+
+
+def _build_shadow_candidate_skills(
+    result: AnalysisResultModel,
+    candidate_profile_analysis: CandidateProfileAnalysisModel,
+) -> list[str]:
+    candidate_skills: list[str] = []
+    candidate_skills.extend(
+        str(skill_name).strip()
+        for skill_name in getattr(candidate_profile_analysis, "skills_json", None) or []
+        if str(skill_name or "").strip()
+    )
+    candidate_skills.extend(
+        str(keyword).strip()
+        for keyword in (result.keywords or [])
+        if str(keyword or "").strip()
+    )
+
+    extracted = result.extracted_data if isinstance(result.extracted_data, dict) else {}
+    raw_skills = extracted.get("skills") if isinstance(extracted, dict) else []
+    if isinstance(raw_skills, list):
+        candidate_skills.extend(
+            str(skill.get("name")).strip()
+            for skill in raw_skills
+            if isinstance(skill, dict) and str(skill.get("name", "")).strip()
+        )
+
+    return _unique_skill_names(candidate_skills)
+
+
+def _resolve_shadow_context(job: object, job_profile_analysis: JobProfileAnalysisModel) -> str | None:
+    candidates = [
+        getattr(job, "job_area", None),
+        getattr(job_profile_analysis, "job_area", None),
+    ]
+    for value in candidates:
+        context = str(value or "").strip().lower()
+        if context:
+            return context
+    return None
+
+
 def _looks_like_structured_skill_name(skill_name: str | None) -> bool:
     normalized = normalize_skill_text(skill_name or "")
     if not normalized:
@@ -624,8 +736,29 @@ class AnalysisResultDetails:
 
 
 class AnalysisService:
-    def __init__(self, repository: SQLAlchemyAnalysisRepository) -> None:
+    def __init__(
+        self,
+        repository: SQLAlchemyAnalysisRepository,
+        eligibility_engine_service: EligibilityEngineService | None = None,
+        skill_fit_score_service: SkillFitScoreService | None = None,
+    ) -> None:
         self._repository = repository
+        self._eligibility_engine_service = eligibility_engine_service
+        self._skill_fit_score_service = skill_fit_score_service
+
+    def _get_eligibility_engine_service(self) -> EligibilityEngineService:
+        if self._eligibility_engine_service is not None:
+            return self._eligibility_engine_service
+        skill_repository = SQLAlchemySkillRepository(self._repository.session)
+        self._eligibility_engine_service = EligibilityEngineService(repository=skill_repository)
+        return self._eligibility_engine_service
+
+    def _get_skill_fit_score_service(self) -> SkillFitScoreService:
+        if self._skill_fit_score_service is not None:
+            return self._skill_fit_score_service
+        skill_repository = SQLAlchemySkillRepository(self._repository.session)
+        self._skill_fit_score_service = SkillFitScoreService(repository=skill_repository)
+        return self._skill_fit_score_service
 
     async def list(
         self,
@@ -932,6 +1065,66 @@ class AnalysisService:
             output_tokens=None,
         )
         return await self._repository.save_job_profile_analysis(record)
+
+    async def _build_shadow_mode_match_fields(
+        self,
+        *,
+        analysis_id: UUID,
+        job: object,
+        result: AnalysisResultModel,
+        candidate_profile_analysis: CandidateProfileAnalysisModel,
+        job_profile_analysis: JobProfileAnalysisModel,
+        job_skills: list[object],
+        official_score: Decimal,
+    ) -> dict[str, object] | None:
+        try:
+            candidate_skills = _build_shadow_candidate_skills(result, candidate_profile_analysis)
+            skill_requirements = _build_shadow_skill_requirements(job, job_skills, job_profile_analysis)
+            context = _resolve_shadow_context(job, job_profile_analysis)
+
+            eligibility = await self._get_eligibility_engine_service().evaluate_eligibility(
+                candidate_skills=candidate_skills,
+                skill_requirements=skill_requirements,
+                context=context,
+            )
+            fit_score = await self._get_skill_fit_score_service().calculate_fit_score(
+                candidate_skills=candidate_skills,
+                skill_requirements=skill_requirements,
+                context=context,
+            )
+
+            strict_score = int(round(float(official_score)))
+            balanced_score = int(fit_score["balanced_score"])
+            score_diff = balanced_score - strict_score
+            possible_false_negative = strict_score < 45 and balanced_score >= 65
+
+            return {
+                "eligibility_status": eligibility["status"],
+                "strict_score": strict_score,
+                "balanced_score": balanced_score,
+                "score_version": "v2_skill_evidence_shadow",
+                "skill_evidence_breakdown": {
+                    "eligibility": eligibility,
+                    "fit_score": fit_score,
+                    "evidences": {
+                        "critical_required": list(eligibility.get("critical_evidences") or []),
+                        "core_required": list(fit_score.get("core_evidences") or []),
+                        "important": list(fit_score.get("important_evidences") or []),
+                        "nice_to_have": list(fit_score.get("nice_to_have_evidences") or []),
+                    },
+                },
+                "possible_false_negative": possible_false_negative,
+                "score_diff": score_diff,
+            }
+        except Exception:
+            logger.exception(
+                "shadow_v2_match_calculation_failed",
+                extra={
+                    "analysis_id": str(analysis_id),
+                    "job_id": str(getattr(job, "id", "")),
+                },
+            )
+            return None
 
     async def _match_details_to_job(
         self,
@@ -1316,22 +1509,41 @@ class AnalysisService:
             raise ValueError("Could not resolve analysis context for candidate_job_match persistence")
 
         pipeline_key = uuid5(NAMESPACE_URL, f"{candidate_id}:{job_id}")
-        await self._repository.upsert_candidate_job_match(
-            CandidateJobMatchModel(
-                candidate_id=candidate_id,
-                job_id=job_id,
-                resume_version_id=resume_version_id,
-                candidate_profile_analysis_id=candidate_profile_analysis.id,
-                job_profile_analysis_id=job_profile_analysis.id,
-                candidate_job_pipeline_id=pipeline_key,
-                match_score=overall,
-                recommendation=recommendation,
-                matched_skills_json=matched_skill_names,
-                missing_skills_json=missing_skill_names,
-                explanation=summary,
-                created_at=datetime.now(UTC),
-            )
+        persisted_match = CandidateJobMatchModel(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            resume_version_id=resume_version_id,
+            candidate_profile_analysis_id=candidate_profile_analysis.id,
+            job_profile_analysis_id=job_profile_analysis.id,
+            candidate_job_pipeline_id=pipeline_key,
+            match_score=overall,
+            recommendation=recommendation,
+            matched_skills_json=matched_skill_names,
+            missing_skills_json=missing_skill_names,
+            explanation=summary,
+            created_at=datetime.now(UTC),
         )
+        shadow_fields = await self._build_shadow_mode_match_fields(
+            analysis_id=analysis_id,
+            job=job,
+            result=result,
+            candidate_profile_analysis=candidate_profile_analysis,
+            job_profile_analysis=job_profile_analysis,
+            job_skills=job_skills,
+            official_score=overall,
+        )
+        if shadow_fields is not None:
+            persisted_match.eligibility_status = shadow_fields["eligibility_status"]
+            persisted_match.strict_score = shadow_fields["strict_score"]
+            persisted_match.balanced_score = shadow_fields["balanced_score"]
+            persisted_match.score_version = shadow_fields["score_version"]
+            persisted_match.skill_evidence_breakdown = make_json_safe(
+                shadow_fields["skill_evidence_breakdown"]
+            )
+            persisted_match.possible_false_negative = shadow_fields["possible_false_negative"]
+            persisted_match.score_diff = shadow_fields["score_diff"]
+
+        await self._repository.upsert_candidate_job_match(persisted_match)
 
         return AnalysisMatchResponse(
             analysis_id=analysis_id,
