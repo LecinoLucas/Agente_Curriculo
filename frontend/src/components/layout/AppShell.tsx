@@ -23,12 +23,10 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
-  { to: "/admin",                   label: "Painel admin",           caption: "Visão geral",                roles: ["admin"] },
-  { to: "/admin/usuarios",          label: "Usuários internos",       caption: "Equipe e acessos",           roles: ["admin"] },
-  { to: "/admin/skills",            label: "Skills",                 caption: "Competências e tecnologias", roles: ["admin"] },
-  { to: "/admin/importar-vagas",    label: "Importar vagas",         caption: "JSON inteligente",           roles: ["admin"] },
-  { to: "/admin/comparacao-scores", label: "Comparação de scores",   caption: "Legado vs adaptativo",      roles: ["admin"] },
-  { to: "/admin/qualidade-matching", label: "Qualidade do matching", caption: "Observabilidade e feedback", roles: ["admin"] },
+  { to: "/admin",                label: "Painel admin",      caption: "Visão geral",                roles: ["admin"] },
+  { to: "/admin/usuarios",       label: "Usuários internos", caption: "Equipe e acessos",           roles: ["admin"] },
+  { to: "/admin/skills",         label: "Skills",            caption: "Competências e tecnologias", roles: ["admin"] },
+  { to: "/admin/importar-vagas", label: "Importar vagas",    caption: "JSON inteligente",           roles: ["admin"] },
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {

@@ -56,6 +56,7 @@ class JobScoreExplanationPayload:
     gaps: list[str]
     confidence_score: float
     strengths: list[str]
+    partial_matches: list[dict[str, Any]] | None = None
     feedback: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -80,6 +81,7 @@ class JobScoreExplanationPayload:
             "gaps": list(self.gaps),
             "confidence_score": self.confidence_score,
             "strengths": list(self.strengths),
+            "partial_matches": list(self.partial_matches) if self.partial_matches else [],
             "feedback": dict(self.feedback) if self.feedback else None,
         }
 
@@ -151,6 +153,14 @@ class JobScoreExplanationService:
             persisted_match.candidate_profile_analysis_id,
         )
 
+        # Extract candidate skills for equivalence matching
+        candidate_skills = list(candidate_profile_analysis.skills_json or []) if candidate_profile_analysis else []
+
+        # Extract stored partial matches if available
+        stored_partial_matches = []
+        if persisted_match.skill_evidence_breakdown:
+            stored_partial_matches = persisted_match.skill_evidence_breakdown.get("partial_matches", [])
+
         explanation = build_match_explanation(
             job=job,
             analysis_result=result,
@@ -159,6 +169,7 @@ class JobScoreExplanationService:
             recommendation=persisted_match.recommendation,
             matched_skills=list(persisted_match.matched_skills_json or []),
             missing_skills=list(persisted_match.missing_skills_json or []),
+            candidate_skills=candidate_skills,
         )
         confidence_assessment = compute_match_confidence(
             match_score=persisted_match.match_score,
@@ -211,10 +222,11 @@ class JobScoreExplanationService:
             overestimation_risks=list(confidence_assessment.overestimation_risks),
             recommended_questions=[],
             strongest_evidence=[],
-            matched_equivalences=[],
+            matched_equivalences=stored_partial_matches or (list(explanation.partial_matches) if explanation.partial_matches else []),
             gaps=list(explanation.missing_skills),
             confidence_score=float(confidence_assessment.confidence_score),
             strengths=list(explanation.matched_skills),
+            partial_matches=stored_partial_matches or (list(explanation.partial_matches) if explanation.partial_matches else []),
         )
 
         await self._observability_service.record_snapshot(

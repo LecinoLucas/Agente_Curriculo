@@ -1,11 +1,32 @@
-export function CandidateScoreCell({ score }: { score: number | null }) {
-  if (score == null) return <span className="ui-text-muted text-xs">—</span>;
-  const rounded = Math.round(score);
-  const cls =
-    rounded >= 80
-      ? "text-[hsl(var(--success))] font-semibold"
-      : rounded >= 60
-        ? "text-[hsl(var(--warning))] font-semibold"
-        : "text-[hsl(var(--danger))] font-semibold";
-  return <span className={`text-sm ${cls}`}>{rounded}</span>;
+import type { CandidateListSummary } from "../../../types/domain";
+import { deriveScoreSemantics } from "../utils/scoreSemantics";
+
+export function CandidateScoreCell({ candidate }: { candidate: CandidateListSummary }) {
+  const semantics = deriveScoreSemantics({
+    activeJobMatchScore: candidate.active_job_match_score,
+    aiScore: candidate.ai_score,
+    aiStatus: candidate.ai_status,
+    hasActiveJob: candidate.linked_job_count > 0,
+  });
+
+  const toneClass =
+    semantics.statusTone === "high"
+      ? "text-[hsl(var(--success))]"
+      : semantics.statusTone === "mid"
+        ? "text-[hsl(var(--warning))]"
+        : semantics.statusTone === "low"
+          ? "text-[hsl(var(--danger))]"
+          : "text-[hsl(var(--text))]";
+
+  return (
+    <div className="min-w-[120px]">
+      <div className={`text-sm font-semibold tabular-nums ${toneClass}`}>{semantics.primaryDisplay}</div>
+      <div className="mt-0.5 text-[11px] text-[hsl(var(--text-muted))]">{semantics.primaryLabel}</div>
+      {semantics.statusLabel ? (
+        <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          {semantics.statusLabel}
+        </div>
+      ) : null}
+    </div>
+  );
 }

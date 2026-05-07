@@ -130,6 +130,9 @@ class CandidateService:
                 created_at=row["created_at"],
                 resume_count=int(row["resume_count"] or 0),
                 linked_job_count=int(row["linked_job_count"] or 0),
+                active_job_title=row["active_job_title"],
+                active_job_stage=row["active_job_stage"],
+                active_job_match_score=float(row["active_job_match_score"]) if row["active_job_match_score"] is not None else None,
                 ai_status=row["ai_status"],
                 ai_score=float(row["ai_score"]) if row["ai_score"] is not None else None,
             )

@@ -31,6 +31,13 @@ type CrudPageProps<T> = {
   items: T[];
   renderRow: (item: T) => TableRowElement;
   footer?: React.ReactNode;
+  sidePanel?: React.ReactNode;
+  layoutClassName?: string;
+  listCardClassName?: string;
+  dataTableClassName?: string;
+  dataTableHeaderClassName?: string;
+  dataTableFooterClassName?: string;
+  sidePanelClassName?: string;
   children?: React.ReactNode;
 };
 
@@ -57,6 +64,13 @@ export function CrudPage<T>({
   items,
   renderRow,
   footer,
+  sidePanel,
+  layoutClassName,
+  listCardClassName,
+  dataTableClassName,
+  dataTableHeaderClassName,
+  dataTableFooterClassName,
+  sidePanelClassName,
   children,
 }: CrudPageProps<T>) {
   const hasToolbar = !!onSearchSubmit || !!filters || !!onNew;
@@ -107,36 +121,49 @@ export function CrudPage<T>({
         </div>
       ) : null}
 
-      <Card>
-        {count != null && !loading && !error && count > 0 ? (
-          <div className="px-6 pt-4 pb-0">
-            <p className="text-xs font-medium text-gray-500">
-              {count} {count === 1 ? "resultado" : "resultados"}
-            </p>
-          </div>
-        ) : null}
+      <div
+        className={
+          sidePanel
+            ? (layoutClassName ?? "grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_360px] lg:items-start")
+            : undefined
+        }
+      >
+        <Card className={listCardClassName}>
+          {count != null && !loading && !error && count > 0 ? (
+            <div className="px-6 pt-4 pb-0">
+              <p className="text-xs font-medium text-gray-500">
+                {count} {count === 1 ? "resultado" : "resultados"}
+              </p>
+            </div>
+          ) : null}
 
-        <CardContent className="p-0">
-          <DataTable
-            columns={normalizedColumns}
-            items={items}
-            loading={loading}
-            error={error}
-            empty={
-              !loading && !error && isEmpty
-                ? {
-                    icon: emptyIcon,
-                    title: emptyTitle,
-                    description: emptyDescription,
-                    action: emptyAction,
-                  }
-                : undefined
-            }
-            renderRow={renderRow}
-            footer={footer}
-          />
-        </CardContent>
-      </Card>
+          <CardContent className="p-0">
+            <DataTable
+              columns={normalizedColumns}
+              items={items}
+              loading={loading}
+              error={error}
+              className={dataTableClassName}
+              headerClassName={dataTableHeaderClassName}
+              footerClassName={dataTableFooterClassName}
+              empty={
+                !loading && !error && isEmpty
+                  ? {
+                      icon: emptyIcon,
+                      title: emptyTitle,
+                      description: emptyDescription,
+                      action: emptyAction,
+                    }
+                  : undefined
+              }
+              renderRow={renderRow}
+              footer={footer}
+            />
+          </CardContent>
+        </Card>
+
+        {sidePanel ? <div className={sidePanelClassName ?? "min-w-0"}>{sidePanel}</div> : null}
+      </div>
 
       {children}
     </div>

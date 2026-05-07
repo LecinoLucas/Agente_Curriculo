@@ -31,6 +31,9 @@ export type CandidateListSummary = {
   created_at: string;
   resume_count: number;
   linked_job_count: number;
+  active_job_title: string | null;
+  active_job_stage: string | null;
+  active_job_match_score: number | null;
   ai_status: string | null;
   ai_score: number | null;
 };
@@ -239,7 +242,7 @@ export type ResumeSummary = {
 
 export type DealBreaker = {
   field: string;
-  operator: "equals" | "not_equals" | "contains" | "in";
+  operator: "equals" | "not_equals" | "not_contains" | "contains" | "in";
   value?: string | null;
   values?: string[] | null;
   reason: string;

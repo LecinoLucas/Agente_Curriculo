@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import UserRole
 
-from .test_admin_scoring_comparison_endpoint import (
+from .helpers import (
     _auth_headers,
     _create_active_user,
     _seed_scoring_case,

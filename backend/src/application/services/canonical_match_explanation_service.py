@@ -71,6 +71,11 @@ class MatchExplanationResult:
     matched_skills: list[str]
     missing_skills: list[str]
     validation_status: str
+    partial_matches: list[dict[str, Any]] = None  # type: ignore
+
+    def __post_init__(self):
+        if self.partial_matches is None:
+            object.__setattr__(self, "partial_matches", [])
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -86,6 +91,7 @@ class MatchExplanationResult:
             "matched_skills": list(self.matched_skills),
             "missing_skills": list(self.missing_skills),
             "validation_status": self.validation_status,
+            "partial_matches": list(self.partial_matches) if self.partial_matches else [],
         }
 
 
@@ -98,6 +104,7 @@ def build_match_explanation(
     recommendation: str | None,
     matched_skills: list[str] | None,
     missing_skills: list[str] | None,
+    candidate_skills: list[str] | None = None,
 ) -> MatchExplanationResult:
     matched_skill_names = _clean_list(matched_skills)
     missing_skill_names = _clean_list(missing_skills)
@@ -109,16 +116,67 @@ def build_match_explanation(
     mandatory_names = [str(row.skill_name).strip() for row in mandatory_skills if str(row.skill_name).strip()]
     optional_names = [str(row.skill_name).strip() for row in optional_skills if str(row.skill_name).strip()]
 
-    mandatory_matched = sum(1 for name in mandatory_names if name.casefold() in matched_lookup)
-    optional_matched = sum(1 for name in optional_names if name.casefold() in matched_lookup)
     total_mandatory = len(mandatory_names)
     total_optional = len(optional_names)
 
-    mandatory_score = (
-        Decimal(mandatory_matched) / Decimal(total_mandatory) * Decimal("100")
-        if total_mandatory > 0
-        else Decimal("0")
-    ).quantize(Decimal("0.01"))
+    # Calculate weighted mandatory score using equivalence service when candidate_skills provided
+    partial_matches: list[dict[str, Any]] = []
+    if candidate_skills:
+        from src.application.services.skill_equivalence_service import SkillEquivalenceService
+        equivalence_service = SkillEquivalenceService()
+        mandatory_scores: list[Decimal] = []
+        all_mandatory_exact = True
+
+        for job_skill_name in mandatory_names:
+            if job_skill_name.casefold() in matched_lookup:
+                # Exact match already in matched_skills
+                mandatory_scores.append(Decimal("1.0"))
+            else:
+                # Try to find best match in candidate_skills using equivalence service
+                best_score = Decimal("0.0")
+                best_candidate = None
+
+                for candidate_skill in candidate_skills:
+                    evidence = equivalence_service.match_skill(candidate_skill, job_skill_name)
+                    if evidence.matched and evidence.score > float(best_score):
+                        best_score = Decimal(str(evidence.score))
+                        best_candidate = candidate_skill
+
+                mandatory_scores.append(best_score)
+
+                # Track partial matches (0 < score < 1)
+                if float(best_score) > 0 and float(best_score) < 1:
+                    partial_matches.append(
+                        {
+                            "required": job_skill_name,
+                            "candidate": best_candidate or "",
+                            "score": float(best_score),
+                            "reason": f'"{best_candidate}" parcialmente atende "{job_skill_name}".',
+                            "source": "partial_match",
+                        }
+                    )
+
+                if float(best_score) < 1:
+                    all_mandatory_exact = False
+
+        mandatory_matched = sum(1 for score in mandatory_scores if score >= Decimal("1.0"))
+        mandatory_score = (
+            sum(mandatory_scores) / Decimal(len(mandatory_scores)) * Decimal("100")
+            if mandatory_scores
+            else Decimal("0")
+        ).quantize(Decimal("0.01"))
+    else:
+        # Original binary matching (no candidate_skills provided)
+        mandatory_matched = sum(1 for name in mandatory_names if name.casefold() in matched_lookup)
+        mandatory_score = (
+            Decimal(mandatory_matched) / Decimal(total_mandatory) * Decimal("100")
+            if total_mandatory > 0
+            else Decimal("0")
+        ).quantize(Decimal("0.01"))
+        all_mandatory_exact = True
+
+    optional_matched = sum(1 for name in optional_names if name.casefold() in matched_lookup)
+
     optional_score = (
         Decimal(optional_matched) / Decimal(total_optional) * Decimal("100")
         if total_optional > 0
@@ -281,6 +339,12 @@ def build_match_explanation(
     elif not highlights:
         explanation_parts.append("Sem destaques fortes o suficiente para elevar a recomendação.")
 
+    # Add risk if all mandatory skills are only partial matches
+    if candidate_skills and all_mandatory_exact is False and total_mandatory > 0:
+        partial_count = sum(1 for score in mandatory_scores if 0 < float(score) < 1)
+        if partial_count == total_mandatory:
+            risks.append("Nenhuma skill obrigatória atendida com exatidão — avalie cuidadosamente.")
+
     return MatchExplanationResult(
         final_score=final_score_decimal,
         recommendation=recommendation_value,
@@ -291,4 +355,5 @@ def build_match_explanation(
         matched_skills=matched_skill_names,
         missing_skills=missing_skill_names,
         validation_status=validation_status,
+        partial_matches=partial_matches,
     )

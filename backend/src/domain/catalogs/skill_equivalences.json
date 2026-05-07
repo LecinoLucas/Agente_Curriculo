@@ -1,0 +1,81 @@
+{
+  "version": "2026-05-v1",
+  "groups": [
+    {
+      "canonical": "SQL",
+      "aliases": ["PostgreSQL", "SQL Server", "MySQL", "Oracle SQL"],
+      "domain": ["data", "technology"],
+      "strength": "strong"
+    },
+    {
+      "canonical": "BI",
+      "aliases": ["Power BI", "Tableau", "dashboards", "DAX"],
+      "domain": ["data"],
+      "strength": "strong"
+    },
+    {
+      "canonical": "ERP",
+      "aliases": ["Protheus", "TOTVS", "SAP"],
+      "domain": ["technology", "supply_chain"],
+      "strength": "strong"
+    },
+    {
+      "canonical": "SAP MM",
+      "aliases": ["SAP", "SAP Materials Management"],
+      "domain": ["supply_chain"],
+      "strength": "strong"
+    }
+  ],
+  "relations": [
+    {
+      "from": "Protheus",
+      "to": "SAP MM",
+      "strength": "partial",
+      "score": 0.45,
+      "reason": "Ambos indicam experiência em ERP, mas Protheus não comprova SAP MM."
+    },
+    {
+      "from": "TOTVS",
+      "to": "SAP MM",
+      "strength": "partial",
+      "score": 0.40,
+      "reason": "TOTVS é ERP relacionado, mas não comprova SAP MM."
+    },
+    {
+      "from": "Power BI",
+      "to": "BI",
+      "strength": "strong",
+      "score": 0.90
+    },
+    {
+      "from": "Tableau",
+      "to": "BI",
+      "strength": "strong",
+      "score": 0.90
+    },
+    {
+      "from": "PostgreSQL",
+      "to": "SQL",
+      "strength": "strong",
+      "score": 0.90
+    },
+    {
+      "from": "MySQL",
+      "to": "SQL",
+      "strength": "strong",
+      "score": 0.90
+    },
+    {
+      "from": "SQL Server",
+      "to": "SQL",
+      "strength": "strong",
+      "score": 0.90
+    },
+    {
+      "from": "Oracle SQL",
+      "to": "SQL",
+      "strength": "strong",
+      "score": 0.85
+    }
+  ]
+}

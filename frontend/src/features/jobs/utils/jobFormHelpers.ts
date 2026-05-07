@@ -1,5 +1,6 @@
 import type { Job, JobFormValues } from "../../../types/domain";
 import { trimToNull } from "../jobFormConfig";
+import { normalizeDealBreakers } from "./dealBreakerHelpers";
 
 export function toForm(job: Job): JobFormValues {
   return {
@@ -16,7 +17,7 @@ export function toForm(job: Job): JobFormValues {
     seniority_level: job.seniority_level ?? "",
     minimum_education_level: job.minimum_education_level ?? "",
     minimum_years_experience: job.minimum_years_experience ?? undefined,
-    deal_breakers: (job.deal_breakers ?? []).map((rule) => ({ ...rule })),
+    deal_breakers: normalizeDealBreakers((job.deal_breakers ?? []).map((rule) => ({ ...rule }))),
     work_model: job.work_model ?? "",
     location: job.location ?? "",
     salary_min: job.salary_min ?? undefined,

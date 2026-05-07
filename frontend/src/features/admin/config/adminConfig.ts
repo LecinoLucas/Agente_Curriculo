@@ -15,6 +15,4 @@ export const SCREENS: { label: string; path: string; roles: Role[] }[] = [
   { label: "Meu perfil",    path: "/perfil",      roles: ["admin", "recruiter", "candidate", "viewer"] },
   { label: "Administração", path: "/admin",       roles: ["admin"] },
   { label: "Importar vagas", path: "/admin/importar-vagas", roles: ["admin"] },
-  { label: "Comparação de scores", path: "/admin/comparacao-scores", roles: ["admin"] },
-  { label: "Qualidade do matching", path: "/admin/qualidade-matching", roles: ["admin"] },
 ];

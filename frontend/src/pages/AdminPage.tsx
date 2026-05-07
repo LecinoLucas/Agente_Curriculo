@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, GitCompareArrows, ShieldCheck, Users, Target, FileJson } from "lucide-react";
+import { CheckCircle2, ShieldCheck, Users, FileJson } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -35,7 +35,7 @@ export function AdminPage() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <AdminQuickAction
           icon={<Users className="h-4 w-4 text-blue-600" />}
           title="Gerenciar usuários internos"
@@ -56,30 +56,12 @@ export function AdminPage() {
         />
 
         <AdminQuickAction
-          icon={<GitCompareArrows className="h-4 w-4 text-amber-600" />}
-          title="Comparar scores"
-          description="Visualize legado vs adaptativo com um painel auditável para calibração interna."
-          buttonLabel="Abrir painel de comparação"
-          onButtonClick={() => navigate("/admin/comparacao-scores")}
-          variant="amber"
-        />
-
-        <AdminQuickAction
           icon={<FileJson className="h-4 w-4 text-cyan-600" />}
           title="Importar vagas via JSON"
           description="Cole um JSON de vagas, detecte duplicadas e distribua automaticamente entre criação e atualização."
           buttonLabel="Abrir importador inteligente"
           onButtonClick={() => navigate("/admin/importar-vagas")}
           variant="cyan"
-        />
-
-        <AdminQuickAction
-          icon={<Target className="h-4 w-4 text-emerald-600" />}
-          title="Qualidade do matching"
-          description="Resumo operacional de score, confiança, feedback negativo e equivalências mais frequentes."
-          buttonLabel="Abrir painel de qualidade"
-          onButtonClick={() => navigate("/admin/qualidade-matching")}
-          variant="emerald"
         />
       </div>
 

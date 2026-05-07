@@ -5,11 +5,14 @@ Scores jobs 0-100 based on completeness and skill configuration.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 from uuid import UUID
 
 import structlog
 
+from src.application.services.skill_requirements_service import (
+    validate_skill_requirements,
+    validate_skill_requirements_product_rules,
+)
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.infrastructure.database.models.job_model import JobModel
 
@@ -31,6 +34,7 @@ class JobQualityResult:
     missing_fields: list[str] = field(default_factory=list)
     suggestions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    validation_errors: list[str] = field(default_factory=list)
 
 
 class JobQualityValidatorService:
@@ -97,6 +101,7 @@ class JobQualityValidatorService:
         missing_fields = []
         suggestions = []
         warnings = []
+        validation_errors: list[str] = []
 
         # 1. Title quality (10 pts)
         title_length = len(job.title.strip()) if job.title else 0
@@ -184,6 +189,16 @@ class JobQualityValidatorService:
         mandatory_skills = [s for s in skills if s["is_mandatory"]]
         optional_skills = [s for s in skills if not s["is_mandatory"]]
         total_skills = len(skills)
+        effective_skill_requirements = JobQualityValidatorService._resolve_effective_skill_requirements(
+            job,
+            skills,
+            warnings,
+        )
+        skill_requirements_validation = validate_skill_requirements_product_rules(
+            effective_skill_requirements,
+            job_area=job.job_area,
+            check_raw_duplicates=False,
+        )
 
         # Mandatory skills count (12 pts)
         if len(mandatory_skills) >= 2:
@@ -234,6 +249,10 @@ class JobQualityValidatorService:
             publication_blockers.append("minimum_years_experience")
         if len(mandatory_skills) < 2:
             publication_blockers.append("mandatory_skills")
+        if skill_requirements_validation.errors:
+            publication_blockers.append("skill_requirements")
+            validation_errors.extend(skill_requirements_validation.errors)
+            suggestions.extend(skill_requirements_validation.errors)
 
         # Determine status and can_publish
         status = "weak" if score < 50 else ("acceptable" if score < 75 else "good")
@@ -251,4 +270,59 @@ class JobQualityValidatorService:
             missing_fields=missing_fields,
             suggestions=suggestions,
             warnings=warnings,
+            validation_errors=list(dict.fromkeys(validation_errors)),
         )
+
+    @staticmethod
+    def _resolve_effective_skill_requirements(
+        job: JobModel,
+        skills: list[dict],
+        warnings: list[str],
+    ) -> dict[str, list[str]]:
+        if job.skill_requirements is not None:
+            try:
+                return validate_skill_requirements(job.skill_requirements)
+            except ValueError:
+                warnings.append(
+                    "skill_requirements inválido na vaga. Usando fallback da estrutura legada."
+                )
+
+        core_required = [
+            str(skill["name"]).strip()
+            for skill in skills
+            if skill["is_mandatory"] and str(skill["name"]).strip()
+        ]
+        nice_to_have = [
+            str(skill["name"]).strip()
+            for skill in skills
+            if not skill["is_mandatory"] and str(skill["name"]).strip()
+        ]
+        if core_required or nice_to_have:
+            return {
+                "critical_required": [],
+                "core_required": core_required,
+                "important": [],
+                "nice_to_have": nice_to_have,
+            }
+
+        job_profile = job.job_profile_json if isinstance(job.job_profile_json, dict) else {}
+        critical_requirements = job_profile.get("critical_requirements", []) if isinstance(job_profile, dict) else []
+        desirable_requirements = job_profile.get("desirable_requirements", []) if isinstance(job_profile, dict) else []
+
+        def _extract_names(items: list[object]) -> list[str]:
+            names: list[str] = []
+            for item in items:
+                if isinstance(item, dict):
+                    name = str(item.get("name", "")).strip()
+                else:
+                    name = str(item or "").strip()
+                if name:
+                    names.append(name)
+            return names
+
+        return {
+            "critical_required": [],
+            "core_required": _extract_names(critical_requirements),
+            "important": [],
+            "nice_to_have": _extract_names(desirable_requirements),
+        }

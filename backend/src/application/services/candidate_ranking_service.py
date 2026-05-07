@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
@@ -163,7 +163,10 @@ class CandidateRankingService:
     # Read path: return persisted ranking (never recomputes)
     # ------------------------------------------------------------------
 
-    async def get_ranking(self, job_id: UUID) -> dict[str, Any]:
+    async def get_ranking(
+        self,
+        job_id: UUID,
+    ) -> dict[str, Any]:
         """Return the ranking for this job from persisted candidate_job_scores.
 
         Only scores computed with the currently active version are returned.
@@ -396,6 +399,36 @@ class CandidateRankingService:
         self, job_id: UUID, version_id: UUID
     ) -> list[dict]:
         """Return persisted scores for this job + version, ordered by final_score DESC."""
+        latest_shadow_match = (
+            sa.select(
+                CandidateJobMatchModel.candidate_id,
+                CandidateJobMatchModel.job_id,
+                CandidateJobMatchModel.eligibility_status,
+                CandidateJobMatchModel.strict_score,
+                CandidateJobMatchModel.balanced_score,
+                CandidateJobMatchModel.skill_evidence_breakdown,
+                CandidateJobMatchModel.created_at.label("shadow_created_at"),
+                sa.func.row_number()
+                .over(
+                    partition_by=(
+                        CandidateJobMatchModel.candidate_id,
+                        CandidateJobMatchModel.job_id,
+                    ),
+                    order_by=(
+                        sa.case(
+                            (CandidateJobMatchModel.candidate_job_pipeline_id.isnot(None), 0),
+                            else_=1,
+                        ),
+                        CandidateJobMatchModel.created_at.desc(),
+                        CandidateJobMatchModel.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .where(CandidateJobMatchModel.score_version == "v2_skill_evidence_shadow")
+            .subquery("latest_shadow_match")
+        )
+
         result = await self._session.execute(
             sa.select(
                 CandidateJobScoreModel.candidate_id,
@@ -410,6 +443,11 @@ class CandidateRankingService:
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
                 CandidateJobPipelineModel.pipeline_status,
                 CandidateJobPipelineModel.entered_at,
+                latest_shadow_match.c.eligibility_status,
+                latest_shadow_match.c.strict_score,
+                latest_shadow_match.c.balanced_score,
+                latest_shadow_match.c.skill_evidence_breakdown,
+                latest_shadow_match.c.shadow_created_at,
             )
             .select_from(CandidateJobScoreModel)
             .join(CandidateModel, CandidateModel.id == CandidateJobScoreModel.candidate_id)
@@ -422,6 +460,14 @@ class CandidateRankingService:
                     CandidateJobPipelineModel.link_status == "active",
                 ),
             )
+            .outerjoin(
+                latest_shadow_match,
+                sa.and_(
+                    latest_shadow_match.c.candidate_id == CandidateJobScoreModel.candidate_id,
+                    latest_shadow_match.c.job_id == CandidateJobScoreModel.job_id,
+                    latest_shadow_match.c.rn == 1,
+                ),
+            )
             .where(
                 CandidateJobScoreModel.job_id == job_id,
                 CandidateJobScoreModel.version_id == version_id,
@@ -429,7 +475,11 @@ class CandidateRankingService:
                 # Exclude invalid candidates based on data quality
                 CandidateModel.data_quality_status.in_(["valid", "unknown"]),
             )
-            .order_by(CandidateJobScoreModel.final_score.desc())
+            .order_by(
+                CandidateJobScoreModel.final_score.desc(),
+                CandidateJobScoreModel.computed_at.desc(),
+                CandidateJobScoreModel.candidate_id.asc(),
+            )
         )
         return [dict(row) for row in result.mappings().all()]
 
@@ -950,6 +1000,32 @@ def _normalize_reason_codes(raw: Any) -> list[dict[str, Any]]:
         normalized_item["description"] = str(item.get("description") or "")
         normalized.append(normalized_item)
     return normalized
+
+
+def _extract_shadow_core_score(raw: Any) -> Decimal | None:
+    if not isinstance(raw, dict):
+        return None
+
+    fit_score = raw.get("fit_score")
+    if isinstance(fit_score, dict) and fit_score.get("core_score") is not None:
+        return _to_decimal(fit_score.get("core_score"))
+
+    eligibility = raw.get("eligibility")
+    if isinstance(eligibility, dict) and eligibility.get("core_score") is not None:
+        return _to_decimal(eligibility.get("core_score"))
+
+    return None
+
+
+def _eligibility_sort_rank(value: Any) -> int:
+    normalized = str(value).strip().upper()
+    if normalized == "PASS":
+        return 0
+    if normalized == "REVIEW":
+        return 1
+    if normalized == "FAIL":
+        return 2
+    return 3
 
 
 def _coerce_list(value: Any) -> list[str]:

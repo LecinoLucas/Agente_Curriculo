@@ -1,5 +1,6 @@
 import type { CreateJobRequestPayload, UpdateJobRequestPayload } from "../../services/jobsService";
 import type { DealBreaker, Job, JobQualityResult } from "../../types/domain";
+import { normalizeDealBreakers } from "./utils/dealBreakerHelpers";
 
 export type JobFormValues = {
   title: string;
@@ -160,7 +161,7 @@ export function buildCreateJobPayload(form: JobFormValues): CreateJobRequestPayl
   if (seniorityLevel) payload.seniority_level = seniorityLevel;
   if (minimumEducationLevel) payload.minimum_education_level = minimumEducationLevel;
   if (form.minimum_years_experience !== undefined) payload.minimum_years_experience = String(form.minimum_years_experience);
-  if ((form.deal_breakers ?? []).length > 0) payload.deal_breakers = form.deal_breakers;
+  if ((form.deal_breakers ?? []).length > 0) payload.deal_breakers = normalizeDealBreakers(form.deal_breakers);
   if (workModel) payload.work_model = workModel;
   if (location) payload.location = location;
   if (form.salary_min !== undefined) payload.salary_min = String(form.salary_min);
@@ -184,7 +185,7 @@ export function buildUpdateJobPayload(form: JobFormValues): UpdateJobRequestPayl
     seniority_level: trimToNull(form.seniority_level),
     minimum_education_level: trimToNull(form.minimum_education_level),
     minimum_years_experience: form.minimum_years_experience !== undefined ? String(form.minimum_years_experience) : null,
-    deal_breakers: form.deal_breakers ?? [],
+    deal_breakers: normalizeDealBreakers(form.deal_breakers ?? []),
     work_model: trimToNull(form.work_model),
     location: trimToNull(form.location),
     salary_min: form.salary_min !== undefined ? String(form.salary_min) : null,

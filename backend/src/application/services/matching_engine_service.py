@@ -24,9 +24,6 @@ from src.application.services.match_confidence_service import (
     compute_match_confidence,
 )
 from src.application.services.resume_profiler_service import ResumeProfilerService
-from src.application.services.scoring_comparison_admin_service import (
-    ScoringComparisonAdminService,
-)
 from src.application.services.skill_normalizer_service import (
     candidate_satisfies_job_requirement,
 )
@@ -126,7 +123,6 @@ class MatchingEngineService:
         self._session = repository.session
         self._adaptive_scorer = AdaptiveScorerService()
         self._insight_service = CandidateEvaluationInsightService()
-        self._fallback_builder = ScoringComparisonAdminService(self._session)
         self._observability_service = MatchingObservabilityService(self._session)
 
     async def match_details_to_job(
@@ -285,7 +281,7 @@ class MatchingEngineService:
         if isinstance(job.job_profile_json, dict) and job.job_profile_json:
             return JobProfile.from_dict(job.job_profile_json)
 
-        skill_rows = await self._fallback_builder._job_repo.list_required_skill_rows(job.id)
+        skill_rows = await self._repository.list_active_job_skill_rows(job.id)
         linked_skills = [job_skill_from_row(row) for row in skill_rows]
         preferred_model = await self._repository.find_preferred_ai_model()
         provider = preferred_model.provider if preferred_model is not None else "deterministic"
@@ -324,28 +320,20 @@ class MatchingEngineService:
             await self._session.flush()
             return profile
 
-        try:
-            profile = await JobProfilerService(ai_service=ai_service).generate_profile(
-                job.description,
-                title=job.title,
-                requirements=job.requirements,
-                seniority_level=job.seniority_level,
-                minimum_years_experience=float(job.minimum_years_experience) if job.minimum_years_experience is not None else None,
-                minimum_education_level=job.minimum_education_level,
-                job_area=job.job_area,
-                responsibilities=job.responsibilities,
-                experience_context=job.experience_context,
-                behavioral_requirements=list(job.behavioral_requirements or []),
-                priority=job.priority,
-                linked_skills=linked_skills,
-            )
-        except Exception as exc:
-            logger.warning(
-                "matching_engine_job_profile_ai_failed",
-                job_id=str(job.id),
-                error=str(exc),
-            )
-            profile = await self._fallback_builder._build_job_profile(job)
+        profile = await JobProfilerService(ai_service=ai_service).generate_profile(
+            job.description,
+            title=job.title,
+            requirements=job.requirements,
+            seniority_level=job.seniority_level,
+            minimum_years_experience=float(job.minimum_years_experience) if job.minimum_years_experience is not None else None,
+            minimum_education_level=job.minimum_education_level,
+            job_area=job.job_area,
+            responsibilities=job.responsibilities,
+            experience_context=job.experience_context,
+            behavioral_requirements=list(job.behavioral_requirements or []),
+            priority=job.priority,
+            linked_skills=linked_skills,
+        )
 
         job.job_profile_json = profile.to_dict()
         job.job_profile_hash = profile.description_hash
@@ -397,17 +385,9 @@ class MatchingEngineService:
                 )
 
         if profile is None:
-            latest_summary = {
-                "analysis_id": analysis.id,
-                "status": "completed",
-                "seniority_level": analysis_result.seniority_level,
-                "total_experience_years": analysis_result.total_experience_years,
-            }
-            profile = self._fallback_builder._build_candidate_profile(
-                candidate=candidate,
-                latest_summary=latest_summary,
-                analysis_result=analysis_result,
-                resume_version=resume_version,
+            raise ValueError(
+                f"Failed to generate candidate profile for resume {resume_version.id}. "
+                f"No cached profile available and AI profiler did not succeed."
             )
 
         resume_version.candidate_profile_json = profile.to_dict()
@@ -434,7 +414,7 @@ class MatchingEngineService:
         ):
             return True
 
-        skill_rows = await self._fallback_builder._job_repo.list_required_skill_rows(job.id)
+        skill_rows = await self._repository.list_active_job_skill_rows(job.id)
         mandatory_skills = {
             _clean_str(getattr(row, "skill_name", "")).casefold()
             for row in skill_rows
@@ -461,7 +441,7 @@ class MatchingEngineService:
         raw_profile = cached_analysis.raw_response_json or {}
         if isinstance(raw_profile, dict) and raw_profile.get("description_hash"):
             return JobProfile.from_dict(raw_profile)
-        return await self._fallback_builder._build_job_profile(job)
+        raise ValueError(f"Cached job profile analysis lacks description_hash for job {job.id}")
 
     def _candidate_profile_from_cached_analysis(
         self,
@@ -478,18 +458,7 @@ class MatchingEngineService:
             if isinstance(nested_profile, dict) and nested_profile.get("resume_hash"):
                 return CandidateProfile.from_dict(nested_profile)
 
-        latest_summary = {
-            "analysis_id": analysis.id,
-            "status": "completed",
-            "seniority_level": analysis_result.seniority_level,
-            "total_experience_years": analysis_result.total_experience_years,
-        }
-        return self._fallback_builder._build_candidate_profile(
-            candidate=candidate,
-            latest_summary=latest_summary,
-            analysis_result=analysis_result,
-            resume_version=resume_version,
-        )
+        raise ValueError(f"Cached candidate profile analysis lacks resume_hash for candidate {candidate.id}")
 
     @staticmethod
     def _build_detached_adaptive_result(

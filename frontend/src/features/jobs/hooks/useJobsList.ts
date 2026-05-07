@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatErrorDetails, handleApiError } from "../../../shared/utils/errorHandler";
-import { closeJob, deleteJob, listJobs, pauseJob } from "../../../services/jobsService";
+import { closeJob, deleteJob, listJobCandidates, listJobs, pauseJob } from "../../../services/jobsService";
+import { pipelineService } from "../../../services/pipelineService";
 import { toast } from "../../../shared/utils/toast";
+import { compareJobsByOperationalPriority } from "../utils/jobsPageHelpers";
 import type { Job } from "../../../types/domain";
 
 export type JobStatusFilter = "all" | "draft" | "published" | "paused" | "closed" | "cancelled";
+
+export type JobOperationalData = {
+  totalCandidates: number;
+  stageCounts: Record<string, number>;
+  latestActivity: string | null;
+  strongCandidates: number;
+  topScore: number | null;
+};
 
 export function useJobsList() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -17,6 +27,8 @@ export function useJobsList() {
   const [statusFilter, setStatusFilter] = useState<JobStatusFilter>("all");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
+  const [jobOperationalData, setJobOperationalData] = useState<Record<string, JobOperationalData>>({});
+  const operationalRequestRef = useRef(0);
 
   async function loadJobs() {
     setLoading(true);
@@ -29,7 +41,7 @@ export function useJobsList() {
       setSelectedJobId((current) =>
         current && response.data.some((job) => job.id === current)
           ? current
-          : response.data[0]?.id ?? null,
+          : null,
       );
     } catch (loadError: unknown) {
       setError(formatErrorDetails(handleApiError(loadError))[0] ?? "Falha ao carregar vagas.");
@@ -42,13 +54,63 @@ export function useJobsList() {
     void loadJobs();
   }, [page, pageSize]);
 
+  useEffect(() => {
+    if (jobs.length === 0) {
+      setJobOperationalData({});
+      return;
+    }
+
+    const requestId = operationalRequestRef.current + 1;
+    operationalRequestRef.current = requestId;
+
+    void (async () => {
+      try {
+        const [pipelineJobs, candidateResults] = await Promise.all([
+          pipelineService.listPipelineJobs(true),
+          Promise.allSettled(jobs.map((job) => listJobCandidates(job.id, 1, 25))),
+        ]);
+
+        if (operationalRequestRef.current !== requestId) return;
+
+        const pipelineJobsById = Object.fromEntries(pipelineJobs.map((job) => [job.id, job]));
+        const nextOperationalData: Record<string, JobOperationalData> = {};
+
+        jobs.forEach((job, index) => {
+          const pipelineJob = pipelineJobsById[job.id];
+          const candidateResult = candidateResults[index];
+          const candidates =
+            candidateResult?.status === "fulfilled" ? (candidateResult.value.data ?? []) : [];
+          const scoredCandidates = candidates
+            .map((candidate) => Number(candidate.match_score ?? candidate.overall_score ?? 0))
+            .filter((score) => Number.isFinite(score));
+
+          nextOperationalData[job.id] = {
+            totalCandidates: pipelineJob?.total_candidates ?? candidates.length,
+            stageCounts: pipelineJob?.stage_counts ?? {},
+            latestActivity: pipelineJob?.latest_activity ?? null,
+            strongCandidates: candidates.filter((candidate) => {
+              const score = Number(candidate.match_score ?? candidate.overall_score ?? 0);
+              return candidate.recommendation === "good_match" || score >= 70;
+            }).length,
+            topScore: scoredCandidates.length > 0 ? Math.max(...scoredCandidates) : null,
+          };
+        });
+
+        setJobOperationalData(nextOperationalData);
+      } catch {
+        if (operationalRequestRef.current !== requestId) return;
+        setJobOperationalData({});
+      }
+    })();
+  }, [jobs]);
+
   const filteredJobs = useMemo(() => {
-    if (statusFilter === "all") return jobs;
-    return jobs.filter((job) => job.status === statusFilter);
-  }, [jobs, statusFilter]);
+    const visibleJobs = statusFilter === "all" ? jobs : jobs.filter((job) => job.status === statusFilter);
+    return [...visibleJobs].sort((left, right) => compareJobsByOperationalPriority(left, right, jobOperationalData));
+  }, [jobs, statusFilter, jobOperationalData]);
 
   const selectedJob = useMemo(
-    () => filteredJobs.find((job) => job.id === selectedJobId) ?? filteredJobs[0] ?? null,
+    () => filteredJobs.find((job) => job.id === selectedJobId) ?? null,
     [filteredJobs, selectedJobId],
   );
 
@@ -118,6 +180,7 @@ export function useJobsList() {
     selectedJobId,
     setSelectedJobId,
     runningAction,
+    jobOperationalData,
     filteredJobs,
     selectedJob,
     summary,

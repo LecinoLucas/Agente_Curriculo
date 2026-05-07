@@ -17,6 +17,9 @@ from src.infrastructure.database.models.profile_analysis_model import (
 )
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
+_VISIBLE_PIPELINE_LINK_STATUSES = ("active", "hired", "rejected")
+_VISIBLE_PIPELINE_STATUSES = ("active", "terminal")
+
 
 class SQLAlchemyCandidateRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -109,10 +112,64 @@ class SQLAlchemyCandidateRepository:
             .where(
                 CandidateJobPipelineModel.candidate_id == CandidateModel.id,
                 JobModel.deleted_at.is_(None),
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
+                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
             )
             .correlate(CandidateModel)
+            .scalar_subquery()
+        )
+        active_job_title_sq = (
+            sa.select(JobModel.title)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
+                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+        active_job_stage_sq = (
+            sa.select(CandidateJobPipelineModel.pipeline_stage)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
+                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+        active_job_match_score_sq = (
+            sa.select(CandidateJobPipelineModel.match_score)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
+                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
             .scalar_subquery()
         )
         ai_status_sq = (
@@ -182,6 +239,9 @@ class SQLAlchemyCandidateRepository:
                 CandidateModel.created_at,
                 resume_count_sq.label("resume_count"),
                 linked_job_count_sq.label("linked_job_count"),
+                active_job_title_sq.label("active_job_title"),
+                active_job_stage_sq.label("active_job_stage"),
+                active_job_match_score_sq.label("active_job_match_score"),
                 ai_status_sq.label("ai_status"),
                 ai_score_sq.label("ai_score"),
             )
@@ -530,8 +590,8 @@ class SQLAlchemyCandidateRepository:
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
                 CandidateJobPipelineModel.candidate_id == candidate_id,
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
+                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
                 JobModel.deleted_at.is_(None),
             )
             .order_by(

@@ -13,7 +13,7 @@ from src.infrastructure.database.models.analysis_model import (
 )
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 
-from .test_admin_scoring_comparison_endpoint import (
+from .helpers import (
     _auth_headers,
     _create_active_user,
     _seed_scoring_case,

@@ -123,6 +123,9 @@ class CandidateListSummaryResponse(BaseModel):
     created_at: datetime
     resume_count: int
     linked_job_count: int = 0
+    active_job_title: str | None = None
+    active_job_stage: str | None = None
+    active_job_match_score: float | None = None
     ai_status: str | None = None
     ai_score: float | None = None
 

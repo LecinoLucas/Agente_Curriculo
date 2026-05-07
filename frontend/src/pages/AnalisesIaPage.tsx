@@ -33,6 +33,8 @@ export function AnalisesIaPage() {
     handleForceFail,
   } = useAnalysesPage();
 
+  const isWorkspaceOpen = selectedCandidateId !== null;
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -62,20 +64,30 @@ export function AnalisesIaPage() {
         />
       </div>
 
-      {/* Filters */}
-      <AnalysisFilters
-        searchInput={searchInput}
-        onSearchChange={setSearchInput}
-        statusFilter={statusFilter}
-        onStatusChange={handleStatusFilter}
-        aiFilter={aiFilter}
-        onAiChange={handleAiFilter}
-        hasActiveFilters={hasActiveFilters}
-        onClearFilters={clearFilters}
-      />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left panel: analyses table */}
+        <div
+          className={[
+            "flex flex-col overflow-hidden",
+            isWorkspaceOpen
+              ? "hidden lg:flex lg:w-[420px] lg:shrink-0 lg:border-r lg:border-[hsl(var(--border))]"
+              : "flex-1",
+          ].join(" ")}
+        >
+          {/* Filters */}
+          <AnalysisFilters
+            searchInput={searchInput}
+            onSearchChange={setSearchInput}
+            statusFilter={statusFilter}
+            onStatusChange={handleStatusFilter}
+            aiFilter={aiFilter}
+            onAiChange={handleAiFilter}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={clearFilters}
+          />
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto">
         {showInitialLoading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent" />
@@ -110,9 +122,12 @@ export function AnalisesIaPage() {
             onClearFilters={clearFilters}
           />
         )}
-      </div>
+          </div>
+        </div>
 
-      <CandidateDrawer key={selectedCandidateId ?? "none"} />
+        {/* Right panel: workspace */}
+        {isWorkspaceOpen ? <CandidateDrawer mode="workspace" /> : null}
+      </div>
     </div>
   );
 }

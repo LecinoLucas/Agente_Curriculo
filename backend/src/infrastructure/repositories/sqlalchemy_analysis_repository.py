@@ -679,6 +679,17 @@ class SQLAlchemyAnalysisRepository:
                     matched_skills_json=match.matched_skills_json,
                     missing_skills_json=match.missing_skills_json,
                     explanation=match.explanation,
+                    eligibility_status=match.eligibility_status,
+                    strict_score=match.strict_score,
+                    balanced_score=match.balanced_score,
+                    score_version=match.score_version,
+                    skill_evidence_breakdown=match.skill_evidence_breakdown,
+                    possible_false_negative=(
+                        match.possible_false_negative
+                        if match.possible_false_negative is not None
+                        else False
+                    ),
+                    score_diff=match.score_diff,
                     created_at=match_created_at,
                     updated_at=now,
                 )
@@ -690,6 +701,17 @@ class SQLAlchemyAnalysisRepository:
                         "matched_skills_json": match.matched_skills_json,
                         "missing_skills_json": match.missing_skills_json,
                         "explanation": match.explanation,
+                        "eligibility_status": match.eligibility_status,
+                        "strict_score": match.strict_score,
+                        "balanced_score": match.balanced_score,
+                        "score_version": match.score_version,
+                        "skill_evidence_breakdown": match.skill_evidence_breakdown,
+                        "possible_false_negative": (
+                            match.possible_false_negative
+                            if match.possible_false_negative is not None
+                            else False
+                        ),
+                        "score_diff": match.score_diff,
                         "updated_at": now,
                     },
                 )
@@ -714,12 +736,25 @@ class SQLAlchemyAnalysisRepository:
             existing.matched_skills_json = match.matched_skills_json
             existing.missing_skills_json = match.missing_skills_json
             existing.explanation = match.explanation
+            existing.eligibility_status = match.eligibility_status
+            existing.strict_score = match.strict_score
+            existing.balanced_score = match.balanced_score
+            existing.score_version = match.score_version
+            existing.skill_evidence_breakdown = match.skill_evidence_breakdown
+            existing.possible_false_negative = (
+                match.possible_false_negative
+                if match.possible_false_negative is not None
+                else False
+            )
+            existing.score_diff = match.score_diff
             existing.updated_at = now
             await self._session.flush()
             await self._session.refresh(existing)
             return existing
 
         match.updated_at = now
+        if match.possible_false_negative is None:
+            match.possible_false_negative = False
         if not match.id:
             match.id = uuid4()
         if not match.created_at:

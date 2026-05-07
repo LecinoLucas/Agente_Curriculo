@@ -129,6 +129,25 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
   };
 }
 
+function normalizeCandidateSummary(item: Partial<CandidateListSummary>): CandidateListSummary {
+  return {
+    id: item.id ?? "",
+    full_name: item.full_name ?? "Candidato sem nome",
+    email: item.email ?? null,
+    phone: item.phone ?? null,
+    cpf: item.cpf ?? null,
+    tags: Array.isArray(item.tags) ? item.tags : [],
+    created_at: item.created_at ?? new Date(0).toISOString(),
+    resume_count: item.resume_count ?? 0,
+    linked_job_count: item.linked_job_count ?? 0,
+    active_job_title: item.active_job_title ?? null,
+    active_job_stage: item.active_job_stage ?? null,
+    active_job_match_score: item.active_job_match_score != null ? Number(item.active_job_match_score) : null,
+    ai_status: item.ai_status ?? null,
+    ai_score: item.ai_score != null ? Number(item.ai_score) : null,
+  };
+}
+
 export const candidatesService = {
   async list(page = 1, pageSize = 20, search?: string): Promise<Paginated<Candidate>> {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
@@ -163,7 +182,13 @@ export const candidatesService = {
     if (aiStatus?.length) aiStatus.forEach((s) => params.append("ai_status", s));
     return httpRequest<Paginated<CandidateListSummary>>(
       `/api/v1/candidates/summaries?${params.toString()}`,
-    );
+    ).then((payload) => ({
+      data: Array.isArray(payload?.data) ? payload.data.map(normalizeCandidateSummary) : [],
+      total: payload?.total ?? 0,
+      page: payload?.page ?? page,
+      page_size: payload?.page_size ?? pageSize,
+      total_pages: payload?.total_pages ?? 1,
+    }));
   },
 
   async checkDuplicate(email?: string, cpf?: string): Promise<CandidateCheckResponse> {

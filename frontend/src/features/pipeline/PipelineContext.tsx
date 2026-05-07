@@ -125,6 +125,17 @@ const INITIAL_STATE: PipelineState = {
   rankingSyncTick: 0,
 };
 
+const PIPELINE_STAGE_STATUS_LABEL: Record<PipelineStage, string> = {
+  entry: "Recebido",
+  screening: "Triagem",
+  hr_interview: "Entrevista RH",
+  technical_interview: "Entrevista Técnica",
+  final: "Final",
+  offer: "Proposta",
+  hired: "Contratado",
+  rejected: "Reprovado",
+};
+
 // Backoff: 1.5s → 5s (after 5 identical statuses) → 15s (after 10)
 function pollingDelay(staleCount: number): number {
   if (staleCount < 5) return 1500;
@@ -487,6 +498,47 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     [],
   );
 
+  const patchCandidateOverviewStage = useCallback(
+    (
+      candidateId: string,
+      payload: {
+        jobId: string;
+        stage: PipelineStage;
+      },
+    ) => {
+      const cached = candidateCacheRef.current.get(candidateId);
+      if (!cached) return;
+
+      const now = new Date().toISOString();
+      let changed = false;
+      const nextEntries = cached.pipeline_entries.map((entry) => {
+        if (entry.job_id !== payload.jobId) return entry;
+        changed = true;
+        return {
+          ...entry,
+          stage: payload.stage,
+          candidate_status: PIPELINE_STAGE_STATUS_LABEL[payload.stage],
+          updated_at: now,
+        };
+      });
+
+      if (!changed) return;
+
+      const nextOverview: CandidateOverview = {
+        ...cached,
+        pipeline_entries: nextEntries,
+      };
+
+      candidateCacheRef.current.set(candidateId, nextOverview);
+      setState((prev) =>
+        prev.selectedCandidateId === candidateId
+          ? { ...prev, candidateOverview: nextOverview, candidateError: null }
+          : prev,
+      );
+    },
+    [],
+  );
+
   // ── Candidate panel ────────────────────────────────────────────────────────
 
   const openCandidate = useCallback(async (candidateId: string, initialTab: PanelTab = "summary") => {
@@ -744,12 +796,23 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   const moveCandidateStage = useCallback(
     async (candidateId: string, toStage: PipelineStage) => {
-      const jobId = activeJobIdRef.current;
-      if (!jobId) return;
+      const jobId =
+        activeJobIdRef.current ??
+        candidateCacheRef.current.get(candidateId)?.active_job_id ??
+        null;
+      if (!jobId) {
+        throw new Error("Candidato sem vaga ativa para mover etapa.");
+      }
+
+      const previousOverview = candidateCacheRef.current.get(candidateId) ?? null;
+      let previousBoard: JobPipelineBoard | null = null;
+
+      patchCandidateOverviewStage(candidateId, { jobId, stage: toStage });
 
       // Optimistic update: move the card immediately in local state.
       // On API failure we reload the board from server to revert.
       setState((prev) => {
+        previousBoard = prev.board;
         if (!prev.board) return prev;
 
         let movingCard: JobCandidate | undefined;
@@ -781,16 +844,44 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         // Invalidate cache: pipeline_entries inside the overview are now stale
         candidateCacheRef.current.delete(candidateId);
         invalidateRanking();
+        notifyCandidatesChanged();
         if (selectedCandidateIdRef.current === candidateId) {
           void refreshCandidateOverview();
         }
+        if (activeJobIdRef.current === jobId) {
+          void loadBoard(jobId, true);
+        }
       } catch (err) {
-        // Revert: reload board from server (authoritative source)
-        void loadBoard(jobId);
+        if (previousOverview) {
+          candidateCacheRef.current.set(candidateId, previousOverview);
+          setState((prev) =>
+            prev.selectedCandidateId === candidateId
+              ? { ...prev, candidateOverview: previousOverview, candidateError: null }
+              : prev,
+          );
+        }
+
+        if (previousBoard) {
+          boardCacheRef.current.set(previousBoard.job_id, previousBoard);
+          setState((prev) =>
+            prev.board?.job_id === previousBoard?.job_id
+              ? { ...prev, board: previousBoard }
+              : prev,
+          );
+        }
+
+        void syncCandidateOverview(candidateId);
         throw err; // bubble up so the caller (UI) can show a toast
       }
     },
-    [invalidateRanking, loadBoard, refreshCandidateOverview],
+    [
+      invalidateRanking,
+      loadBoard,
+      notifyCandidatesChanged,
+      patchCandidateOverviewStage,
+      refreshCandidateOverview,
+      syncCandidateOverview,
+    ],
   );
 
   // ── Polling ────────────────────────────────────────────────────────────────

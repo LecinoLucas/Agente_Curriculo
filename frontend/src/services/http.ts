@@ -1,6 +1,7 @@
 import { tokenStorage } from "../utils/storage";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 
 let refreshInFlight: Promise<void> | null = null;
 
@@ -165,6 +166,65 @@ type RequestOptions = {
   retryOnUnauthorized?: boolean;
 };
 
+type DevHttpChaosMode = "fail" | "timeout";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function getDevHttpChaosRule(
+  mode: DevHttpChaosMode,
+  method: string,
+  path: string,
+): null | { storageKey: string; message: string } {
+  if (!import.meta.env.DEV || typeof window === "undefined") return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const rawRule = params.get(mode === "fail" ? "__dev_fail_once" : "__dev_timeout_once");
+  if (!rawRule) return null;
+
+  const [ruleMethodRaw, ...pathParts] = rawRule.split("|");
+  const ruleMethod = ruleMethodRaw?.trim().toUpperCase();
+  const rulePath = pathParts.join("|").trim();
+
+  if (!ruleMethod || !rulePath) return null;
+  if (ruleMethod !== method.toUpperCase()) return null;
+  if (!path.includes(rulePath)) return null;
+
+  const storageKey = `resume-ai-chaos:${mode}:${rawRule}`;
+  if (window.sessionStorage.getItem(storageKey) === "used") return null;
+
+  return {
+    storageKey,
+    message:
+      mode === "fail"
+        ? "Falha simulada para validar rollback e feedback."
+        : "Timeout simulado para validar loading e retry.",
+  };
+}
+
+async function applyDevHttpChaos(method: string, path: string): Promise<void> {
+  if (!import.meta.env.DEV || typeof window === "undefined") return;
+
+  const params = new URLSearchParams(window.location.search);
+  const latencyValue = Number(params.get("__dev_latency_ms") ?? "0");
+  if (Number.isFinite(latencyValue) && latencyValue > 0) {
+    await sleep(latencyValue);
+  }
+
+  const timeoutRule = getDevHttpChaosRule("timeout", method, path);
+  if (timeoutRule) {
+    window.sessionStorage.setItem(timeoutRule.storageKey, "used");
+    throw new HttpError(504, timeoutRule.message, "DEV_TIMEOUT");
+  }
+
+  const failRule = getDevHttpChaosRule("fail", method, path);
+  if (failRule) {
+    window.sessionStorage.setItem(failRule.storageKey, "used");
+    throw new HttpError(503, failRule.message, "DEV_FAIL");
+  }
+}
+
 export async function httpRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, withAuth = true, retryOnUnauthorized = true } = options;
   const isFormData = body instanceof FormData;
@@ -180,15 +240,33 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
   }
 
   let response: Response;
+  const controller = new AbortController();
+  const timeoutId =
+    typeof window !== "undefined"
+      ? window.setTimeout(() => controller.abort("timeout"), DEFAULT_REQUEST_TIMEOUT_MS)
+      : null;
+
   try {
+    await applyDevHttpChaos(method, path);
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
       credentials: "include",
+      signal: controller.signal,
       body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
     });
   } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+    if (controller.signal.aborted) {
+      throw new HttpError(504, "Tempo de resposta do servidor esgotado. Tente novamente.", undefined, error);
+    }
     throw new HttpError(0, "Sem conexão com o servidor. Verifique sua internet.", undefined, error);
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
   }
 
   if (response.status === 401 && withAuth && retryOnUnauthorized && !path.includes("/auth/refresh")) {

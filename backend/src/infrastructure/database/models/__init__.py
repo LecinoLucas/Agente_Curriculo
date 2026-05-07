@@ -30,7 +30,13 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
     CandidateJobPipelineModel,
 )
-from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
+from src.infrastructure.database.models.job_model import (
+    JobModel,
+    JobRequiredSkillModel,
+    SkillAliasModel,
+    SkillEquivalenceModel,
+    SkillModel,
+)
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.user_model import (
     PasswordResetTokenModel,
@@ -55,6 +61,8 @@ __all__ = [
     "JobModel",
     "JobRequiredSkillModel",
     "SkillModel",
+    "SkillAliasModel",
+    "SkillEquivalenceModel",
     "AuditLogModel",
     "Admission",
     "DocumentRequirement",

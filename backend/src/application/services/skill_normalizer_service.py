@@ -11,6 +11,16 @@ def _strip_accents(value: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
+def normalize_skill_name(value: str | None) -> str:
+    if value is None:
+        return ""
+
+    normalized = _strip_accents(str(value).strip().lower())
+    normalized = normalized.replace("-", " ").replace("_", " ")
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized
+
+
 def normalize_skill_text(value: str) -> str:
     normalized = _strip_accents(value.lower().strip())
     normalized = re.sub(r"[*_`~]+", "", normalized)

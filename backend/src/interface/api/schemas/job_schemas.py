@@ -157,6 +157,7 @@ class JobResponse(BaseModel):
     priority: JOB_PRIORITY
     quality_score: int | None = None
     quality_status: Literal["weak", "acceptable", "good"] | None = None
+    skill_requirements: dict[str, list[str]] | None = None
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -193,6 +194,7 @@ class CreateJobRequest(BaseModel):
     experience_context: str | None = None
     behavioral_requirements: list[str] = Field(default_factory=list)
     priority: JOB_PRIORITY = "normal"
+    skill_requirements: dict[str, list[str]] | None = None
 
     model_config = {
         "json_encoders": {
@@ -243,6 +245,7 @@ class UpdateJobRequest(BaseModel):
     experience_context: str | None = None
     behavioral_requirements: list[str] | None = None
     priority: JOB_PRIORITY | None = None
+    skill_requirements: dict[str, list[str]] | None = None
 
     model_config = {
         "json_encoders": {
@@ -340,6 +343,14 @@ class CandidateScoreExplanationBreakdownResponse(BaseModel):
     ai_adjustment: CandidateScoreExplanationBreakdownItemResponse | None = None
 
 
+class SkillPartialMatchResponse(BaseModel):
+    required: str
+    candidate: str
+    score: float
+    reason: str
+    source: str = "partial_match"
+
+
 class CandidateScoreExplanationResponse(BaseModel):
     job_id: UUID
     candidate_id: UUID
@@ -358,6 +369,7 @@ class CandidateScoreExplanationResponse(BaseModel):
     recommended_questions: list[str] = Field(default_factory=list)
     strongest_evidence: list[ScoreExplanationEvidenceResponse] = Field(default_factory=list)
     matched_equivalences: list[ScoreExplanationEvidenceResponse] = Field(default_factory=list)
+    partial_matches: list[SkillPartialMatchResponse] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
     confidence_score: float
     strengths: list[str] = Field(default_factory=list)
@@ -373,6 +385,7 @@ class JobQualityResponse(BaseModel):
     missing_fields: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    validation_errors: list[str] = Field(default_factory=list)
 
 
 class BulkImportJobSkillRequest(BaseModel):

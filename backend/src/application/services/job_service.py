@@ -8,6 +8,7 @@ from src.infrastructure.database.models.job_model import JobModel, JobRequiredSk
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
 from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
+from src.domain.exceptions import ValidationException
 
 if TYPE_CHECKING:
     from src.application.services.job_profiler_service import JobProfilerService
@@ -16,6 +17,9 @@ if TYPE_CHECKING:
         JobQualityValidatorService,
     )
 from src.application.services.job_profiler_service import JobProfilerService, job_skill_from_row
+from src.application.services.skill_requirements_service import (
+    validate_skill_requirements_product_rules,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -53,12 +57,14 @@ class JobPublicationValidationError(Exception):
         quality_status: str,
         suggestions: list[str],
         warnings: list[str],
+        validation_errors: list[str] | None = None,
     ) -> None:
         self.missing_fields = list(missing_fields)
         self.quality_score = int(quality_score)
         self.quality_status = quality_status
         self.suggestions = list(suggestions)
         self.warnings = list(warnings)
+        self.validation_errors = list(validation_errors or [])
         super().__init__("Vaga não atende os critérios mínimos de publicação.")
 
 
@@ -78,6 +84,10 @@ class JobService:
         title = self._clean_required_text(body.title)
         description = self._clean_required_text(body.description)
         deal_breakers = [db.model_dump(exclude_none=True) for db in body.deal_breakers] if body.deal_breakers else []
+        validated_skill_requirements = self._validate_skill_requirements_payload(
+            body.skill_requirements,
+            job_area=body.job_area,
+        )
         job = JobModel(
             title=title,
             description=description,
@@ -97,6 +107,7 @@ class JobService:
             experience_context=self._clean_optional_text(body.experience_context),
             behavioral_requirements=self._clean_string_list(body.behavioral_requirements),
             priority=body.priority,
+            skill_requirements=validated_skill_requirements,
             created_by=created_by,
         )
         saved_job = await self._repository.create(job)
@@ -119,6 +130,15 @@ class JobService:
         salary_min = body.salary_min if "salary_min" in provided_fields else job.salary_min
         salary_max = body.salary_max if "salary_max" in provided_fields else job.salary_max
         self._validate_salary_range(salary_min, salary_max)
+        target_job_area = body.job_area if "job_area" in provided_fields else job.job_area
+        validated_skill_requirements = (
+            self._validate_skill_requirements_payload(
+                body.skill_requirements,
+                job_area=target_job_area,
+            )
+            if "skill_requirements" in provided_fields
+            else None
+        )
 
         for field_name in (
             "title",
@@ -139,6 +159,7 @@ class JobService:
             "experience_context",
             "behavioral_requirements",
             "priority",
+            "skill_requirements",
         ):
             if field_name not in provided_fields:
                 continue
@@ -156,6 +177,8 @@ class JobService:
                 val = [db.model_dump(exclude_none=True) for db in val]
             if field_name == "behavioral_requirements" and isinstance(val, list):
                 val = self._clean_string_list(val)
+            if field_name == "skill_requirements":
+                val = validated_skill_requirements
             setattr(job, field_name, val)
 
         if "status" in provided_fields and body.status is not None:
@@ -275,6 +298,24 @@ class JobService:
         return normalized
 
     @staticmethod
+    def _validate_skill_requirements_payload(
+        skill_requirements: dict[str, list[str]] | None,
+        *,
+        job_area: str | None,
+    ) -> dict[str, list[str]] | None:
+        if skill_requirements is None:
+            return None
+
+        result = validate_skill_requirements_product_rules(
+            skill_requirements,
+            job_area=job_area,
+            check_raw_duplicates=True,
+        )
+        if result.errors:
+            raise ValidationException("; ".join(result.errors))
+        return result.sanitized
+
+    @staticmethod
     def _set_status(job: JobModel, next_status: str) -> None:
         now = datetime.now(timezone.utc)
         job.status = next_status
@@ -363,6 +404,7 @@ class JobService:
             quality_status=result.status,
             suggestions=result.suggestions,
             warnings=result.warnings,
+            validation_errors=result.validation_errors,
         )
 
     async def _maybe_refresh_quality(self, job_id: UUID) -> None:

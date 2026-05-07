@@ -24,7 +24,7 @@ export const DEAL_BREAKER_OPERATORS: Record<string, DealBreaker["operator"][]> =
   work_model: ["equals", "not_equals"],
   education_level: ["equals", "contains"],
   experience_years: ["equals", "not_equals", "contains"],
-  skill: ["equals", "not_equals", "contains", "in"],
+  skill: ["contains", "not_contains"],
   language: ["equals", "contains"],
   availability: ["equals", "not_equals"],
   custom_text: ["contains"],
@@ -38,4 +38,45 @@ export function emptyDealBreakerDraft(): DealBreakerDraft {
     reason: "",
     is_active: true,
   };
+}
+
+/**
+ * Normalizes deal breakers to ensure operators are valid for their fields.
+ * Converts invalid operator combinations to valid ones based on backend rules.
+ *
+ * Examples:
+ * - skill + equals → skill + contains
+ * - skill + not_equals → skill + not_contains
+ */
+export function normalizeDealBreakers(dealBreakers: DealBreaker[]): DealBreaker[] {
+  return dealBreakers.map((breaker) => {
+    const validOperators = DEAL_BREAKER_OPERATORS[breaker.field] ?? [];
+
+    // If operator is valid for this field, return as-is
+    if (validOperators.includes(breaker.operator)) {
+      return breaker;
+    }
+
+    // Map invalid operators to valid ones
+    let normalizedOperator: DealBreaker["operator"] = breaker.operator;
+
+    // For skill field, convert equals/not_equals to contains/not_contains
+    if (breaker.field === "skill") {
+      if (breaker.operator === "equals") {
+        normalizedOperator = "contains";
+      } else if (breaker.operator === "not_equals") {
+        normalizedOperator = "not_contains";
+      }
+    }
+
+    // If still invalid, use the first valid operator for this field
+    if (!validOperators.includes(normalizedOperator) && validOperators.length > 0) {
+      normalizedOperator = validOperators[0];
+    }
+
+    return {
+      ...breaker,
+      operator: normalizedOperator,
+    };
+  });
 }

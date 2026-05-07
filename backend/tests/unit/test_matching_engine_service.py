@@ -539,7 +539,7 @@ async def test_matching_engine_reuses_cached_job_profile_analysis(
     repo.find_job_profile_analysis_by_signature.return_value = SimpleNamespace(
         raw_response_json=cached_profile.to_dict()
     )
-    service._fallback_builder._job_repo.list_required_skill_rows = AsyncMock(return_value=[])
+    repo.list_active_job_skill_rows = AsyncMock(return_value=[])
 
     profiler_call = AsyncMock(side_effect=AssertionError("job profiler AI should not run"))
     monkeypatch.setattr(
@@ -815,9 +815,7 @@ async def test_matching_engine_service_computes_nonzero_confidence_from_structur
 async def test_matching_engine_requirement_gate_detects_skill_miss() -> None:
     repo = MagicMock()
     repo.session = MagicMock()
-    service = MatchingEngineService(repo)
-
-    service._fallback_builder._job_repo.list_required_skill_rows = AsyncMock(
+    repo.list_active_job_skill_rows = AsyncMock(
         return_value=[
             SimpleNamespace(
                 skill_name="Python",
@@ -825,6 +823,7 @@ async def test_matching_engine_requirement_gate_detects_skill_miss() -> None:
             )
         ]
     )
+    service = MatchingEngineService(repo)
 
     job = MagicMock()
     job.id = uuid4()

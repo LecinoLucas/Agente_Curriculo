@@ -45,11 +45,6 @@ from src.application.services.pipeline_service import (
     PipelineJobNotFoundError,
     PipelineService,
 )
-from src.application.services.scoring_comparison_admin_service import (
-    ScoringComparisonAnalysisNotFoundError,
-    ScoringComparisonCandidateNotFoundError,
-    ScoringComparisonJobNotFoundError,
-)
 from src.domain.entities.user import UserRole
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
@@ -237,12 +232,6 @@ def _handle_job_service_error(exc: Exception) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Nenhuma versão de scoring ativa. Configure uma versão ativa antes de calcular.",
         )
-    if isinstance(exc, ScoringComparisonJobNotFoundError):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
-    if isinstance(exc, ScoringComparisonCandidateNotFoundError):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidato não encontrado")
-    if isinstance(exc, ScoringComparisonAnalysisNotFoundError):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análise do candidato não encontrada")
     if isinstance(exc, JobNotFoundForQualityError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
     if isinstance(exc, JobPublicationValidationError):
@@ -256,6 +245,7 @@ def _handle_job_service_error(exc: Exception) -> None:
                 "quality_status": exc.quality_status,
                 "suggestions": exc.suggestions,
                 "warnings": exc.warnings,
+                "validation_errors": exc.validation_errors,
             },
         )
     if isinstance(exc, CandidateNotLinkedToJobError):
@@ -379,6 +369,7 @@ async def get_job_quality(
             missing_fields=result.missing_fields,
             suggestions=result.suggestions,
             warnings=result.warnings,
+            validation_errors=result.validation_errors,
         )
     except Exception as exc:
         _handle_job_service_error(exc)
