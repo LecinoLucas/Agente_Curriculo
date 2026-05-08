@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.pipeline_service import (
     PipelineCandidateAlreadyActiveInAnotherJobError,
     PipelineCandidateAlreadyActiveInSameJobError,
+    PipelineCandidateAlreadyHiredError,
     PipelineDestinationJobUnavailableError,
     PipelineCandidateNotFoundError,
     PipelineCandidateWithoutActiveJobError,
@@ -210,7 +211,12 @@ def _handle(exc: Exception) -> None:
     if isinstance(exc, PipelineTransferNotAllowedError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Este candidato já avançou no processo. Para preservar o histórico, adicione-o a outra vaga em vez de transferir.",
+            detail="A transferência só pode ser feita para vagas publicadas.",
+        )
+    if isinstance(exc, PipelineCandidateAlreadyHiredError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato já está contratado nesta vaga e não pode ser transferido.",
         )
     if isinstance(exc, PipelineCandidateAlreadyActiveInAnotherJobError):
         raise HTTPException(

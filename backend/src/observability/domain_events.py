@@ -23,6 +23,8 @@ class DomainEventType(Enum):
     DOCUMENT_UPLOADED = "document.uploaded"
     ADMISSION_STATUS_CHANGED = "admission.status_changed"
     CANDIDATE_JOB_TRANSFERRED = "candidate.job.transferred"
+    RANKING_RECOMPUTED = "ranking.recomputed"
+    RANKING_RECOMPUTE_FAILED = "ranking.recompute_failed"
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-import { KanbanSquare, Pencil, Plus, RefreshCcw } from "lucide-react";
+import { KanbanSquare, Pencil, Plus, RefreshCcw, Search, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { ActionMenu } from "../components/common/ActionMenu";
@@ -9,7 +9,12 @@ import { StatusPill } from "../components/common/StatusPill";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../features/auth/useAuth";
 import { JobContextPanel } from "../features/jobs/components/JobContextPanel";
-import { useJobsList, type JobStatusFilter } from "../features/jobs/hooks/useJobsList";
+import {
+  useJobsList,
+  type JobAreaFilter,
+  type JobStatusFilter,
+  type JobWorkModelFilter,
+} from "../features/jobs/hooks/useJobsList";
 import {
   buildJobActionItems,
   getJobOperationalPresentation,
@@ -44,6 +49,19 @@ function formatJobArea(value: string | null | undefined) {
   return labels[value] ?? value;
 }
 
+function formatStatusFilterLabel(value: JobStatusFilter) {
+  const labels: Record<JobStatusFilter, string> = {
+    all: "Todas",
+    draft: "Rascunho",
+    published: "Publicadas",
+    paused: "Pausadas",
+    closed: "Encerradas",
+    cancelled: "Canceladas",
+  };
+
+  return labels[value];
+}
+
 export function VagasPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -58,8 +76,14 @@ export function VagasPage() {
     setPageSize,
     total,
     totalPages,
+    searchInput,
+    setSearchInput,
     statusFilter,
     setStatusFilter,
+    areaFilter,
+    setAreaFilter,
+    workModelFilter,
+    setWorkModelFilter,
     selectedJobId,
     setSelectedJobId,
     runningAction,
@@ -67,24 +91,62 @@ export function VagasPage() {
     filteredJobs,
     selectedJob,
     loadJobs,
+    summary,
+    areaOptions,
+    workModelOptions,
+    statusCounts,
+    hasActiveFilters,
+    clearFilters,
     handlePause,
     handleClose,
     handleDelete,
   } = useJobsList();
 
+  const statusQuickFilters: Array<{ value: JobStatusFilter; label: string; count: number }> = [
+    { value: "all", label: "Todas", count: statusCounts.all },
+    { value: "published", label: "Publicadas", count: statusCounts.published },
+    { value: "draft", label: "Rascunhos", count: statusCounts.draft },
+    { value: "paused", label: "Pausadas", count: statusCounts.paused },
+    { value: "closed", label: "Encerradas", count: statusCounts.closed },
+  ];
+
+  const activeFilterChips = [
+    statusFilter !== "all"
+      ? { key: "status", label: `Status: ${formatStatusFilterLabel(statusFilter)}`, onClear: () => setStatusFilter("all") }
+      : null,
+    areaFilter !== "all"
+      ? { key: "area", label: `Área: ${formatJobArea(areaFilter) ?? areaFilter}`, onClear: () => setAreaFilter("all") }
+      : null,
+    workModelFilter !== "all"
+      ? { key: "workModel", label: `Modelo: ${formatWorkModel(workModelFilter)}`, onClear: () => setWorkModelFilter("all") }
+      : null,
+    searchInput.trim()
+      ? { key: "search", label: `Busca: ${searchInput.trim()}`, onClear: () => setSearchInput("") }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; onClear: () => void }>;
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 px-4 pt-4 sm:px-6 sm:pt-5">
       <PageHeader
         title="Vagas"
-        subtitle="Priorize rapidamente o que precisa de atenção e mantenha a leitura da operação mais limpa."
+        subtitle={`${statusCounts.all} vagas • ${summary.published} publicadas • ${summary.attention} precisam atenção`}
         actions={
           <>
-            <Button type="button" variant="outline" onClick={() => void loadJobs()} disabled={loading}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl border-[hsl(var(--border-strong))]/55 bg-[hsl(var(--surface))] px-4 text-sm shadow-[0_10px_24px_-22px_hsl(var(--text)/0.35)]"
+              onClick={() => void loadJobs()}
+              disabled={loading}
+            >
               <RefreshCcw className="mr-2 h-4 w-4" />
               Atualizar
             </Button>
             {canManage ? (
-              <Button type="button" onClick={() => navigate("/vagas/nova")}>
+              <Button
+                type="button"
+                className="h-11 rounded-xl px-4 text-sm shadow-[0_16px_34px_-24px_hsl(var(--primary)/0.75)]"
+                onClick={() => navigate("/vagas/nova")}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Nova vaga
               </Button>
@@ -96,7 +158,8 @@ export function VagasPage() {
       <CrudPage<Job>
         loading={loading}
         error={error}
-        isEmpty={filteredJobs.length === 0}
+        count={total}
+        isEmpty={total === 0}
         emptyIcon="📄"
         emptyTitle="Nenhuma vaga encontrada"
         emptyDescription="Crie uma nova vaga para começar o fluxo estruturado de publicação."
@@ -115,21 +178,131 @@ export function VagasPage() {
         dataTableFooterClassName="border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/55"
         sidePanelClassName="min-w-0"
         filters={
-          <label className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
-            Status
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as JobStatusFilter)}
-              className="ui-input h-10 min-w-[180px] rounded-xl px-3 text-sm"
-            >
-              <option value="all">Todos</option>
-              <option value="draft">Rascunho</option>
-              <option value="published">Publicada</option>
-              <option value="paused">Pausada</option>
-              <option value="closed">Encerrada</option>
-              <option value="cancelled">Cancelada</option>
-            </select>
-          </label>
+          <div className="w-full rounded-[22px] border border-[hsl(var(--border-strong))]/40 bg-[hsl(var(--surface))]/96 px-3 py-2.5 shadow-[0_18px_42px_-34px_hsl(var(--text)/0.26)]">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                <label className="block min-w-0 flex-1">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+                    <input
+                      value={searchInput}
+                      onChange={(event) => {
+                        setPage(1);
+                        setSearchInput(event.target.value);
+                      }}
+                      placeholder="Buscar por título, área, senioridade ou local"
+                      className="ui-input h-10 w-full rounded-xl border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface))] pl-10 pr-3 text-sm shadow-none"
+                    />
+                  </div>
+                </label>
+
+                <div className="grid gap-2 sm:grid-cols-3 lg:w-auto lg:flex-none">
+                  <select
+                    value={areaFilter}
+                    onChange={(event) => {
+                      setPage(1);
+                      setAreaFilter(event.target.value as JobAreaFilter);
+                    }}
+                    className="ui-input h-10 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
+                  >
+                    <option value="all">Todas as áreas</option>
+                    {areaOptions.map((area) => (
+                      <option key={area} value={area}>
+                        {formatJobArea(area) ?? area}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={workModelFilter}
+                    onChange={(event) => {
+                      setPage(1);
+                      setWorkModelFilter(event.target.value as JobWorkModelFilter);
+                    }}
+                    className="ui-input h-10 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
+                  >
+                    <option value="all">Todos os modelos</option>
+                    {workModelOptions.map((workModel) => (
+                      <option key={workModel} value={workModel}>
+                        {formatWorkModel(workModel)}
+                      </option>
+                    ))}
+                  </select>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-xl border-[hsl(var(--border))] px-3 text-sm lg:w-[116px]"
+                    onClick={clearFilters}
+                    disabled={!hasActiveFilters}
+                  >
+                    <X className="mr-1.5 h-3.5 w-3.5" />
+                    Limpar
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-[hsl(var(--border))]/70 pt-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="text-xs text-[hsl(var(--text-muted))]">
+                  <span className="font-medium text-[hsl(var(--text))]">{total} visíveis</span>
+                  <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
+                  <span>{summary.published} publicadas</span>
+                  <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
+                  <span>{summary.draft} rascunhos</span>
+                  <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
+                  <span className={summary.attention > 0 ? "text-[hsl(var(--warning))]" : undefined}>
+                    {summary.attention} atenção
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {statusQuickFilters.map((item) => {
+                    const isActive = statusFilter === item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => {
+                          setPage(1);
+                          setStatusFilter(item.value);
+                        }}
+                        className={[
+                          "inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition",
+                          isActive
+                            ? "border-[hsl(var(--primary))]/40 bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]"
+                            : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] hover:border-[hsl(var(--primary))]/28 hover:text-[hsl(var(--text))]",
+                        ].join(" ")}
+                      >
+                        <span>{item.label}</span>
+                        <span className="rounded-full bg-black/6 px-1.5 py-0.5 text-[10px] tabular-nums">
+                          {item.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {activeFilterChips.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {activeFilterChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={() => {
+                        setPage(1);
+                        chip.onClear();
+                      }}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/78 px-2.5 text-[11px] font-medium text-[hsl(var(--text))] transition hover:border-[hsl(var(--primary))]/28"
+                    >
+                      <span>{chip.label}</span>
+                      <X className="h-3 w-3 text-[hsl(var(--text-muted))]" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
         }
         columns={[
           { header: "Vaga", className: "min-w-[320px]" },

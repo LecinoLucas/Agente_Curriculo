@@ -1,65 +1,76 @@
 import type { PipelineStage } from "../../../../types/domain";
-import { BarChart3, Check, X } from "lucide-react";
+import { ArrowRight, BarChart3, X } from "lucide-react";
 
 interface CandidateQuickActionsProps {
-  onApprove: () => void;
-  onReject: () => void;
+  onAdvance: () => void;
+  onTerminate: () => void;
   onViewAnalysis: () => void;
   currentStage: PipelineStage | null;
-  pendingAction?: "approve" | "reject" | null;
+  pendingAction?: "advance" | "terminate" | null;
   isLoading?: boolean;
 }
 
+const NEXT_STAGE_LABEL: Partial<Record<PipelineStage, string>> = {
+  entry: "Avançar para Triagem",
+  screening: "Avançar para Entrevista",
+  hr_interview: "Avançar para Etapa Técnica",
+  technical_interview: "Avançar para Final",
+  final: "Contratar",
+  offer: "Contratar",
+};
+
 export function CandidateQuickActions({
-  onApprove,
-  onReject,
+  onAdvance,
+  onTerminate,
   onViewAnalysis,
   currentStage,
   pendingAction = null,
   isLoading = false,
 }: CandidateQuickActionsProps) {
-  const isApproved = currentStage === "hired";
-  const isRejected = currentStage === "rejected";
+  const hasProgression = currentStage !== null && Boolean(NEXT_STAGE_LABEL[currentStage]);
+  const advanceLabel = currentStage ? NEXT_STAGE_LABEL[currentStage] : null;
+  const isHireStage = currentStage === "final" || currentStage === "offer";
+
+  if (!hasProgression) {
+    return null;
+  }
 
   return (
     <div className="shrink-0 border-t border-[hsl(var(--border))]/30 bg-[hsl(var(--surface))] px-5 py-3">
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="flex items-center gap-2.5">
         <button
           type="button"
-          onClick={onApprove}
-          disabled={isLoading || isApproved}
+          onClick={onAdvance}
+          disabled={isLoading}
           className={[
-            "flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-semibold transition disabled:opacity-50",
-            isApproved
-              ? "border-emerald-300 bg-emerald-100 text-emerald-950 shadow-sm"
-              : "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+            "flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition disabled:opacity-50",
+            isHireStage
+              ? "bg-emerald-600 hover:bg-emerald-700"
+              : "bg-blue-600 hover:bg-blue-700",
           ].join(" ")}
         >
-          <Check className="h-4 w-4" />
-          {pendingAction === "approve" ? "Aprovando…" : isApproved ? "Aprovado" : "Aprovar"}
+          <ArrowRight className="h-4 w-4" />
+          {pendingAction === "advance" ? (isHireStage ? "Contratando…" : "Avançando…") : advanceLabel}
         </button>
+
         <button
           type="button"
-          onClick={onReject}
-          disabled={isLoading || isRejected}
-          className={[
-            "flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-semibold transition disabled:opacity-50",
-            isRejected
-              ? "border-rose-300 bg-rose-100 text-rose-950 shadow-sm"
-              : "border-rose-200 bg-rose-50 text-rose-900 hover:bg-rose-100",
-          ].join(" ")}
+          onClick={onTerminate}
+          disabled={isLoading}
+          className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-2.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
         >
-          <X className="h-4 w-4" />
-          {pendingAction === "reject" ? "Rejeitando…" : isRejected ? "Rejeitado" : "Rejeitar"}
+          <X className="h-3.5 w-3.5" />
+          {pendingAction === "terminate" ? "Reprovando…" : "Reprovar"}
         </button>
+
         <button
           type="button"
           onClick={onViewAnalysis}
           disabled={isLoading}
-          className="flex items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 px-3.5 py-2.5 text-sm font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]/70 disabled:opacity-50"
+          title="Ver análise"
+          className="flex items-center gap-1 rounded-lg border border-[hsl(var(--border))] px-3 py-2.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))]/70 disabled:opacity-50"
         >
-          <BarChart3 className="h-4 w-4" />
-          Análise
+          <BarChart3 className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

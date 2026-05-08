@@ -115,8 +115,24 @@ class JobService:
         await self._maybe_refresh_quality(saved_job.id)
         return saved_job
 
-    async def list(self, page: int, page_size: int) -> tuple[list[JobModel], int]:
-        return await self._repository.list_active(page, page_size)
+    async def list(
+        self,
+        page: int,
+        page_size: int,
+        *,
+        search: str | None = None,
+        status: str | None = None,
+        job_area: str | None = None,
+        work_model: str | None = None,
+    ) -> tuple[list[JobModel], int, dict[str, int]]:
+        return await self._repository.list_active(
+            page,
+            page_size,
+            search=search,
+            status=status,
+            job_area=job_area,
+            work_model=work_model,
+        )
 
     async def get(self, job_id: UUID) -> JobModel:
         job = await self._repository.find_active_by_id(job_id)

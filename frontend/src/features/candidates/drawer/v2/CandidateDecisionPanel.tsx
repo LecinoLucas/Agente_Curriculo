@@ -3,6 +3,11 @@ import type { ScoreExplanationResponse } from "../../../../services/scoreExplana
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, ScanSearch, XCircle } from "lucide-react";
 import { getScoreTone, normalizeScorePercent } from "../../utils/scoreFormatting";
 import { deriveScoreSemantics, type ScoreSemanticState } from "../../utils/scoreSemantics";
+import {
+  getExplainabilityDeltaLine,
+  getExplainabilityFreshnessLine,
+  getExplainabilityQuickLine,
+} from "../../utils/explainabilityUi";
 
 interface CandidateDecisionPanelProps {
   currentStage: PipelineStage | null;
@@ -14,7 +19,7 @@ interface CandidateDecisionPanelProps {
   aiStatus: string | null | undefined;
   scoreExplanation: ScoreExplanationResponse | null;
   onViewAnalysis: () => void;
-  onOpenAddJob?: () => void;
+  compact?: boolean;
 }
 
 type Recommendation = "advance" | "evaluate" | "reject" | "pending";
@@ -174,7 +179,7 @@ export function CandidateDecisionPanel({
   aiStatus,
   scoreExplanation,
   onViewAnalysis,
-  onOpenAddJob,
+  compact = false,
 }: CandidateDecisionPanelProps) {
   const confidenceScore =
     scoreExplanation?.confidence_score ??
@@ -194,6 +199,12 @@ export function CandidateDecisionPanel({
   const scoreLabel = semantics.primaryDisplay;
   const RecommendationIcon = recommendation.icon;
   const hasInsights = strengths.length > 0 || risks.length > 0;
+  const explainabilityLine = getExplainabilityQuickLine(scoreExplanation);
+  const deltaLine = getExplainabilityDeltaLine(scoreExplanation);
+  const freshnessLine = getExplainabilityFreshnessLine(
+    scoreExplanation?.freshness_status ?? rankingEntry?.freshness_status,
+    scoreExplanation?.computed_at ?? rankingEntry?.ranking_updated_at ?? rankingEntry?.computed_at,
+  );
   const contextText =
     currentStage === "hired"
       ? "Ação aplicada. O candidato foi aprovado para a vaga ativa."
@@ -209,34 +220,17 @@ export function CandidateDecisionPanel({
 
   // Fallback when no analysis data available
   if (compatibilityScore === null && !analysisResult && !scoreExplanation) {
-    // Candidate without job: show prominent CTA
-    if (!hasActiveJob && onOpenAddJob) {
-      return (
-        <div className="px-5 py-4">
-          <div className="rounded-2xl border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/5 p-5">
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Candidato sem vaga</p>
-            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-              Associe a uma vaga para ver compatibilidade e recomendação de IA.
-            </p>
-            <button
-              type="button"
-              onClick={onOpenAddJob}
-              className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 text-sm font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90"
-            >
-              Associar a uma vaga
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      );
-    }
     // Generic fallback (has job but no analysis yet)
     return (
       <div className="px-5 py-4">
         <div className="rounded-2xl border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-4">
-          <p className="text-sm font-semibold text-[hsl(var(--text))]">Análise não disponível</p>
+          <p className="text-sm font-semibold text-[hsl(var(--text))]">
+            {hasActiveJob ? "Análise não disponível" : "Candidato sem vaga ativa"}
+          </p>
           <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-            Solicite análise para ver a recomendação.
+            {hasActiveJob
+              ? "Solicite análise para ver a recomendação."
+              : "Associe o candidato por um fluxo de vaga para liberar compatibilidade e recomendação."}
           </p>
         </div>
       </div>
@@ -270,6 +264,21 @@ export function CandidateDecisionPanel({
                 {detailText}
               </p>
             ) : null}
+            {explainabilityLine ? (
+              <p className="mt-3 rounded-xl border border-[hsl(var(--border))]/50 bg-white/55 px-3 py-2 text-sm leading-6 text-[hsl(var(--text))]">
+                {explainabilityLine}
+              </p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-[hsl(var(--border))]/60 bg-white/55 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+                {freshnessLine}
+              </span>
+              {deltaLine ? (
+                <span className="rounded-full border border-[hsl(var(--border))]/60 bg-white/55 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+                  {deltaLine}
+                </span>
+              ) : null}
+            </div>
             {semantics.secondaryDisplay ? (
               <div className="mt-3 inline-flex items-center rounded-full border border-[hsl(var(--border))]/60 bg-white/60 px-3 py-1 text-xs font-medium text-[hsl(var(--text-muted))]">
                 {semantics.secondaryLabel}: {semantics.secondaryDisplay}
@@ -309,7 +318,7 @@ export function CandidateDecisionPanel({
           </div>
         </div>
 
-        {hasInsights ? (
+        {!compact && hasInsights ? (
           <div className="mt-4 grid gap-3 xl:grid-cols-2">
           {strengths.length > 0 && (
             <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-white/55 px-3.5 py-3">

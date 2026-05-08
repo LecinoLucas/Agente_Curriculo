@@ -22,6 +22,34 @@ from src.infrastructure.database.models.user_model import UserModel
 
 logger = structlog.get_logger(__name__)
 
+_TERMINAL_LINK_STATUSES: frozenset[str] = frozenset({"hired", "rejected", "removed", "transferred"})
+_PIPELINE_VISIBLE_JOB_STATUSES: tuple[str, ...] = ("published", "paused")
+_PIPELINE_TRANSFER_TARGET_STATUSES: tuple[str, ...] = ("published",)
+
+
+def _relationship_status_from_link_status(link_status: str) -> str:
+    if link_status == "removed":
+        return "withdrawn"
+    if link_status == "transferred":
+        return "archived"
+    return link_status
+
+
+def _relationship_update_values(
+    *,
+    link_status: str,
+    updated_at: datetime,
+    termination_reason: str | None = None,
+) -> dict:
+    relationship_status = _relationship_status_from_link_status(link_status)
+    is_terminal = relationship_status != "active"
+    return {
+        "relationship_status": relationship_status,
+        "is_terminal": is_terminal,
+        "terminated_at": updated_at if is_terminal else None,
+        "termination_reason": termination_reason if is_terminal else None,
+    }
+
 
 class SQLAlchemyPipelineRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -46,7 +74,7 @@ class SQLAlchemyPipelineRepository:
             sa.select(JobModel).where(
                 JobModel.id == job_id,
                 JobModel.deleted_at.is_(None),
-                JobModel.status.in_(["published", "paused"]),
+                JobModel.status.in_(_PIPELINE_VISIBLE_JOB_STATUSES),
             )
         )
 
@@ -71,8 +99,9 @@ class SQLAlchemyPipelineRepository:
             sa.select(CandidateJobPipelineModel).where(
                 CandidateJobPipelineModel.candidate_id == candidate_id,
                 CandidateJobPipelineModel.job_id == job_id,
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
         )
 
@@ -80,8 +109,9 @@ class SQLAlchemyPipelineRepository:
         return await self._session.scalar(
             sa.select(CandidateJobPipelineModel).where(
                 CandidateJobPipelineModel.candidate_id == candidate_id,
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
         )
 
@@ -179,8 +209,9 @@ class SQLAlchemyPipelineRepository:
             .where(
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
             .order_by(
                 CandidateJobPipelineModel.match_score.desc().nulls_last(),
@@ -215,21 +246,29 @@ class SQLAlchemyPipelineRepository:
         new_status: str,
         last_moved_by: UUID,
         updated_at: datetime,
+        termination_reason: str | None = None,
     ) -> dict | None:
-        pipeline_status = "terminal" if new_status in {"hired", "rejected", "removed", "transferred"} else "active"
+        pipeline_status = "terminal" if new_status in _TERMINAL_LINK_STATUSES else "active"
+        relationship_values = _relationship_update_values(
+            link_status=new_status,
+            updated_at=updated_at,
+            termination_reason=termination_reason,
+        )
         result = await self._session.execute(
             sa.update(CandidateJobPipelineModel)
             .where(
                 CandidateJobPipelineModel.candidate_id == candidate_id,
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateJobPipelineModel.pipeline_stage == expected_stage,
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
             .values(
                 pipeline_stage=new_stage,
                 link_status=new_status,
                 pipeline_status=pipeline_status,
+                **relationship_values,
                 last_moved_by=last_moved_by,
                 updated_at=updated_at,
             )
@@ -318,7 +357,11 @@ class SQLAlchemyPipelineRepository:
         moved_by: UUID | None,
         updated_at: datetime,
     ) -> dict:
-        pipeline_status = "terminal" if status in {"hired", "rejected", "removed", "transferred"} else "active"
+        pipeline_status = "terminal" if status in _TERMINAL_LINK_STATUSES else "active"
+        relationship_values = _relationship_update_values(
+            link_status=status,
+            updated_at=updated_at,
+        )
         pipeline_key = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
         result = await self._session.execute(
             sa.insert(CandidateJobPipelineModel)
@@ -329,6 +372,10 @@ class SQLAlchemyPipelineRepository:
                 pipeline_stage=stage,
                 link_status=status,
                 pipeline_status=pipeline_status,
+                relationship_status=relationship_values["relationship_status"],
+                is_terminal=relationship_values["is_terminal"],
+                terminated_at=relationship_values["terminated_at"],
+                termination_reason=relationship_values["termination_reason"],
                 source="manual",
                 entered_at=updated_at,
                 last_moved_by=moved_by,
@@ -362,14 +409,19 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.candidate_id == candidate_id,
                 CandidateJobPipelineModel.job_id == job_id,
                 sa.or_(
-                    CandidateJobPipelineModel.pipeline_status != "active",
-                    CandidateJobPipelineModel.link_status != "active",
+                    CandidateJobPipelineModel.relationship_status != "active",
+                    CandidateJobPipelineModel.is_terminal.is_(True),
+                    CandidateJobPipelineModel.terminated_at.is_not(None),
                 ),
             )
             .values(
                 pipeline_stage=stage,
                 link_status=status,
                 pipeline_status="active",
+                relationship_status="active",
+                is_terminal=False,
+                terminated_at=None,
+                termination_reason=None,
                 source="manual",
                 match_score=None,
                 entered_at=updated_at,
@@ -395,8 +447,14 @@ class SQLAlchemyPipelineRepository:
         new_status: str,
         last_moved_by: UUID | None,
         updated_at: datetime,
+        termination_reason: str | None = None,
     ) -> dict | None:
-        pipeline_status = "terminal" if new_status in {"hired", "rejected", "removed", "transferred"} else "active"
+        pipeline_status = "terminal" if new_status in _TERMINAL_LINK_STATUSES else "active"
+        relationship_values = _relationship_update_values(
+            link_status=new_status,
+            updated_at=updated_at,
+            termination_reason=termination_reason,
+        )
         result = await self._session.execute(
             sa.update(CandidateJobPipelineModel)
             .where(
@@ -406,6 +464,7 @@ class SQLAlchemyPipelineRepository:
             .values(
                 link_status=new_status,
                 pipeline_status=pipeline_status,
+                **relationship_values,
                 last_moved_by=last_moved_by,
                 updated_at=updated_at,
             )
@@ -431,12 +490,17 @@ class SQLAlchemyPipelineRepository:
             sa.update(CandidateJobPipelineModel)
             .where(
                 CandidateJobPipelineModel.candidate_id == candidate_id,
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
             .values(
                 pipeline_status="terminal",
                 link_status="transferred",
+                relationship_status="archived",
+                is_terminal=True,
+                terminated_at=updated_at,
+                termination_reason="candidate_transferred",
                 last_moved_by=last_moved_by,
                 updated_at=updated_at,
             )
@@ -468,6 +532,10 @@ class SQLAlchemyPipelineRepository:
                     pipeline_stage="entry",
                     link_status="active",
                     pipeline_status="active",
+                    relationship_status="active",
+                    is_terminal=False,
+                    terminated_at=None,
+                    termination_reason=None,
                     source="ai_match",
                     current_analysis_id=analysis_id,
                     match_score=match_score,
@@ -599,7 +667,9 @@ class SQLAlchemyPipelineRepository:
             )
             .where(
                 CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
             .group_by(CandidateJobPipelineModel.job_id, CandidateJobPipelineModel.pipeline_stage)
         )

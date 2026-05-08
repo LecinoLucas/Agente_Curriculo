@@ -20,6 +20,40 @@ class SQLAlchemyJobRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    def _build_filters(
+        self,
+        *,
+        search: str | None = None,
+        status: str | None = None,
+        job_area: str | None = None,
+        work_model: str | None = None,
+        include_status: bool = True,
+    ) -> list:
+        filters: list = [JobModel.deleted_at.is_(None)]
+
+        if search:
+            normalized = f"%{search.strip().lower()}%"
+            filters.append(
+                sa.or_(
+                    sa.func.lower(JobModel.title).like(normalized),
+                    sa.func.lower(sa.func.coalesce(JobModel.location, "")).like(normalized),
+                    sa.func.lower(sa.func.coalesce(JobModel.job_area, "")).like(normalized),
+                    sa.func.lower(sa.func.coalesce(JobModel.work_model, "")).like(normalized),
+                    sa.func.lower(sa.func.coalesce(JobModel.seniority_level, "")).like(normalized),
+                )
+            )
+
+        if job_area:
+            filters.append(JobModel.job_area == job_area)
+
+        if work_model:
+            filters.append(JobModel.work_model == work_model)
+
+        if include_status and status:
+            filters.append(JobModel.status == status)
+
+        return filters
+
     async def create(self, job: JobModel) -> JobModel:
         self._session.add(job)
         await self._session.flush()
@@ -50,11 +84,26 @@ class SQLAlchemyJobRepository:
             )
         )
 
-    async def list_active(self, page: int, page_size: int) -> tuple[list[JobModel], int]:
+    async def list_active(
+        self,
+        page: int,
+        page_size: int,
+        *,
+        search: str | None = None,
+        status: str | None = None,
+        job_area: str | None = None,
+        work_model: str | None = None,
+    ) -> tuple[list[JobModel], int, dict[str, int]]:
+        filters = self._build_filters(
+            search=search,
+            status=status,
+            job_area=job_area,
+            work_model=work_model,
+        )
         total = int(
             (
                 await self._session.scalar(
-                    sa.select(sa.func.count()).select_from(JobModel).where(JobModel.deleted_at.is_(None))
+                    sa.select(sa.func.count()).select_from(JobModel).where(*filters)
                 )
             )
             or 0
@@ -62,12 +111,44 @@ class SQLAlchemyJobRepository:
         offset = (page - 1) * page_size
         result = await self._session.execute(
             sa.select(JobModel)
-            .where(JobModel.deleted_at.is_(None))
+            .where(*filters)
             .order_by(JobModel.created_at.desc())
             .offset(offset)
             .limit(page_size)
         )
-        return list(result.scalars().all()), total
+        summary_filters = self._build_filters(
+            search=search,
+            job_area=job_area,
+            work_model=work_model,
+            include_status=False,
+        )
+        summary_row = (
+            await self._session.execute(
+                sa.select(
+                    sa.func.count(JobModel.id).label("all"),
+                    sa.func.sum(sa.case((JobModel.status == "published", 1), else_=0)).label("published"),
+                    sa.func.sum(sa.case((JobModel.status == "draft", 1), else_=0)).label("draft"),
+                    sa.func.sum(sa.case((JobModel.status == "paused", 1), else_=0)).label("paused"),
+                    sa.func.sum(sa.case((JobModel.status == "closed", 1), else_=0)).label("closed"),
+                    sa.func.sum(sa.case((JobModel.status == "cancelled", 1), else_=0)).label("cancelled"),
+                    sa.func.sum(
+                        sa.case((JobModel.quality_status.in_(["weak", "acceptable"]), 1), else_=0)
+                    ).label("attention"),
+                ).where(*summary_filters)
+            )
+        ).mappings().one()
+
+        summary = {
+            "all": int(summary_row["all"] or 0),
+            "published": int(summary_row["published"] or 0),
+            "draft": int(summary_row["draft"] or 0),
+            "paused": int(summary_row["paused"] or 0),
+            "closed": int(summary_row["closed"] or 0),
+            "cancelled": int(summary_row["cancelled"] or 0),
+            "attention": int(summary_row["attention"] or 0),
+        }
+
+        return list(result.scalars().all()), total, summary
 
     async def save(self, job: JobModel) -> JobModel:
         await self._session.flush()
@@ -164,7 +245,9 @@ class SQLAlchemyJobRepository:
                     CandidateJobPipelineModel.candidate_id == CandidateModel.id,
                     CandidateJobPipelineModel.job_id == job_id,
                     CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.link_status == "active",
+                    CandidateJobPipelineModel.relationship_status == "active",
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
                 ),
             )
             .outerjoin(
@@ -205,7 +288,9 @@ class SQLAlchemyJobRepository:
                     CandidateJobPipelineModel.candidate_id == ResumeModel.candidate_id,
                     CandidateJobPipelineModel.job_id == job_id,
                     CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.link_status == "active",
+                    CandidateJobPipelineModel.relationship_status == "active",
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
                 ),
             )
             .where(

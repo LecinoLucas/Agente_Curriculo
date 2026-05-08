@@ -1,8 +1,9 @@
-import { ChevronDown, ChevronUp, PanelRightClose, PanelRightOpen, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, PanelRightClose, PanelRightOpen, RefreshCw, UserPlus } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
+import { CandidateSearchModal } from "../features/pipeline/CandidateSearchModal";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
 import { KanbanColumn } from "../components/kanban/KanbanColumn";
@@ -21,6 +22,7 @@ import {
   formatWorkModel,
   jobStatusTone,
 } from "../utils/jobFormatters";
+import { isPipelineOperationalJob } from "../utils/jobStatusRules";
 import {
   buildDealBreakerViolationDisplay,
   isDealBreakerReasonCode,
@@ -35,10 +37,22 @@ const MAIN_STAGES: ReadonlyArray<PipelineStage> = [
   "offer",
   "hired",
 ];
+const PIPELINE_SHOW_RANKING_STORAGE_KEY = "pipeline:showRanking";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function canUsePipeline(status: string | undefined) {
-  return status === "published" || status === "paused";
+  return isPipelineOperationalJob(status);
+}
+
+function getRankingFreshnessLabel(status: JobRankingEntry["freshness_status"] | null | undefined) {
+  if (status === "fresh") return "Atualizado";
+  if (status === "stale") return "Score desatualizado";
+  return "Aguardando reprocessamento";
+}
+
+function resolveInitialShowRanking() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(PIPELINE_SHOW_RANKING_STORAGE_KEY) === "true";
 }
 
 // ── PipelinePage ───────────────────────────────────────────────────────────────
@@ -48,7 +62,8 @@ export function PipelinePage() {
   const navigate = useNavigate();
 
   const [showNewCandidate, setShowNewCandidate] = useState(false);
-  const [rankingCollapsed, setRankingCollapsed] = useState(false);
+  const [showSourceCandidates, setShowSourceCandidates] = useState(false);
+  const [showRanking, setShowRanking] = useState(resolveInitialShowRanking);
   const [ranking, setRanking] = useState<JobRanking | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingError, setRankingError] = useState<string | null>(null);
@@ -144,6 +159,13 @@ export function PipelinePage() {
   }, [rankingSyncTick]);
 
   useEffect(() => {
+    window.localStorage.setItem(
+      PIPELINE_SHOW_RANKING_STORAGE_KEY,
+      showRanking ? "true" : "false",
+    );
+  }, [showRanking]);
+
+  useEffect(() => {
     if (!activeJobId) {
       setRanking(null);
       setRankingError(null);
@@ -224,7 +246,6 @@ export function PipelinePage() {
 
   const totalActive = mainCols.reduce((n, c) => n + c.candidates.length, 0);
   const totalRejected = rejectedCol?.candidates.length ?? 0;
-  const rankingPreview = ranking?.candidates.slice(0, 3) ?? [];
   const isBoardRefreshing = boardLoading && board !== null;
   const showInitialBoardLoading = boardLoading && board === null;
   const isRankingRefreshing = rankingLoading && ranking !== null;
@@ -232,13 +253,12 @@ export function PipelinePage() {
   // Status flags
   const isDraft = selectedJob?.status === "draft";
   const canUse = canUsePipeline(selectedJob?.status);
-  const isReadOnly = selectedJob?.status === "closed";
 
   const activeJobAcceptsCandidates =
     selectedJob?.status === "published" || selectedJob?.status === "paused";
-  const boardLayoutClass = rankingCollapsed
-    ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)]"
-    : "grid gap-6 xl:grid-cols-[minmax(0,1fr)_clamp(18rem,24vw,21rem)]";
+  const boardLayoutClass = showRanking
+    ? "grid grid-cols-1 gap-6 xl:items-start xl:grid-cols-[minmax(0,1fr)_360px] xl:transition-[grid-template-columns] xl:duration-200"
+    : "grid grid-cols-1 gap-6 xl:items-start xl:grid-cols-[minmax(0,1fr)] xl:transition-[grid-template-columns] xl:duration-200";
 
   // ── Handler ───────────────────────────────────────────────────────────────
   // Navigate only. The URL change triggers Effect 1 which calls setActiveJob.
@@ -246,6 +266,12 @@ export function PipelinePage() {
   function handleSelectJob(nextJobId: string) {
     navigate(`/pipeline/${nextJobId}`, { replace: true });
   }
+
+  const handleOpenSourceCandidates = () => {
+    if (!canUse || !activeJobId) return;
+    void loadRanking(activeJobId);
+    setShowSourceCandidates(true);
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -261,15 +287,16 @@ export function PipelinePage() {
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={() => canUse && setShowNewCandidate(true)}
+            onClick={handleOpenSourceCandidates}
             disabled={!canUse}
-            className={`rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition ${
+            className={`rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition inline-flex items-center gap-2 ${
               canUse
                 ? "bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 cursor-pointer"
                 : "bg-[hsl(var(--primary))]/50 cursor-not-allowed"
             }`}
           >
-            Novo candidato
+            <UserPlus className="h-4 w-4" />
+            Adicionar candidatos
           </button>
           <button
             type="button"
@@ -348,22 +375,22 @@ export function PipelinePage() {
           {activeJobId ? (
             <button
               type="button"
-              onClick={() => setRankingCollapsed((current) => !current)}
+              onClick={() => setShowRanking((current) => !current)}
               className="ui-btn-secondary inline-flex items-center justify-center gap-2 self-start rounded-xl border px-3 py-2 text-sm font-medium shadow-sm xl:self-center"
-              aria-expanded={!rankingCollapsed}
+              aria-expanded={showRanking}
               aria-controls="pipeline-ranking-panel"
             >
-              {rankingCollapsed ? (
-                <>
-                  <PanelRightOpen className="h-4 w-4" />
-                  <span>Mostrar ranking</span>
-                  <ChevronDown className="h-4 w-4 xl:hidden" />
-                </>
-              ) : (
+              {showRanking ? (
                 <>
                   <PanelRightClose className="h-4 w-4" />
                   <span>Ocultar ranking</span>
                   <ChevronUp className="h-4 w-4 xl:hidden" />
+                </>
+              ) : (
+                <>
+                  <PanelRightOpen className="h-4 w-4" />
+                  <span>Mostrar ranking</span>
+                  <ChevronDown className="h-4 w-4 xl:hidden" />
                 </>
               )}
             </button>
@@ -390,7 +417,7 @@ export function PipelinePage() {
           />
         ) : (
           <div className={boardLayoutClass}>
-            <div className="ui-card overflow-hidden rounded-3xl p-4 sm:p-5">
+            <div className="ui-card min-w-0 overflow-hidden rounded-3xl p-4 sm:p-5">
           {/* Board header */}
             <div className="mb-4 flex flex-col gap-3 border-b border-[hsl(var(--border))] pb-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
@@ -474,26 +501,49 @@ export function PipelinePage() {
 
           {/* Empty board */}
             {!showInitialBoardLoading && board && !boardError && totalActive === 0 && totalRejected === 0 ? (
-              <EmptyState
-                icon="📋"
-                title="Ainda não há candidatos nesta vaga"
-                description="Adicione um candidato ou envie um currículo para iniciar o acompanhamento neste pipeline."
-              />
+              <div className="flex flex-col items-center justify-center gap-4 py-12">
+                <div className="rounded-2xl border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-8 max-w-sm text-center">
+                  <p className="text-base font-semibold text-[hsl(var(--text))]">
+                    Pipeline sem candidatos
+                  </p>
+                  <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
+                    Adicione talentos existentes ou deixe a IA sugerir matches compatíveis.
+                  </p>
+                  <div className="mt-5 flex flex-col gap-2.5">
+                    <button
+                      onClick={handleOpenSourceCandidates}
+                      disabled={!canUse}
+                      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+                        canUse
+                          ? "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90"
+                          : "bg-[hsl(var(--primary))]/50 text-white cursor-not-allowed"
+                      }`}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Adicionar candidatos
+                    </button>
+                    <button
+                      onClick={() => canUse && setShowNewCandidate(true)}
+                      disabled={!canUse}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] px-4 py-2.5 text-sm font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+                    >
+                      Criar manualmente
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : null}
           </div>
 
-          {!rankingCollapsed ? (
-          <RankingPanel
-              collapsed={rankingCollapsed}
+          {showRanking ? (
+            <RankingPanel
               jobTitle={selectedJob?.title ?? "vaga selecionada"}
               job={selectedJob}
-              preview={rankingPreview}
-              totalActive={totalActive}
               ranking={ranking}
               loading={rankingLoading}
               isRefreshing={isRankingRefreshing}
               error={rankingError}
-              onToggle={() => setRankingCollapsed((current) => !current)}
+              onToggle={() => setShowRanking(false)}
               onOpenCandidate={openCandidate}
               onRefresh={
                 activeJobId
@@ -522,6 +572,27 @@ export function PipelinePage() {
         )
       ) : null}
 
+      {/* ── Candidate search (sourcing) modal ── */}
+      <CandidateSearchModal
+        isOpen={showSourceCandidates}
+        activeJobId={activeJobId ?? ""}
+        activeJobTitle={selectedJob?.title ?? ""}
+        ranking={ranking}
+        rankingLoading={rankingLoading}
+        onClose={() => setShowSourceCandidates(false)}
+        onAdded={async () => {
+          await refreshBoard();
+        }}
+        onCreateNew={() => {
+          setShowSourceCandidates(false);
+          setShowNewCandidate(true);
+        }}
+        onOpenCandidate={(candidateId) => {
+          setShowSourceCandidates(false);
+          navigate(`/candidatos?candidateId=${candidateId}`);
+        }}
+      />
+
       {/* ── New candidate modal ── */}
       {showNewCandidate && (
         <NewCandidateModal
@@ -542,11 +613,8 @@ export function PipelinePage() {
 }
 
 function RankingPanel({
-  collapsed,
   jobTitle,
   job,
-  preview,
-  totalActive,
   ranking,
   loading,
   isRefreshing,
@@ -555,11 +623,8 @@ function RankingPanel({
   onOpenCandidate,
   onRefresh,
 }: {
-  collapsed: boolean;
   jobTitle: string;
   job: PipelineJobSummary | null;
-  preview: JobRankingEntry[];
-  totalActive: number;
   ranking: JobRanking | null;
   loading: boolean;
   isRefreshing: boolean;
@@ -569,44 +634,23 @@ function RankingPanel({
   onRefresh?: () => void;
 }) {
   const showInitialLoading = loading && ranking === null;
-  const candidateCount = ranking?.total_candidates ?? totalActive;
 
   return (
     <aside
       id="pipeline-ranking-panel"
-      className={[
-        "ui-card rounded-3xl transition-all duration-200",
-        collapsed ? "p-3 sm:p-4" : "p-4 sm:p-5",
-      ].join(" ")}
+      className="ui-card min-w-0 rounded-3xl p-4 transition-all duration-200 sm:p-5"
     >
-      <div
-        className={[
-          "flex gap-3 border-b border-[hsl(var(--border))] pb-4",
-          collapsed ? "flex-col items-center text-center" : "items-start justify-between",
-        ].join(" ")}
-      >
-        <div className={collapsed ? "w-full" : "min-w-0"}>
+      <div className="flex items-start justify-between gap-3 border-b border-[hsl(var(--border))] pb-4">
+        <div className="min-w-0">
           <p className="ui-text-muted text-xs font-semibold uppercase tracking-wide">
             Ranking da vaga
           </p>
-          <h3
-            className={[
-              "mt-1 font-semibold text-[hsl(var(--text))]",
-              collapsed ? "line-clamp-3 text-sm" : "text-sm",
-            ].join(" ")}
-          >
-            {jobTitle}
-          </h3>
+          <h3 className="mt-1 text-sm font-semibold text-[hsl(var(--text))]">{jobTitle}</h3>
           <p className="ui-text-muted mt-1 text-xs">
             Apoio a decisao. O ranking nao altera a etapa do pipeline.
           </p>
         </div>
-        <div
-          className={[
-            "flex gap-2",
-            collapsed ? "w-full flex-col items-stretch" : "shrink-0 items-center",
-          ].join(" ")}
-        >
+        <div className="flex shrink-0 items-center gap-2">
           {onRefresh ? (
             <button
               type="button"
@@ -622,139 +666,65 @@ function RankingPanel({
             type="button"
             onClick={onToggle}
             className="ui-btn-secondary inline-flex items-center justify-center gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-medium"
-            aria-expanded={!collapsed}
+            aria-expanded={true}
             aria-controls="pipeline-ranking-content"
           >
-            {collapsed ? <PanelRightOpen className="h-3.5 w-3.5" /> : <PanelRightClose className="h-3.5 w-3.5" />}
-            <span>{collapsed ? "Expandir" : "Recolher"}</span>
+            <PanelRightClose className="h-3.5 w-3.5" />
+            <span>Ocultar ranking</span>
           </button>
         </div>
       </div>
 
       <div id="pipeline-ranking-content" className="mt-4">
-        {collapsed ? (
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-3 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                Candidatos ranqueados
-              </p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-[hsl(var(--text))]">
-                {candidateCount}
-              </p>
-            </div>
-
-            {preview.length > 0 ? (
-              <div className="space-y-2">
-                {preview.map((entry) => (
-                  <PreviewRankingItem
-                    key={`${entry.rank}-${entry.candidate_id}`}
-                    entry={entry}
-                    onOpenCandidate={onOpenCandidate}
-                  />
-                ))}
-              </div>
-            ) : null}
+        {showInitialLoading ? <SkeletonRows rows={4} /> : null}
+        {isRefreshing ? (
+          <div className="mb-3 rounded-lg border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-[11px] text-[hsl(var(--primary))]">
+            Atualizando o ranking da vaga…
           </div>
         ) : null}
 
-        {!collapsed ? (
-          <>
-            {showInitialLoading ? <SkeletonRows rows={4} /> : null}
-            {isRefreshing ? (
-              <div className="mb-3 rounded-lg border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-[11px] text-[hsl(var(--primary))]">
-                Atualizando o ranking da vaga…
-              </div>
-            ) : null}
+        {!showInitialLoading && error ? (
+          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
+            {error}
+          </div>
+        ) : null}
 
-            {!showInitialLoading && error ? (
-              <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
-                {error}
-              </div>
-            ) : null}
+        {!showInitialLoading && !error && ranking && ranking.candidates.length === 0 ? (
+          <EmptyState
+            icon="🏁"
+            title="Ainda não há ranking para esta vaga"
+            description="Assim que houver candidatos com análise concluída, o ranking aparecerá aqui."
+          />
+        ) : null}
 
-            {!showInitialLoading && !error && ranking && ranking.candidates.length === 0 ? (
-              <EmptyState
-                icon="🏁"
-                title="Ainda não há ranking para esta vaga"
-                description="Assim que houver candidatos com análise concluída, o ranking aparecerá aqui."
+        {!showInitialLoading && !error && ranking && ranking.candidates.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-[11px] text-[hsl(var(--text))]">
+              {ranking.total_candidates} candidato{ranking.total_candidates !== 1 ? "s" : ""} no ranking
+              {ranking.score_version ? ` · versao ${ranking.score_version}` : ""}
+            </div>
+
+            {ranking.data_quality_stats && (
+              <DataQualityBanner
+                filteredCount={ranking.data_quality_stats.filtered_candidates}
+                validCount={ranking.data_quality_stats.valid_candidates}
+                unknownCount={ranking.data_quality_stats.unknown_candidates}
+                totalCount={ranking.data_quality_stats.total_candidates}
               />
-            ) : null}
+            )}
 
-            {!showInitialLoading && !error && ranking && ranking.candidates.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                <div className="rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-[11px] text-[hsl(var(--text))]">
-                  {ranking.total_candidates} candidato{ranking.total_candidates !== 1 ? "s" : ""} no ranking
-                  {ranking.score_version ? ` · versao ${ranking.score_version}` : ""}
-                </div>
-
-                {ranking.data_quality_stats && (
-                  <DataQualityBanner
-                    filteredCount={ranking.data_quality_stats.filtered_candidates}
-                    validCount={ranking.data_quality_stats.valid_candidates}
-                    unknownCount={ranking.data_quality_stats.unknown_candidates}
-                    totalCount={ranking.data_quality_stats.total_candidates}
-                  />
-                )}
-
-                {ranking.candidates.map((entry) => (
-                  <RankingCard
-                    key={`${entry.rank}-${entry.candidate_id}`}
-                    entry={entry}
-                    job={job}
-                    onOpenCandidate={onOpenCandidate}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </>
+            {ranking.candidates.map((entry) => (
+              <RankingCard
+                key={`${entry.rank}-${entry.candidate_id}`}
+                entry={entry}
+                job={job}
+                onOpenCandidate={onOpenCandidate}
+              />
+            ))}
+          </div>
         ) : null}
       </div>
     </aside>
-  );
-}
-
-function PreviewRankingItem({
-  entry,
-  onOpenCandidate,
-}: {
-  entry: JobRankingEntry;
-  onOpenCandidate: (candidateId: string) => Promise<void>;
-}) {
-  const isDealBreakerRejected =
-    entry.decision_suggestion === "rejected_suggested" &&
-    Math.round(entry.final_score) === 0 &&
-    entry.reason_codes.some((reason) => isDealBreakerReasonCode(reason));
-
-  return (
-    <button
-      type="button"
-      onClick={() => void onOpenCandidate(entry.candidate_id)}
-      className={[
-        "flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left transition hover:border-[hsl(var(--primary))]/35 hover:bg-[hsl(var(--accent-soft))]",
-        isDealBreakerRejected
-          ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))]"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]",
-      ].join(" ")}
-    >
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-          #{entry.rank}
-        </p>
-        <p className="truncate text-xs font-medium text-[hsl(var(--text))]">{entry.candidate_name}</p>
-      </div>
-      <div className="shrink-0 text-right">
-        <span className="text-sm font-semibold tabular-nums text-[hsl(var(--text))]">
-          {Math.round(entry.final_score)}%
-        </span>
-        {isDealBreakerRejected ? (
-          <div className="mt-1 flex justify-end">
-            <Badge variant="danger" className="text-[10px]">
-              Critério eliminatório
-            </Badge>
-          </div>
-        ) : null}
-      </div>
-    </button>
   );
 }
 
@@ -780,9 +750,10 @@ function RankingCard({
     Math.round(entry.final_score) === 0;
   const reasonPreview = entry.reason_codes
     .filter((reason) => !isDealBreakerReasonCode(reason))
-    .slice(0, 2)
+    .slice(0, 3)
     .map((reason) => reason.description)
     .filter(Boolean);
+  const freshnessLabel = getRankingFreshnessLabel(entry.freshness_status);
 
   return (
     <button
@@ -817,6 +788,12 @@ function RankingCard({
         </div>
       </div>
 
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]">
+          {freshnessLabel}
+        </span>
+      </div>
+
       {hasDealBreakerRejection && dealBreakerDisplay ? (
         <div className="mt-3 rounded-xl border border-[hsl(var(--danger))]/20 bg-white/75 px-3 py-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--danger))]">
@@ -835,20 +812,25 @@ function RankingCard({
       ) : null}
 
       {reasonPreview.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {reasonPreview.map((reason) => (
-            <span
-              key={reason}
-              className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]"
-            >
-              {reason}
-            </span>
-          ))}
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            Por que este score?
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {reasonPreview.map((reason) => (
+              <span
+                key={reason}
+                className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]"
+              >
+                {reason}
+              </span>
+            ))}
+          </div>
         </div>
       ) : null}
 
       {entry.explanation_text ? (
-        <p className="ui-text-muted mt-3 line-clamp-3 text-xs leading-relaxed">
+        <p className="ui-text-muted mt-3 line-clamp-2 text-xs leading-relaxed">
           {entry.explanation_text}
         </p>
       ) : (

@@ -48,7 +48,15 @@ class CandidateRankingEntry(BaseModel):
     explanation_text: str
     entered_at: datetime | None
     computed_at: datetime
+    freshness_status: str = "unknown"
+    score_computed_at: datetime | None = None
+    source_analysis_id: UUID | None = None
+    source_analysis_created_at: datetime | None = None
+    score_model_version: str | None = None
+    match_updated_at: datetime | None = None
+    ranking_updated_at: datetime | None = None
     version: str
+    ranking_version: str | None = None
     data_quality_status: str = "unknown"  # Safe fallback; can be: valid, unknown, data_error, or any invalid status
 
 

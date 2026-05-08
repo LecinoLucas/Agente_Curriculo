@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
 
 import { StatusPill } from "../../../../components/common/StatusPill";
 import type { CandidateOverview, PipelineStage } from "../../../../types/domain";
@@ -43,6 +44,8 @@ interface CandidateDrawerHeaderProps {
   linkStatus: string;
   candidateLoading: boolean;
   closeCandidate: () => void;
+  onBackToList?: () => void;
+  backToListLabel?: string;
 }
 
 export function CandidateDrawerHeader({
@@ -59,11 +62,23 @@ export function CandidateDrawerHeader({
   linkStatus,
   candidateLoading,
   closeCandidate,
+  onBackToList,
+  backToListLabel = "Candidatos",
 }: CandidateDrawerHeaderProps) {
   return (
     <div className="shrink-0 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-5 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          {!candidateLoading && onBackToList ? (
+            <button
+              type="button"
+              onClick={onBackToList}
+              className="mb-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>{backToListLabel}</span>
+            </button>
+          ) : null}
           {candidateLoading ? (
             <div className="h-5 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
           ) : (
@@ -123,7 +138,7 @@ export function CandidateDrawerHeader({
           }
         />
         <HeaderFact
-          label="Match da vaga ativa"
+          label="Compatibilidade Contextual"
           value={fmtScore(activeJobCompatibilityScore)}
           valueClassName={scoreColorClass(activeJobCompatibilityScore)}
         />

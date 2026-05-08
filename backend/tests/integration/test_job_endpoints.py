@@ -16,6 +16,10 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, SkillModel
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
+from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreModel,
+    ScoreModelVersionModel,
+)
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -91,6 +95,24 @@ async def _create_skill(
     session.add(skill)
     await session.commit()
     return skill
+
+
+async def _create_active_score_version(session: AsyncSession, *, version: str = "v-test-ranking") -> ScoreModelVersionModel:
+    model = ScoreModelVersionModel(
+        version=f"{version}-{uuid4().hex[:8]}",
+        weights={
+            "mandatory": 0.45,
+            "optional": 0.15,
+            "experience": 0.20,
+            "seniority": 0.10,
+            "ai": 0.0,
+        },
+        thresholds={"high": 70, "low": 55},
+        is_active=True,
+    )
+    session.add(model)
+    await session.commit()
+    return model
 
 
 @pytest.mark.asyncio
@@ -562,6 +584,7 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     )
     candidate_headers = await _auth_headers(client, "candidate-ranking@test.com", "password123")
     recruiter_headers = await _auth_headers(client, "recruiter-ranking@test.com", "password123")
+    score_version = await _create_active_score_version(db_session)
 
     db_session.add(
         CandidateModel(
@@ -656,6 +679,8 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     )
     assert match.status_code == 200
     assert match.json()["recommendation"] in {"strong_match", "good_match", "potential"}
+    assert match.json()["ranking_refresh_status"] == "updated"
+    assert match.json()["ranking_freshness_status"] == "fresh"
 
     persisted = await db_session.scalar(
         sa.select(CandidateJobMatchModel).where(
@@ -666,12 +691,31 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert set(persisted.matched_skills_json) == {"Python", "FastAPI"}
     assert persisted.missing_skills_json == []
 
-    ranking = await client.get(f"/api/v1/jobs/{job_id}/candidates", headers=recruiter_headers)
+    persisted_score = await db_session.scalar(
+        sa.select(CandidateJobScoreModel).where(
+            CandidateJobScoreModel.job_id == UUID(job_id),
+            CandidateJobScoreModel.candidate_id == persisted.candidate_id,
+            CandidateJobScoreModel.version_id == score_version.id,
+        )
+    )
+    assert persisted_score is not None
+    assert persisted_score.freshness_status == "fresh"
+    assert persisted_score.score_model_version == score_version.version
+    assert persisted_score.source_analysis_id == analysis_id
+
+    ranking = await client.get(f"/api/v1/jobs/{job_id}/ranking", headers=recruiter_headers)
     assert ranking.status_code == 200
     candidates = ranking.json()["candidates"]
     assert len(candidates) == 1
     assert candidates[0]["candidate_name"] == "Candidate Ranking"
-    assert candidates[0]["recommendation"] == match.json()["recommendation"]
+    assert candidates[0]["decision_suggestion"] in {"approved", "review", "rejected_suggested"}
+    assert candidates[0]["freshness_status"] == "fresh"
+    assert candidates[0]["source_analysis_id"] == str(analysis_id)
+    assert candidates[0]["source_analysis_created_at"] is not None
+    assert candidates[0]["score_model_version"] == score_version.version
+    assert candidates[0]["ranking_updated_at"] is not None
+    assert candidates[0]["match_updated_at"] is not None
+    assert candidates[0]["ranking_version"] == score_version.version
 
 
 @pytest.mark.asyncio
@@ -798,3 +842,66 @@ async def test_updating_job_does_not_mix_pipeline_candidates_between_jobs(
     pipeline_entries = overview.json()["pipeline_entries"]
     assert len(pipeline_entries) == 1
     assert pipeline_entries[0]["job_id"] == job_a_id
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_applies_status_filter_and_returns_canonical_summary(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-job-summary@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-job-summary@test.com", "password123")
+
+    created_ids: list[str] = []
+    for title in (
+        "QA Published One",
+        "QA Published Two",
+        "QA Draft",
+        "QA Paused",
+        "QA Closed",
+    ):
+        response = await client.post(
+            "/api/v1/jobs",
+            json=_job_payload(title=title, description=f"{title} description"),
+            headers=headers,
+        )
+        assert response.status_code == 201
+        created_ids.append(response.json()["id"])
+
+    jobs = (
+        await db_session.execute(
+            sa.select(JobModel).where(JobModel.id.in_([UUID(job_id) for job_id in created_ids]))
+        )
+    ).scalars().all()
+    status_by_title = {
+        "QA Published One": "published",
+        "QA Published Two": "published",
+        "QA Draft": "draft",
+        "QA Paused": "paused",
+        "QA Closed": "closed",
+    }
+    for job in jobs:
+        job.status = status_by_title[job.title]
+        job.quality_status = "weak" if job.title == "QA Draft" else "good"
+    await db_session.commit()
+
+    response = await client.get("/api/v1/jobs?status_filter=published&search=QA", headers=headers)
+    assert response.status_code == 200, response.text
+
+    payload = response.json()
+    assert payload["total"] == 2
+    assert {item["title"] for item in payload["data"]} == {"QA Published One", "QA Published Two"}
+    assert payload["summary"] == {
+        "all": 5,
+        "published": 2,
+        "draft": 1,
+        "paused": 1,
+        "closed": 1,
+        "cancelled": 0,
+        "attention": 1,
+    }

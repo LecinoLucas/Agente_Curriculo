@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal
+from time import perf_counter
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
+import structlog
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,19 +25,25 @@ from src.application.services.match_confidence_service import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.database.models.profile_analysis_model import (
     CandidateJobMatchModel,
     CandidateProfileAnalysisModel,
 )
 from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreFactorModel,
     CandidateJobScoreModel,
+    CandidateJobScoreSnapshotModel,
     ScoreModelVersionModel,
 )
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
+from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
 from src.domain.services.deal_breaker_evaluator import evaluate_deal_breakers
+
+logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -74,90 +83,113 @@ class CandidateRankingService:
         Raises RankingJobNotFoundError if the job does not exist.
         Raises NoActiveScoreVersionError if no active score model version exists.
         """
-        await self._assert_job_exists(job_id)
-        job = await self._load_job_with_deal_breakers(job_id)
-        version = await self._load_active_version()
-        threshold_high, threshold_low = _resolve_thresholds(version)
-        job_skill_rows = await self._load_job_skill_rows(job_id)
+        job, version, threshold_high, threshold_low, job_skill_rows = await self._load_scoring_context(job_id)
         rows = await self._fetch_match_rows(job_id)
         rows = await self._reprocess_outdated_matches_if_needed(
             job_id=job_id,
             job=job,
             job_skill_rows=job_skill_rows,
             rows=rows,
+            candidate_id=None,
         )
-        now = datetime.now(UTC)
         count = 0
 
         for row in rows:
-            outdated = _is_outdated_match_row(
+            started_perf = perf_counter()
+            payload = self._build_score_payload(
                 row=row,
                 job=job,
                 job_skill_rows=job_skill_rows,
+                threshold_high=threshold_high,
+                threshold_low=threshold_low,
+                score_version=version.version,
             )
-            bd = _compute_breakdown(
-                row=row,
-                job=job,
-                job_skill_rows=job_skill_rows,
-                outdated=outdated,
+            persist_result = await self._persist_score(
+                candidate_id=row["candidate_id"],
+                job_id=job_id,
+                version=version,
+                payload=payload,
             )
-            deal_breaker_violations = evaluate_deal_breakers(job.deal_breakers, row)
-            decision = _decide(bd["final_score"], threshold_high, threshold_low)
-            matched = _coerce_list(row.get("matched_skills"))
-            missing = _coerce_list(row.get("missing_skills"))
-            reason_codes = _build_reason_codes(
-                row,
-                bd,
-                matched,
-                missing,
-                deal_breaker_violations,
-                outdated=outdated,
+            duration_ms = int((perf_counter() - started_perf) * 1000)
+            await self._emit_recompute_observability(
+                candidate_id=row["candidate_id"],
+                job_id=job_id,
+                payload=payload,
+                version=version,
+                persist_result=persist_result,
+                duration_ms=duration_ms,
             )
-            explanation = _build_explanation(
-                row,
-                bd,
-                decision,
-                matched,
-                missing,
-                outdated=outdated,
-            )
-
-            # Serialize Decimal values for JSONB storage
-            serialized_bd = {k: float(v) for k, v in bd.items()}
-            serialized_codes = [
-                {**rc, "impact": float(rc["impact"])} for rc in reason_codes
-            ]
-
-            stmt = (
-                pg_insert(CandidateJobScoreModel)
-                .values(
-                    id=uuid4(),
-                    candidate_id=row["candidate_id"],
-                    job_id=job_id,
-                    version_id=version.id,
-                    final_score=bd["final_score"],
-                    decision_suggestion=decision,
-                    breakdown=serialized_bd,
-                    reason_codes=serialized_codes,
-                    explanation_text=explanation,
-                    computed_at=now,
-                )
-                .on_conflict_do_update(
-                    constraint="uq_candidate_job_score_version",
-                    set_={
-                        "final_score": bd["final_score"],
-                        "decision_suggestion": decision,
-                        "breakdown": serialized_bd,
-                        "reason_codes": serialized_codes,
-                        "explanation_text": explanation,
-                        "computed_at": now,
-                    },
-                )
-            )
-            await self._session.execute(stmt)
             count += 1
 
         return count
+
+    async def compute_single_candidate(
+        self,
+        job_id: UUID,
+        candidate_id: UUID,
+    ) -> dict[str, Any] | None:
+        job, version, threshold_high, threshold_low, job_skill_rows = await self._load_scoring_context(job_id)
+        rows = await self._fetch_match_rows(job_id, candidate_id=candidate_id)
+        rows = await self._reprocess_outdated_matches_if_needed(
+            job_id=job_id,
+            job=job,
+            job_skill_rows=job_skill_rows,
+            rows=rows,
+            candidate_id=candidate_id,
+        )
+        if not rows:
+            return None
+
+        row = rows[0]
+        started_perf = perf_counter()
+        payload = self._build_score_payload(
+            row=row,
+            job=job,
+            job_skill_rows=job_skill_rows,
+            threshold_high=threshold_high,
+            threshold_low=threshold_low,
+            score_version=version.version,
+        )
+        persist_result = await self._persist_score(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            version=version,
+            payload=payload,
+        )
+        duration_ms = int((perf_counter() - started_perf) * 1000)
+        await self._emit_recompute_observability(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            payload=payload,
+            version=version,
+            persist_result=persist_result,
+            duration_ms=duration_ms,
+        )
+        return {
+            "candidate_id": candidate_id,
+            "job_id": job_id,
+            "final_score": persist_result["new_score"],
+            "freshness_status": payload["freshness_status"],
+            "computed_at": payload["computed_at"],
+            "score_model_version": version.version,
+            "source_analysis_id": payload["source_analysis_id"],
+            "explainability_version": payload["explainability_version"],
+            "factors": payload["factors"],
+            "factor_summary": persist_result["factor_summary"],
+            "delta": persist_result["delta_summary"],
+        }
+
+    async def mark_candidate_stale(self, job_id: UUID, candidate_id: UUID) -> None:
+        version = await self._load_active_version()
+        await self._session.execute(
+            sa.update(CandidateJobScoreModel)
+            .where(
+                CandidateJobScoreModel.job_id == job_id,
+                CandidateJobScoreModel.candidate_id == candidate_id,
+                CandidateJobScoreModel.version_id == version.id,
+            )
+            .values(freshness_status="stale")
+        )
 
     # ------------------------------------------------------------------
     # Read path: return persisted ranking (never recomputes)
@@ -186,6 +218,11 @@ class CandidateRankingService:
             # data_quality_status should never be None due to server_default="unknown"
             # But as defensive programming, fall back to "unknown" if missing
             dq_status = row.get("data_quality_status", "unknown")
+            freshness_status = _resolve_freshness_status(
+                ranking_updated_at=row.get("ranking_updated_at"),
+                match_updated_at=row.get("match_updated_at"),
+                persisted_status=row.get("freshness_status"),
+            )
 
             entries.append({
                 "rank": rank,
@@ -202,7 +239,15 @@ class CandidateRankingService:
                 "final_score": Decimal(str(row["final_score"])),
                 "entered_at": row.get("entered_at"),
                 "computed_at": row["computed_at"],
+                "freshness_status": freshness_status,
+                "score_computed_at": row["computed_at"],
+                "source_analysis_id": row.get("source_analysis_id"),
+                "source_analysis_created_at": row.get("source_analysis_created_at"),
+                "score_model_version": row.get("score_model_version") or version.version,
+                "match_updated_at": row.get("match_updated_at"),
+                "ranking_updated_at": row.get("ranking_updated_at"),
                 "version": version.version,
+                "ranking_version": version.version,
                 "data_quality_status": dq_status,
             })
 
@@ -222,6 +267,17 @@ class CandidateRankingService:
     # ------------------------------------------------------------------
     # DB helpers
     # ------------------------------------------------------------------
+
+    async def _load_scoring_context(
+        self,
+        job_id: UUID,
+    ) -> tuple[JobModel, ScoreModelVersionModel, Decimal, Decimal, list[Any]]:
+        await self._assert_job_exists(job_id)
+        job = await self._load_job_with_deal_breakers(job_id)
+        version = await self._load_active_version()
+        threshold_high, threshold_low = _resolve_thresholds(version)
+        job_skill_rows = await self._load_job_skill_rows(job_id)
+        return job, version, threshold_high, threshold_low, job_skill_rows
 
     async def _assert_job_exists(self, job_id: UUID) -> None:
         job = await self._session.scalar(
@@ -254,7 +310,12 @@ class CandidateRankingService:
             raise NoActiveScoreVersionError
         return version
 
-    async def _fetch_match_rows(self, job_id: UUID) -> list[dict]:
+    async def _fetch_match_rows(
+        self,
+        job_id: UUID,
+        *,
+        candidate_id: UUID | None = None,
+    ) -> list[dict]:
         latest_match = (
             sa.select(
                 CandidateJobMatchModel.candidate_id,
@@ -264,6 +325,7 @@ class CandidateRankingService:
                 CandidateJobMatchModel.recommendation,
                 CandidateJobMatchModel.matched_skills_json,
                 CandidateJobMatchModel.missing_skills_json,
+                CandidateJobMatchModel.skill_evidence_breakdown,
                 CandidateProfileAnalysisModel.seniority_level,
                 CandidateProfileAnalysisModel.experience_years,
                 CandidateProfileAnalysisModel.education_level,
@@ -299,7 +361,7 @@ class CandidateRankingService:
             .subquery("latest_match")
         )
 
-        result = await self._session.execute(
+        query = (
             # CandidateJobMatch currently stores final recommendation; derive validation
             # state from that canonical signal for ranking guardrails.
             # - `not_match` => hard fail
@@ -316,6 +378,7 @@ class CandidateRankingService:
                 latest_match.c.match_score.label("seniority_match_score"),
                 latest_match.c.matched_skills_json.label("matched_skills"),
                 latest_match.c.missing_skills_json.label("missing_skills"),
+                latest_match.c.skill_evidence_breakdown,
                 sa.case(
                     (latest_match.c.recommendation == "not_match", "fail"),
                     (latest_match.c.recommendation == "review_manually", "unknown"),
@@ -324,6 +387,9 @@ class CandidateRankingService:
                 sa.literal(None).label("rejection_reasons"),
                 latest_match.c.match_score.label("overall_score"),
                 latest_match.c.match_score.label("education_score"),
+                CandidateJobPipelineModel.current_analysis_id.label("source_analysis_id"),
+                AnalysisModel.created_at.label("source_analysis_created_at"),
+                latest_match.c.resume_version_id,
                 latest_match.c.experience_years.label("total_experience_years"),
                 latest_match.c.skills_json.label("candidate_skills"),
                 latest_match.c.strengths_json.label("strengths"),
@@ -332,6 +398,10 @@ class CandidateRankingService:
             )
             .select_from(CandidateJobPipelineModel)
             .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
+            .outerjoin(
+                AnalysisModel,
+                AnalysisModel.id == CandidateJobPipelineModel.current_analysis_id,
+            )
             .outerjoin(
                 latest_match,
                 sa.and_(
@@ -344,9 +414,15 @@ class CandidateRankingService:
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
                 CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
         )
+        if candidate_id is not None:
+            query = query.where(CandidateJobPipelineModel.candidate_id == candidate_id)
+
+        result = await self._session.execute(query)
         return [dict(row) for row in result.mappings().all()]
 
     async def _load_job_skill_rows(self, job_id: UUID):
@@ -368,6 +444,7 @@ class CandidateRankingService:
         job: JobModel,
         job_skill_rows: list[Any],
         rows: list[dict],
+        candidate_id: UUID | None,
     ) -> list[dict]:
         outdated_rows = [
             row
@@ -392,13 +469,43 @@ class CandidateRankingService:
             reprocessed = True
 
         if reprocessed:
-            return await self._fetch_match_rows(job_id)
+            return await self._fetch_match_rows(job_id, candidate_id=candidate_id)
         return rows
 
     async def _fetch_persisted_scores(
         self, job_id: UUID, version_id: UUID
     ) -> list[dict]:
         """Return persisted scores for this job + version, ordered by final_score DESC."""
+        latest_match = (
+            sa.select(
+                CandidateJobMatchModel.candidate_id,
+                CandidateJobMatchModel.job_id,
+                sa.func.coalesce(
+                    CandidateJobMatchModel.updated_at,
+                    CandidateJobMatchModel.created_at,
+                ).label("match_updated_at"),
+                sa.func.row_number()
+                .over(
+                    partition_by=(
+                        CandidateJobMatchModel.candidate_id,
+                        CandidateJobMatchModel.job_id,
+                    ),
+                    order_by=(
+                        sa.case(
+                            (CandidateJobMatchModel.candidate_job_pipeline_id.isnot(None), 0),
+                            else_=1,
+                        ),
+                        sa.func.coalesce(
+                            CandidateJobMatchModel.updated_at,
+                            CandidateJobMatchModel.created_at,
+                        ).desc(),
+                        CandidateJobMatchModel.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .subquery("latest_match")
+        )
         latest_shadow_match = (
             sa.select(
                 CandidateJobMatchModel.candidate_id,
@@ -438,11 +545,17 @@ class CandidateRankingService:
                 CandidateJobScoreModel.reason_codes,
                 CandidateJobScoreModel.explanation_text,
                 CandidateJobScoreModel.computed_at,
+                CandidateJobScoreModel.updated_at.label("ranking_updated_at"),
+                CandidateJobScoreModel.source_analysis_id,
+                CandidateJobScoreModel.source_analysis_created_at,
+                CandidateJobScoreModel.score_model_version,
+                CandidateJobScoreModel.freshness_status,
                 CandidateModel.full_name.label("candidate_name"),
                 CandidateModel.data_quality_status,
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
                 CandidateJobPipelineModel.pipeline_status,
                 CandidateJobPipelineModel.entered_at,
+                latest_match.c.match_updated_at,
                 latest_shadow_match.c.eligibility_status,
                 latest_shadow_match.c.strict_score,
                 latest_shadow_match.c.balanced_score,
@@ -457,7 +570,17 @@ class CandidateRankingService:
                     CandidateJobPipelineModel.candidate_id == CandidateJobScoreModel.candidate_id,
                     CandidateJobPipelineModel.job_id == CandidateJobScoreModel.job_id,
                     CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.link_status == "active",
+                    CandidateJobPipelineModel.relationship_status == "active",
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
+                ),
+            )
+            .outerjoin(
+                latest_match,
+                sa.and_(
+                    latest_match.c.candidate_id == CandidateJobScoreModel.candidate_id,
+                    latest_match.c.job_id == CandidateJobScoreModel.job_id,
+                    latest_match.c.rn == 1,
                 ),
             )
             .outerjoin(
@@ -482,6 +605,473 @@ class CandidateRankingService:
             )
         )
         return [dict(row) for row in result.mappings().all()]
+
+    async def _load_latest_snapshot(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> dict[str, Any] | None:
+        snapshot = await self._session.scalar(
+            sa.select(CandidateJobScoreSnapshotModel)
+            .where(
+                CandidateJobScoreSnapshotModel.candidate_id == candidate_id,
+                CandidateJobScoreSnapshotModel.job_id == job_id,
+            )
+            .order_by(
+                CandidateJobScoreSnapshotModel.computed_at.desc(),
+                CandidateJobScoreSnapshotModel.id.desc(),
+            )
+            .limit(1)
+        )
+        if snapshot is None:
+            return None
+
+        result = await self._session.execute(
+            sa.select(CandidateJobScoreFactorModel)
+            .where(CandidateJobScoreFactorModel.snapshot_id == snapshot.id)
+            .order_by(
+                CandidateJobScoreFactorModel.display_order.asc(),
+                CandidateJobScoreFactorModel.id.asc(),
+            )
+        )
+        factors = [
+            {
+                "factor_type": row.factor_type,
+                "factor_key": row.factor_key,
+                "factor_label": row.factor_label,
+                "impact_score": float(Decimal(str(row.impact_score)).quantize(Decimal("0.01"))),
+                "normalized_weight": float(Decimal(str(row.normalized_weight)).quantize(Decimal("0.0001"))),
+                "direction": row.direction,
+                "evidence_json": dict(row.evidence_json or {}),
+                "display_order": row.display_order,
+            }
+            for row in result.scalars().all()
+        ]
+        return {
+            "id": snapshot.id,
+            "candidate_id": snapshot.candidate_id,
+            "job_id": snapshot.job_id,
+            "version_id": snapshot.version_id,
+            "ranking_version": snapshot.ranking_version,
+            "source_analysis_id": snapshot.source_analysis_id,
+            "source_analysis_created_at": snapshot.source_analysis_created_at,
+            "job_signature_hash": snapshot.job_signature_hash,
+            "score_model_version": snapshot.score_model_version,
+            "explainability_version": snapshot.explainability_version,
+            "input_hash": snapshot.input_hash,
+            "final_score": Decimal(str(snapshot.final_score)),
+            "freshness_status": snapshot.freshness_status,
+            "computed_at": snapshot.computed_at,
+            "factors": factors,
+        }
+
+    async def _insert_snapshot_and_factors(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        version: ScoreModelVersionModel,
+        payload: dict[str, Any],
+    ) -> CandidateJobScoreSnapshotModel:
+        snapshot = CandidateJobScoreSnapshotModel(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            version_id=version.id,
+            ranking_version=version.version,
+            source_analysis_id=payload["source_analysis_id"],
+            source_analysis_created_at=payload["source_analysis_created_at"],
+            job_signature_hash=payload["job_signature_hash"],
+            score_model_version=payload["score_model_version"],
+            explainability_version=payload["explainability_version"],
+            input_hash=payload["input_hash"],
+            final_score=payload["final_score"],
+            freshness_status=payload["freshness_status"],
+            computed_at=payload["computed_at"],
+        )
+        self._session.add(snapshot)
+        await self._session.flush()
+
+        for factor in payload["factors"]:
+            self._session.add(
+                CandidateJobScoreFactorModel(
+                    snapshot_id=snapshot.id,
+                    factor_type=factor["factor_type"],
+                    factor_key=factor["factor_key"],
+                    factor_label=factor["factor_label"],
+                    impact_score=Decimal(str(factor["impact_score"])),
+                    normalized_weight=Decimal(str(factor["normalized_weight"])),
+                    direction=factor["direction"],
+                    evidence_json=factor["evidence_json"],
+                    display_order=int(factor["display_order"]),
+                )
+            )
+        await self._session.flush()
+        return snapshot
+
+    async def _persist_score(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        version: ScoreModelVersionModel,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = dict(payload)
+        payload.setdefault("score_model_version", version.version)
+        payload.setdefault("explainability_version", _EXPLAINABILITY_VERSION)
+        payload.setdefault("factors", [])
+        _validate_score_factors(payload["factors"])
+        payload.setdefault("factor_summary_json", _summarize_score_factors(payload["factors"]))
+        payload.setdefault("freshness_status", "fresh")
+        payload.setdefault("computed_at", datetime.now(UTC))
+        payload.setdefault("updated_at", payload["computed_at"])
+        payload.setdefault("job_signature_hash", "legacy")
+        if not payload.get("input_hash"):
+            payload["input_hash"] = hashlib.sha256(
+                "|".join(
+                    [
+                        str(candidate_id),
+                        str(job_id),
+                        str(payload.get("source_analysis_id") or ""),
+                        str(payload.get("source_analysis_created_at") or ""),
+                        str(payload.get("final_score") or ""),
+                        str(payload.get("score_model_version") or ""),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()
+        existing = await self._session.scalar(
+            sa.select(CandidateJobScoreModel).where(
+                CandidateJobScoreModel.candidate_id == candidate_id,
+                CandidateJobScoreModel.job_id == job_id,
+                CandidateJobScoreModel.version_id == version.id,
+            )
+        )
+        previous_score = (
+            Decimal(str(existing.final_score))
+            if existing is not None and existing.final_score is not None
+            else None
+        )
+        previous_snapshot = await self._load_latest_snapshot(
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+        current_analysis_created_at = _coerce_utc_datetime(
+            existing.source_analysis_created_at if existing is not None else None
+        )
+        incoming_analysis_created_at = _coerce_utc_datetime(payload["source_analysis_created_at"])
+        incoming_updated_at = _coerce_utc_datetime(payload["updated_at"])
+        if (
+            current_analysis_created_at is not None
+            and incoming_analysis_created_at is not None
+            and incoming_analysis_created_at < current_analysis_created_at
+        ):
+            return {
+                "monotonicity_decision": "skipped_older_analysis",
+                "previous_score": previous_score,
+                "new_score": previous_score,
+                "ranking_updated_at": existing.updated_at if existing is not None else None,
+                "factor_summary": dict(existing.factor_summary_json or {}) if existing is not None else {"positive": [], "negative": [], "contextual": []},
+                "delta_summary": dict(existing.delta_summary_json or {}) if existing is not None else _empty_delta_summary(current_score=previous_score),
+            }
+
+        factor_summary = dict(payload["factor_summary_json"] or {})
+        delta_summary = _derive_delta_summary(
+            previous_snapshot=previous_snapshot,
+            payload=payload,
+        )
+        payload["delta_summary_json"] = delta_summary
+        payload["explanation_text"] = _render_score_explanation(
+            final_score=payload["final_score"],
+            decision=payload["decision_suggestion"],
+            factor_summary=factor_summary,
+            delta_summary=delta_summary,
+        )
+
+        if self._session.bind is not None and self._session.bind.dialect.name == "postgresql":
+            insert_stmt = (
+                pg_insert(CandidateJobScoreModel)
+                .values(
+                    id=uuid4(),
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    version_id=version.id,
+                    source_analysis_id=payload["source_analysis_id"],
+                    source_analysis_created_at=incoming_analysis_created_at,
+                    input_hash=payload["input_hash"],
+                    score_model_version=payload["score_model_version"],
+                    explainability_version=payload["explainability_version"],
+                    final_score=payload["final_score"],
+                    decision_suggestion=payload["decision_suggestion"],
+                    breakdown=payload["breakdown"],
+                    reason_codes=payload["reason_codes"],
+                    explanation_text=payload["explanation_text"],
+                    factor_summary_json=payload["factor_summary_json"],
+                    delta_summary_json=payload["delta_summary_json"],
+                    freshness_status=payload["freshness_status"],
+                    computed_at=payload["computed_at"],
+                    updated_at=payload["updated_at"],
+                )
+            )
+            excluded = insert_stmt.excluded
+            stmt = insert_stmt.on_conflict_do_update(
+                constraint="uq_candidate_job_score_version",
+                set_={
+                    "source_analysis_id": payload["source_analysis_id"],
+                    "source_analysis_created_at": incoming_analysis_created_at,
+                    "input_hash": payload["input_hash"],
+                    "score_model_version": payload["score_model_version"],
+                    "explainability_version": payload["explainability_version"],
+                    "final_score": payload["final_score"],
+                    "decision_suggestion": payload["decision_suggestion"],
+                    "breakdown": payload["breakdown"],
+                    "reason_codes": payload["reason_codes"],
+                    "explanation_text": payload["explanation_text"],
+                    "factor_summary_json": payload["factor_summary_json"],
+                    "delta_summary_json": payload["delta_summary_json"],
+                    "freshness_status": payload["freshness_status"],
+                    "computed_at": payload["computed_at"],
+                    "updated_at": payload["updated_at"],
+                },
+                where=sa.or_(
+                    CandidateJobScoreModel.source_analysis_created_at.is_(None),
+                    excluded.source_analysis_created_at.is_(None),
+                    excluded.source_analysis_created_at >= CandidateJobScoreModel.source_analysis_created_at,
+                ),
+            ).returning(
+                CandidateJobScoreModel.final_score,
+                CandidateJobScoreModel.updated_at,
+            )
+            result = await self._session.execute(stmt)
+            returned_row = result.mappings().first()
+            if returned_row is None:
+                current = await self._session.scalar(
+                    sa.select(CandidateJobScoreModel).where(
+                        CandidateJobScoreModel.candidate_id == candidate_id,
+                        CandidateJobScoreModel.job_id == job_id,
+                        CandidateJobScoreModel.version_id == version.id,
+                    )
+                )
+                current_score = (
+                    Decimal(str(current.final_score))
+                    if current is not None and current.final_score is not None
+                    else previous_score
+                )
+                return {
+                    "monotonicity_decision": "skipped_older_analysis",
+                    "previous_score": previous_score,
+                    "new_score": current_score,
+                    "ranking_updated_at": current.updated_at if current is not None else None,
+                    "factor_summary": dict(current.factor_summary_json or {}) if current is not None else {"positive": [], "negative": [], "contextual": []},
+                    "delta_summary": dict(current.delta_summary_json or {}) if current is not None else _empty_delta_summary(current_score=current_score),
+                }
+            await self._insert_snapshot_and_factors(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                version=version,
+                payload=payload,
+            )
+            return {
+                "monotonicity_decision": "updated",
+                "previous_score": previous_score,
+                "new_score": Decimal(str(returned_row["final_score"])),
+                "ranking_updated_at": _coerce_utc_datetime(returned_row["updated_at"]) or incoming_updated_at,
+                "factor_summary": factor_summary,
+                "delta_summary": delta_summary,
+            }
+
+        if existing is None:
+            self._session.add(
+                CandidateJobScoreModel(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    version_id=version.id,
+                    source_analysis_id=payload["source_analysis_id"],
+                    source_analysis_created_at=incoming_analysis_created_at,
+                    input_hash=payload["input_hash"],
+                    score_model_version=payload["score_model_version"],
+                    explainability_version=payload["explainability_version"],
+                    final_score=payload["final_score"],
+                    decision_suggestion=payload["decision_suggestion"],
+                    breakdown=payload["breakdown"],
+                    reason_codes=payload["reason_codes"],
+                    explanation_text=payload["explanation_text"],
+                    factor_summary_json=payload["factor_summary_json"],
+                    delta_summary_json=payload["delta_summary_json"],
+                    freshness_status=payload["freshness_status"],
+                    computed_at=payload["computed_at"],
+                    updated_at=payload["updated_at"],
+                )
+            )
+            await self._session.flush()
+            await self._insert_snapshot_and_factors(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                version=version,
+                payload=payload,
+            )
+            return {
+                "monotonicity_decision": "updated",
+                "previous_score": previous_score,
+                "new_score": Decimal(str(payload["final_score"])),
+                "ranking_updated_at": incoming_updated_at,
+                "factor_summary": factor_summary,
+                "delta_summary": delta_summary,
+            }
+
+        existing.source_analysis_id = payload["source_analysis_id"]
+        existing.source_analysis_created_at = incoming_analysis_created_at
+        existing.input_hash = payload["input_hash"]
+        existing.score_model_version = payload["score_model_version"]
+        existing.explainability_version = payload["explainability_version"]
+        existing.final_score = payload["final_score"]
+        existing.decision_suggestion = payload["decision_suggestion"]
+        existing.breakdown = payload["breakdown"]
+        existing.reason_codes = payload["reason_codes"]
+        existing.explanation_text = payload["explanation_text"]
+        existing.factor_summary_json = payload["factor_summary_json"]
+        existing.delta_summary_json = payload["delta_summary_json"]
+        existing.freshness_status = payload["freshness_status"]
+        existing.computed_at = payload["computed_at"]
+        existing.updated_at = payload["updated_at"]
+        await self._session.flush()
+        await self._insert_snapshot_and_factors(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            version=version,
+            payload=payload,
+        )
+        return {
+            "monotonicity_decision": "updated",
+            "previous_score": previous_score,
+            "new_score": Decimal(str(payload["final_score"])),
+            "ranking_updated_at": incoming_updated_at,
+            "factor_summary": factor_summary,
+            "delta_summary": delta_summary,
+        }
+
+    def _build_score_payload(
+        self,
+        *,
+        row: dict[str, Any],
+        job: JobModel,
+        job_skill_rows: list[Any],
+        threshold_high: Decimal,
+        threshold_low: Decimal,
+        score_version: str,
+    ) -> dict[str, Any]:
+        outdated = _is_outdated_match_row(
+            row=row,
+            job=job,
+            job_skill_rows=job_skill_rows,
+        )
+        bd = _compute_breakdown(
+            row=row,
+            job=job,
+            job_skill_rows=job_skill_rows,
+            outdated=outdated,
+        )
+        deal_breaker_violations = evaluate_deal_breakers(job.deal_breakers, row)
+        decision = _decide(bd["final_score"], threshold_high, threshold_low)
+        matched = _coerce_list(row.get("matched_skills"))
+        missing = _coerce_list(row.get("missing_skills"))
+        factors = _build_score_factors(
+            row=row,
+            job=job,
+            job_skill_rows=job_skill_rows,
+            bd=bd,
+            matched=matched,
+            missing=missing,
+            deal_breaker_violations=deal_breaker_violations,
+            outdated=outdated,
+        )
+        reason_codes = _build_reason_codes(factors)
+        factor_summary = _summarize_score_factors(factors)
+        explanation = _render_score_explanation(
+            final_score=bd["final_score"],
+            decision=decision,
+            factor_summary=factor_summary,
+            delta_summary=None,
+        )
+        now = datetime.now(UTC)
+        job_signature_hash = _build_job_signature_hash(job=job, job_skill_rows=job_skill_rows)
+        input_hash = _build_score_input_hash(
+            row=row,
+            score_version=score_version,
+            job_signature_hash=job_signature_hash,
+        )
+        return {
+            "source_analysis_id": row.get("source_analysis_id"),
+            "source_analysis_created_at": row.get("source_analysis_created_at"),
+            "job_signature_hash": job_signature_hash,
+            "input_hash": input_hash,
+            "score_model_version": score_version,
+            "explainability_version": _EXPLAINABILITY_VERSION,
+            "final_score": bd["final_score"],
+            "decision_suggestion": decision,
+            "breakdown": {k: float(v) for k, v in bd.items()},
+            "factors": factors,
+            "factor_summary_json": factor_summary,
+            "reason_codes": [{**rc, "impact": float(rc["impact"])} for rc in reason_codes],
+            "explanation_text": explanation,
+            "freshness_status": "fresh",
+            "computed_at": now,
+            "updated_at": now,
+        }
+
+    async def _emit_recompute_observability(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        payload: dict[str, Any],
+        version: ScoreModelVersionModel,
+        persist_result: dict[str, Any],
+        duration_ms: int,
+    ) -> None:
+        source_analysis_created_at = _coerce_utc_datetime(payload.get("source_analysis_created_at"))
+        ranking_updated_at = _coerce_utc_datetime(persist_result.get("ranking_updated_at"))
+        context = structlog.contextvars.get_contextvars()
+        trace_id = context.get("correlation_id")
+        request_id = context.get("request_id")
+        base_payload = {
+            "candidate_id": str(candidate_id),
+            "job_id": str(job_id),
+            "source_analysis_id": str(payload["source_analysis_id"]) if payload.get("source_analysis_id") else None,
+            "source_analysis_created_at": (
+                source_analysis_created_at.isoformat()
+                if source_analysis_created_at is not None
+                else None
+            ),
+            "previous_score": float(persist_result["previous_score"]) if persist_result.get("previous_score") is not None else None,
+            "new_score": float(persist_result["new_score"]) if persist_result.get("new_score") is not None else None,
+            "freshness_status": payload["freshness_status"],
+            "score_model_version": version.version,
+            "compute_duration_ms": duration_ms,
+            "monotonicity_decision": persist_result["monotonicity_decision"],
+            "ranking_updated_at": (
+                ranking_updated_at.isoformat()
+                if ranking_updated_at is not None
+                else None
+            ),
+            "ranking_version": version.version,
+            "ranking_version_id": str(version.id),
+            "trace_id": trace_id,
+            "request_id": request_id,
+            "input_hash": payload.get("input_hash"),
+        }
+        logger.info("ranking_recomputed", **base_payload)
+        await publish_domain_event(
+            DomainEvent(
+                event_type=DomainEventType.RANKING_RECOMPUTED,
+                entity_id=candidate_id,
+                payload={
+                    "event": "ranking_recomputed",
+                    **base_payload,
+                },
+            ),
+            session=self._session,
+        )
 
     async def _get_filtered_candidates_count(self, job_id: UUID) -> int:
         """Count how many candidates were filtered due to data quality issues."""
@@ -560,6 +1150,23 @@ class CandidateRankingService:
 
 _MISSING_SKILL_PENALTY = Decimal("3")
 _MAX_PENALTY = Decimal("20")
+_EXPLAINABILITY_VERSION = "v1_structured_factors"
+_SCORE_DELTA_CHANGE_THRESHOLD = Decimal("2.00")
+_SCORE_DELTA_SUMMARY_LIMIT = 4
+_SCORE_FACTOR_SUMMARY_LIMIT = 4
+_ALLOWED_SCORE_FACTOR_TYPES = {
+    "required_skill_match",
+    "missing_required_skill",
+    "adjacent_skill_match",
+    "experience_match",
+    "insufficient_experience",
+    "seniority_match",
+    "seniority_gap",
+    "education_match",
+    "deal_breaker_violation",
+    "data_confidence_penalty",
+    "legacy_outdated_penalty",
+}
 
 
 def _compute_breakdown(
@@ -711,161 +1318,422 @@ def _decide(final_score: Decimal, threshold_high: Decimal, threshold_low: Decima
 
 
 # ---------------------------------------------------------------------------
-# Structured reason_codes — filterable, auditable, impact-quantified
+# Structured explainability factors
 # ---------------------------------------------------------------------------
 
-def _build_reason_codes(
-    row: dict,
+def _build_score_factors(
+    *,
+    row: dict[str, Any],
+    job: JobModel,
+    job_skill_rows: list[Any],
     bd: dict[str, Decimal],
     matched: list[str],
     missing: list[str],
     deal_breaker_violations: list[dict[str, Any]] | None = None,
-    *,
     outdated: bool = False,
 ) -> list[dict[str, Any]]:
-    """Return structured reason codes with explicit type, field, impact, and description.
+    mandatory_names = [
+        str(item.skill_name).strip()
+        for item in job_skill_rows
+        if getattr(item.JobRequiredSkillModel, "is_mandatory", False) and str(item.skill_name).strip()
+    ]
+    mandatory_lookup = {name.casefold(): name for name in mandatory_names}
+    matched_required = [skill for skill in matched if skill.casefold() in mandatory_lookup]
+    missing_required = [skill for skill in missing if skill.casefold() in mandatory_lookup]
+    partial_matches = []
+    if isinstance(row.get("skill_evidence_breakdown"), dict):
+        partial_matches = row["skill_evidence_breakdown"].get("partial_matches", []) or []
 
-    Each code is filterable by type and carries a numeric impact in score-point
-    units so the frontend can sort/group by contribution. Positive = favorable,
-    negative = penalizing.
-    """
-    codes: list[dict[str, Any]] = []
-
-    # Add deal-breaker violations first (highest priority)
-    if deal_breaker_violations:
-        codes.extend(deal_breaker_violations)
-    if outdated:
-        codes.append({
-            "type": "outdated_score",
-            "field": "candidate_job_match",
-            "impact": -float(max(Decimal("0.00"), _to_decimal(row.get("overall_score")) - bd["final_score"])),
-            "description": "Score legado rebaixado para respeitar a regra atual de vaga sem requisitos estruturados",
-        })
-
-    # Per-skill impact is approximated as the skill_match contribution divided
-    # evenly across matched skills.
-    n_matched = len(matched) or 1
-    per_skill_contribution = float(
-        bd["skill_match_score"] / Decimal(str(n_matched))
+    weights = _canonical_component_weights(
+        total_mandatory=len(mandatory_names),
+        total_optional=sum(
+            1
+            for item in job_skill_rows
+            if not getattr(item.JobRequiredSkillModel, "is_mandatory", False) and str(item.skill_name).strip()
+        ),
     )
+    mandatory_slot_impact = (
+        (Decimal("100") * weights["mandatory"]) / Decimal(str(len(mandatory_names)))
+        if mandatory_names
+        else Decimal("0")
+    ).quantize(Decimal("0.01"))
 
-    for skill in matched[:5]:
-        codes.append({
-            "type": "skill_match",
-            "field": skill.lower(),
-            "impact": round(per_skill_contribution, 2),
-            "description": f"Alta aderência em {skill}",
-        })
+    factors: list[dict[str, Any]] = []
+    display_order = 0
 
-    for skill in missing[:5]:
-        codes.append({
-            "type": "missing_skill",
-            "field": skill.lower(),
-            "impact": -float(_MISSING_SKILL_PENALTY),
-            "description": f"Skill ausente: {skill}",
+    def add_factor(
+        *,
+        factor_type: str,
+        factor_key: str,
+        factor_label: str,
+        impact_score: Decimal,
+        normalized_weight: Decimal,
+        direction: str,
+        evidence: dict[str, Any] | None = None,
+    ) -> None:
+        nonlocal display_order
+        factors.append({
+            "factor_type": factor_type,
+            "factor_key": factor_key,
+            "factor_label": factor_label,
+            "impact_score": float(impact_score.quantize(Decimal("0.01"))),
+            "normalized_weight": float(normalized_weight.quantize(Decimal("0.0001"))),
+            "direction": direction,
+            "evidence_json": evidence or {},
+            "display_order": display_order,
         })
+        display_order += 1
 
-    validation_status = row.get("validation_status")
-    rejection_reasons = _coerce_list(row.get("rejection_reasons"))
-    if validation_status == "fail":
-        codes.append({
-            "type": "validation",
-            "field": "hard_reject",
-            "impact": -float(bd["validation_penalty_score"]),
-            "description": (
-                rejection_reasons[0]
-                if rejection_reasons
-                else "Candidato reprovado nas validações obrigatórias"
-            ),
-        })
-    elif validation_status == "unknown":
-        codes.append({
-            "type": "validation",
-            "field": "manual_review",
-            "impact": -float(bd["validation_penalty_score"]),
-            "description": (
-                rejection_reasons[0]
-                if rejection_reasons
-                else "Evidências insuficientes; revisão manual necessária"
-            ),
-        })
+    if deal_breaker_violations:
+        penalty = max(Decimal("0.00"), bd.get("deal_breaker_penalty_score", Decimal("0.00")))
+        for violation in deal_breaker_violations:
+            add_factor(
+                factor_type="deal_breaker_violation",
+                factor_key=str(violation.get("field") or "deal_breaker"),
+                factor_label=str(violation.get("description") or violation.get("reason") or "Critério eliminatório violado"),
+                impact_score=-penalty if penalty > 0 else Decimal("-100.00"),
+                normalized_weight=Decimal("1.0"),
+                direction="negative",
+                evidence={"violation": dict(violation)},
+            )
 
-    seniority_score = bd["seniority_match_score"]
-    seniority_impact = round(float((seniority_score - Decimal("50")) * Decimal("0.15")), 2)
-    if seniority_score >= 80:
-        codes.append({
-            "type": "seniority",
-            "field": row.get("seniority_level") or "seniority",
-            "impact": seniority_impact,
-            "description": "Nível de senioridade compatível com a vaga",
-        })
-    elif seniority_score >= 50:
-        codes.append({
-            "type": "seniority",
-            "field": row.get("seniority_level") or "seniority",
-            "impact": seniority_impact,
-            "description": "Senioridade parcialmente compatível",
-        })
-    else:
-        codes.append({
-            "type": "seniority",
-            "field": row.get("seniority_level") or "seniority",
-            "impact": seniority_impact,
-            "description": "Baixo fit para o nível de senioridade exigido",
-        })
+    if outdated:
+        outdated_penalty = max(Decimal("0.00"), _to_decimal(row.get("overall_score")) - bd["final_score"])
+        add_factor(
+            factor_type="legacy_outdated_penalty",
+            factor_key="legacy_outdated",
+            factor_label="Score legado limitado para evitar falso positivo",
+            impact_score=-outdated_penalty,
+            normalized_weight=weights["mandatory"],
+            direction="negative",
+            evidence={
+                "previous_score": float(_to_decimal(row.get("overall_score")).quantize(Decimal("0.01"))),
+                "current_score": float(bd["final_score"].quantize(Decimal("0.01"))),
+            },
+        )
+
+    for skill in matched_required[:5]:
+        add_factor(
+            factor_type="required_skill_match",
+            factor_key=skill.casefold(),
+            factor_label=f"Skill obrigatória atendida: {skill}",
+            impact_score=mandatory_slot_impact,
+            normalized_weight=weights["mandatory"],
+            direction="positive",
+            evidence={"matched": True, "required_skill": skill},
+        )
+
+    partial_required_keys = {str(item.get("required") or "").casefold() for item in partial_matches}
+    for skill in missing_required[:5]:
+        if skill.casefold() in partial_required_keys:
+            continue
+        add_factor(
+            factor_type="missing_required_skill",
+            factor_key=skill.casefold(),
+            factor_label=f"Skill obrigatória ausente: {skill}",
+            impact_score=-mandatory_slot_impact,
+            normalized_weight=weights["mandatory"],
+            direction="negative",
+            evidence={"matched": False, "required_skill": skill},
+        )
+
+    for partial in partial_matches[:5]:
+        required = str(partial.get("required") or "").strip()
+        candidate_skill = str(partial.get("candidate") or "").strip()
+        partial_score = _to_decimal(partial.get("score"))
+        if not required:
+            continue
+        add_factor(
+            factor_type="adjacent_skill_match",
+            factor_key=required.casefold(),
+            factor_label=f"Experiência adjacente cobre parcialmente {required}",
+            impact_score=(mandatory_slot_impact * partial_score).quantize(Decimal("0.01")),
+            normalized_weight=weights["mandatory"],
+            direction="neutral",
+            evidence={
+                "required_skill": required,
+                "candidate_skill": candidate_skill,
+                "partial_score": float(partial_score.quantize(Decimal("0.01"))),
+                "reason": partial.get("reason"),
+                "source": partial.get("source"),
+            },
+        )
 
     experience_score = bd["experience_match_score"]
-    experience_impact = round(float((experience_score - Decimal("50")) * Decimal("0.25")), 2)
+    experience_impact = ((experience_score - Decimal("50")) * Decimal("0.25")).quantize(Decimal("0.01"))
     years = row.get("total_experience_years")
-    years_label = f" ({float(years):.0f} anos)" if years else ""
-    if experience_score >= 70:
-        codes.append({
-            "type": "experience",
-            "field": "total_experience_years",
-            "impact": experience_impact,
-            "description": f"Experiência profissional relevante{years_label}",
-        })
-    elif experience_score >= 40:
-        codes.append({
-            "type": "experience",
-            "field": "total_experience_years",
-            "impact": experience_impact,
-            "description": f"Experiência parcialmente compatível{years_label}",
-        })
-    else:
-        codes.append({
-            "type": "experience",
-            "field": "total_experience_years",
-            "impact": experience_impact,
-            "description": f"Experiência insuficiente para o cargo{years_label}",
-        })
+    required_years = job.minimum_years_experience
+    add_factor(
+        factor_type="experience_match" if experience_score >= Decimal("70") else "insufficient_experience",
+        factor_key="experience",
+        factor_label=(
+            "Experiência atende ou supera o esperado"
+            if experience_score >= Decimal("70")
+            else "Experiência abaixo do esperado"
+        ),
+        impact_score=experience_impact,
+        normalized_weight=weights["experience"],
+        direction="positive" if experience_score >= Decimal("70") else "negative",
+        evidence={
+            "years_found": float(_to_decimal(years, default=Decimal("0")).quantize(Decimal("0.01"))) if years is not None else 0.0,
+            "years_required": float(_to_decimal(required_years, default=Decimal("0")).quantize(Decimal("0.01"))) if required_years is not None else 0.0,
+        },
+    )
 
-    for strength in _coerce_list(row.get("strengths"))[:1]:
-        codes.append({
-            "type": "strength",
-            "field": "profile",
-            "impact": 2.0,
-            "description": f"Ponto forte: {strength}",
-        })
+    seniority_score = bd["seniority_match_score"]
+    seniority_impact = ((seniority_score - Decimal("50")) * Decimal("0.15")).quantize(Decimal("0.01"))
+    add_factor(
+        factor_type="seniority_match" if seniority_score >= Decimal("70") else "seniority_gap",
+        factor_key="seniority",
+        factor_label=(
+            "Senioridade alinhada à vaga"
+            if seniority_score >= Decimal("70")
+            else "Senioridade abaixo da desejada"
+        ),
+        impact_score=seniority_impact,
+        normalized_weight=weights["seniority"],
+        direction="positive" if seniority_score >= Decimal("70") else "negative",
+        evidence={
+            "candidate_seniority": row.get("seniority_level"),
+            "job_seniority": job.seniority_level,
+        },
+    )
 
-    for weakness in _coerce_list(row.get("weaknesses"))[:1]:
-        codes.append({
-            "type": "weakness",
-            "field": "profile",
-            "impact": -2.0,
-            "description": f"Ponto de atenção: {weakness}",
-        })
+    education_score = bd["education_score"]
+    if education_score >= Decimal("100"):
+        add_factor(
+            factor_type="education_match",
+            factor_key="education",
+            factor_label="Formação compatível com a vaga",
+            impact_score=Decimal("5.00"),
+            normalized_weight=Decimal("0.10"),
+            direction="positive",
+            evidence={
+                "candidate_education": row.get("education_level"),
+                "job_education": job.minimum_education_level,
+            },
+        )
 
     confidence_score = bd.get("confidence_score", Decimal("0.00"))
     if bd["final_score"] >= Decimal("70.00") and confidence_score < Decimal("50.00"):
+        confidence_penalty = ((Decimal("50.00") - confidence_score) / Decimal("4")).quantize(Decimal("0.01"))
+        add_factor(
+            factor_type="data_confidence_penalty",
+            factor_key="matching_confidence",
+            factor_label="Baixa confiança dos dados usados no matching",
+            impact_score=-confidence_penalty,
+            normalized_weight=Decimal("0.05"),
+            direction="negative",
+            evidence={"confidence_score": float(confidence_score.quantize(Decimal("0.01")))},
+        )
+
+    _validate_score_factors(factors)
+    return factors
+
+
+def _build_reason_codes(factors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    codes: list[dict[str, Any]] = []
+    for factor in factors:
+        factor_type = str(factor.get("factor_type") or "")
+        factor_key = str(factor.get("factor_key") or "")
+        factor_label = str(factor.get("factor_label") or "")
+        impact = float(factor.get("impact_score") or 0.0)
+
+        reason_type = {
+            "required_skill_match": "skill_match",
+            "missing_required_skill": "missing_skill",
+            "adjacent_skill_match": "adjacent_skill",
+            "experience_match": "experience",
+            "insufficient_experience": "experience",
+            "seniority_match": "seniority",
+            "seniority_gap": "seniority",
+            "education_match": "education",
+            "deal_breaker_violation": "deal_breaker",
+            "data_confidence_penalty": "confidence_alert",
+            "legacy_outdated_penalty": "outdated_score",
+        }.get(factor_type, factor_type)
+
         codes.append({
-            "type": "confidence_alert",
-            "field": "matching_confidence",
-            "impact": 0.0,
-            "description": "Score alto com baixa confiança dos dados; revisar vaga e profile antes de decidir.",
+            "type": reason_type,
+            "field": factor_key,
+            "impact": impact,
+            "description": factor_label,
+        })
+    return codes
+
+
+def _validate_score_factors(factors: list[dict[str, Any]]) -> None:
+    for factor in factors:
+        factor_type = str(factor.get("factor_type") or "")
+        direction = str(factor.get("direction") or "")
+        if factor_type not in _ALLOWED_SCORE_FACTOR_TYPES:
+            logger.error("ranking.invalid_factor_type", factor_type=factor_type, factor=factor)
+            raise ValueError(f"Unsupported factor_type: {factor_type}")
+        if direction not in {"positive", "negative", "neutral"}:
+            logger.error("ranking.invalid_factor_direction", direction=direction, factor=factor)
+            raise ValueError(f"Unsupported factor direction: {direction}")
+
+
+def _summarize_score_factors(factors: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {
+        "positive": [],
+        "negative": [],
+        "contextual": [],
+    }
+    for factor in sorted(
+        factors,
+        key=lambda item: abs(float(item.get("impact_score") or 0.0)),
+        reverse=True,
+    ):
+        direction = str(factor.get("direction") or "neutral")
+        bucket = "contextual"
+        if direction == "positive":
+            bucket = "positive"
+        elif direction == "negative":
+            bucket = "negative"
+
+        if len(grouped[bucket]) >= _SCORE_FACTOR_SUMMARY_LIMIT:
+            continue
+        grouped[bucket].append({
+            "factor_type": str(factor.get("factor_type") or ""),
+            "factor_key": str(factor.get("factor_key") or ""),
+            "factor_label": str(factor.get("factor_label") or ""),
+            "impact_score": float(factor.get("impact_score") or 0.0),
+            "direction": direction,
+        })
+    return grouped
+
+
+def _empty_delta_summary(
+    *,
+    current_score: Decimal | None,
+) -> dict[str, Any]:
+    return {
+        "previous_score": None,
+        "current_score": float(current_score.quantize(Decimal("0.01"))) if current_score is not None else None,
+        "score_change": None,
+        "change_reason": None,
+        "top_changes": [],
+    }
+
+
+def _derive_delta_summary(
+    *,
+    previous_snapshot: dict[str, Any] | None,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    current_score = _to_decimal(payload["final_score"]).quantize(Decimal("0.01"))
+    if previous_snapshot is None:
+        return _empty_delta_summary(current_score=current_score)
+
+    previous_score = _to_decimal(previous_snapshot.get("final_score")).quantize(Decimal("0.01"))
+    score_change = (current_score - previous_score).quantize(Decimal("0.01"))
+    previous_factors = {
+        (str(item.get("factor_type") or ""), str(item.get("factor_key") or "")): item
+        for item in previous_snapshot.get("factors", [])
+    }
+    current_factors = {
+        (str(item.get("factor_type") or ""), str(item.get("factor_key") or "")): item
+        for item in payload.get("factors", [])
+    }
+    all_keys = set(previous_factors) | set(current_factors)
+    top_changes: list[dict[str, Any]] = []
+
+    for factor_key in all_keys:
+        previous_factor = previous_factors.get(factor_key)
+        current_factor = current_factors.get(factor_key)
+        previous_impact = _to_decimal(previous_factor.get("impact_score")) if previous_factor else Decimal("0.00")
+        current_impact = _to_decimal(current_factor.get("impact_score")) if current_factor else Decimal("0.00")
+        impact_delta = (current_impact - previous_impact).quantize(Decimal("0.01"))
+        if abs(impact_delta) < _SCORE_DELTA_CHANGE_THRESHOLD:
+            continue
+        base_factor = current_factor or previous_factor or {}
+        top_changes.append({
+            "factor_type": str(base_factor.get("factor_type") or ""),
+            "factor_key": str(base_factor.get("factor_key") or ""),
+            "factor_label": str(base_factor.get("factor_label") or ""),
+            "previous_impact_score": float(previous_impact),
+            "current_impact_score": float(current_impact),
+            "impact_delta": float(impact_delta),
+            "change_kind": (
+                "added"
+                if previous_factor is None
+                else "removed"
+                if current_factor is None
+                else "changed"
+            ),
         })
 
-    return codes
+    top_changes.sort(key=lambda item: abs(float(item["impact_delta"])), reverse=True)
+    top_changes = top_changes[:_SCORE_DELTA_SUMMARY_LIMIT]
+
+    previous_input_hash = str(previous_snapshot.get("input_hash") or "")
+    current_input_hash = str(payload.get("input_hash") or "")
+    previous_job_signature_hash = str(previous_snapshot.get("job_signature_hash") or "")
+    current_job_signature_hash = str(payload.get("job_signature_hash") or "")
+    previous_ranking_version = str(previous_snapshot.get("ranking_version") or "")
+    current_ranking_version = str(payload.get("score_model_version") or "")
+    previous_analysis_id = str(previous_snapshot.get("source_analysis_id") or "")
+    current_analysis_id = str(payload.get("source_analysis_id") or "")
+    previous_analysis_created_at = str(previous_snapshot.get("source_analysis_created_at") or "")
+    current_analysis_created_at = str(payload.get("source_analysis_created_at") or "")
+
+    if previous_ranking_version and current_ranking_version and previous_ranking_version != current_ranking_version:
+        change_reason = "score_model_changed"
+    elif previous_job_signature_hash and current_job_signature_hash and previous_job_signature_hash != current_job_signature_hash:
+        change_reason = "job_requirements_changed"
+    elif (
+        previous_analysis_id != current_analysis_id
+        or previous_analysis_created_at != current_analysis_created_at
+    ):
+        change_reason = "candidate_analysis_changed"
+    elif previous_input_hash == current_input_hash:
+        change_reason = "manual_recompute_same_inputs"
+    else:
+        change_reason = "candidate_analysis_changed"
+
+    return {
+        "previous_score": float(previous_score),
+        "current_score": float(current_score),
+        "score_change": float(score_change),
+        "change_reason": change_reason,
+        "top_changes": top_changes,
+    }
+
+
+def _render_score_explanation(
+    *,
+    final_score: Decimal | float | int,
+    decision: str,
+    factor_summary: dict[str, list[dict[str, Any]]],
+    delta_summary: dict[str, Any] | None,
+) -> str:
+    score = float(_to_decimal(final_score).quantize(Decimal("0.01")))
+    positives = [item["factor_label"] for item in factor_summary.get("positive", [])[:2]]
+    negatives = [item["factor_label"] for item in factor_summary.get("negative", [])[:2]]
+
+    parts = [f"Aderência à vaga em {score:.1f}/100."]
+    if positives:
+        parts.append(f"Pontos fortes: {', '.join(positives)}.")
+    if negatives:
+        parts.append(f"Principais impactos negativos: {', '.join(negatives)}.")
+
+    if delta_summary and delta_summary.get("score_change") not in {None, 0, 0.0}:
+        delta_value = float(delta_summary["score_change"])
+        if abs(delta_value) >= 5:
+            direction = "subiu" if delta_value > 0 else "caiu"
+            parts.append(
+                f"O score {direction} {abs(delta_value):.0f} pontos desde o snapshot anterior."
+            )
+
+    decision_text = {
+        "approved": "Perfil recomendado para avançar.",
+        "review": "Perfil pede revisão adicional.",
+        "rejected_suggested": "Perfil abaixo do threshold recomendado.",
+    }.get(decision)
+    if decision_text:
+        parts.append(decision_text)
+    return " ".join(parts)
 
 
 def _build_explanation(
@@ -944,6 +1812,79 @@ def _resolve_thresholds(version: ScoreModelVersionModel) -> tuple[Decimal, Decim
     high = thresholds.get("high", Decimal("70"))
     low = thresholds.get("low", Decimal("55"))
     return high, low
+
+
+def _coerce_utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _resolve_freshness_status(
+    *,
+    ranking_updated_at: datetime | None,
+    match_updated_at: datetime | None,
+    persisted_status: str | None,
+) -> str:
+    if ranking_updated_at is None or match_updated_at is None:
+        return persisted_status or "unknown"
+    if ranking_updated_at >= match_updated_at:
+        return "fresh"
+    return "stale"
+
+
+def _build_score_input_hash(
+    *,
+    row: dict[str, Any],
+    score_version: str,
+    job_signature_hash: str,
+) -> str:
+    raw = "|".join([
+        str(row.get("candidate_id") or ""),
+        str(row.get("source_analysis_id") or ""),
+        str(row.get("source_analysis_created_at") or ""),
+        str(row.get("resume_version_id") or ""),
+        str(row.get("overall_score") or ""),
+        ",".join(_coerce_list(row.get("matched_skills"))),
+        ",".join(_coerce_list(row.get("missing_skills"))),
+        str(row.get("total_experience_years") or ""),
+        str(row.get("seniority_level") or ""),
+        job_signature_hash,
+        score_version,
+    ])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _build_job_signature_hash(*, job: JobModel, job_skill_rows: list[Any]) -> str:
+    raw = "|".join([
+        str(job.title or ""),
+        str(job.description or ""),
+        str(job.requirements or ""),
+        str(job.seniority_level or ""),
+        str(job.minimum_education_level or ""),
+        str(job.minimum_years_experience or ""),
+        str(job.deal_breakers or []),
+        "|".join(
+            sorted(
+                [
+                    ":".join(
+                        [
+                            str(item.skill_name or ""),
+                            "mandatory" if getattr(item.JobRequiredSkillModel, "is_mandatory", False) else "optional",
+                            str(getattr(item.JobRequiredSkillModel, "minimum_level", None) or ""),
+                            str(getattr(item.JobRequiredSkillModel, "minimum_years", None) or ""),
+                            str(getattr(item.JobRequiredSkillModel, "weight", None) or ""),
+                        ]
+                    )
+                    for item in job_skill_rows
+                    if str(item.skill_name or "").strip()
+                ]
+            )
+        ),
+    ])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _is_outdated_match_row(

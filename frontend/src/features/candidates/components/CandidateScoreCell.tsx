@@ -6,7 +6,7 @@ export function CandidateScoreCell({ candidate }: { candidate: CandidateListSumm
     activeJobMatchScore: candidate.active_job_match_score,
     aiScore: candidate.ai_score,
     aiStatus: candidate.ai_status,
-    hasActiveJob: candidate.linked_job_count > 0,
+    hasActiveJob: Boolean(candidate.active_job_id),
   });
 
   const toneClass =

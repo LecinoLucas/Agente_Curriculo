@@ -16,6 +16,30 @@ export function OverviewTab({
   activePipelineEntry,
   onEdit,
 }: OverviewTabProps) {
+  const hasActiveRelationship = activePipelineEntry?.relationship_status === "active";
+  const activeEntryById =
+    activeJobId != null
+      ? overview.pipeline_entries.find((entry) => entry.job_id === activeJobId) ?? null
+      : null;
+  const latestLinkedEntry = overview.pipeline_entries[0] ?? null;
+  const relationshipTitle = hasActiveRelationship ? "Vaga ativa" : "Última vaga vinculada";
+  const relationshipScoreTitle =
+    hasActiveRelationship
+      ? activePipelineEntry?.match_score != null
+        ? `${Math.round(activePipelineEntry.match_score)}%`
+        : "—"
+      : "—";
+  const relationshipJobTitle =
+    hasActiveRelationship
+      ? activeJob?.title ?? activeEntryById?.job_title ?? "Nenhuma vaga ativa"
+      : latestLinkedEntry?.job_title ?? "Nenhuma vaga vinculada";
+  const relationshipStatusLabel = hasActiveRelationship ? "Etapa atual" : "Status final";
+  const relationshipStatusTitle =
+    hasActiveRelationship
+      ? activePipelineEntry?.candidate_status ?? "Não vinculado"
+      : latestLinkedEntry?.candidate_status ?? "Não vinculado";
+  const relationshipStatusDescription = hasActiveRelationship ? "Estado no pipeline" : "Candidatura encerrada";
+
   return (
     <div className="flex flex-col gap-5 p-5">
       {/* Summary Section */}
@@ -48,21 +72,17 @@ export function OverviewTab({
       </Section>
 
       {/* Score Section */}
-      <Section title="Vaga ativa">
+      <Section title={relationshipTitle}>
         <div className="grid gap-3 sm:grid-cols-2">
           <StatusCard
-            label="Match da vaga ativa"
-            title={
-              activePipelineEntry?.match_score != null
-                ? `${Math.round(activePipelineEntry.match_score)}%`
-                : "—"
-            }
-            description={activeJob?.title ?? "Nenhuma vaga ativa"}
+            label="Compatibilidade Contextual"
+            title={relationshipScoreTitle}
+            description={relationshipJobTitle}
           />
           <StatusCard
-            label="Etapa atual"
-            title={activePipelineEntry?.candidate_status ?? "Não vinculado"}
-            description="Estado no pipeline"
+            label={relationshipStatusLabel}
+            title={relationshipStatusTitle}
+            description={relationshipStatusDescription}
           />
         </div>
       </Section>

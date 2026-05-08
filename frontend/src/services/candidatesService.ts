@@ -107,6 +107,22 @@ function normalizeLatestAnalysisPipeline(
 }
 
 function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candidate?: Partial<Candidate> }): CandidateOverview {
+  const normalizedEntries = Array.isArray(item.pipeline_entries)
+    ? item.pipeline_entries.map((entry) => ({
+        candidate_id: entry?.candidate_id ?? "",
+        job_id: entry?.job_id ?? "",
+        job_title: entry?.job_title ?? "",
+        stage: (entry?.stage ?? "entry") as PipelineStage,
+        relationship_status: entry?.relationship_status ?? "active",
+        is_terminal: Boolean(entry?.is_terminal),
+        terminated_at: entry?.terminated_at ?? null,
+        termination_reason: entry?.termination_reason ?? null,
+        candidate_status: entry?.candidate_status ?? "Em processo",
+        match_score: entry?.match_score != null ? Number(entry.match_score) : null,
+        updated_at: entry?.updated_at ?? new Date(0).toISOString(),
+      }))
+    : [];
+
   return {
     candidate: normalizeCandidate(item.candidate ?? {}),
     resumes: Array.isArray(item.resumes) ? item.resumes : [],
@@ -125,7 +141,7 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
             status: item.active_job.status,
           }
         : null,
-    pipeline_entries: Array.isArray(item.pipeline_entries) ? item.pipeline_entries : [],
+    pipeline_entries: normalizedEntries,
   };
 }
 
@@ -140,6 +156,11 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
     created_at: item.created_at ?? new Date(0).toISOString(),
     resume_count: item.resume_count ?? 0,
     linked_job_count: item.linked_job_count ?? 0,
+    latest_job_id: typeof item.latest_job_id === "string" ? item.latest_job_id : null,
+    latest_job_title: item.latest_job_title ?? null,
+    latest_job_stage: item.latest_job_stage ?? null,
+    latest_relationship_status: item.latest_relationship_status ?? null,
+    active_job_id: typeof item.active_job_id === "string" ? item.active_job_id : null,
     active_job_title: item.active_job_title ?? null,
     active_job_stage: item.active_job_stage ?? null,
     active_job_match_score: item.active_job_match_score != null ? Number(item.active_job_match_score) : null,

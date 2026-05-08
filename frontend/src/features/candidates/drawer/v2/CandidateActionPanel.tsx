@@ -35,7 +35,6 @@ interface CandidateActionPanelProps {
   interactionLocked?: boolean;
   onStageChange: (stage: PipelineStage) => Promise<void>;
   onLinkToActiveJob: () => Promise<void>;
-  onOpenAddJob: () => void;
   onOpenTransferJob: () => void;
   isOpen: boolean;
   onToggle: () => void;
@@ -51,7 +50,6 @@ export function CandidateActionPanel({
   interactionLocked = false,
   onStageChange,
   onLinkToActiveJob,
-  onOpenAddJob,
   onOpenTransferJob,
   isOpen,
   onToggle,
@@ -174,27 +172,16 @@ export function CandidateActionPanel({
           ) : null}
 
           {/* Job actions */}
-          <div className="space-y-2">
+          {canTransferCurrentJob && (
             <button
               type="button"
-              onClick={onOpenAddJob}
+              onClick={onOpenTransferJob}
               disabled={interactionLocked}
               className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
             >
-              + Adicionar a outra vaga
+              ↔️ Transferir para outra vaga
             </button>
-
-            {canTransferCurrentJob && (
-              <button
-                type="button"
-                onClick={onOpenTransferJob}
-                disabled={interactionLocked}
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
-              >
-                ↔️ Transferir para outra vaga
-              </button>
-            )}
-          </div>
+          )}
         </div>
       )}
     </div>

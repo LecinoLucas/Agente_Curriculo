@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { JobStatusSummary } from "../../../types/api";
 import { formatErrorDetails, handleApiError } from "../../../shared/utils/errorHandler";
 import { closeJob, deleteJob, listJobCandidates, listJobs, pauseJob } from "../../../services/jobsService";
 import { pipelineService } from "../../../services/pipelineService";
@@ -7,6 +8,8 @@ import { compareJobsByOperationalPriority } from "../utils/jobsPageHelpers";
 import type { Job } from "../../../types/domain";
 
 export type JobStatusFilter = "all" | "draft" | "published" | "paused" | "closed" | "cancelled";
+export type JobAreaFilter = "all" | string;
+export type JobWorkModelFilter = "all" | string;
 
 export type JobOperationalData = {
   totalCandidates: number;
@@ -24,20 +27,38 @@ export function useJobsList() {
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState<JobStatusFilter>("all");
+  const [areaFilter, setAreaFilter] = useState<JobAreaFilter>("all");
+  const [workModelFilter, setWorkModelFilter] = useState<JobWorkModelFilter>("all");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const [jobOperationalData, setJobOperationalData] = useState<Record<string, JobOperationalData>>({});
+  const [summary, setSummary] = useState<JobStatusSummary>({
+    all: 0,
+    published: 0,
+    draft: 0,
+    paused: 0,
+    closed: 0,
+    cancelled: 0,
+    attention: 0,
+  });
   const operationalRequestRef = useRef(0);
 
   async function loadJobs() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listJobs(page, pageSize);
+      const response = await listJobs(page, pageSize, {
+        search: searchInput,
+        statusFilter,
+        jobArea: areaFilter,
+        workModel: workModelFilter,
+      });
       setJobs(response.data);
       setTotal(response.total);
       setTotalPages(response.total_pages);
+      setSummary(response.summary);
       setSelectedJobId((current) =>
         current && response.data.some((job) => job.id === current)
           ? current
@@ -52,7 +73,7 @@ export function useJobsList() {
 
   useEffect(() => {
     void loadJobs();
-  }, [page, pageSize]);
+  }, [page, pageSize, searchInput, statusFilter, areaFilter, workModelFilter]);
 
   useEffect(() => {
     if (jobs.length === 0) {
@@ -104,24 +125,57 @@ export function useJobsList() {
     })();
   }, [jobs]);
 
-  const filteredJobs = useMemo(() => {
-    const visibleJobs = statusFilter === "all" ? jobs : jobs.filter((job) => job.status === statusFilter);
-    return [...visibleJobs].sort((left, right) => compareJobsByOperationalPriority(left, right, jobOperationalData));
-  }, [jobs, statusFilter, jobOperationalData]);
+  const filteredJobs = useMemo(
+    () => [...jobs].sort((left, right) => compareJobsByOperationalPriority(left, right, jobOperationalData)),
+    [jobs, jobOperationalData],
+  );
 
   const selectedJob = useMemo(
     () => filteredJobs.find((job) => job.id === selectedJobId) ?? null,
     [filteredJobs, selectedJobId],
   );
 
-  const summary = useMemo(() => {
-    const published = jobs.filter((job) => job.status === "published").length;
-    const drafts = jobs.filter((job) => job.status === "draft").length;
-    const attention = jobs.filter((job) => {
-      return job.quality_status === "weak" || job.quality_status === "acceptable";
-    }).length;
-    return { published, drafts, attention };
-  }, [jobs]);
+  const areaOptions = useMemo(
+    () =>
+      Array.from(new Set(jobs.map((job) => job.job_area).filter(Boolean) as string[])).sort((left, right) =>
+        left.localeCompare(right, "pt-BR"),
+      ),
+    [jobs],
+  );
+
+  const workModelOptions = useMemo(
+    () =>
+      Array.from(new Set(jobs.map((job) => job.work_model).filter(Boolean) as string[])).sort((left, right) =>
+        left.localeCompare(right, "pt-BR"),
+      ),
+    [jobs],
+  );
+
+  const statusCounts = useMemo(
+    () => ({
+      all: summary.all,
+      published: summary.published,
+      draft: summary.draft,
+      paused: summary.paused,
+      closed: summary.closed,
+      cancelled: summary.cancelled,
+    }),
+    [summary],
+  );
+
+  const hasActiveFilters =
+    searchInput.trim().length > 0 ||
+    statusFilter !== "all" ||
+    areaFilter !== "all" ||
+    workModelFilter !== "all";
+
+  function clearFilters() {
+    setSearchInput("");
+    setStatusFilter("all");
+    setAreaFilter("all");
+    setWorkModelFilter("all");
+    setPage(1);
+  }
 
   async function handlePause(jobId: string) {
     setRunningAction(`pause:${jobId}`);
@@ -175,8 +229,14 @@ export function useJobsList() {
     setPageSize,
     total,
     totalPages,
+    searchInput,
+    setSearchInput,
     statusFilter,
     setStatusFilter,
+    areaFilter,
+    setAreaFilter,
+    workModelFilter,
+    setWorkModelFilter,
     selectedJobId,
     setSelectedJobId,
     runningAction,
@@ -184,6 +244,11 @@ export function useJobsList() {
     filteredJobs,
     selectedJob,
     summary,
+    areaOptions,
+    workModelOptions,
+    statusCounts,
+    hasActiveFilters,
+    clearFilters,
     loadJobs,
     handlePause,
     handleClose,

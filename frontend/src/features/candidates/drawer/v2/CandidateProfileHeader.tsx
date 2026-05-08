@@ -1,29 +1,35 @@
 import type { CandidateOverview, PipelineStage } from "../../../../types/domain";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { deriveScoreSemantics } from "../../utils/scoreSemantics";
 
 interface CandidateProfileHeaderProps {
   candidate: CandidateOverview["candidate"] | null | undefined;
   currentStage: PipelineStage | null;
   activeJobLabel: string;
+  hasActiveJob: boolean;
   compatibilityScore: number | null;
   aiScore: number | null;
   aiStatus: string | null | undefined;
   isLoading: boolean;
   onClose: () => void;
   onNavigateToFull?: () => void;
+  onBackToList?: () => void;
+  backToListLabel?: string;
 }
 
 export function CandidateProfileHeader({
   candidate,
   currentStage,
   activeJobLabel,
+  hasActiveJob,
   compatibilityScore,
   aiScore,
   aiStatus,
   isLoading,
   onClose,
   onNavigateToFull,
+  onBackToList,
+  backToListLabel = "Candidatos",
 }: CandidateProfileHeaderProps) {
   const initials = candidate?.full_name
     ?.split(" ")
@@ -36,7 +42,7 @@ export function CandidateProfileHeader({
     activeJobMatchScore: compatibilityScore,
     aiScore,
     aiStatus,
-    hasActiveJob: Boolean(activeJobLabel && activeJobLabel !== "Não vinculado"),
+    hasActiveJob,
   });
 
   const scoreColor =
@@ -77,12 +83,27 @@ export function CandidateProfileHeader({
               </>
             ) : (
               <>
+                {onBackToList ? (
+                  <button
+                    type="button"
+                    onClick={onBackToList}
+                    className="mb-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span>{backToListLabel}</span>
+                  </button>
+                ) : null}
                 <h1 className="truncate text-lg font-semibold tracking-[-0.01em] text-[hsl(var(--text))]">
                   {candidate?.full_name ?? "—"}
                 </h1>
                 <p className="mt-0.5 truncate text-sm text-[hsl(var(--text-muted))]">
                   {activeJobLabel || "Sem vaga"}
                 </p>
+                {!hasActiveJob && activeJobLabel && activeJobLabel !== "Não vinculado" ? (
+                  <p className="mt-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
+                    Última vaga vinculada
+                  </p>
+                ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors duration-300 ${stageBadgeClass}`}>
                     {currentStage ? STAGE_LABEL[currentStage] ?? currentStage : "Sem etapa"}

@@ -14,6 +14,7 @@ _PIPELINE_STAGE_VALUES = (
     "'final', 'offer', 'hired', 'rejected'"
 )
 _LINK_STATUS_VALUES = "'active', 'removed', 'transferred', 'hired', 'rejected'"
+_RELATIONSHIP_STATUS_VALUES = "'active', 'rejected', 'hired', 'withdrawn', 'archived'"
 _PIPELINE_STATUS_VALUES = "'active', 'terminal'"
 _SOURCE_VALUES = "'manual', 'ai_match', 'import'"
 
@@ -41,6 +42,19 @@ class CandidateJobPipelineModel(Base):
         nullable=False,
         server_default="active",
     )
+    relationship_status: Mapped[str] = mapped_column(
+        sa.String(20),
+        nullable=False,
+        server_default="active",
+    )
+    is_terminal: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa.false(),
+    )
+    terminated_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    termination_reason: Mapped[str | None] = mapped_column(sa.String(500))
     pipeline_stage: Mapped[str] = mapped_column(
         sa.String(50),
         nullable=False,
@@ -89,8 +103,20 @@ class CandidateJobPipelineModel(Base):
             name="ck_candidate_job_pipeline_link_status",
         ),
         sa.CheckConstraint(
+            f"relationship_status IN ({_RELATIONSHIP_STATUS_VALUES})",
+            name="ck_candidate_job_pipeline_relationship_status",
+        ),
+        sa.CheckConstraint(
             f"pipeline_status IN ({_PIPELINE_STATUS_VALUES})",
             name="ck_candidate_job_pipeline_pipeline_status",
+        ),
+        sa.CheckConstraint(
+            "("
+            "relationship_status = 'active' AND is_terminal = FALSE AND terminated_at IS NULL AND termination_reason IS NULL"
+            ") OR ("
+            "relationship_status <> 'active' AND is_terminal = TRUE AND terminated_at IS NOT NULL"
+            ")",
+            name="ck_candidate_job_pipeline_relationship_terminal",
         ),
         sa.CheckConstraint(
             f"source IN ({_SOURCE_VALUES})",
@@ -106,6 +132,12 @@ class CandidateJobPipelineModel(Base):
             "job_id",
             "pipeline_status",
             "link_status",
+        ),
+        sa.Index(
+            "idx_candidate_job_pipeline_job_relationship_active",
+            "job_id",
+            "relationship_status",
+            "is_terminal",
         ),
         sa.Index(
             "idx_candidate_job_pipeline_analysis",

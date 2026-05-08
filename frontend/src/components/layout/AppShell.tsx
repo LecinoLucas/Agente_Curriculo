@@ -72,10 +72,10 @@ export function AppShell() {
         end={item.to === "/admin"}
         className={({ isActive }) =>
           cn(
-            "group relative flex min-w-[110px] flex-col rounded-xl px-3 py-2 transition-all duration-150",
+            "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
             isActive
-              ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-              : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+              ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
+              : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
           )
         }
       >
@@ -97,7 +97,7 @@ export function AppShell() {
         onClick={() => setMobileMenuOpen(false)}
         className={({ isActive }) =>
           cn(
-            "flex items-center justify-between rounded-xl px-4 py-3 transition-colors",
+            "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
             isActive
               ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
               : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
@@ -117,17 +117,17 @@ export function AppShell() {
     <div className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
 
       {/* ── Top navigation bar (dark in light mode, darker-dark in dark mode) ── */}
-      <header className="sticky top-0 z-40 border-b border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-bg))]">
-        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-3 sm:px-6">
+      <header className="sticky top-0 z-40 border-b border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))]/95 shadow-[0_18px_40px_-34px_hsl(var(--text)/0.18)] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--nav-bg))]/88">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-3.5 sm:px-6">
 
           {/* Brand */}
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={() => navigate("/pipeline")}
-              className="flex items-center gap-3 rounded-xl px-1 py-1 text-left transition hover:bg-[hsl(var(--nav-active-bg))]"
+              className="flex items-center gap-3 rounded-2xl border border-transparent px-2 py-1.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/68"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 text-xs font-extrabold text-white shadow-md">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] via-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-xs font-extrabold text-white shadow-[0_16px_30px_-20px_hsl(var(--primary)/0.65)]">
                 RA
               </div>
               <div className="hidden sm:block">
@@ -142,17 +142,17 @@ export function AppShell() {
           </div>
 
           {/* Desktop nav */}
-          <nav className="ml-2 hidden flex-1 items-center gap-1 lg:flex">
+          <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
             {visibleItems.map(renderDesktopLink)}
             {visibleAdminItems.length > 0 ? (
               <div className="relative group">
                 <button
                   type="button"
                   className={cn(
-                    "group relative flex min-w-[110px] flex-col rounded-xl px-3 py-2 transition-all duration-150",
+                    "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
                     isAdminActive
-                      ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-                      : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+                      ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
+                      : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
                   )}
                   onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
                 >
@@ -168,7 +168,7 @@ export function AppShell() {
                 {/* Dropdown menu */}
                 <div
                   className={cn(
-                    "absolute left-0 top-full mt-2 hidden w-max rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-lg transition-all duration-150 group-hover:block",
+                    "absolute left-0 top-full mt-2 hidden w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))]/98 shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] backdrop-blur transition-all duration-150 group-hover:block",
                     adminDropdownOpen && "block",
                   )}
                 >
@@ -180,7 +180,7 @@ export function AppShell() {
                       onClick={() => setAdminDropdownOpen(false)}
                       className={({ isActive }) =>
                         cn(
-                          "flex flex-col px-4 py-3 transition-colors first:rounded-t-xl last:rounded-b-xl",
+                          "flex flex-col px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl",
                           isActive
                             ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
                             : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--text))]",
@@ -205,7 +205,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[hsl(var(--nav-muted))] transition-colors hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-transparent text-[hsl(var(--nav-muted))] transition-colors hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
               aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
               title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
             >
@@ -216,7 +216,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => navigate("/perfil")}
-              className="hidden items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-[hsl(var(--nav-active-bg))] lg:flex"
+              className="hidden items-center gap-3 rounded-2xl border border-transparent px-3.5 py-2.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] lg:flex"
             >
               <div className="text-right">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--nav-muted))]">
@@ -229,7 +229,7 @@ export function AppShell() {
                   {user?.role ? ROLE_LABELS[user.role] : ""}
                 </p>
               </div>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-semibold text-white shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white shadow-[0_16px_30px_-22px_hsl(var(--primary)/0.68)]">
                 {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
               </div>
             </button>
@@ -238,7 +238,7 @@ export function AppShell() {
             <div className="hidden lg:block">
               <ActionMenu
                 buttonLabel="Abrir ações de perfil"
-                buttonClassName="!border-0 !bg-transparent !text-[hsl(var(--nav-muted))] hover:!bg-[hsl(var(--nav-active-bg))] hover:!text-[hsl(var(--nav-text))]"
+                buttonClassName="!h-10 !w-10 !rounded-2xl !border !border-transparent !bg-transparent !text-[hsl(var(--nav-muted))] hover:!border-[hsl(var(--nav-border))]/70 hover:!bg-[hsl(var(--nav-active-bg))] hover:!text-[hsl(var(--nav-text))]"
                 items={[
                   { label: "Meu perfil", onClick: () => navigate("/perfil") },
                   { label: "Sair", onClick: () => void logout(), tone: "danger" },
@@ -250,7 +250,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[hsl(var(--nav-muted))] transition-colors hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))] lg:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-transparent text-[hsl(var(--nav-muted))] transition-colors hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))] lg:hidden"
               aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
               aria-expanded={mobileMenuOpen}
             >
@@ -261,12 +261,12 @@ export function AppShell() {
 
         {/* ── Mobile drawer ──────────────────────────────────────────────── */}
         {mobileMenuOpen ? (
-          <div className="border-t border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-bg))] px-4 py-4 shadow-lg lg:hidden">
+          <div className="border-t border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-bg))]/98 px-4 py-4 shadow-[0_24px_46px_-30px_hsl(var(--text)/0.26)] lg:hidden">
             <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
 
               {/* Profile summary */}
-              <div className="flex items-center gap-3 rounded-xl bg-[hsl(var(--nav-active-bg))] px-4 py-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-semibold text-white">
+              <div className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--nav-border))]/70 bg-[hsl(var(--nav-active-bg))] px-4 py-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white">
                   {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
                 </div>
                 <div className="min-w-0">
@@ -288,7 +288,7 @@ export function AppShell() {
                   <button
                     type="button"
                     onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                    className="flex items-center justify-between rounded-xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
+                    className="flex items-center justify-between rounded-2xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
                   >
                     <div className="min-w-0 text-left">
                       <p className="text-sm font-semibold tracking-tight text-[hsl(var(--nav-text))]">Admin</p>
@@ -297,7 +297,7 @@ export function AppShell() {
                     <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", adminDropdownOpen && "rotate-180")} />
                   </button>
                   {adminDropdownOpen ? (
-                    <div className="flex flex-col gap-1 rounded-lg bg-[hsl(var(--nav-active-bg))]/30 p-2">
+                    <div className="flex flex-col gap-1 rounded-2xl bg-[hsl(var(--nav-active-bg))]/40 p-2">
                       {visibleAdminItems.map(renderMobileLink)}
                     </div>
                   ) : null}

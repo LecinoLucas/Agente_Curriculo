@@ -7,6 +7,7 @@ import { CandidateProfileHeader } from "./CandidateProfileHeader";
 import { CandidateDecisionPanel } from "./CandidateDecisionPanel";
 import { CandidateQuickActions } from "./CandidateQuickActions";
 import { CandidateActionPanel } from "./CandidateActionPanel";
+import { CandidateQuickJobActions } from "./CandidateQuickJobActions";
 import { CandidateProfileNavigation, type TabKey } from "./CandidateProfileNavigation";
 import { CandidateProfileContent } from "./CandidateProfileContent";
 
@@ -36,11 +37,13 @@ interface CandidateProfileViewProps {
   interactionLocked?: boolean;
   compact?: boolean;
   onClose: () => void;
-  onApprove: () => void;
-  onReject: () => void;
+  onAdvance: () => void;
+  onTerminate: () => void;
   onViewAnalysis: () => void;
   onTabChange: (tab: TabKey) => void;
   onNavigateToFull?: () => void;
+  onBackToList?: () => void;
+  backToListLabel?: string;
   // Action panel props
   activeJob?: Job | null;
   activeJobId?: string | null;
@@ -49,7 +52,6 @@ interface CandidateProfileViewProps {
   linkSaving?: boolean;
   onStageChange?: (stage: PipelineStage) => Promise<void>;
   onLinkToActiveJob?: () => Promise<void>;
-  onOpenAddJob?: () => void;
   onOpenTransferJob?: () => void;
   children?: ReactNode;
 }
@@ -72,11 +74,13 @@ export function CandidateProfileView({
   interactionLocked = false,
   compact = false,
   onClose,
-  onApprove,
-  onReject,
+  onAdvance,
+  onTerminate,
   onViewAnalysis,
   onTabChange,
   onNavigateToFull,
+  onBackToList,
+  backToListLabel,
   activeJob = null,
   activeJobId = null,
   canTransferCurrentJob = false,
@@ -84,12 +88,11 @@ export function CandidateProfileView({
   linkSaving = false,
   onStageChange,
   onLinkToActiveJob,
-  onOpenAddJob,
   onOpenTransferJob,
   children,
 }: CandidateProfileViewProps) {
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [pendingQuickAction, setPendingQuickAction] = useState<"approve" | "reject" | null>(null);
+  const [pendingQuickAction, setPendingQuickAction] = useState<"advance" | "terminate" | null>(null);
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
   const [isFeedbackFresh, setIsFeedbackFresh] = useState(false);
 
@@ -100,24 +103,24 @@ export function CandidateProfileView({
     return () => window.clearTimeout(timeoutId);
   }, [actionFeedback?.id]);
 
-  const handleApprove = async () => {
+  const handleAdvance = async () => {
     if (interactionLocked) return;
-    setPendingQuickAction("approve");
+    setPendingQuickAction("advance");
     setIsActionLoading(true);
     try {
-      await Promise.resolve(onApprove());
+      await Promise.resolve(onAdvance());
     } finally {
       setPendingQuickAction(null);
       setIsActionLoading(false);
     }
   };
 
-  const handleReject = async () => {
+  const handleTerminate = async () => {
     if (interactionLocked) return;
-    setPendingQuickAction("reject");
+    setPendingQuickAction("terminate");
     setIsActionLoading(true);
     try {
-      await Promise.resolve(onReject());
+      await Promise.resolve(onTerminate());
     } finally {
       setPendingQuickAction(null);
       setIsActionLoading(false);
@@ -125,18 +128,26 @@ export function CandidateProfileView({
   };
 
   return (
-    <div className="flex h-full flex-col bg-[hsl(var(--surface))]">
+    <div
+      className={[
+        "flex flex-col bg-[hsl(var(--surface))]",
+        compact ? "h-auto overflow-visible" : "h-full min-h-0 overflow-hidden",
+      ].join(" ")}
+    >
       {/* Header with candidate identity */}
       <CandidateProfileHeader
         candidate={candidate}
         currentStage={currentStage}
         activeJobLabel={activeJobLabel}
+        hasActiveJob={hasActiveJob}
         compatibilityScore={activeJobCompatibilityScore}
         aiScore={aiScore}
         aiStatus={aiStatus}
         isLoading={isLoading}
         onClose={onClose}
         onNavigateToFull={onNavigateToFull}
+        onBackToList={onBackToList}
+        backToListLabel={backToListLabel}
       />
 
       {!isLoading && actionFeedback ? (
@@ -157,24 +168,40 @@ export function CandidateProfileView({
           aiStatus={aiStatus}
           scoreExplanation={scoreExplanation}
           onViewAnalysis={onViewAnalysis}
-          onOpenAddJob={onOpenAddJob}
+          compact={compact}
         />
       )}
 
       {/* Quick actions */}
       {!isLoading && (
         <CandidateQuickActions
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onViewAnalysis={onViewAnalysis}
+          onAdvance={handleAdvance}
+          onTerminate={handleTerminate}
+          onViewAnalysis={compact && onNavigateToFull ? onNavigateToFull : onViewAnalysis}
           currentStage={currentStage}
           pendingAction={pendingQuickAction}
           isLoading={isActionLoading || interactionLocked}
         />
       )}
 
-      {/* Additional actions panel — hidden in compact/Quick View mode */}
-      {!isLoading && !compact && onStageChange && onLinkToActiveJob && onOpenAddJob && onOpenTransferJob && (
+      {/* Job actions — Quick View compact layout */}
+      {!isLoading && compact && onStageChange && onLinkToActiveJob && onOpenTransferJob && (
+        <CandidateQuickJobActions
+          currentStage={currentStage}
+          activeJob={activeJob}
+          activeJobId={activeJobId}
+          canTransferCurrentJob={canTransferCurrentJob}
+          stageSaving={stageSaving}
+          linkSaving={linkSaving}
+          interactionLocked={interactionLocked}
+          onStageChange={onStageChange}
+          onLinkToActiveJob={onLinkToActiveJob}
+          onOpenTransferJob={onOpenTransferJob}
+        />
+      )}
+
+      {/* Additional actions panel — only in Full Workspace mode */}
+      {!isLoading && !compact && onStageChange && onLinkToActiveJob && onOpenTransferJob && (
         <CandidateActionPanel
           currentStage={currentStage}
           activeJob={activeJob}
@@ -185,25 +212,24 @@ export function CandidateProfileView({
           interactionLocked={interactionLocked}
           onStageChange={onStageChange}
           onLinkToActiveJob={onLinkToActiveJob}
-          onOpenAddJob={onOpenAddJob}
           onOpenTransferJob={onOpenTransferJob}
           isOpen={isActionPanelOpen}
           onToggle={() => setIsActionPanelOpen(!isActionPanelOpen)}
         />
       )}
 
-      {/* Navigation tabs */}
-      {!isLoading && (
-        <CandidateProfileNavigation
-          activeTab={activeTab}
-          onChange={onTabChange}
-        />
+      {/* Navigation tabs and content — only in Full Workspace mode */}
+      {!isLoading && !compact && (
+        <>
+          <CandidateProfileNavigation
+            activeTab={activeTab}
+            onChange={onTabChange}
+          />
+          <CandidateProfileContent isLoading={isLoadingContent}>
+            {children}
+          </CandidateProfileContent>
+        </>
       )}
-
-      {/* Content area - temporary for current tabs */}
-      <CandidateProfileContent isLoading={isLoadingContent}>
-        {children}
-      </CandidateProfileContent>
     </div>
   );
 }

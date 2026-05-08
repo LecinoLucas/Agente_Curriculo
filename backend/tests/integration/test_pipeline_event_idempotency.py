@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -250,6 +251,10 @@ async def test_remove_candidate_retry_creates_single_event(db_session: AsyncSess
     assert entry is not None
     entry.link_status = "active"
     entry.pipeline_status = "active"
+    entry.relationship_status = "active"
+    entry.is_terminal = False
+    entry.terminated_at = None
+    entry.termination_reason = None
     await db_session.flush()
 
     # Remove again (retry)
@@ -394,6 +399,10 @@ async def test_add_candidate_twice_creates_single_added_event(db_session: AsyncS
     entry.pipeline_stage = "screening"
     entry.link_status = "removed"
     entry.pipeline_status = "terminal"
+    entry.relationship_status = "withdrawn"
+    entry.is_terminal = True
+    entry.terminated_at = datetime.now(UTC)
+    entry.termination_reason = "candidate_removed"
     await db_session.flush()
 
     # Now re-add from that state

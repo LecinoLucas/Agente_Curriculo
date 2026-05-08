@@ -254,6 +254,84 @@ async def test_transfer_flow_allows_return_to_previous_job(
 
 
 @pytest.mark.asyncio
+async def test_transfer_requires_published_destination_job(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_user(db_session, f"recruiter-transfer-published-{uuid4().hex[:6]}@test.com", UserRole.RECRUITER)
+    headers = await _auth_headers(client, recruiter.email)
+
+    job_a = await _create_published_job(client, db_session, headers, "Job A")
+    job_b = await _create_published_job(client, db_session, headers, "Job B")
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        "Transfer Published Candidate",
+        f"transfer-published-{uuid4().hex[:6]}@test.com",
+    )
+
+    paused_job = await db_session.scalar(sa.select(JobModel).where(JobModel.id == job_b))
+    assert paused_job is not None
+    paused_job.status = "paused"
+    await db_session.commit()
+
+    add_a = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        json={"job_id": str(job_a), "initial_stage": "entry"},
+        headers=headers,
+    )
+    assert add_a.status_code == 200
+
+    transfer_b = await client.patch(
+        f"/api/v1/pipeline/{candidate_id}/transfer-job",
+        json={"from_job_id": str(job_a), "to_job_id": str(job_b), "reason": "Mover para vaga pausada"},
+        headers=headers,
+    )
+    assert transfer_b.status_code == 409
+    assert transfer_b.json()["detail"] == "A transferência só pode ser feita para vagas publicadas."
+
+
+@pytest.mark.asyncio
+async def test_transfer_rejects_hired_candidate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_user(db_session, f"recruiter-transfer-hired-{uuid4().hex[:6]}@test.com", UserRole.RECRUITER)
+    headers = await _auth_headers(client, recruiter.email)
+
+    job_a = await _create_published_job(client, db_session, headers, "Job A")
+    job_b = await _create_published_job(client, db_session, headers, "Job B")
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        "Transfer Hired Candidate",
+        f"transfer-hired-{uuid4().hex[:6]}@test.com",
+    )
+
+    add_a = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        json={"job_id": str(job_a), "initial_stage": "entry"},
+        headers=headers,
+    )
+    assert add_a.status_code == 200
+
+    hire_resp = await client.patch(
+        f"/api/v1/pipeline/{job_a}/{candidate_id}/stage",
+        json={"stage": "hired"},
+        headers=headers,
+    )
+    assert hire_resp.status_code == 200, hire_resp.text
+
+    transfer_b = await client.patch(
+        f"/api/v1/pipeline/{candidate_id}/transfer-job",
+        json={"from_job_id": str(job_a), "to_job_id": str(job_b), "reason": "Tentativa após contratação"},
+        headers=headers,
+    )
+    assert transfer_b.status_code == 409
+    assert transfer_b.json()["detail"] == "Candidato já está contratado nesta vaga e não pode ser transferido."
+
+
+@pytest.mark.asyncio
 async def test_add_candidate_with_active_pipeline_returns_clear_409(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -556,6 +634,129 @@ async def test_transferred_link_not_treated_as_active(
         headers=headers,
     )
     assert score_old_job.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rejecting_candidate_closes_relationship_and_removes_active_job(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_user(db_session, f"recruiter-reject-{uuid4().hex[:6]}@test.com", UserRole.RECRUITER)
+    headers = await _auth_headers(client, recruiter.email)
+
+    job_id = await _create_published_job(client, db_session, headers, "Job Reject")
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        "Rejected Candidate",
+        f"rejected-{uuid4().hex[:6]}@test.com",
+    )
+
+    add_resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        json={"job_id": str(job_id), "initial_stage": "entry"},
+        headers=headers,
+    )
+    assert add_resp.status_code == 200, add_resp.text
+
+    reject_resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "rejected", "reason": "not_a_fit"},
+        headers=headers,
+    )
+    assert reject_resp.status_code == 200, reject_resp.text
+
+    link_row = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert link_row is not None
+    assert link_row.pipeline_stage == "rejected"
+    assert link_row.link_status == "rejected"
+    assert link_row.relationship_status == "rejected"
+    assert link_row.is_terminal is True
+    assert link_row.terminated_at is not None
+
+    overview = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert overview.status_code == 200, overview.text
+    payload = overview.json()
+    assert payload["active_job_id"] is None
+    assert payload["active_job"] is None
+    assert len(payload["pipeline_entries"]) == 1
+    assert payload["pipeline_entries"][0]["relationship_status"] == "rejected"
+    assert payload["pipeline_entries"][0]["is_terminal"] is True
+
+    summaries = await client.get("/api/v1/candidates/summaries?page=1&page_size=20", headers=headers)
+    assert summaries.status_code == 200, summaries.text
+    summary_row = next((row for row in summaries.json()["data"] if row["id"] == str(candidate_id)), None)
+    assert summary_row is not None
+    assert summary_row["active_job_id"] is None
+    assert summary_row["latest_relationship_status"] == "rejected"
+
+    matches = await client.get(f"/api/v1/jobs/{job_id}/matches", headers=headers)
+    assert matches.status_code == 200, matches.text
+    assert all(item["candidate_id"] != str(candidate_id) for item in matches.json())
+
+
+@pytest.mark.asyncio
+async def test_reactivation_after_rejection_restores_active_relationship(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_user(db_session, f"recruiter-reactivate-{uuid4().hex[:6]}@test.com", UserRole.RECRUITER)
+    headers = await _auth_headers(client, recruiter.email)
+
+    job_id = await _create_published_job(client, db_session, headers, "Job Reactivate")
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        "Reactivated Candidate",
+        f"reactivated-{uuid4().hex[:6]}@test.com",
+    )
+
+    add_resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        json={"job_id": str(job_id), "initial_stage": "entry"},
+        headers=headers,
+    )
+    assert add_resp.status_code == 200, add_resp.text
+
+    reject_resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "rejected"},
+        headers=headers,
+    )
+    assert reject_resp.status_code == 200, reject_resp.text
+
+    reactivate_resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        json={"job_id": str(job_id), "initial_stage": "entry"},
+        headers=headers,
+    )
+    assert reactivate_resp.status_code == 200, reactivate_resp.text
+    assert reactivate_resp.json()["status"] == "active"
+
+    link_row = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert link_row is not None
+    assert link_row.pipeline_stage == "entry"
+    assert link_row.link_status == "active"
+    assert link_row.relationship_status == "active"
+    assert link_row.is_terminal is False
+    assert link_row.terminated_at is None
+    assert link_row.termination_reason is None
+
+    overview = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert overview.status_code == 200, overview.text
+    payload = overview.json()
+    assert payload["active_job_id"] == str(job_id)
+    assert payload["active_job"] is not None
 
 
 @pytest.mark.asyncio

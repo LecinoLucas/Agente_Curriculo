@@ -175,6 +175,25 @@ class JobResponse(BaseModel):
         return normalize_job_area_value(value)
 
 
+class JobStatusSummaryResponse(BaseModel):
+    all: int = 0
+    published: int = 0
+    draft: int = 0
+    paused: int = 0
+    closed: int = 0
+    cancelled: int = 0
+    attention: int = 0
+
+
+class JobListResponse(BaseModel):
+    data: list[JobResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    summary: JobStatusSummaryResponse
+
+
 class CreateJobRequest(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=10)
@@ -351,16 +370,59 @@ class SkillPartialMatchResponse(BaseModel):
     source: str = "partial_match"
 
 
+class CandidateScoreExplanationFactorSummaryItemResponse(BaseModel):
+    factor_type: str
+    factor_key: str
+    factor_label: str
+    impact_score: float
+    direction: Literal["positive", "negative", "neutral"]
+
+
+class CandidateScoreExplanationFactorSummaryResponse(BaseModel):
+    positive: list[CandidateScoreExplanationFactorSummaryItemResponse] = Field(default_factory=list)
+    negative: list[CandidateScoreExplanationFactorSummaryItemResponse] = Field(default_factory=list)
+    contextual: list[CandidateScoreExplanationFactorSummaryItemResponse] = Field(default_factory=list)
+
+
+class CandidateScoreExplanationDeltaChangeResponse(BaseModel):
+    factor_type: str
+    factor_key: str
+    factor_label: str
+    previous_impact_score: float
+    current_impact_score: float
+    impact_delta: float
+    change_kind: Literal["added", "removed", "changed"]
+
+
+class CandidateScoreExplanationDeltaResponse(BaseModel):
+    previous_score: float | None = None
+    current_score: float | None = None
+    score_change: float | None = None
+    change_reason: Literal[
+        "candidate_analysis_changed",
+        "job_requirements_changed",
+        "score_model_changed",
+        "manual_recompute_same_inputs",
+    ] | None = None
+    top_changes: list[CandidateScoreExplanationDeltaChangeResponse] = Field(default_factory=list)
+
+
 class CandidateScoreExplanationResponse(BaseModel):
     job_id: UUID
     candidate_id: UUID
     analysis_id: UUID
     score: float
     final_score: float
+    freshness_status: Literal["fresh", "stale", "unknown"]
+    score_model_version: str | None = None
+    explainability_version: str | None = None
+    computed_at: datetime | None = None
     recommendation: str
     engine_used: str
     explanation: str
     breakdown: CandidateScoreExplanationBreakdownResponse = Field(default_factory=CandidateScoreExplanationBreakdownResponse)
+    factor_summary: CandidateScoreExplanationFactorSummaryResponse = Field(default_factory=CandidateScoreExplanationFactorSummaryResponse)
+    delta: CandidateScoreExplanationDeltaResponse | None = None
     highlights: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     high_score_reasons: list[str] = Field(default_factory=list)

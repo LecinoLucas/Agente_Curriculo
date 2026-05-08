@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { CandidateOverview, Job, JobRankingEntry, PipelineStage } from "../../../../types/domain";
 import { getCandidateState, getNextAction, type CandidateState } from "../../../pipeline/candidateState";
 import { formatScorePercent, getScoreTone, normalizeScorePercent } from "../../utils/scoreFormatting";
+import { isTransferTargetJob } from "../../../../utils/jobStatusRules";
 
 export function fmtScore(score: number | null | undefined): string {
   return formatScorePercent(score);
@@ -86,6 +87,10 @@ export function useCandidateDecision({
     if (!candidateOverview || !candidateActiveJobId) return null;
     return candidateOverview.pipeline_entries.find((entry) => entry.job_id === candidateActiveJobId) ?? null;
   }, [candidateOverview, candidateActiveJobId]);
+  const latestPipelineEntry = useMemo(
+    () => candidateOverview?.pipeline_entries[0] ?? null,
+    [candidateOverview?.pipeline_entries],
+  );
 
   const currentStage = primaryPipelineEntry?.stage ?? null;
 
@@ -95,6 +100,7 @@ export function useCandidateDecision({
   );
 
   const activeJobCompatibilityScore = normalizeScorePercent(primaryPipelineEntry?.match_score ?? null);
+  const isTerminalPipelineStage = currentStage === "hired" || currentStage === "rejected";
 
   const candidateState = useMemo(() => {
     if (!candidateOverview) return null;
@@ -118,23 +124,17 @@ export function useCandidateDecision({
     [candidateState],
   );
 
-  const linkedJobIds = useMemo(() => {
-    const entries = candidateOverview?.pipeline_entries ?? [];
-    return new Set(entries.map((entry) => entry.job_id));
-  }, [candidateOverview]);
-
-  const availableJobs = useMemo(
+  const transferAvailableJobs = useMemo(
     () =>
       jobs.filter(
         (job) =>
           job.id !== (candidateActiveJobId ?? null) &&
-          !linkedJobIds.has(job.id) &&
-          (job.status === "published" || job.status === "paused"),
+          isTransferTargetJob(job.status),
       ),
-    [jobs, candidateActiveJobId, linkedJobIds],
+    [jobs, candidateActiveJobId],
   );
 
-  const canTransferCurrentJob = primaryPipelineEntry !== null;
+  const canTransferCurrentJob = primaryPipelineEntry !== null && !isTerminalPipelineStage;
   const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
 
   const compatibilityGuidance = getCompatibilityGuidance({
@@ -143,23 +143,31 @@ export function useCandidateDecision({
     analysisStatus: candidateOverview?.latest_analysis?.status ?? null,
   });
 
-  const activeJobLabel = activeJob?.title ?? candidateOverview?.active_job?.title ?? "Não vinculado";
+  const activeJobLabel =
+    activeJob?.title ??
+    candidateOverview?.active_job?.title ??
+    latestPipelineEntry?.job_title ??
+    "Não vinculado";
 
   const linkStatus = primaryPipelineEntry
     ? "Vínculo ativo no pipeline"
+    : latestPipelineEntry?.relationship_status === "rejected"
+      ? "Vínculo encerrado (Reprovado)"
+      : latestPipelineEntry?.relationship_status === "hired"
+        ? "Vínculo encerrado (Contratado)"
     : linkSaving
       ? "Vinculando à vaga ativa"
       : "Não vinculado";
 
   return {
     primaryPipelineEntry,
+    latestPipelineEntry,
     currentStage,
     activeJob,
     activeJobCompatibilityScore,
     candidateState,
     candidateNextAction,
-    linkedJobIds,
-    availableJobs,
+    transferAvailableJobs,
     canTransferCurrentJob,
     hasResume,
     compatibilityGuidance,

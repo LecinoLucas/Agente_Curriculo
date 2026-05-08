@@ -17,8 +17,8 @@ from src.infrastructure.database.models.profile_analysis_model import (
 )
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
-_VISIBLE_PIPELINE_LINK_STATUSES = ("active", "hired", "rejected")
-_VISIBLE_PIPELINE_STATUSES = ("active", "terminal")
+_ACTIVE_RELATIONSHIP_STATUS = "active"
+_VISIBLE_RELATIONSHIP_STATUSES = ("active", "hired", "rejected")
 
 
 class SQLAlchemyCandidateRepository:
@@ -112,10 +112,96 @@ class SQLAlchemyCandidateRepository:
             .where(
                 CandidateJobPipelineModel.candidate_id == CandidateModel.id,
                 JobModel.deleted_at.is_(None),
-                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
-                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
             )
             .correlate(CandidateModel)
+            .scalar_subquery()
+        )
+        latest_job_id_sq = (
+            sa.select(CandidateJobPipelineModel.job_id)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+        latest_job_title_sq = (
+            sa.select(JobModel.title)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+        latest_job_stage_sq = (
+            sa.select(CandidateJobPipelineModel.pipeline_stage)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+        latest_relationship_status_sq = (
+            sa.select(CandidateJobPipelineModel.relationship_status)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+        active_job_id_sq = (
+            sa.select(CandidateJobPipelineModel.job_id)
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .order_by(
+                CandidateJobPipelineModel.updated_at.desc(),
+                CandidateJobPipelineModel.match_score.desc().nulls_last(),
+            )
+            .limit(1)
             .scalar_subquery()
         )
         active_job_title_sq = (
@@ -124,8 +210,9 @@ class SQLAlchemyCandidateRepository:
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
                 CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
-                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
                 JobModel.deleted_at.is_(None),
             )
             .correlate(CandidateModel)
@@ -142,8 +229,9 @@ class SQLAlchemyCandidateRepository:
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
                 CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
-                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
                 JobModel.deleted_at.is_(None),
             )
             .correlate(CandidateModel)
@@ -160,8 +248,9 @@ class SQLAlchemyCandidateRepository:
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
                 CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
-                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
                 JobModel.deleted_at.is_(None),
             )
             .correlate(CandidateModel)
@@ -239,6 +328,11 @@ class SQLAlchemyCandidateRepository:
                 CandidateModel.created_at,
                 resume_count_sq.label("resume_count"),
                 linked_job_count_sq.label("linked_job_count"),
+                latest_job_id_sq.label("latest_job_id"),
+                latest_job_title_sq.label("latest_job_title"),
+                latest_job_stage_sq.label("latest_job_stage"),
+                latest_relationship_status_sq.label("latest_relationship_status"),
+                active_job_id_sq.label("active_job_id"),
                 active_job_title_sq.label("active_job_title"),
                 active_job_stage_sq.label("active_job_stage"),
                 active_job_match_score_sq.label("active_job_match_score"),
@@ -500,8 +594,9 @@ class SQLAlchemyCandidateRepository:
                 sa.and_(
                     CandidateJobPipelineModel.candidate_id == candidate_id,
                     CandidateJobPipelineModel.job_id == CandidateJobMatchModel.job_id,
-                    CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.link_status == "active",
+                    CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
                 ),
             )
             .join(
@@ -584,14 +679,17 @@ class SQLAlchemyCandidateRepository:
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.relationship_status,
+                CandidateJobPipelineModel.is_terminal,
+                CandidateJobPipelineModel.terminated_at,
+                CandidateJobPipelineModel.termination_reason,
                 CandidateJobPipelineModel.match_score,
                 CandidateJobPipelineModel.updated_at,
             )
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
                 CandidateJobPipelineModel.candidate_id == candidate_id,
-                CandidateJobPipelineModel.pipeline_status.in_(_VISIBLE_PIPELINE_STATUSES),
-                CandidateJobPipelineModel.link_status.in_(_VISIBLE_PIPELINE_LINK_STATUSES),
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
                 JobModel.deleted_at.is_(None),
             )
             .order_by(

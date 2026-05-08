@@ -181,6 +181,10 @@ class PipelineTransferNotAllowedError(Exception):
     pass
 
 
+class PipelineCandidateAlreadyHiredError(Exception):
+    pass
+
+
 class PipelineCandidateAlreadyActiveInSameJobError(Exception):
     pass
 
@@ -244,7 +248,24 @@ class PipelineService:
         if entry is None:
             raise PipelineEntryNotFoundError
 
+        to_cfg = STAGE_CONFIG[body.stage]
+        terminal_status = to_cfg.terminal_status
+
         entry.pipeline_stage = body.stage
+        if terminal_status is not None:
+            entry.link_status = terminal_status
+            entry.pipeline_status = "terminal"
+            entry.relationship_status = terminal_status
+            entry.is_terminal = True
+            entry.terminated_at = datetime.now(UTC)
+            entry.termination_reason = None
+        else:
+            entry.link_status = "active"
+            entry.pipeline_status = "active"
+            entry.relationship_status = "active"
+            entry.is_terminal = False
+            entry.terminated_at = None
+            entry.termination_reason = None
         entry.updated_at = datetime.now(UTC)
         saved = await self._repository.save_entry(entry)
 
@@ -319,6 +340,7 @@ class PipelineService:
             new_status=new_status,
             last_moved_by=moved_by,
             updated_at=now,
+            termination_reason=body.reason,
         )
         if saved_row is None:
             raise PipelineConcurrentModificationError(
@@ -453,10 +475,15 @@ class PipelineService:
         moved_by: UUID,
     ) -> TransferCandidateJobResponse:
         await self._ensure_active_candidate(candidate_id)
-        await self._ensure_available_job(body.to_job_id)
+        await self._ensure_published_transfer_job(body.to_job_id)
 
         source_entry = await self._repository.find_active_entry_by_candidate(candidate_id)
         if source_entry is None:
+            source_any_entry = await self._repository.find_any_entry(candidate_id, body.from_job_id)
+            if source_any_entry is not None and (
+                source_any_entry.link_status == "hired" or source_any_entry.pipeline_stage == "hired"
+            ):
+                raise PipelineCandidateAlreadyHiredError
             raise PipelineCandidateWithoutActiveJobError
         if source_entry.job_id != body.from_job_id:
             raise PipelineEntryNotFoundError
@@ -603,6 +630,7 @@ class PipelineService:
             new_status="removed",
             last_moved_by=moved_by,
             updated_at=now,
+            termination_reason="candidate_removed",
         )
         if updated is None:
             raise PipelineEntryNotFoundError
@@ -721,6 +749,11 @@ class PipelineService:
     async def _ensure_available_job(self, job_id: UUID) -> None:
         if await self._repository.find_available_job(job_id) is None:
             raise PipelineDestinationJobUnavailableError
+
+    async def _ensure_published_transfer_job(self, job_id: UUID) -> None:
+        job = await self._repository.find_active_job(job_id)
+        if job is None or job.status != "published":
+            raise PipelineTransferNotAllowedError
 
     async def _ensure_active_candidate(self, candidate_id: UUID) -> None:
         if await self._repository.find_active_candidate(candidate_id) is None:

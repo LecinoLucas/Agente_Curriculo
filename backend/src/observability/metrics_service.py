@@ -9,6 +9,11 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
+from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreModel,
+    ScoreModelVersionModel,
+)
 from src.infrastructure.database.models.pipeline_event_model import PipelineEventModel
 from src.observability.domain_events import DomainEventType
 
@@ -32,6 +37,12 @@ class PipelineMetricsService:
     def _safe_int(self, value: Any) -> int | None:
         try:
             return int(value)
+        except Exception:
+            return None
+
+    def _safe_float(self, value: Any) -> float | None:
+        try:
+            return float(value)
         except Exception:
             return None
 
@@ -79,7 +90,9 @@ class PipelineMetricsService:
         async for event in self._stream_events(stmt):
             events.append(event)
 
-        return self._aggregate(events, since, window_hours)
+        base = self._aggregate(events, since, window_hours)
+        base["ranking"] = await self._aggregate_ranking_metrics(events)
+        return base
 
     # ─────────────────────────────────────────
     # TRACE
@@ -196,3 +209,157 @@ class PipelineMetricsService:
                 "throughput_by_worker": throughput_by_worker,
             },
         }
+
+    async def _aggregate_ranking_metrics(self, events: list[EventRow]) -> dict[str, Any]:
+        recomputed = [
+            e for e in events if e.event_type == DomainEventType.RANKING_RECOMPUTED.value
+        ]
+        recompute_failed = [
+            e for e in events if e.event_type == DomainEventType.RANKING_RECOMPUTE_FAILED.value
+        ]
+
+        recompute_duration_ms = [
+            value
+            for e in [*recomputed, *recompute_failed]
+            if (value := self._safe_int(e.payload.get("compute_duration_ms"))) is not None
+        ]
+        success_total = sum(
+            1
+            for e in recomputed
+            if str(e.payload.get("monotonicity_decision") or "") == "updated"
+        )
+        skipped_total = sum(
+            1
+            for e in recomputed
+            if str(e.payload.get("monotonicity_decision") or "") == "skipped_older_analysis"
+        )
+        total = len(recomputed) + len(recompute_failed)
+        failed_total = len(recompute_failed)
+        stale_detected_total = sum(
+            1
+            for e in [*recomputed, *recompute_failed]
+            if str(e.payload.get("freshness_status") or "") == "stale"
+        )
+
+        stale_snapshot = await self._ranking_freshness_snapshot()
+
+        return {
+            "counters": {
+                "ranking_recompute_total": total,
+                "ranking_recompute_failed_total": failed_total,
+                "ranking_recompute_success_total": success_total,
+                "ranking_recompute_skipped_monotonicity_total": skipped_total,
+                "ranking_stale_detected_total": stale_detected_total,
+            },
+            "histograms": {
+                "ranking_recompute_duration_ms": _distribution_summary(recompute_duration_ms),
+                "ranking_stale_age_ms": _distribution_summary(stale_snapshot["stale_age_values_ms"]),
+            },
+            "gauges": {
+                "ranking_stale_candidates_total": stale_snapshot["stale_candidates_total"],
+                "ranking_unknown_freshness_total": stale_snapshot["unknown_freshness_total"],
+            },
+        }
+
+    async def _ranking_freshness_snapshot(self) -> dict[str, Any]:
+        version = await self._session.scalar(
+            sa.select(ScoreModelVersionModel).where(ScoreModelVersionModel.is_active.is_(True))
+        )
+        if version is None:
+            return {
+                "stale_candidates_total": 0,
+                "unknown_freshness_total": 0,
+                "stale_age_values_ms": [],
+            }
+
+        latest_match = (
+            sa.select(
+                CandidateJobMatchModel.candidate_id,
+                CandidateJobMatchModel.job_id,
+                sa.func.coalesce(
+                    CandidateJobMatchModel.updated_at,
+                    CandidateJobMatchModel.created_at,
+                ).label("match_updated_at"),
+                sa.func.row_number()
+                .over(
+                    partition_by=(
+                        CandidateJobMatchModel.candidate_id,
+                        CandidateJobMatchModel.job_id,
+                    ),
+                    order_by=(
+                        sa.case(
+                            (CandidateJobMatchModel.candidate_job_pipeline_id.isnot(None), 0),
+                            else_=1,
+                        ),
+                        sa.func.coalesce(
+                            CandidateJobMatchModel.updated_at,
+                            CandidateJobMatchModel.created_at,
+                        ).desc(),
+                        CandidateJobMatchModel.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .subquery("latest_match")
+        )
+
+        result = await self._session.execute(
+            sa.select(
+                CandidateJobScoreModel.freshness_status,
+                CandidateJobScoreModel.updated_at,
+                latest_match.c.match_updated_at,
+            )
+            .select_from(CandidateJobScoreModel)
+            .outerjoin(
+                latest_match,
+                sa.and_(
+                    latest_match.c.candidate_id == CandidateJobScoreModel.candidate_id,
+                    latest_match.c.job_id == CandidateJobScoreModel.job_id,
+                    latest_match.c.rn == 1,
+                ),
+            )
+            .where(CandidateJobScoreModel.version_id == version.id)
+        )
+
+        stale_count = 0
+        unknown_count = 0
+        stale_age_values_ms: list[int] = []
+
+        for row in result.mappings().all():
+            ranking_updated_at = row.get("updated_at")
+            match_updated_at = row.get("match_updated_at")
+            persisted_status = row.get("freshness_status")
+            if ranking_updated_at is None or match_updated_at is None:
+                resolved = persisted_status or "unknown"
+            elif ranking_updated_at >= match_updated_at:
+                resolved = "fresh"
+            else:
+                resolved = "stale"
+
+            if resolved == "stale":
+                stale_count += 1
+                if ranking_updated_at is not None and match_updated_at is not None:
+                    stale_age_values_ms.append(
+                        max(0, int((match_updated_at - ranking_updated_at).total_seconds() * 1000))
+                    )
+            elif resolved == "unknown":
+                unknown_count += 1
+
+        return {
+            "stale_candidates_total": stale_count,
+            "unknown_freshness_total": unknown_count,
+            "stale_age_values_ms": stale_age_values_ms,
+        }
+
+
+def _distribution_summary(values: list[int]) -> dict[str, Any]:
+    if not values:
+        return {"count": 0, "avg": None, "p95": None, "max": None}
+    ordered = sorted(values)
+    index = max(0, min(len(ordered) - 1, int((len(ordered) - 1) * 0.95)))
+    return {
+        "count": len(ordered),
+        "avg": round(mean(ordered), 2),
+        "p95": ordered[index],
+        "max": ordered[-1],
+    }

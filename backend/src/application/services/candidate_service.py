@@ -130,6 +130,11 @@ class CandidateService:
                 created_at=row["created_at"],
                 resume_count=int(row["resume_count"] or 0),
                 linked_job_count=int(row["linked_job_count"] or 0),
+                latest_job_id=row.get("latest_job_id"),
+                latest_job_title=row.get("latest_job_title"),
+                latest_job_stage=row.get("latest_job_stage"),
+                latest_relationship_status=row.get("latest_relationship_status"),
+                active_job_id=row["active_job_id"],
                 active_job_title=row["active_job_title"],
                 active_job_stage=row["active_job_stage"],
                 active_job_match_score=float(row["active_job_match_score"]) if row["active_job_match_score"] is not None else None,
@@ -151,7 +156,10 @@ class CandidateService:
         resume_rows = await self._repository.list_resume_summaries(candidate_id)
         match_rows = await self._repository.list_top_job_matches(candidate_id)
         pipeline_rows = await self._repository.list_pipeline_entries(candidate_id)
-        active_pipeline_row = pipeline_rows[0] if pipeline_rows else None
+        active_pipeline_row = next(
+            (row for row in pipeline_rows if row.get("relationship_status") == "active"),
+            None,
+        )
         active_job_id = active_pipeline_row["job_id"] if active_pipeline_row is not None else None
 
         latest_analysis_row = await self._repository.find_latest_analysis_summary(candidate_id)
@@ -229,6 +237,10 @@ class CandidateService:
                     job_id=row["job_id"],
                     job_title=row["job_title"],
                     stage=row["stage"],
+                    relationship_status=row["relationship_status"],
+                    is_terminal=bool(row["is_terminal"]),
+                    terminated_at=row.get("terminated_at"),
+                    termination_reason=row.get("termination_reason"),
                     candidate_status=self._pipeline_stage_to_candidate_status(row["stage"]),
                     match_score=float(row["match_score"]) if row.get("match_score") is not None else None,
                     updated_at=row["updated_at"],

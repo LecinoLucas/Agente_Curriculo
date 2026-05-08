@@ -377,7 +377,9 @@ test("ranking destaca candidatos rejeitados por deal-breaker", async ({ page }) 
   const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
   await expect(drawer).toBeVisible();
 
+  await page.getByRole("button", { name: "Mostrar ranking" }).click();
   const rankingPanel = page.locator("#pipeline-ranking-panel");
+  await expect(rankingPanel).toBeVisible();
   await expect(rankingPanel.getByText("Critério eliminatório", { exact: true })).toBeVisible();
   await expect(rankingPanel.getByText("Rejeitado por regra da vaga")).toBeVisible();
   await expect(rankingPanel.getByText(/Localização: esperado São Paulo/i)).toBeVisible();

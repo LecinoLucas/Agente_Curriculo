@@ -56,7 +56,6 @@ from src.application.services.candidate_ranking_service import (
     RankingJobNotFoundError,
 )
 from src.interface.api.dependencies import CurrentUser, InternalUser, RecruiterOrAdmin, get_db
-from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.job_schemas import (
     AddCandidateToJobRequest,
     BulkImportJobsRequest,
@@ -65,8 +64,10 @@ from src.interface.api.schemas.job_schemas import (
     BulkUpdateJobsResponse,
     CandidateScoreExplanationResponse,
     CreateJobRequest,
+    JobListResponse,
     JobQualityResponse,
     JobResponse,
+    JobStatusSummaryResponse,
     MatchingFeedbackRequest,
     MatchingFeedbackResponse,
     UpdateJobRequest,
@@ -321,21 +322,33 @@ async def bulk_update_jobs(
         raise
 
 
-@router.get("", response_model=PaginatedResponse[JobResponse])
+@router.get("", response_model=JobListResponse)
 async def list_jobs(
     current_user: CurrentUser,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    search: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, pattern="^(draft|published|paused|closed|cancelled)$"),
+    job_area: str | None = Query(default=None),
+    work_model: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-) -> PaginatedResponse[JobResponse]:
-    jobs, total_items = await _job_service(db).list(page, page_size)
+) -> JobListResponse:
+    jobs, total_items, summary = await _job_service(db).list(
+        page,
+        page_size,
+        search=search,
+        status=status_filter,
+        job_area=job_area,
+        work_model=work_model,
+    )
 
-    return PaginatedResponse[JobResponse](
+    return JobListResponse(
         data=[JobResponse.model_validate(job) for job in jobs],
         total=total_items,
         page=page,
         page_size=page_size,
         total_pages=max(1, (total_items + page_size - 1) // page_size),
+        summary=JobStatusSummaryResponse(**summary),
     )
 
 

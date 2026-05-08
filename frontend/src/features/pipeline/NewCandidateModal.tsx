@@ -11,6 +11,7 @@ import { pipelineService } from "../../services/pipelineService";
 import { usePipeline } from "./PipelineContext";
 import type { Job } from "../../types/domain";
 import { formatJobStatus, formatSeniority, jobStatusTone } from "../../utils/jobFormatters";
+import { isPipelineOperationalJob } from "../../utils/jobStatusRules";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -33,7 +34,7 @@ function formatCpfInput(raw: string): string {
 }
 
 function canLinkToJob(job: Job | null): boolean {
-  return job?.status === "published" || job?.status === "paused";
+  return isPipelineOperationalJob(job?.status);
 }
 
 interface NewCandidateModalProps {
@@ -65,6 +66,10 @@ export function NewCandidateModal({
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? null,
     [jobs, selectedJobId],
+  );
+  const selectableJobs = useMemo(
+    () => jobs.filter((job) => isPipelineOperationalJob(job.status)),
+    [jobs],
   );
 
   const selectedJobCanReceiveCandidates = canLinkToJob(selectedJob);
@@ -583,7 +588,7 @@ export function NewCandidateModal({
               className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
             >
               <option value="">Sem vaga</option>
-              {jobs.map((job) => (
+              {selectableJobs.map((job) => (
                 <option key={job.id} value={job.id}>
                   {job.title} - {formatJobStatus(job.status)}
                 </option>

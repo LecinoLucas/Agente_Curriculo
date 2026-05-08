@@ -144,6 +144,10 @@ class AnalysisMatchResponse(BaseModel):
     risk_points: list[str] = Field(default_factory=list)
     explanation: str | None = None
     behavioral_indicators: list[str] = Field(default_factory=list)
+    ranking_refresh_status: str | None = None
+    ranking_freshness_status: str | None = None
+    ranking_refreshed_at: datetime | None = None
+    ranking_warning: str | None = None
 
 
 class BulkAnalysisActionRequest(BaseModel):

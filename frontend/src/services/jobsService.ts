@@ -1,5 +1,5 @@
 import { Job, JobCandidate, JobPipelineBoard, JobQualityResult, JobRanking, PipelineStage } from "../types/domain";
-import { Paginated } from "../types/api";
+import { Paginated, PaginatedJobs } from "../types/api";
 import { httpRequest } from "./http";
 
 export type CreateJobRequestPayload = {
@@ -64,8 +64,36 @@ function toNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-export async function listJobs(page = 1, page_size = 20): Promise<Paginated<Job>> {
-  return httpRequest<Paginated<Job>>(`/api/v1/jobs?page=${page}&page_size=${page_size}`);
+export type ListJobsFilters = {
+  search?: string;
+  statusFilter?: "draft" | "published" | "paused" | "closed" | "cancelled" | "all";
+  jobArea?: string;
+  workModel?: string;
+};
+
+export async function listJobs(
+  page = 1,
+  page_size = 20,
+  filters?: ListJobsFilters,
+): Promise<PaginatedJobs<Job>> {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("page_size", String(page_size));
+
+  if (filters?.search?.trim()) {
+    params.set("search", filters.search.trim());
+  }
+  if (filters?.statusFilter && filters.statusFilter !== "all") {
+    params.set("status_filter", filters.statusFilter);
+  }
+  if (filters?.jobArea && filters.jobArea !== "all") {
+    params.set("job_area", filters.jobArea);
+  }
+  if (filters?.workModel && filters.workModel !== "all") {
+    params.set("work_model", filters.workModel);
+  }
+
+  return httpRequest<PaginatedJobs<Job>>(`/api/v1/jobs?${params.toString()}`);
 }
 
 export async function getJob(jobId: string): Promise<Job> {
@@ -223,7 +251,15 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
       explanation_text: item?.explanation_text ?? "",
       entered_at: item?.entered_at ?? null,
       computed_at: item?.computed_at ?? new Date(0).toISOString(),
+      freshness_status: item?.freshness_status ?? "unknown",
+      score_computed_at: item?.score_computed_at ?? item?.computed_at ?? null,
+      source_analysis_id: item?.source_analysis_id ?? null,
+      source_analysis_created_at: item?.source_analysis_created_at ?? null,
+      score_model_version: item?.score_model_version ?? null,
+      match_updated_at: item?.match_updated_at ?? null,
+      ranking_updated_at: item?.ranking_updated_at ?? null,
       version: item?.version ?? "",
+      ranking_version: item?.ranking_version ?? item?.version ?? "",
     })),
   };
 }

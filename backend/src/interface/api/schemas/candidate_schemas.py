@@ -90,6 +90,10 @@ class CandidatePipelineEntryResponse(BaseModel):
     job_id: UUID
     job_title: str
     stage: str
+    relationship_status: str
+    is_terminal: bool
+    terminated_at: datetime | None = None
+    termination_reason: str | None = None
     candidate_status: str
     match_score: float | None = None
     entered_at: datetime | None = None
@@ -123,6 +127,11 @@ class CandidateListSummaryResponse(BaseModel):
     created_at: datetime
     resume_count: int
     linked_job_count: int = 0
+    latest_job_id: UUID | None = None
+    latest_job_title: str | None = None
+    latest_job_stage: str | None = None
+    latest_relationship_status: str | None = None
+    active_job_id: UUID | None = None
     active_job_title: str | None = None
     active_job_stage: str | None = None
     active_job_match_score: float | None = None

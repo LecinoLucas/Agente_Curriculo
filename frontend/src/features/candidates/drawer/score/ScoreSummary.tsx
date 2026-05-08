@@ -1,6 +1,11 @@
 import type { JobRankingEntry } from "../../../../types/domain";
 import type { ScoreExplanationResponse } from "../../../../services/scoreExplanationService";
 import { formatScorePercent, getScoreTone, normalizeScorePercent } from "../../utils/scoreFormatting";
+import {
+  getExplainabilityDeltaLine,
+  getExplainabilityFreshnessLine,
+  getTopExplainabilityInsights,
+} from "../../utils/explainabilityUi";
 
 interface ScoreSummaryProps {
   compatibilityScore: number | null;
@@ -63,10 +68,13 @@ export function ScoreSummary({
 }: ScoreSummaryProps) {
   const qualitativeLabel = getQualitativeLabel(compatibilityScore);
   const scorePercentage = normalizeScorePercent(compatibilityScore);
-
-  const highlights = scoreExplanation?.highlights.slice(0, 3) ?? [];
-  const risks = scoreExplanation?.risks.slice(0, 3) ?? [];
   const summaryText = overallSummary || scoreExplanation?.explanation || null;
+  const insights = getTopExplainabilityInsights(scoreExplanation, 3);
+  const deltaLine = getExplainabilityDeltaLine(scoreExplanation);
+  const freshnessLine = getExplainabilityFreshnessLine(
+    scoreExplanation?.freshness_status,
+    scoreExplanation?.computed_at,
+  );
 
   const showBreakdown =
     scoreBreakdown &&
@@ -75,9 +83,6 @@ export function ScoreSummary({
       scoreBreakdown.seniority_match_score !== null ||
       scoreBreakdown.education_score !== null ||
       scoreBreakdown.confidence_score !== null);
-
-  const showHighlights = highlights.length > 0;
-  const showRisks = risks.length > 0;
 
   if (compatibilityScore == null && !scoreBreakdown && !scoreExplanation) {
     return null;
@@ -88,7 +93,7 @@ export function ScoreSummary({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-            Match da vaga ativa
+            Compatibilidade Contextual
           </p>
           <div className="mt-2 flex items-end gap-2">
             <span
@@ -114,6 +119,16 @@ export function ScoreSummary({
               {summaryText}
             </p>
           ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+              {freshnessLine}
+            </span>
+            {deltaLine ? (
+              <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+                {deltaLine}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         {showBreakdown ? (
@@ -132,37 +147,28 @@ export function ScoreSummary({
         ) : null}
       </div>
 
-      {showHighlights || showRisks ? (
-        <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          {showHighlights ? (
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-                Destaques positivos
-              </p>
-              <ul className="space-y-1.5">
-                {highlights.map((highlight) => (
-                  <li key={highlight} className="rounded-lg bg-[hsl(var(--surface-muted))]/40 px-3 py-2 text-sm text-[hsl(var(--text))]">
-                    {highlight}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {showRisks ? (
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-                Pontos de atenção
-              </p>
-              <ul className="space-y-1.5">
-                {risks.map((risk) => (
-                  <li key={risk} className="rounded-lg bg-[hsl(var(--surface-muted))]/40 px-3 py-2 text-sm text-[hsl(var(--text))]">
-                    {risk}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+      {insights.length > 0 ? (
+        <div className="mt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+            Por que este score?
+          </p>
+          <div className="grid gap-2 xl:grid-cols-3">
+            {insights.map((insight) => (
+              <div
+                key={`${insight.factorType}-${insight.label}`}
+                className={[
+                  "rounded-xl border px-3 py-2.5 text-sm",
+                  insight.tone === "positive"
+                    ? "border-emerald-200 bg-emerald-50/65 text-emerald-950"
+                    : insight.tone === "negative"
+                      ? "border-amber-200 bg-amber-50/75 text-amber-950"
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 text-[hsl(var(--text))]",
+                ].join(" ")}
+              >
+                {insight.label}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

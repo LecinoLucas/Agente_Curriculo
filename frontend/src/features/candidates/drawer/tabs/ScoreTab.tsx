@@ -16,6 +16,12 @@ import { toast } from "../../../../shared/utils/toast";
 import { buildDealBreakerViolationDisplay, isDealBreakerReasonCode } from "../../../pipeline/dealBreakerDisplay";
 import { ScoreSummary } from "../score/ScoreSummary";
 import { deriveScoreSemantics } from "../../utils/scoreSemantics";
+import {
+  getExplainabilityDeltaLine,
+  getExplainabilityFreshnessLine,
+  getExplainabilityQuickLine,
+  getTopExplainabilityInsights,
+} from "../../utils/explainabilityUi";
 
 function formatOptionalDateTime(value: string | null | undefined): string {
   if (!value) return "—";
@@ -28,6 +34,54 @@ function formatOptionalDateTime(value: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatRelativeDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return "—";
+
+  const diffMs = date.getTime() - Date.now();
+  const diffMinutes = Math.round(diffMs / 60000);
+  const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+
+  if (Math.abs(diffMinutes) < 60) return rtf.format(diffMinutes, "minute");
+  const diffHours = Math.round(diffMinutes / 60);
+  if (Math.abs(diffHours) < 24) return rtf.format(diffHours, "hour");
+  const diffDays = Math.round(diffHours / 24);
+  return rtf.format(diffDays, "day");
+}
+
+function getFreshnessBadge(status: string | null | undefined, loading: boolean) {
+  if (loading) {
+    return {
+      label: "Atualizando ranking...",
+      variant: "secondary" as const,
+      description: "Recomputando a aderência da vaga com a análise mais recente.",
+    };
+  }
+
+  if (status === "fresh") {
+    return {
+      label: "Atualizado",
+      variant: "success" as const,
+      description: "Este score representa a aderência do candidato à vaga com base na análise mais recente disponível.",
+    };
+  }
+
+  if (status === "stale") {
+    return {
+      label: "Ranking desatualizado",
+      variant: "warning" as const,
+      description: "A aderência desta vaga ainda não refletiu a análise mais recente disponível.",
+    };
+  }
+
+  return {
+    label: "Status do ranking indisponível",
+    variant: "neutral" as const,
+    description: "Ainda não há evidência suficiente para garantir a atualização deste ranking.",
+  };
 }
 
 export function ScoreTab({
@@ -77,6 +131,17 @@ export function ScoreTab({
     Boolean(rankingEntry && rankingEntry.reason_codes.length > 0) ||
     Boolean(rankingEntry?.score_breakdown) ||
     dealBreakerDetails.length > 0;
+  const freshnessBadge = getFreshnessBadge(rankingEntry?.freshness_status, loading);
+  const rankingComputedAt = rankingEntry?.ranking_updated_at ?? rankingEntry?.score_computed_at ?? rankingEntry?.computed_at ?? null;
+  const rankingRelativeTime = formatRelativeDateTime(rankingComputedAt);
+  const rankingVersion = rankingEntry?.ranking_version ?? rankingEntry?.version ?? null;
+  const explainabilityInsights = getTopExplainabilityInsights(scoreExplanation, 3);
+  const explainabilityLine = getExplainabilityQuickLine(scoreExplanation);
+  const deltaLine = getExplainabilityDeltaLine(scoreExplanation);
+  const freshnessLine = getExplainabilityFreshnessLine(
+    scoreExplanation?.freshness_status ?? rankingEntry?.freshness_status,
+    scoreExplanation?.computed_at ?? rankingComputedAt,
+  );
 
   // Update scoreExplanation when prop changes (for feedback updates)
   useEffect(() => {
@@ -151,29 +216,49 @@ export function ScoreTab({
       ) : null}
 
       <Section title="Indicadores da vaga ativa">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
+              Aderência à Vaga
+            </p>
+            <p className="mt-1 text-sm text-[hsl(var(--text))]" title={freshnessBadge.description}>
+              Este score representa a aderência do candidato à vaga com base na análise mais recente disponível.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={freshnessBadge.variant} title={freshnessBadge.description}>
+              {freshnessBadge.label}
+            </Badge>
+            {rankingComputedAt ? (
+              <span className="text-xs text-[hsl(var(--text-muted))]">
+                Atualizado {rankingRelativeTime}
+              </span>
+            ) : null}
+          </div>
+        </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <DecisionCard
-            label="Match da vaga ativa"
+            label="Compatibilidade Contextual"
             value={compatibilityGuidance ? compatibilityGuidance.title : fmtScore(compatibilityScore)}
-            description={compatibilityGuidance?.description ?? "Aderência do candidato à vaga ativa."}
+            description={compatibilityGuidance?.description ?? "Leitura contextual do candidato dentro da vaga ativa."}
             valueClassName={compatibilityGuidance ? "text-[hsl(var(--text))]" : scoreColorClass(compatibilityScore)}
           />
           <DecisionCard
-            label="Score geral IA"
+            label="Perfil Geral IA"
             value={fmtScore(aiScore)}
             description={
               latestActiveAnalysis?.status === "completed"
-                ? "Resumo geral do perfil feito pela IA, fora do contexto da vaga ativa."
+                ? "Resumo geral do perfil feito pela IA, fora do contexto específico desta vaga."
                 : "Aguardando análise concluída para mostrar este contexto secundário."
             }
             valueClassName={scoreColorClass(aiScore)}
           />
           <DecisionCard
-            label="Ranking da vaga"
+            label="Aderência à Vaga"
             value={rankingEntry ? `#${rankingEntry.rank} · ${fmtScore(rankingEntry.final_score)}` : "—"}
             description={
               rankingEntry
-                ? "Posição atual do candidato no ranking desta vaga."
+                ? `${freshnessBadge.label}. Posição atual do candidato no ranking desta vaga.`
                 : "Ainda não há posição persistida para este candidato nesta vaga."
             }
             valueClassName={rankingEntry ? scoreColorClass(rankingEntry.final_score) : undefined}
@@ -191,11 +276,11 @@ export function ScoreTab({
 
         {!loading && !error && rankingEntry ? (
           <div className="flex flex-col gap-4">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <MetaItem label="Posição" value={`#${rankingEntry.rank}`} />
-              <MetaItem label="Ranking da vaga" value={fmtScore(rankingEntry.final_score)} />
-              <MetaItem label="Etapa no ranking" value={rankingEntry.stage || "—"} />
-              <MetaItem label="Status do pipeline" value={rankingEntry.pipeline_status || "—"} />
+              <MetaItem label="Aderência à Vaga" value={fmtScore(rankingEntry.final_score)} />
+              <MetaItem label="Atualização" value={freshnessLine} />
+              <MetaItem label="Atualizado em" value={formatOptionalDateTime(rankingComputedAt)} />
             </div>
 
             {dealBreakerDetails.length > 0 ? (
@@ -204,20 +289,6 @@ export function ScoreTab({
                 <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--text))]">
                   Este candidato foi rejeitado porque um critério eliminatório da vaga não foi atendido.
                 </p>
-              </div>
-            ) : null}
-
-            {rankingEntry.score_breakdown ? (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <BreakdownItem label="Skills" value={rankingEntry.score_breakdown.skill_match_score} />
-                <BreakdownItem label="Experiência" value={rankingEntry.score_breakdown.experience_match_score} />
-                <BreakdownItem label="Senioridade" value={rankingEntry.score_breakdown.seniority_match_score} />
-                <BreakdownItem label="Educação" value={rankingEntry.score_breakdown.education_score} />
-                <BreakdownItem
-                  label="Confiança dos dados"
-                  value={rankingEntry.score_breakdown.confidence_score || rankingEntry.score_breakdown.ai_confidence_score}
-                />
-                <BreakdownItem label="Penalidade" value={rankingEntry.score_breakdown.penalty_score} />
               </div>
             ) : null}
 
@@ -260,6 +331,7 @@ export function ScoreTab({
               <div className="flex flex-wrap gap-2">
                 {rankingEntry.reason_codes
                   .filter((reason) => !isDealBreakerReasonCode(reason))
+                  .slice(0, 3)
                   .map((reason, index) => (
                   <span
                     key={`${reason.type}-${reason.field}-${index}`}
@@ -276,15 +348,43 @@ export function ScoreTab({
             ) : null}
 
             {rankingEntry.explanation_text ? (
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                  Explicação
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">
-                  {rankingEntry.explanation_text}
-                </p>
-              </div>
+              <p className="text-sm leading-relaxed text-[hsl(var(--text-muted))]">
+                {rankingEntry.explanation_text}
+              </p>
             ) : null}
+
+            <details className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3">
+              <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
+                Ver detalhes da análise
+              </summary>
+              <div className="mt-4 flex flex-col gap-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <MetaItem label="Etapa no ranking" value={rankingEntry.stage || "—"} />
+                  <MetaItem label="Status do pipeline" value={rankingEntry.pipeline_status || "—"} />
+                  <MetaItem
+                    label="Análise de origem"
+                    value={rankingEntry.source_analysis_created_at ? formatOptionalDateTime(rankingEntry.source_analysis_created_at) : "—"}
+                  />
+                  <MetaItem label="Versão do ranking" value={rankingVersion || "—"} />
+                  <MetaItem label="Modelo de score" value={rankingEntry.score_model_version || "—"} />
+                  <MetaItem label="Status do ranking" value={freshnessBadge.label} />
+                </div>
+
+                {rankingEntry.score_breakdown ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <BreakdownItem label="Skills" value={rankingEntry.score_breakdown.skill_match_score} />
+                    <BreakdownItem label="Experiência" value={rankingEntry.score_breakdown.experience_match_score} />
+                    <BreakdownItem label="Senioridade" value={rankingEntry.score_breakdown.seniority_match_score} />
+                    <BreakdownItem label="Educação" value={rankingEntry.score_breakdown.education_score} />
+                    <BreakdownItem
+                      label="Confiança dos dados"
+                      value={rankingEntry.score_breakdown.confidence_score || rankingEntry.score_breakdown.ai_confidence_score}
+                    />
+                    <BreakdownItem label="Penalidade" value={rankingEntry.score_breakdown.penalty_score} />
+                  </div>
+                ) : null}
+              </div>
+            </details>
 
             {!hasRankingDetails ? (
               <p className="text-sm text-[hsl(var(--text-muted))]">
@@ -306,20 +406,44 @@ export function ScoreTab({
       <Section title="Por que este score?">
         {scoreExplanation ? (
           <div className="flex flex-col gap-4">
-            <div className="grid gap-2 sm:grid-cols-4">
-              <MetaItem label="Score final" value={fmtScore(scoreExplanation.final_score)} />
-              <MetaItem label="Recommendation" value={scoreExplanation.recommendation || "—"} />
-              <MetaItem label="Motor usado" value={scoreExplanation.engine_used || "—"} />
-              <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.confidence_score)} />
+            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    Leitura operacional
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">
+                    {explainabilityLine || scoreExplanation.explanation}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={freshnessBadge.variant}>{freshnessBadge.label}</Badge>
+                  <span className="text-xs text-[hsl(var(--text-muted))]">{freshnessLine}</span>
+                </div>
+              </div>
+              {deltaLine ? (
+                <div className="mt-3 rounded-lg border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-sm text-[hsl(var(--text))]">
+                  {deltaLine}
+                </div>
+              ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={scoreExplanation.engine_used === "canonical" ? "success" : "outline"}>
-                {scoreExplanation.engine_used === "canonical" ? "Motor: Canônico" : `Motor: ${scoreExplanation.engine_used}`}
-              </Badge>
-              <Badge variant="outline">Recommendation: {scoreExplanation.recommendation || "—"}</Badge>
-              <Badge variant="outline">Confiança: {fmtPercentValue(scoreExplanation.confidence_score)}</Badge>
-            </div>
+            {explainabilityInsights.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  Principais fatores
+                </p>
+                <div className="grid gap-2 md:grid-cols-3">
+                  {explainabilityInsights.map((insight) => (
+                    <ExplainabilityCard
+                      key={`${insight.factorType}-${insight.label}`}
+                      label={insight.label}
+                      tone={insight.tone}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {scoreExplanation.overestimation_risks.length > 0 ? (
               <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
@@ -397,40 +521,45 @@ export function ScoreTab({
               </div>
             ) : null}
 
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                Resumo
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">
-                {scoreExplanation.explanation}
-              </p>
-            </div>
+            <details className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3">
+              <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
+                Ver detalhes da análise
+              </summary>
+              <div className="mt-4 flex flex-col gap-4">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetaItem label="Score final" value={fmtScore(scoreExplanation.final_score)} />
+                  <MetaItem label="Recommendation" value={scoreExplanation.recommendation || "—"} />
+                  <MetaItem label="Motor usado" value={scoreExplanation.engine_used || "—"} />
+                  <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.confidence_score)} />
+                </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 lg:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                  Breakdown do score
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                  <ExplanationBreakdownItem label="Obrigatórias" item={scoreExplanation.breakdown.mandatory ?? null} />
-                  <ExplanationBreakdownItem label="Opcionais" item={scoreExplanation.breakdown.optional ?? null} />
-                  <ExplanationBreakdownItem label="Experiência" item={scoreExplanation.breakdown.experience ?? null} />
-                  <ExplanationBreakdownItem label="Senioridade" item={scoreExplanation.breakdown.seniority ?? null} />
-                  <ExplanationBreakdownItem label="Ajuste IA" item={scoreExplanation.breakdown.ai_adjustment ?? null} />
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 lg:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                      Breakdown do score
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                      <ExplanationBreakdownItem label="Obrigatórias" item={scoreExplanation.breakdown.mandatory ?? null} />
+                      <ExplanationBreakdownItem label="Opcionais" item={scoreExplanation.breakdown.optional ?? null} />
+                      <ExplanationBreakdownItem label="Experiência" item={scoreExplanation.breakdown.experience ?? null} />
+                      <ExplanationBreakdownItem label="Senioridade" item={scoreExplanation.breakdown.seniority ?? null} />
+                      <ExplanationBreakdownItem label="Ajuste IA" item={scoreExplanation.breakdown.ai_adjustment ?? null} />
+                    </div>
+                  </div>
+
+                  <InsightListBlock
+                    title="Destaques"
+                    items={scoreExplanation.highlights}
+                    empty="Sem destaques relevantes."
+                  />
+                  <InsightListBlock
+                    title="Riscos"
+                    items={scoreExplanation.risks}
+                    empty="Sem riscos relevantes."
+                  />
                 </div>
               </div>
-
-              <InsightListBlock
-                title="Destaques"
-                items={scoreExplanation.highlights}
-                empty="Sem destaques relevantes."
-              />
-              <InsightListBlock
-                title="Riscos"
-                items={scoreExplanation.risks}
-                empty="Sem riscos relevantes."
-              />
-            </div>
+            </details>
           </div>
         ) : null}
 
@@ -469,6 +598,29 @@ function InsightListBlock({
       ) : (
         <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
       )}
+    </div>
+  );
+}
+
+function ExplainabilityCard({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "positive" | "negative" | "contextual";
+}) {
+  return (
+    <div
+      className={[
+        "rounded-xl border px-3 py-3 text-sm leading-6",
+        tone === "positive"
+          ? "border-emerald-200 bg-emerald-50/75 text-emerald-950"
+          : tone === "negative"
+            ? "border-amber-200 bg-amber-50/80 text-amber-950"
+            : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))]",
+      ].join(" ")}
+    >
+      {label}
     </div>
   );
 }

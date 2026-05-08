@@ -5,9 +5,11 @@ import { PageHeader } from "../components/common/PageHeader";
 import { AnalysisFilters } from "../features/analyses/components/AnalysisFilters";
 import { AnalysesTable } from "../features/analyses/components/AnalysesTable";
 import { useAnalysesPage } from "../features/analyses/hooks/useAnalysesPage";
+import { useEffect, useState } from "react";
 
 export function AnalisesIaPage() {
   const { openCandidate, selectedCandidateId } = usePipeline();
+  const [workspaceFocused, setWorkspaceFocused] = useState(false);
 
   const {
     page,
@@ -34,6 +36,16 @@ export function AnalisesIaPage() {
   } = useAnalysesPage();
 
   const isWorkspaceOpen = selectedCandidateId !== null;
+  const showAnalysesList = !isWorkspaceOpen || !workspaceFocused;
+  const showWorkspace = isWorkspaceOpen && workspaceFocused;
+
+  useEffect(() => {
+    if (selectedCandidateId) {
+      setWorkspaceFocused(true);
+      return;
+    }
+    setWorkspaceFocused(false);
+  }, [selectedCandidateId]);
 
   return (
     <div className="flex h-full flex-col">
@@ -65,15 +77,8 @@ export function AnalisesIaPage() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel: analyses table */}
-        <div
-          className={[
-            "flex flex-col overflow-hidden",
-            isWorkspaceOpen
-              ? "hidden lg:flex lg:w-[420px] lg:shrink-0 lg:border-r lg:border-[hsl(var(--border))]"
-              : "flex-1",
-          ].join(" ")}
-        >
+        {showAnalysesList ? (
+          <div className="flex flex-1 flex-col overflow-hidden">
           {/* Filters */}
           <AnalysisFilters
             searchInput={searchInput}
@@ -114,7 +119,9 @@ export function AnalisesIaPage() {
             isRefreshing={isRefreshing}
             actionId={actionId}
             onOpen={(item) => {
-              if (item.candidate_id) void openCandidate(item.candidate_id);
+              if (!item.candidate_id) return;
+              setWorkspaceFocused(true);
+              void openCandidate(item.candidate_id);
             }}
             onRetry={(item) => void handleRetry(item)}
             onForceFail={(item) => void handleForceFail(item)}
@@ -124,9 +131,15 @@ export function AnalisesIaPage() {
         )}
           </div>
         </div>
+        ) : null}
 
-        {/* Right panel: workspace */}
-        {isWorkspaceOpen ? <CandidateDrawer mode="workspace" /> : null}
+        {showWorkspace ? (
+          <CandidateDrawer
+            mode="workspace"
+            onBackToList={() => setWorkspaceFocused(false)}
+            backToListLabel="Análises"
+          />
+        ) : null}
       </div>
     </div>
   );

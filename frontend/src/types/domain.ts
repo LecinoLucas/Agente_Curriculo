@@ -31,6 +31,11 @@ export type CandidateListSummary = {
   created_at: string;
   resume_count: number;
   linked_job_count: number;
+  latest_job_id: string | null;
+  latest_job_title: string | null;
+  latest_job_stage: string | null;
+  latest_relationship_status: string | null;
+  active_job_id: string | null;
   active_job_title: string | null;
   active_job_stage: string | null;
   active_job_match_score: number | null;
@@ -114,6 +119,10 @@ export type CandidatePipelineEntryOverview = {
   job_id: string;
   job_title: string;
   stage: PipelineStage;
+  relationship_status: string;
+  is_terminal: boolean;
+  terminated_at: string | null;
+  termination_reason: string | null;
   candidate_status: string;
   match_score: number | null;
   updated_at: string;
@@ -200,6 +209,10 @@ export type AnalysisMatch = {
   seniority_score: number;
   candidate_seniority: string | null;
   job_seniority: string | null;
+  ranking_refresh_status?: "updated" | "skipped" | "failed" | "unknown" | null;
+  ranking_freshness_status?: "fresh" | "stale" | "unknown" | null;
+  ranking_refreshed_at?: string | null;
+  ranking_warning?: string | null;
 };
 
 export type ResumeUploadResponse = {
@@ -321,7 +334,15 @@ export type JobRankingEntry = {
   explanation_text: string;
   entered_at: string | null;
   computed_at: string;
+  freshness_status?: "fresh" | "stale" | "unknown";
+  score_computed_at?: string | null;
+  source_analysis_id?: string | null;
+  source_analysis_created_at?: string | null;
+  score_model_version?: string | null;
+  match_updated_at?: string | null;
+  ranking_updated_at?: string | null;
   version: string;
+  ranking_version?: string | null;
   data_quality_status?: "valid" | "unknown" | "no_resume" | "empty_resume" | "parsing_failed" | "invalid_manual";
 };
 

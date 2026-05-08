@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import hashlib
 
 import pytest
+import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,8 @@ from src.infrastructure.security.password_service import hash_password
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import SQLAlchemyCandidateRepository
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
+from src.application.services.candidate_ranking_service import CandidateRankingService
 
 
 async def _create_active_user(
@@ -267,6 +270,30 @@ async def _seed_scoring_case(
         explanation="Good technical match with Python/FastAPI expertise.",
     )
     db_session.add(match)
+    pipeline.current_analysis_id = analysis.id
     await db_session.commit()
+
+    if include_ranking_row:
+        active_version = await db_session.scalar(
+            sa.select(ScoreModelVersionModel).where(ScoreModelVersionModel.is_active.is_(True))
+        )
+        if active_version is None:
+            active_version = ScoreModelVersionModel(
+                version=f"test-score-{uuid4()}",
+                is_active=True,
+                weights={
+                    "skill_match": 0.4,
+                    "experience_match": 0.25,
+                    "seniority_match": 0.2,
+                    "education": 0.1,
+                    "ai_confidence": 0.05,
+                },
+                thresholds={"high": 70, "low": 45},
+            )
+            db_session.add(active_version)
+            await db_session.commit()
+
+        await CandidateRankingService(db_session).compute_single_candidate(job.id, candidate.id)
+        await db_session.commit()
 
     return job.id, candidate.id, match.id

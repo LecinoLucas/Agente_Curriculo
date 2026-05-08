@@ -14,7 +14,9 @@ from src.infrastructure.database.models.profile_analysis_model import (
     JobProfileAnalysisModel,
 )
 from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreFactorModel,
     CandidateJobScoreModel,
+    CandidateJobScoreSnapshotModel,
     ScoreModelVersionModel,
 )
 from src.infrastructure.database.models.analysis_model import (
@@ -71,6 +73,8 @@ __all__ = [
     "PipelineEventModel",
     "ScoreModelVersionModel",
     "CandidateJobScoreModel",
+    "CandidateJobScoreSnapshotModel",
+    "CandidateJobScoreFactorModel",
     "CandidateProfileAnalysisModel",
     "JobProfileAnalysisModel",
     "CandidateJobMatchModel",

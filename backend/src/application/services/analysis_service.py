@@ -80,6 +80,7 @@ from src.interface.api.schemas.analysis_schemas import (
     AnalysisPipelineResponse,
 )
 from src.application.services.pipeline_service import PipelineService
+from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
 
 
 # ── Validation State ──────────────────────────────────────────────────────────
@@ -1556,6 +1557,75 @@ class AnalysisService:
 
         await self._repository.upsert_candidate_job_match(persisted_match)
 
+        ranking_refresh_status = "unknown"
+        ranking_freshness_status = "unknown"
+        ranking_refreshed_at = None
+        ranking_warning = None
+        ranking_service = None
+        try:
+            from src.application.services.candidate_ranking_service import CandidateRankingService
+
+            ranking_service = CandidateRankingService(self._repository.session)
+            async with self._repository.session.begin_nested():
+                ranking_result = await ranking_service.compute_single_candidate(job_id, candidate_id)
+
+            if ranking_result is None:
+                ranking_refresh_status = "skipped"
+                ranking_warning = "Ranking incremental não encontrou contexto suficiente para o candidato."
+            else:
+                ranking_refresh_status = "updated"
+                ranking_freshness_status = str(ranking_result.get("freshness_status") or "fresh")
+                ranking_refreshed_at = ranking_result.get("computed_at")
+        except Exception:
+            ranking_refresh_status = "failed"
+            ranking_freshness_status = "stale"
+            ranking_warning = (
+                "Match salvo, mas o ranking incremental falhou e pode estar desatualizado."
+            )
+            logger.warning(
+                "ranking.single_recompute_failed",
+                exc_info=True,
+                extra={
+                    "analysis_id": str(analysis_id),
+                    "candidate_id": str(candidate_id),
+                    "job_id": str(job_id),
+                    "resume_version_id": str(resume_version_id),
+                    "recompute_reason": "match_to_job_sync",
+                },
+            )
+            await publish_domain_event(
+                DomainEvent(
+                    event_type=DomainEventType.RANKING_RECOMPUTE_FAILED,
+                    entity_id=candidate_id,
+                    payload={
+                        "event": "ranking_recompute_failed",
+                        "candidate_id": str(candidate_id),
+                        "job_id": str(job_id),
+                        "source_analysis_id": str(analysis_id),
+                        "source_analysis_created_at": details.analysis.created_at.isoformat(),
+                        "score_model_version": score_model_version.version if score_model_version else None,
+                        "ranking_version": score_model_version.version if score_model_version else None,
+                        "freshness_status": "stale",
+                        "recompute_reason": "match_to_job_sync",
+                    },
+                ),
+                session=self._repository.session,
+            )
+            if ranking_service is not None:
+                try:
+                    async with self._repository.session.begin_nested():
+                        await ranking_service.mark_candidate_stale(job_id, candidate_id)
+                except Exception:
+                    logger.warning(
+                        "ranking.mark_stale_failed",
+                        exc_info=True,
+                        extra={
+                            "analysis_id": str(analysis_id),
+                            "candidate_id": str(candidate_id),
+                            "job_id": str(job_id),
+                        },
+                    )
+
         return AnalysisMatchResponse(
             analysis_id=analysis_id,
             job_id=job_id,
@@ -1577,5 +1647,9 @@ class AnalysisService:
             gaps=adaptive_gaps,
             risk_points=adaptive_risk_points,
             explanation=adaptive_explanation,
-                behavioral_indicators=adaptive_behavioral_indicators,
+            behavioral_indicators=adaptive_behavioral_indicators,
+            ranking_refresh_status=ranking_refresh_status,
+            ranking_freshness_status=ranking_freshness_status,
+            ranking_refreshed_at=ranking_refreshed_at,
+            ranking_warning=ranking_warning,
         )

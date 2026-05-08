@@ -85,6 +85,18 @@ class CandidateJobScoreModel(Base):
         sa.ForeignKey("score_model_versions.id"),
         nullable=False,
     )
+    source_analysis_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("analyses.id"),
+        nullable=True,
+    )
+    source_analysis_created_at: Mapped[datetime | None] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=True,
+    )
+    input_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    score_model_version: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
+    explainability_version: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
     final_score: Mapped[Decimal] = mapped_column(sa.Numeric(5, 2), nullable=False)
     decision_suggestion: Mapped[str] = mapped_column(sa.String(30), nullable=False)
     breakdown: Mapped[dict[str, Any]] = mapped_column(JSONB_COMPAT, nullable=False)
@@ -92,7 +104,20 @@ class CandidateJobScoreModel(Base):
         JSONB_COMPAT, nullable=False, server_default="[]"
     )
     explanation_text: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    factor_summary_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
+    delta_summary_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
+    freshness_status: Mapped[str] = mapped_column(
+        sa.String(20),
+        nullable=False,
+        server_default="unknown",
+    )
     computed_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
@@ -108,6 +133,141 @@ class CandidateJobScoreModel(Base):
             "candidate_id", "job_id", "version_id",
             name="uq_candidate_job_score_version",
         ),
+        sa.CheckConstraint(
+            "freshness_status IN ('fresh', 'stale', 'unknown')",
+            name="ck_candidate_job_scores_freshness_status",
+        ),
         sa.Index("idx_candidate_job_scores_job_id", "job_id", "final_score"),
         sa.Index("idx_candidate_job_scores_candidate_job", "candidate_id", "job_id"),
+        sa.Index("idx_candidate_job_scores_freshness", "job_id", "freshness_status"),
+        sa.Index("idx_candidate_job_scores_input_hash", "job_id", "input_hash"),
+    )
+
+
+class CandidateJobScoreSnapshotModel(Base):
+    __tablename__ = "candidate_job_score_snapshots"
+
+    id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
+    )
+    candidate_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("candidates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    job_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("jobs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("score_model_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ranking_version: Mapped[str] = mapped_column(sa.String(50), nullable=False)
+    source_analysis_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("analyses.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_analysis_created_at: Mapped[datetime | None] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=True,
+    )
+    job_signature_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    score_model_version: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
+    explainability_version: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
+    input_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    final_score: Mapped[Decimal] = mapped_column(sa.Numeric(5, 2), nullable=False)
+    freshness_status: Mapped[str] = mapped_column(
+        sa.String(20),
+        nullable=False,
+        server_default="unknown",
+    )
+    computed_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+
+    factors: Mapped[list[CandidateJobScoreFactorModel]] = relationship(
+        "CandidateJobScoreFactorModel",
+        back_populates="snapshot",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
+
+    __table_args__ = (
+        sa.CheckConstraint(
+            "freshness_status IN ('fresh', 'stale', 'unknown')",
+            name="ck_candidate_job_score_snapshots_freshness_status",
+        ),
+        sa.Index("idx_candidate_job_score_snapshots_candidate_job", "candidate_id", "job_id", "computed_at"),
+        sa.Index("idx_candidate_job_score_snapshots_job", "job_id", "computed_at"),
+        sa.Index("idx_candidate_job_score_snapshots_input_hash", "job_id", "input_hash"),
+    )
+
+
+class CandidateJobScoreFactorModel(Base):
+    __tablename__ = "candidate_job_score_factors"
+
+    id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
+    )
+    snapshot_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("candidate_job_score_snapshots.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    factor_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    factor_key: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    factor_label: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    impact_score: Mapped[Decimal] = mapped_column(sa.Numeric(7, 2), nullable=False)
+    normalized_weight: Mapped[Decimal] = mapped_column(sa.Numeric(6, 4), nullable=False)
+    direction: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    evidence_json: Mapped[dict[str, Any]] = mapped_column(JSONB_COMPAT, nullable=False, server_default="{}")
+    display_order: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+
+    snapshot: Mapped[CandidateJobScoreSnapshotModel] = relationship(
+        "CandidateJobScoreSnapshotModel",
+        back_populates="factors",
+        lazy="noload",
+    )
+
+    __table_args__ = (
+        sa.CheckConstraint(
+            "factor_type IN ("
+            "'required_skill_match',"
+            "'missing_required_skill',"
+            "'adjacent_skill_match',"
+            "'experience_match',"
+            "'insufficient_experience',"
+            "'seniority_match',"
+            "'seniority_gap',"
+            "'education_match',"
+            "'deal_breaker_violation',"
+            "'data_confidence_penalty',"
+            "'legacy_outdated_penalty'"
+            ")",
+            name="ck_candidate_job_score_factors_type",
+        ),
+        sa.CheckConstraint(
+            "direction IN ('positive', 'negative', 'neutral')",
+            name="ck_candidate_job_score_factors_direction",
+        ),
+        sa.Index("idx_candidate_job_score_factors_snapshot", "snapshot_id", "display_order"),
     )

@@ -43,7 +43,6 @@ import {
   isDealBreakerReasonCode,
 } from "./dealBreakerDisplay";
 import { type PanelTab, usePipeline } from "./PipelineContext";
-import { AddJobModal } from "./AddJobModal";
 import { EditCandidateModal } from "./EditCandidateModal";
 
 
@@ -62,6 +61,15 @@ const STAGE_LABEL: Record<PipelineStage, string> = {
   rejected: "Reprovado",
 };
 
+const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
+  entry: "screening",
+  screening: "hr_interview",
+  hr_interview: "technical_interview",
+  technical_interview: "final",
+  final: "hired",
+  offer: "hired",
+};
+
 function buildStageActionFeedback(
   stage: PipelineStage,
   phase: "pending" | "success" | "error",
@@ -72,12 +80,17 @@ function buildStageActionFeedback(
     return {
       tone: "info",
       pending: true,
-      title: stage === "hired" ? "Aplicando aprovação" : stage === "rejected" ? "Aplicando rejeição" : `Movendo para ${label}`,
+      title:
+        stage === "hired"
+          ? "Aplicando aprovação"
+          : stage === "rejected"
+            ? "Encerrando candidatura"
+            : `Movendo para ${label}`,
       detail:
         stage === "hired"
           ? "O candidato está sendo movido para Contratado."
           : stage === "rejected"
-            ? "O candidato está sendo movido para Reprovado."
+            ? "A candidatura está sendo encerrada."
             : "O novo estado está sendo aplicado no workspace.",
     };
   }
@@ -96,13 +109,13 @@ function buildStageActionFeedback(
       stage === "hired"
         ? "Candidato aprovado"
         : stage === "rejected"
-          ? "Candidato rejeitado"
+          ? "Candidatura encerrada"
           : `Candidato movido para ${label}`,
     detail:
       stage === "hired"
         ? "O estado atual foi atualizado para Contratado."
         : stage === "rejected"
-          ? "O estado atual foi atualizado para Reprovado."
+          ? "A candidatura foi encerrada para esta vaga."
           : "A etapa atual já foi sincronizada no workspace.",
   };
 }
@@ -145,9 +158,15 @@ async function recoverInFlightAnalysis(params: {
 
 interface CandidateDrawerProps {
   mode?: "overlay" | "workspace";
+  onBackToList?: () => void;
+  backToListLabel?: string;
 }
 
-export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {}) {
+export function CandidateDrawer({
+  mode = "overlay",
+  onBackToList,
+  backToListLabel,
+}: CandidateDrawerProps = {}) {
   const navigate = useNavigate();
   const {
     selectedCandidateId,
@@ -213,8 +232,6 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
   const {
     editModalOpen,
     setEditModalOpen,
-    addJobModalOpen,
-    setAddJobModalOpen,
     transferJobModalOpen,
     setTransferJobModalOpen,
     dataQualityActionLoading,
@@ -230,8 +247,7 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
     activeJob,
     activeJobCompatibilityScore,
     candidateState,
-    linkedJobIds,
-    availableJobs,
+    transferAvailableJobs,
     canTransferCurrentJob,
     compatibilityGuidance,
     activeJobLabel,
@@ -243,6 +259,17 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
     rankingEntry,
     linkSaving,
   });
+
+  useEffect(() => {
+    if (mode !== "overlay" || !isOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen, mode]);
 
   const pushActionFeedback = useCallback((feedback: Omit<CandidateActionFeedback, "id">) => {
     setActionFeedback({
@@ -509,10 +536,6 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
     }
   }, [selectedCandidateId, activeBoardJobId, invalidateJobState, pushActionFeedbackForCandidate]);
 
-  const handleOpenAddJob = useCallback(() => {
-    setAddJobModalOpen(true);
-  }, [setAddJobModalOpen]);
-
   const handleOpenTransferJob = useCallback(() => {
     setTransferJobModalOpen(true);
   }, [setTransferJobModalOpen]);
@@ -535,12 +558,14 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
     }
   }, [selectedCandidateId]);
 
-  const handleHeroApprove = useCallback(async () => {
-    if (!selectedCandidateId || !currentStage || currentStage === "hired") return;
-    await handleStageChange("hired");
+  const handleHeroAdvance = useCallback(async () => {
+    if (!selectedCandidateId || !currentStage) return;
+    const nextStage = NEXT_PIPELINE_STAGE[currentStage];
+    if (!nextStage) return;
+    await handleStageChange(nextStage);
   }, [selectedCandidateId, currentStage, handleStageChange]);
 
-  const handleHeroReject = useCallback(async () => {
+  const handleHeroTerminate = useCallback(async () => {
     if (!selectedCandidateId || !currentStage || currentStage === "rejected") return;
     await handleStageChange("rejected");
   }, [selectedCandidateId, currentStage, handleStageChange]);
@@ -584,11 +609,13 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
             interactionLocked={stageSaving || linkSaving || headerActionLoading}
             compact={mode === "overlay"}
             onClose={closeCandidate}
-            onApprove={handleHeroApprove}
-            onReject={handleHeroReject}
+            onAdvance={handleHeroAdvance}
+            onTerminate={handleHeroTerminate}
             onViewAnalysis={handleHeroViewAnalysis}
             onTabChange={handleProfileTabChange}
             onNavigateToFull={mode === "overlay" ? () => navigate("/candidatos") : undefined}
+            onBackToList={mode === "workspace" ? onBackToList : undefined}
+            backToListLabel={backToListLabel}
             activeJob={activeJob}
             activeJobId={candidateActiveJobId}
             canTransferCurrentJob={canTransferCurrentJob}
@@ -596,7 +623,6 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
             linkSaving={linkSaving}
             onStageChange={handleStageChange}
             onLinkToActiveJob={handleLinkToActiveJob}
-            onOpenAddJob={handleOpenAddJob}
             onOpenTransferJob={handleOpenTransferJob}
           >
             {profileTabKey === "overview" && (
@@ -664,13 +690,14 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
             stageSaving={stageSaving}
             linkSaving={linkSaving}
             onClose={closeCandidate}
-            onApprove={handleHeroApprove}
-            onReject={handleHeroReject}
+            onAdvance={handleHeroAdvance}
+            onTerminate={handleHeroTerminate}
             onOpenDocuments={handleOpenDocuments}
             onTabChange={handleProfileTabChange}
+            onBackToList={mode === "workspace" ? onBackToList : undefined}
+            backToListLabel={backToListLabel}
             onStageChange={handleStageChange}
             onLinkToActiveJob={handleLinkToActiveJob}
-            onOpenAddJob={handleOpenAddJob}
             onOpenTransferJob={handleOpenTransferJob}
           >
             {profileTabKey === "overview" && (
@@ -765,25 +792,11 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
         }}
       />
 
-      <AddJobModal
-        isOpen={addJobModalOpen}
-        candidateId={candidate?.id ?? null}
-        jobs={jobs}
-        linkedJobIds={linkedJobIds}
-        excludedJobId={candidateActiveJobId}
-        onClose={() => setAddJobModalOpen(false)}
-        onSuccess={async () => {
-          if (!candidate?.id) return;
-          await invalidateJobState(candidateActiveJobId);
-          setAddJobModalOpen(false);
-        }}
-      />
-
       <TransferJobModal
         isOpen={transferJobModalOpen}
         candidateId={candidate?.id ?? null}
         fromJobId={primaryPipelineEntry?.job_id ?? null}
-        availableJobs={availableJobs}
+        availableJobs={transferAvailableJobs}
         canTransfer={canTransferCurrentJob}
         onClose={() => setTransferJobModalOpen(false)}
         onSuccess={async () => {
@@ -804,7 +817,7 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
         <div
           role="complementary"
           aria-label="Painel do candidato"
-          className="flex flex-1 flex-col overflow-hidden border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))]"
+          className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[hsl(var(--surface))]"
         >
           {drawerContent}
         </div>
@@ -817,7 +830,7 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
   return (
     <>
       {isOpen ? (
-        <div className="fixed inset-0 z-40 bg-black/20" onClick={closeCandidate} aria-hidden="true" />
+        <div className="fixed inset-0 z-40 bg-black/50" onClick={closeCandidate} aria-hidden="true" />
       ) : null}
 
       <div
@@ -825,7 +838,8 @@ export function CandidateDrawer({ mode = "overlay" }: CandidateDrawerProps = {})
         aria-modal="true"
         aria-label="Painel do candidato"
         className={[
-          "fixed inset-y-0 right-0 z-50 flex w-[600px] max-w-full flex-col bg-[hsl(var(--surface))] shadow-2xl",
+          "fixed inset-y-0 right-0 z-50 flex w-[520px] max-w-full flex-col bg-[hsl(var(--surface))] shadow-2xl",
+          mode === "overlay" ? "overflow-y-auto" : "overflow-hidden",
           "transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
@@ -913,7 +927,7 @@ function TransferJobModal({
           <div>
             <h2 className="text-base font-semibold text-[hsl(var(--text))]">Transferir/corrigir vaga</h2>
             <p className="ui-text-muted mt-0.5 text-sm">
-              O vínculo atual será desativado e o candidato entrará em <code>entry</code> na vaga destino.
+              O vínculo atual será desativado e o candidato entrará em <code>entry</code> na vaga destino publicada.
             </p>
           </div>
           <button
@@ -953,6 +967,9 @@ function TransferJobModal({
               )}
             </select>
           </label>
+          <p className="text-xs text-[hsl(var(--text-muted))]">
+            Apenas vagas publicadas podem receber transferência.
+          </p>
 
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-[hsl(var(--text))]">Motivo da transferência</span>

@@ -510,6 +510,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       if (!cached) return;
 
       const now = new Date().toISOString();
+      const isTerminalStage = payload.stage === "hired" || payload.stage === "rejected";
       let changed = false;
       const nextEntries = cached.pipeline_entries.map((entry) => {
         if (entry.job_id !== payload.jobId) return entry;
@@ -517,6 +518,10 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         return {
           ...entry,
           stage: payload.stage,
+          relationship_status: isTerminalStage ? payload.stage : "active",
+          is_terminal: isTerminalStage,
+          terminated_at: isTerminalStage ? now : null,
+          termination_reason: isTerminalStage ? entry.termination_reason : null,
           candidate_status: PIPELINE_STAGE_STATUS_LABEL[payload.stage],
           updated_at: now,
         };

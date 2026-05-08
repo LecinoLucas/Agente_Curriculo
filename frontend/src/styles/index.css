@@ -9,78 +9,75 @@
    * LIGHT THEME (default)
    *
    * Palette direction:
-   *   --bg            off-white cool (93 % lightness)  → body canvas
-   *   --surface       pure white                        → cards / panels
-   *   --surface-muted near-white (96 %)                → table heads, tags
-   *   --border        warm-gray  (82 %)                → visible separation
-   *   --text          near-black with blue tint         → primary text
-   *   --text-muted    medium gray (40 % lightness)      → secondary text
-   *   --primary       vivid blue                        → CTA / badges / focus
-   *   --accent        very-light blue (96 %)            → shadcn hover bg only
-   *   --nav-bg/text   dark navy                         → header bar
+   *   --bg            palha / bege claro               â†’ body canvas
+   *   --surface       creme muito suave                â†’ cards / panels
+   *   --surface-muted areia clara                      â†’ table heads, tags
+   *   --border        bege acinzentado                 â†’ visible separation
+   *   --text          marrom grafite                   â†’ primary text
+   *   --text-muted    taupe mÃ©dio                      â†’ secondary text
+   *   --primary       azul profundo elegante           â†’ CTA / focus
+   *   --nav-bg/text   champagne light                  â†’ header bar
    */
   :root {
-    /* ── Core surfaces ─────────────────────────────────────────────── */
-    --bg:             220 22% 93%;
+    /* â”€â”€ Core surfaces: modern operational AI workspace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    --bg:             220 20% 97%;
     --surface:        0 0% 100%;
-    --surface-muted:  220 16% 96%;
-    --border:         214 20% 82%;
-    --border-strong:  214 28% 68%;
+    --surface-muted:  220 14% 96%;
+    --border:         220 13% 88%;
+    --border-strong:  217 12% 78%;
 
-    /* ── Typography ────────────────────────────────────────────────── */
-    --text:           222 52% 8%;
-    --text-muted:     215 20% 40%;
+    /* â”€â”€ Typography â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    --text:           222 47% 11%;
+    --text-muted:     215 16% 44%;
 
-    /* ── Semantic colors ───────────────────────────────────────────── */
-    --success:        152 84% 28%;
-    --success-soft:   151 72% 93%;
-    --warning:        33  95% 38%;
-    --warning-soft:   48  88% 92%;
-    --danger:         350 89% 48%;
-    --danger-soft:    356 88% 94%;
+    /* â”€â”€ Semantic colors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    --success:        152 70% 32%;
+    --success-soft:   150 60% 94%;
+    --warning:        35  92% 38%;
+    --warning-soft:   45  90% 94%;
+    --danger:         350 78% 46%;
+    --danger-soft:    354 80% 95%;
 
-    /* ── Accent (vivid blue — used by custom .ui-* classes) ─────────
-       NOTE: --accent is re-defined below for shadcn (as a soft hover
-       bg). Custom components MUST reference --primary, not --accent.   */
-    --accent-soft:     226 100% 95%;
+    /* â”€â”€ Accent / AI blue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    --accent-soft:     224 70% 95%;
     --accent-contrast: 0 0% 100%;
 
-    /* ── Nav-specific tokens (dark header in light mode) ───────────── */
-    --nav-bg:         222 42% 14%;
-    --nav-text:       210 30% 93%;
-    --nav-muted:      215 20% 62%;
-    --nav-active-bg:  222 32% 22%;
-    --nav-border:     222 30% 20%;
+    /* â”€â”€ Nav-specific tokens: dark topbar in light theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    --nav-bg:         222 47% 11%;
+    --nav-text:       210 40% 98%;
+    --nav-muted:      215 20% 70%;
+    --nav-active-bg:  221 39% 18%;
+    --nav-border:     222 34% 17%;
 
-    /* ── shadcn/radix design-token contract ────────────────────────── */
-    --background:          220 22% 93%;
-    --foreground:          222 52% 8%;
+    /* â”€â”€ shadcn/radix design-token contract â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    --background:          220 20% 97%;
+    --foreground:          222 47% 11%;
     --card:                0 0% 100%;
-    --card-foreground:     222 52% 8%;
+    --card-foreground:     222 47% 11%;
     --popover:             0 0% 100%;
-    --popover-foreground:  222 52% 8%;
-    --primary:             224 84% 52%;
+    --popover-foreground:  222 47% 11%;
+    --primary:             224 76% 52%;
     --primary-foreground:  0 0% 100%;
-    --secondary:           220 16% 96%;
-    --secondary-foreground:222 52% 8%;
-    --muted:               220 16% 96%;
-    --muted-foreground:    215 20% 40%;
-    --accent:              220 16% 96%;   /* shadcn: subtle hover bg */
-    --accent-foreground:   222 52% 8%;
-    --destructive:         350 89% 48%;
+    --secondary:           220 14% 96%;
+    --secondary-foreground:222 47% 11%;
+    --muted:               220 14% 96%;
+    --muted-foreground:    215 16% 44%;
+    --accent:              220 14% 96%;
+    --accent-foreground:   222 47% 11%;
+    --destructive:         350 78% 46%;
     --destructive-foreground: 0 0% 100%;
-    --border:              214 20% 82%;
-    --input:               214 20% 82%;
-    --ring:                224 84% 52%;
+    --border:              220 13% 88%;
+    --input:               220 13% 88%;
+    --ring:                224 76% 52%;
     --radius:              0.625rem;
-    --sidebar-start:       222 42% 14%;
-    --sidebar-end:         222 36% 18%;
-    --sidebar-accent:      224 84% 52%;
-    --hero-start:          224 84% 52%;
-    --hero-end:            265 83% 60%;
+    --sidebar-start:       220 20% 98%;
+    --sidebar-end:         220 18% 95%;
+    --sidebar-accent:      224 76% 52%;
+    --hero-start:          224 76% 52%;
+    --hero-end:            211 80% 56%;
   }
 
-  /* ── DARK THEME ─────────────────────────────────────────────────── */
+  /* â”€â”€ DARK THEME â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   :root[data-theme="dark"] {
     --bg:             222 40% 8%;
     --surface:        222 31% 12%;
@@ -156,10 +153,7 @@
   }
 
   :root[data-theme="dark"] body {
-    background:
-      radial-gradient(circle at top left,  rgba(56, 189, 248, 0.12), transparent 24%),
-      radial-gradient(circle at top right, rgba(129, 140, 248, 0.14), transparent 22%),
-      linear-gradient(180deg, #08111f 0%, #0f172a 52%, #111827 100%);
+    background: hsl(var(--bg));
     color: hsl(var(--text));
   }
 
@@ -315,7 +309,7 @@
     background: hsl(var(--text-muted));
   }
 
-  /* ── Dark-theme overrides for hardcoded Tailwind classes ─────────── */
+  /* â”€â”€ Dark-theme overrides for hardcoded Tailwind classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   :root[data-theme="dark"] .bg-white {
     background-color: hsl(var(--surface)) !important;
   }

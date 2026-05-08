@@ -40,13 +40,14 @@ interface CandidateDrawerV1Props {
   stageSaving?: boolean;
   linkSaving?: boolean;
   onClose: () => void;
-  onApprove: () => void;
-  onReject: () => void;
+  onAdvance: () => void;
+  onTerminate: () => void;
   onOpenDocuments: () => void;
   onTabChange: (tab: CandidateDrawerV1TabKey) => void;
+  onBackToList?: () => void;
+  backToListLabel?: string;
   onStageChange?: (stage: PipelineStage) => Promise<void>;
   onLinkToActiveJob?: () => Promise<void>;
-  onOpenAddJob?: () => void;
   onOpenTransferJob?: () => void;
   children?: ReactNode;
 }
@@ -58,6 +59,15 @@ const TABS: { key: CandidateDrawerV1TabKey; label: string }[] = [
   { key: "score", label: "Score & Análise" },
   { key: "documents", label: "Documentos" },
 ];
+
+const PRIMARY_ACTION_LABEL: Partial<Record<PipelineStage, string>> = {
+  entry: "Avançar etapa",
+  screening: "Avançar etapa",
+  hr_interview: "Avançar etapa",
+  technical_interview: "Avançar etapa",
+  final: "Contratar",
+  offer: "Contratar",
+};
 
 export function CandidateDrawerV1({
   candidate,
@@ -80,17 +90,18 @@ export function CandidateDrawerV1({
   stageSaving = false,
   linkSaving = false,
   onClose,
-  onApprove,
-  onReject,
+  onAdvance,
+  onTerminate,
   onOpenDocuments,
   onTabChange,
+  onBackToList,
+  backToListLabel,
   onStageChange,
   onLinkToActiveJob,
-  onOpenAddJob,
   onOpenTransferJob,
   children,
 }: CandidateDrawerV1Props) {
-  const [pendingQuickAction, setPendingQuickAction] = useState<"approve" | "reject" | null>(null);
+  const [pendingQuickAction, setPendingQuickAction] = useState<"advance" | "terminate" | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
   const [isFeedbackFresh, setIsFeedbackFresh] = useState(false);
@@ -114,27 +125,30 @@ export function CandidateDrawerV1({
   });
 
   const recommendation = getRecommendation(currentStage, candidateState, semantics);
-  const approveDisabled = interactionLocked || currentStage === "hired" || currentStage === null;
+  const canAdvance = currentStage !== null && Boolean(PRIMARY_ACTION_LABEL[currentStage]) && currentStage !== "hired";
+  const advanceDisabled = interactionLocked || !canAdvance;
   const rejectDisabled = interactionLocked || currentStage === "rejected" || currentStage === null;
+  const isHireStage = currentStage === "final" || currentStage === "offer";
+  const advanceLabel = currentStage ? PRIMARY_ACTION_LABEL[currentStage] : null;
 
-  const handleApprove = async () => {
-    if (approveDisabled) return;
-    setPendingQuickAction("approve");
+  const handleAdvance = async () => {
+    if (advanceDisabled) return;
+    setPendingQuickAction("advance");
     setIsActionLoading(true);
     try {
-      await Promise.resolve(onApprove());
+      await Promise.resolve(onAdvance());
     } finally {
       setPendingQuickAction(null);
       setIsActionLoading(false);
     }
   };
 
-  const handleReject = async () => {
+  const handleTerminate = async () => {
     if (rejectDisabled) return;
-    setPendingQuickAction("reject");
+    setPendingQuickAction("terminate");
     setIsActionLoading(true);
     try {
-      await Promise.resolve(onReject());
+      await Promise.resolve(onTerminate());
     } finally {
       setPendingQuickAction(null);
       setIsActionLoading(false);
@@ -157,6 +171,8 @@ export function CandidateDrawerV1({
         linkStatus={linkStatus}
         candidateLoading={isLoading}
         closeCandidate={onClose}
+        onBackToList={onBackToList}
+        backToListLabel={backToListLabel}
       />
 
       {!isLoading && actionFeedback ? (
@@ -212,24 +228,27 @@ export function CandidateDrawerV1({
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void handleApprove()}
-              disabled={approveDisabled}
-              className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"
+              onClick={() => void handleAdvance()}
+              disabled={advanceDisabled}
+              className={[
+                "rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-45",
+                isHireStage ? "bg-emerald-700 hover:bg-emerald-800" : "bg-blue-700 hover:bg-blue-800",
+              ].join(" ")}
             >
-              {pendingQuickAction === "approve" || (isActionLoading && currentStage !== "hired")
-                ? "Aprovando…"
-                : currentStage === "hired"
-                  ? "Aprovado"
-                  : "Aprovar"}
+              {pendingQuickAction === "advance"
+                ? isHireStage
+                  ? "Contratando…"
+                  : "Avançando…"
+                : advanceLabel}
             </button>
             <button
               type="button"
-              onClick={() => void handleReject()}
+              onClick={() => void handleTerminate()}
               disabled={rejectDisabled}
               className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {pendingQuickAction === "reject" || (isActionLoading && currentStage !== "rejected")
-                ? "Rejeitando…"
+              {pendingQuickAction === "terminate" || (isActionLoading && currentStage !== "rejected")
+                ? "Reprovando…"
                 : currentStage === "rejected"
                   ? "Rejeitado"
                   : "Reprovar"}
@@ -246,7 +265,7 @@ export function CandidateDrawerV1({
         </section>
       ) : null}
 
-      {!isLoading && onStageChange && onLinkToActiveJob && onOpenAddJob && onOpenTransferJob ? (
+      {!isLoading && onStageChange && onLinkToActiveJob && onOpenTransferJob ? (
         <CandidateActionPanel
           currentStage={currentStage}
           activeJob={activeJob}
@@ -257,7 +276,6 @@ export function CandidateDrawerV1({
           interactionLocked={interactionLocked}
           onStageChange={onStageChange}
           onLinkToActiveJob={onLinkToActiveJob}
-          onOpenAddJob={onOpenAddJob}
           onOpenTransferJob={onOpenTransferJob}
           isOpen={isActionPanelOpen}
           onToggle={() => setIsActionPanelOpen((current) => !current)}
