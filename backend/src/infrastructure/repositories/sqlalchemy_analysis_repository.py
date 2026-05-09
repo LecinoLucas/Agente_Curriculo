@@ -358,7 +358,6 @@ class SQLAlchemyAnalysisRepository:
             sa.select(
                 JobRequiredSkillModel,
                 SkillModel.name.label("skill_name"),
-                SkillModel.aliases.label("skill_aliases"),
             )
             .join(SkillModel, JobRequiredSkillModel.skill_id == SkillModel.id)
             .where(JobRequiredSkillModel.job_id == job_id, SkillModel.deleted_at.is_(None))

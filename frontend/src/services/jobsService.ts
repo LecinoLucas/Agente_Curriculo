@@ -235,7 +235,6 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
         seniority_match_score: requireNumber(item?.score_breakdown?.seniority_match_score, "score_breakdown.seniority_match_score"),
         education_score: requireNumber(item?.score_breakdown?.education_score, "score_breakdown.education_score"),
         confidence_score: requireNumber(item?.score_breakdown?.confidence_score, "score_breakdown.confidence_score"),
-        ai_confidence_score: requireNumber(item?.score_breakdown?.ai_confidence_score, "score_breakdown.ai_confidence_score"),
         penalty_score: requireNumber(item?.score_breakdown?.penalty_score, "score_breakdown.penalty_score"),
         final_score: requireNumber(item?.score_breakdown?.final_score, "score_breakdown.final_score"),
       },

@@ -33,6 +33,7 @@ interface CandidateProfileViewProps {
   isLoading: boolean;
   isLoadingContent?: boolean;
   activeTab?: TabKey;
+  showDetailTabs?: boolean;
   actionFeedback?: CandidateActionFeedback | null;
   interactionLocked?: boolean;
   compact?: boolean;
@@ -70,6 +71,7 @@ export function CandidateProfileView({
   isLoading,
   isLoadingContent = false,
   activeTab = "overview",
+  showDetailTabs = false,
   actionFeedback = null,
   interactionLocked = false,
   compact = false,
@@ -95,6 +97,7 @@ export function CandidateProfileView({
   const [pendingQuickAction, setPendingQuickAction] = useState<"advance" | "terminate" | null>(null);
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
   const [isFeedbackFresh, setIsFeedbackFresh] = useState(false);
+  const shouldRenderTabContent = !compact || showDetailTabs;
 
   useEffect(() => {
     if (!actionFeedback) return;
@@ -177,7 +180,7 @@ export function CandidateProfileView({
         <CandidateQuickActions
           onAdvance={handleAdvance}
           onTerminate={handleTerminate}
-          onViewAnalysis={compact && onNavigateToFull ? onNavigateToFull : onViewAnalysis}
+          onViewAnalysis={onViewAnalysis}
           currentStage={currentStage}
           pendingAction={pendingQuickAction}
           isLoading={isActionLoading || interactionLocked}
@@ -219,7 +222,7 @@ export function CandidateProfileView({
       )}
 
       {/* Navigation tabs and content — only in Full Workspace mode */}
-      {!isLoading && !compact && (
+      {!isLoading && shouldRenderTabContent && (
         <>
           <CandidateProfileNavigation
             activeTab={activeTab}

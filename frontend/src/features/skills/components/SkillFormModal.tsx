@@ -1,23 +1,25 @@
-import { Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Modal } from "../../../components/common/Modal";
 import { Button } from "@/components/ui/button";
+
+type SkillFormValues = {
+  canonical: string;
+  aliases: string[];
+  domainsInput: string;
+  type: string;
+  strength: "exact" | "strong" | "partial" | "weak";
+  newAlias: string;
+};
 
 interface SkillFormModalProps {
   isOpen: boolean;
   isEditing: boolean;
-  form: {
-    name: string;
-    category?: string;
-    aliases: string[];
-    newAlias: string;
-  };
-  onFormChange: (updates: Partial<typeof form>) => void;
+  form: SkillFormValues;
+  onFormChange: (updates: Partial<SkillFormValues>) => void;
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
   saving: boolean;
   formError: string | null;
-  allCategories: string[];
-  onShowAddCategory: () => void;
   onAddAlias: () => void;
   onRemoveAlias: (alias: string) => void;
 }
@@ -31,8 +33,6 @@ export function SkillFormModal({
   onClose,
   saving,
   formError,
-  allCategories,
-  onShowAddCategory,
   onAddAlias,
   onRemoveAlias,
 }: SkillFormModalProps) {
@@ -40,7 +40,7 @@ export function SkillFormModal({
 
   return (
     <Modal
-      title={isEditing ? "Editar skill" : "Criar skill"}
+      title={isEditing ? "Editar equivalência" : "Criar equivalência"}
       onClose={onClose}
       contentClassName="flex w-full flex-col max-h-[90vh] overflow-hidden p-0 max-w-[600px]"
     >
@@ -48,47 +48,57 @@ export function SkillFormModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-col gap-4">
             <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-              Nome *
+              Nome canônico *
               <input
                 required
-                value={form.name}
-                onChange={(e) => onFormChange({ name: e.target.value })}
-                placeholder="Ex: Python, React, Liderança"
+                value={form.canonical}
+                onChange={(e) => onFormChange({ canonical: e.target.value })}
+                placeholder="Ex: JavaScript, SQL, BI"
                 className="ui-input h-10 rounded-md px-3 text-sm"
               />
             </label>
 
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
-              Categoria
-              <div className="flex gap-2">
+            <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                Domínios
+                <input
+                  value={form.domainsInput}
+                  onChange={(e) => onFormChange({ domainsInput: e.target.value })}
+                  placeholder="Ex: technology, frontend"
+                  className="ui-input h-10 rounded-md px-3 text-sm"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                Força
                 <select
-                  value={form.category || ""}
-                  onChange={(e) => onFormChange({ category: e.target.value || "" })}
-                  className="ui-input flex-1 h-10 rounded-md px-3 text-sm"
+                  value={form.strength}
+                  onChange={(e) => onFormChange({ strength: e.target.value as typeof form.strength })}
+                  className="ui-input h-10 rounded-md px-3 text-sm"
                 >
-                  <option value="">—</option>
-                  {allCategories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
+                  <option value="exact">Exact</option>
+                  <option value="strong">Strong</option>
+                  <option value="partial">Partial</option>
+                  <option value="weak">Weak</option>
                 </select>
-                <button
-                  type="button"
-                  onClick={onShowAddCategory}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[hsl(var(--border))] transition-colors hover:bg-[hsl(var(--surface-muted))]"
-                  title="Adicionar nova categoria"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-[hsl(var(--text))]">
+              Tipo
+              <input
+                value={form.type}
+                onChange={(e) => onFormChange({ type: e.target.value })}
+                placeholder="Ex: skill, tool, platform"
+                className="ui-input h-10 rounded-md px-3 text-sm"
+              />
             </label>
 
             <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-4">
               <div className="flex flex-col gap-1">
                 <div className="text-sm font-semibold text-[hsl(var(--text))]">Aliases / termos equivalentes</div>
                 <div className="text-xs text-[hsl(var(--text-muted))]">
-                  Use aliases para melhorar busca, Kanban e matching sem duplicar skills.
+                  Estes aliases são gravados no JSON canônico usado pelo matching.
                 </div>
               </div>
 
@@ -102,7 +112,7 @@ export function SkillFormModal({
                       onAddAlias();
                     }
                   }}
-                  placeholder="Ex: JS, Node, PowerBI"
+                  placeholder="Ex: JS, TS, React"
                   className="ui-input h-10 flex-1 rounded-md px-3 text-sm"
                 />
                 <Button type="button" variant="outline" onClick={onAddAlias}>
@@ -148,8 +158,8 @@ export function SkillFormModal({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving || !form.name}>
-                {saving ? "Salvando…" : isEditing ? "Salvar alterações" : "Criar skill"}
+              <Button type="submit" disabled={saving || !form.canonical}>
+                {saving ? "Salvando…" : isEditing ? "Salvar alterações" : "Criar equivalência"}
               </Button>
             </div>
           </div>

@@ -535,39 +535,29 @@ async def test_resume_pipeline_smoke_realish_pdfs(
     skills = await _ensure_skills(
         db_session,
         [
-            {"name": "Python", "normalized_name": "python", "aliases": [], "is_verified": True},
-            {"name": "Java", "normalized_name": "java", "aliases": [], "is_verified": True},
-            {"name": "SQL", "normalized_name": "sql", "aliases": [], "is_verified": True},
-            {
-                "name": "Node.js",
-                "normalized_name": "node.js",
-                "aliases": ["Node"],
-                "is_verified": True,
-            },
-            {
-                "name": "AWS",
-                "normalized_name": "aws",
-                "aliases": ["Amazon Web Services"],
-                "is_verified": True,
-            },
-            {"name": "Docker", "normalized_name": "docker", "aliases": [], "is_verified": True},
-            {"name": "Kubernetes", "normalized_name": "kubernetes", "aliases": [], "is_verified": True},
+            {"name": "Python", "normalized_name": "python"},
+            {"name": "Java", "normalized_name": "java"},
+            {"name": "SQL", "normalized_name": "sql"},
+            {"name": "Node.js", "normalized_name": "node.js"},
+            {"name": "AWS", "normalized_name": "aws"},
+            {"name": "Docker", "normalized_name": "docker"},
+            {"name": "Kubernetes", "normalized_name": "kubernetes"},
         ],
     )
 
-    skill_ids = {skill.name: skill.id for skill in skills}
+    skill_names = {skill.name: skill.name for skill in skills}
     for skill_name in ["Python", "Java", "SQL", "Node.js", "AWS"]:
         response = await client.post(
             f"/api/v1/jobs/{job_id}/skills",
             headers=recruiter_headers,
-            json={"skill_id": str(skill_ids[skill_name]), "is_mandatory": True},
+            json={"skill_name": skill_names[skill_name], "is_mandatory": True},
         )
         assert response.status_code == 201
     for skill_name in ["Docker", "Kubernetes"]:
         response = await client.post(
             f"/api/v1/jobs/{job_id}/skills",
             headers=recruiter_headers,
-            json={"skill_id": str(skill_ids[skill_name]), "is_mandatory": False},
+            json={"skill_name": skill_names[skill_name], "is_mandatory": False},
         )
         assert response.status_code == 201
 
@@ -866,18 +856,18 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
     skills = await _ensure_skills(
         db_session,
         [
-            {"name": "Python", "normalized_name": "python", "aliases": [], "is_verified": True},
-            {"name": "PostgreSQL", "normalized_name": "postgresql", "aliases": [], "is_verified": True},
-            {"name": "Docker", "normalized_name": "docker", "aliases": [], "is_verified": True},
+            {"name": "Python", "normalized_name": "python"},
+            {"name": "PostgreSQL", "normalized_name": "postgresql"},
+            {"name": "Docker", "normalized_name": "docker"},
         ],
     )
 
-    skill_ids = {skill.name: skill.id for skill in skills}
+    skill_names = {skill.name: skill.name for skill in skills}
     for skill_name in ["Python", "PostgreSQL", "Docker"]:
         response = await client.post(
             f"/api/v1/jobs/{job_id}/skills",
             headers=recruiter_headers,
-            json={"skill_id": str(skill_ids[skill_name]), "is_mandatory": True},
+            json={"skill_name": skill_names[skill_name], "is_mandatory": True},
         )
         assert response.status_code == 201
 

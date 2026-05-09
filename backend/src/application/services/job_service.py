@@ -4,7 +4,8 @@ from uuid import UUID
 
 import structlog
 
-from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel
+from src.application.services.skill_text_normalizer import normalize_skill_text
+from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
 from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
@@ -351,17 +352,27 @@ class JobService:
     async def add_required_skill(self, job_id: UUID, body: AddJobSkillRequest) -> JobRequiredSkillResponse:
         await self.get(job_id)
 
-        skill = await self._repository.find_active_skill_by_id(body.skill_id)
-        if skill is None:
+        skill_name = body.skill_name.strip()
+        normalized_name = normalize_skill_text(skill_name)
+        if not normalized_name:
             raise SkillNotFoundError
 
-        existing = await self._repository.find_required_skill_link(job_id, body.skill_id)
+        skill = await self._repository.find_active_skill_by_normalized_name(normalized_name)
+        if skill is None:
+            skill = await self._repository.create_skill(
+                SkillModel(
+                    name=skill_name,
+                    normalized_name=normalized_name,
+                )
+            )
+
+        existing = await self._repository.find_required_skill_link(job_id, skill.id)
         if existing is not None:
             raise JobSkillConflictError
 
         link = JobRequiredSkillModel(
             job_id=job_id,
-            skill_id=body.skill_id,
+            skill_id=skill.id,
             is_mandatory=body.is_mandatory,
             minimum_level=body.minimum_level,
             minimum_years=body.minimum_years,
@@ -557,21 +568,50 @@ class JobService:
     ) -> None:
         if self._audit_service is None:
             return
-        await self._audit_service.log_event(
-            action=action,
-            resource_type="job",
-            resource_id=job.id,
-            user_id=actor.id,
-            metadata={
-                "entityType": "job",
-                "entityId": str(job.id),
-                "reason": reason,
-                "note": note,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-            before_state=before_state,
-            after_state=after_state,
-        )
+        try:
+            audit_session = getattr(self._audit_service, "_session", None)
+            if audit_session is None:
+                await self._audit_service.log_event(
+                    action=action,
+                    resource_type="job",
+                    resource_id=job.id,
+                    user_id=actor.id,
+                    metadata={
+                        "entityType": "job",
+                        "entityId": str(job.id),
+                        "reason": reason,
+                        "note": note,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                    before_state=before_state,
+                    after_state=after_state,
+                )
+                return
+
+            async with audit_session.begin_nested():
+                await self._audit_service.log_event(
+                    action=action,
+                    resource_type="job",
+                    resource_id=job.id,
+                    user_id=actor.id,
+                    metadata={
+                        "entityType": "job",
+                        "entityId": str(job.id),
+                        "reason": reason,
+                        "note": note,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                    before_state=before_state,
+                    after_state=after_state,
+                )
+        except Exception as exc:
+            logger.warning(
+                "job_audit_log_failed",
+                action=action,
+                job_id=str(job.id),
+                actor_id=str(actor.id),
+                error=str(exc),
+            )
 
     async def _maybe_refresh_quality(self, job_id: UUID) -> None:
         try:

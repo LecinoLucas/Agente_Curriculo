@@ -92,8 +92,6 @@ def _create_skill_row(
             )
             self.skill_name = skill_name
             self.skill_normalized_name = skill_name.lower().replace(" ", "_")
-            self.skill_category = "Technology"
-            self.skill_aliases = []
 
     return MockRow()
 

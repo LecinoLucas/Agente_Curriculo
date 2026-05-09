@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -79,8 +79,6 @@ _CAPABILITY_HINTS: dict[str, str] = {
 class StructuredJobSkill:
     name: str
     normalized_name: str
-    category: str | None = None
-    aliases: list[str] = field(default_factory=list)
     is_mandatory: bool = False
     minimum_level: str | None = None
     minimum_years: float | None = None
@@ -281,8 +279,6 @@ def job_skill_from_row(row: Any) -> StructuredJobSkill:
         name=_clean_text(getattr(row, "skill_name", "")),
         normalized_name=_clean_text(getattr(row, "skill_normalized_name", ""))
         or normalize_skill_text(getattr(row, "skill_name", "")),
-        category=_clean_text(getattr(row, "skill_category", "")) or None,
-        aliases=_safe_list(getattr(row, "skill_aliases", [])),
         is_mandatory=bool(getattr(link, "is_mandatory", False)),
         minimum_level=_clean_text(getattr(link, "minimum_level", "")) or None,
         minimum_years=_safe_float(getattr(link, "minimum_years", None), default=None),
@@ -391,8 +387,6 @@ def build_job_profile_hash(
             {
                 "name": skill.name,
                 "normalized_name": skill.normalized_name,
-                "category": skill.category,
-                "aliases": sorted(skill.aliases),
                 "is_mandatory": skill.is_mandatory,
                 "minimum_level": skill.minimum_level,
                 "minimum_years": skill.minimum_years,
@@ -666,12 +660,11 @@ def _format_structured_skills_context(linked_skills: tuple[StructuredJobSkill, .
 
     lines: list[str] = []
     for skill in linked_skills:
-        aliases = ", ".join(skill.aliases) if skill.aliases else "-"
         years = f"{skill.minimum_years:g}" if skill.minimum_years is not None else "-"
         level = skill.minimum_level or "-"
         importance = "mandatory" if skill.is_mandatory else "optional"
         lines.append(
-            f"- name={skill.name}; category={skill.category or '-'}; aliases={aliases}; importance={importance}; level={level}; min_years={years}; weight={skill.weight:.2f}"
+            f"- name={skill.name}; importance={importance}; level={level}; min_years={years}; weight={skill.weight:.2f}"
         )
     return "\n".join(lines)
 
@@ -821,7 +814,7 @@ def _job_requirement_from_skill(skill: StructuredJobSkill) -> JobRequirement:
         description=_skill_description(skill),
         is_mandatory=skill.is_mandatory,
         importance_weight=_mandatory_weight(skill) if skill.is_mandatory else _optional_weight(skill),
-        evidence_examples=_dedupe([skill.name, *(skill.aliases or [])][:3]),
+        evidence_examples=_dedupe([skill.name]),
     )
 
 
@@ -857,7 +850,7 @@ def _find_requirement_match(index: dict[str, int], skill_keys: set[str]) -> int 
 
 
 def _skill_keys_for_matching(skill: StructuredJobSkill) -> set[str]:
-    values = {skill.name, skill.normalized_name, *(skill.aliases or [])}
+    values = {skill.name, skill.normalized_name}
     return {key for value in values if (key := _skill_key(value))}
 
 

@@ -154,7 +154,6 @@ export function ScoreTab({
     confidenceScore:
       scoreExplanation?.confidence_score ??
       rankingEntry?.score_breakdown?.confidence_score ??
-      rankingEntry?.score_breakdown?.ai_confidence_score ??
       null,
   });
 
@@ -366,7 +365,7 @@ export function ScoreTab({
                     <BreakdownItem label="Educação" value={rankingEntry.score_breakdown.education_score} />
                     <BreakdownItem
                       label="Confiança dos dados"
-                      value={rankingEntry.score_breakdown.confidence_score || rankingEntry.score_breakdown.ai_confidence_score}
+                      value={rankingEntry.score_breakdown.confidence_score}
                     />
                     <BreakdownItem label="Penalidade" value={rankingEntry.score_breakdown.penalty_score} />
                   </div>

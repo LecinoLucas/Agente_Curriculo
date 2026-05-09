@@ -16,12 +16,3 @@ export function renderAliasBadges(aliases: string[]) {
 
   return { visible, remaining };
 }
-
-export const DEFAULT_SKILL_CATEGORIES = [
-  "Technology",
-  "Language",
-  "Framework",
-  "Tool",
-  "Soft Skill",
-  "Domain",
-];

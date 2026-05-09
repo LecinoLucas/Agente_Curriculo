@@ -67,7 +67,7 @@ export type SkillPartialMatch = {
 export type ScoreExplanationResponse = {
   job_id: string;
   candidate_id: string;
-  analysis_id: string;
+  analysis_id?: string | null;
   score: number;
   final_score: number;
   freshness_status: "fresh" | "stale";

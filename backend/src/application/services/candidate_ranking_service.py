@@ -464,7 +464,6 @@ class CandidateRankingService:
             sa.select(
                 JobRequiredSkillModel,
                 SkillModel.name.label("skill_name"),
-                SkillModel.aliases.label("skill_aliases"),
             )
             .join(SkillModel, JobRequiredSkillModel.skill_id == SkillModel.id)
             .where(JobRequiredSkillModel.job_id == job_id, SkillModel.deleted_at.is_(None))
@@ -1366,7 +1365,6 @@ def _compute_breakdown(
         "seniority_match_score": seniority_match.quantize(q),
         "education_score": education.quantize(q),
         "confidence_score": confidence_assessment.confidence_score.quantize(q),
-        "ai_confidence_score": confidence_assessment.confidence_score.quantize(q),
         "penalty_score": penalty,
         "validation_penalty_score": validation_penalty,
         "deal_breaker_penalty_score": Decimal("0.00"),
@@ -2070,7 +2068,6 @@ def _default_score_breakdown() -> dict[str, Any]:
         "seniority_match_score": zero,
         "education_score": zero,
         "confidence_score": zero,
-        "ai_confidence_score": zero,
         "penalty_score": zero,
         "validation_penalty_score": zero,
         "final_score": zero,
@@ -2088,7 +2085,6 @@ def _normalize_score_breakdown(raw: Any) -> dict[str, Any]:
         "seniority_match_score",
         "education_score",
         "confidence_score",
-        "ai_confidence_score",
         "penalty_score",
         "validation_penalty_score",
         "final_score",
@@ -2105,7 +2101,6 @@ def _normalize_score_breakdown(raw: Any) -> dict[str, Any]:
         "seniority_match_score": _to_decimal(breakdown.get("seniority_match_score")).quantize(q),
         "education_score": _to_decimal(breakdown.get("education_score")).quantize(q),
         "confidence_score": _to_decimal(breakdown.get("confidence_score")).quantize(q),
-        "ai_confidence_score": _to_decimal(breakdown.get("ai_confidence_score")).quantize(q),
         "penalty_score": _to_decimal(breakdown.get("penalty_score")).quantize(q),
         "validation_penalty_score": _to_decimal(breakdown.get("validation_penalty_score")).quantize(q),
         "final_score": _to_decimal(breakdown.get("final_score")).quantize(q),

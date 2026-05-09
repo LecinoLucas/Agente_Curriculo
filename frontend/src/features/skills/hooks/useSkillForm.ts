@@ -1,21 +1,25 @@
 import { useState } from "react";
-import { skillsService } from "../../../services/skillsService";
+import { skillEquivalencesService } from "../../../services/skillEquivalencesService";
 import { toast } from "../../../shared/utils/toast";
 import { formatErrorDetails, handleApiError } from "../../../shared/utils/errorHandler";
-import type { Skill } from "../../../types/domain";
+import type { SkillEquivalenceGroup } from "../../../types/domain";
 import { aliasComparisonKey, normalizeAliasValue } from "../utils/skillHelpers";
 
 type SkillFormValues = {
-  name: string;
-  category?: string;
+  canonical: string;
   aliases: string[];
+  domainsInput: string;
+  type: string;
+  strength: SkillEquivalenceGroup["strength"];
   newAlias: string;
 };
 
 const EMPTY_FORM: SkillFormValues = {
-  name: "",
-  category: "",
+  canonical: "",
   aliases: [],
+  domainsInput: "",
+  type: "skill",
+  strength: "strong",
   newAlias: "",
 };
 
@@ -28,7 +32,7 @@ export function useSkillForm(onSaveSuccess: () => void) {
   const [form, setForm] = useState<SkillFormValues>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const [editingSkill, setEditingSkill] = useState<SkillEquivalenceGroup | null>(null);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -41,24 +45,31 @@ export function useSkillForm(onSaveSuccess: () => void) {
         .filter(Boolean)
         .filter(
           (alias, index, aliases) =>
-            aliasComparisonKey(alias) !== aliasComparisonKey(form.name) &&
             aliases.findIndex((candidate) => aliasComparisonKey(candidate) === aliasComparisonKey(alias)) === index,
         );
 
       if (form.aliases.length !== sanitizedAliases.length) {
-        throw new Error("Revise os aliases: há duplicidade ou alias igual ao nome da skill.");
+        throw new Error("Revise os aliases: há duplicidade.");
       }
 
+      const domains = form.domainsInput
+        .split(",")
+        .map((domain) => domain.trim())
+        .filter(Boolean);
+      const payload = {
+        canonical: form.canonical,
+        aliases: sanitizedAliases,
+        domains,
+        type: form.type || "skill",
+        strength: form.strength,
+      };
+
       if (editingSkill) {
-        await skillsService.update(editingSkill.id, {
-          name: form.name,
-          category: form.category || undefined,
-          aliases: sanitizedAliases,
-        });
-        toast.success(`Skill atualizada: ${form.name}`);
+        await skillEquivalencesService.update(editingSkill.id, payload);
+        toast.success(`Equivalência atualizada: ${form.canonical}`);
       } else {
-        await skillsService.create(form.name, form.category || undefined, sanitizedAliases);
-        toast.success(`Skill criada: ${form.name}`);
+        await skillEquivalencesService.create(payload);
+        toast.success(`Equivalência criada: ${form.canonical}`);
       }
 
       setForm(EMPTY_FORM);
@@ -79,13 +90,8 @@ export function useSkillForm(onSaveSuccess: () => void) {
       return;
     }
 
-    if (aliasComparisonKey(normalizedAlias) === aliasComparisonKey(form.name)) {
-      setFormError("Alias não pode ser igual ao nome da skill.");
-      return;
-    }
-
     if (form.aliases.some((alias) => aliasComparisonKey(alias) === aliasComparisonKey(normalizedAlias))) {
-      setFormError("Alias duplicado nesta skill.");
+      setFormError("Alias duplicado nesta equivalência.");
       return;
     }
 
@@ -111,12 +117,14 @@ export function useSkillForm(onSaveSuccess: () => void) {
     setShowForm(true);
   }
 
-  function openEditForm(skill: Skill) {
+  function openEditForm(skill: SkillEquivalenceGroup) {
     setEditingSkill(skill);
     setForm({
-      name: skill.name,
-      category: skill.category ?? "",
+      canonical: skill.canonical,
       aliases: [...(skill.aliases ?? [])],
+      domainsInput: (skill.domains ?? []).join(", "),
+      type: skill.type ?? "skill",
+      strength: skill.strength,
       newAlias: "",
     });
     setFormError(null);

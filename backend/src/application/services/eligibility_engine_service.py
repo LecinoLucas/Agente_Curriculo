@@ -3,19 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from src.application.services.skill_evidence_service import SkillEvidenceService
-from src.infrastructure.repositories.sqlalchemy_skill_repository import SQLAlchemySkillRepository
 
 
 class EligibilityEngineService:
     def __init__(
         self,
-        repository: SQLAlchemySkillRepository | None = None,
         evidence_service: SkillEvidenceService | None = None,
     ) -> None:
-        if evidence_service is None and repository is None:
-            raise ValueError("repository or evidence_service is required")
-
-        self._evidence_service = evidence_service or SkillEvidenceService(repository)  # type: ignore[arg-type]
+        self._evidence_service = evidence_service or SkillEvidenceService()
 
     async def evaluate_eligibility(
         self,

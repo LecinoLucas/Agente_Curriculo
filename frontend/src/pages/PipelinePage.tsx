@@ -38,6 +38,7 @@ const MAIN_STAGES: ReadonlyArray<PipelineStage> = [
   "hired",
 ];
 const PIPELINE_SHOW_RANKING_STORAGE_KEY = "pipeline:showRanking";
+const PIPELINE_LAST_SELECTED_JOB_KEY = "pipeline:lastSelectedJobId";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function canUsePipeline(status: string | undefined) {
@@ -53,6 +54,11 @@ function getRankingFreshnessLabel(status: JobRankingEntry["freshness_status"] | 
 function resolveInitialShowRanking() {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(PIPELINE_SHOW_RANKING_STORAGE_KEY) === "true";
+}
+
+function getLastSelectedJobId() {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(PIPELINE_LAST_SELECTED_JOB_KEY);
 }
 
 // ── PipelinePage ───────────────────────────────────────────────────────────────
@@ -204,12 +210,18 @@ export function PipelinePage() {
 
   // ── Effect 2: auto-redirect when no jobId in URL ──────────────────────────
   // /pipeline (no :jobId) is a valid entry point. Once jobs are ready,
-  // redirect to /pipeline/:firstJobId so the URL always reflects what's shown.
+  // redirect to the last selected job if it still exists, otherwise to the first job.
   // replace: true prevents the bare /pipeline from polluting browser history.
   useEffect(() => {
     if (jobIdParam) return;
     if (pipelineJobsLoading || pipelineJobs.length === 0) return;
-    navigate(`/pipeline/${pipelineJobs[0].id}`, { replace: true });
+
+    const lastJobId = getLastSelectedJobId();
+    const jobToSelect = lastJobId && pipelineJobs.some((job) => job.id === lastJobId)
+      ? lastJobId
+      : pipelineJobs[0].id;
+
+    navigate(`/pipeline/${jobToSelect}`, { replace: true });
   }, [jobIdParam, pipelineJobsLoading, pipelineJobs, navigate]);
 
   useEffect(() => {
@@ -264,6 +276,7 @@ export function PipelinePage() {
   // Navigate only. The URL change triggers Effect 1 which calls setActiveJob.
   // This avoids double-calling setActiveJob (once here, once in the effect).
   function handleSelectJob(nextJobId: string) {
+    window.sessionStorage.setItem(PIPELINE_LAST_SELECTED_JOB_KEY, nextJobId);
     navigate(`/pipeline/${nextJobId}`, { replace: true });
   }
 

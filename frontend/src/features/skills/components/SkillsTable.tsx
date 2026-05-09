@@ -5,17 +5,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "../../../components/common/EmptyState";
 import { SkeletonRows } from "../../../components/common/Skeleton";
-import type { Skill } from "../../../types/domain";
+import type { SkillEquivalenceGroup } from "../../../types/domain";
 import { renderAliasBadges } from "../utils/skillHelpers";
 
 interface SkillsTableProps {
   loading: boolean;
   error: string | null;
-  items: Skill[];
+  items: SkillEquivalenceGroup[];
   total: number;
   hasActiveSearch: boolean;
   isEmptyState: boolean;
-  onEdit: (skill: Skill) => void;
+  onEdit: (skill: SkillEquivalenceGroup) => void;
   onDelete: (skillId: string) => void;
   onClearSearch: () => void;
   onCreateNew: () => void;
@@ -82,11 +82,11 @@ export function SkillsTable({
         {isEmptyState ? (
           <EmptyState
             icon={hasActiveSearch ? "🔎" : "🎯"}
-            title={hasActiveSearch ? "Nenhuma skill encontrada" : "Nenhuma skill cadastrada"}
+            title={hasActiveSearch ? "Nenhuma equivalência encontrada" : "Nenhuma equivalência cadastrada"}
             description={
               hasActiveSearch
-                ? "A busca atual não encontrou skills por nome ou alias."
-                : "Crie a primeira skill para começar a organizar o banco de talentos."
+                ? "A busca atual não encontrou equivalências por nome, alias ou domínio."
+                : "Crie a primeira equivalência para alimentar o matching."
             }
             action={
               hasActiveSearch
@@ -95,7 +95,7 @@ export function SkillsTable({
                     onClick: onClearSearch,
                   }
                 : {
-                    label: "Nova skill",
+                    label: "Nova equivalência",
                     onClick: onCreateNew,
                   }
             }
@@ -106,7 +106,7 @@ export function SkillsTable({
           <>
             <div className="border-b border-[hsl(var(--border))] px-4 py-3 sm:px-6">
               <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                {total} {total === 1 ? "skill" : "skills"}
+                {total} {total === 1 ? "equivalência" : "equivalências"}
               </p>
             </div>
 
@@ -115,9 +115,10 @@ export function SkillsTable({
               <Table className="w-full table-fixed">
                 <TableHeader className="bg-[hsl(var(--surface-muted))]">
                   <TableRow className="hover:bg-[hsl(var(--surface-muted))]">
-                    <TableHead className="w-[24%] min-w-[220px]">Nome</TableHead>
-                    <TableHead className="w-[18%]">Categoria</TableHead>
-                    <TableHead className="w-[42%]">Aliases</TableHead>
+                    <TableHead className="w-[24%] min-w-[220px]">Canônico</TableHead>
+                    <TableHead className="w-[18%]">Domínios</TableHead>
+                    <TableHead className="w-[12%]">Força</TableHead>
+                    <TableHead className="w-[30%]">Aliases</TableHead>
                     <TableHead className="w-[16%] text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -127,18 +128,26 @@ export function SkillsTable({
                       <TableCell className="min-w-0 py-4">
                         <div className="min-w-0">
                           <p className="break-words text-sm font-semibold text-[hsl(var(--text))]">
-                            {skill.name}
+                            {skill.canonical}
                           </p>
+                          {skill.type ? <p className="text-xs text-[hsl(var(--text-muted))]">{skill.type}</p> : null}
                         </div>
                       </TableCell>
                       <TableCell className="py-4">
-                        {skill.category ? (
-                          <Badge variant="secondary" className="max-w-full">
-                            {skill.category}
-                          </Badge>
+                        {skill.domains.length ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {skill.domains.slice(0, 2).map((domain) => (
+                              <Badge key={domain} variant="secondary" className="max-w-full">
+                                {domain}
+                              </Badge>
+                            ))}
+                          </div>
                         ) : (
                           <span className="text-sm text-[hsl(var(--text-muted))]">—</span>
                         )}
+                      </TableCell>
+                      <TableCell className="py-4">
+                        <Badge variant="outline">{skill.strength}</Badge>
                       </TableCell>
                       <TableCell className="min-w-0 py-4">
                         <div className="max-w-full">{renderAliasBadgesDisplay(skill.aliases ?? [])}</div>
@@ -152,7 +161,7 @@ export function SkillsTable({
                             size="sm"
                             variant="destructive"
                             onClick={() => onDelete(skill.id)}
-                            aria-label={`Excluir ${skill.name}`}
+                            aria-label={`Excluir ${skill.canonical}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -174,9 +183,26 @@ export function SkillsTable({
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-semibold text-[hsl(var(--text))]">{skill.name}</p>
+                        <p className="break-words text-sm font-semibold text-[hsl(var(--text))]">{skill.canonical}</p>
                       </div>
-                      {skill.category ? <Badge variant="secondary">{skill.category}</Badge> : null}
+                      <Badge variant="outline">{skill.strength}</Badge>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                        Domínios
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {skill.domains.length ? (
+                          skill.domains.map((domain) => (
+                            <Badge key={domain} variant="secondary">
+                              {domain}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-sm text-[hsl(var(--text-muted))]">—</span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-1">
@@ -200,7 +226,7 @@ export function SkillsTable({
                         variant="destructive"
                         className="min-w-11"
                         onClick={() => onDelete(skill.id)}
-                        aria-label={`Excluir ${skill.name}`}
+                        aria-label={`Excluir ${skill.canonical}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

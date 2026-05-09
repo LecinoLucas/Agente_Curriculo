@@ -169,6 +169,7 @@ export function CandidateDrawer({
   const [linkSavingCandidateId, setLinkSavingCandidateId] = useState<string | null>(null);
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(null);
   const [profileTabKey, setProfileTabKey] = useState<ProfileTabKey>("overview");
+  const [detailTabsVisible, setDetailTabsVisible] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<CandidateActionFeedback | null>(null);
 
   const stageSaving =
@@ -411,6 +412,7 @@ export function CandidateDrawer({
 
   const handleProfileTabChange = useCallback(
     (tabKey: ProfileTabKey) => {
+      setDetailTabsVisible(true);
       setProfileTabKey(tabKey);
 
       const panelTabMap: Record<ProfileTabKey, PanelTab> = {
@@ -427,9 +429,20 @@ export function CandidateDrawer({
   useEffect(() => {
     if (!selectedCandidateId) return;
 
-    setProfileTabKey("overview");
+    const panelToProfileTab: Record<PanelTab, ProfileTabKey> = {
+      summary: "overview",
+      score: "score",
+      analysis: "score",
+      documents: "documents",
+      history: "overview",
+      actions: "overview",
+    };
+
+    const nextTab = panelToProfileTab[activePanelTab];
+    setProfileTabKey(nextTab);
+    setDetailTabsVisible(activePanelTab !== "summary");
     setActionFeedback(null);
-  }, [selectedCandidateId]);
+  }, [selectedCandidateId, activePanelTab]);
 
   const handleHeroAdvance = useCallback(async () => {
     if (!selectedCandidateId || !currentStage) return;
@@ -447,6 +460,7 @@ export function CandidateDrawer({
   }, [selectedCandidateId, currentStage, handleStageChange]);
 
   const handleHeroViewAnalysis = useCallback(() => {
+    setDetailTabsVisible(true);
     setProfileTabKey("score");
     switchPanelTab("score");
   }, [switchPanelTab]);
@@ -469,6 +483,7 @@ export function CandidateDrawer({
           isLoading={candidateLoading}
           isLoadingContent={profileTabKey === "score" && rankingEntryLoading}
           activeTab={profileTabKey}
+          showDetailTabs={detailTabsVisible}
           actionFeedback={actionFeedback}
           interactionLocked={stageSaving || linkSaving}
           compact={mode === "overlay"}

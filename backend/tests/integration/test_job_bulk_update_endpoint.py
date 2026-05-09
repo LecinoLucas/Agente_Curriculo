@@ -18,32 +18,6 @@ async def _create_skill(session: AsyncSession, name: str, normalized_name: str |
     skill = SkillModel(
         name=name,
         normalized_name=key,
-        category="Tecnologia",
-        aliases=[],
-        is_verified=True,
-    )
-    session.add(skill)
-    await session.commit()
-    return skill
-
-
-async def _create_skill_with_aliases(
-    session: AsyncSession,
-    name: str,
-    normalized_name: str,
-    aliases: list[str],
-    category: str = "Tecnologia",
-) -> SkillModel:
-    existing = await session.scalar(sa.select(SkillModel).where(SkillModel.normalized_name == normalized_name))
-    if existing is not None:
-        return existing
-
-    skill = SkillModel(
-        name=name,
-        normalized_name=normalized_name,
-        category=category,
-        aliases=aliases,
-        is_verified=True,
     )
     session.add(skill)
     await session.commit()

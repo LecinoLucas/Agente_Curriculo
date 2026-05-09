@@ -491,7 +491,7 @@ class SQLAlchemyCandidateRepository:
                 ResumeModel.candidate_id == candidate_id,
                 ResumeModel.deleted_at.is_(None),
                 AnalysisModel.job_id == job_id,
-                AnalysisModel.status != "discarded",
+                AnalysisModel.status == "completed",
             )
             .order_by(AnalysisModel.created_at.desc(), AnalysisModel.updated_at.desc())
             .limit(1)

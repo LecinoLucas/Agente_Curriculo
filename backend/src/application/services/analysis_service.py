@@ -42,12 +42,8 @@ from src.application.services.job_profiler_service import (
     job_skill_from_row,
 )
 from src.application.services.skill_requirements_service import validate_skill_requirements
-from src.application.services.skill_normalizer_service import (
-    candidate_satisfies_job_requirement,
-)
 from src.application.services.skill_equivalence_service import SkillEquivalenceService
 from src.application.services.skill_text_normalizer import (
-    contains_whole_phrase,
     normalize_skill_text,
 )
 from src.application.services.strict_payload import require_key
@@ -65,9 +61,6 @@ from src.infrastructure.database.models.profile_analysis_model import (
 from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
-)
-from src.infrastructure.repositories.sqlalchemy_skill_repository import (
-    SQLAlchemySkillRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
@@ -128,45 +121,17 @@ def _extract_profile_completeness(candidate_result: object) -> Decimal | None:
         return None
 
 
-def _skill_matches_exact_and_aliases_only(
+def _skill_matches_exact_only(
     candidate_skill_name: str,
     job_skill_name: str,
-    job_skill_aliases: list[str] | None = None,
 ) -> bool:
-    """Check if candidate skill exactly matches job skill or is in aliases.
-
-    F7.1 restriction: Only exact/alias matches.
-    This allows SkillEquivalenceService to handle all scoring logic.
-
-    Returns True only for:
-    1. Exact string match (normalized)
-    2. Alias match (from job_skill_aliases list)
-
-    Does NOT use:
-    - Legacy _DIRECTIONAL_EQUIVALENCES
-    - Token containment
-    - Levenshtein distance
-    """
+    """Check if candidate skill exactly matches job skill after normalization."""
     from src.application.services.skill_text_normalizer import normalize_skill_text
 
     candidate_normalized = normalize_skill_text(candidate_skill_name)
     job_normalized = normalize_skill_text(job_skill_name)
 
-    # 1. Exact match
-    if candidate_normalized == job_normalized:
-        return True
-
-    # 2. Alias match
-    if job_skill_aliases:
-        aliases_normalized = {
-            normalize_skill_text(alias)
-            for alias in job_skill_aliases
-            if alias and normalize_skill_text(alias)
-        }
-        if candidate_normalized in aliases_normalized:
-            return True
-
-    return False
+    return candidate_normalized == job_normalized
 
 
 def _compute_skill_scores(
@@ -175,8 +140,7 @@ def _compute_skill_scores(
 ) -> dict:
     """Compute weighted skill scores using equivalence service.
 
-    F7.1 fix: Uses SkillEquivalenceService for ALL equivalence logic.
-    Only uses exact/alias matching.
+    Uses exact normalized equality and SkillEquivalenceService for all equivalence logic.
 
     Returns dict with:
     - mandatory_score_weighted: Decimal (sum of scores / total * 100)
@@ -203,14 +167,12 @@ def _compute_skill_scores(
     # Process mandatory skills
     for job_skill_row in mandatory_skills:
         job_skill_name = job_skill_row.skill_name
-        job_skill_aliases = job_skill_row.skill_aliases or []
         best_score = Decimal("0.0")
         best_candidate = None
         best_evidence = None
 
         for candidate_skill in all_candidate_skills:
-            # F7.1: Only check exact/alias.
-            if _skill_matches_exact_and_aliases_only(candidate_skill, job_skill_name, job_skill_aliases):
+            if _skill_matches_exact_only(candidate_skill, job_skill_name):
                 best_score = Decimal("1.0")
                 best_candidate = candidate_skill
                 best_evidence = None
@@ -247,13 +209,11 @@ def _compute_skill_scores(
     # Process optional skills
     for job_skill_row in optional_skills:
         job_skill_name = job_skill_row.skill_name
-        job_skill_aliases = job_skill_row.skill_aliases or []
         best_score = Decimal("0.0")
         best_candidate = None
 
         for candidate_skill in all_candidate_skills:
-            # F7.1: Only check exact/alias.
-            if _skill_matches_exact_and_aliases_only(candidate_skill, job_skill_name, job_skill_aliases):
+            if _skill_matches_exact_only(candidate_skill, job_skill_name):
                 best_score = Decimal("1.0")
                 best_candidate = candidate_skill
                 break
@@ -643,61 +603,15 @@ def _job_has_structured_requirements(
     return False
 
 
-# ── Skill Matching: Exact + Aliases + Levenshtein (for typos only) ─────────────
-
-
-def _levenshtein_distance(s1: str, s2: str) -> int:
-    """Calculate Levenshtein distance between two strings.
-
-    Used only for detecting typos in skill names.
-    Only accepts distance <= 2 and length >= 4 to avoid false positives.
-    """
-    if len(s1) < len(s2):
-        return _levenshtein_distance(s2, s1)
-
-    if len(s2) == 0:
-        return len(s1)
-
-    previous_row = list(range(len(s2) + 1))
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1
-            deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-
-    return previous_row[-1]
-
-
 def _skill_matches(
     candidate_skill_name: str,
     job_skill_name: str,
-    job_skill_aliases: list[str] | None = None,
 ) -> bool:
     """
-    Check if candidate skill matches job skill using multi-strategy approach:
+    Check if candidate skill matches the job skill using the canonical JSON catalog.
 
-    1. Exact match after normalization (case-insensitive, markdown stripped)
-    2. Alias lookup from SkillModel.aliases
-    3. Token / phrase containment for real-world text variants
-    4. Levenshtein distance <= 2 (only for skill names >= 4 chars)
-
-    Args:
-        candidate_skill_name: Skill from candidate resume (e.g., "javascript")
-        job_skill_name: Skill from job requirement (e.g., "Java")
-        job_skill_aliases: List of aliases from SkillModel (e.g., ["JS", "Node"])
-
-    Returns:
-        True if skills match, False otherwise
-
-    Examples:
-        _skill_matches("Java", "Java")              → True (exact)
-        _skill_matches("javascript", "Java")        → False (different)
-        _skill_matches("JS", "JavaScript", ["JS"]) → True (alias)
-        _skill_matches("Pythn", "Python")           → True (typo, distance=1)
-        _skill_matches("Jv", "Java")                → False (too short for Levenshtein)
+    The only matching rules here are exact normalized equality and
+    SkillEquivalenceService, which reads backend/src/domain/catalogs/skill_equivalences.json.
     """
     candidate_normalized = normalize_skill_text(candidate_skill_name)
     job_normalized = normalize_skill_text(job_skill_name)
@@ -706,40 +620,10 @@ def _skill_matches(
     if not candidate_normalized or not job_normalized:
         return False
 
-    if candidate_satisfies_job_requirement(
-        candidate_skill_name,
-        job_skill_name,
-        job_skill_aliases,
-    ):
-        return True
-
     if candidate_normalized == job_normalized:
         return True
 
-    aliases = [
-        normalize_skill_text(alias)
-        for alias in (job_skill_aliases or [])
-        if normalize_skill_text(alias)
-    ]
-    if candidate_normalized in aliases:
-        return True
-
-    shorter, longer = sorted((candidate_normalized, job_normalized), key=len)
-    if contains_whole_phrase(shorter, longer):
-        return True
-    if any(
-        contains_whole_phrase(*sorted((candidate_normalized, alias), key=len))
-        for alias in aliases
-    ):
-        return True
-
-    comparable_targets = [job_normalized, *aliases]
-    if len(candidate_normalized) >= 4:
-        for target in comparable_targets:
-            if len(target) >= 4 and _levenshtein_distance(candidate_normalized, target) <= 2:
-                return True
-
-    return False
+    return SkillEquivalenceService().match_skill(candidate_skill_name, job_skill_name).matched
 
 
 def _unique_skill_names(skill_names: list[str]) -> list[str]:
@@ -852,8 +736,7 @@ class AnalysisService:
     def _get_eligibility_engine_service(self) -> EligibilityEngineService:
         if self._eligibility_engine_service is not None:
             return self._eligibility_engine_service
-        skill_repository = SQLAlchemySkillRepository(self._repository.session)
-        self._eligibility_engine_service = EligibilityEngineService(repository=skill_repository)
+        self._eligibility_engine_service = EligibilityEngineService()
         return self._eligibility_engine_service
 
     async def list(
@@ -1301,7 +1184,7 @@ class AnalysisService:
         def _is_bonus(cand_skill: str) -> bool:
             """Check if candidate skill is not a job requirement (bonus skill)."""
             for job_row in job_skills:
-                if _skill_matches(cand_skill, job_row.skill_name, job_row.skill_aliases or []):
+                if _skill_matches(cand_skill, job_row.skill_name):
                     return False
             return True
 

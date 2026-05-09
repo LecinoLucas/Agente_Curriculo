@@ -1,19 +1,19 @@
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { JobSkill, PendingJobSkill, Skill } from "../../../types/domain";
+import type { JobSkill, PendingJobSkill, SkillEquivalenceGroup } from "../../../types/domain";
 
 type SkillSectionProps = {
   title: string;
   description: string;
   emphasis: string;
-  availableSkills: Skill[];
+  availableSkills: SkillEquivalenceGroup[];
   linkedSkills: Array<JobSkill | PendingJobSkill>;
   search: string;
   onSearchChange: (value: string) => void;
   addLabel: string;
   addMandatory: boolean;
   savingSkillId: string | null;
-  onAddSkill: (skill: Skill, isMandatory: boolean) => Promise<void>;
+  onAddSkill: (skill: SkillEquivalenceGroup, isMandatory: boolean) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
 };
@@ -64,9 +64,9 @@ export function SkillSection({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.name}</p>
+                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.canonical}</p>
                     <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                      {skill.category ?? "Sem categoria"}
+                      {skill.domains.join(", ") || skill.type || "Sem domínio"}
                     </p>
                   </div>
                   <Button

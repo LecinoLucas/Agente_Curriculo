@@ -10,6 +10,7 @@ Verifica que:
 """
 
 import json
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -20,6 +21,7 @@ from src.application.services.job_profiler_service import (
     JobProfilerService,
 )
 from src.application.services.job_service import JobService
+from src.domain.entities.user import User, UserRole, UserStatus
 from src.domain.value_objects.job_profile import JobProfile, AREA_WEIGHTS
 from src.infrastructure.database.models.job_model import JobModel
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
@@ -537,11 +539,9 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
     row.JobRequiredSkillModel = link
     row.skill_name = "SQL"
     row.skill_normalized_name = "sql"
-    row.skill_category = "data"
-    row.skill_aliases = []
 
     mock_repository.find_active_by_id.return_value = job
-    mock_repository.find_active_skill_by_id.return_value = skill
+    mock_repository.find_active_skill_by_normalized_name.return_value = skill
     mock_repository.find_required_skill_link.return_value = None
     mock_repository.create_required_skill_link.return_value = link
     mock_repository.list_required_skill_rows.return_value = [row]
@@ -549,7 +549,114 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
     service = JobService(repository=mock_repository, job_profiler_service=mock_profiler_service)
     await service.add_required_skill(
         job_id,
-        MagicMock(skill_id=skill_id, is_mandatory=True, minimum_level=None, minimum_years=None, weight=1),
+        MagicMock(skill_name="SQL", is_mandatory=True, minimum_level=None, minimum_years=None, weight=1),
     )
 
     mock_profiler_service.generate_profile.assert_called_once()
+
+
+async def test_archive_continua_funcionando_quando_auditoria_falha(mock_repository):
+    actor = User(
+        id=uuid4(),
+        email="recruiter@example.com",
+        password_hash="hash",
+        role=UserRole.RECRUITER,
+        status=UserStatus.ACTIVE,
+        full_name="Recruiter",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    job_id = uuid4()
+    job = JobModel(
+        id=job_id,
+        title="Analista",
+        description="Descrição",
+        created_by=actor.id,
+        status="published",
+    )
+
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.save = AsyncMock(return_value=job)
+    failing_audit = AsyncMock()
+    failing_audit._session = None
+    failing_audit.log_event = AsyncMock(side_effect=RuntimeError("audit down"))
+
+    service = JobService(repository=mock_repository, audit_service=failing_audit)
+
+    with patch("src.application.services.job_service.logger.warning") as warning_mock:
+        result = await service.archive(
+            job_id,
+            actor=actor,
+            reason="position_closed",
+            note="Encerrada pelo cliente",
+        )
+
+    assert result is job
+    mock_repository.save.assert_awaited_once()
+    failing_audit.log_event.assert_awaited_once()
+    warning_mock.assert_called_once_with(
+        "job_audit_log_failed",
+        action="archive_job",
+        job_id=str(job_id),
+        actor_id=str(actor.id),
+        error="audit down",
+    )
+
+
+async def test_archive_isola_falha_de_flush_da_auditoria(mock_repository):
+    class _NestedTransaction:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    actor = User(
+        id=uuid4(),
+        email="recruiter@example.com",
+        password_hash="hash",
+        role=UserRole.RECRUITER,
+        status=UserStatus.ACTIVE,
+        full_name="Recruiter",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    job_id = uuid4()
+    job = JobModel(
+        id=job_id,
+        title="Analista",
+        description="Descrição",
+        created_by=actor.id,
+        status="published",
+    )
+
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.save = AsyncMock(return_value=job)
+
+    audit_session = MagicMock()
+    audit_session.begin_nested.return_value = _NestedTransaction()
+    failing_audit = AsyncMock()
+    failing_audit._session = audit_session
+    failing_audit.log_event = AsyncMock(side_effect=RuntimeError("flush failed"))
+
+    service = JobService(repository=mock_repository, audit_service=failing_audit)
+
+    with patch("src.application.services.job_service.logger.warning") as warning_mock:
+        result = await service.archive(
+            job_id,
+            actor=actor,
+            reason="position_closed",
+            note="Encerrada pelo cliente",
+        )
+
+    assert result is job
+    audit_session.begin_nested.assert_called_once_with()
+    mock_repository.save.assert_awaited_once()
+    failing_audit.log_event.assert_awaited_once()
+    warning_mock.assert_called_once_with(
+        "job_audit_log_failed",
+        action="archive_job",
+        job_id=str(job_id),
+        actor_id=str(actor.id),
+        error="flush failed",
+    )

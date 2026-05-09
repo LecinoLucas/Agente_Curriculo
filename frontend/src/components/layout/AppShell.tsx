@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { ChevronDown, LogOut, Menu, Moon, PanelTop, Sun, UserRound, X } from "lucide-react";
 
@@ -44,6 +44,7 @@ export function AppShell() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
+  const adminDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const visibleItems = useMemo(
     () => NAV_ITEMS.filter((item) => user && item.roles.includes(user.role)),
@@ -62,6 +63,32 @@ export function AppShell() {
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [user?.role]);
+
+  useEffect(() => {
+    setAdminDropdownOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!adminDropdownOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent | PointerEvent | TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (adminDropdownRef.current?.contains(target)) {
+        return;
+      }
+      setAdminDropdownOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [adminDropdownOpen]);
 
   // ── Desktop nav link — rendered on the dark navbar ────────────────
   function renderDesktopLink(item: NavItem) {
@@ -145,7 +172,7 @@ export function AppShell() {
           <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
             {visibleItems.map(renderDesktopLink)}
             {visibleAdminItems.length > 0 ? (
-              <div className="relative group">
+              <div ref={adminDropdownRef} className="relative">
                 <button
                   type="button"
                   className={cn(
@@ -155,10 +182,12 @@ export function AppShell() {
                       : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
                   )}
                   onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                  aria-expanded={adminDropdownOpen}
+                  aria-haspopup="menu"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold tracking-tight">Admin</span>
-                    <ChevronDown className="h-4 w-4 transition-transform group-hover:rotate-180" />
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", adminDropdownOpen && "rotate-180")} />
                   </div>
                   <span className="mt-0.5 text-[11px] leading-tight opacity-70">
                     Gerenciamento
@@ -168,9 +197,10 @@ export function AppShell() {
                 {/* Dropdown menu */}
                 <div
                   className={cn(
-                    "absolute left-0 top-full mt-2 hidden w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))]/98 shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] backdrop-blur transition-all duration-150 group-hover:block",
-                    adminDropdownOpen && "block",
+                    "absolute left-0 top-full mt-2 w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))]/98 shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] backdrop-blur transition-all duration-150",
+                    adminDropdownOpen ? "block" : "hidden",
                   )}
+                  role="menu"
                 >
                   {visibleAdminItems.map((item) => (
                     <NavLink

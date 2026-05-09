@@ -1,22 +1,6 @@
 import type { CSSProperties } from "react";
-import type { AIAnalysisStatus, JobCandidate } from "../../types/domain";
+import type { JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
-
-const AI_STATUS_CLS: Record<AIAnalysisStatus, string> = {
-  completed:  "ui-badge-success ring-1 ring-[hsl(var(--success))]/25",
-  processing: "ui-badge-info ring-1 ring-[hsl(var(--primary))]/20",
-  pending:    "ui-badge-warning ring-1 ring-[hsl(var(--warning))]/25",
-  failed:     "ui-badge-danger ring-1 ring-[hsl(var(--danger))]/25",
-  cancelled:  "ui-badge-neutral ring-1 ring-[hsl(var(--border))]",
-};
-
-const AI_STATUS_LABEL: Record<AIAnalysisStatus, string> = {
-  completed:  "Concluída",
-  processing: "Processando",
-  pending:    "Na fila",
-  failed:     "Falhou",
-  cancelled:  "Cancelada",
-};
 
 interface KanbanCardProps {
   candidate: JobCandidate;
@@ -32,7 +16,7 @@ export function KanbanCard({
   onCardClick,
 }: KanbanCardProps) {
   const skills = (candidate.top_skills ?? []).slice(0, 3);
-  const aiStatus = candidate.ai_status ?? null;
+  const finalScore = candidate.final_score;
   const seniority = candidate.seniority_level ? formatSeniority(candidate.seniority_level) : null;
   const experience =
     typeof candidate.total_experience_years === "number"
@@ -79,25 +63,22 @@ export function KanbanCard({
         </div>
       ) : null}
 
-      {/* Footer: saving state OR ai_status badge */}
+      {/* Footer: saving state OR final score */}
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-[hsl(var(--border))]/80 pt-2.5">
         {isSaving ? (
           <span className="text-[10px] text-[hsl(var(--text-muted))]">Salvando…</span>
         ) : (
           <>
             <span className="text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Status da IA
+              Score final
             </span>
-            {aiStatus ? (
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums ${AI_STATUS_CLS[aiStatus]}`}
-                title={`Status da IA: ${AI_STATUS_LABEL[aiStatus]}`}
-              >
-                {AI_STATUS_LABEL[aiStatus]}
+            {finalScore !== null && finalScore !== undefined ? (
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums text-[hsl(var(--text))]">
+                {Math.round(finalScore)}%
               </span>
             ) : (
               <span className="rounded-full px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))] ring-1 ring-[hsl(var(--border))]">
-                Sem status
+                Aguardando
               </span>
             )}
           </>

@@ -57,32 +57,6 @@ async def _create_skill(session: AsyncSession, name: str, normalized_name: str |
     skill = SkillModel(
         name=name,
         normalized_name=key,
-        category="Financeiro",
-        aliases=[],
-        is_verified=True,
-    )
-    session.add(skill)
-    await session.commit()
-    return skill
-
-
-async def _create_skill_with_aliases(
-    session: AsyncSession,
-    name: str,
-    normalized_name: str,
-    aliases: list[str],
-    category: str = "Tecnologia",
-) -> SkillModel:
-    existing = await session.scalar(sa.select(SkillModel).where(SkillModel.normalized_name == normalized_name))
-    if existing is not None:
-        return existing
-
-    skill = SkillModel(
-        name=name,
-        normalized_name=normalized_name,
-        category=category,
-        aliases=aliases,
-        is_verified=True,
     )
     session.add(skill)
     await session.commit()
@@ -340,7 +314,6 @@ async def test_bulk_import_resolves_postgresql_as_sql(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_skill_with_aliases(db_session, "SQL", "sql", ["postgresql", "mysql", "sql server", "t-sql"], category="Dados")
     await _create_active_user(db_session, "bulk-import-sql-equivalence@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-import-sql-equivalence@test.com", "password123")
 
@@ -378,7 +351,6 @@ async def test_bulk_import_resolves_apis_rest_as_api_rest(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_skill_with_aliases(db_session, "API REST", "api rest", ["rest", "rest api"], category="Tecnologia")
     await _create_active_user(db_session, "bulk-import-rest-equivalence@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-import-rest-equivalence@test.com", "password123")
 
@@ -406,7 +378,6 @@ async def test_bulk_import_resolves_catalog_alias(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_skill_with_aliases(db_session, "Node.js", "node js", ["node", "nodejs"], category="Tecnologia")
     await _create_active_user(db_session, "bulk-import-alias@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-import-alias@test.com", "password123")
 

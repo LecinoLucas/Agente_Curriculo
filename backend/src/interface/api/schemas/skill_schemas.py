@@ -1,4 +1,3 @@
-from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -6,29 +5,29 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class SkillResponse(BaseModel):
-    id: UUID
-    name: str
-    normalized_name: str
-    category: Optional[str] = None
+class SkillEquivalenceGroupResponse(BaseModel):
+    id: str
+    canonical: str
     aliases: list[str] = Field(default_factory=list)
-    is_verified: bool
-    created_at: datetime
+    domains: list[str] = Field(default_factory=list)
+    type: Optional[str] = None
+    strength: str = "partial"
 
-    model_config = {"from_attributes": True}
 
-
-class CreateSkillRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    category: Optional[str] = Field(default=None, max_length=100)
+class CreateSkillEquivalenceGroupRequest(BaseModel):
+    canonical: str = Field(min_length=1, max_length=255)
     aliases: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
+    type: Optional[str] = Field(default="skill", max_length=50)
+    strength: str = Field(default="partial", pattern="^(exact|strong|partial|weak)$")
 
 
-class UpdateSkillRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    category: Optional[str] = Field(default=None, max_length=100)
+class UpdateSkillEquivalenceGroupRequest(BaseModel):
+    canonical: Optional[str] = Field(default=None, min_length=1, max_length=255)
     aliases: Optional[list[str]] = None
-    is_verified: Optional[bool] = None
+    domains: Optional[list[str]] = None
+    type: Optional[str] = Field(default=None, max_length=50)
+    strength: Optional[str] = Field(default=None, pattern="^(exact|strong|partial|weak)$")
 
 
 class JobRequiredSkillResponse(BaseModel):
@@ -50,7 +49,7 @@ class JobRequiredSkillResponse(BaseModel):
 
 
 class AddJobSkillRequest(BaseModel):
-    skill_id: UUID
+    skill_name: str = Field(min_length=1, max_length=255)
     is_mandatory: bool = False
     minimum_level: Optional[str] = Field(default=None, max_length=50)
     minimum_years: Optional[Decimal] = Field(default=None, ge=0, le=80)

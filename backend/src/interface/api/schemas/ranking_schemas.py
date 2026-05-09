@@ -30,7 +30,6 @@ class ScoreBreakdownResponse(BaseModel):
     seniority_match_score: Decimal
     education_score: Decimal
     confidence_score: Decimal
-    ai_confidence_score: Decimal
     penalty_score: Decimal
     validation_penalty_score: Decimal
     final_score: Decimal

@@ -396,7 +396,7 @@ class CandidateScoreExplanationDeltaResponse(BaseModel):
 class CandidateScoreExplanationResponse(BaseModel):
     job_id: UUID
     candidate_id: UUID
-    analysis_id: UUID
+    analysis_id: UUID | None = None
     score: float
     final_score: float
     freshness_status: Literal["fresh", "stale"]

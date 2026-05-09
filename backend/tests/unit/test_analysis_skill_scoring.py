@@ -11,11 +11,10 @@ from src.application.services.analysis_service import (
 )
 
 
-def _row(name: str, *, mandatory: bool = True, aliases: list | None = None):
+def _row(name: str, *, mandatory: bool = True):
     """Helper to create a job skill row."""
     return SimpleNamespace(
         skill_name=name,
-        skill_aliases=aliases or [],
         JobRequiredSkillModel=SimpleNamespace(is_mandatory=mandatory),
     )
 
@@ -77,12 +76,10 @@ class TestAnalysisSkillScoring:
             {skill.lower() for skill in structured_skills},
         )
 
-        assert result["mandatory_matched"] == 1
-        assert result["matched_skill_names"] == ["Node.js"]
+        assert result["mandatory_matched"] == 3
+        assert result["matched_skill_names"] == ["TypeScript", "Node.js", "SQL Server"]
         assert "React Native" in result["missing_skill_names"]
-        partial_required = {item["required"] for item in result["partial_matches"]}
-        assert "TypeScript" in partial_required
-        assert "SQL Server" in partial_required
+        assert result["partial_matches"] == []
 
     def test_protheus_partial_match_sap_mm_real_score(self):
         """Test 2: Protheus partially matches SAP MM in real score."""

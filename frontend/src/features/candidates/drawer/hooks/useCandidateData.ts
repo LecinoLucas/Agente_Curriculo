@@ -40,8 +40,6 @@ export function useCandidateData({
   }, [rankingSyncTick, candidateActiveJobId, candidateOverview?.candidate.id]);
 
   useEffect(() => {
-    if (activePanelTab !== "analysis" && activePanelTab !== "score") return;
-
     const analysisId = candidateOverview?.latest_analysis?.analysis_id;
     const status = candidateOverview?.latest_analysis?.status;
     if (!analysisId || status !== "completed") return;
@@ -83,7 +81,6 @@ export function useCandidateData({
       abortController.abort();
     };
   }, [
-    activePanelTab,
     candidateOverview?.latest_analysis?.analysis_id,
     candidateOverview?.latest_analysis?.status,
     rankingSyncTick,
@@ -91,7 +88,6 @@ export function useCandidateData({
   ]);
 
   useEffect(() => {
-    if (activePanelTab !== "score") return;
     if (!candidateActiveJobId || !candidateOverview) {
       setRankingEntry(null);
       setRankingEntryError(null);
@@ -139,7 +135,7 @@ export function useCandidateData({
     return () => {
       abortController.abort();
     };
-  }, [activePanelTab, candidateActiveJobId, candidateOverview, rankingSyncTick]);
+  }, [candidateActiveJobId, candidateOverview, rankingSyncTick]);
 
   return {
     analysisResult,

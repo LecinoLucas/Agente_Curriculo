@@ -9,7 +9,7 @@ from src.interface.api.routers import (
     observability,
     pipeline,
     resumes,
-    skills,
+    skill_equivalences,
     users,
 )
 
@@ -21,7 +21,7 @@ __all__ = [
     "analyses",
     "jobs",
     "pipeline",
-    "skills",
+    "skill_equivalences",
     "ai_models",
     "document_ai",
     "internal_users",

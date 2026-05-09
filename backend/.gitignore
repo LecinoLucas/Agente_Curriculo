@@ -32,6 +32,8 @@ alembic/versions/*.py
 !alembic/versions/2d0c3f6a1b10_create_candidate_job_pipeline_canonical.py
 !alembic/versions/7e0b4c9d2f21_drop_candidate_job_legacy_tables.py
 !alembic/versions/6f8d9c1b2a34_add_ranking_freshness_to_candidate_job_scores.py
+!alembic/versions/4b6f1d2a9c03_drop_skill_alias_and_equivalence_tables.py
+!alembic/versions/5c7e2a1b9d04_drop_legacy_skill_columns.py
 
 # Logs
 *.log

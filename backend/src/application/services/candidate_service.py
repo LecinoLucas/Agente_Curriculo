@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+import structlog
+
 from src.application.ports.file_storage import FileStorageService
 from src.application.services.audit_service import AuditService
 from src.domain.entities.user import User
@@ -25,6 +27,8 @@ from src.interface.api.schemas.candidate_schemas import (
     CreateCandidateRequest,
     UpdateCandidateRequest,
 )
+
+logger = structlog.get_logger(__name__)
 
 
 class CandidateNotFoundError(Exception):
@@ -186,9 +190,14 @@ class CandidateService:
         )
         active_job_id = active_pipeline_row["job_id"] if active_pipeline_row is not None else None
 
-        latest_analysis_row = await self._repository.find_latest_analysis_summary(candidate_id)
-        if latest_analysis_row is None and active_job_id is not None:
-            latest_analysis_row = await self._repository.find_latest_analysis_summary_for_job(candidate_id, active_job_id)
+        latest_analysis_row = None
+        if active_job_id is not None:
+            latest_analysis_row = await self._repository.find_latest_analysis_summary_for_job(
+                candidate_id,
+                active_job_id,
+            )
+        if latest_analysis_row is None:
+            latest_analysis_row = await self._repository.find_latest_analysis_summary(candidate_id)
 
         latest_analysis = (
             CandidateLatestAnalysisResponse(**latest_analysis_row)
@@ -446,28 +455,64 @@ class CandidateService:
     ) -> None:
         if self._audit_service is None:
             return
-        await self._audit_service.log_event(
-            action="delete_candidate",
-            resource_type="candidate",
-            resource_id=candidate.id,
-            user_id=actor.id,
-            metadata={
-                "entityType": "candidate",
-                "entityId": str(candidate.id),
-                "reason": reason,
-                "note": note,
-                "candidate_name": candidate.full_name,
-                "candidate_email": candidate.email,
-                "linked_jobs_count": summary.linked_jobs_count,
-                "analyses_count": summary.analyses_count,
-                "timestamp": datetime.now(UTC).isoformat(),
-            },
-            before_state={
-                "full_name": candidate.full_name,
-                "email": candidate.email,
-            },
-            after_state={"deleted": True},
-        )
+        try:
+            audit_session = getattr(self._audit_service, "_session", None)
+            if audit_session is None:
+                await self._audit_service.log_event(
+                    action="delete_candidate",
+                    resource_type="candidate",
+                    resource_id=candidate.id,
+                    user_id=actor.id,
+                    metadata={
+                        "entityType": "candidate",
+                        "entityId": str(candidate.id),
+                        "reason": reason,
+                        "note": note,
+                        "candidate_name": candidate.full_name,
+                        "candidate_email": candidate.email,
+                        "linked_jobs_count": summary.linked_jobs_count,
+                        "analyses_count": summary.analyses_count,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                    before_state={
+                        "full_name": candidate.full_name,
+                        "email": candidate.email,
+                    },
+                    after_state={"deleted": True},
+                )
+                return
+
+            async with audit_session.begin_nested():
+                await self._audit_service.log_event(
+                    action="delete_candidate",
+                    resource_type="candidate",
+                    resource_id=candidate.id,
+                    user_id=actor.id,
+                    metadata={
+                        "entityType": "candidate",
+                        "entityId": str(candidate.id),
+                        "reason": reason,
+                        "note": note,
+                        "candidate_name": candidate.full_name,
+                        "candidate_email": candidate.email,
+                        "linked_jobs_count": summary.linked_jobs_count,
+                        "analyses_count": summary.analyses_count,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                    before_state={
+                        "full_name": candidate.full_name,
+                        "email": candidate.email,
+                    },
+                    after_state={"deleted": True},
+                )
+        except Exception as exc:
+            logger.warning(
+                "candidate_delete_audit_log_failed",
+                action="delete_candidate",
+                candidate_id=str(candidate.id),
+                actor_id=str(actor.id),
+                error=str(exc),
+            )
 
     async def _cleanup_candidate_files(self, summary: CandidateDeleteSummary) -> None:
         if self._file_storage is not None:

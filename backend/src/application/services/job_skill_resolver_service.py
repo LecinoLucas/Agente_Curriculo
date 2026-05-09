@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.application.services.skill_equivalence_service import SkillEquivalenceService
 from src.application.services.skill_text_normalizer import normalize_skill_text
 from src.infrastructure.database.models.job_model import SkillModel
-from src.infrastructure.repositories.sqlalchemy_skill_repository import SQLAlchemySkillRepository
 from src.interface.api.schemas.job_schemas import BulkImportJobSkillRequest
 
 
@@ -23,24 +26,8 @@ class JobSkillResolutionResult:
 
 
 class JobSkillResolverService:
-    _CONTROLLED_EQUIVALENCES = {
-        "postgresql": "sql",
-        "postgres": "sql",
-        "mysql": "sql",
-        "sql server": "sql",
-        "mssql": "sql",
-        "t sql": "sql",
-        "t-sql": "sql",
-        "apis rest": "api rest",
-        "api rest": "api rest",
-        "rest api": "api rest",
-        "rest apis": "api rest",
-        "ci cd": "ci/cd",
-        "cicd": "ci/cd",
-    }
-
-    def __init__(self, repository: SQLAlchemySkillRepository) -> None:
-        self._repository = repository
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._catalog_loaded = False
         self._direct: dict[str, SkillModel] = {}
 
@@ -84,14 +71,31 @@ class JobSkillResolverService:
         if self._catalog_loaded:
             return
 
-        skills = await self._repository.list_all_active()
-        for skill in skills:
-            self._add_lookup(skill.normalized_name, skill, self._direct)
-            self._add_lookup(skill.name, skill, self._direct)
-            for alias in skill.aliases or []:
-                self._add_lookup(alias, skill, self._direct)
+        for group in SkillEquivalenceService().list_groups(limit=500):
+            canonical_name = group["canonical"]
+            canonical_key = normalize_skill_text(canonical_name)
+            canonical_skill = await self._ensure_active_skill(canonical_name, canonical_key)
+            self._add_lookup(canonical_name, canonical_skill, self._direct)
+            for alias in group["aliases"]:
+                self._add_lookup(alias, canonical_skill, self._direct)
 
         self._catalog_loaded = True
+
+    async def _ensure_active_skill(self, name: str, normalized_name: str) -> SkillModel:
+        skill = await self._session.scalar(
+            sa.select(SkillModel).where(
+                SkillModel.normalized_name == normalized_name,
+                SkillModel.deleted_at.is_(None),
+            )
+        )
+        if skill is not None:
+            return skill
+
+        skill = SkillModel(name=name, normalized_name=normalized_name)
+        self._session.add(skill)
+        await self._session.flush()
+        await self._session.refresh(skill)
+        return skill
 
     @staticmethod
     def _add_lookup(raw: str | None, skill: SkillModel, target: dict[str, SkillModel]) -> None:
@@ -100,13 +104,4 @@ class JobSkillResolverService:
             target[normalized] = skill
 
     def _resolve_one(self, normalized: str) -> SkillModel | None:
-        direct = self._direct.get(normalized)
-        if direct is not None:
-            return direct
-
-        normalized_key = " ".join(normalized.replace("(", " ").replace(")", " ").split())
-        equivalent_key = self._CONTROLLED_EQUIVALENCES.get(normalized_key)
-        if equivalent_key is None:
-            return None
-
-        return self._direct.get(equivalent_key)
+        return self._direct.get(normalized)

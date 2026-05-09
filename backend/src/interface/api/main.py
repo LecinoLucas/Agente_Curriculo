@@ -32,7 +32,7 @@ from src.interface.api.routers import (
     observability,
     pipeline,
     resumes,
-    skills,
+    skill_equivalences,
     users,
 )
 from src.observability.logging import configure_structured_logging
@@ -79,7 +79,7 @@ app.include_router(resumes.router, prefix=_PREFIX)
 app.include_router(analyses.router, prefix=_PREFIX)
 app.include_router(jobs.router, prefix=_PREFIX)
 app.include_router(pipeline.router, prefix=_PREFIX)
-app.include_router(skills.router, prefix=_PREFIX)
+app.include_router(skill_equivalences.router, prefix=_PREFIX)
 app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)
 app.include_router(observability.router, prefix=_PREFIX)

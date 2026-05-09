@@ -124,14 +124,13 @@ export type CandidatePipelineEntryOverview = {
   updated_at: string;
 };
 
-export type Skill = {
+export type SkillEquivalenceGroup = {
   id: string;
-  name: string;
-  normalized_name: string;
-  category: string | null;
+  canonical: string;
   aliases: string[];
-  is_verified: boolean;
-  created_at: string;
+  domains: string[];
+  type: string | null;
+  strength: "exact" | "strong" | "partial" | "weak";
 };
 
 export type JobQualityResult = {
@@ -315,7 +314,6 @@ export type JobRankingBreakdown = {
   seniority_match_score: number;
   education_score: number;
   confidence_score: number;
-  ai_confidence_score: number;
   penalty_score: number;
   final_score: number;
 };

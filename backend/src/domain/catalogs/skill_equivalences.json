@@ -430,7 +430,8 @@
         "C#",
         "ASP.NET",
         ".NET Core",
-        "Entity Framework"
+        "Entity Framework",
+        "JS"
       ],
       "domain": [
         "backend",
@@ -1118,14 +1119,14 @@
       "from": "ASP.NET",
       "to": ".NET",
       "strength": "strong",
-      "score": 0.9,
+      "score": 0.85,
       "reason": "ASP.NET faz parte do ecossistema .NET."
     },
     {
       "from": "C#",
       "to": ".NET",
       "strength": "strong",
-      "score": 0.9,
+      "score": 0.85,
       "reason": "C# é linguagem principal do ecossistema .NET."
     },
     {

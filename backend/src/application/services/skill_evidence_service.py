@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.application.services.skill_resolver_service import SkillResolverService
-from src.infrastructure.repositories.sqlalchemy_skill_repository import SQLAlchemySkillRepository
+from src.application.services.skill_equivalence_service import SkillEquivalenceService
 
 
 class SkillEvidenceService:
-    def __init__(self, repository: SQLAlchemySkillRepository) -> None:
-        self._repository = repository
-        self._resolver = SkillResolverService(repository)
+    def __init__(self) -> None:
+        self._equivalence_service = SkillEquivalenceService()
 
     async def resolve_skill_evidence(
         self,
@@ -17,30 +15,27 @@ class SkillEvidenceService:
         required_skill: str,
         context: str | None = None,
     ) -> dict[str, Any]:
-        required_resolution = await self._resolver.resolve_skill(required_skill)
-        if required_resolution is None:
+        if not str(required_skill or "").strip():
             return self._build_empty_result(
                 required_skill=required_skill,
-                reason="Skill exigida não encontrada no catálogo.",
+                reason="Skill exigida inválida.",
                 context=context,
             )
 
-        candidate_resolutions = await self._resolver.resolve_many(candidate_skills)
-        if not candidate_resolutions:
+        cleaned_candidate_skills = [skill for skill in candidate_skills if str(skill or "").strip()]
+        if not cleaned_candidate_skills:
             return self._build_empty_result(
                 required_skill=required_skill,
-                required_skill_id=required_resolution["skill_id"],
                 reason="Nenhuma evidência encontrada.",
                 context=context,
             )
 
         best_match: dict[str, Any] | None = None
-        best_score = -1
+        best_score = -1.0
 
-        for candidate_resolution in candidate_resolutions:
-            evidence = await self._evaluate_candidate_against_required(
-                candidate_resolution=candidate_resolution,
-                required_resolution=required_resolution,
+        for candidate_skill in cleaned_candidate_skills:
+            evidence = self._evaluate_candidate_against_required(
+                candidate_skill=candidate_skill,
                 required_skill=required_skill,
                 context=context,
             )
@@ -53,7 +48,6 @@ class SkillEvidenceService:
 
         return self._build_empty_result(
             required_skill=required_skill,
-            required_skill_id=required_resolution["skill_id"],
             reason="Nenhuma evidência encontrada.",
             context=context,
         )
@@ -75,74 +69,31 @@ class SkillEvidenceService:
             )
         return results
 
-    async def _evaluate_candidate_against_required(
+    def _evaluate_candidate_against_required(
         self,
         *,
-        candidate_resolution: dict[str, Any],
-        required_resolution: dict[str, Any],
+        candidate_skill: str,
         required_skill: str,
         context: str | None,
     ) -> dict[str, Any]:
-        candidate_skill_id = candidate_resolution["skill_id"]
-        required_skill_id = required_resolution["skill_id"]
-
-        if candidate_skill_id == required_skill_id:
-            if candidate_resolution["matched_by"] == "alias":
-                return {
-                    "required_skill": required_skill,
-                    "required_skill_id": required_skill_id,
-                    "matched_skill": candidate_resolution["raw_value"],
-                    "matched_skill_id": candidate_skill_id,
-                    "score": 95,
-                    "match_type": "alias",
-                    "strength": "exact",
-                    "reason": "Skill encontrada por alias.",
-                    "context": context,
-                }
-
-            return {
-                "required_skill": required_skill,
-                "required_skill_id": required_skill_id,
-                "matched_skill": candidate_resolution["raw_value"],
-                "matched_skill_id": candidate_skill_id,
-                "score": 100,
-                "match_type": "exact",
-                "strength": "exact",
-                "reason": "Skill encontrada por match exato.",
-                "context": context,
-            }
-
-        equivalence = await self._repository.find_equivalence(
-            source_skill_id=candidate_skill_id,
-            target_skill_id=required_skill_id,
-            context=context,
-        )
-        if equivalence is None:
+        evidence = self._equivalence_service.match_skill(candidate_skill, required_skill, domain=context)
+        if not evidence.matched:
             return self._build_empty_result(
                 required_skill=required_skill,
-                required_skill_id=required_skill_id,
                 reason="Nenhuma evidência encontrada.",
                 context=context,
             )
 
-        strength = str(equivalence.strength)
-        canonical_required = str(required_resolution["canonical_name"])
-        matched_skill = str(candidate_resolution["raw_value"])
-        reason = f"{matched_skill} possui equivalência {strength} com {canonical_required}."
-        extra_reason = str(equivalence.reason or "").strip()
-        if extra_reason:
-            reason = f"{reason} {extra_reason}"
-
         return {
             "required_skill": required_skill,
-            "required_skill_id": required_skill_id,
-            "matched_skill": matched_skill,
-            "matched_skill_id": candidate_skill_id,
-            "score": int(equivalence.score),
-            "match_type": self._equivalence_match_type(strength),
-            "strength": strength,
-            "reason": reason,
-            "context": equivalence.context,
+            "required_skill_id": None,
+            "matched_skill": candidate_skill,
+            "matched_skill_id": None,
+            "score": int(round(evidence.score * 100)),
+            "match_type": self._equivalence_match_type(evidence.strength),
+            "strength": evidence.strength,
+            "reason": evidence.reason,
+            "context": context,
         }
 
     @staticmethod

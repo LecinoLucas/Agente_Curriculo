@@ -162,14 +162,26 @@ class SQLAlchemyJobRepository:
             sa.select(SkillModel).where(SkillModel.id == skill_id, SkillModel.deleted_at.is_(None))
         )
 
+    async def find_active_skill_by_normalized_name(self, normalized_name: str) -> SkillModel | None:
+        return await self._session.scalar(
+            sa.select(SkillModel).where(
+                SkillModel.normalized_name == normalized_name,
+                SkillModel.deleted_at.is_(None),
+            )
+        )
+
+    async def create_skill(self, skill: SkillModel) -> SkillModel:
+        self._session.add(skill)
+        await self._session.flush()
+        await self._session.refresh(skill)
+        return skill
+
     async def list_required_skill_rows(self, job_id: UUID):
         result = await self._session.execute(
             sa.select(
                 JobRequiredSkillModel,
                 SkillModel.name.label("skill_name"),
                 SkillModel.normalized_name.label("skill_normalized_name"),
-                SkillModel.category.label("skill_category"),
-                SkillModel.aliases.label("skill_aliases"),
             )
             .join(SkillModel, JobRequiredSkillModel.skill_id == SkillModel.id)
             .where(JobRequiredSkillModel.job_id == job_id, SkillModel.deleted_at.is_(None))

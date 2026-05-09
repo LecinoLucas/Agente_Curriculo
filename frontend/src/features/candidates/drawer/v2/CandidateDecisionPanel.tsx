@@ -184,7 +184,6 @@ export function CandidateDecisionPanel({
   const confidenceScore =
     scoreExplanation?.confidence_score ??
     rankingEntry?.score_breakdown?.confidence_score ??
-    rankingEntry?.score_breakdown?.ai_confidence_score ??
     null;
   const semantics = deriveScoreSemantics({
     finalScore: compatibilityScore,

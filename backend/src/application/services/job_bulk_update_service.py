@@ -14,7 +14,6 @@ from src.application.services.job_service import (
 from src.application.services.job_skill_resolver_service import JobSkillResolverService
 from src.infrastructure.database.models.job_model import JobRequiredSkillModel, SkillModel
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
-from src.infrastructure.repositories.sqlalchemy_skill_repository import SQLAlchemySkillRepository
 from src.interface.api.schemas.job_schemas import (
     BulkImportJobSkillRequest,
     BulkUpdateJobDataRequest,
@@ -30,8 +29,7 @@ class JobBulkUpdateService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._job_repository = SQLAlchemyJobRepository(session)
-        self._skill_repository = SQLAlchemySkillRepository(session)
-        self._skill_resolver = JobSkillResolverService(self._skill_repository)
+        self._skill_resolver = JobSkillResolverService(session)
         self._job_service = JobService(self._job_repository)
 
     async def update_jobs(self, payload: BulkUpdateJobsRequest) -> BulkUpdateJobsResponse:

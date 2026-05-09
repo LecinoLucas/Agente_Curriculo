@@ -165,3 +165,121 @@ class TestSkillEquivalenceServiceEdgeCases:
         assert evidence.matched is True
         assert evidence.strength == "partial"
         assert evidence.score < 0.50  # TOTVS has score 0.40
+
+
+class TestSkillEquivalenceCatalogCrud:
+    def test_create_group_updates_same_catalog_used_by_matching(self, tmp_path):
+        catalog_path = tmp_path / "skill_equivalences.json"
+        catalog_path.write_text(
+            json.dumps(
+                {
+                    "version": "test",
+                    "score_policy": {"exact": 1.0, "strong": 0.85, "partial": 0.45, "weak": 0.25},
+                    "groups": [],
+                    "relations": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        SkillEquivalenceService.clear_catalog_cache()
+
+        service = SkillEquivalenceService(catalog_path)
+        created = service.create_group(
+            {
+                "canonical": "JavaScript",
+                "aliases": ["TypeScript", "TS"],
+                "domains": ["technology"],
+                "type": "skill",
+                "strength": "strong",
+            }
+        )
+
+        assert created["id"] == "javascript"
+        reloaded = SkillEquivalenceService(catalog_path)
+        evidence = reloaded.match_skill("TypeScript", "JavaScript")
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert evidence.score == 0.85
+
+    def test_update_and_delete_group_change_matching_result(self, tmp_path):
+        catalog_path = tmp_path / "skill_equivalences.json"
+        catalog_path.write_text(
+            json.dumps(
+                {
+                    "version": "test",
+                    "score_policy": {"exact": 1.0, "strong": 0.85, "partial": 0.45, "weak": 0.25},
+                    "groups": [
+                        {
+                            "canonical": "BI",
+                            "aliases": ["Power BI"],
+                            "domain": ["data"],
+                            "type": "skill",
+                            "strength": "strong",
+                        }
+                    ],
+                    "relations": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        SkillEquivalenceService.clear_catalog_cache()
+
+        service = SkillEquivalenceService(catalog_path)
+        service.update_group("bi", {"aliases": ["Tableau"], "strength": "partial"})
+        updated = SkillEquivalenceService(catalog_path)
+        assert updated.match_skill("Power BI", "BI").matched is False
+        tableau = updated.match_skill("Tableau", "BI")
+        assert tableau.matched is True
+        assert tableau.strength == "partial"
+
+        updated.delete_group("bi")
+        deleted = SkillEquivalenceService(catalog_path)
+        assert deleted.match_skill("Tableau", "BI").matched is False
+
+    def test_update_group_prunes_and_syncs_relations_that_would_override_admin_change(self, tmp_path):
+        catalog_path = tmp_path / "skill_equivalences.json"
+        catalog_path.write_text(
+            json.dumps(
+                {
+                    "version": "test",
+                    "score_policy": {"exact": 1.0, "strong": 0.85, "partial": 0.45, "weak": 0.25},
+                    "groups": [
+                        {
+                            "canonical": "JavaScript",
+                            "aliases": ["TypeScript", "React"],
+                            "domain": ["technology"],
+                            "type": "skill",
+                            "strength": "strong",
+                        }
+                    ],
+                    "relations": [
+                        {
+                            "from": "TypeScript",
+                            "to": "JavaScript",
+                            "strength": "strong",
+                            "score": 0.9,
+                            "reason": "explicit",
+                        },
+                        {
+                            "from": "React",
+                            "to": "JavaScript",
+                            "strength": "strong",
+                            "score": 0.9,
+                            "reason": "explicit",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        SkillEquivalenceService.clear_catalog_cache()
+
+        service = SkillEquivalenceService(catalog_path)
+        service.update_group("javascript", {"aliases": ["React"], "strength": "partial"})
+
+        reloaded = SkillEquivalenceService(catalog_path)
+        assert reloaded.match_skill("TypeScript", "JavaScript").matched is False
+        react = reloaded.match_skill("React", "JavaScript")
+        assert react.matched is True
+        assert react.strength == "partial"
+        assert react.score == 0.45

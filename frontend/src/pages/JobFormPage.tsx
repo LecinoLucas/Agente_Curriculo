@@ -29,7 +29,8 @@ import { useJobSkills } from "../features/jobs/hooks/useJobSkills";
 import { useJobPublication } from "../features/jobs/hooks/useJobPublication";
 import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
 import { getJob, getJobQuality, publishJob, type CreateJobRequestPayload, type UpdateJobRequestPayload, updateJob, createJob } from "../services/jobsService";
-import { skillsService } from "../services/skillsService";
+import { jobSkillsService } from "../services/jobSkillsService";
+import { skillEquivalencesService } from "../services/skillEquivalencesService";
 import { toast } from "../shared/utils/toast";
 import type { Job } from "../types/domain";
 import {
@@ -131,7 +132,7 @@ export function JobFormPage() {
     if (!canManage) return;
 
     let cancelled = false;
-    void skillsService.list().then((items) => {
+    void skillEquivalencesService.list().then((items) => {
       if (!cancelled) {
         setAllSkills(items);
       }
@@ -158,7 +159,7 @@ export function JobFormPage() {
     setFormErrors([]);
     setBackendPublishErrors([]);
 
-    void Promise.all([getJob(jobId), skillsService.listJobSkills(jobId), getJobQuality(jobId)])
+    void Promise.all([getJob(jobId), jobSkillsService.listJobSkills(jobId), getJobQuality(jobId)])
       .then(([job, skills, quality]) => {
         if (cancelled) return;
         setCurrentJob(job);
@@ -221,7 +222,7 @@ export function JobFormPage() {
     await refreshQuality(saved.id);
 
     if (saved.id) {
-      const refreshedSkills = await skillsService.listJobSkills(saved.id);
+      const refreshedSkills = await jobSkillsService.listJobSkills(saved.id);
       setJobSkills(refreshedSkills);
     }
 
@@ -568,4 +569,3 @@ export function JobFormPage() {
     </div>
   );
 }
-

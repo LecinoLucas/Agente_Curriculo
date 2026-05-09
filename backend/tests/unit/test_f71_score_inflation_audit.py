@@ -15,10 +15,9 @@ import pytest
 from src.application.services.analysis_service import _compute_skill_scores
 
 
-def _row(name: str, *, mandatory: bool = True, aliases: list | None = None):
+def _row(name: str, *, mandatory: bool = True):
     return SimpleNamespace(
         skill_name=name,
-        skill_aliases=aliases or [],
         JobRequiredSkillModel=SimpleNamespace(is_mandatory=mandatory),
     )
 
@@ -183,9 +182,7 @@ class TestF71ScoreInflationRootCause:
         """Audit _skill_matches to see if it's returning True for equivalence."""
         from src.application.services.analysis_service import _skill_matches
 
-        # This is the key function that should only match exact/alias
-        # PostgreSQL should NOT match SQL (different words)
-        result = _skill_matches("postgresql", "SQL", job_skill_aliases=None)
+        result = _skill_matches("postgresql", "SQL")
 
         print(f"\n[Root Cause Check: _skill_matches]")
         print(f"  _skill_matches('postgresql', 'SQL') = {result}")

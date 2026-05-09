@@ -1,13 +1,13 @@
-import type { JobSkill, PendingJobSkill, Skill } from "../../../types/domain";
+import type { JobSkill, PendingJobSkill, SkillEquivalenceGroup } from "../../../types/domain";
 import { SkillSection } from "../components/SkillSection";
 
 type JobFormMandatorySkillsStepProps = {
   mandatorySkills: Array<JobSkill | PendingJobSkill>;
-  availableSkills: Skill[];
+  availableSkills: SkillEquivalenceGroup[];
   skillSearch: string;
   onSearchChange: (value: string) => void;
   savingSkillId: string | null;
-  onAddSkill: (skill: Skill, isMandatory: boolean) => Promise<void>;
+  onAddSkill: (skill: SkillEquivalenceGroup, isMandatory: boolean) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
 };

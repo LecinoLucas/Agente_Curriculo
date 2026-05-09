@@ -135,11 +135,11 @@ async def _seed_scoring_case(
     await db_session.flush()
 
     # 3a. Create skills and link to job (for highlights)
-    python_skill = SkillModel(name="Python", normalized_name="python", category="programming_language", is_verified=True)
+    python_skill = SkillModel(name="Python", normalized_name="python")
     db_session.add(python_skill)
     await db_session.flush()
 
-    fastapi_skill = SkillModel(name="FastAPI", normalized_name="fastapi", category="framework", is_verified=True)
+    fastapi_skill = SkillModel(name="FastAPI", normalized_name="fastapi")
     db_session.add(fastapi_skill)
     await db_session.flush()
 
@@ -179,18 +179,14 @@ async def _seed_scoring_case(
                 SimpleNamespace(
                     JobRequiredSkillModel=job_python,
                     skill_name=python_skill.name,
-                    skill_aliases=python_skill.aliases,
                     skill_normalized_name=python_skill.normalized_name,
-                    skill_category=python_skill.category,
                 )
             ),
             job_skill_from_row(
                 SimpleNamespace(
                     JobRequiredSkillModel=job_fastapi,
                     skill_name=fastapi_skill.name,
-                    skill_aliases=fastapi_skill.aliases,
                     skill_normalized_name=fastapi_skill.normalized_name,
-                    skill_category=fastapi_skill.category,
                 )
             ),
         ),

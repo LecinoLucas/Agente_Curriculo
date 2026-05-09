@@ -39,7 +39,7 @@ class CandidateScoreExplanationNotReadyError(Exception):
 class JobScoreExplanationPayload:
     job_id: UUID
     candidate_id: UUID
-    analysis_id: UUID
+    analysis_id: UUID | None
     score: float
     final_score: float
     freshness_status: str
@@ -123,43 +123,13 @@ class JobScoreExplanationService:
             candidate_id=candidate_id,
             job_id=job_id,
         )
-        if persisted_match is None:
-            raise CandidateScoreExplanationNotReadyError(
-                "O score contextual desta vaga ainda não foi persistido."
-            )
-
-        analysis = await self._analysis_repo.find_latest_completed_for_version(
-            persisted_match.resume_version_id,
-            job_id,
-        )
-        if analysis is None:
-            raise CandidateScoreExplanationNotReadyError(
-                "Não há análise concluída para explicar este score."
-            )
-
-        result = await self._analysis_repo.find_result(analysis.id)
-        if result is None:
-            raise CandidateScoreExplanationNotReadyError(
-                "O resultado da análise ainda não está disponível."
-            )
-
-        job = await self._analysis_repo.find_active_job(job_id)
-        if job is None:
-            raise CandidateScoreExplanationNotReadyError(
-                "A vaga não está disponível para explicar este score."
-            )
-
-        job_skill_rows = await self._analysis_repo.list_active_job_skill_rows(job_id)
-        stored_partial_matches = []
-        if persisted_match.skill_evidence_breakdown:
-            stored_partial_matches = persisted_match.skill_evidence_breakdown.get("partial_matches", [])
+        analysis_id = await self._resolve_analysis_id(job_id=job_id, persisted_match=persisted_match)
 
         persisted_payload = await self._build_persisted_payload(
             job_id=job_id,
             candidate_id=candidate_id,
-            analysis_id=analysis.id,
+            analysis_id=analysis_id,
             persisted_match=persisted_match,
-            stored_partial_matches=stored_partial_matches,
         )
         if persisted_payload is not None:
             await self._observability_service.record_snapshot(
@@ -169,8 +139,8 @@ class JobScoreExplanationService:
                 engine_used=persisted_payload.engine_used,
                 score=persisted_payload.final_score,
                 confidence_score=persisted_payload.confidence_score,
-                matched_skills=list(persisted_match.matched_skills_json or []),
-                missing_skills=list(persisted_match.missing_skills_json or []),
+                matched_skills=list(getattr(persisted_match, "matched_skills_json", None) or []),
+                missing_skills=list(getattr(persisted_match, "missing_skills_json", None) or []),
                 equivalences_used=list(persisted_payload.partial_matches or []),
                 source="ui",
             )
@@ -183,8 +153,30 @@ class JobScoreExplanationService:
             )
             return self._filter_for_role(persisted_payload, role)
         raise CandidateScoreExplanationNotReadyError(
-            "O score persistido desta vaga não está completo no modelo atual."
+            "O score oficial desta vaga ainda não foi persistido."
         )
+
+    async def _resolve_analysis_id(
+        self,
+        *,
+        job_id: UUID,
+        persisted_match: Any | None,
+    ) -> UUID | None:
+        if persisted_match is None:
+            return None
+
+        resume_version_id = getattr(persisted_match, "resume_version_id", None)
+        if resume_version_id is None:
+            return None
+
+        analysis = await self._analysis_repo.find_latest_completed_for_version(
+            resume_version_id,
+            job_id,
+        )
+        if analysis is None:
+            return None
+
+        return analysis.id
 
     def _filter_for_role(
         self,
@@ -230,9 +222,8 @@ class JobScoreExplanationService:
         *,
         job_id: UUID,
         candidate_id: UUID,
-        analysis_id: UUID,
-        persisted_match: Any,
-        stored_partial_matches: list[dict[str, Any]],
+        analysis_id: UUID | None,
+        persisted_match: Any | None,
     ) -> JobScoreExplanationPayload | None:
         version = await self._session.scalar(
             sa.select(ScoreModelVersionModel).where(ScoreModelVersionModel.is_active.is_(True))
@@ -250,6 +241,16 @@ class JobScoreExplanationService:
         if score_head is None:
             return None
 
+        score_head_payload = self._build_payload_from_score_head(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            analysis_id=analysis_id,
+            version=version,
+            score_head=score_head,
+            persisted_match=persisted_match,
+            factors=[],
+        )
+
         snapshot = await self._session.scalar(
             sa.select(CandidateJobScoreSnapshotModel)
             .where(
@@ -264,7 +265,7 @@ class JobScoreExplanationService:
             .limit(1)
         )
         if snapshot is None:
-            return None
+            return score_head_payload
 
         snapshot_factors = (
             await self._session.execute(
@@ -277,7 +278,7 @@ class JobScoreExplanationService:
             )
         ).scalars().all()
         if not snapshot_factors:
-            return None
+            return score_head_payload
 
         factors = [
             {
@@ -292,58 +293,14 @@ class JobScoreExplanationService:
             }
             for factor in snapshot_factors
         ]
-        factor_summary = dict(score_head.factor_summary_json or {}) or _summarize_score_factors(factors)
-        delta_summary = dict(score_head.delta_summary_json or {}) or _empty_delta_summary(
-            current_score=Decimal(str(score_head.final_score))
-        )
-        partial_matches = self._extract_partial_matches_from_factors(factors) or list(stored_partial_matches or [])
-        positive_labels = [item["factor_label"] for item in factor_summary.get("positive", [])]
-        negative_labels = [item["factor_label"] for item in factor_summary.get("negative", [])]
-        gaps = self._extract_gap_labels(factors) or list(persisted_match.missing_skills_json or [])
-        confidence_risks = [
-            item["factor_label"]
-            for item in factor_summary.get("negative", [])
-            if item.get("factor_type") == "data_confidence_penalty"
-        ]
-        explanation = _render_score_explanation(
-            final_score=Decimal(str(score_head.final_score)),
-            decision=score_head.decision_suggestion,
-            factor_summary=factor_summary,
-            delta_summary=delta_summary,
-        )
-        return JobScoreExplanationPayload(
+        return self._build_payload_from_score_head(
             job_id=job_id,
             candidate_id=candidate_id,
-            analysis_id=score_head.source_analysis_id or analysis_id,
-            score=float(Decimal(str(score_head.final_score))),
-            final_score=float(Decimal(str(score_head.final_score))),
-            freshness_status=score_head.freshness_status,
-            score_model_version=score_head.score_model_version or version.version,
-            explainability_version=score_head.explainability_version,
-            computed_at=score_head.computed_at,
-            recommendation=persisted_match.recommendation,
-            engine_used="canonical",
-            explanation=explanation,
-            breakdown=self._build_persisted_breakdown(score_head.breakdown),
-            factor_summary=factor_summary,
-            delta=delta_summary,
-            highlights=positive_labels,
-            risks=negative_labels,
-            high_score_reasons=positive_labels,
-            low_score_reasons=negative_labels,
-            overestimation_risks=confidence_risks,
-            recommended_questions=[],
-            strongest_evidence=[],
-            matched_equivalences=partial_matches,
-            gaps=gaps,
-            confidence_score=float(
-                self._coerce_decimal(
-                    (score_head.breakdown or {}).get("confidence_score")
-                    or (score_head.breakdown or {}).get("ai_confidence_score")
-                ).quantize(Decimal("0.01"))
-            ),
-            strengths=positive_labels,
-            partial_matches=partial_matches,
+            analysis_id=analysis_id,
+            version=version,
+            score_head=score_head,
+            persisted_match=persisted_match,
+            factors=factors,
         )
 
     @staticmethod
@@ -374,7 +331,7 @@ class JobScoreExplanationService:
             "optional": None,
             "experience": _item("experience_match_score"),
             "seniority": _item("seniority_match_score"),
-            "ai_adjustment": _item("confidence_score") or _item("ai_confidence_score"),
+            "ai_adjustment": _item("confidence_score"),
         }
 
     @staticmethod
@@ -418,3 +375,69 @@ class JobScoreExplanationService:
         if value is None:
             return Decimal("0")
         return Decimal(str(value))
+
+    def _build_payload_from_score_head(
+        self,
+        *,
+        job_id: UUID,
+        candidate_id: UUID,
+        analysis_id: UUID | None,
+        version: ScoreModelVersionModel,
+        score_head: CandidateJobScoreModel,
+        persisted_match: Any | None,
+        factors: list[dict[str, Any]],
+    ) -> JobScoreExplanationPayload:
+        factor_summary = dict(score_head.factor_summary_json or {}) or _summarize_score_factors(factors)
+        delta_summary = dict(score_head.delta_summary_json or {}) or _empty_delta_summary(
+            current_score=Decimal(str(score_head.final_score))
+        )
+        partial_matches = self._extract_partial_matches_from_factors(factors)
+        positive_labels = [item["factor_label"] for item in factor_summary.get("positive", [])]
+        negative_labels = [item["factor_label"] for item in factor_summary.get("negative", [])]
+        gaps = self._extract_gap_labels(factors) or list(getattr(persisted_match, "missing_skills_json", None) or [])
+        confidence_risks = [
+            item["factor_label"]
+            for item in factor_summary.get("negative", [])
+            if item.get("factor_type") == "data_confidence_penalty"
+        ]
+        explanation = str(score_head.explanation_text or "").strip() or _render_score_explanation(
+            final_score=Decimal(str(score_head.final_score)),
+            decision=score_head.decision_suggestion,
+            factor_summary=factor_summary,
+            delta_summary=delta_summary,
+        )
+        return JobScoreExplanationPayload(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            analysis_id=score_head.source_analysis_id or analysis_id,
+            score=float(Decimal(str(score_head.final_score))),
+            final_score=float(Decimal(str(score_head.final_score))),
+            freshness_status=score_head.freshness_status,
+            score_model_version=score_head.score_model_version or version.version,
+            explainability_version=score_head.explainability_version,
+            computed_at=score_head.computed_at,
+            recommendation=str(
+                getattr(persisted_match, "recommendation", None) or score_head.decision_suggestion
+            ),
+            engine_used="canonical",
+            explanation=explanation,
+            breakdown=self._build_persisted_breakdown(score_head.breakdown),
+            factor_summary=factor_summary,
+            delta=delta_summary,
+            highlights=positive_labels,
+            risks=negative_labels,
+            high_score_reasons=positive_labels,
+            low_score_reasons=negative_labels,
+            overestimation_risks=confidence_risks,
+            recommended_questions=[],
+            strongest_evidence=[],
+            matched_equivalences=partial_matches,
+            gaps=gaps,
+            confidence_score=float(
+                self._coerce_decimal(
+                    (score_head.breakdown or {}).get("confidence_score")
+                ).quantize(Decimal("0.01"))
+            ),
+            strengths=positive_labels,
+            partial_matches=partial_matches,
+        )
