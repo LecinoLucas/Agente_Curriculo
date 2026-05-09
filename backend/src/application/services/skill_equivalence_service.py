@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.application.services.skill_normalizer_service import (
-    candidate_satisfies_job_requirement,
     normalize_skill_text,
 )
 
@@ -54,8 +53,7 @@ class SkillEquivalenceService:
         1. Check exact string match (no normalization)
         2. Check relations in catalog (specific pairs with scored equivalences)
         3. Check groups in catalog (domain membership)
-        4. Check legacy binary match via candidate_satisfies_job_requirement
-        5. No match
+        4. No match
 
         Args:
             candidate_skill: The skill the candidate has
@@ -88,7 +86,7 @@ class SkillEquivalenceService:
             )
 
         # 2. Check relations in catalog (explicit pairs with scores)
-        for relation in self._catalog.get("relations", []):
+        for relation in self._catalog.get("relations", []) or []:
             from_norm = normalize_skill_text(relation.get("from", ""))
             to_norm = normalize_skill_text(relation.get("to", ""))
 
@@ -113,23 +111,12 @@ class SkillEquivalenceService:
             group_name = list(common_groups)[0]
             return SkillMatchEvidence(
                 matched=True,
-                strength="strong",
-                score=0.85,
+                strength="partial",
+                score=0.50,
                 reason=f'Ambas são do grupo "{group_name}".',
                 source="group",
             )
 
-        # 4. Check legacy binary match (for backward compatibility with existing normalizer rules)
-        if candidate_satisfies_job_requirement(candidate_skill, required_skill):
-            return SkillMatchEvidence(
-                matched=True,
-                strength="strong",
-                score=0.85,
-                reason=f'"{candidate_skill}" satisfaz "{required_skill}" (match por regra legacy).',
-                source="relation",
-            )
-
-        # 5. No match
         return SkillMatchEvidence(
             matched=False,
             strength="none",

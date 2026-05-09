@@ -1,81 +1,1482 @@
 {
-  "version": "2026-05-v1",
+  "version": "2026-05-v2",
+  "description": "Mapa de equivalências, aliases e relações parciais para matching de vagas e candidatos.",
+  "score_policy": {
+    "exact": 1.0,
+    "strong": 0.85,
+    "partial": 0.45,
+    "weak": 0.25
+  },
   "groups": [
     {
       "canonical": "SQL",
-      "aliases": ["PostgreSQL", "SQL Server", "MySQL", "Oracle SQL"],
-      "domain": ["data", "technology"],
+      "aliases": [
+        "SQL",
+        "PostgreSQL",
+        "Postgres",
+        "SQL Server",
+        "MySQL",
+        "MariaDB",
+        "Oracle SQL",
+        "SQLite",
+        "T-SQL",
+        "PL/SQL"
+      ],
+      "domain": [
+        "data",
+        "technology",
+        "backend"
+      ],
+      "type": "skill",
       "strength": "strong"
     },
     {
       "canonical": "BI",
-      "aliases": ["Power BI", "Tableau", "dashboards", "DAX"],
-      "domain": ["data"],
+      "aliases": [
+        "BI",
+        "Business Intelligence",
+        "Power BI",
+        "Tableau",
+        "Looker",
+        "Qlik",
+        "dashboards",
+        "DAX",
+        "relatórios gerenciais"
+      ],
+      "domain": [
+        "data",
+        "business"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Excel",
+      "aliases": [
+        "Excel",
+        "Microsoft Excel",
+        "planilhas",
+        "tabela dinâmica",
+        "VLOOKUP",
+        "PROCV",
+        "Power Query",
+        "Power Pivot"
+      ],
+      "domain": [
+        "data",
+        "administrative",
+        "finance"
+      ],
+      "type": "tool",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Python",
+      "aliases": [
+        "Python",
+        "Pandas",
+        "NumPy",
+        "FastAPI",
+        "Django",
+        "Flask",
+        "Jupyter"
+      ],
+      "domain": [
+        "technology",
+        "data",
+        "backend",
+        "ai"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "JavaScript",
+      "aliases": [
+        "JavaScript",
+        "JS",
+        "ECMAScript",
+        "TypeScript",
+        "TS",
+        "Node.js",
+        "React",
+        "Next.js",
+        "Vue",
+        "Angular"
+      ],
+      "domain": [
+        "technology",
+        "frontend",
+        "backend"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Backend",
+      "aliases": [
+        "Backend",
+        "Back-end",
+        "API",
+        "REST",
+        "GraphQL",
+        "Node.js",
+        "Java",
+        "Spring Boot",
+        "Python",
+        "Django",
+        "FastAPI",
+        "C#",
+        ".NET",
+        "PHP",
+        "Laravel"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Frontend",
+      "aliases": [
+        "Frontend",
+        "Front-end",
+        "React",
+        "Next.js",
+        "Vue",
+        "Angular",
+        "HTML",
+        "CSS",
+        "Tailwind",
+        "JavaScript",
+        "TypeScript"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Cloud",
+      "aliases": [
+        "Cloud",
+        "AWS",
+        "Azure",
+        "GCP",
+        "Google Cloud Platform",
+        "Oracle Cloud",
+        "cloud computing"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "DevOps",
+      "aliases": [
+        "DevOps",
+        "CI/CD",
+        "Docker",
+        "Kubernetes",
+        "Terraform",
+        "GitHub Actions",
+        "GitLab CI",
+        "Jenkins",
+        "observability",
+        "monitoring"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Git",
+      "aliases": [
+        "Git",
+        "GitHub",
+        "GitLab",
+        "Bitbucket",
+        "versionamento",
+        "controle de versão"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "tool",
       "strength": "strong"
     },
     {
       "canonical": "ERP",
-      "aliases": ["Protheus", "TOTVS", "SAP"],
-      "domain": ["technology", "supply_chain"],
+      "aliases": [
+        "ERP",
+        "SAP",
+        "SAP MM",
+        "SAP SD",
+        "SAP FI",
+        "SAP CO",
+        "TOTVS",
+        "Protheus",
+        "Oracle ERP",
+        "Senior Sistemas"
+      ],
+      "domain": [
+        "technology",
+        "finance",
+        "supply_chain",
+        "administrative"
+      ],
+      "type": "system",
       "strength": "strong"
     },
     {
       "canonical": "SAP MM",
-      "aliases": ["SAP", "SAP Materials Management"],
-      "domain": ["supply_chain"],
+      "aliases": [
+        "SAP MM",
+        "SAP Materials Management",
+        "SAP compras",
+        "SAP suprimentos",
+        "SAP estoque"
+      ],
+      "domain": [
+        "supply_chain",
+        "procurement"
+      ],
+      "type": "system_module",
+      "strength": "strong"
+    },
+    {
+      "canonical": "CRM",
+      "aliases": [
+        "CRM",
+        "Salesforce",
+        "HubSpot",
+        "Pipedrive",
+        "Dynamics CRM",
+        "Zoho CRM"
+      ],
+      "domain": [
+        "sales",
+        "customer_success",
+        "business"
+      ],
+      "type": "system",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Agile",
+      "aliases": [
+        "Agile",
+        "Scrum",
+        "Kanban",
+        "metodologias ágeis",
+        "sprint",
+        "Jira",
+        "Trello"
+      ],
+      "domain": [
+        "technology",
+        "product",
+        "business"
+      ],
+      "type": "methodology",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Product Management",
+      "aliases": [
+        "Product Manager",
+        "PM",
+        "Product Owner",
+        "PO",
+        "gestão de produto",
+        "roadmap",
+        "discovery",
+        "delivery"
+      ],
+      "domain": [
+        "product",
+        "business"
+      ],
+      "type": "role_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Data Analysis",
+      "aliases": [
+        "Análise de dados",
+        "Data Analyst",
+        "Analista de Dados",
+        "SQL",
+        "Power BI",
+        "Tableau",
+        "Excel",
+        "dashboards",
+        "KPIs"
+      ],
+      "domain": [
+        "data",
+        "business"
+      ],
+      "type": "role_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Data Engineering",
+      "aliases": [
+        "Engenharia de Dados",
+        "Data Engineer",
+        "ETL",
+        "ELT",
+        "Airflow",
+        "Spark",
+        "Databricks",
+        "dbt",
+        "Data Lake",
+        "Data Warehouse"
+      ],
+      "domain": [
+        "data",
+        "technology"
+      ],
+      "type": "role_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Machine Learning",
+      "aliases": [
+        "Machine Learning",
+        "ML",
+        "IA",
+        "AI",
+        "modelos preditivos",
+        "scikit-learn",
+        "TensorFlow",
+        "PyTorch",
+        "LLM"
+      ],
+      "domain": [
+        "ai",
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Finance",
+      "aliases": [
+        "Financeiro",
+        "contas a pagar",
+        "contas a receber",
+        "conciliação bancária",
+        "fluxo de caixa",
+        "FP&A",
+        "controladoria"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "HR",
+      "aliases": [
+        "RH",
+        "Recursos Humanos",
+        "People",
+        "People Ops",
+        "DP",
+        "Departamento Pessoal",
+        "recrutamento",
+        "seleção",
+        "folha de pagamento"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Java",
+      "aliases": [
+        "Java",
+        "Spring",
+        "Spring Boot",
+        "J2EE",
+        "Hibernate",
+        "Maven"
+      ],
+      "domain": [
+        "backend",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": ".NET",
+      "aliases": [
+        ".NET",
+        "C#",
+        "ASP.NET",
+        ".NET Core",
+        "Entity Framework"
+      ],
+      "domain": [
+        "backend",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "PHP",
+      "aliases": [
+        "PHP",
+        "Laravel",
+        "Symfony",
+        "CodeIgniter"
+      ],
+      "domain": [
+        "backend",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Mobile",
+      "aliases": [
+        "Android",
+        "iOS",
+        "React Native",
+        "Flutter",
+        "Swift",
+        "Kotlin"
+      ],
+      "domain": [
+        "mobile",
+        "technology"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "QA",
+      "aliases": [
+        "QA",
+        "Quality Assurance",
+        "Testes",
+        "Selenium",
+        "Cypress",
+        "Playwright",
+        "JUnit"
+      ],
+      "domain": [
+        "technology",
+        "quality"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Cybersecurity",
+      "aliases": [
+        "Segurança",
+        "Cybersecurity",
+        "Pentest",
+        "OWASP",
+        "SIEM",
+        "SOC",
+        "LGPD"
+      ],
+      "domain": [
+        "security",
+        "technology"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Data Science",
+      "aliases": [
+        "Data Science",
+        "Cientista de Dados",
+        "Machine Learning",
+        "Estatística",
+        "Modelagem Preditiva"
+      ],
+      "domain": [
+        "data",
+        "ai"
+      ],
+      "type": "role_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "ETL",
+      "aliases": [
+        "ETL",
+        "ELT",
+        "Data Pipeline",
+        "Ingestão de Dados",
+        "Airflow",
+        "SSIS",
+        "Talend"
+      ],
+      "domain": [
+        "data"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Linux",
+      "aliases": [
+        "Linux",
+        "Ubuntu",
+        "Debian",
+        "CentOS",
+        "Shell Script",
+        "Bash"
+      ],
+      "domain": [
+        "infrastructure",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Observability",
+      "aliases": [
+        "Observability",
+        "Grafana",
+        "Prometheus",
+        "Datadog",
+        "New Relic",
+        "monitoramento"
+      ],
+      "domain": [
+        "devops",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "E-commerce",
+      "aliases": [
+        "E-commerce",
+        "VTEX",
+        "Shopify",
+        "Magento",
+        "WooCommerce"
+      ],
+      "domain": [
+        "business",
+        "technology"
+      ],
+      "type": "business_domain",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Fintech",
+      "aliases": [
+        "Fintech",
+        "Pagamentos",
+        "Banking",
+        "Open Finance",
+        "PIX"
+      ],
+      "domain": [
+        "finance",
+        "technology"
+      ],
+      "type": "business_domain",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Supply Chain",
+      "aliases": [
+        "Supply Chain",
+        "Logística",
+        "Compras",
+        "Estoque",
+        "Procurement"
+      ],
+      "domain": [
+        "operations",
+        "business"
+      ],
+      "type": "business_domain",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Customer Success",
+      "aliases": [
+        "CS",
+        "Customer Success",
+        "Sucesso do Cliente",
+        "Onboarding",
+        "Retention"
+      ],
+      "domain": [
+        "customer_success"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Sales",
+      "aliases": [
+        "Vendas",
+        "Sales",
+        "Inside Sales",
+        "SDR",
+        "Closer",
+        "Outbound",
+        "Inbound"
+      ],
+      "domain": [
+        "sales"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Marketing",
+      "aliases": [
+        "Marketing",
+        "Growth",
+        "SEO",
+        "SEM",
+        "Mídia Paga",
+        "Google Ads",
+        "Meta Ads"
+      ],
+      "domain": [
+        "marketing"
+      ],
+      "type": "area",
       "strength": "strong"
     }
   ],
   "relations": [
     {
-      "from": "Protheus",
-      "to": "SAP MM",
-      "strength": "partial",
-      "score": 0.45,
-      "reason": "Ambos indicam experiência em ERP, mas Protheus não comprova SAP MM."
-    },
-    {
-      "from": "TOTVS",
-      "to": "SAP MM",
-      "strength": "partial",
-      "score": 0.40,
-      "reason": "TOTVS é ERP relacionado, mas não comprova SAP MM."
-    },
-    {
-      "from": "Power BI",
-      "to": "BI",
-      "strength": "strong",
-      "score": 0.90
-    },
-    {
-      "from": "Tableau",
-      "to": "BI",
-      "strength": "strong",
-      "score": 0.90
-    },
-    {
       "from": "PostgreSQL",
       "to": "SQL",
       "strength": "strong",
-      "score": 0.90
-    },
-    {
-      "from": "MySQL",
-      "to": "SQL",
-      "strength": "strong",
-      "score": 0.90
+      "score": 0.9,
+      "reason": "PostgreSQL comprova uso prático de SQL."
     },
     {
       "from": "SQL Server",
       "to": "SQL",
       "strength": "strong",
-      "score": 0.90
+      "score": 0.9,
+      "reason": "SQL Server comprova uso prático de SQL."
     },
     {
       "from": "Oracle SQL",
       "to": "SQL",
       "strength": "strong",
-      "score": 0.85
+      "score": 0.85,
+      "reason": "Oracle SQL comprova experiência com banco relacional e SQL."
+    },
+    {
+      "from": "Power BI",
+      "to": "BI",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Power BI é ferramenta direta de BI."
+    },
+    {
+      "from": "Tableau",
+      "to": "BI",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Tableau é ferramenta direta de BI."
+    },
+    {
+      "from": "Excel",
+      "to": "BI",
+      "strength": "partial",
+      "score": 0.45,
+      "reason": "Excel pode apoiar análise e relatórios, mas não comprova BI avançado."
+    },
+    {
+      "from": "Power Query",
+      "to": "BI",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Power Query indica tratamento de dados, útil em BI."
+    },
+    {
+      "from": "TypeScript",
+      "to": "JavaScript",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "TypeScript é extensão do ecossistema JavaScript."
+    },
+    {
+      "from": "React",
+      "to": "Frontend",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "React comprova experiência frontend moderna."
+    },
+    {
+      "from": "Next.js",
+      "to": "Frontend",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Next.js comprova frontend React e aplicações web."
+    },
+    {
+      "from": "Node.js",
+      "to": "Backend",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Node.js comprova experiência backend web."
+    },
+    {
+      "from": "Node.js",
+      "to": "API",
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Node.js sugere construção de APIs, mas não comprova explicitamente REST ou GraphQL."
+    },
+    {
+      "from": "Spring Boot",
+      "to": "Backend",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Spring Boot é stack backend consolidada."
+    },
+    {
+      "from": ".NET",
+      "to": "Backend",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": ".NET é stack backend comum em sistemas corporativos."
+    },
+    {
+      "from": "AWS",
+      "to": "Cloud",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "AWS comprova experiência prática em cloud."
+    },
+    {
+      "from": "Azure",
+      "to": "Cloud",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Azure comprova experiência prática em cloud."
+    },
+    {
+      "from": "GCP",
+      "to": "Cloud",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "GCP comprova experiência prática em cloud."
+    },
+    {
+      "from": "Docker",
+      "to": "DevOps",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Docker indica conhecimento de containers, mas não comprova DevOps completo."
+    },
+    {
+      "from": "Kubernetes",
+      "to": "DevOps",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Kubernetes indica conhecimento avançado de orquestração."
+    },
+    {
+      "from": "Terraform",
+      "to": "DevOps",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Terraform indica infraestrutura como código."
+    },
+    {
+      "from": "GitHub",
+      "to": "Git",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "GitHub normalmente comprova uso de Git."
+    },
+    {
+      "from": "GitLab",
+      "to": "Git",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "GitLab normalmente comprova uso de Git."
+    },
+    {
+      "from": "Protheus",
+      "to": "ERP",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Protheus é um ERP."
+    },
+    {
+      "from": "TOTVS",
+      "to": "ERP",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "TOTVS indica experiência em ERP."
+    },
+    {
+      "from": "SAP",
+      "to": "ERP",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "SAP é ERP corporativo."
+    },
+    {
+      "from": "Protheus",
+      "to": "SAP MM",
+      "strength": "partial",
+      "score": 0.45,
+      "reason": "Protheus indica ERP, mas não comprova SAP MM."
+    },
+    {
+      "from": "TOTVS",
+      "to": "SAP MM",
+      "strength": "partial",
+      "score": 0.4,
+      "reason": "TOTVS é ERP adjacente, mas não comprova SAP MM."
+    },
+    {
+      "from": "SAP",
+      "to": "SAP MM",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "SAP genérico pode indicar contato com o ecossistema, mas não garante módulo MM."
+    },
+    {
+      "from": "Salesforce",
+      "to": "CRM",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Salesforce é CRM corporativo."
+    },
+    {
+      "from": "HubSpot",
+      "to": "CRM",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "HubSpot é plataforma CRM e marketing."
+    },
+    {
+      "from": "Scrum",
+      "to": "Agile",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Scrum é metodologia ágil."
+    },
+    {
+      "from": "Kanban",
+      "to": "Agile",
+      "strength": "strong",
+      "score": 0.8,
+      "reason": "Kanban é prática ágil de gestão de fluxo."
+    },
+    {
+      "from": "Jira",
+      "to": "Agile",
+      "strength": "partial",
+      "score": 0.5,
+      "reason": "Jira sugere contexto ágil, mas não comprova domínio metodológico."
+    },
+    {
+      "from": "Product Owner",
+      "to": "Product Management",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Product Owner é função próxima de gestão de produto."
+    },
+    {
+      "from": "Product Manager",
+      "to": "Product Management",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Product Manager comprova atuação direta em produto."
+    },
+    {
+      "from": "Airflow",
+      "to": "Data Engineering",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Airflow indica orquestração de pipelines de dados."
+    },
+    {
+      "from": "Spark",
+      "to": "Data Engineering",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Spark indica processamento distribuído de dados."
+    },
+    {
+      "from": "Pandas",
+      "to": "Data Analysis",
+      "strength": "strong",
+      "score": 0.8,
+      "reason": "Pandas é biblioteca comum para análise de dados."
+    },
+    {
+      "from": "Python",
+      "to": "Data Analysis",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Python pode indicar análise de dados, mas depende do contexto."
+    },
+    {
+      "from": "scikit-learn",
+      "to": "Machine Learning",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "scikit-learn é biblioteca direta de machine learning."
+    },
+    {
+      "from": "TensorFlow",
+      "to": "Machine Learning",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "TensorFlow é framework de machine learning."
+    },
+    {
+      "from": "PyTorch",
+      "to": "Machine Learning",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "PyTorch é framework de machine learning."
+    },
+    {
+      "from": "React",
+      "to": "JavaScript",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "React comprova uso prático do ecossistema JavaScript."
+    },
+    {
+      "from": "Next.js",
+      "to": "JavaScript",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Next.js comprova experiência prática com JavaScript/React."
+    },
+    {
+      "from": "Contas a Pagar",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Contas a pagar faz parte do financeiro."
+    },
+    {
+      "from": "Conciliação Bancária",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Conciliação bancária comprova rotina financeira."
+    },
+    {
+      "from": "Folha de Pagamento",
+      "to": "Recursos Humanos",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Folha de pagamento é rotina clássica de RH/DP."
+    },
+    {
+      "from": "Admissão",
+      "to": "Recursos Humanos",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Admissão comprova atuação em RH."
+    },
+    {
+      "from": "Recepcionista",
+      "to": "Atendimento",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Recepcionista comprova atendimento ao público."
+    },
+    {
+      "from": "SAC",
+      "to": "Atendimento",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "SAC é atendimento ao cliente."
+    },
+    {
+      "from": "Auxiliar de Limpeza",
+      "to": "Limpeza",
+      "strength": "strong",
+      "score": 0.95,
+      "reason": "Auxiliar de limpeza atua diretamente em conservação."
+    },
+    {
+      "from": "Faxina",
+      "to": "Limpeza",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Faxina é atividade de limpeza/conservação."
+    },
+    {
+      "from": "Porteiro",
+      "to": "Portaria",
+      "strength": "strong",
+      "score": 0.95,
+      "reason": "Porteiro atua em portaria e controle de acesso."
+    },
+    {
+      "from": "Controle de Acesso",
+      "to": "Portaria",
+      "strength": "partial",
+      "score": 0.65,
+      "reason": "Controle de acesso normalmente faz parte da portaria."
+    },
+    {
+      "from": "Vendedor",
+      "to": "Vendas",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Vendedor comprova atuação comercial."
+    },
+    {
+      "from": "SDR",
+      "to": "Vendas",
+      "strength": "partial",
+      "score": 0.7,
+      "reason": "SDR atua na área comercial."
+    },
+    {
+      "from": "Auxiliar Administrativo",
+      "to": "Administrativo",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Auxiliar administrativo comprova rotina administrativa."
+    },
+    {
+      "from": "Planilhas",
+      "to": "Administrativo",
+      "strength": "partial",
+      "score": 0.45,
+      "reason": "Uso de planilhas sugere rotina administrativa."
+    },
+    {
+      "from": "Estoque",
+      "to": "Logística",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Controle de estoque faz parte da logística."
+    },
+    {
+      "from": "Conferente",
+      "to": "Logística",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Conferente atua em logística e expedição."
+    },
+    {
+      "from": "Carga e Descarga",
+      "to": "Logística",
+      "strength": "partial",
+      "score": 0.65,
+      "reason": "Carga e descarga faz parte da operação logística."
+    },
+    {
+      "from": "Spring Boot",
+      "to": "Java",
+      "strength": "strong",
+      "score": 0.92,
+      "reason": "Spring Boot comprova experiência prática em Java backend."
+    },
+    {
+      "from": "Hibernate",
+      "to": "Java",
+      "strength": "partial",
+      "score": 0.75,
+      "reason": "Hibernate normalmente é utilizado em aplicações Java."
+    },
+    {
+      "from": "ASP.NET",
+      "to": ".NET",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "ASP.NET faz parte do ecossistema .NET."
+    },
+    {
+      "from": "C#",
+      "to": ".NET",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "C# é linguagem principal do ecossistema .NET."
+    },
+    {
+      "from": "Laravel",
+      "to": "PHP",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Laravel é framework PHP."
+    },
+    {
+      "from": "React Native",
+      "to": "Mobile",
+      "strength": "strong",
+      "score": 0.88,
+      "reason": "React Native comprova desenvolvimento mobile cross-platform."
+    },
+    {
+      "from": "Flutter",
+      "to": "Mobile",
+      "strength": "strong",
+      "score": 0.88,
+      "reason": "Flutter comprova desenvolvimento mobile cross-platform."
+    },
+    {
+      "from": "Playwright",
+      "to": "QA",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Playwright comprova automação de testes."
+    },
+    {
+      "from": "Cypress",
+      "to": "QA",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Cypress comprova automação de testes frontend."
+    },
+    {
+      "from": "OWASP",
+      "to": "Cybersecurity",
+      "strength": "strong",
+      "score": 0.82,
+      "reason": "OWASP indica práticas de segurança de aplicações."
+    },
+    {
+      "from": "Pentest",
+      "to": "Cybersecurity",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Pentest comprova atuação em segurança ofensiva."
+    },
+    {
+      "from": "Machine Learning",
+      "to": "Data Science",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "Machine Learning faz parte central de Data Science."
+    },
+    {
+      "from": "Airflow",
+      "to": "ETL",
+      "strength": "strong",
+      "score": 0.88,
+      "reason": "Airflow é amplamente utilizado para pipelines ETL."
+    },
+    {
+      "from": "SSIS",
+      "to": "ETL",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "SSIS comprova experiência em integração de dados."
+    },
+    {
+      "from": "Ubuntu",
+      "to": "Linux",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Ubuntu comprova experiência prática com Linux."
+    },
+    {
+      "from": "Bash",
+      "to": "Linux",
+      "strength": "partial",
+      "score": 0.65,
+      "reason": "Bash normalmente é usado em ambientes Linux."
+    },
+    {
+      "from": "Grafana",
+      "to": "Observability",
+      "strength": "strong",
+      "score": 0.88,
+      "reason": "Grafana comprova monitoramento e observabilidade."
+    },
+    {
+      "from": "Prometheus",
+      "to": "Observability",
+      "strength": "strong",
+      "score": 0.88,
+      "reason": "Prometheus comprova monitoramento técnico."
+    },
+    {
+      "from": "VTEX",
+      "to": "E-commerce",
+      "strength": "strong",
+      "score": 0.9,
+      "reason": "VTEX é plataforma de e-commerce."
+    },
+    {
+      "from": "Shopify",
+      "to": "E-commerce",
+      "strength": "strong",
+      "score": 0.88,
+      "reason": "Shopify é plataforma de e-commerce."
+    },
+    {
+      "from": "PIX",
+      "to": "Fintech",
+      "strength": "partial",
+      "score": 0.65,
+      "reason": "PIX sugere contexto de pagamentos digitais."
+    },
+    {
+      "from": "Open Finance",
+      "to": "Fintech",
+      "strength": "strong",
+      "score": 0.82,
+      "reason": "Open Finance comprova contexto financeiro moderno."
+    },
+    {
+      "from": "Compras",
+      "to": "Supply Chain",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Compras faz parte da cadeia de suprimentos."
+    },
+    {
+      "from": "Onboarding",
+      "to": "Customer Success",
+      "strength": "strong",
+      "score": 0.8,
+      "reason": "Onboarding é atividade comum em Customer Success."
+    },
+    {
+      "from": "Retention",
+      "to": "Customer Success",
+      "strength": "partial",
+      "score": 0.65,
+      "reason": "Retention sugere atuação em sucesso do cliente."
+    },
+    {
+      "from": "SDR",
+      "to": "Sales",
+      "strength": "strong",
+      "score": 0.82,
+      "reason": "SDR comprova atuação comercial."
+    },
+    {
+      "from": "Closer",
+      "to": "Sales",
+      "strength": "strong",
+      "score": 0.82,
+      "reason": "Closer comprova atuação em fechamento de vendas."
+    },
+    {
+      "from": "SEO",
+      "to": "Marketing",
+      "strength": "strong",
+      "score": 0.8,
+      "reason": "SEO comprova atuação em marketing digital."
+    },
+    {
+      "from": "Google Ads",
+      "to": "Marketing",
+      "strength": "strong",
+      "score": 0.82,
+      "reason": "Google Ads comprova mídia paga e performance."
+    }
+  ],
+  "business_domains": [
+    {
+      "canonical": "Financeiro",
+      "aliases": [
+        "Financeiro",
+        "Contas a Pagar",
+        "Contas a Receber",
+        "Fluxo de Caixa",
+        "Tesouraria",
+        "Conciliação Bancária",
+        "Faturamento",
+        "Cobrança",
+        "Boleto",
+        "Nota Fiscal",
+        "NF-e",
+        "Emissão de Nota",
+        "Fechamento Financeiro",
+        "Controladoria",
+        "FP&A"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Recursos Humanos",
+      "aliases": [
+        "RH",
+        "Recursos Humanos",
+        "People",
+        "Departamento Pessoal",
+        "DP",
+        "Folha de Pagamento",
+        "Admissão",
+        "Rescisão",
+        "Ponto Eletrônico",
+        "Benefícios",
+        "Recrutamento",
+        "Seleção",
+        "Treinamento",
+        "Onboarding"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Atendimento",
+      "aliases": [
+        "Atendimento",
+        "Atendimento ao Cliente",
+        "Recepção",
+        "Recepcionista",
+        "SAC",
+        "Suporte",
+        "Call Center",
+        "Telemarketing",
+        "Central de Atendimento"
+      ],
+      "domain": [
+        "customer_service"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Operacional",
+      "aliases": [
+        "Operacional",
+        "Operações",
+        "Serviços Gerais",
+        "Auxiliar Operacional",
+        "Produção",
+        "Chão de Fábrica",
+        "Operador de Máquina"
+      ],
+      "domain": [
+        "operations"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Limpeza",
+      "aliases": [
+        "Auxiliar de Limpeza",
+        "Serviços Gerais",
+        "Faxina",
+        "Higienização",
+        "Limpeza Predial",
+        "Conservação",
+        "Zeladoria"
+      ],
+      "domain": [
+        "facilities"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Portaria",
+      "aliases": [
+        "Porteiro",
+        "Portaria",
+        "Controle de Acesso",
+        "Vigia",
+        "Segurança Patrimonial"
+      ],
+      "domain": [
+        "security",
+        "facilities"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Vendas",
+      "aliases": [
+        "Vendas",
+        "Comercial",
+        "Vendedor",
+        "Consultor Comercial",
+        "Representante Comercial",
+        "Inside Sales",
+        "SDR",
+        "Atendimento Comercial"
+      ],
+      "domain": [
+        "sales"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Administrativo",
+      "aliases": [
+        "Administrativo",
+        "Auxiliar Administrativo",
+        "Assistente Administrativo",
+        "Secretária",
+        "Rotinas Administrativas",
+        "Arquivo",
+        "Digitação",
+        "Planilhas",
+        "Organização de Documentos"
+      ],
+      "domain": [
+        "administrative"
+      ],
+      "type": "business_area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Logística",
+      "aliases": [
+        "Logística",
+        "Estoque",
+        "Almoxarifado",
+        "Conferente",
+        "Expedição",
+        "Separação de Pedidos",
+        "Inventário",
+        "Carga e Descarga"
+      ],
+      "domain": [
+        "logistics"
+      ],
+      "type": "business_area",
+      "strength": "strong"
     }
   ]
 }

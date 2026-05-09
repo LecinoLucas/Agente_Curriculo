@@ -1,13 +1,19 @@
 """Unit tests for SkillEquivalenceService."""
 
-from decimal import Decimal
-from types import SimpleNamespace
+import json
+from pathlib import Path
 
 import pytest
 
 from src.application.services.skill_equivalence_service import SkillEquivalenceService
-from src.application.services.canonical_match_explanation_service import (
-    build_match_explanation,
+
+
+CATALOG_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "domain"
+    / "catalogs"
+    / "skill_equivalences.json"
 )
 
 
@@ -30,6 +36,20 @@ class TestSkillEquivalenceService:
     def test_sql_server_satisfies_sql_as_strong(self, equivalence_service):
         """Test 2: SQL Server satisfaz SQL como strong (score >= 0.85)."""
         evidence = equivalence_service.match_skill("SQL Server", "SQL")
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert evidence.score >= 0.85
+
+    def test_typescript_satisfies_javascript_as_strong(self, equivalence_service):
+        """TypeScript satisfaz JavaScript como strong."""
+        evidence = equivalence_service.match_skill("TypeScript", "JavaScript")
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert evidence.score >= 0.85
+
+    def test_react_satisfies_javascript_as_strong(self, equivalence_service):
+        """React comprova uso pratico do ecossistema JavaScript."""
+        evidence = equivalence_service.match_skill("React", "JavaScript")
         assert evidence.matched is True
         assert evidence.strength == "strong"
         assert evidence.score >= 0.85
@@ -62,161 +82,38 @@ class TestSkillEquivalenceService:
         assert evidence.strength != "strong"
         assert evidence.score < 0.85
 
-    def test_partial_increases_mandatory_score_but_not_to_100(self):
-        """Test 7: Partial aumenta mandatory_score no breakdown, mas não além de 75% quando todas são partial."""
-        # Job requires: Python, SAP MM
-        # Candidate has: Python, Protheus
-        job_rows = [
-            SimpleNamespace(
-                skill_name="Python",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            ),
-            SimpleNamespace(
-                skill_name="SAP MM",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            ),
+
+class TestSkillEquivalenceCatalogContract:
+    """Contract tests for the production equivalence catalog."""
+
+    def test_catalog_has_no_duplicate_top_level_keys(self):
+        duplicates = []
+
+        def track_duplicates(pairs):
+            seen = set()
+            for key, _value in pairs:
+                if key in seen:
+                    duplicates.append(key)
+                seen.add(key)
+            return dict(pairs)
+
+        json.loads(CATALOG_PATH.read_text(encoding="utf-8"), object_pairs_hook=track_duplicates)
+        assert duplicates == []
+
+    def test_catalog_uses_single_relations_source(self):
+        catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        assert "additional_relations" not in catalog
+        assert "additional_groups" not in catalog
+        assert isinstance(catalog["relations"], list)
+        assert isinstance(catalog["groups"], list)
+
+    def test_catalog_relation_pairs_are_unique(self):
+        catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        pairs = [
+            (relation["from"].casefold(), relation["to"].casefold())
+            for relation in catalog["relations"]
         ]
-        job = SimpleNamespace(
-            seniority_level="mid",
-            minimum_years_experience=None,
-            minimum_education_level=None,
-            deal_breakers=[],
-        )
-        result = SimpleNamespace(
-            seniority_level="mid",
-            overall_score=Decimal("70"),
-            total_experience_years=None,
-            highest_education_level=None,
-            extracted_data={},
-        )
-
-        explanation = build_match_explanation(
-            job=job,
-            analysis_result=result,
-            job_skill_rows=job_rows,
-            final_score=Decimal("70"),
-            recommendation="good_match",
-            matched_skills=["Python"],  # Exact match
-            missing_skills=["SAP MM"],  # Will be found as partial via Protheus
-            candidate_skills=["Python", "Protheus"],
-        )
-
-        # Mandatory breakdown should improve from 50% (1/2) but not reach 100%
-        assert explanation.breakdown["mandatory"] is not None
-        mandatory_score = explanation.breakdown["mandatory"].score
-        assert mandatory_score > Decimal("50")  # Improved from binary 50%
-        assert mandatory_score <= Decimal("75")  # Capped due to partial only
-
-    def test_all_mandatory_partial_adds_risk(self):
-        """Test 8: Vaga com obrigatórias 100% parciais → adiciona risco."""
-        # Job requires: SAP MM, SQL
-        # Candidate has: Protheus (partial SAP MM), MySQL (strong SQL)
-        # But for this test, let's test the case where BOTH are partial
-        job_rows = [
-            SimpleNamespace(
-                skill_name="SAP MM",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            ),
-            SimpleNamespace(
-                skill_name="COBOL",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            ),
-        ]
-        job = SimpleNamespace(
-            seniority_level="mid",
-            minimum_years_experience=None,
-            minimum_education_level=None,
-            deal_breakers=[],
-        )
-        result = SimpleNamespace(
-            seniority_level="mid",
-            overall_score=Decimal("70"),
-            total_experience_years=None,
-            highest_education_level=None,
-            extracted_data={},
-        )
-
-        # In this case: no exact matches, Protheus partially matches SAP MM,
-        # COBOL has no match even partial
-        explanation = build_match_explanation(
-            job=job,
-            analysis_result=result,
-            job_skill_rows=job_rows,
-            final_score=Decimal("50"),
-            recommendation="maybe",
-            matched_skills=[],  # No exact matches
-            missing_skills=["SAP MM", "COBOL"],
-            candidate_skills=["Protheus"],  # Partial SAP MM, no COBOL
-        )
-
-        # Should have missing skills and potentially the safety warning
-        # about no exact matches if all were partial (but in this case COBOL is 0%)
-        risks_text = " ".join(explanation.risks)
-        assert "sap mm" in risks_text.lower() or "cobol" in risks_text.lower() or "faltantes" in risks_text.lower()
-
-    def test_hiago_like_profile_partial_matches(self):
-        """Test 9: Hiago-like profile with SQL, Power BI, Python, Protheus → partial_matches for SAP MM."""
-        job_rows = [
-            SimpleNamespace(
-                skill_name="SQL",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            ),
-            SimpleNamespace(
-                skill_name="Power BI",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            ),
-            SimpleNamespace(
-                skill_name="SAP MM",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            ),
-            SimpleNamespace(
-                skill_name="Excel",
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=False),
-            ),
-        ]
-        job = SimpleNamespace(
-            seniority_level="mid",
-            minimum_years_experience=None,
-            minimum_education_level=None,
-            deal_breakers=[],
-        )
-        result = SimpleNamespace(
-            seniority_level="mid",
-            overall_score=Decimal("70"),
-            total_experience_years=None,
-            highest_education_level=None,
-            extracted_data={},
-        )
-
-        explanation = build_match_explanation(
-            job=job,
-            analysis_result=result,
-            job_skill_rows=job_rows,
-            final_score=Decimal("65"),
-            recommendation="good_match",
-            matched_skills=["SQL", "Power BI"],  # Exact matches
-            missing_skills=["SAP MM", "Excel"],  # SAP MM partial, Excel missing
-            candidate_skills=["SQL", "Power BI", "Python", "Protheus"],
-        )
-
-        # Mandatory score should be between 50% and 90% (not 0, not 100%)
-        mandatory_score = explanation.breakdown["mandatory"].score
-        assert mandatory_score >= Decimal("50"), f"Expected >= 50, got {mandatory_score}"
-        assert mandatory_score < Decimal("100"), f"Expected < 100, got {mandatory_score}"
-
-        # Should have partial matches for SAP MM
-        assert explanation.partial_matches is not None
-        partial_matches_text = str(explanation.partial_matches)
-        assert "SAP MM" in partial_matches_text or "sap mm" in partial_matches_text.lower()
-        assert "Protheus" in partial_matches_text or "protheus" in partial_matches_text.lower()
+        assert len(pairs) == len(set(pairs))
 
 
 class TestSkillEquivalenceServiceEdgeCases:
