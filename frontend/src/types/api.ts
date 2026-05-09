@@ -13,6 +13,7 @@ export type JobStatusSummary = {
   paused: number;
   closed: number;
   cancelled: number;
+  archived: number;
   attention: number;
 };
 

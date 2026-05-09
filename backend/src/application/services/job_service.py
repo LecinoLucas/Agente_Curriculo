@@ -8,6 +8,8 @@ from src.infrastructure.database.models.job_model import JobModel, JobRequiredSk
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
 from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
+from src.application.services.audit_service import AuditService
+from src.domain.entities.user import User
 from src.domain.exceptions import ValidationException
 
 if TYPE_CHECKING:
@@ -16,7 +18,11 @@ if TYPE_CHECKING:
         JobQualityResult,
         JobQualityValidatorService,
     )
-from src.application.services.job_profiler_service import JobProfilerService, job_skill_from_row
+from src.application.services.job_profiler_service import (
+    JobProfilerService,
+    build_job_profile_hash,
+    job_skill_from_row,
+)
 from src.application.services.skill_requirements_service import (
     validate_skill_requirements_product_rules,
 )
@@ -74,10 +80,12 @@ class JobService:
         repository: SQLAlchemyJobRepository,
         job_profiler_service: "JobProfilerService | None" = None,
         job_quality_validator_service: "JobQualityValidatorService | None" = None,
+        audit_service: AuditService | None = None,
     ) -> None:
         self._repository = repository
         self._job_profiler = job_profiler_service
         self._quality_validator = job_quality_validator_service
+        self._audit_service = audit_service
 
     async def create(self, body: CreateJobRequest, created_by: UUID) -> JobModel:
         self._validate_salary_range(body.salary_min, body.salary_max)
@@ -143,6 +151,8 @@ class JobService:
     async def update(self, job_id: UUID, body: UpdateJobRequest) -> JobModel:
         job = await self.get(job_id)
         provided_fields = body.model_fields_set
+        if "status" in provided_fields and body.status == "archived":
+            raise ValidationException("Use a ação específica de arquivar vaga.")
         salary_min = body.salary_min if "salary_min" in provided_fields else job.salary_min
         salary_max = body.salary_max if "salary_max" in provided_fields else job.salary_max
         self._validate_salary_range(salary_min, salary_max)
@@ -203,6 +213,7 @@ class JobService:
         job.updated_at = datetime.now(timezone.utc)
         saved_job = await self._repository.save(job)
 
+        # Invalidate stale scores/matches if structural fields changed
         if provided_fields.intersection({
             "title",
             "description",
@@ -215,19 +226,114 @@ class JobService:
             "minimum_years_experience",
             "minimum_education_level",
             "priority",
+            "deal_breakers",
+            "skill_requirements",
+            "job_profile_json",
         }):
+            await self._invalidate_job_scores_and_matches(job_id)
             await self._maybe_generate_job_profile(saved_job)
 
         await self._maybe_refresh_quality(saved_job.id)
 
         return saved_job
 
+    async def _invalidate_job_scores_and_matches(self, job_id: UUID) -> None:
+        """Hard-delete persisted ranking/matching data for this job after structural updates."""
+        import sqlalchemy as sa
+        from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
+        from src.infrastructure.database.models.profile_analysis_model import (
+            CandidateJobMatchModel,
+            JobProfileAnalysisModel,
+        )
+
+        await self._repository.session.execute(
+            sa.delete(CandidateJobScoreModel).where(CandidateJobScoreModel.job_id == job_id)
+        )
+        await self._repository.session.execute(
+            sa.delete(CandidateJobMatchModel).where(CandidateJobMatchModel.job_id == job_id)
+        )
+        await self._repository.session.execute(
+            sa.update(JobProfileAnalysisModel)
+            .where(
+                JobProfileAnalysisModel.job_id == job_id,
+                JobProfileAnalysisModel.is_active.is_(True),
+            )
+            .values(
+                is_active=False,
+                superseded_at=datetime.now(timezone.utc),
+            )
+        )
+
     async def transition_status(self, job_id: UUID, next_status: str) -> JobModel:
+        if next_status == "archived":
+            raise ValidationException("Use a ação específica de arquivar vaga.")
         job = await self.get(job_id)
         if next_status == "published":
             await self.ensure_publishable(job.id)
         self._set_status(job, next_status)
         return await self._repository.save(job)
+
+    async def archive(
+        self,
+        job_id: UUID,
+        *,
+        actor: User,
+        reason: str,
+        note: str | None = None,
+    ) -> JobModel:
+        job = await self.get(job_id)
+        if job.status == "archived":
+            raise ValidationException("A vaga já está arquivada.")
+
+        previous_status = str(job.status)
+        now = datetime.now(timezone.utc)
+        job.archived_previous_status = previous_status
+        job.status = "archived"
+        job.archived_at = now
+        job.archived_by = actor.id
+        job.archive_reason = reason.strip()
+        job.archive_reason_note = self._clean_optional_text(note)
+        job.updated_at = now
+        saved = await self._repository.save(job)
+        await self._log_audit(
+            action="archive_job",
+            job=saved,
+            actor=actor,
+            reason=job.archive_reason,
+            note=job.archive_reason_note,
+            before_state={"status": previous_status},
+            after_state={"status": "archived"},
+        )
+        return saved
+
+    async def restore(self, job_id: UUID, *, actor: User) -> JobModel:
+        job = await self.get(job_id)
+        if job.status != "archived":
+            raise ValidationException("A vaga não está arquivada.")
+
+        previous_status = str(job.archived_previous_status or "paused")
+        now = datetime.now(timezone.utc)
+        if previous_status == "published":
+            await self.ensure_publishable(job.id)
+
+        job.status = previous_status
+        job.updated_at = now
+        job.archived_at = None
+        job.archived_by = None
+        job.archive_reason = None
+        job.archive_reason_note = None
+        job.archived_previous_status = None
+        saved = await self._repository.save(job)
+        await self._log_audit(
+            action="restore_job",
+            job=saved,
+            actor=actor,
+            reason=None,
+            note=None,
+            before_state={"status": "archived"},
+            after_state={"status": previous_status},
+        )
+        return saved
 
     async def soft_delete(self, job_id: UUID) -> None:
         job = await self.get(job_id)
@@ -276,10 +382,6 @@ class JobService:
         job = await self.get(job_id)
         await self._maybe_generate_job_profile(job)
         await self._maybe_refresh_quality(job.id)
-
-    async def list_candidate_ranking(self, job_id: UUID) -> dict:
-        await self.get(job_id)
-        return {"job_id": job_id, "candidates": await self._repository.list_candidate_ranking(job_id)}
 
     @staticmethod
     def _validate_salary_range(salary_min, salary_max) -> None:
@@ -341,6 +443,12 @@ class JobService:
             job.published_at = now
         if next_status in {"closed", "cancelled"} and job.closed_at is None:
             job.closed_at = now
+        if next_status != "archived":
+            job.archived_at = None
+            job.archived_by = None
+            job.archive_reason = None
+            job.archive_reason_note = None
+            job.archived_previous_status = None
 
     @staticmethod
     def _required_skill_response(link: JobRequiredSkillModel, skill_name: str) -> JobRequiredSkillResponse:
@@ -379,7 +487,20 @@ class JobService:
             )
 
             job.job_profile_json = profile.to_dict()
-            job.job_profile_hash = profile.description_hash
+            job.job_profile_hash = build_job_profile_hash(
+                title=job.title,
+                description=job.description,
+                requirements=job.requirements,
+                seniority_level=job.seniority_level,
+                minimum_years_experience=float(job.minimum_years_experience) if job.minimum_years_experience is not None else None,
+                minimum_education_level=job.minimum_education_level,
+                job_area=job.job_area,
+                responsibilities=job.responsibilities,
+                experience_context=job.experience_context,
+                behavioral_requirements=tuple(job.behavioral_requirements or ()),
+                priority=job.priority,
+                linked_skills=tuple(job_skill_from_row(row) for row in skill_rows),
+            )
             await self._repository.save(job)
 
             logger.info(
@@ -421,6 +542,35 @@ class JobService:
             suggestions=result.suggestions,
             warnings=result.warnings,
             validation_errors=result.validation_errors,
+        )
+
+    async def _log_audit(
+        self,
+        *,
+        action: str,
+        job: JobModel,
+        actor: User,
+        reason: str | None,
+        note: str | None,
+        before_state: dict[str, str] | None,
+        after_state: dict[str, str] | None,
+    ) -> None:
+        if self._audit_service is None:
+            return
+        await self._audit_service.log_event(
+            action=action,
+            resource_type="job",
+            resource_id=job.id,
+            user_id=actor.id,
+            metadata={
+                "entityType": "job",
+                "entityId": str(job.id),
+                "reason": reason,
+                "note": note,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            before_state=before_state,
+            after_state=after_state,
         )
 
     async def _maybe_refresh_quality(self, job_id: UUID) -> None:

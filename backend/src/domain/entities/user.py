@@ -12,21 +12,11 @@ class UserRole(str, Enum):
     IMPORTANT - Semantic Meaning:
     ────────────────────────────
     - ADMIN, RECRUITER, VIEWER: Internal system users (can manage jobs, candidates, etc)
-    - CANDIDATE: NOT an internal user. Represents a person accessing the candidate portal.
-               Has limited access: /perfil + future /candidate-portal/* routes only.
-
-    Candidate Portal (Phase 20.2):
-    ──────────────────────────────
-    A User with role="CANDIDATE" must have exactly 1 Candidate linked via Candidate.user_id.
-    This enables candidate portal access (resume upload, status tracking, etc).
-    Currently implemented as a bridge mechanism. Will be replaced by separate
-    CandidateAccount table in Phase 20.3+ with independent authentication.
-
-    See: docs/user-candidate-boundary.md
+    - CANDIDATE: external candidate account with limited access.
     """
     ADMIN = "admin"
     RECRUITER = "recruiter"
-    CANDIDATE = "candidate"  # Candidate portal access (not internal user)
+    CANDIDATE = "candidate"
     VIEWER = "viewer"
 
 

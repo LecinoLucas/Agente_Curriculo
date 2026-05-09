@@ -4,6 +4,7 @@ const JOB_STATUS_LABEL: Record<string, string> = {
   paused: "Pausada",
   closed: "Encerrada",
   cancelled: "Cancelada",
+  archived: "Arquivada",
 };
 
 const SENIORITY_LABEL: Record<string, string> = {
@@ -40,7 +41,7 @@ export function jobStatusTone(
   status: string | null | undefined,
 ): "success" | "warning" | "danger" | "neutral" {
   if (status === "published") return "success";
-  if (status === "paused") return "warning";
+  if (status === "paused" || status === "archived") return "warning";
   if (status === "closed" || status === "cancelled") return "danger";
   return "neutral";
 }

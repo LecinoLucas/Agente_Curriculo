@@ -3,8 +3,7 @@ import { deriveScoreSemantics } from "../utils/scoreSemantics";
 
 export function CandidateScoreCell({ candidate }: { candidate: CandidateListSummary }) {
   const semantics = deriveScoreSemantics({
-    activeJobMatchScore: candidate.active_job_match_score,
-    aiScore: candidate.ai_score,
+    finalScore: candidate.active_job_final_score,
     aiStatus: candidate.ai_status,
     hasActiveJob: Boolean(candidate.active_job_id),
   });

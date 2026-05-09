@@ -1,12 +1,9 @@
-import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
-
-logger = logging.getLogger(__name__)
 
 JOB_AREA = Literal[
     "technology",
@@ -34,21 +31,6 @@ DEAL_BREAKER_FIELDS = Literal[
     "custom_text",
 ]
 
-LEGACY_JOB_AREA_MAP = {
-    "operacional": "operational",
-    "tecnologia": "technology",
-    "dados": "data",
-    "financeiro": "financial",
-    "fiscal": "fiscal",
-    "contabilidade": "accounting",
-    "contábil": "accounting",
-    "administrativo": "administrative",
-    "comercial": "commercial",
-    "rh": "hr",
-    "recursos humanos": "hr",
-    "liderança": "leadership",
-}
-
 VALID_JOB_AREAS = {
     "technology",
     "data",
@@ -72,19 +54,13 @@ def normalize_job_area_value(value: str | None) -> str | None:
     if not cleaned:
         return None
 
-    if cleaned in LEGACY_JOB_AREA_MAP:
-        return LEGACY_JOB_AREA_MAP[cleaned]
-
     if cleaned in VALID_JOB_AREAS:
         return cleaned
 
-    logger.warning(
-        "Invalid job_area value: '%s'. Expected one of %s or legacy values %s",
-        value,
-        sorted(VALID_JOB_AREAS),
-        sorted(LEGACY_JOB_AREA_MAP.keys()),
+    raise ValueError(
+        f"Invalid job_area value: {value}. "
+        f"Expected one of {sorted(VALID_JOB_AREAS)}"
     )
-    return None
 
 
 class DealBreaker(BaseModel):
@@ -159,6 +135,10 @@ class JobResponse(BaseModel):
     quality_status: Literal["weak", "acceptable", "good"] | None = None
     skill_requirements: dict[str, list[str]] | None = None
     created_by: UUID
+    archived_at: datetime | None = None
+    archived_by: UUID | None = None
+    archive_reason: str | None = None
+    archive_reason_note: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -182,6 +162,7 @@ class JobStatusSummaryResponse(BaseModel):
     paused: int = 0
     closed: int = 0
     cancelled: int = 0
+    archived: int = 0
     attention: int = 0
 
 
@@ -198,7 +179,7 @@ class CreateJobRequest(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=10)
     requirements: str | None = None
-    status: Literal["draft", "published", "paused", "closed", "cancelled"] = "draft"
+    status: Literal["draft", "published", "paused", "closed", "cancelled", "archived"] = "draft"
     seniority_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
     minimum_education_level: Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"] | None = None
     minimum_years_experience: Decimal | None = None
@@ -249,7 +230,7 @@ class UpdateJobRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
     description: str | None = Field(default=None, min_length=10)
     requirements: str | None = None
-    status: Literal["draft", "published", "paused", "closed", "cancelled"] | None = None
+    status: Literal["draft", "published", "paused", "closed", "cancelled", "archived"] | None = None
     seniority_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
     minimum_education_level: Literal["none", "high_school", "technical", "bachelor", "postgraduate", "master", "phd"] | None = None
     minimum_years_experience: Decimal | None = None
@@ -297,6 +278,11 @@ class UpdateJobRequest(BaseModel):
             normalized.append(cleaned)
 
         return normalized
+
+
+class ArchiveJobRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class ScoreExplanationEvidenceResponse(BaseModel):
@@ -413,7 +399,7 @@ class CandidateScoreExplanationResponse(BaseModel):
     analysis_id: UUID
     score: float
     final_score: float
-    freshness_status: Literal["fresh", "stale", "unknown"]
+    freshness_status: Literal["fresh", "stale"]
     score_model_version: str | None = None
     explainability_version: str | None = None
     computed_at: datetime | None = None
@@ -513,7 +499,6 @@ class BulkImportOptionsRequest(BaseModel):
     dry_run: bool = False
     skip_duplicates: bool = True
     default_status: Literal["draft", "published", "paused", "closed", "cancelled"] = "draft"
-    fallback_unknown_skills_to_requirements: bool = False
 
 
 class BulkImportJobsRequest(BaseModel):
@@ -612,13 +597,8 @@ class BulkUpdateJobItemRequest(BaseModel):
     data: BulkUpdateJobDataRequest
 
 
-class BulkUpdateOptionsRequest(BaseModel):
-    fallback_unknown_skills_to_requirements: bool = False
-
-
 class BulkUpdateJobsRequest(BaseModel):
     jobs: list[BulkUpdateJobItemRequest] = Field(default_factory=list, min_length=1)
-    options: BulkUpdateOptionsRequest = Field(default_factory=BulkUpdateOptionsRequest)
 
 
 class BulkUpdateJobResultResponse(BaseModel):

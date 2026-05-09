@@ -74,7 +74,6 @@ export const pipelineService = {
       job_title: item?.job_title ?? "",
       current_stage: item?.current_stage ?? "entry",
       status: item?.status ?? "active",
-      match_score: item?.match_score != null ? Number(item.match_score) : null,
       entered_at: item?.entered_at ?? null,
       updated_at: item?.updated_at ?? new Date(0).toISOString(),
       transitions: Array.isArray(item?.transitions)
@@ -103,7 +102,6 @@ export const pipelineService = {
       stage: item?.stage ?? payload.stage,
       candidate_status: item?.candidate_status ?? "Em processo",
       status: item?.status ?? "active",
-      match_score: item?.match_score != null ? Number(item.match_score) : null,
       transition_id: item?.transition_id ?? "",
       updated_at: item?.updated_at ?? new Date(0).toISOString(),
     };

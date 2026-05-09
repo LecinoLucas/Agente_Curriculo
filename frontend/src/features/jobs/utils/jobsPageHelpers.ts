@@ -256,11 +256,16 @@ export function getJobOperationalPriority(
       };
     }
 
-    if (job.status === "closed" || job.status === "cancelled") {
+    if (job.status === "closed" || job.status === "cancelled" || job.status === "archived") {
       return {
         score: -24,
         level: "stable",
-        label: job.status === "closed" ? "Concluída" : "Cancelada",
+        label:
+          job.status === "closed"
+            ? "Concluída"
+            : job.status === "archived"
+              ? "Arquivada"
+              : "Cancelada",
         note: "Sem ação operacional prioritária neste momento",
         momentum: "stable",
         momentumLabel: "Estável",
@@ -338,6 +343,7 @@ export function getJobOperationalPriority(
 
   if (job.status === "closed") score -= 52;
   if (job.status === "cancelled") score -= 40;
+  if (job.status === "archived") score -= 48;
   if (snapshot.advancedCount > 0) score -= 6;
 
   const level: JobOperationalPriorityLevel =
@@ -532,11 +538,11 @@ export function getJobOperationalPresentation(
       };
     }
 
-    if (job.status === "closed") {
+    if (job.status === "closed" || job.status === "archived") {
       return {
         tone: "healthy",
-        healthLabel: "Encerrada",
-        healthNote: "Vaga concluída ou finalizada",
+        healthLabel: job.status === "archived" ? "Arquivada" : "Encerrada",
+        healthNote: "Vaga fora da lista operacional ativa",
         pipelineLabel: "Histórico em atualização",
         pipelineNote: "Abra o pipeline se precisar revisar o histórico",
         actionLabel: "Abrir pipeline",
@@ -586,6 +592,18 @@ export function getJobOperationalPresentation(
       pipelineNote: "Retome quando houver contexto para seguir",
       actionLabel: "Revisar prioridade",
       actionTarget: "edit",
+    };
+  }
+
+  if (job.status === "archived") {
+    return {
+      tone: "healthy",
+      healthLabel: "Arquivada",
+      healthNote: "Vaga preservada apenas para histórico e auditoria",
+      pipelineLabel: totalCandidates > 0 ? `${pluralizeCandidates(totalCandidates)} preservados` : "Sem candidatos vinculados",
+      pipelineNote: "O histórico continua acessível sem entrar na operação ativa",
+      actionLabel: "Abrir pipeline",
+      actionTarget: "pipeline",
     };
   }
 
@@ -820,6 +838,8 @@ export function buildJobActionItems(
   onPipeline: (jobId: string) => void,
   onPause: (jobId: string) => void,
   onClose: (jobId: string) => void,
+  onArchive: (job: Job) => void,
+  onRestore: (jobId: string) => void,
   onDelete: (job: Job) => void,
 ): ActionMenuItem[] {
   const items: ActionMenuItem[] = [
@@ -849,10 +869,33 @@ export function buildJobActionItems(
   }
 
   if (job.status === "paused") {
+    items.push(
+      {
+        label: "Encerrar",
+        onClick: () => onClose(job.id),
+        disabled: runningAction === `close:${job.id}`,
+      },
+      {
+        label: "Arquivar vaga",
+        onClick: () => onArchive(job),
+        disabled: runningAction === `archive:${job.id}`,
+      },
+    );
+  }
+
+  if (job.status === "published" || job.status === "closed" || job.status === "cancelled") {
     items.push({
-      label: "Encerrar",
-      onClick: () => onClose(job.id),
-      disabled: runningAction === `close:${job.id}`,
+      label: "Arquivar vaga",
+      onClick: () => onArchive(job),
+      disabled: runningAction === `archive:${job.id}`,
+    });
+  }
+
+  if (job.status === "archived") {
+    items.push({
+      label: "Reativar vaga",
+      onClick: () => onRestore(job.id),
+      disabled: runningAction === `restore:${job.id}`,
     });
   }
 

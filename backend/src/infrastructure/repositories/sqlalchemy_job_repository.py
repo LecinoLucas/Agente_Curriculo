@@ -9,10 +9,7 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
-from src.infrastructure.database.models.profile_analysis_model import (
-    CandidateJobMatchModel,
-    CandidateProfileAnalysisModel,
-)
+from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
 
@@ -49,8 +46,11 @@ class SQLAlchemyJobRepository:
         if work_model:
             filters.append(JobModel.work_model == work_model)
 
-        if include_status and status:
-            filters.append(JobModel.status == status)
+        if include_status:
+            if status:
+                filters.append(JobModel.status == status)
+            else:
+                filters.append(JobModel.status != "archived")
 
         return filters
 
@@ -131,6 +131,7 @@ class SQLAlchemyJobRepository:
                     sa.func.sum(sa.case((JobModel.status == "paused", 1), else_=0)).label("paused"),
                     sa.func.sum(sa.case((JobModel.status == "closed", 1), else_=0)).label("closed"),
                     sa.func.sum(sa.case((JobModel.status == "cancelled", 1), else_=0)).label("cancelled"),
+                    sa.func.sum(sa.case((JobModel.status == "archived", 1), else_=0)).label("archived"),
                     sa.func.sum(
                         sa.case((JobModel.quality_status.in_(["weak", "acceptable"]), 1), else_=0)
                     ).label("attention"),
@@ -145,6 +146,7 @@ class SQLAlchemyJobRepository:
             "paused": int(summary_row["paused"] or 0),
             "closed": int(summary_row["closed"] or 0),
             "cancelled": int(summary_row["cancelled"] or 0),
+            "archived": int(summary_row["archived"] or 0),
             "attention": int(summary_row["attention"] or 0),
         }
 
@@ -199,72 +201,6 @@ class SQLAlchemyJobRepository:
     async def delete_required_skill_link(self, link: JobRequiredSkillModel) -> None:
         await self._session.delete(link)
         await self._session.flush()
-
-    async def list_candidate_ranking(self, job_id: UUID) -> list[dict]:
-        latest_match = (
-            sa.select(
-                CandidateJobMatchModel.candidate_id,
-                CandidateJobMatchModel.job_id,
-                CandidateJobMatchModel.match_score,
-                CandidateJobMatchModel.recommendation,
-                CandidateProfileAnalysisModel.seniority_level,
-                CandidateProfileAnalysisModel.experience_years,
-                sa.func.row_number()
-                .over(
-                    partition_by=(
-                        CandidateJobMatchModel.candidate_id,
-                        CandidateJobMatchModel.job_id,
-                    ),
-                    order_by=CandidateJobMatchModel.created_at.desc(),
-                )
-                .label("rn"),
-            )
-            .select_from(CandidateJobMatchModel)
-            .join(
-                CandidateProfileAnalysisModel,
-                CandidateProfileAnalysisModel.id == CandidateJobMatchModel.candidate_profile_analysis_id,
-            )
-            .where(CandidateJobMatchModel.job_id == job_id)
-            .subquery("latest_match")
-        )
-
-        result = await self._session.execute(
-            sa.select(
-                CandidateModel.id.label("candidate_id"),
-                CandidateModel.full_name.label("candidate_name"),
-                CandidateModel.email,
-                latest_match.c.match_score,
-                latest_match.c.recommendation,
-                latest_match.c.match_score.label("overall_score"),
-                latest_match.c.seniority_level,
-                latest_match.c.experience_years.label("total_experience_years"),
-            )
-            .join(
-                CandidateJobPipelineModel,
-                sa.and_(
-                    CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                    CandidateJobPipelineModel.job_id == job_id,
-                    CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.relationship_status == "active",
-                    CandidateJobPipelineModel.is_terminal.is_(False),
-                    CandidateJobPipelineModel.terminated_at.is_(None),
-                ),
-            )
-            .outerjoin(
-                latest_match,
-                sa.and_(
-                    latest_match.c.candidate_id == CandidateModel.id,
-                    latest_match.c.job_id == CandidateJobPipelineModel.job_id,
-                    latest_match.c.rn == 1,
-                ),
-            )
-            .where(
-                CandidateModel.deleted_at.is_(None),
-            )
-            .order_by(latest_match.c.match_score.desc().nulls_last())
-            .limit(50)
-        )
-        return [dict(row) for row in result.mappings().all()]
 
     async def list_completed_unmatched_analyses(
         self,

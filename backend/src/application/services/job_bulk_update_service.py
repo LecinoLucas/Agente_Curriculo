@@ -11,7 +11,6 @@ from src.application.services.job_service import (
     JobPublicationValidationError,
     JobService,
 )
-from src.application.services.job_bulk_import_service import JobBulkImportService
 from src.application.services.job_skill_resolver_service import JobSkillResolverService
 from src.infrastructure.database.models.job_model import JobRequiredSkillModel, SkillModel
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
@@ -41,7 +40,7 @@ class JobBulkUpdateService:
         failed = 0
 
         for item in payload.jobs:
-            result = await self._update_single_job(item, payload.options.fallback_unknown_skills_to_requirements)
+            result = await self._update_single_job(item)
             results.append(result)
             if result.status == "updated":
                 updated += 1
@@ -58,7 +57,6 @@ class JobBulkUpdateService:
     async def _update_single_job(
         self,
         item: BulkUpdateJobItemRequest,
-        fallback_unknown_skills_to_requirements: bool,
     ) -> BulkUpdateJobResultResponse:
         warnings: list[str] = []
         unresolved_skills: list[str] = []
@@ -82,17 +80,7 @@ class JobBulkUpdateService:
                 update_data.skills = [entry.request for entry in skill_resolution.resolved]
 
                 if unresolved_skills:
-                    if not fallback_unknown_skills_to_requirements:
-                        raise ValueError(f"Skill não encontrada: {', '.join(unresolved_skills)}")
-                    update_data.requirements = JobBulkImportService._append_unresolved_skills_to_requirements(
-                        update_data.requirements if "requirements" in update_data.model_fields_set else job.requirements,
-                        unresolved_skills,
-                    )
-                    warnings.append(
-                        "Skills fora do catálogo estruturado foram mantidas apenas em requirements: "
-                        + ", ".join(unresolved_skills)
-                        + "."
-                    )
+                    raise ValueError(f"Skill não encontrada: {', '.join(unresolved_skills)}")
 
             update_body = self._build_update_request(update_data)
             if update_body.model_fields_set:

@@ -1,11 +1,15 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.audit_service import AuditService
 from src.application.services.candidate_service import (
     CandidateCpfConflictError,
+    CandidateCriticalHistoryError,
+    CandidateDeleteConfirmationError,
+    CandidateDeleteReasonRequiredError,
     CandidateEmailConflictError,
     CandidateNotAllowedUserIdError,
     CandidateNotFoundError,
@@ -21,13 +25,14 @@ from src.application.services.pipeline_service import (
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
 )
-from src.interface.api.dependencies import RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import AdminOnly, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.candidate_schemas import (
     CandidateCheckResponse,
     CandidateListSummaryResponse,
     CandidateOverviewResponse,
     CandidateResponse,
     CreateCandidateRequest,
+    DeleteCandidateRequest,
     UpdateCandidateRequest,
 )
 from src.interface.api.schemas.common import PaginatedResponse
@@ -36,7 +41,10 @@ router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 
 def _candidate_service(db: AsyncSession) -> CandidateService:
-    return CandidateService(SQLAlchemyCandidateRepository(db))
+    return CandidateService(
+        SQLAlchemyCandidateRepository(db),
+        audit_service=AuditService(db),
+    )
 
 
 def _handle_candidate_service_error(exc: Exception) -> None:
@@ -81,6 +89,21 @@ def _handle_candidate_service_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Não é permitido especificar user_id durante criação de candidato",
+        )
+    if isinstance(exc, CandidateDeleteReasonRequiredError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Informe o motivo da exclusão definitiva.",
+        )
+    if isinstance(exc, CandidateDeleteConfirmationError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Digite EXCLUIR para confirmar a exclusão definitiva.",
+        )
+    if isinstance(exc, CandidateCriticalHistoryError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
         )
     if isinstance(exc, PipelineCandidateNotFoundError | PipelineJobNotFoundError | PipelineEntryNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recurso não encontrado")
@@ -204,11 +227,19 @@ async def update_candidate(
 @router.delete("/{candidate_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_candidate(
     candidate_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AdminOnly,
+    body: DeleteCandidateRequest | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     try:
-        await _candidate_service(db).soft_delete(candidate_id)
+        payload = body or DeleteCandidateRequest()
+        await _candidate_service(db).hard_delete(
+            candidate_id,
+            actor=current_user,
+            reason=payload.reason,
+            note=payload.note,
+            confirmation=payload.confirmation,
+        )
         await db.commit()
     except Exception as exc:
         await db.rollback()

@@ -16,6 +16,11 @@ export type PaginatedResponse<T> = {
   total_pages: number;
 };
 
+export type AnalysisLifecyclePayload = {
+  reason: string;
+  note?: string;
+};
+
 function formatRetryAfter(seconds: number): string {
   const rounded = Math.max(1, Math.ceil(seconds));
   if (rounded < 60) return `${rounded}s`;
@@ -60,6 +65,10 @@ function normalizeAnalysisSummary(item: Partial<AnalysisSummary> & { id?: string
     requested_by: item.requested_by ?? "",
     requested_by_name: item.requested_by_name ?? null,
     failure_reason: item.failure_reason ?? null,
+    discarded_at: item.discarded_at ?? null,
+    discarded_by: item.discarded_by ?? null,
+    discard_reason: item.discard_reason ?? null,
+    discard_reason_note: item.discard_reason_note ?? null,
     created_at: item.created_at ?? new Date(0).toISOString(),
     updated_at: item.updated_at ?? new Date(0).toISOString(),
   };
@@ -107,12 +116,6 @@ function normalizeAnalysisResult(item: Partial<AnalysisResult>): AnalysisResult 
     worker_id: item.worker_id ?? null,
     task_id: item.task_id ?? null,
     used_real_ai: item.used_real_ai ?? false,
-    overall_score: item.overall_score ?? null,
-    technical_score: item.technical_score ?? null,
-    experience_score: item.experience_score ?? null,
-    education_score: item.education_score ?? null,
-    communication_score: item.communication_score ?? null,
-    leadership_score: item.leadership_score ?? null,
     candidate_summary: item.candidate_summary ?? null,
     seniority_level: item.seniority_level ?? null,
     total_experience_years: item.total_experience_years ?? null,
@@ -177,6 +180,12 @@ export const analysisService = {
       `/api/v1/analyses/${analysisId}/retry`,
       { method: "POST" }
     ).catch((error) => rethrowAnalysisRateLimit(error)),
+
+  discard: (analysisId: string, payload: AnalysisLifecyclePayload) =>
+    httpRequest<AnalysisSummary>(
+      `/api/v1/analyses/${analysisId}/discard`,
+      { method: "PATCH", body: payload }
+    ).then(normalizeAnalysisSummary),
 
   forceFail: (analysisId: string) =>
     httpRequest<{ status: string }>(

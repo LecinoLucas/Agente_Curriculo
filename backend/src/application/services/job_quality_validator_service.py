@@ -280,49 +280,11 @@ class JobQualityValidatorService:
         warnings: list[str],
     ) -> dict[str, list[str]]:
         if job.skill_requirements is not None:
-            try:
-                return validate_skill_requirements(job.skill_requirements)
-            except ValueError:
-                warnings.append(
-                    "skill_requirements inválido na vaga. Usando fallback da estrutura legada."
-                )
-
-        core_required = [
-            str(skill["name"]).strip()
-            for skill in skills
-            if skill["is_mandatory"] and str(skill["name"]).strip()
-        ]
-        nice_to_have = [
-            str(skill["name"]).strip()
-            for skill in skills
-            if not skill["is_mandatory"] and str(skill["name"]).strip()
-        ]
-        if core_required or nice_to_have:
-            return {
-                "critical_required": [],
-                "core_required": core_required,
-                "important": [],
-                "nice_to_have": nice_to_have,
-            }
-
-        job_profile = job.job_profile_json if isinstance(job.job_profile_json, dict) else {}
-        critical_requirements = job_profile.get("critical_requirements", []) if isinstance(job_profile, dict) else []
-        desirable_requirements = job_profile.get("desirable_requirements", []) if isinstance(job_profile, dict) else []
-
-        def _extract_names(items: list[object]) -> list[str]:
-            names: list[str] = []
-            for item in items:
-                if isinstance(item, dict):
-                    name = str(item.get("name", "")).strip()
-                else:
-                    name = str(item or "").strip()
-                if name:
-                    names.append(name)
-            return names
+            return validate_skill_requirements(job.skill_requirements)
 
         return {
             "critical_required": [],
-            "core_required": _extract_names(critical_requirements),
+            "core_required": [],
             "important": [],
-            "nice_to_have": _extract_names(desirable_requirements),
+            "nice_to_have": [],
         }

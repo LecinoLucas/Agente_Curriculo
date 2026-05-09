@@ -54,6 +54,7 @@ export function AnalysisFilters({
         <option value="completed">Concluída</option>
         <option value="failed">Falhou</option>
         <option value="cancelled">Cancelado</option>
+        <option value="discarded">Descartada</option>
       </select>
 
       <select

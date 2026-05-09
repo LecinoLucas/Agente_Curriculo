@@ -45,7 +45,6 @@ class JobBulkImportService:
                 payload.options.dry_run,
                 payload.options.skip_duplicates,
                 payload.options.default_status,
-                payload.options.fallback_unknown_skills_to_requirements,
                 created_by,
             )
             results.append(result)
@@ -70,7 +69,6 @@ class JobBulkImportService:
         dry_run: bool,
         skip_duplicates: bool,
         default_status: str,
-        fallback_unknown_skills_to_requirements: bool,
         created_by: UUID,
     ) -> BulkImportJobResultResponse:
         warnings: list[str] = []
@@ -103,19 +101,14 @@ class JobBulkImportService:
         requirements = item.requirements
 
         if unresolved_skills:
-            if not fallback_unknown_skills_to_requirements:
-                missing = ", ".join(unresolved_skills)
-                return BulkImportJobResultResponse(
-                    title=item.title,
-                    status="failed",
-                    resolved_skills=skill_resolution.resolved_skill_names,
-                    unresolved_skills=unresolved_skills,
-                    errors=[f"Skills não encontradas: {missing}"],
-                    warnings=warnings,
-                )
-            requirements = self._append_unresolved_skills_to_requirements(item.requirements, unresolved_skills)
-            warnings.append(
-                f"Skills fora do catálogo estruturado foram mantidas apenas em requirements: {', '.join(unresolved_skills)}."
+            missing = ", ".join(unresolved_skills)
+            return BulkImportJobResultResponse(
+                title=item.title,
+                status="failed",
+                resolved_skills=skill_resolution.resolved_skill_names,
+                unresolved_skills=unresolved_skills,
+                errors=[f"Skills não encontradas: {missing}"],
+                warnings=warnings,
             )
 
         nested = await self._session.begin_nested()
@@ -209,11 +202,3 @@ class JobBulkImportService:
         if isinstance(exc, JobPublicationValidationError):
             return "Vaga não atende os critérios mínimos de publicação: " + ", ".join(exc.missing_fields)
         return str(exc)
-
-    @staticmethod
-    def _append_unresolved_skills_to_requirements(requirements: str | None, unresolved: list[str]) -> str:
-        sentence = (
-            "Tecnologias mencionadas no payload e preservadas apenas no texto por não existirem no catálogo estruturado: "
-            f"{', '.join(unresolved)}."
-        )
-        return " ".join(part for part in [(requirements or "").strip(), sentence] if part).strip()

@@ -9,6 +9,7 @@ from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
     AnalysisResultModel,
+    MatchingObservationModel,
     PromptTemplateModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
@@ -20,6 +21,10 @@ from src.infrastructure.database.models.profile_analysis_model import (
 )
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
+from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreModel,
+    CandidateJobScoreSnapshotModel,
+)
 
 
 class SQLAlchemyAnalysisRepository:
@@ -135,6 +140,8 @@ class SQLAlchemyAnalysisRepository:
             conditions.append(AnalysisModel.requested_by == current_user.id)
         if status_filter is not None:
             conditions.append(AnalysisModel.status == status_filter)
+        else:
+            conditions.append(AnalysisModel.status != "discarded")
 
         base_query = sa.select(AnalysisModel)
         count_query = sa.select(sa.func.count()).select_from(AnalysisModel)
@@ -239,6 +246,8 @@ class SQLAlchemyAnalysisRepository:
         filters: list[sa.ColumnElement] = []
         if status_filter:
             filters.append(AnalysisModel.status == status_filter)
+        else:
+            filters.append(AnalysisModel.status != "discarded")
         if search:
             term = f"%{search.lower().strip()}%"
             filters.append(
@@ -274,6 +283,10 @@ class SQLAlchemyAnalysisRepository:
                 AnalysisModel.resume_version_id,
                 AnalysisModel.status,
                 AnalysisModel.failure_reason,
+                AnalysisModel.discarded_at,
+                AnalysisModel.discarded_by,
+                AnalysisModel.discard_reason,
+                AnalysisModel.discard_reason_note,
                 AnalysisModel.retry_count,
                 AnalysisModel.created_at,
                 AnalysisModel.started_at,
@@ -284,7 +297,6 @@ class SQLAlchemyAnalysisRepository:
                 CandidateModel.email.label("candidate_email"),
                 ResumeVersionModel.original_file_name.label("resume_file_name"),
                 used_real_ai_expr,
-                AnalysisResultModel.overall_score,
             )
             .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
             .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
@@ -299,8 +311,47 @@ class SQLAlchemyAnalysisRepository:
 
     async def find_active_job(self, job_id: UUID) -> JobModel | None:
         return await self._session.scalar(
-            sa.select(JobModel).where(JobModel.id == job_id, JobModel.deleted_at.is_(None))
+            sa.select(JobModel).where(
+                JobModel.id == job_id,
+                JobModel.deleted_at.is_(None),
+                JobModel.status != "archived",
+            )
         )
+
+    async def is_decision_linked(self, analysis_id: UUID) -> bool:
+        linked_score = await self._session.scalar(
+            sa.select(sa.literal(True))
+            .select_from(CandidateJobScoreModel)
+            .where(CandidateJobScoreModel.source_analysis_id == analysis_id)
+            .limit(1)
+        )
+        if linked_score:
+            return True
+
+        linked_snapshot = await self._session.scalar(
+            sa.select(sa.literal(True))
+            .select_from(CandidateJobScoreSnapshotModel)
+            .where(CandidateJobScoreSnapshotModel.source_analysis_id == analysis_id)
+            .limit(1)
+        )
+        if linked_snapshot:
+            return True
+
+        linked_observation = await self._session.scalar(
+            sa.select(sa.literal(True))
+            .select_from(MatchingObservationModel)
+            .where(
+                MatchingObservationModel.analysis_id == analysis_id,
+                sa.or_(
+                    MatchingObservationModel.hired.is_(True),
+                    MatchingObservationModel.rejected.is_(True),
+                    MatchingObservationModel.liked.is_(True),
+                    MatchingObservationModel.feedback_comment.is_not(None),
+                ),
+            )
+            .limit(1)
+        )
+        return bool(linked_observation)
 
     async def list_active_job_skill_rows(self, job_id: UUID):
         result = await self._session.execute(
@@ -315,17 +366,10 @@ class SQLAlchemyAnalysisRepository:
         return result.all()
 
     async def find_active_score_model_version(self) -> ScoreModelVersionModel | None:
-        """Fetch active ScoreModelVersionModel, fallback to latest if none active."""
-        version = await self._session.scalar(
+        return await self._session.scalar(
             sa.select(ScoreModelVersionModel)
             .where(ScoreModelVersionModel.is_active.is_(True))
             .order_by(ScoreModelVersionModel.created_at.desc())
-        )
-        if version is not None:
-            return version
-        # Fallback: return latest version created
-        return await self._session.scalar(
-            sa.select(ScoreModelVersionModel).order_by(ScoreModelVersionModel.created_at.desc())
         )
 
     async def list_unmatched_published_jobs(
@@ -456,12 +500,18 @@ class SQLAlchemyAnalysisRepository:
             )
             .subquery()
         )
+        active_score_version = (
+            sa.select(ScoreModelVersionModel.id)
+            .where(ScoreModelVersionModel.is_active.is_(True))
+            .limit(1)
+            .scalar_subquery()
+        )
         result = await self._session.execute(
             sa.select(
                 CandidateJobMatchModel.job_id,
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
-                CandidateJobMatchModel.match_score,
+                CandidateJobScoreModel.final_score,
                 CandidateJobMatchModel.recommendation,
                 CandidateJobMatchModel.created_at,
             )
@@ -473,12 +523,21 @@ class SQLAlchemyAnalysisRepository:
                     CandidateJobMatchModel.resume_version_id == context_sq.c.resume_version_id,
                 ),
             )
+            .join(
+                CandidateJobScoreModel,
+                sa.and_(
+                    CandidateJobScoreModel.candidate_id == CandidateJobMatchModel.candidate_id,
+                    CandidateJobScoreModel.job_id == CandidateJobMatchModel.job_id,
+                    CandidateJobScoreModel.version_id == active_score_version,
+                    CandidateJobScoreModel.freshness_status == "fresh",
+                ),
+            )
             .where(
                 JobModel.status == "published",
                 JobModel.deleted_at.is_(None),
             )
             .order_by(
-                CandidateJobMatchModel.match_score.desc().nulls_last(),
+                CandidateJobScoreModel.final_score.desc().nulls_last(),
                 CandidateJobMatchModel.created_at.desc(),
             )
             .limit(limit)
@@ -505,6 +564,11 @@ class SQLAlchemyAnalysisRepository:
         )
         return await self._session.scalar(
             sa.select(CandidateJobMatchModel)
+            .join(JobModel, JobModel.id == CandidateJobMatchModel.job_id)
+            .join(
+                JobProfileAnalysisModel,
+                JobProfileAnalysisModel.id == CandidateJobMatchModel.job_profile_analysis_id,
+            )
             .join(
                 context_sq,
                 sa.and_(
@@ -512,8 +576,19 @@ class SQLAlchemyAnalysisRepository:
                     CandidateJobMatchModel.resume_version_id == context_sq.c.resume_version_id,
                 ),
             )
-            .where(CandidateJobMatchModel.job_id == job_id)
-            .order_by(CandidateJobMatchModel.created_at.desc())
+            .where(
+                CandidateJobMatchModel.job_id == job_id,
+                CandidateJobMatchModel.freshness_status == "fresh",
+                CandidateJobMatchModel.job_signature_hash == JobModel.job_profile_hash,
+                JobProfileAnalysisModel.is_active.is_(True),
+            )
+            .order_by(
+                sa.func.coalesce(
+                    CandidateJobMatchModel.updated_at,
+                    CandidateJobMatchModel.created_at,
+                ).desc(),
+                CandidateJobMatchModel.id.desc(),
+            )
         )
 
     async def find_candidate_job_match_for_candidate_job(
@@ -524,11 +599,25 @@ class SQLAlchemyAnalysisRepository:
     ) -> CandidateJobMatchModel | None:
         return await self._session.scalar(
             sa.select(CandidateJobMatchModel)
+            .join(JobModel, JobModel.id == CandidateJobMatchModel.job_id)
+            .join(
+                JobProfileAnalysisModel,
+                JobProfileAnalysisModel.id == CandidateJobMatchModel.job_profile_analysis_id,
+            )
             .where(
                 CandidateJobMatchModel.candidate_id == candidate_id,
                 CandidateJobMatchModel.job_id == job_id,
+                CandidateJobMatchModel.freshness_status == "fresh",
+                CandidateJobMatchModel.job_signature_hash == JobModel.job_profile_hash,
+                JobProfileAnalysisModel.is_active.is_(True),
             )
-            .order_by(CandidateJobMatchModel.created_at.desc())
+            .order_by(
+                sa.func.coalesce(
+                    CandidateJobMatchModel.updated_at,
+                    CandidateJobMatchModel.created_at,
+                ).desc(),
+                CandidateJobMatchModel.id.desc(),
+            )
         )
 
     async def get_candidate_id_from_analysis(self, analysis_id: UUID) -> UUID | None:
@@ -603,6 +692,7 @@ class SQLAlchemyAnalysisRepository:
                 JobProfileAnalysisModel.model_id == model_id,
                 JobProfileAnalysisModel.prompt_version == prompt_version,
                 JobProfileAnalysisModel.job_signature_hash == job_signature_hash,
+                JobProfileAnalysisModel.is_active.is_(True),
             )
             .order_by(JobProfileAnalysisModel.created_at.desc())
         )
@@ -611,6 +701,18 @@ class SQLAlchemyAnalysisRepository:
         self,
         profile: JobProfileAnalysisModel,
     ) -> JobProfileAnalysisModel:
+        if profile.is_active:
+            await self._session.execute(
+                sa.update(JobProfileAnalysisModel)
+                .where(
+                    JobProfileAnalysisModel.job_id == profile.job_id,
+                    JobProfileAnalysisModel.is_active.is_(True),
+                )
+                .values(
+                    is_active=False,
+                    superseded_at=datetime.now(UTC),
+                )
+            )
         self._session.add(profile)
         await self._session.flush()
         await self._session.refresh(profile)
@@ -622,7 +724,10 @@ class SQLAlchemyAnalysisRepository:
     ) -> JobProfileAnalysisModel | None:
         return await self._session.scalar(
             sa.select(JobProfileAnalysisModel)
-            .where(JobProfileAnalysisModel.job_id == job_id)
+            .where(
+                JobProfileAnalysisModel.job_id == job_id,
+                JobProfileAnalysisModel.is_active.is_(True),
+            )
             .order_by(JobProfileAnalysisModel.created_at.desc())
         )
 
@@ -657,6 +762,10 @@ class SQLAlchemyAnalysisRepository:
         Garante que múltiplos retries/concorrência não criam duplicatas.
         """
         now = datetime.now(UTC)
+        if match.freshness_status != "fresh":
+            raise ValueError("candidate_job_match must be persisted with freshness_status='fresh'")
+        if not match.job_signature_hash:
+            raise ValueError("candidate_job_match requires non-empty job_signature_hash")
 
         if self._is_postgresql():
             from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -674,7 +783,6 @@ class SQLAlchemyAnalysisRepository:
                     candidate_profile_analysis_id=match.candidate_profile_analysis_id,
                     job_profile_analysis_id=match.job_profile_analysis_id,
                     candidate_job_pipeline_id=match.candidate_job_pipeline_id,
-                    match_score=match.match_score,
                     recommendation=match.recommendation,
                     matched_skills_json=match.matched_skills_json,
                     missing_skills_json=match.missing_skills_json,
@@ -692,11 +800,12 @@ class SQLAlchemyAnalysisRepository:
                     score_diff=match.score_diff,
                     created_at=match_created_at,
                     updated_at=now,
+                    freshness_status=match.freshness_status,
+                    job_signature_hash=match.job_signature_hash,
                 )
                 .on_conflict_do_update(
                     constraint="uq_candidate_job_match_profile_pair",
                     set_={
-                        "match_score": match.match_score,
                         "recommendation": match.recommendation,
                         "matched_skills_json": match.matched_skills_json,
                         "missing_skills_json": match.missing_skills_json,
@@ -713,6 +822,8 @@ class SQLAlchemyAnalysisRepository:
                         ),
                         "score_diff": match.score_diff,
                         "updated_at": now,
+                        "freshness_status": match.freshness_status,
+                        "job_signature_hash": match.job_signature_hash,
                     },
                 )
                 .returning(CandidateJobMatchModel)
@@ -731,7 +842,6 @@ class SQLAlchemyAnalysisRepository:
         )
 
         if existing is not None:
-            existing.match_score = match.match_score
             existing.recommendation = match.recommendation
             existing.matched_skills_json = match.matched_skills_json
             existing.missing_skills_json = match.missing_skills_json
@@ -748,6 +858,8 @@ class SQLAlchemyAnalysisRepository:
             )
             existing.score_diff = match.score_diff
             existing.updated_at = now
+            existing.freshness_status = match.freshness_status
+            existing.job_signature_hash = match.job_signature_hash
             await self._session.flush()
             await self._session.refresh(existing)
             return existing

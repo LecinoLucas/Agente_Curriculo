@@ -38,9 +38,8 @@ export type CandidateListSummary = {
   active_job_id: string | null;
   active_job_title: string | null;
   active_job_stage: string | null;
-  active_job_match_score: number | null;
+  active_job_final_score: number | null;
   ai_status: string | null;
-  ai_score: number | null;
 };
 
 export type CandidateResumeOverview = {
@@ -59,7 +58,7 @@ export type CandidateLatestAnalysisOverview = {
   job_id: string | null;
   resume_id: string;
   resume_title: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
   started_at: string | null;
   completed_at: string | null;
   failed_at: string | null;
@@ -67,7 +66,6 @@ export type CandidateLatestAnalysisOverview = {
   used_real_ai: boolean | null;
   task_id: string | null;
   worker_id: string | null;
-  overall_score: number | null;
   seniority_level: string | null;
   total_experience_years: number | null;
   created_at: string;
@@ -89,9 +87,8 @@ export type CandidateJobMatchOverview = {
   job_id: string;
   job_title: string;
   job_status: string;
-  match_score: number | null;
+  final_score: number | null;
   recommendation: string | null;
-  overall_score: number | null;
   seniority_level: string | null;
   total_experience_years: number | null;
   created_at: string;
@@ -124,7 +121,6 @@ export type CandidatePipelineEntryOverview = {
   terminated_at: string | null;
   termination_reason: string | null;
   candidate_status: string;
-  match_score: number | null;
   updated_at: string;
 };
 
@@ -180,7 +176,6 @@ export type AIModel = {
   context_window: number | null;
   is_active: boolean;
   activated_at: string;
-  deprecated_at: string | null;
   created_at: string;
 };
 
@@ -200,7 +195,7 @@ export type PromptTemplate = {
 export type AnalysisMatch = {
   analysis_id: string;
   job_id: string;
-  match_score: number;
+  final_score: number;
   recommendation: string;
   mandatory_skills_matched: number;
   mandatory_skills_total: number;
@@ -210,7 +205,7 @@ export type AnalysisMatch = {
   candidate_seniority: string | null;
   job_seniority: string | null;
   ranking_refresh_status?: "updated" | "skipped" | "failed" | "unknown" | null;
-  ranking_freshness_status?: "fresh" | "stale" | "unknown" | null;
+  ranking_freshness_status?: "fresh" | "stale" | null;
   ranking_refreshed_at?: string | null;
   ranking_warning?: string | null;
 };
@@ -230,7 +225,7 @@ export type ResumeFileUploadResponse = {
   version_id: string;
   analysis_auto_requested: boolean;
   analysis_id: string | null;
-  analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled" | null;
+  analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded" | null;
   original_file_name: string;
   file_size_bytes: number;
   file_hash_sha256: string;
@@ -285,6 +280,10 @@ export type Job = {
   quality_score: number | null;
   quality_status: "weak" | "acceptable" | "good" | null;
   created_by: string;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  archive_reason?: string | null;
+  archive_reason_note?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -334,7 +333,7 @@ export type JobRankingEntry = {
   explanation_text: string;
   entered_at: string | null;
   computed_at: string;
-  freshness_status?: "fresh" | "stale" | "unknown";
+  freshness_status?: "fresh" | "stale";
   score_computed_at?: string | null;
   source_analysis_id?: string | null;
   source_analysis_created_at?: string | null;
@@ -364,7 +363,7 @@ export type JobRanking = {
   data_quality_stats?: DataQualityStats;
 };
 
-export type AIAnalysisStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+export type AIAnalysisStatus = "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
 
 export type JobCandidate = {
   candidate_id: string;
@@ -375,9 +374,8 @@ export type JobCandidate = {
   // Only changed by recruiter actions (drag-and-drop, dropdown). Never by AI workers.
   stage?: PipelineStage;
   candidate_status?: string;
-  match_score?: number | null;
+  final_score?: number | null;
   recommendation?: string | null;
-  overall_score?: number | null;
   seniority_level?: string | null;
   total_experience_years?: number | null;
   top_skills?: string[];
@@ -431,7 +429,6 @@ export type CandidatePipelineHistory = {
   job_title: string;
   current_stage: PipelineStage;
   status: "active" | "hired" | "rejected" | "transferred";
-  match_score: number | null;
   entered_at: string | null;
   updated_at: string;
   transitions: PipelineStageTransition[];
@@ -449,7 +446,6 @@ export type MovePipelineCandidateResponse = {
   stage: PipelineStage;
   candidate_status: string;
   status: "active" | "hired" | "rejected" | "transferred";
-  match_score: number | null;
   transition_id: string;
   updated_at: string;
 };
@@ -490,7 +486,7 @@ export type TransferCandidateJobResponse = {
 
 export type AnalysisStatus = {
   analysis_id: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
   retry_count: number;
   failure_reason: string | null;
   next_retry_at: string | null;
@@ -504,7 +500,7 @@ export type AnalysisPipelineMatch = {
   job_id: string;
   job_title: string;
   job_status: string;
-  match_score: number | null;
+  final_score: number | null;
   recommendation: string | null;
   created_at: string;
 };
@@ -512,7 +508,7 @@ export type AnalysisPipelineMatch = {
 export type AnalysisPipelineStatus = {
   analysis_id: string;
   job_id: string | null;
-  analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
   matching_status: "waiting_analysis" | "processing" | "completed" | "blocked" | "idle";
   matching_error?: string | null;
   published_jobs_total: number;
@@ -534,12 +530,6 @@ export type AnalysisResult = {
   worker_id: string | null;
   task_id: string | null;
   used_real_ai: boolean;
-  overall_score: number | null;
-  technical_score: number | null;
-  experience_score: number | null;
-  education_score: number | null;
-  communication_score: number | null;
-  leadership_score: number | null;
   candidate_summary: string | null;
   seniority_level: string | null;
   total_experience_years: number | null;
@@ -583,10 +573,13 @@ export type AnalysisGlobalItem = {
   candidate_email: string | null;
   resume_file_name: string | null;
   resume_version_id: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
   failure_reason: string | null;
+  discarded_at?: string | null;
+  discarded_by?: string | null;
+  discard_reason?: string | null;
+  discard_reason_note?: string | null;
   used_real_ai: boolean | null;
-  overall_score: number | null;
   retry_count: number;
   created_at: string;
   started_at: string | null;
@@ -603,12 +596,16 @@ export type AnalysisSummary = {
   resume_title: string | null;
   resume_file_name: string | null;
   job_id: string | null;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
   priority: number;
   retry_count: number;
   requested_by: string;
   requested_by_name: string | null;
   failure_reason: string | null;
+  discarded_at?: string | null;
+  discarded_by?: string | null;
+  discard_reason?: string | null;
+  discard_reason_note?: string | null;
   created_at: string;
   updated_at: string;
 };

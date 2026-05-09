@@ -3,10 +3,10 @@ import { formatFieldLabel } from "./jobFormHelpers";
 
 export function extractPublication422Details(error: unknown): string[] {
   const friendly = handleApiError(error);
-  const fallback = formatErrorDetails(friendly);
+  const details = formatErrorDetails(friendly);
   const detail = getBackendDetail(error);
   if (!detail || typeof detail !== "object" || Array.isArray(detail)) {
-    return fallback;
+    return details;
   }
 
   const detailRecord = detail as Record<string, unknown>;
@@ -14,5 +14,5 @@ export function extractPublication422Details(error: unknown): string[] {
     return detailRecord.missing_fields.map((field) => formatFieldLabel(String(field)));
   }
 
-  return fallback;
+  return details;
 }

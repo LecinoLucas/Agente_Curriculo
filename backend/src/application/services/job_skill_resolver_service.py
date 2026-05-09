@@ -43,7 +43,6 @@ class JobSkillResolverService:
         self._repository = repository
         self._catalog_loaded = False
         self._direct: dict[str, SkillModel] = {}
-        self._fallback: dict[str, SkillModel] = {}
 
     async def resolve_many(self, skills: list[BulkImportJobSkillRequest]) -> JobSkillResolutionResult:
         await self._ensure_catalog()
@@ -92,13 +91,6 @@ class JobSkillResolverService:
             for alias in skill.aliases or []:
                 self._add_lookup(alias, skill, self._direct)
 
-            self._add_lookup(skill.normalized_name.replace(".", " "), skill, self._fallback)
-            self._add_lookup(skill.name.replace(".", " "), skill, self._fallback)
-            self._add_lookup(skill.name.replace("/", " "), skill, self._fallback)
-            for alias in skill.aliases or []:
-                self._add_lookup(alias.replace(".", " "), skill, self._fallback)
-                self._add_lookup(alias.replace("/", " "), skill, self._fallback)
-
         self._catalog_loaded = True
 
     @staticmethod
@@ -112,13 +104,9 @@ class JobSkillResolverService:
         if direct is not None:
             return direct
 
-        compact = " ".join(normalized.replace("(", " ").replace(")", " ").replace(".", " ").replace("/", " ").split())
-        fallback = self._fallback.get(compact)
-        if fallback is not None:
-            return fallback
-
-        equivalent_key = self._CONTROLLED_EQUIVALENCES.get(compact)
+        normalized_key = " ".join(normalized.replace("(", " ").replace(")", " ").split())
+        equivalent_key = self._CONTROLLED_EQUIVALENCES.get(normalized_key)
         if equivalent_key is None:
             return None
 
-        return self._direct.get(equivalent_key) or self._fallback.get(equivalent_key)
+        return self._direct.get(equivalent_key)

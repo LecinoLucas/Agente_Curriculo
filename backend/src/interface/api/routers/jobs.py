@@ -19,6 +19,7 @@ from src.application.services.job_service import (
     JobService,
     SkillNotFoundError,
 )
+from src.application.services.audit_service import AuditService
 from src.application.services.job_bulk_import_service import JobBulkImportService
 from src.application.services.job_bulk_payload_normalizer import (
     BulkJobPayloadNormalizationError,
@@ -46,6 +47,7 @@ from src.application.services.pipeline_service import (
     PipelineService,
 )
 from src.domain.entities.user import UserRole
+from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
@@ -55,9 +57,10 @@ from src.application.services.candidate_ranking_service import (
     NoActiveScoreVersionError,
     RankingJobNotFoundError,
 )
-from src.interface.api.dependencies import CurrentUser, InternalUser, RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import AdminOnly, CurrentUser, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.job_schemas import (
     AddCandidateToJobRequest,
+    ArchiveJobRequest,
     BulkImportJobsRequest,
     BulkImportJobsResponse,
     BulkUpdateJobsRequest,
@@ -85,7 +88,7 @@ _ANALYSIS_QUEUE = "analysis"
 
 
 def _job_service(db: AsyncSession) -> JobService:
-    return JobService(SQLAlchemyJobRepository(db))
+    return JobService(SQLAlchemyJobRepository(db), audit_service=AuditService(db))
 
 
 def _job_bulk_import_service(db: AsyncSession) -> JobBulkImportService:
@@ -194,6 +197,8 @@ def _handle_job_service_error(exc: Exception) -> None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Faixa salarial inválida")
     if isinstance(exc, InvalidJobTextError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Título e descrição não podem estar em branco")
+    if isinstance(exc, ValidationException):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, SkillNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skill não encontrada")
     if isinstance(exc, JobSkillConflictError):
@@ -328,7 +333,7 @@ async def list_jobs(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
-    status_filter: str | None = Query(default=None, pattern="^(draft|published|paused|closed|cancelled)$"),
+    status_filter: str | None = Query(default=None, pattern="^(draft|published|paused|closed|cancelled|archived)$"),
     job_area: str | None = Query(default=None),
     work_model: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
@@ -453,6 +458,46 @@ async def cancel_job(
     return await _transition_job_status(job_id, "cancelled", db)
 
 
+@router.patch("/{job_id}/archive", response_model=JobResponse)
+async def archive_job(
+    job_id: UUID,
+    body: ArchiveJobRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> JobResponse:
+    try:
+        job = await _job_service(db).archive(
+            job_id,
+            actor=current_user,
+            reason=body.reason,
+            note=body.note,
+        )
+        await db.commit()
+        await db.refresh(job)
+        return JobResponse.model_validate(job)
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.patch("/{job_id}/restore", response_model=JobResponse)
+async def restore_job(
+    job_id: UUID,
+    current_user: AdminOnly,
+    db: AsyncSession = Depends(get_db),
+) -> JobResponse:
+    try:
+        job = await _job_service(db).restore(job_id, actor=current_user)
+        await db.commit()
+        await db.refresh(job)
+        return JobResponse.model_validate(job)
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
+
+
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(
     job_id: UUID,
@@ -470,6 +515,11 @@ async def delete_job(
 
 async def _transition_job_status(job_id: UUID, next_status: str, db: AsyncSession) -> JobResponse:
     try:
+        if next_status == "archived":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Use a ação específica de arquivar vaga.",
+            )
         job = await _job_service(db).transition_status(job_id, next_status)
         await db.commit()
         await db.refresh(job)
@@ -522,19 +572,6 @@ async def remove_job_skill(
         await db.commit()
     except Exception as exc:
         await db.rollback()
-        _handle_job_service_error(exc)
-        raise
-
-
-@router.get("/{job_id}/candidates")
-async def list_job_candidates(
-    job_id: UUID,
-    current_user: RecruiterOrAdmin,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    try:
-        return await _job_service(db).list_candidate_ranking(job_id)
-    except Exception as exc:
         _handle_job_service_error(exc)
         raise
 

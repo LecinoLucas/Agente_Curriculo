@@ -48,27 +48,44 @@ function normalizeAiStatus(value: unknown): JobCandidate["ai_status"] {
     value === "processing" ||
     value === "completed" ||
     value === "failed" ||
-    value === "cancelled"
+    value === "cancelled" ||
+    value === "discarded"
   ) {
     return value;
   }
   return null;
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === "number") return value;
+function requireFreshnessStatus(value: unknown): "fresh" | "stale" {
+  if (value === "fresh" || value === "stale") {
+    return value;
+  }
+  throw new Error("Invalid ranking freshness_status");
+}
+
+function requireNumber(value: unknown, label: string): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
   }
-  return fallback;
+  throw new Error(`Invalid numeric field: ${label}`);
 }
 
 export type ListJobsFilters = {
   search?: string;
-  statusFilter?: "draft" | "published" | "paused" | "closed" | "cancelled" | "all";
+  statusFilter?: "draft" | "published" | "paused" | "closed" | "cancelled" | "archived" | "all";
   jobArea?: string;
   workModel?: string;
+};
+
+export type JobLifecyclePayload = {
+  reason: string;
+  note?: string;
 };
 
 export async function listJobs(
@@ -124,6 +141,14 @@ export async function cancelJob(jobId: string): Promise<Job> {
   return httpRequest<Job>(`/api/v1/jobs/${jobId}/cancel`, { method: "PATCH" });
 }
 
+export async function archiveJob(jobId: string, payload: JobLifecyclePayload): Promise<Job> {
+  return httpRequest<Job>(`/api/v1/jobs/${jobId}/archive`, { method: "PATCH", body: payload });
+}
+
+export async function restoreJob(jobId: string): Promise<Job> {
+  return httpRequest<Job>(`/api/v1/jobs/${jobId}/restore`, { method: "PATCH" });
+}
+
 export async function deleteJob(jobId: string): Promise<void> {
   return httpRequest<void>(`/api/v1/jobs/${jobId}`, { method: "DELETE" });
 }
@@ -135,25 +160,22 @@ export async function listJobCandidates(
   min_score?: number,
   seniority?: string,
 ): Promise<Paginated<JobCandidate>> {
-  const response = await httpRequest<{ job_id: string; candidates: any[] }>(`/api/v1/jobs/${jobId}/candidates`);
-  const candidatesRaw = response?.candidates ?? [];
-
-  const candidates: JobCandidate[] = candidatesRaw.map((c: any) => ({
-    candidate_id: c.candidate_id,
-    candidate_name: c.candidate_name,
-    email: c.email,
+  const response = await getJobRanking(jobId);
+  const candidates: JobCandidate[] = response.candidates.map((entry) => ({
+    candidate_id: entry.candidate_id,
+    candidate_name: entry.candidate_name,
     job_id: response.job_id,
-    match_score: c.match_score != null ? Number(c.match_score) : null,
-    recommendation: c.recommendation ?? null,
-    overall_score: c.overall_score != null ? Number(c.overall_score) : null,
-    seniority_level: c.seniority_level ?? null,
-    total_experience_years: c.total_experience_years != null ? Number(c.total_experience_years) : null,
+    stage: (entry.stage || "entry") as PipelineStage,
+    candidate_status: entry.pipeline_status,
+    final_score: entry.final_score,
+    recommendation: entry.decision_suggestion,
     top_skills: [],
+    updated_at: entry.ranking_updated_at ?? entry.computed_at,
   }));
 
   let filtered = candidates;
   if (min_score != null) {
-    filtered = filtered.filter((c) => (c.match_score ?? 0) >= min_score);
+    filtered = filtered.filter((c) => (c.final_score ?? 0) >= min_score);
   }
   if (seniority) {
     filtered = filtered.filter((c) => (c.seniority_level ?? "").toLowerCase() === seniority.toLowerCase());
@@ -165,23 +187,6 @@ export async function listJobCandidates(
   const data = filtered.slice(start, start + page_size);
 
   return { data, total, page, page_size, total_pages };
-}
-
-export async function listJobMatches(jobId: string): Promise<JobCandidate[]> {
-  const response = await httpRequest<any[]>(`/api/v1/jobs/${jobId}/matches`);
-  const raw = Array.isArray(response) ? response : [];
-  return raw
-    .map((item) => ({
-      candidate_id: item.candidate_id ?? "",
-      candidate_name: item.candidate_name ?? "Candidato sem nome",
-      job_id: item.job_id ?? jobId,
-      stage: (item.stage ?? "entry") as PipelineStage,
-      candidate_status: item.candidate_status ?? "Recebido",
-      match_score: item.match_score != null ? Number(item.match_score) : null,
-      top_skills: Array.isArray(item.top_skills) ? item.top_skills.filter(Boolean) : [],
-      updated_at: item.updated_at ?? new Date(0).toISOString(),
-    }))
-    .sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
 }
 
 export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
@@ -199,7 +204,6 @@ export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
             job_id: item.job_id,
             stage: item.stage,
             candidate_status: item.candidate_status,
-            match_score: item.match_score != null ? Number(item.match_score) : null,
             top_skills: Array.isArray(item.top_skills) ? item.top_skills.filter(Boolean) : [],
             updated_at: item.updated_at,
             ai_status: normalizeAiStatus(item.ai_status),
@@ -215,27 +219,27 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
 
   return {
     job_id: response?.job_id ?? jobId,
-    total_candidates: toNumber(response?.total_candidates),
-    threshold_high: toNumber(response?.threshold_high),
-    threshold_low: toNumber(response?.threshold_low),
+    total_candidates: requireNumber(response?.total_candidates, "total_candidates"),
+    threshold_high: requireNumber(response?.threshold_high, "threshold_high"),
+    threshold_low: requireNumber(response?.threshold_low, "threshold_low"),
     score_version: response?.score_version ?? "",
     candidates: candidatesRaw.map((item: any) => ({
-      rank: toNumber(item?.rank),
+      rank: requireNumber(item?.rank, "rank"),
       candidate_id: item?.candidate_id ?? "",
       candidate_name: item?.candidate_name ?? "Candidato sem nome",
       stage: item?.stage ?? "",
       pipeline_status: item?.pipeline_status ?? "",
       score_breakdown: {
-        skill_match_score: toNumber(item?.score_breakdown?.skill_match_score),
-        experience_match_score: toNumber(item?.score_breakdown?.experience_match_score),
-        seniority_match_score: toNumber(item?.score_breakdown?.seniority_match_score),
-        education_score: toNumber(item?.score_breakdown?.education_score),
-        confidence_score: toNumber(item?.score_breakdown?.confidence_score ?? item?.score_breakdown?.ai_confidence_score),
-        ai_confidence_score: toNumber(item?.score_breakdown?.ai_confidence_score ?? item?.score_breakdown?.confidence_score),
-        penalty_score: toNumber(item?.score_breakdown?.penalty_score),
-        final_score: toNumber(item?.score_breakdown?.final_score),
+        skill_match_score: requireNumber(item?.score_breakdown?.skill_match_score, "score_breakdown.skill_match_score"),
+        experience_match_score: requireNumber(item?.score_breakdown?.experience_match_score, "score_breakdown.experience_match_score"),
+        seniority_match_score: requireNumber(item?.score_breakdown?.seniority_match_score, "score_breakdown.seniority_match_score"),
+        education_score: requireNumber(item?.score_breakdown?.education_score, "score_breakdown.education_score"),
+        confidence_score: requireNumber(item?.score_breakdown?.confidence_score, "score_breakdown.confidence_score"),
+        ai_confidence_score: requireNumber(item?.score_breakdown?.ai_confidence_score, "score_breakdown.ai_confidence_score"),
+        penalty_score: requireNumber(item?.score_breakdown?.penalty_score, "score_breakdown.penalty_score"),
+        final_score: requireNumber(item?.score_breakdown?.final_score, "score_breakdown.final_score"),
       },
-      final_score: toNumber(item?.final_score),
+      final_score: requireNumber(item?.final_score, "final_score"),
       decision_suggestion: item?.decision_suggestion ?? "review",
       reason_codes: Array.isArray(item?.reason_codes)
         ? item.reason_codes.map((reason: any) => ({
@@ -251,7 +255,7 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
       explanation_text: item?.explanation_text ?? "",
       entered_at: item?.entered_at ?? null,
       computed_at: item?.computed_at ?? new Date(0).toISOString(),
-      freshness_status: item?.freshness_status ?? "unknown",
+      freshness_status: requireFreshnessStatus(item?.freshness_status),
       score_computed_at: item?.score_computed_at ?? item?.computed_at ?? null,
       source_analysis_id: item?.source_analysis_id ?? null,
       source_analysis_created_at: item?.source_analysis_created_at ?? null,

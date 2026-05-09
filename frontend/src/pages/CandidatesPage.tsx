@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 
+import { ActionMenu } from "../components/common/ActionMenu";
 import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
+import { useAuth } from "../features/auth/useAuth";
+import { DeleteCandidateModal } from "../features/candidates/components/DeleteCandidateModal";
 import { useCandidatesFilters } from "../features/candidates/hooks/useCandidatesFilters";
 import { CandidateAiStatusBadge } from "../features/candidates/components/CandidateAiStatusBadge";
 import { CandidateScoreCell } from "../features/candidates/components/CandidateScoreCell";
@@ -15,6 +18,8 @@ import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
 import { candidatesService } from "../services/candidatesService";
 import { formatContextError } from "../services/errorMessages";
+import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
+import { toast } from "../shared/utils/toast";
 import { CandidateListSummary } from "../types/domain";
 import { Paginated } from "../types/api";
 import { useAsyncState } from "../hooks/useAsyncState";
@@ -25,11 +30,20 @@ const PAGE_SIZE = 20;
 
 export function CandidatesPage() {
   const location = useLocation();
-  const { openCandidate, candidatesSyncTick, selectedCandidateId } = usePipeline();
+  const { user } = useAuth();
+  const {
+    openCandidate,
+    closeCandidate,
+    notifyCandidatesChanged,
+    candidatesSyncTick,
+    selectedCandidateId,
+  } = usePipeline();
 
   const [page, setPage] = useState(1);
   const [showNewCandidate, setShowNewCandidate] = useState(false);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CandidateListSummary | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const {
     searchInput,
     setSearchInput,
@@ -98,10 +112,38 @@ export function CandidatesPage() {
   const candidates = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
+  const canDeleteCandidates = user?.role === "admin";
   const isRefreshing = loading && candidates.length > 0;
   const showInitialLoading = loading && candidates.length === 0 && !error;
   const showCandidatesList = !isWorkspaceOpen || !workspaceFocused;
   const showWorkspace = isWorkspaceOpen && workspaceFocused;
+
+  const handleDeleteCandidate = useCallback(
+    async (payload: { reason: string; note?: string; confirmation: string }) => {
+      if (!deleteTarget) return;
+
+      setDeleteLoading(true);
+      try {
+        await candidatesService.delete(deleteTarget.id, payload);
+        toast.success("Candidato excluído com sucesso.");
+        if (selectedCandidateId === deleteTarget.id) {
+          closeCandidate();
+          setWorkspaceFocused(false);
+        }
+        setDeleteTarget(null);
+        notifyCandidatesChanged();
+        fetchCandidates();
+      } catch (err: unknown) {
+        toast.error(
+          formatErrorDetails(handleApiError(err))[0] ??
+            "Não foi possível excluir o candidato.",
+        );
+      } finally {
+        setDeleteLoading(false);
+      }
+    },
+    [closeCandidate, deleteTarget, fetchCandidates, notifyCandidatesChanged, selectedCandidateId],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -244,6 +286,11 @@ export function CandidatesPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Criado em
                     </th>
+                    {canDeleteCandidates ? (
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Ações
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
@@ -256,6 +303,8 @@ export function CandidatesPage() {
                         setWorkspaceFocused(true);
                         void openCandidate(c.id);
                       }}
+                      canDelete={canDeleteCandidates}
+                      onDelete={() => setDeleteTarget(c)}
                     />
                   ))}
                 </tbody>
@@ -302,6 +351,17 @@ export function CandidatesPage() {
           }}
         />
       ) : null}
+
+      <DeleteCandidateModal
+        isOpen={deleteTarget !== null}
+        candidateName={deleteTarget?.full_name ?? "este candidato"}
+        loading={deleteLoading}
+        onClose={() => {
+          if (deleteLoading) return;
+          setDeleteTarget(null);
+        }}
+        onConfirm={handleDeleteCandidate}
+      />
     </div>
   );
 }
@@ -313,10 +373,14 @@ function CandidateRow({
   candidate: c,
   isActive = false,
   onOpen,
+  canDelete = false,
+  onDelete,
 }: {
   candidate: CandidateListSummary;
   isActive?: boolean;
   onOpen: () => void;
+  canDelete?: boolean;
+  onDelete?: () => void;
 }) {
   const statusLabel =
     c.active_job_stage === "hired"
@@ -403,6 +467,20 @@ function CandidateRow({
       <td className="ui-text-muted px-4 py-4 text-xs">
         {formatCandidateDate(c.created_at)}
       </td>
+      {canDelete ? (
+        <td className="px-4 py-4 text-right" onClick={(event) => event.stopPropagation()}>
+          <ActionMenu
+            buttonLabel={`Ações do candidato ${c.full_name}`}
+            items={[
+              {
+                label: "Excluir candidato",
+                tone: "danger",
+                onClick: () => onDelete?.(),
+              },
+            ]}
+          />
+        </td>
+      ) : null}
     </tr>
   );
 }

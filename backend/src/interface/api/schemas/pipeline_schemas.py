@@ -1,5 +1,4 @@
 from datetime import datetime
-from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -28,7 +27,7 @@ CandidateOutcomeStatus = Literal["active", "removed", "hired", "rejected", "tran
 
 # AI analysis processing status — completely independent of pipeline stage.
 # Controlled exclusively by the analysis worker; never set by stage moves.
-AIAnalysisStatus = Literal["pending", "processing", "completed", "failed", "cancelled"]
+AIAnalysisStatus = Literal["pending", "processing", "completed", "failed", "cancelled", "discarded"]
 
 # ---------------------------------------------------------------------------
 # Board — existing schemas (unchanged)
@@ -43,7 +42,6 @@ class JobMatchCandidateResponse(BaseModel):
     stage: PipelineStage
     candidate_status: str
     status: CandidateOutcomeStatus = "active"
-    match_score: Decimal | None = None
     entered_at: datetime | None = None
     top_skills: list[str]
     updated_at: datetime
@@ -78,7 +76,6 @@ class UpdateCandidateStageResponse(BaseModel):
     job_id: UUID
     stage: PipelineStage
     candidate_status: str
-    match_score: Decimal | None = None
     updated_at: datetime
 
 
@@ -100,7 +97,6 @@ class MoveCandidateResponse(BaseModel):
     stage: PipelineStage
     candidate_status: str
     status: CandidateOutcomeStatus
-    match_score: Decimal | None = None
     transition_id: UUID
     updated_at: datetime
 
@@ -178,7 +174,6 @@ class CandidatePipelineHistoryResponse(BaseModel):
     job_title: str
     current_stage: PipelineStage
     status: CandidateOutcomeStatus
-    match_score: Decimal | None
     entered_at: datetime | None
     updated_at: datetime
     transitions: list[StageTransitionResponse]

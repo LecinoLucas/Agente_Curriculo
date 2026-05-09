@@ -23,12 +23,6 @@ export function OverviewTab({
       : null;
   const latestLinkedEntry = overview.pipeline_entries[0] ?? null;
   const relationshipTitle = hasActiveRelationship ? "Vaga ativa" : "Última vaga vinculada";
-  const relationshipScoreTitle =
-    hasActiveRelationship
-      ? activePipelineEntry?.match_score != null
-        ? `${Math.round(activePipelineEntry.match_score)}%`
-        : "—"
-      : "—";
   const relationshipJobTitle =
     hasActiveRelationship
       ? activeJob?.title ?? activeEntryById?.job_title ?? "Nenhuma vaga ativa"
@@ -74,11 +68,7 @@ export function OverviewTab({
       {/* Score Section */}
       <Section title={relationshipTitle}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <StatusCard
-            label="Compatibilidade Contextual"
-            title={relationshipScoreTitle}
-            description={relationshipJobTitle}
-          />
+          <StatusCard label="Vaga" title={relationshipJobTitle} description="Score final disponível no ranking" />
           <StatusCard
             label={relationshipStatusLabel}
             title={relationshipStatusTitle}

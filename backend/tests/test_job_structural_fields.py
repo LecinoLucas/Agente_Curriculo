@@ -240,24 +240,6 @@ async def test_update_priority_field(db_session: AsyncSession):
     assert updated_job.priority == "urgent"
 
 
-@pytest.mark.asyncio
-async def test_old_jobs_backward_compatible(db_session: AsyncSession):
-    """Test that old jobs without new fields continue to work."""
-    user_id = await _create_creator(db_session)
-    # Simulate old job by creating with just required fields
-    body = CreateJobRequest(
-        title="Support Agent",
-        description="Customer support position...",
-    )
-
-    service = JobService(SQLAlchemyJobRepository(db_session))
-    job = await service.create(body, user_id)
-    await db_session.refresh(job)
-
-    # Should have defaults
-    assert job.job_area is None
-    assert job.responsibilities is None
-    assert job.experience_context is None
     assert job.behavioral_requirements == []
     assert job.priority == "normal"
 

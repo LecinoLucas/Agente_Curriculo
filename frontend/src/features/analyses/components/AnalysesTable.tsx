@@ -15,6 +15,7 @@ interface AnalysesTableProps {
   onOpen: (item: AnalysisGlobalItem) => void;
   onRetry: (item: AnalysisGlobalItem) => void;
   onForceFail: (item: AnalysisGlobalItem) => void;
+  onDiscard: (item: AnalysisGlobalItem) => void;
   hasActiveFilters: boolean;
   onClearFilters: () => void;
 }
@@ -30,6 +31,7 @@ export function AnalysesTable({
   onOpen,
   onRetry,
   onForceFail,
+  onDiscard,
   hasActiveFilters,
   onClearFilters,
 }: AnalysesTableProps) {
@@ -78,9 +80,6 @@ export function AnalysesTable({
                 Status da IA
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Score da IA
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Uso de IA
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -103,6 +102,7 @@ export function AnalysesTable({
                 onOpen={() => onOpen(item)}
                 onRetry={() => onRetry(item)}
                 onForceFail={() => onForceFail(item)}
+                onDiscard={() => onDiscard(item)}
               />
             ))}
           </tbody>

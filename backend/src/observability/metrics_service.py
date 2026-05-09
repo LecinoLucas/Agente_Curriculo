@@ -322,15 +322,16 @@ class PipelineMetricsService:
         )
 
         stale_count = 0
-        unknown_count = 0
         stale_age_values_ms: list[int] = []
 
         for row in result.mappings().all():
             ranking_updated_at = row.get("updated_at")
             match_updated_at = row.get("match_updated_at")
             persisted_status = row.get("freshness_status")
-            if ranking_updated_at is None or match_updated_at is None:
-                resolved = persisted_status or "unknown"
+            if persisted_status != "fresh":
+                resolved = "stale"
+            elif ranking_updated_at is None or match_updated_at is None:
+                resolved = "stale"
             elif ranking_updated_at >= match_updated_at:
                 resolved = "fresh"
             else:
@@ -342,12 +343,10 @@ class PipelineMetricsService:
                     stale_age_values_ms.append(
                         max(0, int((match_updated_at - ranking_updated_at).total_seconds() * 1000))
                     )
-            elif resolved == "unknown":
-                unknown_count += 1
 
         return {
             "stale_candidates_total": stale_count,
-            "unknown_freshness_total": unknown_count,
+            "unknown_freshness_total": 0,
             "stale_age_values_ms": stale_age_values_ms,
         }
 

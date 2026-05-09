@@ -18,7 +18,7 @@ class MatchConfidenceAssessment:
 
 def compute_match_confidence(
     *,
-    match_score: Decimal | float | int | None,
+    final_score: Decimal | float | int | None,
     structured_mandatory_skill_count: int,
     structured_total_skill_count: int,
     has_job_seniority: bool,
@@ -26,7 +26,6 @@ def compute_match_confidence(
     candidate_structured_skill_count: int,
     candidate_has_experience: bool,
     candidate_has_education: bool,
-    used_job_skill_fallback: bool = False,
 ) -> MatchConfidenceAssessment:
     score = Decimal("0")
     reasons: list[str] = []
@@ -66,11 +65,6 @@ def compute_match_confidence(
     else:
         reasons.append("O candidato não tem educação estruturada.")
 
-    if used_job_skill_fallback:
-        score -= Decimal("15")
-        reasons.append("O matching dependeu de fallback textual para skills da vaga.")
-        risks.append("O score usa fallback textual para skills da vaga; revisar o cadastro estruturado.")
-
     if not candidate_has_experience and not candidate_has_education:
         score -= Decimal("10")
         risks.append("Faltam experiência e educação estruturadas do candidato.")
@@ -83,7 +77,6 @@ def compute_match_confidence(
             candidate_structured_skill_count > 0,
             candidate_has_experience,
             candidate_has_education,
-            used_job_skill_fallback,
         )
     )
 
@@ -92,8 +85,8 @@ def compute_match_confidence(
         score = Decimal("15")
 
     score = score.quantize(Decimal("0.01"))
-    normalized_match_score = Decimal(str(match_score or 0))
-    low_confidence_alert = normalized_match_score >= Decimal("70") and score < Decimal("50")
+    normalized_final_score = Decimal(str(final_score or 0))
+    low_confidence_alert = normalized_final_score >= Decimal("70") and score < Decimal("50")
     if low_confidence_alert:
         risks.append("Score alto com baixa confiança dos dados; revisar cadastro e extração antes de decidir.")
 

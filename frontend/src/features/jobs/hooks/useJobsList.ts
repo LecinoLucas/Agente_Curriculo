@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JobStatusSummary } from "../../../types/api";
 import { formatErrorDetails, handleApiError } from "../../../shared/utils/errorHandler";
-import { closeJob, deleteJob, listJobCandidates, listJobs, pauseJob } from "../../../services/jobsService";
+import {
+  archiveJob,
+  closeJob,
+  deleteJob,
+  listJobCandidates,
+  listJobs,
+  pauseJob,
+  restoreJob,
+} from "../../../services/jobsService";
 import { pipelineService } from "../../../services/pipelineService";
 import { toast } from "../../../shared/utils/toast";
 import { compareJobsByOperationalPriority } from "../utils/jobsPageHelpers";
 import type { Job } from "../../../types/domain";
 
-export type JobStatusFilter = "all" | "draft" | "published" | "paused" | "closed" | "cancelled";
+export type JobStatusFilter = "all" | "draft" | "published" | "paused" | "closed" | "cancelled" | "archived";
 export type JobAreaFilter = "all" | string;
 export type JobWorkModelFilter = "all" | string;
 
@@ -33,6 +41,7 @@ export function useJobsList() {
   const [workModelFilter, setWorkModelFilter] = useState<JobWorkModelFilter>("all");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<Job | null>(null);
   const [jobOperationalData, setJobOperationalData] = useState<Record<string, JobOperationalData>>({});
   const [summary, setSummary] = useState<JobStatusSummary>({
     all: 0,
@@ -41,6 +50,7 @@ export function useJobsList() {
     paused: 0,
     closed: 0,
     cancelled: 0,
+    archived: 0,
     attention: 0,
   });
   const operationalRequestRef = useRef(0);
@@ -102,7 +112,7 @@ export function useJobsList() {
           const candidates =
             candidateResult?.status === "fulfilled" ? (candidateResult.value.data ?? []) : [];
           const scoredCandidates = candidates
-            .map((candidate) => Number(candidate.match_score ?? candidate.overall_score ?? 0))
+            .map((candidate) => Number(candidate.final_score ?? 0))
             .filter((score) => Number.isFinite(score));
 
           nextOperationalData[job.id] = {
@@ -110,7 +120,7 @@ export function useJobsList() {
             stageCounts: pipelineJob?.stage_counts ?? {},
             latestActivity: pipelineJob?.latest_activity ?? null,
             strongCandidates: candidates.filter((candidate) => {
-              const score = Number(candidate.match_score ?? candidate.overall_score ?? 0);
+              const score = Number(candidate.final_score ?? 0);
               return candidate.recommendation === "good_match" || score >= 70;
             }).length,
             topScore: scoredCandidates.length > 0 ? Math.max(...scoredCandidates) : null,
@@ -159,6 +169,7 @@ export function useJobsList() {
       paused: summary.paused,
       closed: summary.closed,
       cancelled: summary.cancelled,
+      archived: summary.archived,
     }),
     [summary],
   );
@@ -219,6 +230,35 @@ export function useJobsList() {
     }
   }
 
+  async function handleArchive(payload: { reason: string; note?: string }) {
+    if (!archiveTarget) return;
+
+    setRunningAction(`archive:${archiveTarget.id}`);
+    try {
+      await archiveJob(archiveTarget.id, payload);
+      toast.success("Vaga arquivada com sucesso.");
+      setArchiveTarget(null);
+      await loadJobs();
+    } catch (actionError: unknown) {
+      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível arquivar a vaga.");
+    } finally {
+      setRunningAction(null);
+    }
+  }
+
+  async function handleRestore(jobId: string) {
+    setRunningAction(`restore:${jobId}`);
+    try {
+      await restoreJob(jobId);
+      toast.success("Vaga reativada com sucesso.");
+      await loadJobs();
+    } catch (actionError: unknown) {
+      toast.error(formatErrorDetails(handleApiError(actionError))[0] ?? "Não foi possível reativar a vaga.");
+    } finally {
+      setRunningAction(null);
+    }
+  }
+
   return {
     jobs,
     loading,
@@ -240,6 +280,8 @@ export function useJobsList() {
     selectedJobId,
     setSelectedJobId,
     runningAction,
+    archiveTarget,
+    setArchiveTarget,
     jobOperationalData,
     filteredJobs,
     selectedJob,
@@ -253,5 +295,7 @@ export function useJobsList() {
     handlePause,
     handleClose,
     handleDelete,
+    handleArchive,
+    handleRestore,
   };
 }

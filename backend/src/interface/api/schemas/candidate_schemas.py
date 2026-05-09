@@ -56,7 +56,6 @@ class CandidateLatestAnalysisResponse(BaseModel):
     used_real_ai: bool | None = None
     task_id: str | None = None
     worker_id: str | None = None
-    overall_score: float | None = None
     seniority_level: str | None = None
     total_experience_years: float | None = None
     created_at: datetime
@@ -77,9 +76,8 @@ class CandidateJobMatchSummaryResponse(BaseModel):
     job_id: UUID
     job_title: str
     job_status: str
-    match_score: float | None = None
+    final_score: float | None = None
     recommendation: str | None = None
-    overall_score: float | None = None
     seniority_level: str | None = None
     total_experience_years: float | None = None
     created_at: datetime
@@ -95,7 +93,6 @@ class CandidatePipelineEntryResponse(BaseModel):
     terminated_at: datetime | None = None
     termination_reason: str | None = None
     candidate_status: str
-    match_score: float | None = None
     entered_at: datetime | None = None
     updated_at: datetime
 
@@ -134,9 +131,8 @@ class CandidateListSummaryResponse(BaseModel):
     active_job_id: UUID | None = None
     active_job_title: str | None = None
     active_job_stage: str | None = None
-    active_job_match_score: float | None = None
+    active_job_final_score: float | None = None
     ai_status: str | None = None
-    ai_score: float | None = None
 
 
 class CreateCandidateRequest(BaseModel):
@@ -168,3 +164,9 @@ class UpdateCandidateRequest(BaseModel):
     portfolio_url: str | None = Field(default=None, max_length=500)
     internal_notes: str | None = None
     tags: list[str] | None = None
+
+
+class DeleteCandidateRequest(BaseModel):
+    reason: str | None = None
+    note: str | None = None
+    confirmation: str | None = None

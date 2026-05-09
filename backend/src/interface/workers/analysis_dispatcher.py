@@ -66,17 +66,5 @@ def enqueue_analysis(
             args=[analysis_id_str],
             **options,
         )
-    except Exception as exc:
-        if settings.is_production:
-            raise
-
-        logger.warning(
-            "analysis.enqueue_fallback_local",
-            analysis_id=analysis_id_str,
-            task_id=task_id,
-            error=str(exc),
-        )
-        process_analysis.apply(
-            args=[analysis_id_str],
-            task_id=task_id,
-        )
+    except Exception:
+        raise

@@ -1,11 +1,45 @@
 import { useRef, useState } from "react";
 import type { CandidateOverview } from "../../../../types/domain";
+import type { PanelTab } from "../../../pipeline/PipelineContext";
 import type { CandidateActionFeedback } from "../v2/CandidateProfileView";
 import { Section, StatusCard, EmptyTab } from "../components/DrawerSectionHelpers";
 import { useDocumentHandlers } from "../hooks/useDocumentHandlers";
-import { toast } from "../../../../shared/utils/toast";
 
-const ANALYSIS_STATUS_LABEL: Record<string, string> = {
+type AnalysisStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+type DocumentsTabProps = {
+  overview: CandidateOverview;
+  activeJobId: string | null;
+  activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
+  compatibilityGuidance?: unknown;
+  canSpendRealTokens: boolean;
+  pollingAnalysisId: string | null;
+  refreshCandidateOverview: () => Promise<void>;
+  startPolling: (
+    analysisId: string,
+    candidateId?: string | null,
+    initialStatus?: AnalysisStatus | null,
+    jobId?: string | null,
+  ) => void;
+  switchPanelTab: (tab: PanelTab) => void;
+  syncAnalysisStart: (payload: {
+    candidateId: string;
+    analysisId: string;
+    status: AnalysisStatus;
+    jobId: string | null;
+    resumeId: string | null;
+    resumeTitle: string | null;
+  }) => Promise<void>;
+  notifyCandidatesChanged: () => void;
+  onActionFeedback?: (feedback: Omit<CandidateActionFeedback, "id">) => void;
+};
+
+const ANALYSIS_STATUS_LABEL: Record<AnalysisStatus, string> = {
   pending: "Na fila",
   processing: "Processando",
   completed: "Concluída",
@@ -20,38 +54,20 @@ const EXTRACTION_STATUS_LABEL: Record<string, string> = {
   failed: "Falha",
 };
 
-export function DocumentsTab({
-  overview,
-  activeJobId,
-  activePipelineEntry,
-  canSpendRealTokens,
-  pollingAnalysisId,
-  refreshCandidateOverview,
-  startPolling,
-  switchPanelTab,
-  syncAnalysisStart,
-  notifyCandidatesChanged,
-  onActionFeedback,
-}: {
-  overview: CandidateOverview;
-  activeJobId: string | null;
-  activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
-  canSpendRealTokens: boolean;
-  pollingAnalysisId: string | null;
-  refreshCandidateOverview: () => Promise<void>;
-  startPolling: (analysisId: string, cId: string, status: string, jobId: string | null) => void;
-  switchPanelTab: (tab: string) => void;
-  syncAnalysisStart: (payload: {
-    candidateId: string;
-    analysisId: string;
-    status: string;
-    jobId: string | null;
-    resumeId: string | null;
-    resumeTitle: string | null;
-  }) => Promise<void>;
-  notifyCandidatesChanged: () => void;
-  onActionFeedback?: (feedback: Omit<CandidateActionFeedback, "id">) => void;
-}) {
+export function DocumentsTab(props: DocumentsTabProps) {
+  const {
+    overview,
+    activeJobId,
+    canSpendRealTokens,
+    pollingAnalysisId,
+    refreshCandidateOverview,
+    startPolling,
+    switchPanelTab,
+    syncAnalysisStart,
+    notifyCandidatesChanged,
+    onActionFeedback,
+  } = props;
+
   const { resumes, latest_analysis } = overview;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -111,7 +127,8 @@ export function DocumentsTab({
             label="Última análise"
             title={
               latest_analysis
-                ? ANALYSIS_STATUS_LABEL[latest_analysis.status] ?? latest_analysis.status
+                ? ANALYSIS_STATUS_LABEL[latest_analysis.status as AnalysisStatus] ??
+                  latest_analysis.status
                 : "Ainda não solicitada"
             }
             description={
@@ -122,7 +139,12 @@ export function DocumentsTab({
           />
           <StatusCard
             label="Processamento do currículo"
-            title={resumes[0]?.extraction_status ? EXTRACTION_STATUS_LABEL[resumes[0].extraction_status] ?? resumes[0].extraction_status : "Sem currículo"}
+            title={
+              resumes[0]?.extraction_status
+                ? EXTRACTION_STATUS_LABEL[resumes[0].extraction_status] ??
+                  resumes[0].extraction_status
+                : "Sem currículo"
+            }
             description="Upload, extração do PDF e disponibilidade para análise."
           />
         </div>
@@ -130,7 +152,8 @@ export function DocumentsTab({
 
       {!canSpendRealTokens ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          Consumo real bloqueado — ative <code>real_ai_token_spend_enabled</code> para analisar currículos.
+          Consumo real bloqueado — ative{" "}
+          <code>real_ai_token_spend_enabled</code> para analisar currículos.
         </div>
       ) : null}
 
@@ -143,6 +166,7 @@ export function DocumentsTab({
           onChange={(event) => handlers.handleFileSelect(event.target.files?.[0] ?? null)}
           className="hidden"
         />
+
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -193,6 +217,7 @@ export function DocumentsTab({
           >
             {uploadLoading ? "Enviando currículo…" : "Enviar currículo"}
           </button>
+
           {selectedFile ? (
             <button
               type="button"
@@ -233,7 +258,8 @@ export function DocumentsTab({
               const isDeleting = deletingId === resume.resume_id;
               const isAnalyzing = analyzingResumeId === resume.resume_id;
               const canAnalyze =
-                Boolean(resume.current_version_id) && resume.extraction_status === "completed";
+                Boolean(resume.current_version_id) &&
+                resume.extraction_status === "completed";
 
               return (
                 <div
@@ -274,7 +300,9 @@ export function DocumentsTab({
                           </button>
                         </div>
                       ) : (
-                        <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">{resume.title}</p>
+                        <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
+                          {resume.title}
+                        </p>
                       )}
 
                       {resume.current_file_name ? (
@@ -306,7 +334,8 @@ export function DocumentsTab({
                         ].join(" ")}
                       >
                         {EXTRACTION_STATUS_LABEL[resume.extraction_status ?? ""] ??
-                          (resume.extraction_status ?? "—")}
+                          resume.extraction_status ??
+                          "—"}
                       </span>
                     </div>
                   </div>
@@ -328,13 +357,17 @@ export function DocumentsTab({
                       >
                         Editar título
                       </button>
+
                       <button
                         type="button"
-                        onClick={() => void handlers.handleToggleStatus(resume.resume_id, resume.status)}
+                        onClick={() =>
+                          void handlers.handleToggleStatus(resume.resume_id, resume.status)
+                        }
                         className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))]"
                       >
                         {resume.status === "active" ? "Arquivar" : "Reativar"}
                       </button>
+
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteId(resume.resume_id)}
@@ -342,10 +375,22 @@ export function DocumentsTab({
                       >
                         Excluir
                       </button>
+
                       <button
                         type="button"
-                        onClick={() => void handlers.handleAnalyze(resume.resume_id, resume.current_version_id!)}
-                        disabled={!canAnalyze || isAnalyzing || pollingAnalysisId !== null || !canSpendRealTokens}
+                        onClick={() => {
+                          if (!resume.current_version_id) return;
+                          void handlers.handleAnalyze(
+                            resume.resume_id,
+                            resume.current_version_id,
+                          );
+                        }}
+                        disabled={
+                          !canAnalyze ||
+                          isAnalyzing ||
+                          pollingAnalysisId !== null ||
+                          !canSpendRealTokens
+                        }
                         className="rounded-lg bg-[hsl(var(--primary))] px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
                       >
                         {isAnalyzing ? "Solicitando…" : "Análise manual"}
@@ -361,7 +406,9 @@ export function DocumentsTab({
 
                   {confirmDeleteId === resume.resume_id ? (
                     <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                      <p className="text-xs text-red-700">Confirmar exclusão deste currículo?</p>
+                      <p className="text-xs text-red-700">
+                        Confirmar exclusão deste currículo?
+                      </p>
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"

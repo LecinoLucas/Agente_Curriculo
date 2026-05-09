@@ -143,9 +143,9 @@ function pollingDelay(staleCount: number): number {
   return 15000;
 }
 
-function toFriendlyText(error: unknown, fallback: string): string {
+function toFriendlyText(error: unknown, defaultMessage: string): string {
   const detail = formatErrorDetails(handleApiError(error)).join(" ");
-  return detail || fallback;
+  return detail || defaultMessage;
 }
 
 // ── Context ────────────────────────────────────────────────────────────────────
@@ -411,7 +411,6 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           used_real_ai: latest?.used_real_ai ?? null,
           task_id: null,
           worker_id: null,
-          overall_score: null,
           seniority_level: null,
           total_experience_years: null,
           created_at: now,

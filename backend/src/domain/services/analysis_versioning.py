@@ -17,70 +17,10 @@ REGRAS DE VERSIONAMENTO:
 7. A análise mais recente (completed_at DESC) é considerada a "corrente".
 8. Histórico completo é preservado para auditoria — nunca deletar análises.
 
-REGRAS DE DELTA (mudança de score entre versões):
-────────────────────────────────────────────────────────────────────────────
-  Δ ≥ 15 pontos  → mudança SIGNIFICATIVA (alerta para revisor)
-  5 ≤ Δ < 15     → mudança MODERADA (registrado, não alerta)
-  Δ < 5          → mudança MÍNIMA (esperado — variação natural do LLM)
 """
 
-from dataclasses import dataclass
-from decimal import Decimal
 from typing import Optional
 from uuid import UUID
-
-
-@dataclass(frozen=True)
-class ScoreDelta:
-    overall: Decimal
-    technical: Decimal
-    experience: Decimal
-    education: Decimal
-    communication: Decimal
-    leadership: Decimal
-
-    @property
-    def is_significant(self) -> bool:
-        return abs(float(self.overall)) >= 15.0
-
-    @property
-    def is_moderate(self) -> bool:
-        return 5.0 <= abs(float(self.overall)) < 15.0
-
-    @property
-    def direction(self) -> str:
-        if float(self.overall) > 0:
-            return "improvement"
-        if float(self.overall) < 0:
-            return "regression"
-        return "neutral"
-
-    def to_dict(self) -> dict:
-        return {
-            "overall": float(self.overall),
-            "technical": float(self.technical),
-            "experience": float(self.experience),
-            "education": float(self.education),
-            "communication": float(self.communication),
-            "leadership": float(self.leadership),
-            "is_significant": self.is_significant,
-            "direction": self.direction,
-        }
-
-
-@dataclass(frozen=True)
-class VersioningContext:
-    """
-    Contexto de versionamento para uma nova análise.
-    Criado antes de publicar a análise na fila.
-    """
-
-    resume_version_id: UUID
-    prompt_template_id: UUID
-    ai_model_id: UUID
-    job_id: Optional[UUID]
-    previous_analysis_id: Optional[UUID]    # análise anterior do mesmo resume_version (se existir)
-    previous_overall_score: Optional[Decimal]
 
 
 class AnalysisVersioningService:
@@ -107,36 +47,6 @@ class AnalysisVersioningService:
         return (
             f"analysis:{resume_version_id}:{prompt_template_id}:{ai_model_id}:{job_part}"
         )
-
-    @staticmethod
-    def calculate_delta(
-        previous_scores: dict[str, Decimal],
-        new_scores: dict[str, Decimal],
-    ) -> ScoreDelta:
-        """
-        Calcula o delta entre dois resultados de análise.
-        Útil para detectar regressões ao trocar versão de prompt ou modelo.
-        """
-
-        def diff(key: str) -> Decimal:
-            return new_scores.get(key, Decimal("0")) - previous_scores.get(key, Decimal("0"))
-
-        return ScoreDelta(
-            overall=diff("overall_score"),
-            technical=diff("technical_score"),
-            experience=diff("experience_score"),
-            education=diff("education_score"),
-            communication=diff("communication_score"),
-            leadership=diff("leadership_score"),
-        )
-
-    @staticmethod
-    def should_alert_on_delta(delta: ScoreDelta) -> bool:
-        """
-        Retorna True se a mudança de score é grande o suficiente para alertar
-        o time de produto (possível regressão do prompt ou modelo).
-        """
-        return delta.is_significant
 
     @staticmethod
     def validate_reanalysis_allowed(

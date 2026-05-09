@@ -30,32 +30,27 @@ function normalizeConfidenceScore(value: number | null | undefined): number | nu
 }
 
 export function deriveScoreSemantics({
-  activeJobMatchScore,
-  aiScore,
+  finalScore,
   aiStatus,
   hasActiveJob,
   confidenceScore,
 }: {
-  activeJobMatchScore: number | null | undefined;
-  aiScore: number | null | undefined;
+  finalScore: number | null | undefined;
   aiStatus?: AnalysisStatus;
   hasActiveJob: boolean;
   confidenceScore?: number | null | undefined;
 }): ScoreSemantics {
-  const primaryScore = normalizeScorePercent(activeJobMatchScore);
-  const secondaryScore = normalizeScorePercent(aiScore);
+  const primaryScore = normalizeScorePercent(finalScore);
+  const secondaryScore = null;
   const confidence = normalizeConfidenceScore(confidenceScore);
-  const hasConflict =
-    primaryScore != null &&
-    secondaryScore != null &&
-    Math.abs(primaryScore - secondaryScore) >= 15;
+  const hasConflict = false;
   const aiFailed = aiStatus === "failed" || aiStatus === "cancelled";
   const aiPending = aiStatus === "pending" || aiStatus === "processing";
   const lowConfidence = confidence != null && confidence < 50;
 
   if (!hasActiveJob) {
     return {
-      primaryLabel: "Compatibilidade Contextual",
+      primaryLabel: "Score final",
       primaryScore: null,
       primaryDisplay: "—",
       secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -63,7 +58,7 @@ export function deriveScoreSemantics({
       secondaryDisplay: secondaryScore != null ? formatScorePercent(secondaryScore) : null,
       statusLabel: "Sem vaga ativa",
       statusTone: "neutral",
-      contextLine: "Associe o candidato a uma vaga para calcular a compatibilidade que guia a decisão.",
+      contextLine: "Associe o candidato a uma vaga para calcular o score final.",
       detailLine: secondaryScore != null ? "Perfil Geral IA resume o perfil, mas não decide a vaga ativa." : null,
       state: "no_active_job",
       hasConflict: false,
@@ -72,7 +67,7 @@ export function deriveScoreSemantics({
 
   if (primaryScore == null) {
     return {
-      primaryLabel: "Compatibilidade Contextual",
+      primaryLabel: "Score final",
       primaryScore: null,
       primaryDisplay: "—",
       secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -82,7 +77,7 @@ export function deriveScoreSemantics({
       statusTone: aiFailed ? "low" : "mid",
       contextLine: aiFailed
         ? "A última análise da IA falhou. Valide manualmente antes de decidir."
-        : "A compatibilidade contextual ainda não está disponível para esta decisão.",
+        : "O score final ainda não está disponível para esta decisão.",
       detailLine: secondaryScore != null ? "Perfil Geral IA é apenas contexto enquanto a compatibilidade não chega." : null,
       state: "awaiting_match",
       hasConflict: false,
@@ -91,7 +86,7 @@ export function deriveScoreSemantics({
 
   if (aiFailed || hasConflict || lowConfidence) {
     return {
-      primaryLabel: "Compatibilidade Contextual",
+      primaryLabel: "Score final",
       primaryScore,
       primaryDisplay: formatScorePercent(primaryScore),
       secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -100,7 +95,7 @@ export function deriveScoreSemantics({
       statusLabel: aiFailed ? "Análise inconclusiva" : "Revisão recomendada",
       statusTone: aiFailed ? "low" : "mid",
       contextLine: aiFailed
-        ? "A última análise da IA falhou. A compatibilidade exibida pode depender de contexto anterior."
+        ? "A última análise da IA falhou. O score final exibido pode depender de contexto anterior."
         : hasConflict
           ? "Compatibilidade Contextual e Perfil Geral IA contam histórias diferentes."
           : "A compatibilidade existe, mas a confiança da IA está baixa para decisão automática.",
@@ -115,7 +110,7 @@ export function deriveScoreSemantics({
   }
 
   return {
-    primaryLabel: "Compatibilidade Contextual",
+      primaryLabel: "Score final",
     primaryScore,
     primaryDisplay: formatScorePercent(primaryScore),
     secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -123,7 +118,7 @@ export function deriveScoreSemantics({
     secondaryDisplay: secondaryScore != null ? formatScorePercent(secondaryScore) : null,
     statusLabel: null,
     statusTone: getScoreTone(primaryScore),
-    contextLine: "Compatibilidade Contextual é o primeiro sinal para decidir a vaga ativa.",
+    contextLine: "Score final é o primeiro sinal para decidir a vaga ativa.",
     detailLine: secondaryScore != null ? "Perfil Geral IA resume o perfil e não substitui a aderência desta vaga." : null,
     state: "ready",
     hasConflict: false,

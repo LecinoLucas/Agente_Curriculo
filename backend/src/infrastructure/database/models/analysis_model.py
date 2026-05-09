@@ -109,6 +109,7 @@ class AnalysisModel(Base):
             "completed",
             "failed",
             "cancelled",
+            "discarded",
             name="analysis_status",
         ),
         nullable=False,
@@ -131,6 +132,10 @@ class AnalysisModel(Base):
     worker_claim_id: Mapped[str | None] = mapped_column(sa.String(255))
     claimed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     stale_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    discarded_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    discarded_by: Mapped[UUID | None] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"))
+    discard_reason: Mapped[str | None] = mapped_column(sa.String(100))
+    discard_reason_note: Mapped[str | None] = mapped_column(sa.Text)
     queue_name: Mapped[str] = mapped_column(
         sa.String(100),
         nullable=False,
@@ -174,12 +179,6 @@ class AnalysisResultModel(Base):
     analysis_id: Mapped[UUID] = mapped_column(
         sa.UUID(as_uuid=True), sa.ForeignKey("analyses.id"), nullable=False, unique=True
     )
-    overall_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    technical_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    experience_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    education_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    communication_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    leadership_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
     candidate_summary: Mapped[str | None] = mapped_column(sa.Text)
     seniority_level: Mapped[str | None] = mapped_column(sa.String(50))
     total_experience_years: Mapped[Decimal | None] = mapped_column(sa.Numeric(4, 1))

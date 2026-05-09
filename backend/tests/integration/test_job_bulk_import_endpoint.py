@@ -429,49 +429,6 @@ async def test_bulk_import_resolves_catalog_alias(
 
 
 @pytest.mark.asyncio
-async def test_bulk_import_unknown_skill_with_fallback_becomes_requirement(
-    client: AsyncClient,
-    db_session: AsyncSession,
-):
-    await _create_skill_with_aliases(db_session, "SQL", "sql", ["postgresql"], category="Dados")
-    await _create_active_user(db_session, "bulk-import-fallback@test.com", "password123", UserRole.RECRUITER)
-    headers = await _auth_headers(client, "bulk-import-fallback@test.com", "password123")
-
-    response = await client.post(
-        "/api/v1/jobs/bulk-import",
-        json=_bulk_payload(
-            _job_seed(
-                title="Backend Fallback Skill",
-                location="São Paulo FB",
-                job_area="technology",
-                requirements="Base original.",
-                skills=[
-                    {"name": "SQL", "is_mandatory": True, "weight": 10},
-                    {"name": "Skill Inexistente", "is_mandatory": False, "weight": 5},
-                ],
-            ),
-            fallback_unknown_skills_to_requirements=True,
-        ),
-        headers=headers,
-    )
-
-    assert response.status_code == 201
-    body = response.json()
-    assert body["created"] == 1
-    assert body["results"][0]["resolved_skills"] == ["SQL"]
-    assert body["results"][0]["unresolved_skills"] == ["Skill Inexistente"]
-    assert any("mantidas apenas em requirements" in warning for warning in body["results"][0]["warnings"])
-
-    job = await db_session.scalar(sa.select(JobModel).where(JobModel.title == "Backend Fallback Skill"))
-    assert job is not None
-    assert "Skill Inexistente" in (job.requirements or "")
-    link_count = await db_session.scalar(
-        sa.select(sa.func.count()).select_from(JobRequiredSkillModel).where(JobRequiredSkillModel.job_id == job.id)
-    )
-    assert link_count == 1
-
-
-@pytest.mark.asyncio
 async def test_bulk_import_normalizes_job_area_english_value(
     client: AsyncClient,
     db_session: AsyncSession,

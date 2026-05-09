@@ -30,6 +30,12 @@ export type CreateCandidatePayload = {
 };
 
 export type UpdateCandidatePayload = Partial<CreateCandidatePayload>;
+export type DeleteCandidatePayload = {
+  reason: string;
+  note?: string;
+  confirmation: string;
+};
+
 export type UpdateCandidateStagePayload = {
   job_id: string;
   stage: PipelineStage;
@@ -40,7 +46,6 @@ export type UpdateCandidateStageResponse = {
   job_id: string;
   stage: PipelineStage;
   candidate_status: string;
-  match_score: number | null;
   updated_at: string;
 };
 
@@ -82,7 +87,6 @@ function normalizeLatestAnalysis(
     used_real_ai: item.used_real_ai ?? null,
     task_id: item.task_id ?? null,
     worker_id: item.worker_id ?? null,
-    overall_score: item.overall_score != null ? Number(item.overall_score) : null,
     seniority_level: item.seniority_level ?? null,
     total_experience_years:
       item.total_experience_years != null ? Number(item.total_experience_years) : null,
@@ -118,7 +122,6 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
         terminated_at: entry?.terminated_at ?? null,
         termination_reason: entry?.termination_reason ?? null,
         candidate_status: entry?.candidate_status ?? "Em processo",
-        match_score: entry?.match_score != null ? Number(entry.match_score) : null,
         updated_at: entry?.updated_at ?? new Date(0).toISOString(),
       }))
     : [];
@@ -163,9 +166,8 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
     active_job_id: typeof item.active_job_id === "string" ? item.active_job_id : null,
     active_job_title: item.active_job_title ?? null,
     active_job_stage: item.active_job_stage ?? null,
-    active_job_match_score: item.active_job_match_score != null ? Number(item.active_job_match_score) : null,
+    active_job_final_score: item.active_job_final_score != null ? Number(item.active_job_final_score) : null,
     ai_status: item.ai_status ?? null,
-    ai_score: item.ai_score != null ? Number(item.ai_score) : null,
   };
 }
 
@@ -227,8 +229,8 @@ export const candidatesService = {
     return httpRequest<Candidate>(`/api/v1/candidates/${id}`, { method: "PATCH", body: payload });
   },
 
-  async delete(id: string): Promise<void> {
-    return httpRequest<void>(`/api/v1/candidates/${id}`, { method: "DELETE" });
+  async delete(id: string, payload: DeleteCandidatePayload): Promise<void> {
+    return httpRequest<void>(`/api/v1/candidates/${id}`, { method: "DELETE", body: payload });
   },
 
   async updateStage(id: string, payload: UpdateCandidateStagePayload): Promise<UpdateCandidateStageResponse> {
@@ -240,7 +242,6 @@ export const candidatesService = {
       job_id: item.job_id,
       stage: item.stage,
       candidate_status: item.candidate_status ?? "Em processo",
-      match_score: item.match_score != null ? Number(item.match_score) : null,
       updated_at: item.updated_at ?? new Date(0).toISOString(),
     }));
   },

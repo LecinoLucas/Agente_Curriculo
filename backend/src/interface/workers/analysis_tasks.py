@@ -9,7 +9,6 @@ import sqlalchemy as sa
 import structlog
 
 from src.core.settings import settings
-from src.application.services.extraction_fallbacks import enrich_analysis_result_fields
 from src.infrastructure.queue.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -242,7 +241,6 @@ def _build_minimal_user_prompt(*, resume_text: str, job_context: str) -> str:
         "Apenas JSON puro e compacto.\n"
         "Retorne EXATAMENTE estes campos:\n"
         "{\n"
-        '  "overall_score": 0-100,\n'
         '  "professional_area": "technology|data|administrative|accounting|financial|commercial|operational|leadership|other",\n'
         '  "seniority_level": "intern|junior|mid|senior|lead|undefined",\n'
         '  "skills": ["maximo 4 skills curtas e normalizadas"]\n'
@@ -892,7 +890,6 @@ async def _run_real_ai_analysis(
 
     try:
         result_fields = parse_analysis_response(ai_response.content)
-        result_fields = enrich_analysis_result_fields(result_fields, resume_text)
     except Exception as exc:
         logger.exception(
             "analysis.parse_failed",
@@ -939,12 +936,6 @@ async def _run_real_ai_analysis(
 
 def _validate_result_fields(result_fields: dict) -> None:
     required_fields = {
-        "overall_score",
-        "technical_score",
-        "experience_score",
-        "education_score",
-        "communication_score",
-        "leadership_score",
         "candidate_summary",
         "seniority_level",
         "total_experience_years",
@@ -1030,12 +1021,6 @@ async def _persist_completed_analysis(
         )
 
         result_payload = {
-            "overall_score": result_fields["overall_score"],
-            "technical_score": result_fields["technical_score"],
-            "experience_score": result_fields["experience_score"],
-            "education_score": result_fields["education_score"],
-            "communication_score": result_fields["communication_score"],
-            "leadership_score": result_fields["leadership_score"],
             "candidate_summary": result_fields["candidate_summary"],
             "seniority_level": result_fields["seniority_level"],
             "total_experience_years": result_fields["total_experience_years"],

@@ -71,22 +71,15 @@ class ResumeService:
         Candidate Portal Access:
         ────────────────────────
         If current_user.role == "candidate", this method implements candidate portal access
-        by finding the Candidate where user_id = current_user.id. This is a bridge mechanism
-        for Phase 20.2. In Phase 20.3+, candidate portal access will use a separate
-        CandidateAccount table and authentication system.
-
-        See: docs/user-candidate-boundary.md
+        by finding the Candidate where user_id = current_user.id.
         """
         if self._can_manage_all(current_user):
             # Internal user (recruiter/admin/viewer): access all resumes
             return await self._repository.list_summaries()
 
-        # Candidate portal access: find candidate linked to this user
-        # This is the temporary bridge for candidate portal (Phase 20.2)
         candidate = await self._repository.find_candidate_by_user_id(current_user.id)
         if candidate is None:
             # User with role="candidate" should always have linked Candidate
-            # Returning empty list is lenient; could be stricter in Phase 20.3
             return []
         return await self._repository.list_summaries(candidate.id)
 
@@ -254,13 +247,9 @@ class ResumeService:
         - ADMIN/RECRUITER: Must explicitly provide candidate_id
         - role="candidate": Can upload for own linked Candidate (via Candidate.user_id)
 
-        Guardrail (Phase 20.3):
-        ──────────────────────
         role="candidate" CANNOT auto-create Candidate. This prevents mixing Candidate
         creation logic into portal access flow. Candidates are created only by
         admin/recruiter via POST /candidates endpoint.
-
-        See: docs/user-candidate-boundary.md
         """
         if candidate_id is not None:
             candidate = await self._repository.find_candidate_by_id(candidate_id)

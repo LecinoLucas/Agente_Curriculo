@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5, uuid4
 
 import sqlalchemy as sa
@@ -189,7 +188,6 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.job_id,
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
                 CandidateJobPipelineModel.link_status.label("status"),
-                CandidateJobPipelineModel.match_score,
                 CandidateJobPipelineModel.entered_at,
                 CandidateJobPipelineModel.updated_at,
                 latest_keywords.c.top_skills,
@@ -213,10 +211,7 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.is_terminal.is_(False),
                 CandidateJobPipelineModel.terminated_at.is_(None),
             )
-            .order_by(
-                CandidateJobPipelineModel.match_score.desc().nulls_last(),
-                CandidateJobPipelineModel.updated_at.desc(),
-            )
+            .order_by(CandidateJobPipelineModel.updated_at.desc())
         )
         return [dict(row) for row in result.mappings().all()]
 
@@ -277,7 +272,6 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.job_id,
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
                 CandidateJobPipelineModel.link_status.label("status"),
-                CandidateJobPipelineModel.match_score,
                 CandidateJobPipelineModel.updated_at,
             )
         )
@@ -423,7 +417,6 @@ class SQLAlchemyPipelineRepository:
                 terminated_at=None,
                 termination_reason=None,
                 source="manual",
-                match_score=None,
                 entered_at=updated_at,
                 last_moved_by=moved_by,
                 updated_at=updated_at,
@@ -511,7 +504,6 @@ class SQLAlchemyPipelineRepository:
         self,
         analysis_id: UUID,
         job_id: UUID,
-        match_score: Decimal,
     ) -> None:
         candidate_id = await self._resolve_candidate_id_from_analysis(analysis_id)
         if candidate_id is None:
@@ -538,7 +530,6 @@ class SQLAlchemyPipelineRepository:
                     termination_reason=None,
                     source="ai_match",
                     current_analysis_id=analysis_id,
-                    match_score=match_score,
                     entered_at=now,
                     created_at=now,
                     updated_at=now,
@@ -562,7 +553,6 @@ class SQLAlchemyPipelineRepository:
             await self._session.flush()
             return
 
-        current.match_score = match_score
         if current.candidate_job_pipeline_id is None:
             current.candidate_job_pipeline_id = _candidate_job_pipeline_key(
                 candidate_id=candidate_id,
@@ -580,7 +570,6 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.job_id,
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
                 CandidateJobPipelineModel.link_status.label("status"),
-                CandidateJobPipelineModel.match_score,
                 CandidateJobPipelineModel.entered_at,
                 CandidateJobPipelineModel.updated_at,
                 CandidateModel.full_name.label("candidate_name"),

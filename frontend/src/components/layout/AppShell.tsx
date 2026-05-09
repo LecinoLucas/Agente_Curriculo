@@ -7,6 +7,7 @@ import { ActionMenu } from "../common/ActionMenu";
 import { useAuth } from "../../features/auth/useAuth";
 import { useTheme } from "../../hooks/useTheme";
 import { UserRole } from "../../types/auth";
+import { VisualThemeSwitcher } from "./VisualThemeSwitcher";
 
 type NavItem = {
   to: string;
@@ -26,7 +27,6 @@ const ADMIN_ITEMS: NavItem[] = [
   { to: "/admin",                label: "Painel admin",      caption: "Visão geral",                roles: ["admin"] },
   { to: "/admin/usuarios",       label: "Usuários internos", caption: "Equipe e acessos",           roles: ["admin"] },
   { to: "/admin/skills",         label: "Skills",            caption: "Competências e tecnologias", roles: ["admin"] },
-  { to: "/admin/importar-vagas", label: "Importar vagas",    caption: "JSON inteligente",           roles: ["admin"] },
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -200,6 +200,7 @@ export function AppShell() {
 
           {/* Right-side controls */}
           <div className="ml-auto flex items-center gap-2">
+            <VisualThemeSwitcher />
 
             {/* Theme toggle */}
             <button

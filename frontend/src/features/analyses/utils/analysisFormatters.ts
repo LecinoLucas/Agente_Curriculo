@@ -4,6 +4,7 @@ export const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   completed: { label: "Concluída", cls: "ui-badge-success" },
   failed: { label: "Falhou", cls: "ui-badge-danger" },
   cancelled: { label: "Cancelado", cls: "ui-badge-warning" },
+  discarded: { label: "Descartada", cls: "ui-badge-warning" },
 };
 
 export function fmtDate(iso: string | null): string {

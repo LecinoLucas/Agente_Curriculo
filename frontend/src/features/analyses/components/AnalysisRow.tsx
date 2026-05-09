@@ -1,3 +1,4 @@
+import { ActionMenu } from "../../../components/common/ActionMenu";
 import { AnalysisGlobalItem } from "../../../types/domain";
 import { STATUS_CONFIG, fmtDate, fmtDuration } from "../utils/analysisFormatters";
 
@@ -7,6 +8,7 @@ interface AnalysisRowProps {
   onOpen: () => void;
   onRetry: () => void;
   onForceFail: () => void;
+  onDiscard: () => void;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -16,18 +18,6 @@ function StatusBadge({ status }: { status: string }) {
       {c.label}
     </span>
   );
-}
-
-function ScoreCell({ score }: { score: number | null }) {
-  if (score == null) return <span className="ui-text-muted text-xs">—</span>;
-  const r = Math.round(score);
-  const cls =
-    r >= 80
-      ? "font-semibold text-[hsl(var(--success))]"
-      : r >= 60
-        ? "font-semibold text-[hsl(var(--warning))]"
-        : "font-semibold text-[hsl(var(--danger))]";
-  return <span className={`text-sm ${cls}`}>{r}</span>;
 }
 
 function AiBadge({ used }: { used: boolean | null }) {
@@ -49,13 +39,49 @@ export function AnalysisRow({
   onOpen,
   onRetry,
   onForceFail,
+  onDiscard,
 }: AnalysisRowProps) {
   const isFailed = item.status === "failed";
   const isStuck = item.status === "pending" || item.status === "processing";
+  const isDiscarded = item.status === "discarded";
   const hasCandidate = Boolean(item.candidate_id);
+  const actionItems = [
+    hasCandidate
+      ? {
+          label: "Abrir",
+          onClick: onOpen,
+        }
+      : null,
+    isStuck
+      ? {
+          label: actionInFlight ? "Encerrando..." : "Encerrar",
+          onClick: onForceFail,
+          tone: "danger" as const,
+          disabled: actionInFlight,
+        }
+      : null,
+    isFailed
+      ? {
+          label: actionInFlight ? "Reprocessando..." : "Reprocessar",
+          onClick: onRetry,
+          disabled: actionInFlight,
+        }
+      : null,
+    !isDiscarded
+      ? {
+          label: actionInFlight ? "Descartando..." : "Descartar análise",
+          onClick: onDiscard,
+          disabled: actionInFlight,
+        }
+      : null,
+  ].filter(Boolean);
 
   return (
-    <tr className="group transition-colors hover:bg-[hsl(var(--surface-muted))]">
+    <tr
+      className={`group transition-colors hover:bg-[hsl(var(--surface-muted))] ${
+        isDiscarded ? "bg-[hsl(var(--surface-muted))]/45 text-[hsl(var(--text-muted))]" : ""
+      }`}
+    >
       {/* Candidato */}
       <td className="px-6 py-4">
         <button
@@ -108,11 +134,6 @@ export function AnalysisRow({
         </div>
       </td>
 
-      {/* Score */}
-      <td className="px-4 py-4">
-        <ScoreCell score={item.overall_score} />
-      </td>
-
       {/* IA real */}
       <td className="px-4 py-4">
         <AiBadge used={item.used_real_ai} />
@@ -129,35 +150,7 @@ export function AnalysisRow({
       {/* Ações */}
       <td className="px-4 py-4 text-right">
         <div className="flex items-center justify-end gap-2">
-          {hasCandidate ? (
-            <button
-              type="button"
-              onClick={onOpen}
-              className="ui-btn-secondary rounded-lg px-2.5 py-1 text-xs font-medium"
-            >
-              Abrir
-            </button>
-          ) : null}
-          {isStuck ? (
-            <button
-              type="button"
-              onClick={onForceFail}
-              disabled={actionInFlight}
-              className="rounded-lg border border-[hsl(var(--danger))]/40 px-2.5 py-1 text-xs font-medium text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger))]/10 disabled:opacity-40"
-            >
-              {actionInFlight ? "Encerrando…" : "Encerrar"}
-            </button>
-          ) : null}
-          {isFailed ? (
-            <button
-              type="button"
-              onClick={onRetry}
-              disabled={actionInFlight}
-              className="rounded-lg bg-[hsl(var(--primary))] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
-            >
-              {actionInFlight ? "Reprocessando…" : "Reprocessar"}
-            </button>
-          ) : null}
+          <ActionMenu buttonLabel={`Ações da análise ${item.id}`} items={actionItems} />
         </div>
       </td>
     </tr>

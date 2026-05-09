@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 
 
 class CandidateUserNotAllowedError(ConflictException):
-    """Raised when attempting to create a User with role="candidate" without Candidate portal."""
+    """Raised when attempting to create a candidate user through internal user creation."""
     pass
 
 
@@ -22,22 +22,17 @@ class CreateUserUseCase:
         """
         Create a new internal User.
 
-        Guardrail (Phase 20.3):
-        ──────────────────────
         Users with role="candidate" cannot be created via this endpoint.
-        role="candidate" represents candidate portal access and should be linked
-        to Candidate via CandidateAccount (Phase 20.3+), not created independently.
+        role="candidate" represents candidate portal access, not an internal user.
 
         Allowed roles: ADMIN, RECRUITER, VIEWER
         Blocked role: CANDIDATE (reserved for portal)
-
-        See: docs/user-candidate-boundary.md
         """
         # GUARDRAIL: Block role="candidate" creation
         if command.role == UserRole.CANDIDATE:
             raise CandidateUserNotAllowedError(
                 "Não é permitido criar usuários com role=candidate via API administrativo. "
-                "O vínculo com candidato será feito via portal do candidato (Phase 20.3+)."
+                "O vínculo com candidato será feito via portal do candidato."
             )
 
         if await self._user_repo.exists_by_email(command.email):

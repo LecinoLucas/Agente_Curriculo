@@ -1,9 +1,6 @@
-"""
-Integration tests for User-Candidate boundary (Phase 20.3).
+"""Integration tests for User-Candidate boundary.
 
-See: docs/user-candidate-boundary.md
-
-Tests validate:
+Validates:
 1. Candidate creation does NOT create User
 2. Candidate creation does NOT accept user_id
 3. User creation does NOT accept role="candidate" via admin API
@@ -295,7 +292,7 @@ class TestEndToEndBoundary:
         Workflow:
         1. Recruiter creates Candidate (no user_id)
         2. Later, admin creates User with role="candidate"
-        3. User can upload resume for Candidate (via manual link in Phase 20.3)
+        3. Candidate user creation remains blocked in internal admin flow
         """
         recruiter = User.create(
             email="recruiter@example.com",
@@ -322,8 +319,7 @@ class TestEndToEndBoundary:
         joao_user = await user_repo.find_by_email("joao@example.com")
         assert joao_user is None  # No user created
 
-        # Step 3: In Phase 20.3, admin would create User + CandidateAccount link
-        # For now, test that portal user cannot be created manually
+        # Step 3: portal user cannot be created manually
         create_user_case = CreateUserUseCase(user_repo)
         with pytest.raises(CandidateUserNotAllowedError):
             await create_user_case.execute(

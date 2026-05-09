@@ -40,14 +40,22 @@ test_engine = create_async_engine(
 )
 
 
+from uuid import uuid4 as generate_uuid
+
+
 @event.listens_for(test_engine.sync_engine, "connect")
 def _register_sqlite_functions(dbapi_connection: object, _connection_record: object) -> None:
-    # Emular NOW() do PostgreSQL para defaults server-side nos modelos.
+    # Emular NOW() e uuid_generate_v4() do PostgreSQL para defaults server-side nos modelos.
     if hasattr(dbapi_connection, "create_function"):
         dbapi_connection.create_function(
             "NOW",
             0,
             lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        dbapi_connection.create_function(
+            "uuid_generate_v4",
+            0,
+            lambda: str(generate_uuid()),
         )
 
 TestSessionFactory = async_sessionmaker(

@@ -46,7 +46,6 @@ class UserProfileService:
 
         self.AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Cleanup old avatar files (any extension) for this user
         self._cleanup_old_avatars(current_user.id)
 
         file_path.write_bytes(file_content)
@@ -63,7 +62,7 @@ class UserProfileService:
         raise InvalidAvatarError("Apenas JPEG e PNG são permitidos")
 
     def _cleanup_old_avatars(self, user_id: UUID) -> None:
-        """Remove old avatar files for this user (any extension)."""
+        """Remove previous avatar files for this user."""
         if not self.AVATAR_DIR.exists():
             return
         for file in self.AVATAR_DIR.glob(f"{user_id}.*"):

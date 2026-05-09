@@ -109,7 +109,6 @@ class CandidateJobScoreModel(Base):
     freshness_status: Mapped[str] = mapped_column(
         sa.String(20),
         nullable=False,
-        server_default="unknown",
     )
     computed_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
@@ -123,6 +122,10 @@ class CandidateJobScoreModel(Base):
         default=lambda: datetime.now(UTC),
         server_default=sa.text("NOW()"),
     )
+    previous_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2), nullable=True)
+    recompute_reason: Mapped[str] = mapped_column(sa.String(50), nullable=False)
+    job_signature_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    job_updated_at: Mapped[datetime] = mapped_column(sa.TIMESTAMP(timezone=True), nullable=False)
 
     version: Mapped[ScoreModelVersionModel] = relationship(
         "ScoreModelVersionModel", back_populates="scores", lazy="noload"
@@ -134,13 +137,16 @@ class CandidateJobScoreModel(Base):
             name="uq_candidate_job_score_version",
         ),
         sa.CheckConstraint(
-            "freshness_status IN ('fresh', 'stale', 'unknown')",
+            "freshness_status IN ('fresh', 'stale')",
             name="ck_candidate_job_scores_freshness_status",
         ),
         sa.Index("idx_candidate_job_scores_job_id", "job_id", "final_score"),
         sa.Index("idx_candidate_job_scores_candidate_job", "candidate_id", "job_id"),
         sa.Index("idx_candidate_job_scores_freshness", "job_id", "freshness_status"),
         sa.Index("idx_candidate_job_scores_input_hash", "job_id", "input_hash"),
+        sa.Index("idx_candidate_job_scores_recompute_reason", "job_id", "recompute_reason"),
+        sa.Index("idx_candidate_job_scores_job_signature", "job_id", "job_signature_hash"),
+        sa.Index("idx_candidate_job_scores_job_updated", "job_id", "job_updated_at"),
     )
 
 
@@ -186,7 +192,6 @@ class CandidateJobScoreSnapshotModel(Base):
     freshness_status: Mapped[str] = mapped_column(
         sa.String(20),
         nullable=False,
-        server_default="unknown",
     )
     computed_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
@@ -204,7 +209,7 @@ class CandidateJobScoreSnapshotModel(Base):
 
     __table_args__ = (
         sa.CheckConstraint(
-            "freshness_status IN ('fresh', 'stale', 'unknown')",
+            "freshness_status IN ('fresh', 'stale')",
             name="ck_candidate_job_score_snapshots_freshness_status",
         ),
         sa.Index("idx_candidate_job_score_snapshots_candidate_job", "candidate_id", "job_id", "computed_at"),
@@ -260,8 +265,8 @@ class CandidateJobScoreFactorModel(Base):
             "'seniority_gap',"
             "'education_match',"
             "'deal_breaker_violation',"
-            "'data_confidence_penalty',"
-            "'legacy_outdated_penalty'"
+            "'eligibility_cap',"
+            "'data_confidence_penalty'"
             ")",
             name="ck_candidate_job_score_factors_type",
         ),

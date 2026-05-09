@@ -119,9 +119,9 @@ export function NewCandidateModal({
 
   if (!isOpen) return null;
 
-  function toFriendlyText(error: unknown, fallback: string): string {
+  function toFriendlyText(error: unknown, defaultMessage: string): string {
     const detail = formatErrorDetails(handleApiError(error)).join(" ");
-    return detail || fallback;
+    return detail || defaultMessage;
   }
 
   function clearDuplicate(field?: keyof NewCandidateFormErrors) {

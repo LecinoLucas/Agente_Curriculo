@@ -27,7 +27,7 @@ class AnalysisPipelineJobMatchResponse(BaseModel):
     job_id: UUID
     job_title: str
     job_status: str
-    match_score: Decimal | None = None
+    final_score: float | None = None
     recommendation: str | None = None
     created_at: datetime
 
@@ -58,6 +58,10 @@ class AnalysisResponse(BaseModel):
     requested_by: UUID
     requested_by_name: str | None = None
     failure_reason: str | None = None
+    discarded_at: datetime | None = None
+    discarded_by: UUID | None = None
+    discard_reason: str | None = None
+    discard_reason_note: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -77,12 +81,6 @@ class AnalysisResultResponse(BaseModel):
     worker_id: str | None = None
     task_id: str | None = None
     used_real_ai: bool
-    overall_score: Decimal | None = None
-    technical_score: Decimal | None = None
-    experience_score: Decimal | None = None
-    education_score: Decimal | None = None
-    communication_score: Decimal | None = None
-    leadership_score: Decimal | None = None
     candidate_summary: str | None = None
     seniority_level: str | None = None
     total_experience_years: Decimal | None = None
@@ -113,8 +111,11 @@ class AnalysisGlobalItemResponse(BaseModel):
     resume_version_id: UUID
     status: str
     failure_reason: str | None = None
+    discarded_at: datetime | None = None
+    discarded_by: UUID | None = None
+    discard_reason: str | None = None
+    discard_reason_note: str | None = None
     used_real_ai: bool | None = None
-    overall_score: float | None = None
     retry_count: int
     created_at: datetime
     started_at: datetime | None = None
@@ -125,19 +126,19 @@ class AnalysisGlobalItemResponse(BaseModel):
 class AnalysisMatchResponse(BaseModel):
     analysis_id: UUID
     job_id: UUID
-    match_score: Decimal
+    final_score: float | None = None
     recommendation: str
     mandatory_skills_matched: int
     mandatory_skills_total: int
     optional_skills_matched: int
     optional_skills_total: int
-    seniority_score: Decimal
+    seniority_score: float
     candidate_seniority: str | None = None
     job_seniority: str | None = None
     validation_status: str = "pass"  # "pass" | "fail" | "unknown"
     missing_evidence: list[str] = Field(default_factory=list)  # ["education"] or ["experience"]
     rejection_reasons: list[str] = Field(default_factory=list)  # Detailed failure messages
-    engine_used: str = "legacy"
+    engine_used: str
     score_breakdown: dict[str, Any] = Field(default_factory=dict)
     strengths: list[str] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
@@ -157,3 +158,8 @@ class BulkAnalysisActionRequest(BaseModel):
 class BulkAnalysisActionResponse(BaseModel):
     processed: int
     skipped: int
+
+
+class DiscardAnalysisRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=1000)

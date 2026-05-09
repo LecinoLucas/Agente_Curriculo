@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
@@ -14,21 +13,10 @@ from src.application.services.candidate_ranking_service import (
     _render_score_explanation,
     _summarize_score_factors,
 )
-from src.application.services.canonical_match_explanation_service import (
-    MatchExplanationResult,
-    build_match_explanation,
-)
-from src.application.services.match_confidence_service import (
-    compute_match_confidence,
-)
 from src.application.services.matching_observability_service import (
     MatchingObservabilityService,
 )
 from src.domain.entities.user import UserRole
-from src.infrastructure.database.models.profile_analysis_model import (
-    CandidateProfileAnalysisModel,
-    JobProfileAnalysisModel,
-)
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreFactorModel,
     CandidateJobScoreModel,
@@ -162,23 +150,6 @@ class JobScoreExplanationService:
             )
 
         job_skill_rows = await self._analysis_repo.list_active_job_skill_rows(job_id)
-        structured_job_skill_rows = list(job_skill_rows)
-        used_job_skill_fallback = False
-        if not job_skill_rows:
-            job_profile_analysis = await self._session.get(
-                JobProfileAnalysisModel,
-                persisted_match.job_profile_analysis_id,
-            )
-            if job_profile_analysis is not None:
-                job_skill_rows = self._fallback_skill_rows(job_profile_analysis)
-                used_job_skill_fallback = bool(job_skill_rows)
-
-        candidate_profile_analysis = await self._session.get(
-            CandidateProfileAnalysisModel,
-            persisted_match.candidate_profile_analysis_id,
-        )
-
-        candidate_skills = list(candidate_profile_analysis.skills_json or []) if candidate_profile_analysis else []
         stored_partial_matches = []
         if persisted_match.skill_evidence_breakdown:
             stored_partial_matches = persisted_match.skill_evidence_breakdown.get("partial_matches", [])
@@ -211,101 +182,9 @@ class JobScoreExplanationService:
                 feedback_payload.to_dict() if feedback_payload is not None else None
             )
             return self._filter_for_role(persisted_payload, role)
-
-        explanation = build_match_explanation(
-            job=job,
-            analysis_result=result,
-            job_skill_rows=job_skill_rows,
-            final_score=persisted_match.match_score,
-            recommendation=persisted_match.recommendation,
-            matched_skills=list(persisted_match.matched_skills_json or []),
-            missing_skills=list(persisted_match.missing_skills_json or []),
-            candidate_skills=candidate_skills,
+        raise CandidateScoreExplanationNotReadyError(
+            "O score persistido desta vaga não está completo no modelo atual."
         )
-        confidence_assessment = compute_match_confidence(
-            match_score=persisted_match.match_score,
-            structured_mandatory_skill_count=sum(
-                1
-                for row in structured_job_skill_rows
-                if getattr(row.JobRequiredSkillModel, "is_mandatory", False)
-                and str(row.skill_name).strip()
-            ),
-            structured_total_skill_count=sum(
-                1 for row in structured_job_skill_rows if str(row.skill_name).strip()
-            ),
-            has_job_seniority=bool(getattr(job, "seniority_level", None)),
-            has_job_min_experience=getattr(job, "minimum_years_experience", None) is not None,
-            candidate_structured_skill_count=sum(
-                1
-                for skill in ((candidate_profile_analysis.skills_json or []) if candidate_profile_analysis else [])
-                if str(skill).strip()
-            ),
-            candidate_has_experience=bool(
-                candidate_profile_analysis is not None
-                and candidate_profile_analysis.experience_years is not None
-            ),
-            candidate_has_education=bool(
-                candidate_profile_analysis is not None
-                and str(candidate_profile_analysis.education_level or "").strip().lower()
-                not in {"", "none", "unknown", "undefined"}
-            ),
-            used_job_skill_fallback=used_job_skill_fallback,
-        )
-        combined_risks = list(explanation.risks)
-        for item in confidence_assessment.overestimation_risks:
-            if item not in combined_risks:
-                combined_risks.append(item)
-
-        payload = JobScoreExplanationPayload(
-            job_id=job_id,
-            candidate_id=candidate_id,
-            analysis_id=analysis.id,
-            score=float(explanation.final_score),
-            final_score=float(explanation.final_score),
-            freshness_status="unknown",
-            score_model_version=None,
-            explainability_version=None,
-            computed_at=None,
-            recommendation=explanation.recommendation,
-            engine_used="canonical",
-            explanation=explanation.explanation,
-            breakdown=explanation.to_dict()["breakdown"],
-            factor_summary={"positive": [], "negative": [], "contextual": []},
-            delta=None,
-            highlights=list(explanation.highlights),
-            risks=combined_risks,
-            high_score_reasons=list(explanation.highlights),
-            low_score_reasons=combined_risks,
-            overestimation_risks=list(confidence_assessment.overestimation_risks),
-            recommended_questions=[],
-            strongest_evidence=[],
-            matched_equivalences=stored_partial_matches or (list(explanation.partial_matches) if explanation.partial_matches else []),
-            gaps=list(explanation.missing_skills),
-            confidence_score=float(confidence_assessment.confidence_score),
-            strengths=list(explanation.matched_skills),
-            partial_matches=stored_partial_matches or (list(explanation.partial_matches) if explanation.partial_matches else []),
-        )
-
-        await self._observability_service.record_snapshot(
-            job_id=job_id,
-            candidate_id=candidate_id,
-            analysis_id=analysis.id,
-            engine_used=payload.engine_used,
-            score=payload.final_score,
-            confidence_score=payload.confidence_score,
-            matched_skills=list(explanation.matched_skills),
-            missing_skills=list(explanation.missing_skills),
-            equivalences_used=[],
-            source="ui",
-        )
-        feedback_payload = await self._observability_service.get_feedback(
-            job_id=job_id,
-            candidate_id=candidate_id,
-        )
-        payload.feedback = (
-            feedback_payload.to_dict() if feedback_payload is not None else None
-        )
-        return self._filter_for_role(payload, role)
 
     def _filter_for_role(
         self,
@@ -474,27 +353,6 @@ class JobScoreExplanationService:
             f"Score {score_label} calculado pelo motor canônico com recommendation "
             f"{payload.recommendation}. Consulte recrutador ou admin para o detalhamento."
         )
-
-    @staticmethod
-    def _fallback_skill_rows(job_profile_analysis: JobProfileAnalysisModel) -> list[SimpleNamespace]:
-        rows: list[SimpleNamespace] = []
-        for skill_name in job_profile_analysis.required_skills_json or []:
-            rows.append(
-                SimpleNamespace(
-                    skill_name=skill_name,
-                    skill_aliases=[],
-                    JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-                )
-            )
-        for skill_name in job_profile_analysis.nice_to_have_skills_json or []:
-            rows.append(
-                SimpleNamespace(
-                    skill_name=skill_name,
-                    skill_aliases=[],
-                    JobRequiredSkillModel=SimpleNamespace(is_mandatory=False),
-                )
-            )
-        return rows
 
     @staticmethod
     def _build_persisted_breakdown(raw: dict[str, Any] | None) -> dict[str, Any]:

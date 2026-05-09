@@ -1,9 +1,14 @@
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
+from src.application.ports.file_storage import FileStorageService
+from src.application.services.audit_service import AuditService
+from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
+    CandidateDeleteSummary,
     SQLAlchemyCandidateRepository,
 )
 from src.interface.api.schemas.candidate_schemas import (
@@ -46,32 +51,48 @@ class CandidateNotAllowedUserIdError(Exception):
     pass
 
 
+class CandidateDeleteReasonRequiredError(Exception):
+    pass
+
+
+class CandidateDeleteConfirmationError(Exception):
+    pass
+
+
+class CandidateCriticalHistoryError(Exception):
+    pass
+
+
 class CandidateService:
-    def __init__(self, repository: SQLAlchemyCandidateRepository) -> None:
+    def __init__(
+        self,
+        repository: SQLAlchemyCandidateRepository,
+        *,
+        audit_service: AuditService | None = None,
+        file_storage: FileStorageService | None = None,
+    ) -> None:
         self._repository = repository
+        self._audit_service = audit_service
+        self._file_storage = file_storage
 
     async def create(self, body: CreateCandidateRequest, created_by: UUID) -> CandidateModel:
         """
         Create a new Candidate.
 
-        Guardrail (Phase 20.3):
-        ──────────────────────
         The user_id field in CreateCandidateRequest is RESERVED for future portal use.
         Currently, it MUST be NULL. Creating Candidates with user_id requires explicit
-        linking via CandidateAccount (Phase 20.3+), not during Candidate creation.
+        linking outside Candidate creation.
 
         This prevents:
         - Accidental User creation when Candidate is created
         - Mixing User and Candidate creation flows
         - Race conditions between User and Candidate
-
-        See: docs/user-candidate-boundary.md
         """
         # GUARDRAIL: Reject user_id in candidate creation
         if body.user_id is not None:
             raise CandidateNotAllowedUserIdError(
                 "Não é permitido especificar user_id durante criação de candidato. "
-                "O vínculo com usuário será feito via portal do candidato (Phase 20.3+)."
+                "O vínculo com usuário será feito via portal do candidato."
             )
 
         email = self._clean_email(body.email)
@@ -95,7 +116,7 @@ class CandidateService:
             portfolio_url=body.portfolio_url,
             internal_notes=body.internal_notes,
             tags=self._clean_tags(body.tags),
-            user_id=None,  # GUARDRAIL: Always NULL; user_id will be set via CandidateAccount
+            user_id=None,
             created_by=created_by,
         )
         return await self._repository.create(candidate)
@@ -137,9 +158,12 @@ class CandidateService:
                 active_job_id=row["active_job_id"],
                 active_job_title=row["active_job_title"],
                 active_job_stage=row["active_job_stage"],
-                active_job_match_score=float(row["active_job_match_score"]) if row["active_job_match_score"] is not None else None,
+                active_job_final_score=(
+                    float(row["active_job_final_score"])
+                    if row["active_job_final_score"] is not None
+                    else None
+                ),
                 ai_status=row["ai_status"],
-                ai_score=float(row["ai_score"]) if row["ai_score"] is not None else None,
             )
             for row in rows
         ]
@@ -242,7 +266,6 @@ class CandidateService:
                     terminated_at=row.get("terminated_at"),
                     termination_reason=row.get("termination_reason"),
                     candidate_status=self._pipeline_stage_to_candidate_status(row["stage"]),
-                    match_score=float(row["match_score"]) if row.get("match_score") is not None else None,
                     updated_at=row["updated_at"],
                 )
                 for row in pipeline_rows
@@ -307,6 +330,39 @@ class CandidateService:
         candidate.updated_at = now
         await self._repository.save(candidate)
 
+    async def hard_delete(
+        self,
+        candidate_id: UUID,
+        *,
+        actor: User,
+        reason: str | None,
+        note: str | None,
+        confirmation: str | None,
+    ) -> None:
+        candidate = await self.get(candidate_id)
+        delete_reason = self._clean_optional_text(reason)
+        if delete_reason is None:
+            raise CandidateDeleteReasonRequiredError
+        if confirmation != "EXCLUIR":
+            raise CandidateDeleteConfirmationError
+
+        summary = await self._repository.get_delete_summary(candidate_id)
+        if summary.has_final_decision or summary.has_hiring_record:
+            raise CandidateCriticalHistoryError(
+                "Este candidato possui histórico crítico no processo e não pode ser excluído definitivamente. Use inativar candidato."
+            )
+
+        cleaned_note = self._clean_optional_text(note)
+        await self._log_delete_audit(
+            candidate=candidate,
+            actor=actor,
+            reason=delete_reason,
+            note=cleaned_note,
+            summary=summary,
+        )
+        await self._repository.hard_delete(candidate_id)
+        await self._cleanup_candidate_files(summary)
+
     async def check_duplicate(
         self,
         email: str | None,
@@ -355,6 +411,13 @@ class CandidateService:
         return cleaned
 
     @staticmethod
+    def _clean_optional_text(value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @staticmethod
     def _clean_tags(tags: list[str]) -> list[str]:
         return sorted({tag.lower().strip() for tag in tags if tag.strip()})
 
@@ -371,3 +434,48 @@ class CandidateService:
             "rejected": "Reprovado",
         }
         return mapping.get(stage, "Em processo")
+
+    async def _log_delete_audit(
+        self,
+        *,
+        candidate: CandidateModel,
+        actor: User,
+        reason: str,
+        note: str | None,
+        summary: CandidateDeleteSummary,
+    ) -> None:
+        if self._audit_service is None:
+            return
+        await self._audit_service.log_event(
+            action="delete_candidate",
+            resource_type="candidate",
+            resource_id=candidate.id,
+            user_id=actor.id,
+            metadata={
+                "entityType": "candidate",
+                "entityId": str(candidate.id),
+                "reason": reason,
+                "note": note,
+                "candidate_name": candidate.full_name,
+                "candidate_email": candidate.email,
+                "linked_jobs_count": summary.linked_jobs_count,
+                "analyses_count": summary.analyses_count,
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+            before_state={
+                "full_name": candidate.full_name,
+                "email": candidate.email,
+            },
+            after_state={"deleted": True},
+        )
+
+    async def _cleanup_candidate_files(self, summary: CandidateDeleteSummary) -> None:
+        if self._file_storage is not None:
+            for s3_key in summary.resume_s3_keys:
+                await self._file_storage.delete(s3_key)
+
+        for file_path in summary.candidate_document_paths:
+            path = Path(file_path)
+            if not path.is_absolute() or not path.exists() or not path.is_file():
+                continue
+            path.unlink(missing_ok=True)

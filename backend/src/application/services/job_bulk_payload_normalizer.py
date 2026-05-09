@@ -15,7 +15,6 @@ from src.interface.api.schemas.job_schemas import (
     BulkUpdateJobDataRequest,
     BulkUpdateJobItemRequest,
     BulkUpdateJobsRequest,
-    BulkUpdateOptionsRequest,
     BulkUpdateMatchKeyRequest,
 )
 
@@ -144,10 +143,10 @@ class JobBulkPayloadNormalizer:
 
     @classmethod
     def normalize_update_request(cls, raw: Any) -> BulkUpdateJobsRequest:
-        jobs_raw, options_raw = cls._extract_update_root(raw)
+        jobs_raw, _options_raw = cls._extract_update_root(raw)
         jobs = [cls._normalize_update_job(job, index) for index, job in enumerate(jobs_raw)]
         try:
-            return BulkUpdateJobsRequest(jobs=jobs, options=cls._normalize_update_options(options_raw))
+            return BulkUpdateJobsRequest(jobs=jobs)
         except ValidationError as exc:
             raise BulkJobPayloadNormalizationError(str(exc)) from exc
 
@@ -460,36 +459,6 @@ class JobBulkPayloadNormalizer:
                 "dry_run": cls._coerce_boolean(cls._pick_first(source, ["dry_run", "dryRun"]), False),
                 "skip_duplicates": cls._coerce_boolean(cls._pick_first(source, ["skip_duplicates", "skipDuplicates"]), True),
                 "default_status": cls._normalize_status(cls._pick_first(source, ["default_status", "status_padrao", "defaultStatus"])),
-                "fallback_unknown_skills_to_requirements": cls._coerce_boolean(
-                    cls._pick_first(
-                        source,
-                        [
-                            "fallback_unknown_skills_to_requirements",
-                            "fallbackUnknownSkillsToRequirements",
-                            "fallback_skills_para_requirements",
-                        ],
-                    ),
-                    False,
-                ),
-            }
-        )
-
-    @classmethod
-    def _normalize_update_options(cls, value: Any) -> BulkUpdateOptionsRequest:
-        source = cls._as_object(value) or {}
-        return BulkUpdateOptionsRequest.model_validate(
-            {
-                "fallback_unknown_skills_to_requirements": cls._coerce_boolean(
-                    cls._pick_first(
-                        source,
-                        [
-                            "fallback_unknown_skills_to_requirements",
-                            "fallbackUnknownSkillsToRequirements",
-                            "fallback_skills_para_requirements",
-                        ],
-                    ),
-                    False,
-                ),
             }
         )
 
@@ -608,7 +577,7 @@ class JobBulkPayloadNormalizer:
         return []
 
     @classmethod
-    def _coerce_boolean(cls, value: Any, fallback: bool) -> bool:
+    def _coerce_boolean(cls, value: Any, default_value: bool) -> bool:
         if isinstance(value, bool):
             return value
         if isinstance(value, (int, float)):
@@ -618,7 +587,7 @@ class JobBulkPayloadNormalizer:
             return True
         if normalized in {"false", "0", "nao", "no", "n", "opcional", "optional"}:
             return False
-        return fallback
+        return default_value
 
     @classmethod
     def _coerce_number(cls, value: Any) -> Decimal | None:

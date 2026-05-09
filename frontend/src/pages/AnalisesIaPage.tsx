@@ -4,6 +4,7 @@ import { usePipeline } from "../features/pipeline/PipelineContext";
 import { PageHeader } from "../components/common/PageHeader";
 import { AnalysisFilters } from "../features/analyses/components/AnalysisFilters";
 import { AnalysesTable } from "../features/analyses/components/AnalysesTable";
+import { DiscardAnalysisModal } from "../features/analyses/components/DiscardAnalysisModal";
 import { useAnalysesPage } from "../features/analyses/hooks/useAnalysesPage";
 import { useEffect, useState } from "react";
 
@@ -21,6 +22,8 @@ export function AnalisesIaPage() {
     aiFilter,
     handleAiFilter,
     actionId,
+    discardTarget,
+    setDiscardTarget,
     loading,
     error,
     items,
@@ -33,6 +36,7 @@ export function AnalisesIaPage() {
     clearFilters,
     handleRetry,
     handleForceFail,
+    handleDiscard,
   } = useAnalysesPage();
 
   const isWorkspaceOpen = selectedCandidateId !== null;
@@ -125,6 +129,7 @@ export function AnalisesIaPage() {
             }}
             onRetry={(item) => void handleRetry(item)}
             onForceFail={(item) => void handleForceFail(item)}
+            onDiscard={(item) => setDiscardTarget(item)}
             hasActiveFilters={hasActiveFilters}
             onClearFilters={clearFilters}
           />
@@ -141,6 +146,12 @@ export function AnalisesIaPage() {
           />
         ) : null}
       </div>
+      <DiscardAnalysisModal
+        open={discardTarget != null}
+        loading={discardTarget != null && actionId === discardTarget.id}
+        onClose={() => setDiscardTarget(null)}
+        onConfirm={handleDiscard}
+      />
     </div>
   );
 }

@@ -1,8 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 from uuid import UUID, uuid4
 
 
@@ -12,6 +11,7 @@ class AnalysisStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    DISCARDED = "discarded"
 
 
 class SeniorityLevel(str, Enum):
@@ -22,36 +22,6 @@ class SeniorityLevel(str, Enum):
     LEAD = "lead"
     PRINCIPAL = "principal"
     DIRECTOR = "director"
-
-
-@dataclass
-class AnalysisResult:
-    id: UUID
-    analysis_id: UUID
-    extracted_data: dict[str, Any]
-    created_at: datetime
-    overall_score: Optional[Decimal] = None
-    technical_score: Optional[Decimal] = None
-    experience_score: Optional[Decimal] = None
-    education_score: Optional[Decimal] = None
-    communication_score: Optional[Decimal] = None
-    leadership_score: Optional[Decimal] = None
-    candidate_summary: Optional[str] = None
-    seniority_level: Optional[SeniorityLevel] = None
-    total_experience_years: Optional[Decimal] = None
-    highest_education_level: Optional[str] = None
-    highest_education_field: Optional[str] = None
-    strengths: list[str] = field(default_factory=list)
-    weaknesses: list[str] = field(default_factory=list)
-    recommendations: list[str] = field(default_factory=list)
-    keywords: list[str] = field(default_factory=list)
-    input_tokens: Optional[int] = None
-    output_tokens: Optional[int] = None
-    cache_read_tokens: Optional[int] = None
-    cache_write_tokens: Optional[int] = None
-    processing_time_ms: Optional[int] = None
-    raw_llm_response: Optional[str] = None
-    prompt_version_used: Optional[str] = None
 
 
 @dataclass

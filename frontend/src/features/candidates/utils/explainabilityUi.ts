@@ -121,7 +121,7 @@ export function getExplainabilityFreshnessLine(
 ): string {
   if (status === "recomputing") return "Atualizando ranking...";
   if (status === "stale") return "Score desatualizado";
-  if (status === "unknown" || !status) return "Aguardando reprocessamento";
+  if (!status) return "Aguardando reprocessamento";
 
   const relative = formatRelativeTimestamp(computedAt);
   return relative ? `Atualizado ${relative}` : "Reanalisado recentemente";

@@ -19,10 +19,6 @@ from typing import Any
 import structlog
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIService
-from src.application.services.extraction_fallbacks import (
-    infer_job_nice_to_have_skills,
-    infer_job_required_skills,
-)
 from src.application.services.skill_normalizer_service import contains_whole_phrase, normalize_skill_text
 from src.domain.value_objects.job_profile import (
     AREA_WEIGHTS,
@@ -209,10 +205,7 @@ class JobProfilerService:
         logger.info("job_profiler.cache_miss", hash=desc_hash)
 
         if self._ai is None:
-            profile = ensure_textual_skill_coverage(
-                build_deterministic_job_profile(source),
-                source,
-            )
+            profile = build_deterministic_job_profile(source)
             self._cache.set(desc_hash, profile.to_dict())
             return profile
 
@@ -226,8 +219,6 @@ class JobProfilerService:
                 error=str(exc),
             )
             profile = build_deterministic_job_profile(source)
-
-        profile = ensure_textual_skill_coverage(profile, source)
 
         self._cache.set(desc_hash, profile.to_dict())
         return profile
@@ -574,117 +565,6 @@ def merge_manual_skills_into_profile(profile: JobProfile, source: JobProfileInpu
         confidence=confidence,
         description_hash=source.description_hash,
     )
-
-
-def ensure_textual_skill_coverage(profile: JobProfile, source: JobProfileInput) -> JobProfile:
-    inferred_required = infer_job_required_skills(
-        title=source.title,
-        description=source.description,
-        requirements=source.requirements,
-        responsibilities=source.responsibilities,
-        experience_context=source.experience_context,
-    )
-    inferred_optional = infer_job_nice_to_have_skills(
-        title=source.title,
-        description=source.description,
-        requirements=source.requirements,
-        responsibilities=source.responsibilities,
-        experience_context=source.experience_context,
-    )
-
-    critical = list(profile.critical_requirements)
-    desirable = list(profile.desirable_requirements)
-    if inferred_required:
-        critical = [
-            item for item in critical
-            if _looks_like_structured_requirement_name(item.name)
-        ]
-    if inferred_optional:
-        desirable = [
-            item for item in desirable
-            if _looks_like_structured_requirement_name(item.name)
-        ]
-    required_tools = list(profile.required_tools)
-    critical_keys = {_skill_key(item.name) for item in critical}
-    desirable_keys = {_skill_key(item.name) for item in desirable}
-    tool_keys = {_skill_key(item) for item in required_tools}
-
-    for skill_name in inferred_required:
-        key = _skill_key(skill_name)
-        if not key or key in critical_keys or key in desirable_keys:
-            continue
-        critical.append(
-            JobRequirement(
-                name=skill_name,
-                description=f"Requisito inferido do texto da vaga: {skill_name}",
-                is_mandatory=True,
-                importance_weight=1.2,
-                evidence_examples=[skill_name],
-            )
-        )
-        critical_keys.add(key)
-        if key not in tool_keys:
-            required_tools.append(skill_name)
-            tool_keys.add(key)
-
-    for skill_name in inferred_optional:
-        key = _skill_key(skill_name)
-        if not key or key in critical_keys or key in desirable_keys:
-            continue
-        desirable.append(
-            JobRequirement(
-                name=skill_name,
-                description=f"Diferencial inferido do texto da vaga: {skill_name}",
-                is_mandatory=False,
-                importance_weight=0.6,
-                evidence_examples=[skill_name],
-            )
-        )
-        desirable_keys.add(key)
-        if key not in tool_keys:
-            required_tools.append(skill_name)
-            tool_keys.add(key)
-
-    return JobProfile(
-        area=profile.area,
-        target_level=profile.target_level,
-        main_mission=profile.main_mission,
-        critical_requirements=critical,
-        desirable_requirements=desirable,
-        responsibilities=list(profile.responsibilities),
-        required_tools=_dedupe(required_tools),
-        required_capabilities=list(profile.required_capabilities),
-        seniority_signals=list(profile.seniority_signals),
-        adaptive_weights=dict(profile.adaptive_weights),
-        job_completeness_score=profile.job_completeness_score,
-        confidence=profile.confidence,
-        description_hash=profile.description_hash,
-    )
-
-
-def _looks_like_structured_requirement_name(value: str | None) -> bool:
-    normalized = normalize_skill_text(value or "")
-    if not normalized:
-        return False
-    if len(normalized) > 40 or len(normalized.split()) > 4:
-        return False
-    if any(marker in normalized for marker in (",", ";", ":", " ou ", " and ")):
-        return False
-    if any(phrase in normalized for phrase in ("utilizando", "experiencia em", "conhecimento em", "dominio de")):
-        return False
-
-    generic_tokens = {
-        "requisitos",
-        "requirement",
-        "requirements",
-        "description",
-        "descricao",
-        "responsibilities",
-        "responsabilidades",
-    }
-    if any(token in normalized.split() for token in generic_tokens):
-        return False
-    return True
 
 
 def _hash(text: str) -> str:

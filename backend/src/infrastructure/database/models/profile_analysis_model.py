@@ -88,9 +88,6 @@ class JobProfileAnalysisModel(Base):
     seniority_required: Mapped[str | None] = mapped_column(sa.String(50))
     education_required: Mapped[str | None] = mapped_column(sa.String(100))
     experience_required: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
-    # DEPRECATED: Use skill_requirements from JobModel instead. Keep for backward compatibility with historical data.
-    required_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
-    nice_to_have_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     responsibilities_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     raw_response_json: Mapped[dict] = mapped_column(JSONB_COMPAT, nullable=False, server_default="{}")
     input_tokens: Mapped[int | None] = mapped_column(sa.Integer)
@@ -100,6 +97,15 @@ class JobProfileAnalysisModel(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
         server_default=sa.text("NOW()"),
+    )
+    is_active: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        server_default="true",
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=True,
     )
 
     __table_args__ = (
@@ -113,6 +119,14 @@ class JobProfileAnalysisModel(Base):
         ),
         sa.Index("idx_job_profile_analysis_job", "job_id", "created_at"),
         sa.Index("idx_job_profile_analysis_signature", "job_signature_hash"),
+        sa.Index(
+            "uq_job_profile_analysis_one_active_per_job",
+            "job_id",
+            unique=True,
+            postgresql_where=sa.text("is_active = true"),
+            sqlite_where=sa.text("is_active = 1"),
+        ),
+        sa.Index("idx_job_profile_analysis_is_active", "job_id", "is_active"),
     )
 
 
@@ -154,7 +168,6 @@ class CandidateJobMatchModel(Base):
         sa.UUID(as_uuid=True),
         sa.ForeignKey("candidate_job_pipeline.candidate_job_pipeline_id", ondelete="SET NULL"),
     )
-    match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
     recommendation: Mapped[str | None] = mapped_column(sa.String(50))
     matched_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     missing_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
@@ -180,6 +193,11 @@ class CandidateJobMatchModel(Base):
         sa.TIMESTAMP(timezone=True),
         nullable=True,
     )
+    freshness_status: Mapped[str] = mapped_column(
+        sa.String(20),
+        nullable=False,
+    )
+    job_signature_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
 
     __table_args__ = (
         sa.UniqueConstraint(
@@ -202,12 +220,16 @@ class CandidateJobMatchModel(Base):
             "balanced_score IS NULL OR (balanced_score >= 0 AND balanced_score <= 100)",
             name="ck_candidate_job_match_balanced_score_range",
         ),
-        sa.Index("idx_candidate_job_match_job_score", "job_id", "match_score"),
+        sa.CheckConstraint(
+            "freshness_status IN ('fresh', 'stale')",
+            name="ck_candidate_job_match_freshness_status",
+        ),
         sa.Index("idx_candidate_job_match_job_created", "job_id", "created_at"),
         sa.Index("idx_candidate_job_match_candidate_job", "candidate_id", "job_id"),
         sa.Index("idx_candidate_job_match_pipeline", "candidate_job_pipeline_id"),
         sa.Index("idx_candidate_job_match_eligibility_status", "eligibility_status"),
-        sa.Index("idx_candidate_job_match_score_version", "score_version"),
         sa.Index("idx_candidate_job_match_possible_false_negative", "possible_false_negative"),
         sa.Index("idx_candidate_job_match_balanced_score", "balanced_score"),
+        sa.Index("idx_candidate_job_match_freshness", "job_id", "freshness_status"),
+        sa.Index("idx_candidate_job_match_job_signature", "job_id", "job_signature_hash"),
     )

@@ -8,6 +8,7 @@ import Pagination from "../components/common/Pagination";
 import { StatusPill } from "../components/common/StatusPill";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../features/auth/useAuth";
+import { ArchiveJobModal } from "../features/jobs/components/ArchiveJobModal";
 import { JobContextPanel } from "../features/jobs/components/JobContextPanel";
 import {
   useJobsList,
@@ -57,6 +58,7 @@ function formatStatusFilterLabel(value: JobStatusFilter) {
     paused: "Pausadas",
     closed: "Encerradas",
     cancelled: "Canceladas",
+    archived: "Arquivadas",
   };
 
   return labels[value];
@@ -87,6 +89,8 @@ export function VagasPage() {
     selectedJobId,
     setSelectedJobId,
     runningAction,
+    archiveTarget,
+    setArchiveTarget,
     jobOperationalData,
     filteredJobs,
     selectedJob,
@@ -100,6 +104,8 @@ export function VagasPage() {
     handlePause,
     handleClose,
     handleDelete,
+    handleArchive,
+    handleRestore,
   } = useJobsList();
 
   const statusQuickFilters: Array<{ value: JobStatusFilter; label: string; count: number }> = [
@@ -108,6 +114,7 @@ export function VagasPage() {
     { value: "draft", label: "Rascunhos", count: statusCounts.draft },
     { value: "paused", label: "Pausadas", count: statusCounts.paused },
     { value: "closed", label: "Encerradas", count: statusCounts.closed },
+    { value: "archived", label: "Arquivadas", count: statusCounts.archived },
   ];
 
   const activeFilterChips = [
@@ -250,6 +257,8 @@ export function VagasPage() {
                   <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
                   <span>{summary.draft} rascunhos</span>
                   <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
+                  <span>{summary.archived} arquivadas</span>
+                  <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
                   <span className={summary.attention > 0 ? "text-[hsl(var(--warning))]" : undefined}>
                     {summary.attention} atenção
                   </span>
@@ -348,6 +357,8 @@ export function VagasPage() {
             (jobId) => navigate(`/pipeline/${jobId}`),
             handlePause,
             handleClose,
+            setArchiveTarget,
+            handleRestore,
             handleDelete,
           );
 
@@ -479,6 +490,12 @@ export function VagasPage() {
             />
           ) : null
         }
+      />
+      <ArchiveJobModal
+        open={archiveTarget != null}
+        loading={archiveTarget != null && runningAction === `archive:${archiveTarget.id}`}
+        onClose={() => setArchiveTarget(null)}
+        onConfirm={handleArchive}
       />
     </div>
   );

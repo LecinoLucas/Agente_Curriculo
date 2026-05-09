@@ -15,17 +15,12 @@ class SQLAlchemyResumeRepository:
         """
         Find Candidate linked to a User via user_id.
 
-        Candidate Portal Bridge (Phase 20.2):
-        ────────────────────────────────────
         This method is part of the candidate portal access mechanism. It allows a User
         with role="candidate" to access their linked Candidate profile and resumes.
 
         Invariants:
         - Assumes at most 1 Candidate per user_id (enforced by partial UNIQUE index)
         - Used by ResumeService to filter access for candidate portal users
-        - Will be replaced by separate CandidateAccount table in Phase 20.3+
-
-        See: docs/user-candidate-boundary.md
         """
         return await self._session.scalar(
             sa.select(CandidateModel).where(

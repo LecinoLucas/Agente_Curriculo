@@ -5,12 +5,11 @@ IMPORTANTE:
 Este arquivo NÃO calcula match com vaga.
 Ele apenas:
 - extrai JSON
-- normaliza formatos antigos/novos
+- normaliza payloads de IA
 - calcula dados auxiliares do currículo
 - gera um score interno de qualidade do perfil, NÃO compatibilidade com vaga
 
-O match final deve ser calculado por outro serviço:
-job_profiler + resume_profiler + scoring_service.
+O score final público vem de CandidateJobScore.final_score.
 """
 
 import json
@@ -326,41 +325,6 @@ def _highest_education_level(education: list[dict[str, Any]]) -> str:
     )
 
 
-def _derive_experience_score(total_years: float | None) -> float:
-    if total_years is None:
-        return 0.0
-    if total_years >= 8:
-        return 95.0
-    if total_years >= 6:
-        return 90.0
-    if total_years >= 5:
-        return 80.0
-    if total_years >= 3:
-        return 65.0
-    if total_years >= 1:
-        return 45.0
-    return 20.0
-
-
-def _derive_education_score(level: str | None) -> float:
-    table = {
-        "none": 0.0,
-        "high_school": 35.0,
-        "technical": 55.0,
-        "bachelor": 75.0,
-        "postgraduate": 82.0,
-        "master": 88.0,
-        "phd": 92.0,
-    }
-    return table.get((level or "none"), 0.0)
-
-
-def _derive_technical_score(skills_count: int) -> float:
-    if skills_count <= 0:
-        return 0.0
-    return float(min(100, 40 + skills_count * 15))
-
-
 # ── Seniority / profile quality ────────────────────────────────────────────────
 
 def _classify_seniority(months: int, leadership_signals: list[str]) -> str:
@@ -611,83 +575,8 @@ def _normalize_resume_profiler_v2(data: dict[str, Any]) -> dict[str, Any]:
     return canonical
 
 
-def _normalize_legacy_data(data: dict[str, Any]) -> dict[str, Any]:
-    experiences = _normalize_experiences(data.get("experiences") or data.get("experience") or [])
-    skills = _normalize_skills(data.get("skills") or data.get("evidenced_skills") or [])
-    tools = _normalize_tools(
-        data.get("tools") or data.get("tools_and_systems") or [],
-        data.get("experiences") or [],
-    )
-
-    education_level, education = _normalize_education(
-        data.get("education_level")
-        or data.get("highest_education_level")
-        or data.get("education")
-        or []
-    )
-
-    total_months = (
-        _coerce_int(data.get("total_experience_months"))
-        or _calculate_total_experience_months(experiences)
-        or 0
-    )
-
-    leadership_raw = data.get("leadership_indicators") or {}
-    leadership_signals = _dedupe_strings(
-        data.get("leadership_signals")
-        or data.get("leadership_evidence")
-        or [
-            key
-            for key, value in leadership_raw.items()
-            if value
-        ]
-    )
-
-    impact_signals = _dedupe_strings(
-        data.get("impact_signals")
-        or data.get("business_impact_evidence")
-        or []
-    )
-
-    canonical = {
-        "current_role": normalize_text(data.get("current_role")),
-        "professional_area": normalize_text(data.get("professional_area")) or "other",
-        "detected_level": _classify_seniority(total_months, leadership_signals),
-        "total_experience_months": total_months,
-        "total_experience_years": round(total_months / 12, 1) if total_months else None,
-        "experiences": experiences,
-        "skills": skills,
-        "tools": tools,
-        "education_level": education_level,
-        "education": education,
-        "leadership_signals": leadership_signals,
-        "impact_signals": impact_signals,
-        "profile_completeness": round(_profile_quality_score({
-            "current_role": data.get("current_role"),
-            "experiences": experiences,
-            "skills": skills,
-            "tools": tools,
-            "education_level": education_level,
-            "total_experience_months": total_months,
-            "impact_signals": impact_signals,
-            "leadership_signals": leadership_signals,
-        }) / 100, 2),
-        "confidence": normalize_text(data.get("confidence")) or "medium",
-    }
-
-    return canonical
-
-
 def _canonicalize_candidate_profile(data: dict[str, Any]) -> dict[str, Any]:
-    if (
-        "detected_level" in data
-        or "professional_area" in data
-        or "evidenced_skills" in data
-        or "tools_and_systems" in data
-    ):
-        return _normalize_resume_profiler_v2(data)
-
-    return _normalize_legacy_data(data)
+    return _normalize_resume_profiler_v2(data)
 
 
 # ── Main entry ─────────────────────────────────────────────────────────────────
@@ -701,31 +590,6 @@ def parse_analysis_response(raw: str) -> dict[str, Any]:
     strengths = _dedupe_strings(data.get("strengths") or [])
     weaknesses = _dedupe_strings(data.get("weaknesses") or [])
     recommendations = _dedupe_strings(data.get("recommendations") or [])
-    explicit_overall = _coerce_float(data.get("overall_score"))
-
-    profile_quality = round(float(canonical.get("profile_completeness") or 0) * 100, 2)
-    overall_score = _clamp_score(explicit_overall) if explicit_overall is not None else profile_quality
-
-    communication_score = _coerce_float(data.get("communication_score"))
-    communication_quality_payload = data.get("cv_quality_score")
-    if communication_score is None and isinstance(communication_quality_payload, dict):
-        total_quality = _coerce_float(communication_quality_payload.get("total"))
-        if total_quality is None:
-            total_quality = sum(
-                _coerce_float(communication_quality_payload.get(key)) or 0.0
-                for key in ("structure", "clarity", "professionalism", "completeness")
-            )
-        communication_score = _clamp_score(float(total_quality))
-
-    communication_quality = None
-    if communication_score is not None:
-        communication_quality = {
-            "structure": communication_score,
-            "clarity": communication_score,
-            "professionalism": communication_score,
-            "completeness": communication_score,
-        }
-
     explicit_keywords = _dedupe_preserve_case(data.get("keywords") or [])
     raw_skill_names = _dedupe_preserve_case(
         [
@@ -738,18 +602,6 @@ def parse_analysis_response(raw: str) -> dict[str, Any]:
     total_exp_years = _coerce_float(data.get("total_experience_years"))
     if total_exp_years is None:
         total_exp_years = canonical.get("total_experience_years")
-
-    technical_score = _coerce_float(data.get("technical_score"))
-    if technical_score is None:
-        technical_score = _derive_technical_score(len(canonical.get("skills") or []))
-
-    experience_score = _coerce_float(data.get("experience_score"))
-    if experience_score is None:
-        experience_score = _derive_experience_score(total_exp_years)
-
-    education_score = _coerce_float(data.get("education_score"))
-    if education_score is None:
-        education_score = _derive_education_score(canonical.get("education_level"))
 
     extracted_data = dict(canonical)
     parsed_location = normalize_text(
@@ -764,18 +616,8 @@ def parse_analysis_response(raw: str) -> dict[str, Any]:
         extracted_data["location"] = parsed_location
     if parsed_work_model is not None:
         extracted_data["work_model"] = parsed_work_model
-    if communication_quality is not None:
-        extracted_data["communication_quality"] = communication_quality
 
     return {
-        # Mantém compatibilidade com campos antigos, mas NÃO é match com vaga.
-        "overall_score": overall_score,
-        "technical_score": technical_score,
-        "experience_score": experience_score,
-        "education_score": education_score,
-        "communication_score": communication_score,
-        "leadership_score": _coerce_float(data.get("leadership_score")),
-
         "candidate_summary": str(summary).strip() if summary else None,
         "seniority_level": canonical.get("detected_level"),
         "total_experience_years": total_exp_years,

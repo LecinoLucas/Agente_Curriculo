@@ -70,7 +70,7 @@ export type ScoreExplanationResponse = {
   analysis_id: string;
   score: number;
   final_score: number;
-  freshness_status: "fresh" | "stale" | "unknown";
+  freshness_status: "fresh" | "stale";
   score_model_version?: string | null;
   explainability_version?: string | null;
   computed_at?: string | null;

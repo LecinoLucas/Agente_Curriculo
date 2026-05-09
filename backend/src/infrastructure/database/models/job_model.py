@@ -25,7 +25,7 @@ class JobModel(Base):
     description: Mapped[str] = mapped_column(sa.Text, nullable=False)
     requirements: Mapped[Optional[str]] = mapped_column(sa.Text)
     status: Mapped[str] = mapped_column(
-        sa.Enum("draft", "published", "paused", "closed", "cancelled", name="job_status"),
+        sa.Enum("draft", "published", "paused", "closed", "cancelled", "archived", name="job_status"),
         nullable=False,
         server_default="draft",
     )
@@ -51,6 +51,11 @@ class JobModel(Base):
     created_by: Mapped[UUID] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False)
     published_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
     closed_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
+    archived_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
+    archived_by: Mapped[Optional[UUID]] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"))
+    archived_previous_status: Mapped[Optional[str]] = mapped_column(sa.String(30))
+    archive_reason: Mapped[Optional[str]] = mapped_column(sa.String(100))
+    archive_reason_note: Mapped[Optional[str]] = mapped_column(sa.Text)
     expires_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),

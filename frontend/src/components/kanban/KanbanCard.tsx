@@ -2,12 +2,6 @@ import type { CSSProperties } from "react";
 import type { AIAnalysisStatus, JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
 
-const SCORE_CLS = {
-  high: "ui-badge-success ring-1 ring-[hsl(var(--success))]/25",
-  mid: "ui-badge-warning ring-1 ring-[hsl(var(--warning))]/25",
-  low: "ui-badge-danger ring-1 ring-[hsl(var(--danger))]/25",
-} as const;
-
 const AI_STATUS_CLS: Record<AIAnalysisStatus, string> = {
   completed:  "ui-badge-success ring-1 ring-[hsl(var(--success))]/25",
   processing: "ui-badge-info ring-1 ring-[hsl(var(--primary))]/20",
@@ -24,17 +18,6 @@ const AI_STATUS_LABEL: Record<AIAnalysisStatus, string> = {
   cancelled:  "Cancelada",
 };
 
-function scoreVariant(score: number | null | undefined): keyof typeof SCORE_CLS {
-  if (score == null) return "low";
-  const n = score > 1 ? score / 100 : score;
-  return n >= 0.7 ? "high" : n >= 0.4 ? "mid" : "low";
-}
-
-function fmt(score: number | null | undefined): string {
-  if (score == null) return "—";
-  return `${Math.round(score > 1 ? score : score * 100)}%`;
-}
-
 interface KanbanCardProps {
   candidate: JobCandidate;
   isSaving: boolean;
@@ -48,7 +31,6 @@ export function KanbanCard({
   enterDelay,
   onCardClick,
 }: KanbanCardProps) {
-  const variant = scoreVariant(candidate.match_score);
   const skills = (candidate.top_skills ?? []).slice(0, 3);
   const aiStatus = candidate.ai_status ?? null;
   const seniority = candidate.seniority_level ? formatSeniority(candidate.seniority_level) : null;
@@ -72,7 +54,6 @@ export function KanbanCard({
         .join(" ")}
       style={{ "--enter-delay": `${enterDelay}ms` } as CSSProperties}
     >
-      {/* Name + compatibility score */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <span className="line-clamp-2 text-sm font-semibold leading-snug text-[hsl(var(--text))]">
@@ -81,17 +62,6 @@ export function KanbanCard({
           {meta.length > 0 ? (
             <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">{meta.join(" · ")}</p>
           ) : null}
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Score nesta vaga
-          </div>
-          <span
-            className={`mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${SCORE_CLS[variant]}`}
-            title="Compatibilidade com a vaga ativa"
-          >
-            {fmt(candidate.match_score)}
-          </span>
         </div>
       </div>
 

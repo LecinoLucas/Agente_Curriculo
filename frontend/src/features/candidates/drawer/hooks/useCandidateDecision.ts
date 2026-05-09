@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import type { CandidateOverview, Job, JobRankingEntry, PipelineStage } from "../../../../types/domain";
-import { getCandidateState, getNextAction, type CandidateState } from "../../../pipeline/candidateState";
 import { formatScorePercent, getScoreTone, normalizeScorePercent } from "../../utils/scoreFormatting";
 import { isTransferTargetJob } from "../../../../utils/jobStatusRules";
 
@@ -73,7 +72,6 @@ interface UseCandidateDecisionInput {
   candidateActiveJobId: string | null;
   jobs: Job[];
   rankingEntry: JobRankingEntry | null;
-  linkSaving: boolean;
 }
 
 export function useCandidateDecision({
@@ -81,7 +79,6 @@ export function useCandidateDecision({
   candidateActiveJobId,
   jobs,
   rankingEntry,
-  linkSaving,
 }: UseCandidateDecisionInput) {
   const primaryPipelineEntry = useMemo(() => {
     if (!candidateOverview || !candidateActiveJobId) return null;
@@ -99,30 +96,8 @@ export function useCandidateDecision({
     [jobs, candidateActiveJobId],
   );
 
-  const activeJobCompatibilityScore = normalizeScorePercent(primaryPipelineEntry?.match_score ?? null);
+  const activeJobCompatibilityScore = normalizeScorePercent(rankingEntry?.final_score ?? null);
   const isTerminalPipelineStage = currentStage === "hired" || currentStage === "rejected";
-
-  const candidateState = useMemo(() => {
-    if (!candidateOverview) return null;
-    if (primaryPipelineEntry == null) {
-      return {
-        key: "waiting_job",
-        label: "Aguardando vaga",
-        tone: "warning",
-      } as CandidateState;
-    }
-    return getCandidateState({
-      resume_count: candidateOverview.resumes.length,
-      ai_status: candidateOverview.latest_analysis?.status ?? null,
-      pipeline: { stage: primaryPipelineEntry?.stage ?? null },
-      ranking_available: rankingEntry !== null || activeJobCompatibilityScore !== null,
-    });
-  }, [activeJobCompatibilityScore, primaryPipelineEntry?.stage, candidateOverview, rankingEntry]);
-
-  const candidateNextAction = useMemo(
-    () => (candidateState ? getNextAction(candidateState) : null),
-    [candidateState],
-  );
 
   const transferAvailableJobs = useMemo(
     () =>
@@ -149,29 +124,16 @@ export function useCandidateDecision({
     latestPipelineEntry?.job_title ??
     "Não vinculado";
 
-  const linkStatus = primaryPipelineEntry
-    ? "Vínculo ativo no pipeline"
-    : latestPipelineEntry?.relationship_status === "rejected"
-      ? "Vínculo encerrado (Reprovado)"
-      : latestPipelineEntry?.relationship_status === "hired"
-        ? "Vínculo encerrado (Contratado)"
-    : linkSaving
-      ? "Vinculando à vaga ativa"
-      : "Não vinculado";
-
   return {
     primaryPipelineEntry,
     latestPipelineEntry,
     currentStage,
     activeJob,
     activeJobCompatibilityScore,
-    candidateState,
-    candidateNextAction,
     transferAvailableJobs,
     canTransferCurrentJob,
     hasResume,
     compatibilityGuidance,
     activeJobLabel,
-    linkStatus,
   };
 }

@@ -1,19 +1,42 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import type { RefObject } from "react";
 import type { CandidateOverview } from "../../../../types/domain";
+import type { PanelTab } from "../../../pipeline/PipelineContext";
 import type { CandidateActionFeedback } from "../v2/CandidateProfileView";
 import { resumeService } from "../../../../services/resumeService";
 import { analysisService } from "../../../../services/analysisService";
 import { feedback } from "../../../../services/feedback";
-import { formatErrorForToast, getHttpStatus, handleApiError } from "../../../../shared/utils/errorHandler";
+import {
+  formatErrorForToast,
+  getHttpStatus,
+  handleApiError,
+} from "../../../../shared/utils/errorHandler";
 import { toast } from "../../../../shared/utils/toast";
 
-// Track active async operations for cleanup on unmount/candidate change
-type AbortTrackerRef = React.MutableRefObject<Set<AbortController>>;
+type AnalysisStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 const MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024;
 
+function isAnalysisStatus(status: string | null | undefined): status is AnalysisStatus {
+  return (
+    status === "pending" ||
+    status === "processing" ||
+    status === "completed" ||
+    status === "failed" ||
+    status === "cancelled"
+  );
+}
+
+function normalizeAnalysisStatus(status: string | null | undefined): AnalysisStatus {
+  return isAnalysisStatus(status) ? status : "pending";
+}
+
 function isAnalysisInProgress(status: string | null | undefined): boolean {
-  if (!status) return false;
   return status === "pending" || status === "processing";
 }
 
@@ -23,11 +46,16 @@ async function recoverInFlightAnalysis({
   syncAnalysisStart,
 }: {
   candidateId: string;
-  startPolling: (analysisId: string, cId: string, status: string, jobId: string | null) => void;
+  startPolling: (
+    analysisId: string,
+    candidateId?: string | null,
+    initialStatus?: AnalysisStatus | null,
+    jobId?: string | null,
+  ) => void;
   syncAnalysisStart: (payload: {
     candidateId: string;
     analysisId: string;
-    status: string;
+    status: AnalysisStatus;
     jobId: string | null;
     resumeId: string | null;
     resumeTitle: string | null;
@@ -36,15 +64,20 @@ async function recoverInFlightAnalysis({
   try {
     const result = await analysisService.getInFlightByCandidate(candidateId);
     if (!result) return false;
+
+    const status = normalizeAnalysisStatus(result.analysis_status);
+
     await syncAnalysisStart({
       candidateId,
       analysisId: result.analysis_id,
-      status: result.analysis_status,
+      status,
       jobId: result.job_id ?? null,
       resumeId: result.resume_id ?? null,
       resumeTitle: result.resume_title ?? null,
     });
-    startPolling(result.analysis_id, candidateId, result.analysis_status, result.job_id ?? null);
+
+    startPolling(result.analysis_id, candidateId, status, result.job_id ?? null);
+
     return true;
   } catch {
     return false;
@@ -77,7 +110,7 @@ export interface DocumentState {
   confirmDeleteId: string | null;
   deletingId: string | null;
   analyzingResumeId: string | null;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  fileInputRef: RefObject<HTMLInputElement | null>;
 }
 
 export interface DocumentStateSetters {
@@ -96,14 +129,18 @@ interface UseDocumentHandlersParams {
   overview: CandidateOverview;
   activeJobId: string | null;
   canSpendRealTokens: boolean;
-  // PipelineContext callbacks (passed as props now)
   refreshCandidateOverview: () => Promise<void>;
-  startPolling: (analysisId: string, cId: string, status: string, jobId: string | null) => void;
-  switchPanelTab: (tab: string) => void;
+  startPolling: (
+    analysisId: string,
+    candidateId?: string | null,
+    initialStatus?: AnalysisStatus | null,
+    jobId?: string | null,
+  ) => void;
+  switchPanelTab: (tab: PanelTab) => void;
   syncAnalysisStart: (payload: {
     candidateId: string;
     analysisId: string;
-    status: string;
+    status: AnalysisStatus;
     jobId: string | null;
     resumeId: string | null;
     resumeTitle: string | null;
@@ -135,7 +172,6 @@ export function useDocumentHandlers(
   const activeControllersRef = useRef<Set<AbortController>>(new Set());
   const pendingManualAnalysisRef = useRef<string | null>(null);
 
-  // Cleanup: abort all pending async operations on unmount or candidate change
   useEffect(() => {
     return () => {
       activeControllersRef.current.forEach((controller) => controller.abort());
@@ -152,6 +188,7 @@ export function useDocumentHandlers(
 
   const clearFile = useCallback(() => {
     setters.setSelectedFile(null);
+
     if (state.fileInputRef.current) {
       state.fileInputRef.current.value = "";
     }
@@ -163,16 +200,19 @@ export function useDocumentHandlers(
         clearFile();
         return;
       }
+
       if (!file.name.toLowerCase().endsWith(".pdf")) {
         toast.warning("Selecione um arquivo com extensão .pdf");
         clearFile();
         return;
       }
+
       if (file.size > MAX_PDF_UPLOAD_BYTES) {
         toast.warning("Arquivo PDF excede o limite de 10 MB");
         clearFile();
         return;
       }
+
       setters.setSelectedFile(file);
     },
     [clearFile, setters],
@@ -180,8 +220,11 @@ export function useDocumentHandlers(
 
   const handleUpload = useCallback(async () => {
     if (!state.selectedFile) return;
+
     if (!overview.candidate.id) {
-      toast.error("Não foi possível enviar o currículo. Abra o candidato novamente e tente outra vez.");
+      toast.error(
+        "Não foi possível enviar o currículo. Abra o candidato novamente e tente outra vez.",
+      );
       return;
     }
 
@@ -190,7 +233,10 @@ export function useDocumentHandlers(
 
     setters.setUploadLoading(true);
     feedback.uploadResume.processing();
+
     try {
+      const selectedFileName = state.selectedFile.name;
+
       const payload = await resumeService.initiateUpload(overview.candidate.id);
       if (controller.signal.aborted) return;
 
@@ -198,28 +244,27 @@ export function useDocumentHandlers(
       if (controller.signal.aborted) return;
 
       clearFile();
+
       await refreshCandidateOverview();
       if (controller.signal.aborted) return;
 
-      switchPanelTab("analysis");
+      switchPanelTab("score");
       feedback.uploadResume.success();
 
       if (uploaded.analysis_auto_requested && uploaded.analysis_id) {
+        const status = normalizeAnalysisStatus(uploaded.analysis_status);
+
         await syncAnalysisStart({
           candidateId: overview.candidate.id,
           analysisId: uploaded.analysis_id,
-          status: uploaded.analysis_status ?? "pending",
+          status,
           jobId: activeJobId,
           resumeId: uploaded.resume_id,
-          resumeTitle: state.selectedFile.name,
+          resumeTitle: selectedFileName,
         });
+
         if (!controller.signal.aborted) {
-          startPolling(
-            uploaded.analysis_id,
-            overview.candidate.id,
-            uploaded.analysis_status ?? "pending",
-            activeJobId,
-          );
+          startPolling(uploaded.analysis_id, overview.candidate.id, status, activeJobId);
         }
       } else {
         notifyCandidatesChanged();
@@ -232,11 +277,12 @@ export function useDocumentHandlers(
       if (!controller.signal.aborted) {
         setters.setUploadLoading(false);
       }
+
       activeControllersRef.current.delete(controller);
     }
   }, [
     state.selectedFile,
-    overview,
+    overview.candidate.id,
     activeJobId,
     clearFile,
     refreshCandidateOverview,
@@ -254,12 +300,17 @@ export function useDocumentHandlers(
     activeControllersRef.current.add(controller);
 
     setters.setEditSaving(true);
+
     try {
-      await resumeService.update(state.editingResumeId, { title: state.editTitle.trim() });
+      await resumeService.update(state.editingResumeId, {
+        title: state.editTitle.trim(),
+      });
+
       if (controller.signal.aborted) return;
 
       toast.success("Título atualizado");
       setters.setEditingResumeId(null);
+
       await refreshCandidateOverview();
       if (controller.signal.aborted) return;
 
@@ -272,9 +323,16 @@ export function useDocumentHandlers(
       if (!controller.signal.aborted) {
         setters.setEditSaving(false);
       }
+
       activeControllersRef.current.delete(controller);
     }
-  }, [state.editingResumeId, state.editTitle, refreshCandidateOverview, notifyCandidatesChanged, setters]);
+  }, [
+    state.editingResumeId,
+    state.editTitle,
+    refreshCandidateOverview,
+    notifyCandidatesChanged,
+    setters,
+  ]);
 
   const handleToggleStatus = useCallback(
     async (resumeId: string, currentStatus: string) => {
@@ -285,12 +343,15 @@ export function useDocumentHandlers(
         if (currentStatus === "active") {
           await resumeService.archive(resumeId);
           if (controller.signal.aborted) return;
+
           toast.success("Currículo arquivado");
         } else {
           await resumeService.activate(resumeId);
           if (controller.signal.aborted) return;
+
           toast.success("Currículo reativado");
         }
+
         await refreshCandidateOverview();
         if (controller.signal.aborted) return;
 
@@ -314,11 +375,13 @@ export function useDocumentHandlers(
 
     setters.setDeletingId(state.confirmDeleteId);
     setters.setConfirmDeleteId(null);
+
     try {
       await resumeService.delete(state.confirmDeleteId);
       if (controller.signal.aborted) return;
 
       toast.success("Currículo excluído");
+
       await refreshCandidateOverview();
       if (controller.signal.aborted) return;
 
@@ -331,26 +394,41 @@ export function useDocumentHandlers(
       if (!controller.signal.aborted) {
         setters.setDeletingId(null);
       }
+
       activeControllersRef.current.delete(controller);
     }
-  }, [state.confirmDeleteId, refreshCandidateOverview, notifyCandidatesChanged, setters]);
+  }, [
+    state.confirmDeleteId,
+    refreshCandidateOverview,
+    notifyCandidatesChanged,
+    setters,
+  ]);
 
   const handleAnalyze = useCallback(
     async (resumeId: string, versionId: string) => {
       if (pendingManualAnalysisRef.current === resumeId) return;
+
       const manualJobId = activeJobId;
+
       if (!canSpendRealTokens) {
-        toast.warning("Consumo real bloqueado — ative real_ai_token_spend_enabled para analisar.");
+        toast.warning(
+          "Consumo real bloqueado — ative real_ai_token_spend_enabled para analisar.",
+        );
         return;
       }
+
       if (!manualJobId) {
-        toast.info("Candidato sem vaga ativa. Adicione o candidato a uma vaga antes de solicitar análise.");
+        toast.info(
+          "Candidato sem vaga ativa. Adicione o candidato a uma vaga antes de solicitar análise.",
+        );
         return;
       }
+
       if (isAnalysisInProgress(latest_analysis?.status ?? null)) {
         toast.info("Já existe uma análise em andamento para este candidato.");
         return;
       }
+
       if (pollingAnalysisId !== null) {
         toast.info("Já existe uma análise em andamento para este candidato.");
         return;
@@ -364,6 +442,12 @@ export function useDocumentHandlers(
         startPolling,
         syncAnalysisStart,
       });
+
+      if (controller.signal.aborted) {
+        activeControllersRef.current.delete(controller);
+        return;
+      }
+
       if (reusedInFlightAnalysis) {
         toast.info("Já existe uma análise em andamento para este candidato.");
         activeControllersRef.current.delete(controller);
@@ -372,18 +456,22 @@ export function useDocumentHandlers(
 
       pendingManualAnalysisRef.current = resumeId;
       setters.setAnalyzingResumeId(resumeId);
+
       onActionFeedback?.({
         tone: "info",
         pending: true,
         title: "Solicitando reanálise",
         detail: "O status será atualizado automaticamente neste workspace.",
       });
+
       feedback.requestAnalysis.processing();
+
       try {
         const response = await analysisService.request(versionId, manualJobId);
         if (controller.signal.aborted) return;
 
         const resume = resumes.find((item) => item.resume_id === resumeId);
+
         await syncAnalysisStart({
           candidateId: overview.candidate.id,
           analysisId: response.analysis_id,
@@ -392,14 +480,17 @@ export function useDocumentHandlers(
           resumeId,
           resumeTitle: resume?.title ?? null,
         });
+
         if (controller.signal.aborted) return;
 
         startPolling(response.analysis_id, overview.candidate.id, "pending", manualJobId);
+
         onActionFeedback?.({
           tone: "info",
           title: "Reanálise iniciada",
           detail: "A IA entrou em processamento e o candidato já foi atualizado.",
         });
+
         feedback.requestAnalysis.success();
       } catch (err) {
         if (controller.signal.aborted) {
@@ -413,32 +504,39 @@ export function useDocumentHandlers(
             startPolling,
             syncAnalysisStart,
           });
+
           if (recovered) {
             onActionFeedback?.({
               tone: "info",
               title: "Análise retomada",
               detail: "Já existia uma execução em andamento para este candidato.",
             });
+
             toast.info("Uma análise já estava em andamento e foi retomada.");
             activeControllersRef.current.delete(controller);
             pendingManualAnalysisRef.current = null;
             return;
           }
+
           showManualAnalysisConflictToast();
           activeControllersRef.current.delete(controller);
           pendingManualAnalysisRef.current = null;
           return;
         }
+
         feedback.requestAnalysis.error(err);
+
         onActionFeedback?.({
           tone: "danger",
           title: "Falha ao iniciar a reanálise",
           detail: "A solicitação não foi aplicada. Revise o estado atual e tente novamente.",
         });
+
         setters.setAnalyzingResumeId(null);
         pendingManualAnalysisRef.current = null;
       } finally {
         activeControllersRef.current.delete(controller);
+
         if (controller.signal.aborted) {
           pendingManualAnalysisRef.current = null;
         }
@@ -448,7 +546,7 @@ export function useDocumentHandlers(
       activeJobId,
       canSpendRealTokens,
       latest_analysis,
-      overview,
+      overview.candidate.id,
       pollingAnalysisId,
       startPolling,
       syncAnalysisStart,

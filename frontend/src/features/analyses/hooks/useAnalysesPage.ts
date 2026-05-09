@@ -6,8 +6,9 @@ import { AnalysisGlobalItem } from "../../../types/domain";
 import { Paginated } from "../../../types/api";
 import { usePipeline } from "../../pipeline/PipelineContext";
 import { feedback } from "../../../services/feedback";
+import { toast } from "../../../shared/utils/toast";
 
-export type StatusFilter = "all" | "pending" | "processing" | "completed" | "failed" | "cancelled";
+export type StatusFilter = "all" | "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
 export type AiFilter = "all" | "real" | "mock";
 
 const PAGE_SIZE = 20;
@@ -21,6 +22,7 @@ export function useAnalysesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [aiFilter, setAiFilter] = useState<AiFilter>("all");
   const [actionId, setActionId] = useState<string | null>(null);
+  const [discardTarget, setDiscardTarget] = useState<AnalysisGlobalItem | null>(null);
 
   const { data, loading, error, run } = useAsyncState<Paginated<AnalysisGlobalItem>>();
 
@@ -117,6 +119,27 @@ export function useAnalysesPage() {
     }
   }
 
+  async function handleDiscard(payload: { reason: string; note?: string }) {
+    if (!discardTarget) return;
+    setActionId(discardTarget.id);
+    try {
+      await analysisService.discard(discardTarget.id, payload);
+      setDiscardTarget(null);
+      fetchData();
+      toast.success("Análise descartada com sucesso.");
+    } catch (err) {
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível descartar a análise.",
+          "Tente novamente.",
+        ),
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+
   const items = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
@@ -134,6 +157,8 @@ export function useAnalysesPage() {
     aiFilter,
     handleAiFilter,
     actionId,
+    discardTarget,
+    setDiscardTarget,
     loading,
     error,
     items,
@@ -146,5 +171,6 @@ export function useAnalysesPage() {
     clearFilters,
     handleRetry,
     handleForceFail,
+    handleDiscard,
   };
 }

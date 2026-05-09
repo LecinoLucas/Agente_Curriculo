@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.analysis_service import (
+    AnalysisDiscardBlockedError,
     AnalysisNotCompletedError,
     AnalysisNotFoundError,
     AnalysisResultDetails,
@@ -14,6 +15,7 @@ from src.application.services.analysis_service import (
     AnalysisService,
     JobNotFoundError,
 )
+from src.application.services.audit_service import AuditService
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
 from src.domain.exceptions import ValidationException
@@ -32,6 +34,7 @@ from src.interface.api.schemas.analysis_schemas import (
     AnalysisRequestResponse,
     AnalysisResponse,
     AnalysisResultResponse,
+    DiscardAnalysisRequest,
     AnalysisStatusResponse,
     BulkAnalysisActionRequest,
     BulkAnalysisActionResponse,
@@ -46,7 +49,7 @@ _FORCE_FAIL_REASON = "Encerrada manualmente pelo usuário"
 
 
 def _analysis_service(db: AsyncSession) -> AnalysisService:
-    return AnalysisService(SQLAlchemyAnalysisRepository(db))
+    return AnalysisService(SQLAlchemyAnalysisRepository(db), audit_service=AuditService(db))
 
 
 def _is_rate_limited_analysis_blocked(analysis) -> bool:
@@ -100,6 +103,10 @@ async def _analysis_response(db: AsyncSession, analysis) -> AnalysisResponse:
         requested_by=analysis.requested_by,
         requested_by_name=await _resolve_requestor_name(db, analysis.requested_by),
         failure_reason=analysis.failure_reason,
+        discarded_at=analysis.discarded_at,
+        discarded_by=analysis.discarded_by,
+        discard_reason=analysis.discard_reason,
+        discard_reason_note=analysis.discard_reason_note,
         created_at=analysis.created_at,
         updated_at=analysis.updated_at,
     )
@@ -123,6 +130,8 @@ def _handle_analysis_service_error(exc: Exception) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resultado da análise não encontrado",
         )
+    if isinstance(exc, AnalysisDiscardBlockedError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, JobNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
     raise exc
@@ -153,12 +162,6 @@ async def _analysis_result_response(
         worker_id=details.analysis.worker_id,
         task_id=details.analysis.task_id,
         used_real_ai=total_tokens > 0,
-        overall_score=result.overall_score,
-        technical_score=result.technical_score,
-        experience_score=result.experience_score,
-        education_score=result.education_score,
-        communication_score=result.communication_score,
-        leadership_score=result.leadership_score,
         candidate_summary=result.candidate_summary,
         seniority_level=result.seniority_level,
         total_experience_years=result.total_experience_years,
@@ -278,6 +281,28 @@ async def get_analysis(
         raise
 
 
+@router.patch("/{analysis_id}/discard", response_model=AnalysisResponse)
+async def discard_analysis(
+    analysis_id: UUID,
+    body: DiscardAnalysisRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AnalysisResponse:
+    try:
+        analysis = await _analysis_service(db).discard(
+            analysis_id,
+            current_user=current_user,
+            reason=body.reason,
+            note=body.note,
+        )
+        await db.commit()
+        return await _analysis_response(db, analysis)
+    except Exception as exc:
+        await db.rollback()
+        _handle_analysis_service_error(exc)
+        raise
+
+
 @router.get("/{analysis_id}/status", response_model=AnalysisStatusResponse)
 async def get_analysis_status(
     analysis_id: UUID,
@@ -391,7 +416,7 @@ async def bulk_force_fail_analyses(
     now = datetime.now(UTC)
     processed = 0
     skipped = 0
-    TERMINAL = {"completed", "failed", "cancelled"}
+    TERMINAL = {"completed", "failed", "cancelled", "discarded"}
 
     for analysis_id in body.analysis_ids:
         analysis = await db.scalar(

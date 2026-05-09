@@ -4,132 +4,501 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   MARAJÓ RH AI SYSTEM — DESIGN TOKENS
+   --------------------------------------------------------------------------
+   Arquivo global de tema visual do sistema.
+
+   Objetivo desta versão:
+   - Tema claro com fundo palha/bege, mas respeitando o vermelho da Marajó.
+   - Tema escuro vivo, sem preto seco e sem aparência apagada.
+   - Tela de login corrigida para usar vermelho/vinho institucional.
+   - Botões, inputs, cards, badges, navbar e estados visuais consistentes.
+   - Compatibilidade com Tailwind, shadcn/ui e Radix via CSS variables.
+
+   Observação importante:
+   - O vermelho da marca NÃO deve ser usado como cor de erro principal.
+   - Para erro/destructive, use um vermelho mais fechado/diferenciado.
+   - O primary do sistema é o vermelho Marajó.
+   ========================================================================== */
+
 @layer base {
-  /*
-   * LIGHT THEME (default)
-   *
-   * Palette direction:
-   *   --bg            palha / bege claro               â†’ body canvas
-   *   --surface       creme muito suave                â†’ cards / panels
-   *   --surface-muted areia clara                      â†’ table heads, tags
-   *   --border        bege acinzentado                 â†’ visible separation
-   *   --text          marrom grafite                   â†’ primary text
-   *   --text-muted    taupe mÃ©dio                      â†’ secondary text
-   *   --primary       azul profundo elegante           â†’ CTA / focus
-   *   --nav-bg/text   champagne light                  â†’ header bar
-   */
+  /* ==========================================================================
+     LIGHT THEME — MARAJÓ WARM BRAND
+     --------------------------------------------------------------------------
+     Direção visual:
+     - Fundo palha/bege para sensação premium e menos "SaaS cinza genérico".
+     - Cards claros em creme.
+     - Texto principal marrom/grafite para boa leitura.
+     - Vermelho Marajó como cor principal de ação, foco e destaque.
+     - Navbar vinho/marrom avermelhada para conversar com a marca.
+     ========================================================================== */
+
   :root {
-    /* â”€â”€ Core surfaces: modern operational AI workspace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-    --bg:             220 20% 97%;
-    --surface:        0 0% 100%;
-    --surface-muted:  220 14% 96%;
-    --border:         220 13% 88%;
-    --border-strong:  217 12% 78%;
+    /* -----------------------------------------------------------------------
+       Brand colors — Marajó
+       -----------------------------------------------------------------------
+       Tokens auxiliares da marca.
+       Eles não substituem todos os tokens shadcn, mas ajudam em casos
+       específicos onde a marca precisa aparecer com clareza.
+       ----------------------------------------------------------------------- */
 
-    /* â”€â”€ Typography â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-    --text:           222 47% 11%;
-    --text-muted:     215 16% 44%;
+    --brand:           356 86% 55%;
+    --brand-dark:      356 78% 42%;
+    --brand-soft:      356 88% 95%;
+    --brand-glow:      356 90% 62%;
 
-    /* â”€â”€ Semantic colors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-    --success:        152 70% 32%;
-    --success-soft:   150 60% 94%;
-    --warning:        35  92% 38%;
-    --warning-soft:   45  90% 94%;
-    --danger:         350 78% 46%;
-    --danger-soft:    354 80% 95%;
+    /* -----------------------------------------------------------------------
+       Core surfaces
+       -----------------------------------------------------------------------
+       Superfícies principais do tema claro.
+       --bg: fundo geral da aplicação.
+       --surface: cards, painéis e caixas principais.
+       --surface-muted: áreas secundárias, hover suave, blocos e divisórias.
+       ----------------------------------------------------------------------- */
 
-    /* â”€â”€ Accent / AI blue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-    --accent-soft:     224 70% 95%;
+    --bg:             42 50% 93%;
+    --surface:        42 44% 98%;
+    --surface-muted:  39 34% 90%;
+    --border:         34 26% 77%;
+    --border-strong:  32 22% 62%;
+
+    /* -----------------------------------------------------------------------
+       Typography
+       -----------------------------------------------------------------------
+       Texto com marrom/grafite em vez de cinza frio.
+       Isso combina melhor com fundo palha e com a marca vermelha.
+       ----------------------------------------------------------------------- */
+
+    --text:           24 34% 14%;
+    --text-muted:     26 16% 40%;
+
+    /* -----------------------------------------------------------------------
+       Semantic colors
+       -----------------------------------------------------------------------
+       Cores semânticas.
+       Cuidado: danger é diferente do vermelho da marca para evitar confusão.
+       ----------------------------------------------------------------------- */
+
+    --success:        154 58% 30%;
+    --success-soft:   145 44% 91%;
+
+    --warning:        36 88% 38%;
+    --warning-soft:   42 86% 90%;
+
+    --danger:         348 72% 42%;
+    --danger-soft:    350 70% 95%;
+
+    /* -----------------------------------------------------------------------
+       Accent
+       -----------------------------------------------------------------------
+       Accent suave em vermelho claro para badges, selected states e destaques.
+       ----------------------------------------------------------------------- */
+
+    --accent-soft:     356 88% 95%;
+    --accent-contrast: 24 34% 14%;
+
+    /* -----------------------------------------------------------------------
+       Navbar
+       -----------------------------------------------------------------------
+       Navbar institucional em vinho escuro.
+       A cor precisa conversar com a logo sem virar vermelho berrante.
+       ----------------------------------------------------------------------- */
+
+    --nav-bg:         38 12% 18%;
+    --nav-text:       42 62% 92%;
+    --nav-muted:      42 42% 72%;
+    --nav-active-bg:  42 48% 28%;
+    --nav-border:     42 28% 34%;
+
+    /* -----------------------------------------------------------------------
+       shadcn/radix token contract
+       -----------------------------------------------------------------------
+       Tokens esperados por componentes baseados em shadcn/ui e Radix.
+       ----------------------------------------------------------------------- */
+
+    --background:          42 50% 93%;
+    --foreground:          24 34% 14%;
+
+    --card:                42 44% 98%;
+    --card-foreground:     24 34% 14%;
+
+    --popover:             42 44% 98%;
+    --popover-foreground:  24 34% 14%;
+
+    --primary:             356 86% 55%;
+    --primary-foreground:  0 0% 100%;
+
+    --secondary:           39 34% 90%;
+    --secondary-foreground:24 34% 14%;
+
+    --muted:               39 34% 90%;
+    --muted-foreground:    26 16% 40%;
+
+    --accent:              356 88% 95%;
+    --accent-foreground:   356 78% 38%;
+
+    --destructive:         348 72% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --input:               34 26% 77%;
+    --ring:                356 86% 55%;
+    --radius:              0.75rem;
+
+    /* -----------------------------------------------------------------------
+       Layout accents
+       -----------------------------------------------------------------------
+       Tokens usados por sidebar, hero, banners e grandes áreas visuais.
+       ----------------------------------------------------------------------- */
+
+    --sidebar-start:       42 54% 96%;
+    --sidebar-end:         38 40% 90%;
+    --sidebar-accent:      356 86% 55%;
+
+    --hero-start:          356 86% 55%;
+    --hero-end:            12 82% 52%;
+
+    --page-glow-start:     356 88% 94%;
+    --page-glow-end:       24 76% 92%;
+    --page-gradient-start: 42 50% 94%;
+    --page-gradient-end:   39 36% 89%;
+  }
+
+  /* ==========================================================================
+     DARK THEME — MARAJÓ DARK VIVO
+     --------------------------------------------------------------------------
+     Direção visual:
+     - Dark vivo, não preto morto.
+     - Fundos vinho/ameixa escuros com brilho vermelho sutil.
+     - Cards escuros com profundidade.
+     - Vermelho da marca mais luminoso para CTA e foco.
+     ========================================================================== */
+
+  :root[data-theme="dark"] {
+    /* -----------------------------------------------------------------------
+       Brand colors — versão dark
+       ----------------------------------------------------------------------- */
+
+    --brand:           356 88% 62%;
+    --brand-dark:      356 76% 46%;
+    --brand-soft:      356 42% 22%;
+    --brand-glow:      356 92% 68%;
+
+    /* -----------------------------------------------------------------------
+       Core surfaces
+       ----------------------------------------------------------------------- */
+
+    --bg:             350 24% 12%;
+    --surface:        348 22% 16%;
+    --surface-muted:  348 20% 20%;
+    --border:         350 18% 28%;
+    --border-strong:  350 20% 38%;
+
+    /* -----------------------------------------------------------------------
+       Typography
+       ----------------------------------------------------------------------- */
+
+    --text:           30 42% 94%;
+    --text-muted:     20 22% 74%;
+
+    /* -----------------------------------------------------------------------
+       Semantic colors
+       ----------------------------------------------------------------------- */
+
+    --success:        156 76% 70%;
+    --success-soft:   156 38% 18%;
+
+    --warning:        40 96% 72%;
+    --warning-soft:   38 44% 18%;
+
+    --danger:         0 84% 64%;
+    --danger-soft:    356 38% 20%;
+
+    /* -----------------------------------------------------------------------
+       Accent
+       ----------------------------------------------------------------------- */
+
+    --accent-soft:     356 42% 22%;
     --accent-contrast: 0 0% 100%;
 
-    /* â”€â”€ Nav-specific tokens: dark topbar in light theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-    --nav-bg:         222 47% 11%;
-    --nav-text:       210 40% 98%;
-    --nav-muted:      215 20% 70%;
-    --nav-active-bg:  221 39% 18%;
-    --nav-border:     222 34% 17%;
+    /* -----------------------------------------------------------------------
+       Navbar
+       ----------------------------------------------------------------------- */
 
-    /* â”€â”€ shadcn/radix design-token contract â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-    --background:          220 20% 97%;
-    --foreground:          222 47% 11%;
-    --card:                0 0% 100%;
-    --card-foreground:     222 47% 11%;
-    --popover:             0 0% 100%;
-    --popover-foreground:  222 47% 11%;
-    --primary:             224 76% 52%;
+    --nav-bg:         350 36% 14%;
+    --nav-text:       0 0% 100%;
+    --nav-muted:      356 38% 78%;
+    --nav-active-bg:  356 56% 28%;
+    --nav-border:     350 32% 20%;
+
+    /* -----------------------------------------------------------------------
+       shadcn/radix token contract
+       ----------------------------------------------------------------------- */
+
+    --background:          350 24% 12%;
+    --foreground:          30 42% 94%;
+
+    --card:                348 22% 16%;
+    --card-foreground:     30 42% 94%;
+
+    --popover:             348 22% 16%;
+    --popover-foreground:  30 42% 94%;
+
+    --primary:             356 88% 62%;
     --primary-foreground:  0 0% 100%;
-    --secondary:           220 14% 96%;
-    --secondary-foreground:222 47% 11%;
-    --muted:               220 14% 96%;
-    --muted-foreground:    215 16% 44%;
-    --accent:              220 14% 96%;
-    --accent-foreground:   222 47% 11%;
-    --destructive:         350 78% 46%;
+
+    --secondary:           348 20% 20%;
+    --secondary-foreground:30 42% 94%;
+
+    --muted:               348 20% 20%;
+    --muted-foreground:    20 22% 74%;
+
+    --accent:              356 42% 22%;
+    --accent-foreground:   30 42% 94%;
+
+    --destructive:         0 84% 64%;
     --destructive-foreground: 0 0% 100%;
-    --border:              220 13% 88%;
-    --input:               220 13% 88%;
-    --ring:                224 76% 52%;
-    --radius:              0.625rem;
-    --sidebar-start:       220 20% 98%;
-    --sidebar-end:         220 18% 95%;
-    --sidebar-accent:      224 76% 52%;
-    --hero-start:          224 76% 52%;
-    --hero-end:            211 80% 56%;
+
+    --input:               350 18% 28%;
+    --ring:                356 88% 62%;
+
+    /* -----------------------------------------------------------------------
+       Layout accents
+       ----------------------------------------------------------------------- */
+
+    --sidebar-start:       350 28% 11%;
+    --sidebar-end:         348 26% 16%;
+    --sidebar-accent:      356 88% 62%;
+
+    --hero-start:          356 88% 62%;
+    --hero-end:            12 78% 54%;
+
+    --page-glow-start:     356 88% 38%;
+    --page-glow-end:       12 78% 44%;
+    --page-gradient-start: 350 24% 12%;
+    --page-gradient-end:   348 26% 10%;
   }
 
-  /* â”€â”€ DARK THEME â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  :root[data-theme="dark"] {
-    --bg:             222 40% 8%;
-    --surface:        222 31% 12%;
-    --surface-muted:  222 24% 16%;
-    --border:         222 19% 22%;
-    --border-strong:  222 19% 28%;
+  /* ==========================================================================
+     VISUAL THEMES
+     --------------------------------------------------------------------------
+     O tema visual muda a paleta principal sem substituir o modo claro/escuro.
+     Apenas tokens necessários são sobrescritos.
+     ========================================================================== */
 
-    --text:           210 40% 96%;
-    --text-muted:     215 20% 70%;
+  :root[data-visual-theme="theme-1"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 1 — Grafite Dourado
+       -----------------------------------------------------------------------
+       Direção:
+       - Tema 1 continua institucional, mas a navbar deixa de ser vinho.
+       - Navbar em cinza escuro/grafite com dourado envelhecido.
+       - O vermelho Marajó continua como ação principal no sistema.
+       - O dourado entra como acabamento premium, sem virar cor de CTA.
+       ----------------------------------------------------------------------- */
 
-    --success:        160 84% 72%;
-    --success-soft:   160 40% 18%;
-    --warning:        41  100% 72%;
-    --warning-soft:   38  45% 18%;
-    --danger:         352 84% 72%;
-    --danger-soft:    352 38% 18%;
+    --brand:               356 86% 55%;
+    --brand-dark:          356 78% 42%;
+    --brand-soft:          356 88% 95%;
+    --brand-glow:          356 90% 62%;
 
-    --accent-soft:     223 32% 18%;
-    --accent-contrast: 222 47% 11%;
+    --bg:                  42 50% 93%;
+    --surface:             42 44% 98%;
+    --surface-muted:       39 34% 90%;
+    --border:              34 26% 77%;
+    --border-strong:       32 22% 62%;
 
-    /* Nav: slightly darker than body for subtle hierarchy */
-    --nav-bg:         222 48% 6%;
-    --nav-text:       210 40% 96%;
-    --nav-muted:      215 20% 65%;
-    --nav-active-bg:  222 31% 14%;
-    --nav-border:     222 22% 14%;
+    --background:          42 50% 93%;
+    --card:                42 44% 98%;
+    --popover:             42 44% 98%;
+    --secondary:           39 34% 90%;
+    --muted:               39 34% 90%;
 
-    --background:          222 40% 8%;
-    --foreground:          210 40% 96%;
-    --card:                222 31% 12%;
-    --card-foreground:     210 40% 96%;
-    --popover:             222 31% 12%;
-    --popover-foreground:  210 40% 96%;
-    --primary:             213 94% 68%;
-    --primary-foreground:  222 47% 11%;
-    --secondary:           222 24% 16%;
-    --secondary-foreground:210 40% 96%;
-    --muted:               222 24% 16%;
-    --muted-foreground:    215 20% 70%;
-    --accent:              223 32% 18%;
-    --accent-foreground:   210 40% 96%;
-    --destructive:         352 84% 62%;
-    --destructive-foreground: 0 0% 100%;
-    --border:              222 19% 22%;
-    --input:               222 19% 22%;
-    --ring:                213 94% 68%;
-    --sidebar-start:       222 40% 8%;
-    --sidebar-end:         225 35% 12%;
-    --sidebar-accent:      213 94% 68%;
-    --hero-start:          213 94% 68%;
-    --hero-end:            255 88% 72%;
+    --primary:             356 86% 55%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                356 86% 55%;
+
+    --accent:              42 62% 91%;
+    --accent-foreground:   38 42% 24%;
+    --accent-soft:         42 62% 91%;
+
+    --nav-bg:              38 12% 18%;
+    --nav-text:            42 62% 92%;
+    --nav-muted:           42 42% 72%;
+    --nav-active-bg:       42 48% 28%;
+    --nav-border:          42 28% 34%;
+
+    --sidebar-accent:      356 86% 55%;
+    --hero-start:          356 86% 55%;
+    --hero-end:            32 72% 48%;
+
+    --page-glow-start:     42 78% 90%;
+    --page-glow-end:       356 88% 94%;
+    --page-gradient-start: 42 50% 94%;
+    --page-gradient-end:   39 36% 89%;
   }
+
+  :root[data-visual-theme="theme-2"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 2 — Aurora Mineral
+       -----------------------------------------------------------------------
+       Direção:
+       - Tema surpresa com cara mais moderna e menos óbvia.
+       - Base clara mineral: areia, névoa verde e creme quente.
+       - Primary em coral/tomate sofisticado para ainda conversar com vermelho.
+       - Teal profundo na navbar para dar contraste premium.
+       - Pistache/mint aparece só como apoio vivo, sem virar tema infantil.
+       ----------------------------------------------------------------------- */
+
+    --brand:               8 82% 54%;
+    --brand-dark:          8 68% 38%;
+    --brand-soft:          12 78% 94%;
+    --brand-glow:          16 88% 62%;
+
+    --bg:                  50 44% 94%;
+    --surface:             46 52% 98%;
+    --surface-muted:       86 28% 90%;
+    --border:              64 20% 74%;
+    --border-strong:       170 18% 48%;
+
+    --background:          50 44% 94%;
+    --card:                46 52% 98%;
+    --popover:             46 52% 98%;
+    --secondary:           86 28% 90%;
+    --muted:               86 28% 90%;
+
+    --primary:             8 82% 54%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                8 82% 54%;
+
+    --accent:              166 44% 90%;
+    --accent-foreground:   174 50% 22%;
+    --accent-soft:         166 44% 90%;
+
+    --nav-bg:              176 38% 18%;
+    --nav-text:            48 60% 94%;
+    --nav-muted:           160 30% 76%;
+    --nav-active-bg:       168 46% 30%;
+    --nav-border:          176 34% 13%;
+
+    --sidebar-accent:      8 82% 54%;
+    --hero-start:          176 54% 30%;
+    --hero-end:            8 82% 54%;
+
+    --page-glow-start:     166 56% 88%;
+    --page-glow-end:       16 88% 92%;
+    --page-gradient-start: 50 48% 95%;
+    --page-gradient-end:   82 28% 88%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-1"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 1 Dark — Neon Obsidian
+       -----------------------------------------------------------------------
+       Direção:
+       - Dark novo, mais negro, mais profundo e mais colorido.
+       - Fundo obsidiana com reflexos vermelho, violeta, azul e dourado.
+       - Cards em preto azulado/vinho profundo.
+       - CTA vermelho rubi vivo.
+       - Navbar quase preta com detalhe dourado escuro.
+       ----------------------------------------------------------------------- */
+
+    --brand:               356 92% 64%;
+    --brand-dark:          356 74% 46%;
+    --brand-soft:          356 44% 20%;
+    --brand-glow:          356 96% 68%;
+
+    --bg:                  250 26% 7%;
+    --surface:             252 24% 11%;
+    --surface-muted:       258 24% 16%;
+    --border:              266 20% 25%;
+    --border-strong:       44 32% 42%;
+
+    --background:          250 26% 7%;
+    --card:                252 24% 11%;
+    --popover:             252 24% 11%;
+    --secondary:           258 24% 16%;
+    --muted:               258 24% 16%;
+
+    --primary:             356 92% 64%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                356 92% 64%;
+
+    --accent:              268 46% 20%;
+    --accent-foreground:   42 66% 92%;
+    --accent-soft:         268 46% 20%;
+
+    --nav-bg:              240 18% 6%;
+    --nav-text:            42 68% 90%;
+    --nav-muted:           42 38% 68%;
+    --nav-active-bg:       268 44% 22%;
+    --nav-border:          42 30% 30%;
+
+    --sidebar-accent:      356 92% 64%;
+    --hero-start:          356 92% 64%;
+    --hero-end:            268 82% 62%;
+
+    --page-glow-start:     356 92% 44%;
+    --page-glow-end:       268 90% 48%;
+    --page-gradient-start: 250 26% 7%;
+    --page-gradient-end:   222 30% 6%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-2"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 2 Dark — Biolume Abyss
+       -----------------------------------------------------------------------
+       Direção:
+       - Dark totalmente diferente: abismo petróleo, mint elétrico e coral vivo.
+       - Não é só "dark vermelho"; é um dark futurista, colorido e profundo.
+       - Combina neon controlado com fundo orgânico/mineral.
+       - Feito para parecer vivo sem estourar contraste nem cansar a vista.
+       ----------------------------------------------------------------------- */
+
+    --brand:               10 90% 64%;
+    --brand-dark:          8 72% 46%;
+    --brand-soft:          8 40% 20%;
+    --brand-glow:          14 96% 68%;
+
+    --bg:                  196 44% 7%;
+    --surface:             194 34% 11%;
+    --surface-muted:       188 30% 16%;
+    --border:              184 22% 26%;
+    --border-strong:       166 42% 42%;
+
+    --background:          196 44% 7%;
+    --card:                194 34% 11%;
+    --popover:             194 34% 11%;
+    --secondary:           188 30% 16%;
+    --muted:               188 30% 16%;
+
+    --primary:             10 90% 64%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                166 84% 62%;
+
+    --accent:              166 56% 18%;
+    --accent-foreground:   164 90% 86%;
+    --accent-soft:         166 56% 18%;
+
+    --nav-bg:              198 48% 6%;
+    --nav-text:            166 84% 88%;
+    --nav-muted:           170 42% 68%;
+    --nav-active-bg:       184 48% 18%;
+    --nav-border:          166 36% 26%;
+
+    --sidebar-accent:      166 84% 62%;
+    --hero-start:          166 84% 54%;
+    --hero-end:            10 90% 64%;
+
+    --page-glow-start:     166 84% 42%;
+    --page-glow-end:       10 90% 52%;
+    --page-gradient-start: 196 44% 7%;
+    --page-gradient-end:   226 42% 7%;
+  }
+
+  /* ==========================================================================
+     GLOBAL ELEMENT RESET
+     ========================================================================== */
 
   * {
     box-sizing: border-box;
@@ -144,31 +513,99 @@
     color-scheme: dark;
   }
 
+  /* --------------------------------------------------------------------------
+     Body — tema claro
+     --------------------------------------------------------------------------
+     Fundo palha/bege com brilho sutil.
+     O radial gradient traz vida sem pesar a interface.
+     -------------------------------------------------------------------------- */
+
   body {
-    background: hsl(var(--bg));
+    background:
+      radial-gradient(circle at top left, hsl(var(--page-glow-start) / 0.62), transparent 34rem),
+      radial-gradient(circle at top right, hsl(var(--page-glow-end) / 0.56), transparent 30rem),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
     color: hsl(var(--text));
     font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
 
+  /* --------------------------------------------------------------------------
+     Body — tema escuro
+     --------------------------------------------------------------------------
+     Dark vivo com reflexo vermelho.
+     Não use preto puro; ele deixa a interface pesada e sem identidade.
+     -------------------------------------------------------------------------- */
+
   :root[data-theme="dark"] body {
-    background: hsl(var(--bg));
+    background:
+      radial-gradient(circle at top left, hsl(var(--page-glow-start) / 0.28), transparent 34rem),
+      radial-gradient(circle at top right, hsl(var(--page-glow-end) / 0.20), transparent 30rem),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    color: hsl(var(--text));
+  }
+  :root[data-theme="dark"][data-visual-theme="theme-1"] body {
+    background:
+      radial-gradient(circle at 8% 8%, hsl(356 92% 44% / 0.32), transparent 28rem),
+      radial-gradient(circle at 88% 12%, hsl(268 90% 48% / 0.30), transparent 30rem),
+      radial-gradient(circle at 72% 88%, hsl(205 88% 42% / 0.18), transparent 28rem),
+      radial-gradient(circle at 20% 92%, hsl(42 78% 42% / 0.14), transparent 24rem),
+      linear-gradient(180deg, hsl(250 26% 7%), hsl(222 30% 6%));
+    color: hsl(var(--text));
+  }
+  :root[data-theme="dark"][data-visual-theme="theme-2"] body {
+    background:
+      radial-gradient(circle at 10% 10%, hsl(166 84% 42% / 0.26), transparent 28rem),
+      radial-gradient(circle at 88% 14%, hsl(10 90% 52% / 0.24), transparent 30rem),
+      radial-gradient(circle at 72% 86%, hsl(268 80% 48% / 0.16), transparent 28rem),
+      radial-gradient(circle at 18% 92%, hsl(198 88% 45% / 0.14), transparent 24rem),
+      linear-gradient(180deg, hsl(196 44% 7%), hsl(226 42% 7%));
     color: hsl(var(--text));
   }
 
-  h1, h2, h3, h4, h5, h6 {
+
+
+  /* --------------------------------------------------------------------------
+     Headings
+     -------------------------------------------------------------------------- */
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: "Sora", "Plus Jakarta Sans", sans-serif;
     letter-spacing: -0.03em;
   }
 
+  /* --------------------------------------------------------------------------
+     Text selection
+     -------------------------------------------------------------------------- */
+
   ::selection {
-    background: rgba(37, 99, 235, 0.18);
+    background: hsl(var(--primary) / 0.20);
+    color: hsl(var(--foreground));
+  }
+
+  :root[data-theme="dark"] ::selection {
+    background: hsl(var(--primary) / 0.32);
     color: hsl(var(--foreground));
   }
 }
 
+/* ==========================================================================
+   COMPONENT HELPERS
+   --------------------------------------------------------------------------
+   Classes utilitárias semânticas usadas para manter consistência visual.
+   ========================================================================== */
+
 @layer components {
+  /* --------------------------------------------------------------------------
+     Surfaces
+     -------------------------------------------------------------------------- */
+
   .ui-surface {
     background-color: hsl(var(--surface));
     color: hsl(var(--text));
@@ -185,8 +622,20 @@
     background-color: hsl(var(--surface));
     color: hsl(var(--text));
     border: 1px solid hsl(var(--border));
-    box-shadow: 0 1px 3px 0 hsl(var(--text) / 0.06), 0 1px 2px -1px hsl(var(--text) / 0.04);
+    box-shadow:
+      0 16px 36px -28px hsl(var(--text) / 0.24),
+      0 1px 2px hsl(var(--text) / 0.05);
   }
+
+  :root[data-theme="dark"] .ui-card {
+    box-shadow:
+      0 18px 46px -30px rgba(0, 0, 0, 0.72),
+      inset 0 1px 0 hsl(0 0% 100% / 0.04);
+  }
+
+  /* --------------------------------------------------------------------------
+     Text helpers
+     -------------------------------------------------------------------------- */
 
   .ui-heading {
     color: hsl(var(--text));
@@ -195,6 +644,43 @@
   .ui-text-muted {
     color: hsl(var(--text-muted));
   }
+
+  /* --------------------------------------------------------------------------
+     Navbar helpers
+     --------------------------------------------------------------------------
+     Use estas classes se sua navbar tiver uma classe .navbar.
+     Se a navbar for montada com Tailwind direto, estes seletores ajudam a
+     corrigir links e botões apagados.
+     -------------------------------------------------------------------------- */
+
+  .navbar {
+    background-color: hsl(var(--nav-bg));
+    color: hsl(var(--nav-text));
+    border-color: hsl(var(--nav-border));
+  }
+
+  .navbar,
+  .navbar a,
+  .navbar button {
+    color: hsl(var(--nav-text));
+    font-weight: 700;
+  }
+
+  .navbar a:hover,
+  .navbar button:hover {
+    color: hsl(0 0% 100%);
+    background-color: hsl(var(--nav-active-bg));
+  }
+
+  .navbar .text-muted,
+  .navbar [data-muted="true"] {
+    color: hsl(var(--nav-muted));
+    font-weight: 600;
+  }
+
+  /* --------------------------------------------------------------------------
+     Inputs
+     -------------------------------------------------------------------------- */
 
   .ui-input {
     background-color: hsl(var(--surface));
@@ -206,31 +692,238 @@
     color: hsl(var(--text-muted));
   }
 
+  .ui-input:hover {
+    border-color: hsl(var(--primary) / 0.52);
+  }
+
   .ui-input:focus {
     border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.16);
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.14);
     outline: none;
+  }
+
+  :root[data-theme="dark"] .ui-input {
+    background-color: hsl(var(--surface-muted));
+  }
+
+  /* --------------------------------------------------------------------------
+     Buttons
+     -------------------------------------------------------------------------- */
+
+  .ui-btn-primary {
+    background: linear-gradient(135deg, hsl(var(--hero-start)), hsl(var(--hero-end)));
+    color: hsl(var(--primary-foreground));
+    border: 1px solid hsl(var(--brand-dark));
+    box-shadow:
+      0 16px 34px -18px hsl(var(--brand-dark) / 0.48),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
+    font-weight: 800;
+  }
+
+  .ui-btn-primary:hover {
+    filter: brightness(0.96) saturate(1.04);
+    box-shadow:
+      0 20px 40px -18px hsl(var(--brand-dark) / 0.58),
+      inset 0 1px 0 hsl(0 0% 100% / 0.18);
+  }
+
+  /* --------------------------------------------------------------------------
+     Visual theme switcher
+     -------------------------------------------------------------------------- */
+
+  .visual-theme-switcher {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .visual-theme-trigger {
+    display: inline-flex;
+    height: 2.5rem;
+    width: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: hsl(var(--nav-muted));
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease,
+      transform 150ms ease;
+  }
+
+  .visual-theme-trigger:hover {
+    border-color: hsl(var(--nav-border) / 0.7);
+    background-color: hsl(var(--nav-active-bg));
+    color: hsl(var(--nav-text));
+  }
+
+  .visual-theme-trigger[aria-expanded="true"] {
+    border-color: hsl(var(--nav-border) / 0.78);
+    background-color: hsl(var(--nav-active-bg));
+    color: hsl(var(--nav-text));
+    transform: translateY(1px);
+  }
+
+  .visual-theme-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    cursor: default;
+    background: transparent;
+    border: 0;
+  }
+
+  .visual-theme-popover {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.75rem);
+    z-index: 30;
+    width: min(18rem, calc(100vw - 1.5rem));
+    border-radius: 1.25rem;
+    padding: 0.85rem;
+  }
+
+  .visual-theme-popover-header {
+    margin-bottom: 0.55rem;
+    padding: 0.2rem 0.25rem 0;
+  }
+
+  .visual-theme-popover-title {
+    color: hsl(var(--text));
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .visual-theme-options {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .visual-theme-option {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--surface));
+    padding: 0.8rem 0.9rem;
+    color: hsl(var(--text));
+    text-align: left;
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease,
+      transform 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .visual-theme-option:hover {
+    border-color: hsl(var(--primary) / 0.34);
+    background: hsl(var(--accent-soft));
+    transform: translateY(-1px);
+  }
+
+  .visual-theme-option.is-active {
+    border-color: hsl(var(--primary) / 0.48);
+    background:
+      linear-gradient(135deg, hsl(var(--accent-soft)), hsl(var(--surface)));
+    box-shadow:
+      0 14px 28px -22px hsl(var(--primary) / 0.42),
+      inset 0 1px 0 hsl(0 0% 100% / 0.24);
+  }
+
+  .visual-theme-preview {
+    display: inline-flex;
+    height: 2.35rem;
+    width: 2.35rem;
+    flex-shrink: 0;
+    border-radius: 0.9rem;
+    border: 1px solid hsl(0 0% 100% / 0.18);
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.22),
+      0 10px 20px -16px hsl(var(--text) / 0.38);
+  }
+
+  .visual-theme-preview-theme-1 {
+    background:
+      linear-gradient(135deg, hsl(38 12% 18%), hsl(42 48% 28%)),
+      linear-gradient(135deg, hsl(356 86% 55%), hsl(32 72% 48%));
+  }
+
+  .visual-theme-preview-theme-2 {
+    background:
+      linear-gradient(135deg, hsl(176 54% 30%), hsl(8 82% 54%)),
+      linear-gradient(180deg, hsl(50 48% 95%), hsl(166 56% 88%));
+  }
+
+  .visual-theme-option-copy {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+  }
+
+  .visual-theme-option-label {
+    color: hsl(var(--text));
+    font-size: 0.93rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .visual-theme-option-description {
+    color: hsl(var(--text-muted));
+    font-size: 0.78rem;
+  }
+
+  .visual-theme-option-indicator {
+    display: inline-flex;
+    height: 1.5rem;
+    width: 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid hsl(var(--border));
+    color: transparent;
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  .visual-theme-option-indicator.is-active {
+    border-color: hsl(var(--primary) / 0.32);
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
   }
 
   .ui-btn-secondary {
     background-color: hsl(var(--surface));
     color: hsl(var(--text));
     border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 2px hsl(var(--text) / 0.05);
   }
 
   .ui-btn-secondary:hover {
     background-color: hsl(var(--surface-muted));
+    border-color: hsl(var(--border-strong));
   }
 
   .ui-btn-danger {
     background-color: hsl(var(--danger-soft));
     color: hsl(var(--danger));
-    border-color: hsl(var(--danger) / 0.28);
+    border: 1px solid hsl(var(--danger) / 0.28);
   }
 
   .ui-btn-danger:hover {
     background-color: hsl(var(--danger) / 0.16);
   }
+
+  /* --------------------------------------------------------------------------
+     Job context panel animation
+     -------------------------------------------------------------------------- */
 
   .job-context-panel-enter {
     animation: job-context-panel-in 180ms ease-out;
@@ -249,14 +942,23 @@
     }
   }
 
-  /*
-   * Badge classes use --primary (vivid blue) for the info tint,
-   * NOT --accent (which is the shadcn hover bg and may be near-white).
-   */
+  /* --------------------------------------------------------------------------
+     Badges
+     --------------------------------------------------------------------------
+     O badge informativo agora usa vermelho Marajó.
+     O perigo continua usando --danger para não confundir marca com erro.
+     -------------------------------------------------------------------------- */
+
   .ui-badge-info {
     background-color: hsl(var(--accent-soft));
-    color: hsl(var(--primary));
+    color: hsl(356 78% 38%);
     border-color: hsl(var(--primary) / 0.28);
+  }
+
+  :root[data-theme="dark"] .ui-badge-info {
+    background-color: hsl(356 42% 22%);
+    color: hsl(356 88% 76%);
+    border-color: hsl(356 88% 62% / 0.32);
   }
 
   .ui-badge-success {
@@ -284,7 +986,495 @@
   }
 }
 
+/* ==========================================================================
+   LOGIN PAGE — MARAJÓ BRAND FIX
+   --------------------------------------------------------------------------
+   Correção específica para a tela de login.
+
+   Problemas corrigidos:
+   - Lado esquerdo azul aleatório.
+   - Título escuro em cima de fundo escuro.
+   - Inputs com aparência de campo desabilitado.
+   - Card pálido demais.
+   - Botão vermelho isolado do restante da identidade.
+
+   Como usar:
+   - Idealmente, coloque data-page="login" no container raiz da tela.
+   - Exemplo:
+     <main data-page="login">...</main>
+
+   Classes alternativas também foram incluídas:
+   - .login-page
+   - .auth-page
+   - .login-hero / .auth-hero
+   - .login-card / .auth-card
+   ========================================================================== */
+
+@layer components {
+  /* --------------------------------------------------------------------------
+     Login page background
+     -------------------------------------------------------------------------- */
+
+  .login-page,
+  .auth-page,
+  [data-page="login"] {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top right, hsl(8 72% 92% / 0.70), transparent 28rem),
+      radial-gradient(circle at bottom left, hsl(356 58% 90% / 0.55), transparent 30rem),
+      linear-gradient(180deg, hsl(42 34% 90%), hsl(40 28% 87%));
+  }
+
+  :root[data-theme="dark"] .login-page,
+  :root[data-theme="dark"] .auth-page,
+  :root[data-theme="dark"] [data-page="login"] {
+    background:
+      radial-gradient(circle at top right, hsl(356 88% 34% / 0.25), transparent 28rem),
+      radial-gradient(circle at bottom left, hsl(12 78% 34% / 0.18), transparent 30rem),
+      linear-gradient(180deg, hsl(350 24% 12%), hsl(348 26% 10%));
+  }
+
+  /* --------------------------------------------------------------------------
+     Login layout
+     -------------------------------------------------------------------------- */
+
+  .login-layout,
+  .auth-layout,
+  [data-page="login"] .grid {
+    min-height: 100vh;
+    align-items: stretch;
+  }
+
+  /* --------------------------------------------------------------------------
+     Login hero / left panel
+     -------------------------------------------------------------------------- */
+
+  .login-hero,
+  .auth-hero,
+  [data-page="login"] .hero-panel {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at top left, hsl(356 82% 60% / 0.22), transparent 22rem),
+      radial-gradient(circle at bottom right, hsl(12 78% 52% / 0.18), transparent 24rem),
+      linear-gradient(160deg, hsl(348 58% 20%) 0%, hsl(352 62% 26%) 45%, hsl(356 68% 34%) 100%);
+    color: hsl(0 0% 100%);
+  }
+
+  .login-hero::before,
+  .auth-hero::before,
+  [data-page="login"] .hero-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        180deg,
+        hsl(0 0% 100% / 0.02),
+        transparent 30%,
+        transparent 70%,
+        hsl(0 0% 0% / 0.08)
+      );
+    pointer-events: none;
+  }
+
+  .login-hero > *,
+  .auth-hero > *,
+  [data-page="login"] .hero-panel > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* --------------------------------------------------------------------------
+     Login hero badge
+     -------------------------------------------------------------------------- */
+
+  .login-hero-badge,
+  .auth-hero-badge,
+  [data-page="login"] .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding: 0.5rem 0.9rem;
+    background: hsl(0 0% 100% / 0.10);
+    border: 1px solid hsl(0 0% 100% / 0.14);
+    color: hsl(0 0% 100% / 0.92);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.08);
+  }
+
+  /* --------------------------------------------------------------------------
+     Login hero text
+     -------------------------------------------------------------------------- */
+
+  .login-hero h1,
+  .auth-hero h1,
+  [data-page="login"] .hero-panel h1 {
+    color: hsl(0 0% 100%);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    text-wrap: balance;
+  }
+
+  .login-hero p,
+  .auth-hero p,
+  [data-page="login"] .hero-panel p {
+    color: hsl(0 0% 100% / 0.88);
+  }
+
+  /* --------------------------------------------------------------------------
+     Login feature list
+     -------------------------------------------------------------------------- */
+
+  .login-feature,
+  .auth-feature,
+  [data-page="login"] .hero-feature {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+  }
+
+  .login-feature-icon,
+  .auth-feature-icon,
+  [data-page="login"] .hero-feature svg,
+  [data-page="login"] .hero-feature-icon {
+    color: hsl(0 0% 100%);
+    background: hsl(0 0% 100% / 0.10);
+    border: 1px solid hsl(0 0% 100% / 0.16);
+    border-radius: 999px;
+    padding: 0.3rem;
+    flex-shrink: 0;
+  }
+
+  .login-feature strong,
+  .auth-feature strong,
+  [data-page="login"] .hero-feature strong {
+    color: hsl(0 0% 100%);
+  }
+
+  .login-feature span,
+  .auth-feature span,
+  [data-page="login"] .hero-feature span,
+  [data-page="login"] .hero-feature p {
+    color: hsl(0 0% 100% / 0.80);
+  }
+
+  /* --------------------------------------------------------------------------
+     Login hero footer
+     -------------------------------------------------------------------------- */
+
+  .login-hero-footer,
+  .auth-hero-footer,
+  [data-page="login"] .hero-footer {
+    color: hsl(0 0% 100% / 0.70);
+  }
+
+  /* --------------------------------------------------------------------------
+     Login form side
+     -------------------------------------------------------------------------- */
+
+  .login-panel,
+  .auth-panel,
+  [data-page="login"] .form-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    padding: 2rem;
+  }
+
+  /* --------------------------------------------------------------------------
+     Login card
+     -------------------------------------------------------------------------- */
+
+  .login-card,
+  .auth-card,
+  [data-page="login"] .login-card {
+    width: 100%;
+    max-width: 32rem;
+    border-radius: 1.5rem;
+    background:
+      linear-gradient(180deg, hsl(42 28% 96%), hsl(42 24% 94%));
+    border: 1px solid hsl(30 24% 76%);
+    box-shadow:
+      0 24px 60px -28px hsl(20 30% 20% / 0.20),
+      0 10px 24px -18px hsl(20 22% 16% / 0.12);
+    padding: 2rem;
+  }
+
+  :root[data-theme="dark"] .login-card,
+  :root[data-theme="dark"] .auth-card,
+  :root[data-theme="dark"] [data-page="login"] .login-card {
+    background:
+      linear-gradient(180deg, hsl(348 22% 17%), hsl(348 22% 15%));
+    border-color: hsl(350 18% 30%);
+    box-shadow:
+      0 26px 70px -30px hsl(0 0% 0% / 0.72),
+      inset 0 1px 0 hsl(0 0% 100% / 0.04);
+  }
+
+  .login-card h2,
+  .auth-card h2,
+  [data-page="login"] .login-card h2 {
+    color: hsl(20 34% 18%);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  :root[data-theme="dark"] .login-card h2,
+  :root[data-theme="dark"] .auth-card h2,
+  :root[data-theme="dark"] [data-page="login"] .login-card h2 {
+    color: hsl(var(--text));
+  }
+
+  .login-card p,
+  .auth-card p,
+  [data-page="login"] .login-card p {
+    color: hsl(26 16% 38%);
+  }
+
+  :root[data-theme="dark"] .login-card p,
+  :root[data-theme="dark"] .auth-card p,
+  :root[data-theme="dark"] [data-page="login"] .login-card p {
+    color: hsl(var(--text-muted));
+  }
+
+  /* --------------------------------------------------------------------------
+     Login labels and inputs
+     -------------------------------------------------------------------------- */
+
+  .login-card label,
+  .auth-card label,
+  [data-page="login"] .login-card label {
+    color: hsl(24 26% 22%);
+    font-weight: 600;
+  }
+
+  :root[data-theme="dark"] .login-card label,
+  :root[data-theme="dark"] .auth-card label,
+  :root[data-theme="dark"] [data-page="login"] .login-card label {
+    color: hsl(var(--text));
+  }
+
+  .login-card input,
+  .auth-card input,
+  [data-page="login"] .login-card input {
+    height: 3rem;
+    border-radius: 0.9rem;
+    border: 1px solid hsl(30 24% 74%);
+    background: hsl(42 32% 98%);
+    color: hsl(24 24% 16%);
+    box-shadow: inset 0 1px 1px hsl(20 20% 20% / 0.03);
+  }
+
+  :root[data-theme="dark"] .login-card input,
+  :root[data-theme="dark"] .auth-card input,
+  :root[data-theme="dark"] [data-page="login"] .login-card input {
+    border-color: hsl(var(--border));
+    background: hsl(var(--surface-muted));
+    color: hsl(var(--text));
+  }
+
+  .login-card input::placeholder,
+  .auth-card input::placeholder,
+  [data-page="login"] .login-card input::placeholder {
+    color: hsl(28 12% 52%);
+  }
+
+  :root[data-theme="dark"] .login-card input::placeholder,
+  :root[data-theme="dark"] .auth-card input::placeholder,
+  :root[data-theme="dark"] [data-page="login"] .login-card input::placeholder {
+    color: hsl(var(--text-muted));
+  }
+
+  .login-card input:hover,
+  .auth-card input:hover,
+  [data-page="login"] .login-card input:hover {
+    border-color: hsl(356 48% 62%);
+  }
+
+  .login-card input:focus,
+  .auth-card input:focus,
+  [data-page="login"] .login-card input:focus {
+    outline: none;
+    border-color: hsl(var(--primary));
+    box-shadow:
+      0 0 0 4px hsl(var(--primary) / 0.14),
+      inset 0 1px 1px hsl(20 20% 20% / 0.03);
+    background: hsl(0 0% 100%);
+  }
+
+  :root[data-theme="dark"] .login-card input:focus,
+  :root[data-theme="dark"] .auth-card input:focus,
+  :root[data-theme="dark"] [data-page="login"] .login-card input:focus {
+    background: hsl(348 20% 18%);
+    box-shadow:
+      0 0 0 4px hsl(var(--primary) / 0.20),
+      inset 0 1px 1px hsl(0 0% 0% / 0.12);
+  }
+
+  /* --------------------------------------------------------------------------
+     Login input group with icon button
+     -------------------------------------------------------------------------- */
+
+  .login-input-group,
+  .auth-input-group,
+  [data-page="login"] .input-group {
+    border-radius: 0.9rem;
+    overflow: hidden;
+  }
+
+  .login-input-group button,
+  .auth-input-group button,
+  [data-page="login"] .input-group button {
+    border: 1px solid hsl(30 24% 74%);
+    border-left: 0;
+    background: hsl(42 22% 95%);
+    color: hsl(26 18% 42%);
+  }
+
+  .login-input-group button:hover,
+  .auth-input-group button:hover,
+  [data-page="login"] .input-group button:hover {
+    background: hsl(42 24% 92%);
+    color: hsl(20 28% 26%);
+  }
+
+  :root[data-theme="dark"] .login-input-group button,
+  :root[data-theme="dark"] .auth-input-group button,
+  :root[data-theme="dark"] [data-page="login"] .input-group button {
+    border-color: hsl(var(--border));
+    background: hsl(348 20% 19%);
+    color: hsl(var(--text-muted));
+  }
+
+  :root[data-theme="dark"] .login-input-group button:hover,
+  :root[data-theme="dark"] .auth-input-group button:hover,
+  :root[data-theme="dark"] [data-page="login"] .input-group button:hover {
+    background: hsl(348 20% 22%);
+    color: hsl(var(--text));
+  }
+
+  /* --------------------------------------------------------------------------
+     Login submit button
+     -------------------------------------------------------------------------- */
+
+  .login-submit,
+  .auth-submit,
+  [data-page="login"] button[type="submit"] {
+    height: 3.25rem;
+    border-radius: 0.95rem;
+    border: 1px solid hsl(356 76% 42%);
+    background: linear-gradient(
+      135deg,
+      hsl(356 86% 55%),
+      hsl(2 82% 49%)
+    );
+    color: hsl(0 0% 100%);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    box-shadow:
+      0 16px 34px -18px hsl(356 82% 38% / 0.48),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
+    transition:
+      transform 160ms ease,
+      box-shadow 160ms ease,
+      filter 160ms ease;
+  }
+
+  .login-submit:hover,
+  .auth-submit:hover,
+  [data-page="login"] button[type="submit"]:hover {
+    transform: translateY(-1px);
+    filter: saturate(1.02);
+    box-shadow:
+      0 20px 40px -18px hsl(356 82% 34% / 0.58),
+      inset 0 1px 0 hsl(0 0% 100% / 0.18);
+  }
+
+  .login-submit:active,
+  .auth-submit:active,
+  [data-page="login"] button[type="submit"]:active {
+    transform: translateY(0);
+  }
+
+  /* --------------------------------------------------------------------------
+     Login help text
+     -------------------------------------------------------------------------- */
+
+  .login-help,
+  .auth-help,
+  [data-page="login"] .login-help,
+  [data-page="login"] .text-muted {
+    color: hsl(26 12% 46%);
+  }
+
+  :root[data-theme="dark"] .login-help,
+  :root[data-theme="dark"] .auth-help,
+  :root[data-theme="dark"] [data-page="login"] .login-help,
+  :root[data-theme="dark"] [data-page="login"] .text-muted {
+    color: hsl(var(--text-muted));
+  }
+
+  /* --------------------------------------------------------------------------
+     Login responsive behavior
+     -------------------------------------------------------------------------- */
+
+  @media (max-width: 1024px) {
+    .login-hero,
+    .auth-hero,
+    [data-page="login"] .hero-panel {
+      min-height: 22rem;
+    }
+
+    .login-card,
+    .auth-card,
+    [data-page="login"] .login-card {
+      max-width: 100%;
+      padding: 1.5rem;
+      border-radius: 1.25rem;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .login-page,
+    .auth-page,
+    [data-page="login"] {
+      background:
+        radial-gradient(circle at top, hsl(8 72% 92% / 0.62), transparent 18rem),
+        linear-gradient(180deg, hsl(42 34% 90%), hsl(40 28% 87%));
+    }
+
+    :root[data-theme="dark"] .login-page,
+    :root[data-theme="dark"] .auth-page,
+    :root[data-theme="dark"] [data-page="login"] {
+      background:
+        radial-gradient(circle at top, hsl(356 88% 34% / 0.22), transparent 18rem),
+        linear-gradient(180deg, hsl(350 24% 12%), hsl(348 26% 10%));
+    }
+
+    .login-hero,
+    .auth-hero,
+    [data-page="login"] .hero-panel {
+      border-bottom-left-radius: 1.25rem;
+      border-bottom-right-radius: 1.25rem;
+    }
+  }
+}
+
+/* ==========================================================================
+   UTILITIES
+   --------------------------------------------------------------------------
+   Scrollbar, dark mode overrides e ajustes para classes Tailwind hardcoded.
+   ========================================================================== */
+
 @layer utilities {
+  /* --------------------------------------------------------------------------
+     Custom scrollbar
+     -------------------------------------------------------------------------- */
+
   .ui-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--border-strong)) hsl(var(--surface-muted));
@@ -309,7 +1499,59 @@
     background: hsl(var(--text-muted));
   }
 
-  /* â”€â”€ Dark-theme overrides for hardcoded Tailwind classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* --------------------------------------------------------------------------
+     Light theme overrides
+     --------------------------------------------------------------------------
+     Estes overrides ajudam quando algum componente usa Tailwind hardcoded.
+     O objetivo é impedir que bg-white, text-gray-* e border-gray-* quebrem
+     completamente a identidade quente do tema claro.
+     -------------------------------------------------------------------------- */
+
+  :root:not([data-theme="dark"]) .bg-white {
+    background-color: hsl(var(--surface)) !important;
+  }
+
+  :root:not([data-theme="dark"]) .bg-gray-50,
+  :root:not([data-theme="dark"]) .bg-gray-100,
+  :root:not([data-theme="dark"]) .bg-slate-50,
+  :root:not([data-theme="dark"]) .bg-slate-100 {
+    background-color: hsl(var(--surface-muted)) !important;
+  }
+
+  :root:not([data-theme="dark"]) .text-gray-950,
+  :root:not([data-theme="dark"]) .text-gray-900,
+  :root:not([data-theme="dark"]) .text-gray-800,
+  :root:not([data-theme="dark"]) .text-slate-950,
+  :root:not([data-theme="dark"]) .text-slate-900 {
+    color: hsl(var(--text)) !important;
+  }
+
+  :root:not([data-theme="dark"]) .text-gray-700,
+  :root:not([data-theme="dark"]) .text-gray-600,
+  :root:not([data-theme="dark"]) .text-gray-500,
+  :root:not([data-theme="dark"]) .text-gray-400,
+  :root:not([data-theme="dark"]) .text-slate-700,
+  :root:not([data-theme="dark"]) .text-slate-600,
+  :root:not([data-theme="dark"]) .text-slate-500,
+  :root:not([data-theme="dark"]) .text-slate-400 {
+    color: hsl(var(--text-muted)) !important;
+  }
+
+  :root:not([data-theme="dark"]) .border-gray-100,
+  :root:not([data-theme="dark"]) .border-gray-200,
+  :root:not([data-theme="dark"]) .border-gray-300,
+  :root:not([data-theme="dark"]) .border-slate-200,
+  :root:not([data-theme="dark"]) .divide-gray-100 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  /* --------------------------------------------------------------------------
+     Dark theme background overrides
+     --------------------------------------------------------------------------
+     Corrige classes Tailwind hardcoded, como bg-white, bg-gray-50 etc.,
+     para respeitarem o dark mode.
+     -------------------------------------------------------------------------- */
+
   :root[data-theme="dark"] .bg-white {
     background-color: hsl(var(--surface)) !important;
   }
@@ -346,6 +1588,10 @@
   :root[data-theme="dark"] .bg-rose-100 {
     background-color: hsl(var(--danger-soft)) !important;
   }
+
+  /* --------------------------------------------------------------------------
+     Dark theme text overrides
+     -------------------------------------------------------------------------- */
 
   :root[data-theme="dark"] .text-gray-950,
   :root[data-theme="dark"] .text-gray-900,
@@ -399,6 +1645,10 @@
     color: hsl(var(--danger)) !important;
   }
 
+  /* --------------------------------------------------------------------------
+     Dark theme border overrides
+     -------------------------------------------------------------------------- */
+
   :root[data-theme="dark"] .border-gray-100,
   :root[data-theme="dark"] .border-gray-200,
   :root[data-theme="dark"] .border-gray-300,
@@ -429,6 +1679,10 @@
     border-color: hsl(var(--success) / 0.24) !important;
   }
 
+  /* --------------------------------------------------------------------------
+     Dark theme hover/selected background overrides
+     -------------------------------------------------------------------------- */
+
   :root[data-theme="dark"] .hover\:bg-gray-50:hover,
   :root[data-theme="dark"] .hover\:bg-gray-100:hover,
   :root[data-theme="dark"] .hover\:bg-slate-50:hover,
@@ -443,6 +1697,10 @@
     background-color: hsl(var(--accent-soft)) !important;
   }
 
+  /* --------------------------------------------------------------------------
+     Dark theme shadow overrides
+     -------------------------------------------------------------------------- */
+
   :root[data-theme="dark"] .shadow-sm,
   :root[data-theme="dark"] .shadow-lg,
   :root[data-theme="dark"] .shadow-2xl {
@@ -450,11 +1708,18 @@
   }
 }
 
+/* ==========================================================================
+   KANBAN ANIMATIONS
+   --------------------------------------------------------------------------
+   Animações de entrada das colunas, cards e feedback visual de drop.
+   ========================================================================== */
+
 @keyframes kanbanColumnIn {
   from {
     opacity: 0;
     transform: translateY(10px) scale(0.99);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -466,6 +1731,7 @@
     opacity: 0;
     transform: translateY(6px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -474,12 +1740,17 @@
 
 @keyframes kanbanDropPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.22);
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.22);
   }
+
   100% {
-    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
+    box-shadow: 0 0 0 12px hsl(var(--primary) / 0);
   }
 }
+
+/* --------------------------------------------------------------------------
+   Kanban enter classes
+   -------------------------------------------------------------------------- */
 
 .kanban-column-enter {
   opacity: 0;
@@ -492,6 +1763,12 @@
   animation: kanbanCardIn 260ms ease-out forwards;
   animation-delay: var(--enter-delay, 0ms);
 }
+
+/* --------------------------------------------------------------------------
+   Reduced motion support
+   --------------------------------------------------------------------------
+   Remove animações para usuários que preferem menos movimento.
+   -------------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
   .kanban-column-enter,

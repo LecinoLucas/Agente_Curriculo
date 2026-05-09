@@ -35,15 +35,14 @@ function extractDetail(error: unknown): string | null {
 
 export function formatContextError(
   error: unknown,
-  fallback: string,
+  defaultMessage: string,
   nextStep?: string,
 ): string {
   const detail = extractDetail(error);
-  const base = nextStep ? `${fallback} ${nextStep}` : fallback;
+  const base = nextStep ? `${defaultMessage} ${nextStep}` : defaultMessage;
   if (!detail) return base;
   if (detail.endsWith(".") || detail.endsWith("!") || detail.endsWith("?")) {
     return `${base} Detalhe: ${detail}`;
   }
   return `${base} Detalhe: ${detail}.`;
 }
-

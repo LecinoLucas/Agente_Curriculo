@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
@@ -74,7 +73,6 @@ class CandidateJobPipelineModel(Base):
         sa.UUID(as_uuid=True),
         sa.ForeignKey("analyses.id", ondelete="SET NULL"),
     )
-    match_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 2))
     entered_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     last_moved_by: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),

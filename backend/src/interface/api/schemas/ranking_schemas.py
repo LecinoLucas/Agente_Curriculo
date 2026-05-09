@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 DecisionStatus = Literal["approved", "review", "rejected_suggested"]
+FreshnessStatus = Literal["fresh", "stale"]
 
 class ReasonCode(BaseModel):
     """Filterable, auditable scoring signal with a quantified impact.
@@ -33,6 +34,21 @@ class ScoreBreakdownResponse(BaseModel):
     penalty_score: Decimal
     validation_penalty_score: Decimal
     final_score: Decimal
+    raw_score: Decimal | None = None
+    final_score_before_cap: Decimal | None = None
+    final_score_after_cap: Decimal | None = None
+    cap_applied: bool | None = None
+    cap_reason: str | None = None
+    validation_status: str | None = None
+    validation_reason: str | None = None
+    failed_rule: str | None = None
+    failed_dimension: str | None = None
+    eligibility_status: str | None = None
+    missing_required_skills: list[str] | None = None
+    education_detected: str | None = None
+    minimum_education_required: str | None = None
+    experience_detected: float | None = None
+    minimum_experience_required: float | None = None
 
 
 class CandidateRankingEntry(BaseModel):
@@ -48,7 +64,7 @@ class CandidateRankingEntry(BaseModel):
     explanation_text: str
     entered_at: datetime | None
     computed_at: datetime
-    freshness_status: str = "unknown"
+    freshness_status: FreshnessStatus
     score_computed_at: datetime | None = None
     source_analysis_id: UUID | None = None
     source_analysis_created_at: datetime | None = None
@@ -57,7 +73,7 @@ class CandidateRankingEntry(BaseModel):
     ranking_updated_at: datetime | None = None
     version: str
     ranking_version: str | None = None
-    data_quality_status: str = "unknown"  # Safe fallback; can be: valid, unknown, data_error, or any invalid status
+    data_quality_status: str
 
 
 class DataQualityStats(BaseModel):

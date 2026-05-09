@@ -1,7 +1,6 @@
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 import sqlalchemy as sa
@@ -10,13 +9,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.domain_events import CandidateStageChangedEvent, dispatch_event
-from src.application.services.deterministic_scorer import DeterministicScorer
+from src.application.services.strict_payload import require_key
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
     CandidateJobPipelineEventModel,
 )
-from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
     _candidate_job_pipeline_key,
@@ -81,6 +78,36 @@ _STAGE_TO_OUTCOME: dict[str, str] = {
 }
 
 logger = structlog.get_logger(__name__)
+
+
+def _parse_required_json_object(raw: object, *, field_name: str) -> dict:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            logger.error("pipeline.invalid_json", field=field_name, error=str(exc))
+            raise ValueError(f"{field_name} contains invalid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{field_name} must decode to dict")
+        return parsed
+    raise ValueError(f"{field_name} must be dict or JSON object string")
+
+
+def _parse_required_json_list(raw: object, *, field_name: str) -> list:
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            logger.error("pipeline.invalid_json", field=field_name, error=str(exc))
+            raise ValueError(f"{field_name} contains invalid JSON") from exc
+        if not isinstance(parsed, list):
+            raise ValueError(f"{field_name} must decode to list")
+        return parsed
+    raise ValueError(f"{field_name} must be list or JSON array string")
 
 
 # ---------------------------------------------------------------------------
@@ -274,24 +301,15 @@ class PipelineService:
             job_id=saved.job_id,
             stage=saved.pipeline_stage,  # type: ignore[arg-type]
             candidate_status=STAGE_TO_CANDIDATE_STATUS[saved.pipeline_stage],
-            match_score=saved.match_score,
             updated_at=saved.updated_at,
         )
-
-    # ------------------------------------------------------------------
-    # Matching integration (existing signature — extended to record transition)
-    # ------------------------------------------------------------------
 
     async def register_match_entry(
         self,
         analysis_id: UUID,
         job_id: UUID,
-        match_score: Decimal,
     ) -> None:
-        # Uses the new repository method that also records a StageTransition
-        # when the entry is created for the first time (trigger='auto_match').
-        # Existing callers (AnalysisService) keep the same call signature.
-        await self._repository.upsert_and_record_transition(analysis_id, job_id, match_score)
+        await self._repository.upsert_and_record_transition(analysis_id, job_id)
 
     # ------------------------------------------------------------------
     # New: move candidate with full transition recording
@@ -385,7 +403,6 @@ class PipelineService:
             stage=saved_row["stage"],  # type: ignore[arg-type]
             candidate_status=STAGE_TO_CANDIDATE_STATUS[saved_row["stage"]],
             status=saved_row["status"],  # type: ignore[arg-type]
-            match_score=saved_row["match_score"],
             transition_id=saved_transition.id,
             updated_at=saved_row["updated_at"],
         )
@@ -455,8 +472,6 @@ class PipelineService:
                 created_at=now,
             )
         )
-
-        await self._update_match_score_deterministically(candidate_id=candidate_id, job_id=body.job_id)
 
         return AddCandidateToJobResponse(
             candidate_id=saved_row["candidate_id"],
@@ -578,8 +593,6 @@ class PipelineService:
                 "Não foi possível concluir a transferência. Recarregue e tente novamente."
             ) from exc
 
-        await self._update_match_score_deterministically(candidate_id=candidate_id, job_id=body.to_job_id)
-
         await publish_domain_event(
             DomainEvent(
                 event_type=DomainEventType.CANDIDATE_JOB_TRANSFERRED,
@@ -694,7 +707,6 @@ class PipelineService:
             job_title=entry["job_title"],
             current_stage=entry["stage"],  # type: ignore[arg-type]
             status=entry.get("status", "active"),  # type: ignore[arg-type]
-            match_score=entry["match_score"],
             entered_at=entry["entered_at"],
             updated_at=entry["updated_at"],
             transitions=transitions,
@@ -759,67 +771,12 @@ class PipelineService:
         if await self._repository.find_active_candidate(candidate_id) is None:
             raise PipelineCandidateNotFoundError
 
-    async def _update_match_score_deterministically(
-        self,
-        *,
-        candidate_id: UUID,
-        job_id: UUID,
-    ) -> None:
-        if not self._session:
-            return
-
-        job = await self._session.get(JobModel, job_id)
-        if job is None:
-            return
-
-        resume_version = await self._session.scalar(
-            sa.select(ResumeVersionModel)
-            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-            .where(
-                ResumeModel.candidate_id == candidate_id,
-                ResumeModel.deleted_at.is_(None),
-            )
-            .order_by(ResumeVersionModel.uploaded_at.desc())
-            .limit(1)
-        )
-        if resume_version is None:
-            return
-
-        try:
-            if isinstance(job.job_profile_json, str):
-                job_profile = json.loads(job.job_profile_json)
-            else:
-                job_profile = job.job_profile_json or {}
-
-            if isinstance(resume_version.candidate_profile_json, str):
-                candidate_profile = json.loads(resume_version.candidate_profile_json)
-            else:
-                candidate_profile = resume_version.candidate_profile_json or {}
-
-            scorer = DeterministicScorer()
-            score_result = scorer.calculate(job_profile, candidate_profile)
-            entry = await self._repository.find_active_entry(candidate_id, job_id)
-            if entry is None:
-                return
-
-            entry.match_score = Decimal(str(score_result.match_score))
-            entry.updated_at = datetime.now(UTC)
-            await self._repository.save_entry(entry)
-        except Exception:
-            # Falha silenciosa para não bloquear o vínculo/pipeline.
-            return
-
     @staticmethod
     def _row_to_match_response(row: dict) -> JobMatchCandidateResponse:
-        raw_skills = row.get("top_skills") or []
-        if isinstance(raw_skills, str):
-            try:
-                parsed = json.loads(raw_skills)
-                raw_skills = parsed if isinstance(parsed, list) else []
-            except json.JSONDecodeError:
-                raw_skills = []
-        top_skills = [str(skill) for skill in raw_skills if str(skill).strip()][:5]
-        stage = str(row.get("stage") or "entry")
+        raw_skills = row["top_skills"]
+        parsed_skills = _parse_required_json_list(raw_skills, field_name="top_skills")
+        top_skills = [str(skill) for skill in parsed_skills if str(skill).strip()][:5]
+        stage = str(require_key(row, "stage"))
 
         # ai_status comes from the latest analysis for this candidate (any status).
         # It is read-only here — stage moves never touch it.
@@ -833,7 +790,6 @@ class PipelineService:
             stage=stage,  # type: ignore[arg-type]
             candidate_status=STAGE_TO_CANDIDATE_STATUS.get(stage, "Em processo"),
             status=row.get("status", "active"),  # type: ignore[arg-type]
-            match_score=row.get("match_score"),
             entered_at=row.get("entered_at"),
             top_skills=top_skills,
             updated_at=row["updated_at"],

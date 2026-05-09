@@ -48,6 +48,12 @@ class RequestAnalysisUseCase:
         if not command.job_id:
             raise ValidationException("job_id é obrigatório para análise")
 
+        job = await self._analysis_repo.find_active_job(command.job_id)
+        if job is None:
+            raise ValidationException(
+                "A vaga não está disponível para novas análises. Reative a vaga antes de continuar."
+            )
+
         if str(getattr(version, "extraction_status", "")).lower() != "completed" or not (
             (version.extracted_text or "").strip()
         ):

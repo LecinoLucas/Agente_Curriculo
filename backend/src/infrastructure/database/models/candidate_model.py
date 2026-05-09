@@ -12,11 +12,7 @@ JSONB_COMPAT = JSONB().with_variant(sa.JSON(), "sqlite")
 
 
 class CandidateModel(Base):
-    """
-    Candidate Model - External entity representing a person being evaluated.
-
-    See: docs/user-candidate-boundary.md for boundary documentation.
-    """
+    """External person being evaluated."""
     __tablename__ = "candidates"
 
     id: Mapped[UUID] = mapped_column(
@@ -25,15 +21,11 @@ class CandidateModel(Base):
         default=uuid4,
         server_default=sa.text("uuid_generate_v4()"),
     )
-    # BRIDGE FIELD (Temporary for Phase 20.2)
     # Links Candidate to User with role="candidate" for candidate portal access.
     # When NULL: candidate is anonymous (sourced, imported, no login).
     # When NOT NULL: candidate can login to portal via associated User.
     #
     # Invariant: If user_id is set, User(user_id).role MUST be "candidate"
-    #
-    # Phase 20.3+: Will be replaced by CandidateAccount(candidate_id, user_id)
-    # to completely separate candidate portal from internal user system.
     user_id: Mapped[Optional[UUID]] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"))
     full_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(sa.String(255))

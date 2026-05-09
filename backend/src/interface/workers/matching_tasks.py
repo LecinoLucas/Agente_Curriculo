@@ -87,7 +87,7 @@ async def _match_analysis_to_job_async(analysis_id: str, job_id: str) -> dict:
                     "matching.completed",
                     analysis_id=str(analysis_uuid),
                     job_id=str(job_uuid),
-                    score=str(match.match_score),
+                    final_score=str(match.final_score),
                     recommendation=match.recommendation,
                 )
 
@@ -95,7 +95,7 @@ async def _match_analysis_to_job_async(analysis_id: str, job_id: str) -> dict:
                     "status": "completed",
                     "analysis_id": str(analysis_uuid),
                     "job_id": str(job_uuid),
-                    "match_score": str(match.match_score),
+                    "final_score": str(match.final_score),
                     "recommendation": match.recommendation,
                 }
 

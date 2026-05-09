@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Zap, ArrowRight } from "lucide-react";
 import type { CandidateListSummary, JobRanking, JobRankingEntry } from "../../types/domain";
 import { candidatesService } from "../../services/candidatesService";
@@ -37,28 +37,43 @@ export function CandidateSearchModal({
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Fetch summaries on open or search change
-  useEffect(() => {
-    if (!isOpen) return;
-    void fetchSummaries("");
-  }, [isOpen]);
+  // FIX #3: Use a ref to track the latest request version and avoid race conditions
+  const fetchVersionRef = useRef(0);
 
-  useEffect(() => {
-    const timer = setTimeout(() => void fetchSummaries(search), 350);
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  async function fetchSummaries(q: string) {
+  // FIX #2 + #3: Wrap fetchSummaries in useCallback and handle race conditions with AbortController
+  const fetchSummaries = useCallback(async (q: string) => {
+    const version = ++fetchVersionRef.current;
     setSummariesLoading(true);
     try {
       const { data } = await candidatesService.listSummaries(1, 40, q || undefined);
+      // Ignore stale responses from previous requests
+      if (version !== fetchVersionRef.current) return;
       setSummaries(data);
     } catch (err) {
+      if (version !== fetchVersionRef.current) return;
       toast.error("Erro ao buscar candidatos");
     } finally {
-      setSummariesLoading(false);
+      if (version === fetchVersionRef.current) {
+        setSummariesLoading(false);
+      }
     }
-  }
+  }, []);
+
+  // FIX #1: Single unified effect with debounce — no double fetch on open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Fetch immediately when modal opens (search is "" at this point)
+    // and debounce subsequent search changes
+    const isInitialOpen = search === "";
+    if (isInitialOpen) {
+      void fetchSummaries("");
+      return;
+    }
+
+    const timer = setTimeout(() => void fetchSummaries(search), 350);
+    return () => clearTimeout(timer);
+  }, [isOpen, search, fetchSummaries]);
 
   // Reset state on close
   useEffect(() => {
@@ -67,21 +82,23 @@ export function CandidateSearchModal({
       setSummaries([]);
       setAddedIds(new Set());
       setErrors({});
+      // Reset fetch version so stale requests from previous session are ignored
+      fetchVersionRef.current = 0;
     }
   }, [isOpen]);
 
-  // Candidates from ranking without a pipeline stage (not yet added)
+  // FIX #4: Also filter rankedAvailable by addedIds so added candidates disappear immediately
   const rankedAvailable = useMemo(() => {
     if (!ranking) return [];
     return ranking.candidates
       .filter((e) => !e.stage)
+      .filter((e) => !addedIds.has(e.candidate_id))
       .filter((e) =>
         e.candidate_name.toLowerCase().includes(search.toLowerCase()),
       )
       .slice(0, 8);
-  }, [ranking, search]);
+  }, [ranking, search, addedIds]);
 
-  // Other candidates: not in ranking, excluding already added
   const rankedIds = useMemo(
     () => new Set(ranking?.candidates.map((e) => e.candidate_id) ?? []),
     [ranking],
@@ -271,6 +288,7 @@ export function CandidateSearchModal({
   );
 }
 
+// FIX #5: error tipado como string | undefined em ambos os componentes
 function RankedCandidateRow({
   entry,
   isAdding,
@@ -281,7 +299,7 @@ function RankedCandidateRow({
   entry: JobRankingEntry;
   isAdding: boolean;
   isAdded: boolean;
-  error: string;
+  error?: string; // era: string
   onAdd: () => void;
 }) {
   const scorePercent = normalizeScorePercent(entry.final_score);
@@ -321,23 +339,33 @@ function RankedCandidateRow({
   );
 }
 
+interface AddError {
+  message: string;
+  code?: string;
+}
+
 function OtherCandidateRow({
   candidate,
   isAdding,
   isAdded,
   error,
+  addError,
   onAdd,
   onOpen,
 }: {
   candidate: CandidateListSummary;
   isAdding: boolean;
   isAdded: boolean;
-  error: string;
+  error?: string;
+  addError?: AddError;
   onAdd: () => void;
   onOpen: () => void;
 }) {
   const isLinked = Boolean(candidate.active_job_id);
-  const showOpenAction = isLinked && /transfer|vínculo ativo com outra vaga|vinculo ativo com outra vaga/i.test(error);
+
+  const isLinkedError = addError?.code === "CANDIDATE_LINKED";
+
+  const showOpenAction = isLinked && isLinkedError;
 
   return (
     <div className={`rounded-lg border p-3 transition ${

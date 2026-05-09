@@ -132,7 +132,6 @@ async def test_candidate_list_summaries_includes_linked_job_count():
             "resume_count": 2,
             "linked_job_count": 3,
             "ai_status": "completed",
-            "ai_score": Decimal("87.5"),
         }
     ]
     service = CandidateService(repo)  # type: ignore[arg-type]

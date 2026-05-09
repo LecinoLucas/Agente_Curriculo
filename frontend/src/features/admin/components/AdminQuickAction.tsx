@@ -8,15 +8,12 @@ type AdminQuickActionProps = {
   description: string;
   buttonLabel: string;
   onButtonClick: () => void;
-  variant?: "default" | "blue" | "amber" | "cyan" | "emerald";
+  variant?: "default" | "blue";
 };
 
 const variantClasses: Record<string, string> = {
   default: "border-gray-200 shadow-sm",
   blue: "border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm dark:border-indigo-900/30 dark:from-indigo-950/30 dark:to-blue-950/30",
-  amber: "border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 shadow-sm dark:border-amber-900/30 dark:from-amber-950/30 dark:to-orange-950/20",
-  cyan: "border-cyan-100 bg-gradient-to-br from-cyan-50 to-sky-50 shadow-sm dark:border-cyan-900/30 dark:from-cyan-950/30 dark:to-sky-950/20",
-  emerald: "border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm dark:border-emerald-900/30 dark:from-emerald-950/30 dark:to-teal-950/20",
 };
 
 export function AdminQuickAction({

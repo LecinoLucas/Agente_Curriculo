@@ -109,9 +109,8 @@ export function ScoreTab({
 }) {
   const { user } = useAuth();
   const canSendMatchingFeedback = user?.role === "admin" || user?.role === "recruiter";
-  const compatibilityScore = activePipelineEntry?.match_score ?? null;
+  const compatibilityScore = rankingEntry?.final_score ?? null;
   const latestActiveAnalysis = activeJobId ? overview.latest_analysis : null;
-  const aiScore = analysisResult?.overall_score ?? null;
   // Use prop from parent (CandidateDrawer), only update locally for feedback
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(initialScoreExplanation);
   const [feedbackSaving, setFeedbackSaving] = useState<"liked" | "rejected" | "hired" | null>(null);
@@ -149,8 +148,7 @@ export function ScoreTab({
   }, [initialScoreExplanation]);
 
   const semantics = deriveScoreSemantics({
-    activeJobMatchScore: compatibilityScore,
-    aiScore,
+    finalScore: compatibilityScore,
     aiStatus: latestActiveAnalysis?.status,
     hasActiveJob: Boolean(activeJobId),
     confidenceScore:
@@ -236,22 +234,12 @@ export function ScoreTab({
             ) : null}
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <DecisionCard
-            label="Compatibilidade Contextual"
+            label="Score final"
             value={compatibilityGuidance ? compatibilityGuidance.title : fmtScore(compatibilityScore)}
-            description={compatibilityGuidance?.description ?? "Leitura contextual do candidato dentro da vaga ativa."}
+            description={compatibilityGuidance?.description ?? "Fonte oficial persistida em CandidateJobScore.final_score."}
             valueClassName={compatibilityGuidance ? "text-[hsl(var(--text))]" : scoreColorClass(compatibilityScore)}
-          />
-          <DecisionCard
-            label="Perfil Geral IA"
-            value={fmtScore(aiScore)}
-            description={
-              latestActiveAnalysis?.status === "completed"
-                ? "Resumo geral do perfil feito pela IA, fora do contexto específico desta vaga."
-                : "Aguardando análise concluída para mostrar este contexto secundário."
-            }
-            valueClassName={scoreColorClass(aiScore)}
           />
           <DecisionCard
             label="Aderência à Vaga"

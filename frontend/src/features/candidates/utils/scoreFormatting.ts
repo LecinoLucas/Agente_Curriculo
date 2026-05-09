@@ -11,10 +11,10 @@ export function normalizeScoreUnit(value: number | null | undefined): number | n
 
 export function formatScorePercent(
   value: number | null | undefined,
-  fallback = "—",
+  emptyLabel = "—",
 ): string {
   const percent = normalizeScorePercent(value);
-  return percent == null ? fallback : `${Math.round(percent)}%`;
+  return percent == null ? emptyLabel : `${Math.round(percent)}%`;
 }
 
 export function getScoreTone(value: number | null | undefined): "high" | "mid" | "low" | "neutral" {

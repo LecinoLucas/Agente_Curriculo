@@ -187,8 +187,7 @@ export function CandidateDecisionPanel({
     rankingEntry?.score_breakdown?.ai_confidence_score ??
     null;
   const semantics = deriveScoreSemantics({
-    activeJobMatchScore: compatibilityScore,
-    aiScore,
+    finalScore: compatibilityScore,
     aiStatus,
     hasActiveJob,
     confidenceScore,
@@ -218,9 +217,7 @@ export function CandidateDecisionPanel({
         : null
       : semantics.detailLine;
 
-  // Fallback when no analysis data available
   if (compatibilityScore === null && !analysisResult && !scoreExplanation) {
-    // Generic fallback (has job but no analysis yet)
     return (
       <div className="px-5 py-4">
         <div className="rounded-2xl border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-4">

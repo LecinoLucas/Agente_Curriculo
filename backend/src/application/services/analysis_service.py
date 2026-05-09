@@ -2,8 +2,6 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from inspect import isawaitable
-from types import SimpleNamespace
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import sqlalchemy as sa
@@ -28,12 +26,15 @@ _MANDATORY_STRONG_COVERAGE_STRONG_MATCH = Decimal("80")
 _MANDATORY_STRONG_COVERAGE_GOOD_MATCH = Decimal("60")
 _MANDATORY_STRONG_COVERAGE_CAP_THRESHOLD = Decimal("50")
 _MANDATORY_STRONG_COVERAGE_CAP_SCORE = Decimal("54")
+_MINIMUM_DOMAIN_FIT_CAP_SCORE = Decimal("49")
+_LOW_PROFILE_COMPLETENESS_THRESHOLD = Decimal("0.60")
 _SCORE_VERSION_EQUIVALENCE = "v3.1-equivalence"
 
 logger = logging.getLogger(__name__)
 
 from src.domain.entities.user import User
-from src.application.services.matching_engine_service import MatchingEngineService
+from src.domain.entities.user import UserRole
+from src.application.services.audit_service import AuditService
 from src.application.services.eligibility_engine_service import EligibilityEngineService
 from src.application.services.job_profiler_service import (
     JobProfilerService,
@@ -41,7 +42,6 @@ from src.application.services.job_profiler_service import (
     job_skill_from_row,
 )
 from src.application.services.skill_requirements_service import validate_skill_requirements
-from src.application.services.extraction_fallbacks import enrich_analysis_result_fields
 from src.application.services.skill_normalizer_service import (
     candidate_satisfies_job_requirement,
 )
@@ -50,6 +50,7 @@ from src.application.services.skill_text_normalizer import (
     contains_whole_phrase,
     normalize_skill_text,
 )
+from src.application.services.strict_payload import require_key
 from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
@@ -62,7 +63,6 @@ from src.infrastructure.database.models.profile_analysis_model import (
     JobProfileAnalysisModel,
 )
 from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
-from src.infrastructure.database.models.resume_model import ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
@@ -115,6 +115,19 @@ def _get_education_level_rank(level: str | None) -> int:
     return EDUCATION_HIERARCHY.get(level.lower(), -1)
 
 
+def _extract_profile_completeness(candidate_result: object) -> Decimal | None:
+    extracted = getattr(candidate_result, "extracted_data", None)
+    if not isinstance(extracted, dict):
+        return None
+    value = extracted.get("profile_completeness")
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
 def _skill_matches_exact_and_aliases_only(
     candidate_skill_name: str,
     job_skill_name: str,
@@ -122,7 +135,7 @@ def _skill_matches_exact_and_aliases_only(
 ) -> bool:
     """Check if candidate skill exactly matches job skill or is in aliases.
 
-    F7.1 restriction: Only exact/alias matches, NOT legacy equivalences.
+    F7.1 restriction: Only exact/alias matches.
     This allows SkillEquivalenceService to handle all scoring logic.
 
     Returns True only for:
@@ -163,7 +176,7 @@ def _compute_skill_scores(
     """Compute weighted skill scores using equivalence service.
 
     F7.1 fix: Uses SkillEquivalenceService for ALL equivalence logic.
-    Only uses exact/alias matching (no legacy binary equivalences).
+    Only uses exact/alias matching.
 
     Returns dict with:
     - mandatory_score_weighted: Decimal (sum of scores / total * 100)
@@ -196,7 +209,7 @@ def _compute_skill_scores(
         best_evidence = None
 
         for candidate_skill in all_candidate_skills:
-            # F7.1: Only check exact/alias, NOT legacy equivalences
+            # F7.1: Only check exact/alias.
             if _skill_matches_exact_and_aliases_only(candidate_skill, job_skill_name, job_skill_aliases):
                 best_score = Decimal("1.0")
                 best_candidate = candidate_skill
@@ -239,7 +252,7 @@ def _compute_skill_scores(
         best_candidate = None
 
         for candidate_skill in all_candidate_skills:
-            # F7.1: Only check exact/alias, NOT legacy equivalences
+            # F7.1: Only check exact/alias.
             if _skill_matches_exact_and_aliases_only(candidate_skill, job_skill_name, job_skill_aliases):
                 best_score = Decimal("1.0")
                 best_candidate = candidate_skill
@@ -290,27 +303,6 @@ def _compute_skill_scores(
     }
 
 
-async def _maybe_await(value):
-    if isawaitable(value):
-        return await value
-    return value
-
-
-async def _safe_session_get(session: object | None, model: object, identifier: object) -> object | None:
-    get_fn = getattr(session, "get", None)
-    if not callable(get_fn):
-        return None
-    try:
-        return await _maybe_await(get_fn(model, identifier))
-    except Exception:
-        logger.debug(
-            "analysis_service.session_get_unavailable",
-            exc_info=True,
-            extra={"model": getattr(model, "__name__", str(model))},
-        )
-        return None
-
-
 async def _safe_session_flush(session: object | None) -> None:
     flush_fn = getattr(session, "flush", None)
     if not callable(flush_fn):
@@ -339,7 +331,9 @@ def make_json_safe(value: object) -> object:
 
 
 def _validate_education(
-    candidate_level: str | None, required_level: str | None
+    candidate_level: str | None,
+    required_level: str | None,
+    profile_completeness: Decimal | None = None,
 ) -> ValidationResult:
     """Validate candidate education against job requirement.
 
@@ -351,19 +345,44 @@ def _validate_education(
     if required_level is None:
         return ValidationResult(status="pass")
 
-    if candidate_level is None:
+    normalized_level = str(candidate_level).strip().lower() if candidate_level is not None else None
+
+    if normalized_level in {None, "", "unknown", "undefined"}:
         return ValidationResult(
             status="unknown",
             reason=f"Educação não informada (exigido: {required_level})"
         )
 
-    candidate_rank = _get_education_level_rank(candidate_level)
+    if normalized_level == "none":
+        if (
+            profile_completeness is None
+            or profile_completeness < _LOW_PROFILE_COMPLETENESS_THRESHOLD
+        ):
+            return ValidationResult(
+                status="unknown",
+                reason=(
+                    f"Educação ausente ou inconclusiva no currículo "
+                    f"(exigido: {required_level})"
+                ),
+            )
+        return ValidationResult(
+            status="fail",
+            reason=f"Educação insuficiente ({normalized_level} < {required_level})"
+        )
+
+    candidate_rank = _get_education_level_rank(normalized_level)
     required_rank = _get_education_level_rank(required_level)
+
+    if candidate_rank < 0:
+        return ValidationResult(
+            status="unknown",
+            reason=f"Educação não classificável ({candidate_level})"
+        )
 
     if candidate_rank < required_rank:
         return ValidationResult(
             status="fail",
-            reason=f"Educação insuficiente ({candidate_level} < {required_level})"
+            reason=f"Educação insuficiente ({normalized_level} < {required_level})"
         )
 
     return ValidationResult(status="pass")
@@ -723,31 +742,6 @@ def _skill_matches(
     return False
 
 
-def _fallback_job_skill_rows(job_profile_analysis: JobProfileAnalysisModel) -> list[SimpleNamespace]:
-    rows: list[SimpleNamespace] = []
-    for skill_name in getattr(job_profile_analysis, "required_skills_json", None) or []:
-        if not _looks_like_structured_skill_name(skill_name):
-            continue
-        rows.append(
-            SimpleNamespace(
-                skill_name=skill_name,
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-            )
-        )
-    for skill_name in getattr(job_profile_analysis, "nice_to_have_skills_json", None) or []:
-        if not _looks_like_structured_skill_name(skill_name):
-            continue
-        rows.append(
-            SimpleNamespace(
-                skill_name=skill_name,
-                skill_aliases=[],
-                JobRequiredSkillModel=SimpleNamespace(is_mandatory=False),
-            )
-        )
-    return rows
-
-
 def _unique_skill_names(skill_names: list[str]) -> list[str]:
     seen: set[str] = set()
     unique: list[str] = []
@@ -799,11 +793,8 @@ def _candidate_profile_analysis_is_incomplete(profile: CandidateProfileAnalysisM
 
 
 def _job_profile_analysis_is_incomplete(profile: JobProfileAnalysisModel) -> bool:
-    required = list(getattr(profile, "required_skills_json", None) or [])
-    optional = list(getattr(profile, "nice_to_have_skills_json", None) or [])
-    structured_required = [item for item in required if _looks_like_structured_skill_name(item)]
-    structured_optional = [item for item in optional if _looks_like_structured_skill_name(item)]
-    return not structured_required and not structured_optional
+    raw_payload = getattr(profile, "raw_response_json", None)
+    return not isinstance(raw_payload, dict) or not raw_payload
 
 
 class AnalysisNotFoundError(Exception):
@@ -822,6 +813,10 @@ class JobNotFoundError(Exception):
     pass
 
 
+class AnalysisDiscardBlockedError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class AnalysisResultDetails:
     analysis: AnalysisModel
@@ -833,9 +828,11 @@ class AnalysisService:
         self,
         repository: SQLAlchemyAnalysisRepository,
         eligibility_engine_service: EligibilityEngineService | None = None,
+        audit_service: AuditService | None = None,
     ) -> None:
         self._repository = repository
         self._eligibility_engine_service = eligibility_engine_service
+        self._audit_service = audit_service
 
     def _get_eligibility_engine_service(self) -> EligibilityEngineService:
         if self._eligibility_engine_service is not None:
@@ -875,8 +872,11 @@ class AnalysisService:
                 resume_version_id=row["resume_version_id"],
                 status=row["status"],
                 failure_reason=row["failure_reason"],
+                discarded_at=row.get("discarded_at"),
+                discarded_by=row.get("discarded_by"),
+                discard_reason=row.get("discard_reason"),
+                discard_reason_note=row.get("discard_reason_note"),
                 used_real_ai=row["used_real_ai"],
-                overall_score=float(row["overall_score"]) if row.get("overall_score") is not None else None,
                 retry_count=row["retry_count"],
                 created_at=row["created_at"],
                 started_at=row["started_at"],
@@ -892,6 +892,47 @@ class AnalysisService:
         if analysis is None:
             raise AnalysisNotFoundError
         return analysis
+
+    async def discard(
+        self,
+        analysis_id: UUID,
+        *,
+        current_user: User,
+        reason: str,
+        note: str | None = None,
+    ) -> AnalysisModel:
+        analysis = await self.get(analysis_id, current_user)
+        if analysis.status == "discarded":
+            raise ValidationException("A análise já está descartada.")
+        if analysis.status == "processing":
+            raise ValidationException("Não é possível descartar uma análise em processamento.")
+
+        if (
+            await self._repository.is_decision_linked(analysis.id)
+            and current_user.role != UserRole.ADMIN
+        ):
+            raise AnalysisDiscardBlockedError(
+                "Esta análise já foi usada em decisão do processo. Somente administradores podem descartá-la."
+            )
+
+        previous_status = str(analysis.status)
+        now = datetime.now(UTC)
+        analysis.status = "discarded"
+        analysis.discarded_at = now
+        analysis.discarded_by = current_user.id
+        analysis.discard_reason = reason.strip()
+        analysis.discard_reason_note = note.strip() if isinstance(note, str) and note.strip() else None
+        analysis.updated_at = now
+        saved = await self._repository.save(analysis)
+        await self._log_discard_audit(
+            analysis=saved,
+            current_user=current_user,
+            reason=analysis.discard_reason,
+            note=analysis.discard_reason_note,
+            before_state={"status": previous_status},
+            after_state={"status": "discarded"},
+        )
+        return saved
 
     async def get_result(self, analysis_id: UUID, current_user: User) -> AnalysisResultDetails:
         analysis = await self.get(analysis_id, current_user)
@@ -924,7 +965,7 @@ class AnalysisService:
         pending_jobs_count = 1 if target_job_id is not None and not has_persisted_match else 0
         recent_matches = await self._repository.list_recent_job_matches_for_analysis(analysis_id)
 
-        if analysis.status in {"failed", "cancelled"}:
+        if analysis.status in {"failed", "cancelled", "discarded"}:
             matching_status = "blocked"
         elif analysis.status != "completed":
             matching_status = "waiting_analysis"
@@ -975,6 +1016,34 @@ class AnalysisService:
         details = AnalysisResultDetails(analysis=analysis, result=result)
         return await self._match_details_to_job(
             details, job_id, score_model_version=score_model_version
+        )
+
+    async def _log_discard_audit(
+        self,
+        *,
+        analysis: AnalysisModel,
+        current_user: User,
+        reason: str | None,
+        note: str | None,
+        before_state: dict[str, str] | None,
+        after_state: dict[str, str] | None,
+    ) -> None:
+        if self._audit_service is None:
+            return
+        await self._audit_service.log_event(
+            action="discard_analysis",
+            resource_type="analysis",
+            resource_id=analysis.id,
+            user_id=current_user.id,
+            metadata={
+                "entityType": "analysis",
+                "entityId": str(analysis.id),
+                "reason": reason,
+                "note": note,
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+            before_state=before_state,
+            after_state=after_state,
         )
 
     async def _ensure_candidate_profile_analysis(
@@ -1091,6 +1160,9 @@ class AnalysisService:
             job_signature_hash=signature_hash,
         )
         if cached is not None and not _job_profile_analysis_is_incomplete(cached):
+            job.job_profile_hash = signature_hash
+            job.job_profile_json = dict(cached.raw_response_json)
+            await _safe_session_flush(getattr(self._repository, "session", None))
             return cached
 
         ai_service = None
@@ -1117,17 +1189,17 @@ class AnalysisService:
         )
 
         job.job_profile_json = profile.to_dict()
-        job.job_profile_hash = profile.description_hash
+        job.job_profile_hash = signature_hash
 
         if cached is not None:
             cached.job_area = profile.area
             cached.seniority_required = profile.target_level
             cached.education_required = job.minimum_education_level
             cached.experience_required = job.minimum_years_experience
-            cached.required_skills_json = [item.name for item in profile.critical_requirements]
-            cached.nice_to_have_skills_json = [item.name for item in profile.desirable_requirements]
             cached.responsibilities_json = list(profile.responsibilities)
             cached.raw_response_json = profile.to_dict()
+            cached.is_active = True
+            cached.superseded_at = None
             await _safe_session_flush(getattr(self._repository, "session", None))
             return cached
 
@@ -1141,12 +1213,12 @@ class AnalysisService:
             seniority_required=profile.target_level,
             education_required=job.minimum_education_level,
             experience_required=job.minimum_years_experience,
-            required_skills_json=[item.name for item in profile.critical_requirements],
-            nice_to_have_skills_json=[item.name for item in profile.desirable_requirements],
             responsibilities_json=list(profile.responsibilities),
             raw_response_json=profile.to_dict(),
             input_tokens=None,
             output_tokens=None,
+            is_active=True,
+            superseded_at=None,
         )
         return await self._repository.save_job_profile_analysis(record)
 
@@ -1158,43 +1230,6 @@ class AnalysisService:
     ) -> AnalysisMatchResponse:
         analysis_id = details.analysis.id
         result = details.result
-
-        resume_version = await _safe_session_get(
-            getattr(self._repository, "session", None),
-            ResumeVersionModel,
-            details.analysis.resume_version_id,
-        )
-        resume_text = getattr(resume_version, "extracted_text", None)
-        if isinstance(resume_text, str) and resume_text.strip():
-            enriched_result = enrich_analysis_result_fields(
-                {
-                    "overall_score": result.overall_score,
-                    "technical_score": result.technical_score,
-                    "experience_score": result.experience_score,
-                    "education_score": result.education_score,
-                    "communication_score": result.communication_score,
-                    "leadership_score": result.leadership_score,
-                    "candidate_summary": result.candidate_summary,
-                    "seniority_level": result.seniority_level,
-                    "total_experience_years": result.total_experience_years,
-                    "highest_education_level": result.highest_education_level,
-                    "highest_education_field": result.highest_education_field,
-                    "strengths": list(result.strengths or []),
-                    "weaknesses": list(result.weaknesses or []),
-                    "recommendations": list(result.recommendations or []),
-                    "keywords": list(result.keywords or []),
-                    "extracted_data": dict(result.extracted_data or {}),
-                },
-                resume_text,
-            )
-            result.seniority_level = enriched_result["seniority_level"]
-            result.total_experience_years = enriched_result["total_experience_years"]
-            result.highest_education_level = enriched_result["highest_education_level"]
-            result.highest_education_field = enriched_result["highest_education_field"]
-            result.experience_score = enriched_result["experience_score"]
-            result.education_score = enriched_result["education_score"]
-            result.keywords = enriched_result["keywords"]
-            result.extracted_data = enriched_result["extracted_data"]
 
         job = await self._repository.find_active_job(job_id)
         if job is None:
@@ -1224,8 +1259,6 @@ class AnalysisService:
             deal_breakers=job.deal_breakers,
         )
         job_skills = persisted_job_skills
-        if not job_skills and has_structured_requirements:
-            job_skills = _fallback_job_skill_rows(job_profile_analysis)
         candidate_keywords: set[str] = {
             normalize_skill_text(kw)
             for kw in (result.keywords or [])
@@ -1264,60 +1297,13 @@ class AnalysisService:
         total_mandatory = len(mandatory_skills)
         total_optional = len(optional_skills)
 
-        adaptive_match = None
         adaptive_explanation = None
         adaptive_strengths: list[str] = []
         adaptive_gaps: list[str] = []
         adaptive_risk_points: list[str] = []
         adaptive_behavioral_indicators: list[str] = []
         adaptive_score_breakdown: dict[str, object] = {}
-        engine_used = "legacy"
-
-        try:
-            adaptive_match = await MatchingEngineService(self._repository).match_details_to_job(
-                details.analysis,
-                result,
-                job_id,
-            )
-            if adaptive_match.confidence_score < Decimal("50"):
-                logger.info(
-                    "adaptive_matching_engine_low_confidence analysis_id=%s job_id=%s confidence=%s",
-                    str(analysis_id),
-                    str(job_id),
-                    str(adaptive_match.confidence_score),
-                )
-                adaptive_match = None
-            else:
-                adaptive_explanation = adaptive_match.explanation
-                adaptive_strengths = list(adaptive_match.strengths)
-                adaptive_gaps = list(adaptive_match.gaps)
-                adaptive_risk_points = list(adaptive_match.risk_points)
-                adaptive_behavioral_indicators = list(adaptive_match.behavioral_indicators)
-                adaptive_score_breakdown = {
-                    "score_final": float(adaptive_match.score_final),
-                    "technical_competencies": float(adaptive_match.technical_competencies),
-                    "practical_experience": float(adaptive_match.practical_experience),
-                    "role_fit": float(adaptive_match.role_fit),
-                    "seniority_alignment": float(adaptive_match.seniority_alignment),
-                    "education": float(adaptive_match.education),
-                    "leadership_evidence": float(adaptive_match.leadership_evidence),
-                    "behavioral_indicators": list(adaptive_match.behavioral_indicators),
-                    "risk_points": list(adaptive_match.risk_points),
-                    "strengths": list(adaptive_match.strengths),
-                    "gaps": list(adaptive_match.gaps),
-                    "recommendation": adaptive_match.recommendation,
-                    "engine_used": adaptive_match.engine_used,
-                    "raw_breakdown": dict(adaptive_match.score_breakdown),
-                }
-                bonus_skill_names = adaptive_match.bonus_signals or bonus_skill_names
-                engine_used = adaptive_match.engine_used
-        except Exception as exc:
-            logger.warning(
-                "adaptive_matching_engine_failed analysis_id=%s job_id=%s error=%s",
-                str(analysis_id),
-                str(job_id),
-                str(exc),
-            )
+        engine_used = "canonical"
 
         candidate_years = (
             Decimal(str(result.total_experience_years))
@@ -1350,7 +1336,6 @@ class AnalysisService:
             result.seniority_level,
             job.seniority_level,
         )
-        ai_score = Decimal("0")
 
         overall = min(
             mandatory_score * w_mand
@@ -1359,6 +1344,8 @@ class AnalysisService:
             + seniority_score * w_sen,
             Decimal("100"),
         ).quantize(Decimal("0.01"))
+
+        raw_weighted_score = overall
 
         if total_mandatory > 0 and mandatory_percentage >= _MANDATORY_THRESHOLD:
             overall = max(
@@ -1383,13 +1370,26 @@ class AnalysisService:
         if not has_structured_requirements:
             overall = min(overall, _NO_REQUIREMENTS_SCORE_CAP).quantize(Decimal("0.01"))
 
+        profile_completeness = _extract_profile_completeness(result)
         education_result = _validate_education(
-            result.highest_education_level, job.minimum_education_level
+            result.highest_education_level,
+            job.minimum_education_level,
+            profile_completeness,
         )
         experience_result = _validate_experience(
             candidate_years,
             required_years,
         )
+
+        final_score_before_cap = overall
+        cap_applied = False
+        cap_reason: str | None = None
+        failed_rule: str | None = None
+        failed_dimension: str | None = None
+        eligibility_status = "PASS"
+        deal_breaker_failed = False
+        domain_fit_review = False
+        domain_fit_cap_applied = False
 
         # Track validation status and missing evidence
         validation_status = "pass"  # Default: everything is ok
@@ -1436,6 +1436,9 @@ class AnalysisService:
             if breaker_hit:
                 validation_status = "fail"  # Deal-breaker is a hard reject
                 validation_reasons.append(breaker_reason)
+                failed_rule = "explicit_deal_breaker"
+                failed_dimension = "deal_breaker"
+                deal_breaker_failed = True
                 logger.info(
                     f"[Deal-Breaker] {breaker_reason} Candidate REJECTED."
                 )
@@ -1446,35 +1449,85 @@ class AnalysisService:
         # 2. If only UNKNOWN: don't reject, but mark for manual review + light penalty
         # 3. Otherwise: normal scoring
 
-        if validation_status == "fail":
+        has_domain_evidence = mandatory_matched > 0 or optional_matched > 0 or bool(partial_matches)
+
+        if deal_breaker_failed:
             # Objective validation FAILED (candidate below minimum threshold)
             overall = min(overall, Decimal("39"))  # Cap score at 39 (below "potential")
+            cap_applied = True
+            cap_reason = "explicit_deal_breaker"
+            eligibility_status = "FAIL"
             recommendation = "not_match"
             reason = " | ".join(validation_reasons)
             logger.info(
                 f"[Objective Validation] Candidate REJECTED. "
                 f"Reasons: {reason}. Score capped at 39."
             )
-        elif validation_status == "unknown":
-            # Objective validation UNKNOWN (missing critical evidence)
-            # Don't reject, but flag for manual review and apply penalty
-            penalty = Decimal("0.90")  # Apply 10% penalty for missing evidence
-            overall = (overall * penalty).quantize(Decimal("0.01"))
-            recommendation = "review_manually"
-            reason = f"Dados insuficientes: {', '.join(missing_evidence)}. {' | '.join(validation_reasons)}"
-            logger.info(
-                f"[Objective Validation] Missing evidence detected. "
-                f"Flagged for manual review. Penalty: 10%. "
-                f"Reasons: {' | '.join(validation_reasons)}"
-            )
-        elif total_mandatory > 0 and mandatory_percentage < _MANDATORY_THRESHOLD:
-            # Job has required skills and candidate doesn't meet 60% threshold
-            validation_status = "fail"
-            overall = min(overall, Decimal("39"))  # Cap score at 39 (below "potential")
+        elif education_result.status == "fail":
+            overall = min(overall, Decimal("39"))
+            cap_applied = True
+            cap_reason = "minimum_education"
+            failed_rule = "minimum_education"
+            failed_dimension = "education"
+            eligibility_status = "FAIL"
             recommendation = "not_match"
-            reason = f"Não atende habilidades obrigatórias ({mandatory_matched}/{total_mandatory})"
-            validation_reasons.append(reason)
+            reason = " | ".join(validation_reasons)
+        elif experience_result.status == "fail":
+            overall = min(overall, Decimal("39"))
+            cap_applied = True
+            cap_reason = "minimum_experience"
+            failed_rule = "minimum_experience"
+            failed_dimension = "experience"
+            eligibility_status = "FAIL"
+            recommendation = "not_match"
+            reason = " | ".join(validation_reasons)
         else:
+            if total_mandatory > 0 and mandatory_percentage < _MANDATORY_THRESHOLD:
+                reason = (
+                    f"Não atende integralmente habilidades obrigatórias "
+                    f"({mandatory_matched}/{total_mandatory})"
+                )
+                validation_reasons.append(reason)
+                failed_rule = "missing_required_skills"
+                failed_dimension = "skills"
+                eligibility_status = "REVIEW"
+                if has_domain_evidence:
+                    domain_fit_review = True
+                    logger.info(
+                        "[Domain Fit] Candidate has partial mandatory fit. "
+                        "Flagged for review without hard cap."
+                    )
+                else:
+                    domain_fit_review = True
+                    domain_fit_cap_applied = True
+                    cap_applied = True
+                    cap_reason = "minimum_domain_fit"
+                    failed_rule = "minimum_domain_fit"
+                    overall = min(overall, _MINIMUM_DOMAIN_FIT_CAP_SCORE).quantize(Decimal("0.01"))
+                    logger.info(
+                        "[Domain Fit] Candidate lacks minimum domain fit. "
+                        "Score capped for review."
+                    )
+
+            if validation_status == "unknown":
+                eligibility_status = "REVIEW"
+                recommendation = "review_manually"
+                if not domain_fit_cap_applied:
+                    penalty = Decimal("0.90")  # Apply 10% penalty for missing evidence
+                    overall = (overall * penalty).quantize(Decimal("0.01"))
+                reason = (
+                    f"Dados insuficientes: {', '.join(missing_evidence)}. "
+                    f"{' | '.join(validation_reasons)}"
+                )
+                logger.info(
+                    f"[Objective Validation] Missing evidence detected. "
+                    f"Flagged for manual review. "
+                    f"Reasons: {' | '.join(validation_reasons)}"
+                )
+            elif domain_fit_review:
+                recommendation = "review_manually"
+                reason = " | ".join(validation_reasons)
+
             enough_mandatory_for_strong = (
                 mandatory_strong_coverage >= _MANDATORY_STRONG_COVERAGE_STRONG_MATCH
                 if total_mandatory else True
@@ -1484,19 +1537,22 @@ class AnalysisService:
                 if total_mandatory else True
             )
 
-            if overall >= _STRONG_MATCH_THRESHOLD and enough_mandatory_for_strong:
-                recommendation = "strong_match"
-            elif overall >= _GOOD_MATCH_THRESHOLD and enough_mandatory_for_good:
-                recommendation = "good_match"
-            elif overall >= _POTENTIAL_THRESHOLD:
-                recommendation = "potential"
-            else:
-                recommendation = "not_recommended"
-            reason = None
+            if not domain_fit_review and validation_status != "unknown":
+                if overall >= _STRONG_MATCH_THRESHOLD and enough_mandatory_for_strong:
+                    recommendation = "strong_match"
+                elif overall >= _GOOD_MATCH_THRESHOLD and enough_mandatory_for_good:
+                    recommendation = "good_match"
+                elif overall >= _POTENTIAL_THRESHOLD:
+                    recommendation = "potential"
+                else:
+                    recommendation = "not_recommended"
+                reason = None
 
-            # Prevent all-partial from becoming strong_match or good_match
-            if all_mandatory_partial and recommendation in ("strong_match", "good_match"):
-                recommendation = "potential"
+                # Prevent all-partial from becoming strong_match or good_match
+                if all_mandatory_partial and recommendation in ("strong_match", "good_match"):
+                    recommendation = "potential"
+
+        final_score_after_cap = overall
 
         skills_score = (
             mandatory_score * Decimal("0.75") + optional_score * Decimal("0.25")
@@ -1520,7 +1576,6 @@ class AnalysisService:
         ).register_match_entry(
             analysis_id=analysis_id,
             job_id=job_id,
-            match_score=overall,
         )
 
         candidate_id = await self._repository.get_candidate_id_from_analysis(analysis_id)
@@ -1529,14 +1584,34 @@ class AnalysisService:
             raise ValueError("Could not resolve analysis context for candidate_job_match persistence")
 
         pipeline_key = uuid5(NAMESPACE_URL, f"{candidate_id}:{job_id}")
-        skill_evidence_breakdown = None
-        if partial_matches:
-            skill_evidence_breakdown = {
-                "partial_matches": partial_matches,
-                "mandatory_score_weighted": float(skill_scores["mandatory_score_weighted"]),
-                "mandatory_strong_coverage": float(mandatory_strong_coverage),
-                "score_version": _SCORE_VERSION_EQUIVALENCE,
-            }
+        skill_evidence_breakdown = {
+            "partial_matches": partial_matches,
+            "mandatory_score_weighted": float(skill_scores["mandatory_score_weighted"]),
+            "mandatory_strong_coverage": float(mandatory_strong_coverage),
+            "score_version": _SCORE_VERSION_EQUIVALENCE,
+            "raw_score": float(raw_weighted_score),
+            "final_score_before_cap": float(final_score_before_cap),
+            "final_score_after_cap": float(final_score_after_cap),
+            "cap_applied": cap_applied,
+            "cap_reason": cap_reason,
+            "validation_status": validation_status,
+            "validation_reasons": list(validation_reasons),
+            "failed_rule": failed_rule,
+            "failed_dimension": failed_dimension,
+            "missing_required_skills": list(missing_skill_names),
+            "education_detected": result.highest_education_level,
+            "minimum_education_required": job.minimum_education_level,
+            "experience_detected": float(candidate_years) if candidate_years is not None else None,
+            "minimum_experience_required": float(required_years) if required_years is not None else None,
+            "eligibility_status": eligibility_status,
+            "mandatory_skills_matched": mandatory_matched,
+            "mandatory_skills_total": total_mandatory,
+            "domain_fit_review": domain_fit_review,
+            "has_domain_evidence": has_domain_evidence,
+        }
+
+        if not job.job_profile_hash:
+            raise ValueError(f"Job {job.id} missing job_profile_hash during match persistence")
 
         persisted_match = CandidateJobMatchModel(
             candidate_id=candidate_id,
@@ -1545,37 +1620,64 @@ class AnalysisService:
             candidate_profile_analysis_id=candidate_profile_analysis.id,
             job_profile_analysis_id=job_profile_analysis.id,
             candidate_job_pipeline_id=pipeline_key,
-            match_score=overall,
             recommendation=recommendation,
             matched_skills_json=matched_skill_names,
             missing_skills_json=missing_skill_names,
             skill_evidence_breakdown=skill_evidence_breakdown,
             explanation=summary,
+            eligibility_status=eligibility_status,
             created_at=datetime.now(UTC),
             score_version=_SCORE_VERSION_EQUIVALENCE if partial_matches else None,
+            freshness_status="fresh",
+            job_signature_hash=str(job.job_profile_hash),
         )
 
         await self._repository.upsert_candidate_job_match(persisted_match)
 
+        if cap_applied:
+            logger.info(
+                "score.cap_applied",
+                extra={
+                    "candidate_id": str(candidate_id),
+                    "job_id": str(job_id),
+                    "raw_score": float(raw_weighted_score),
+                    "final_score": float(final_score_after_cap),
+                    "validation_status": validation_status,
+                    "validation_reason": " | ".join(validation_reasons) if validation_reasons else None,
+                    "failed_rule": failed_rule,
+                    "failed_dimension": failed_dimension,
+                    "missing_required_skills": list(missing_skill_names),
+                    "education_detected": result.highest_education_level,
+                    "minimum_education_required": job.minimum_education_level,
+                    "experience_detected": float(candidate_years) if candidate_years is not None else None,
+                    "minimum_experience_required": float(required_years) if required_years is not None else None,
+                    "cap_reason": cap_reason,
+                },
+            )
+
         ranking_refresh_status = "unknown"
-        ranking_freshness_status = "unknown"
+        ranking_freshness_status = "stale"
         ranking_refreshed_at = None
         ranking_warning = None
+        public_final_score = None
         ranking_service = None
         try:
             from src.application.services.candidate_ranking_service import CandidateRankingService
 
             ranking_service = CandidateRankingService(self._repository.session)
             async with self._repository.session.begin_nested():
-                ranking_result = await ranking_service.compute_single_candidate(job_id, candidate_id)
+                ranking_result = await ranking_service.compute_single_candidate(
+                    job_id, candidate_id, recompute_reason="post_match"
+                )
 
             if ranking_result is None:
                 ranking_refresh_status = "skipped"
                 ranking_warning = "Ranking incremental não encontrou contexto suficiente para o candidato."
             else:
                 ranking_refresh_status = "updated"
-                ranking_freshness_status = str(ranking_result.get("freshness_status") or "fresh")
-                ranking_refreshed_at = ranking_result.get("computed_at")
+                ranking_freshness_status = str(require_key(ranking_result, "freshness_status"))
+                ranking_refreshed_at = require_key(ranking_result, "computed_at")
+                public_final_score = float(require_key(ranking_result, "final_score"))
         except Exception:
             ranking_refresh_status = "failed"
             ranking_freshness_status = "stale"
@@ -1629,13 +1731,13 @@ class AnalysisService:
         return AnalysisMatchResponse(
             analysis_id=analysis_id,
             job_id=job_id,
-            match_score=overall,
+            final_score=public_final_score,
             recommendation=recommendation,
             mandatory_skills_matched=mandatory_matched,
             mandatory_skills_total=total_mandatory,
             optional_skills_matched=optional_matched,
             optional_skills_total=total_optional,
-            seniority_score=seniority_score.quantize(Decimal("0.01")),
+            seniority_score=float(seniority_score.quantize(Decimal("0.01"))),
             candidate_seniority=result.seniority_level,
             job_seniority=job.seniority_level,
             validation_status=validation_status,

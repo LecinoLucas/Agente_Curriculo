@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 import hashlib
 
@@ -36,6 +37,7 @@ from src.infrastructure.repositories.sqlalchemy_candidate_repository import SQLA
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
 from src.application.services.candidate_ranking_service import CandidateRankingService
+from src.application.services.job_profiler_service import build_job_profile_hash, job_skill_from_row
 
 
 async def _create_active_user(
@@ -126,6 +128,7 @@ async def _seed_scoring_case(
         description="Test job description with Python, FastAPI, PostgreSQL requirements",
         location="Test Location",
         minimum_years_experience=Decimal("5.0"),
+        job_profile_hash=hashlib.sha256(b"test-job-profile").hexdigest(),
         created_by=created_by,
     )
     db_session.add(job)
@@ -159,6 +162,39 @@ async def _seed_scoring_case(
     )
     db_session.add(job_fastapi)
     await db_session.flush()
+    job.job_profile_hash = build_job_profile_hash(
+        title=job.title,
+        description=job.description,
+        requirements=job.requirements,
+        seniority_level=job.seniority_level,
+        minimum_years_experience=float(job.minimum_years_experience) if job.minimum_years_experience is not None else None,
+        minimum_education_level=job.minimum_education_level,
+        job_area=job.job_area,
+        responsibilities=job.responsibilities,
+        experience_context=job.experience_context,
+        behavioral_requirements=tuple(job.behavioral_requirements or ()),
+        priority=job.priority,
+        linked_skills=(
+            job_skill_from_row(
+                SimpleNamespace(
+                    JobRequiredSkillModel=job_python,
+                    skill_name=python_skill.name,
+                    skill_aliases=python_skill.aliases,
+                    skill_normalized_name=python_skill.normalized_name,
+                    skill_category=python_skill.category,
+                )
+            ),
+            job_skill_from_row(
+                SimpleNamespace(
+                    JobRequiredSkillModel=job_fastapi,
+                    skill_name=fastapi_skill.name,
+                    skill_aliases=fastapi_skill.aliases,
+                    skill_normalized_name=fastapi_skill.normalized_name,
+                    skill_category=fastapi_skill.category,
+                )
+            ),
+        ),
+    )
 
     # 4. Create candidate_job_pipeline (REQUIRED by endpoint)
     pipeline = CandidateJobPipelineModel(
@@ -213,10 +249,6 @@ async def _seed_scoring_case(
     # 8. Create analysis result (REQUIRED by endpoint)
     result = AnalysisResultModel(
         analysis_id=analysis.id,
-        overall_score=Decimal("82.50"),
-        technical_score=Decimal("85.00"),
-        experience_score=Decimal("85.00"),
-        education_score=Decimal("80.00"),
         seniority_level="mid",
         total_experience_years=Decimal("5.0"),
         strengths=["Strong Python expertise", "Proficient with FastAPI framework"],
@@ -241,16 +273,16 @@ async def _seed_scoring_case(
     await db_session.flush()
 
     # 10. Create job profile analysis
-    job_signature_hash = hashlib.sha256(job.description.encode()).hexdigest()[:16]
     job_analysis = JobProfileAnalysisModel(
         job_id=job.id,
         provider="google",
         model_id="gemini-test",
         prompt_version="v1",
-        job_signature_hash=job_signature_hash,
+        job_signature_hash=job.job_profile_hash,
         experience_required=Decimal("3.0"),
-        required_skills_json=["Python", "FastAPI", "PostgreSQL"],
-        nice_to_have_skills_json=["Pipelines"],
+        responsibilities_json=["Build APIs"],
+        raw_response_json={"responsibilities": ["Build APIs"]},
+        is_active=True,
     )
     db_session.add(job_analysis)
     await db_session.flush()
@@ -263,11 +295,12 @@ async def _seed_scoring_case(
         candidate_profile_analysis_id=candidate_analysis.id,
         job_profile_analysis_id=job_analysis.id,
         score_version="v3-canonical-det",
-        match_score=Decimal("75.50"),
         recommendation="good_match",
         matched_skills_json=["Python", "FastAPI"],
         missing_skills_json=["pipelines"],
         explanation="Good technical match with Python/FastAPI expertise.",
+        freshness_status="fresh",
+        job_signature_hash=job.job_profile_hash,
     )
     db_session.add(match)
     pipeline.current_analysis_id = analysis.id

@@ -155,7 +155,7 @@ def extract_pdf_text(content: bytes) -> ExtractedPdfText:
     text = _clean_text("\n\n".join(page_texts))
     used_ocr = False
 
-    # OCR is an expensive fallback and should be used only when no text was extracted.
+    # OCR is expensive and should run only when no text was extracted.
     # Short resumes with selectable text must not fail just because they have few characters.
     should_use_ocr = len(text) == 0
 

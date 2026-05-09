@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, ShieldCheck, Users, FileJson } from "lucide-react";
+import { CheckCircle2, ShieldCheck, Users } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -35,7 +35,7 @@ export function AdminPage() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <AdminQuickAction
           icon={<Users className="h-4 w-4 text-blue-600" />}
           title="Gerenciar usuários internos"
@@ -53,15 +53,6 @@ export function AdminPage() {
           buttonLabel="Consulte a matriz de permissões abaixo para ver as regras por perfil."
           onButtonClick={() => {}}
           variant="default"
-        />
-
-        <AdminQuickAction
-          icon={<FileJson className="h-4 w-4 text-cyan-600" />}
-          title="Importar vagas via JSON"
-          description="Cole um JSON de vagas, detecte duplicadas e distribua automaticamente entre criação e atualização."
-          buttonLabel="Abrir importador inteligente"
-          onButtonClick={() => navigate("/admin/importar-vagas")}
-          variant="cyan"
         />
       </div>
 
