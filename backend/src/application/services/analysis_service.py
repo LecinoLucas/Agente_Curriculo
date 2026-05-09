@@ -792,6 +792,21 @@ def _candidate_profile_analysis_is_incomplete(profile: CandidateProfileAnalysisM
     )
 
 
+def _skill_names_from_extracted_data(extracted_data: dict | None) -> list[str]:
+    if not isinstance(extracted_data, dict):
+        return []
+    raw_skills = extracted_data.get("skills")
+    if not isinstance(raw_skills, list):
+        return []
+    return _unique_skill_names([
+        str(skill.get("name")).strip()
+        for skill in raw_skills
+        if isinstance(skill, dict)
+        and str(skill.get("name", "")).strip()
+        and _looks_like_structured_skill_name(str(skill.get("name", "")).strip())
+    ])
+
+
 def _job_profile_analysis_is_incomplete(profile: JobProfileAnalysisModel) -> bool:
     raw_payload = getattr(profile, "raw_response_json", None)
     return not isinstance(raw_payload, dict) or not raw_payload
@@ -1058,14 +1073,13 @@ class AnalysisService:
         if cached is not None:
             if _candidate_profile_analysis_is_incomplete(cached):
                 extracted = result.extracted_data or {}
-                raw_skills = extracted.get("skills") if isinstance(extracted, dict) else []
-                refreshed_skills = [str(skill) for skill in (result.keywords or []) if str(skill).strip()]
-                if not refreshed_skills and isinstance(raw_skills, list):
-                    refreshed_skills = [
-                        str(skill.get("name")).strip()
-                        for skill in raw_skills
-                        if isinstance(skill, dict) and str(skill.get("name", "")).strip()
-                    ]
+                refreshed_skills = _skill_names_from_extracted_data(extracted)
+                if not refreshed_skills:
+                    refreshed_skills = _unique_skill_names([
+                        str(skill)
+                        for skill in (result.keywords or [])
+                        if str(skill).strip()
+                    ])
                 cached.education_level = result.highest_education_level
                 cached.experience_years = result.total_experience_years
                 cached.seniority_level = result.seniority_level
@@ -1095,15 +1109,13 @@ class AnalysisService:
         if not isinstance(extracted_candidate, dict):
             extracted_candidate = {}
 
-        skills = [str(skill) for skill in (result.keywords or []) if str(skill).strip()]
-        if not skills and isinstance(extracted, dict):
-            raw_skills = extracted.get("skills")
-            if isinstance(raw_skills, list):
-                skills = [
-                    str(skill.get("name")).strip()
-                    for skill in raw_skills
-                    if isinstance(skill, dict) and str(skill.get("name", "")).strip()
-                ]
+        skills = _skill_names_from_extracted_data(extracted)
+        if not skills:
+            skills = _unique_skill_names([
+                str(skill)
+                for skill in (result.keywords or [])
+                if str(skill).strip()
+            ])
 
         profile = CandidateProfileAnalysisModel(
             candidate_id=candidate_id,
@@ -1259,19 +1271,20 @@ class AnalysisService:
             deal_breakers=job.deal_breakers,
         )
         job_skills = persisted_job_skills
-        candidate_keywords: set[str] = {
-            normalize_skill_text(kw)
-            for kw in (result.keywords or [])
-            if kw and normalize_skill_text(kw)
-        }
         extracted: dict = result.extracted_data or {}
-        raw_skills: list[dict] = extracted.get("skills", [])
         candidate_skill_names: set[str] = {
-            normalize_skill_text(skill.get("name", ""))
-            for skill in raw_skills
-            if skill.get("name") and normalize_skill_text(skill.get("name", ""))
+            normalize_skill_text(skill_name)
+            for skill_name in _skill_names_from_extracted_data(extracted)
+            if normalize_skill_text(skill_name)
         }
-        all_candidate_skills = candidate_keywords | candidate_skill_names
+        if candidate_skill_names:
+            all_candidate_skills = candidate_skill_names
+        else:
+            all_candidate_skills = {
+                normalize_skill_text(kw)
+                for kw in (result.keywords or [])
+                if kw and normalize_skill_text(kw)
+            }
 
         # Separate mandatory and optional skills for computing totals
         mandatory_skills = [row for row in job_skills if row.JobRequiredSkillModel.is_mandatory]

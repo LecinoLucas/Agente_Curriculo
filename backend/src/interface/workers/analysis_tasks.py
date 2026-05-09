@@ -687,6 +687,16 @@ async def _process_analysis_with_session(
         )
         return {"analysis_id": str(analysis_uuid), "status": "claim_lost"}
 
+    if job_id is not None:
+        from src.interface.workers.matching_tasks import match_analysis_to_job
+
+        match_analysis_to_job.delay(str(analysis_uuid), str(job_id))
+        logger.info(
+            "analysis.matching_enqueued",
+            analysis_id=str(analysis_uuid),
+            job_id=str(job_id),
+        )
+
     logger.info(
         "analysis.processing_completed",
         analysis_id=str(analysis_uuid),

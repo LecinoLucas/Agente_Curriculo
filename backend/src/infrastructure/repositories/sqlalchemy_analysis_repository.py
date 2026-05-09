@@ -788,8 +788,6 @@ class SQLAlchemyAnalysisRepository:
                     missing_skills_json=match.missing_skills_json,
                     explanation=match.explanation,
                     eligibility_status=match.eligibility_status,
-                    strict_score=match.strict_score,
-                    balanced_score=match.balanced_score,
                     score_version=match.score_version,
                     skill_evidence_breakdown=match.skill_evidence_breakdown,
                     possible_false_negative=(
@@ -797,7 +795,6 @@ class SQLAlchemyAnalysisRepository:
                         if match.possible_false_negative is not None
                         else False
                     ),
-                    score_diff=match.score_diff,
                     created_at=match_created_at,
                     updated_at=now,
                     freshness_status=match.freshness_status,
@@ -811,8 +808,6 @@ class SQLAlchemyAnalysisRepository:
                         "missing_skills_json": match.missing_skills_json,
                         "explanation": match.explanation,
                         "eligibility_status": match.eligibility_status,
-                        "strict_score": match.strict_score,
-                        "balanced_score": match.balanced_score,
                         "score_version": match.score_version,
                         "skill_evidence_breakdown": match.skill_evidence_breakdown,
                         "possible_false_negative": (
@@ -820,7 +815,6 @@ class SQLAlchemyAnalysisRepository:
                             if match.possible_false_negative is not None
                             else False
                         ),
-                        "score_diff": match.score_diff,
                         "updated_at": now,
                         "freshness_status": match.freshness_status,
                         "job_signature_hash": match.job_signature_hash,
@@ -847,8 +841,6 @@ class SQLAlchemyAnalysisRepository:
             existing.missing_skills_json = match.missing_skills_json
             existing.explanation = match.explanation
             existing.eligibility_status = match.eligibility_status
-            existing.strict_score = match.strict_score
-            existing.balanced_score = match.balanced_score
             existing.score_version = match.score_version
             existing.skill_evidence_breakdown = match.skill_evidence_breakdown
             existing.possible_false_negative = (
@@ -856,7 +848,6 @@ class SQLAlchemyAnalysisRepository:
                 if match.possible_false_negative is not None
                 else False
             )
-            existing.score_diff = match.score_diff
             existing.updated_at = now
             existing.freshness_status = match.freshness_status
             existing.job_signature_hash = match.job_signature_hash

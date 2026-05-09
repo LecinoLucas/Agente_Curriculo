@@ -282,6 +282,27 @@ class JobQualityValidatorService:
         if job.skill_requirements is not None:
             return validate_skill_requirements(job.skill_requirements)
 
+        core_required = [
+            str(skill.get("name") or "").strip()
+            for skill in skills
+            if skill.get("is_mandatory") and str(skill.get("name") or "").strip()
+        ]
+        important = [
+            str(skill.get("name") or "").strip()
+            for skill in skills
+            if not skill.get("is_mandatory") and str(skill.get("name") or "").strip()
+        ]
+        if core_required or important:
+            warnings.append(
+                "skill_requirements ausente; usando skills vinculadas como requisitos efetivos."
+            )
+            return {
+                "critical_required": [],
+                "core_required": core_required,
+                "important": important,
+                "nice_to_have": [],
+            }
+
         return {
             "critical_required": [],
             "core_required": [],

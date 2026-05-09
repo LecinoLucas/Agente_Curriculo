@@ -173,8 +173,6 @@ class CandidateJobMatchModel(Base):
     missing_skills_json: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
     explanation: Mapped[str | None] = mapped_column(sa.Text)
     eligibility_status: Mapped[str | None] = mapped_column(sa.String(20))
-    strict_score: Mapped[int | None] = mapped_column(sa.Integer)
-    balanced_score: Mapped[int | None] = mapped_column(sa.Integer)
     score_version: Mapped[str | None] = mapped_column(sa.String(50))
     skill_evidence_breakdown: Mapped[dict | None] = mapped_column(JSONB_COMPAT)
     possible_false_negative: Mapped[bool] = mapped_column(
@@ -182,7 +180,6 @@ class CandidateJobMatchModel(Base):
         nullable=False,
         server_default=sa.text("false"),
     )
-    score_diff: Mapped[int | None] = mapped_column(sa.Integer)
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
@@ -213,14 +210,6 @@ class CandidateJobMatchModel(Base):
             name="ck_candidate_job_match_eligibility_status",
         ),
         sa.CheckConstraint(
-            "strict_score IS NULL OR (strict_score >= 0 AND strict_score <= 100)",
-            name="ck_candidate_job_match_strict_score_range",
-        ),
-        sa.CheckConstraint(
-            "balanced_score IS NULL OR (balanced_score >= 0 AND balanced_score <= 100)",
-            name="ck_candidate_job_match_balanced_score_range",
-        ),
-        sa.CheckConstraint(
             "freshness_status IN ('fresh', 'stale')",
             name="ck_candidate_job_match_freshness_status",
         ),
@@ -229,7 +218,6 @@ class CandidateJobMatchModel(Base):
         sa.Index("idx_candidate_job_match_pipeline", "candidate_job_pipeline_id"),
         sa.Index("idx_candidate_job_match_eligibility_status", "eligibility_status"),
         sa.Index("idx_candidate_job_match_possible_false_negative", "possible_false_negative"),
-        sa.Index("idx_candidate_job_match_balanced_score", "balanced_score"),
         sa.Index("idx_candidate_job_match_freshness", "job_id", "freshness_status"),
         sa.Index("idx_candidate_job_match_job_signature", "job_id", "job_signature_hash"),
     )

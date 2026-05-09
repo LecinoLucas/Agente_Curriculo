@@ -95,18 +95,29 @@ def _parse_required_json_object(raw: object, *, field_name: str) -> dict:
     raise ValueError(f"{field_name} must be dict or JSON object string")
 
 
-def _parse_required_json_list(raw: object, *, field_name: str) -> list:
+def _parse_required_json_list(raw: object, *, field_name: str, required: bool = True) -> list:
     if isinstance(raw, list):
         return raw
     if isinstance(raw, str):
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError as exc:
-            logger.error("pipeline.invalid_json", field=field_name, error=str(exc))
-            raise ValueError(f"{field_name} contains invalid JSON") from exc
+            if required:
+                logger.error("pipeline.invalid_json", field=field_name, error=str(exc))
+                raise ValueError(f"{field_name} contains invalid JSON") from exc
+            else:
+                logger.warning("pipeline.invalid_json_ignored", field=field_name, error=str(exc))
+                return []
         if not isinstance(parsed, list):
-            raise ValueError(f"{field_name} must decode to list")
+            if required:
+                raise ValueError(f"{field_name} must decode to list")
+            else:
+                logger.warning("pipeline.invalid_json_type", field=field_name, expected="list", got=type(parsed).__name__)
+                return []
         return parsed
+    if not required:
+        logger.warning("pipeline.invalid_field_type", field=field_name, type=type(raw).__name__)
+        return []
     raise ValueError(f"{field_name} must be list or JSON array string")
 
 
@@ -774,7 +785,7 @@ class PipelineService:
     @staticmethod
     def _row_to_match_response(row: dict) -> JobMatchCandidateResponse:
         raw_skills = row["top_skills"]
-        parsed_skills = _parse_required_json_list(raw_skills, field_name="top_skills")
+        parsed_skills = _parse_required_json_list(raw_skills, field_name="top_skills", required=False)
         top_skills = [str(skill) for skill in parsed_skills if str(skill).strip()][:5]
         stage = str(require_key(row, "stage"))
 

@@ -163,6 +163,23 @@ async def test_good_vaga_with_all_criteria(service, mock_repository):
 
 
 @pytest.mark.asyncio
+async def test_linked_mandatory_skills_satisfy_skill_requirements_when_payload_is_absent(service, mock_repository):
+    job = _create_job()
+    job.skill_requirements = None
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "React", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Node.js", is_mandatory=True, weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert result.can_publish
+    assert "skill_requirements" not in result.publication_blockers
+    assert any("skills vinculadas" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
 async def test_acceptable_vaga_with_warnings(service, mock_repository):
     """Test that mid-quality vaga can still be blocked from publication."""
     job = _create_job(

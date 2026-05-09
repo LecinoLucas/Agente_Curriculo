@@ -28,6 +28,8 @@ from src.application.services.strict_payload import (
     require_key,
     require_list,
     require_non_empty_string,
+    optional_dict,
+    optional_list,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
@@ -231,8 +233,8 @@ class CandidateRankingService:
                 )
                 continue
             rank = len(entries) + 1
-            breakdown_raw = require_dict(row, "breakdown")
-            reason_codes_raw = require_list(row, "reason_codes")
+            breakdown_raw = optional_dict(row, "breakdown")
+            reason_codes_raw = optional_list(row, "reason_codes")
             freshness_status, stale_reason = _resolve_freshness_status(
                 ranking_updated_at=row["ranking_updated_at"],
                 match_updated_at=row["match_updated_at"],
@@ -524,8 +526,6 @@ class CandidateRankingService:
                 CandidateJobMatchModel.candidate_id,
                 CandidateJobMatchModel.job_id,
                 CandidateJobMatchModel.eligibility_status,
-                CandidateJobMatchModel.strict_score,
-                CandidateJobMatchModel.balanced_score,
                 CandidateJobMatchModel.skill_evidence_breakdown,
                 CandidateJobMatchModel.created_at.label("shadow_created_at"),
                 sa.func.row_number()
@@ -589,8 +589,6 @@ class CandidateRankingService:
                 JobModel.job_profile_hash,
                 latest_match.c.match_updated_at,
                 latest_shadow_match.c.eligibility_status,
-                latest_shadow_match.c.strict_score,
-                latest_shadow_match.c.balanced_score,
                 latest_shadow_match.c.skill_evidence_breakdown,
                 latest_shadow_match.c.shadow_created_at,
             )
@@ -2063,9 +2061,27 @@ def _build_job_signature_hash(*, job: JobModel, job_skill_rows: list[Any]) -> st
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _default_score_breakdown() -> dict[str, Any]:
+    """Return a safe default score breakdown for malformed data."""
+    zero = Decimal("0.00")
+    return {
+        "skill_match_score": zero,
+        "experience_match_score": zero,
+        "seniority_match_score": zero,
+        "education_score": zero,
+        "confidence_score": zero,
+        "ai_confidence_score": zero,
+        "penalty_score": zero,
+        "validation_penalty_score": zero,
+        "final_score": zero,
+    }
+
+
 def _normalize_score_breakdown(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
-        raise ValueError("breakdown must be dict")
+        logger.warning("ranking.invalid_score_breakdown_type", type=type(raw).__name__)
+        return _default_score_breakdown()
+
     required_keys = (
         "skill_match_score",
         "experience_match_score",
@@ -2077,9 +2093,10 @@ def _normalize_score_breakdown(raw: Any) -> dict[str, Any]:
         "validation_penalty_score",
         "final_score",
     )
-    for key in required_keys:
-        if key not in raw:
-            raise ValueError(f"breakdown missing required key: {key}")
+    missing_keys = [key for key in required_keys if key not in raw]
+    if missing_keys:
+        logger.warning("ranking.score_breakdown_missing_keys", keys=missing_keys)
+        return _default_score_breakdown()
     breakdown = dict(raw)
     q = Decimal("0.01")
     normalized: dict[str, Any] = {

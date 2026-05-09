@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.application.services.analysis_service import _compute_skill_scores
+from src.application.services.analysis_service import (
+    _compute_skill_scores,
+    _skill_names_from_extracted_data,
+)
 
 
 def _row(name: str, *, mandatory: bool = True, aliases: list | None = None):
@@ -52,6 +55,34 @@ class TestAnalysisSkillScoring:
         assert result["mandatory_score_weighted"] >= Decimal("90")
         assert "JavaScript" in result["matched_skill_names"]
         assert "Node.js" in result["matched_skill_names"]
+
+    def test_structured_skills_do_not_use_job_keyword_contamination(self):
+        """Structured extracted skills are the candidate skill source, not job keywords."""
+        structured_skills = _skill_names_from_extracted_data({
+            "skills": [
+                {"name": "React"},
+                {"name": "Node.js"},
+                {"name": "PostgreSQL"},
+                {"name": "Docker"},
+            ]
+        })
+
+        result = _compute_skill_scores(
+            [
+                _row("React Native"),
+                _row("TypeScript"),
+                _row("Node.js"),
+                _row("SQL Server"),
+            ],
+            {skill.lower() for skill in structured_skills},
+        )
+
+        assert result["mandatory_matched"] == 1
+        assert result["matched_skill_names"] == ["Node.js"]
+        assert "React Native" in result["missing_skill_names"]
+        partial_required = {item["required"] for item in result["partial_matches"]}
+        assert "TypeScript" in partial_required
+        assert "SQL Server" in partial_required
 
     def test_protheus_partial_match_sap_mm_real_score(self):
         """Test 2: Protheus partially matches SAP MM in real score."""
