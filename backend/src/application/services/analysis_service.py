@@ -968,10 +968,10 @@ class AnalysisService:
                 cached.seniority_level = result.seniority_level
                 cached.skills_json = refreshed_skills
                 cached.summary = result.candidate_summary
-            await _safe_session_flush(getattr(self._repository, "session", None))
+            await _safe_session_flush(getattr(self._repository, "_session", None))
             return cached
 
-        ai_prompt_row = await self._repository.session.execute(
+        ai_prompt_row = await self._repository._session.execute(
             sa.select(AIModelModel.provider, AIModelModel.model_id, PromptTemplateModel.version)
             .select_from(AnalysisModel)
             .join(AIModelModel, AIModelModel.id == AnalysisModel.ai_model_id)
@@ -1468,7 +1468,7 @@ class AnalysisService:
             else:
                 summary = adaptive_explanation or base_summary
         await PipelineService(
-            SQLAlchemyPipelineRepository(self._repository.session)
+            SQLAlchemyPipelineRepository(self._repository._session)
         ).register_match_entry(
             analysis_id=analysis_id,
             job_id=job_id,
@@ -1560,8 +1560,8 @@ class AnalysisService:
         try:
             from src.application.services.candidate_ranking_service import CandidateRankingService
 
-            ranking_service = CandidateRankingService(self._repository.session)
-            async with self._repository.session.begin_nested():
+            ranking_service = CandidateRankingService(self._repository._session)
+            async with self._repository._session.begin_nested():
                 ranking_result = await ranking_service.compute_single_candidate(
                     job_id, candidate_id, recompute_reason="post_match"
                 )
@@ -1607,11 +1607,11 @@ class AnalysisService:
                         "recompute_reason": "match_to_job_sync",
                     },
                 ),
-                session=self._repository.session,
+                session=self._repository._session,
             )
             if ranking_service is not None:
                 try:
-                    async with self._repository.session.begin_nested():
+                    async with self._repository._session.begin_nested():
                         await ranking_service.mark_candidate_stale(job_id, candidate_id)
                 except Exception:
                     logger.warning(

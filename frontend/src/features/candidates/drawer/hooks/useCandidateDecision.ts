@@ -122,7 +122,7 @@ export function useCandidateDecision({
     activeJob?.title ??
     candidateOverview?.active_job?.title ??
     latestPipelineEntry?.job_title ??
-    "Não vinculado";
+    "Aguardando Vaga";
 
   return {
     primaryPipelineEntry,

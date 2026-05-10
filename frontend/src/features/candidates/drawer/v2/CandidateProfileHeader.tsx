@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { CandidateOverview, PipelineStage } from "../../../../types/domain";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { deriveScoreSemantics } from "../../utils/scoreSemantics";
@@ -15,6 +16,10 @@ interface CandidateProfileHeaderProps {
   onNavigateToFull?: () => void;
   onBackToList?: () => void;
   backToListLabel?: string;
+  actions?: ReactNode;
+  analysisStatusLabel?: string;
+  analysisStatusDetail?: string;
+  analysisStatusTone?: "neutral" | "info" | "success" | "danger" | "warning";
 }
 
 export function CandidateProfileHeader({
@@ -30,6 +35,10 @@ export function CandidateProfileHeader({
   onNavigateToFull,
   onBackToList,
   backToListLabel = "Candidatos",
+  actions,
+  analysisStatusLabel,
+  analysisStatusDetail,
+  analysisStatusTone = "neutral",
 }: CandidateProfileHeaderProps) {
   const initials = candidate?.full_name
     ?.split(" ")
@@ -59,6 +68,16 @@ export function CandidateProfileHeader({
       : currentStage === "rejected"
         ? "border-rose-200 bg-rose-50 text-rose-900"
         : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 text-[hsl(var(--text-muted))]";
+  const analysisBadgeClass =
+    analysisStatusTone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : analysisStatusTone === "danger"
+        ? "border-rose-200 bg-rose-50 text-rose-900"
+        : analysisStatusTone === "info"
+          ? "border-sky-200 bg-sky-50 text-sky-900"
+          : analysisStatusTone === "warning"
+            ? "border-amber-200 bg-amber-50 text-amber-900"
+            : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]";
 
   return (
     <div className="shrink-0 border-b border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-5 py-4">
@@ -96,7 +115,7 @@ export function CandidateProfileHeader({
                   {candidate?.full_name ?? "—"}
                 </h1>
                 <p className="mt-0.5 truncate text-sm text-[hsl(var(--text-muted))]">
-                  {activeJobLabel || "Sem vaga"}
+                  {activeJobLabel || "Aguardando Vaga"}
                 </p>
                 {!hasActiveJob && activeJobLabel && activeJobLabel !== "Não vinculado" ? (
                   <p className="mt-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
@@ -124,16 +143,34 @@ export function CandidateProfileHeader({
                     {candidate?.email ?? "Sem e-mail"}
                   </span>
                 </div>
-                {onNavigateToFull && (
-                  <button
-                    type="button"
-                    onClick={onNavigateToFull}
-                    className="mt-2.5 inline-flex items-center gap-1 text-xs font-medium text-[hsl(var(--primary))] transition hover:underline"
-                  >
-                    Ver perfil completo
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                {analysisStatusLabel ? (
+                  <div className="mt-3 flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                        Análise IA
+                      </span>
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${analysisBadgeClass}`}>
+                        {analysisStatusLabel}
+                      </span>
+                    </div>
+                    {analysisStatusDetail ? (
+                      <p className="text-xs text-[hsl(var(--text-muted))]">{analysisStatusDetail}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  {onNavigateToFull ? (
+                    <button
+                      type="button"
+                      onClick={onNavigateToFull}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-[hsl(var(--primary))] transition hover:underline"
+                    >
+                      Ver perfil completo
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+                {actions ? <div className="mt-3 flex flex-wrap gap-2">{actions}</div> : null}
               </>
             )}
           </div>

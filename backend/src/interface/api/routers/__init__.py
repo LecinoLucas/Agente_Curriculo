@@ -11,6 +11,7 @@ from src.interface.api.routers import (
     resumes,
     skill_equivalences,
     users,
+    dashboard,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "document_ai",
     "internal_users",
     "observability",
+    "dashboard",
 ]

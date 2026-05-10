@@ -19,6 +19,21 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     inspector = sa.inspect(op.get_bind())
+    existing_tables = set(inspector.get_table_names())
+    for table_name in (
+        "skill_alias",
+        "skill_equivalence",
+        "resume_job_matches",
+        "candidate_job_pipeline_migration_conflicts",
+        "idempotency_schema_sanitation_log",
+        "audit_logs_default",
+    ):
+        if table_name in existing_tables:
+            op.drop_table(table_name)
+
+    if "skills" not in existing_tables:
+        return
+
     existing_columns = {column["name"] for column in inspector.get_columns("skills")}
     for column_name in ("aliases", "category", "is_verified"):
         if column_name in existing_columns:

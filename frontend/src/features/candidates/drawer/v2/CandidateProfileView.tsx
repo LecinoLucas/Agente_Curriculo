@@ -10,6 +10,7 @@ import { CandidateActionPanel } from "./CandidateActionPanel";
 import { CandidateQuickJobActions } from "./CandidateQuickJobActions";
 import { CandidateProfileNavigation, type TabKey } from "./CandidateProfileNavigation";
 import { CandidateProfileContent } from "./CandidateProfileContent";
+import { getLinkCandidateCtaLabel } from "../../utils/jobLinking";
 
 export type CandidateActionFeedback = {
   id: number;
@@ -37,14 +38,24 @@ interface CandidateProfileViewProps {
   actionFeedback?: CandidateActionFeedback | null;
   interactionLocked?: boolean;
   compact?: boolean;
+  hasLinkedJobs?: boolean;
   onClose: () => void;
   onAdvance: () => void;
   onTerminate: () => void;
   onViewAnalysis: () => void;
   onTabChange: (tab: TabKey) => void;
+  onEditCandidate?: () => void;
+  onLinkJob?: () => void;
+  onStartAnalysis?: () => void;
+  onOpenDocuments?: () => void;
   onNavigateToFull?: () => void;
   onBackToList?: () => void;
   backToListLabel?: string;
+  analysisStatusLabel?: string;
+  analysisStatusDetail?: string;
+  analysisStatusTone?: "neutral" | "info" | "success" | "danger" | "warning";
+  analysisActionLabel?: string;
+  analysisActionDisabled?: boolean;
   // Action panel props
   activeJob?: Job | null;
   activeJobId?: string | null;
@@ -75,14 +86,24 @@ export function CandidateProfileView({
   actionFeedback = null,
   interactionLocked = false,
   compact = false,
+  hasLinkedJobs = false,
   onClose,
   onAdvance,
   onTerminate,
   onViewAnalysis,
   onTabChange,
+  onEditCandidate,
+  onLinkJob,
+  onStartAnalysis,
+  onOpenDocuments,
   onNavigateToFull,
   onBackToList,
   backToListLabel,
+  analysisStatusLabel,
+  analysisStatusDetail,
+  analysisStatusTone = "neutral",
+  analysisActionLabel = "Iniciar análise",
+  analysisActionDisabled = false,
   activeJob = null,
   activeJobId = null,
   canTransferCurrentJob = false,
@@ -98,6 +119,7 @@ export function CandidateProfileView({
   const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
   const [isFeedbackFresh, setIsFeedbackFresh] = useState(false);
   const shouldRenderTabContent = !compact || showDetailTabs;
+  const linkJobLabel = getLinkCandidateCtaLabel(hasLinkedJobs ? 1 : 0);
 
   useEffect(() => {
     if (!actionFeedback) return;
@@ -151,6 +173,50 @@ export function CandidateProfileView({
         onNavigateToFull={onNavigateToFull}
         onBackToList={onBackToList}
         backToListLabel={backToListLabel}
+        analysisStatusLabel={analysisStatusLabel}
+        analysisStatusDetail={analysisStatusDetail}
+        analysisStatusTone={analysisStatusTone}
+        actions={
+          <>
+            {onEditCandidate ? (
+              <button
+                type="button"
+                onClick={onEditCandidate}
+                className="rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+              >
+                Editar candidato
+              </button>
+            ) : null}
+            {onOpenDocuments ? (
+              <button
+                type="button"
+                onClick={onOpenDocuments}
+                className="rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+              >
+                Currículos
+              </button>
+            ) : null}
+            {onLinkJob ? (
+              <button
+                type="button"
+                onClick={onLinkJob}
+                className="rounded-xl bg-[hsl(var(--primary))] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90"
+              >
+                {linkJobLabel}
+              </button>
+            ) : null}
+            {onStartAnalysis ? (
+              <button
+                type="button"
+                onClick={onStartAnalysis}
+                disabled={analysisActionDisabled}
+                className="rounded-xl border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/5 px-3 py-2 text-xs font-semibold text-[hsl(var(--primary))] transition hover:bg-[hsl(var(--primary))]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {analysisActionLabel}
+              </button>
+            ) : null}
+          </>
+        }
       />
 
       {!isLoading && actionFeedback ? (

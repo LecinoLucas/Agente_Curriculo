@@ -34,6 +34,7 @@ from src.interface.api.routers import (
     resumes,
     skill_equivalences,
     users,
+    dashboard,
 )
 from src.observability.logging import configure_structured_logging
 
@@ -83,6 +84,7 @@ app.include_router(skill_equivalences.router, prefix=_PREFIX)
 app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)
 app.include_router(observability.router, prefix=_PREFIX)
+app.include_router(dashboard.router, prefix=_PREFIX)
 
 
 # ── Static files ──────────────────────────────────────────────────────────────

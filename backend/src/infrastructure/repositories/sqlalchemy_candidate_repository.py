@@ -30,6 +30,7 @@ from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreSnapshotModel,
     ScoreModelVersionModel,
 )
+from src.infrastructure.repositories.base_soft_delete_repository import BaseSoftDeleteRepository
 
 _ACTIVE_RELATIONSHIP_STATUS = "active"
 _VISIBLE_RELATIONSHIP_STATUSES = ("active", "hired", "rejected")
@@ -48,9 +49,9 @@ class CandidateDeleteSummary:
     has_hiring_record: bool
 
 
-class SQLAlchemyCandidateRepository:
+class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
     def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+        super().__init__(session, CandidateModel)
 
     async def create(self, candidate: CandidateModel) -> CandidateModel:
         self._session.add(candidate)
@@ -131,11 +132,10 @@ class SQLAlchemyCandidateRepository:
             .scalar_subquery()
         )
         resume_count_sq = (
-            sa.select(sa.func.count(ResumeModel.id))
+            sa.select(sa.func.count(sa.distinct(ResumeModel.id)))
             .where(
                 ResumeModel.candidate_id == CandidateModel.id,
                 ResumeModel.deleted_at.is_(None),
-                AnalysisModel.status != "discarded",
             )
             .correlate(CandidateModel)
             .scalar_subquery()

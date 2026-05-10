@@ -13,6 +13,7 @@ import { CandidateAiStatusBadge } from "../features/candidates/components/Candid
 import { CandidateScoreCell } from "../features/candidates/components/CandidateScoreCell";
 import { CandidateResumeBadge } from "../features/candidates/components/CandidateResumeBadge";
 import { CandidatesFilters } from "../features/candidates/components/CandidatesFilters";
+import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
 import { formatCandidateDate } from "../features/candidates/utils/candidateFormatters";
 import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
@@ -43,6 +44,7 @@ export function CandidatesPage() {
   const [showNewCandidate, setShowNewCandidate] = useState(false);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CandidateListSummary | null>(null);
+  const [linkTarget, setLinkTarget] = useState<CandidateListSummary | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const {
     searchInput,
@@ -185,7 +187,7 @@ export function CandidatesPage() {
           Candidatos são perfis externos gerenciados pelo sistema. Eles não possuem acesso ao sistema interno.
         </p>
         <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-          Sem vínculo = candidato ainda não associado a nenhuma vaga.
+          Aguardando vaga = candidato ainda não associado a nenhum processo seletivo.
         </p>
         <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
           A lista prioriza o match da vaga ativa. O score geral IA aparece apenas como contexto quando necessário.
@@ -305,6 +307,7 @@ export function CandidatesPage() {
                       }}
                       canDelete={canDeleteCandidates}
                       onDelete={() => setDeleteTarget(c)}
+                      onLinkJob={c.linked_job_count === 0 ? () => setLinkTarget(c) : undefined}
                     />
                   ))}
                 </tbody>
@@ -362,6 +365,17 @@ export function CandidatesPage() {
         }}
         onConfirm={handleDeleteCandidate}
       />
+
+      <LinkCandidateJobModal
+        isOpen={linkTarget !== null}
+        candidateId={linkTarget?.id ?? null}
+        candidateName={linkTarget?.full_name ?? null}
+        onClose={() => setLinkTarget(null)}
+        onLinked={async () => {
+          notifyCandidatesChanged();
+          fetchCandidates();
+        }}
+      />
     </div>
   );
 }
@@ -369,18 +383,20 @@ export function CandidatesPage() {
 // ── CandidateRow ───────────────────────────────────────────────────────────────
 // Extracted to prevent inline arrow functions from causing full-list re-renders.
 
-function CandidateRow({
+export function CandidateRow({
   candidate: c,
   isActive = false,
   onOpen,
   canDelete = false,
   onDelete,
+  onLinkJob,
 }: {
   candidate: CandidateListSummary;
   isActive?: boolean;
   onOpen: () => void;
   canDelete?: boolean;
   onDelete?: () => void;
+  onLinkJob?: () => void;
 }) {
   const statusLabel =
     c.active_job_stage === "hired"
@@ -393,7 +409,7 @@ function CandidateRow({
             ? "Reprovado"
         : c.active_job_id
           ? "Vinculado"
-          : "Sem vínculo";
+          : "Aguardando vaga";
   const statusClass =
     c.active_job_stage === "hired"
       ? "border-emerald-200 bg-emerald-50 text-emerald-900"
@@ -456,7 +472,27 @@ function CandidateRow({
         </span>
       </td>
       <td className="px-4 py-4 text-[hsl(var(--text-muted))]">
-        {vacancyLabel}
+        {c.linked_job_count > 0 ? (
+          vacancyLabel
+        ) : (
+          <div className="flex flex-col items-start gap-2">
+            <span className="inline-flex items-center rounded-full border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-2.5 py-0.5 text-xs font-medium text-[hsl(var(--warning))]">
+              Aguardando vaga
+            </span>
+            {onLinkJob ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onLinkJob();
+                }}
+                className="rounded-lg border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/5 px-3 py-1.5 text-xs font-medium text-[hsl(var(--primary))] transition hover:bg-[hsl(var(--primary))]/10"
+              >
+                Vincular vaga
+              </button>
+            ) : null}
+          </div>
+        )}
       </td>
       <td className="px-4 py-4">
         <CandidateAiStatusBadge status={c.ai_status} />

@@ -60,6 +60,16 @@ class CandidateJobScoreModel(Base):
     inline during GET /ranking. The unique constraint on (candidate_id, job_id,
     version_id) allows safe upserts: recomputing with the same version simply
     overwrites the previous result while preserving the audit trail via computed_at.
+
+    VERSION TRACKING:
+    - version_id (FK): The ScoreModelVersionModel that was active when this score was
+      computed. This is the SOURCE OF TRUTH for score semantics (e.g., which factors
+      were used, what weights applied). Always use version_id → version.version.
+    - score_model_version: DEPRECATED denormalization of version.version for backward
+      compatibility. Reads should use version.version from the FK instead.
+    - explainability_version: Separate versioning for the explanation algorithm
+      (e.g., LLM prompt version, response format). NOT tied to version_id.
+      May diverge independently from score version.
     """
 
     __tablename__ = "candidate_job_scores"

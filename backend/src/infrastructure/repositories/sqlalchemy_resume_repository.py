@@ -5,11 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.repositories.base_soft_delete_repository import BaseSoftDeleteRepository
 
 
-class SQLAlchemyResumeRepository:
+class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
     def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+        super().__init__(session, ResumeModel)
 
     async def find_candidate_by_user_id(self, user_id: UUID) -> CandidateModel | None:
         """

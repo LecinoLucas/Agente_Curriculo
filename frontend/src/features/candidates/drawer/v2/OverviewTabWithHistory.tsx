@@ -9,6 +9,7 @@ interface OverviewTabWithHistoryProps {
   activeJob: Job | null;
   activePipelineEntry: CandidateOverview["pipeline_entries"][number] | null;
   onEdit: () => void;
+  onLinkJob: () => void;
   historyCacheRef: MutableRefObject<Map<string, CandidatePipelineHistory>>;
 }
 
@@ -18,6 +19,7 @@ export function OverviewTabWithHistory({
   activeJob,
   activePipelineEntry,
   onEdit,
+  onLinkJob,
   historyCacheRef,
 }: OverviewTabWithHistoryProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -30,6 +32,7 @@ export function OverviewTabWithHistory({
         activeJob={activeJob}
         activePipelineEntry={activePipelineEntry}
         onEdit={onEdit}
+        onLinkJob={onLinkJob}
       />
       <CandidateHistorySection
         overview={overview}

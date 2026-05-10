@@ -4,13 +4,32 @@ import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 import structlog
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from collections.abc import Mapping
+from typing import Any
+
+def optional_str(data: Mapping[str, Any], key: str) -> str | None:
+    value = data.get(key)
+
+    if value is None:
+        return None
+
+    if not isinstance(value, str):
+        logger.warning(
+            "strict_payload.optional_str_invalid",
+            key=key,
+            type=type(value).__name__,
+        )
+        return None
+
+    return value
 
 from src.application.services.analysis_service import (
     _calculate_experience_score,
@@ -235,43 +254,49 @@ class CandidateRankingService:
             rank = len(entries) + 1
             breakdown_raw = optional_dict(row, "breakdown")
             reason_codes_raw = optional_list(row, "reason_codes")
+
+            ranking_updated_at = require_datetime(row, "ranking_updated_at")
+            match_updated_at = require_datetime(row, "match_updated_at")
+            computed_at = require_datetime(row, "computed_at")
+            job_updated_at = require_datetime(row, "job_updated_at")
+
             freshness_status, stale_reason = _resolve_freshness_status(
-                ranking_updated_at=row["ranking_updated_at"],
-                match_updated_at=row["match_updated_at"],
-                persisted_status=row["freshness_status"],
-                score_job_signature_hash=row["job_signature_hash"],
-                job_signature_hash=row["job_profile_hash"],
-                score_computed_at=row["computed_at"],
-                job_updated_at=row["job_updated_at"],
+                ranking_updated_at=ranking_updated_at,
+                match_updated_at=match_updated_at,
+                persisted_status=require_key(row, "freshness_status"),
+                score_job_signature_hash=require_key(row, "job_signature_hash"),
+                job_signature_hash=require_key(row, "job_profile_hash"),
+                score_computed_at=computed_at,
+                job_updated_at=job_updated_at,
             )
 
             entries.append({
                 "rank": rank,
-                "candidate_id": row["candidate_id"],
-                "candidate_name": row["candidate_name"],
-                "stage": row["stage"],
-                "pipeline_status": row["pipeline_status"],
+                "candidate_id": require_key(row, "candidate_id"),
+                "candidate_name": require_key(row, "candidate_name"),
+                "stage": require_key(row, "stage"),
+                "pipeline_status": require_key(row, "pipeline_status"),
                 # Persisted JSON may come from older scoring versions. Fill in
                 # missing fields so the API stays backward compatible.
                 "score_breakdown": _normalize_score_breakdown(breakdown_raw),
-                "decision_suggestion": row["decision_suggestion"],
+                "decision_suggestion": require_key(row, "decision_suggestion"),
                 "reason_codes": _normalize_reason_codes(reason_codes_raw),
-                "explanation_text": row["explanation_text"],
-                "final_score": Decimal(str(row["final_score"])),
+                "explanation_text": require_key(row, "explanation_text"),
+                "final_score": Decimal(str(require_key(row, "final_score"))),
                 "entered_at": row.get("entered_at"),
-                "computed_at": row["computed_at"],
+                "computed_at": computed_at,
                 "freshness_status": freshness_status,
                 "recalculation_required": freshness_status != "fresh",
                 "stale_reason": stale_reason,
-                "score_computed_at": row["computed_at"],
-                "source_analysis_id": row["source_analysis_id"],
-                "source_analysis_created_at": row["source_analysis_created_at"],
-                "score_model_version": row["score_model_version"] or version.version,
-                "match_updated_at": row["match_updated_at"],
-                "ranking_updated_at": row["ranking_updated_at"],
+                "score_computed_at": computed_at,
+                "source_analysis_id": require_key(row, "source_analysis_id"),
+                "source_analysis_created_at": require_key(row, "source_analysis_created_at"),
+                "score_model_version": optional_dict(row, "score_model_version") or version.version,
+                "match_updated_at": match_updated_at,
+                "ranking_updated_at": ranking_updated_at,
                 "version": version.version,
                 "ranking_version": version.version,
-                "data_quality_status": row["data_quality_status"],
+                "data_quality_status": require_key(row, "data_quality_status"),
             })
 
         # Get accurate stats directly from database (not from already-filtered entries)
@@ -1203,7 +1228,20 @@ class CandidateRankingService:
         }
 
         for row in result.mappings().all():
-            status = row["data_quality_status"] or "unknown"  # Defensive: treat NULL as unknown
+            status = row.get("data_quality_status")
+            if status is None:
+                logger.warning(
+                    "ranking.null_data_quality_status_in_stats",
+                    row_count=row.get("count"),
+                )
+                status = "unknown"  # Explicit fallback with logging
+            elif status not in counts:
+                logger.error(
+                    "ranking.invalid_data_quality_status_in_stats",
+                    status=status,
+                )
+                status = "unknown"  # Fail-safe default
+
             if status in counts:
                 counts[status] = row["count"]
 
@@ -1260,12 +1298,12 @@ def _compute_breakdown(
     mandatory_names = {
         str(row.skill_name).strip()
         for row in job_skill_rows
-        if getattr(row.JobRequiredSkillModel, "is_mandatory", False) and str(row.skill_name).strip()
+        if _is_skill_mandatory(row) and str(row.skill_name).strip()
     }
     optional_names = {
         str(row.skill_name).strip()
         for row in job_skill_rows
-        if not getattr(row.JobRequiredSkillModel, "is_mandatory", False) and str(row.skill_name).strip()
+        if not _is_skill_mandatory(row) and str(row.skill_name).strip()
     }
     matched_names = set(_coerce_list(row.get("matched_skills")))
     missing_names = set(_coerce_list(row.get("missing_skills")))
@@ -1486,21 +1524,21 @@ def _build_score_factors(
     mandatory_names = [
         str(item.skill_name).strip()
         for item in job_skill_rows
-        if getattr(item.JobRequiredSkillModel, "is_mandatory", False) and str(item.skill_name).strip()
+        if _is_skill_mandatory(item) and str(item.skill_name).strip()
     ]
     mandatory_lookup = {name.casefold(): name for name in mandatory_names}
     matched_required = [skill for skill in matched if skill.casefold() in mandatory_lookup]
     missing_required = [skill for skill in missing if skill.casefold() in mandatory_lookup]
-    partial_matches = []
-    if isinstance(row.get("skill_evidence_breakdown"), dict):
-        partial_matches = row["skill_evidence_breakdown"].get("partial_matches", []) or []
+
+    breakdown = optional_dict(row, "skill_evidence_breakdown")
+    partial_matches = breakdown.get("partial_matches", []) or []
 
     weights = _canonical_component_weights(
         total_mandatory=len(mandatory_names),
         total_optional=sum(
             1
             for item in job_skill_rows
-            if not getattr(item.JobRequiredSkillModel, "is_mandatory", False) and str(item.skill_name).strip()
+            if not _is_skill_mandatory(item) and str(item.skill_name).strip()
         ),
     )
     mandatory_slot_impact = (
@@ -1959,7 +1997,50 @@ def _build_explanation(
 def _to_decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
     if value is None:
         return default
-    return Decimal(str(value))
+    try:
+        return Decimal(str(value))
+    except (ValueError, TypeError) as exc:
+        logger.warning(
+            "ranking.decimal_conversion_failed",
+            value=str(value)[:100],
+            error=str(exc),
+            using_default=str(default),
+        )
+        return default
+
+
+def _is_skill_mandatory(item: Any) -> bool:
+    """Safely check if a skill is mandatory from job_skill_row.
+
+    Args:
+        item: Row from job_skill_rows query with JobRequiredSkillModel relationship
+
+    Returns:
+        True if skill is mandatory, False if optional or if attribute missing
+    """
+    try:
+        if not hasattr(item, "JobRequiredSkillModel"):
+            logger.warning(
+                "job_skill_row_missing_relation",
+                item_type=type(item).__name__,
+            )
+            return False
+
+        link = item.JobRequiredSkillModel
+        if not hasattr(link, "is_mandatory"):
+            logger.error(
+                "job_required_skill_missing_is_mandatory_attr",
+            )
+            return False
+
+        return bool(link.is_mandatory)
+    except Exception as exc:
+        logger.error(
+            "job_skill_mandatory_check_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return False
 
 
 def _resolve_thresholds(version: ScoreModelVersionModel) -> tuple[Decimal, Decimal]:
@@ -2044,7 +2125,7 @@ def _build_job_signature_hash(*, job: JobModel, job_skill_rows: list[Any]) -> st
                     ":".join(
                         [
                             str(item.skill_name or ""),
-                            "mandatory" if getattr(item.JobRequiredSkillModel, "is_mandatory", False) else "optional",
+                            "mandatory" if _is_skill_mandatory(item) else "optional",
                             str(getattr(item.JobRequiredSkillModel, "minimum_level", None) or ""),
                             str(getattr(item.JobRequiredSkillModel, "minimum_years", None) or ""),
                             str(getattr(item.JobRequiredSkillModel, "weight", None) or ""),

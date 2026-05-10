@@ -11,11 +11,12 @@ from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.repositories.base_soft_delete_repository import BaseSoftDeleteRepository
 
 
-class SQLAlchemyJobRepository:
+class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
     def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+        super().__init__(session, JobModel)
 
     def _build_filters(
         self,

@@ -19,6 +19,10 @@ import pytest
 from src.application.services.job_profiler_service import (
     InMemoryJobProfileCache,
     JobProfilerService,
+    JobProfileInput,
+    StructuredJobSkill,
+    build_job_profile_hash,
+    build_deterministic_job_profile,
 )
 from src.application.services.job_service import JobService
 from src.domain.entities.user import User, UserRole, UserStatus
@@ -159,7 +163,7 @@ async def test_create_com_campos_estruturados_repassa_para_profiler(
         responsibilities="Construir dashboards e acompanhar indicadores.",
         experience_context="Experiência em analytics, BI e operação de dados.",
         behavioral_requirements=["Comunicação", "Autonomia"],
-        job_area="Dados",
+        job_area="data",
         priority="high",
         status="draft",
     )
@@ -190,6 +194,30 @@ async def test_create_com_campos_estruturados_repassa_para_profiler(
     assert kwargs["experience_context"] == "Experiência em analytics, BI e operação de dados."
     assert kwargs["behavioral_requirements"] == ["Comunicação", "Autonomia"]
     assert kwargs["priority"] == "high"
+
+
+def test_build_deterministic_profile_nao_depende_de_categoria_legada():
+    profile = build_deterministic_job_profile(
+        JobProfileInput(
+            title="Analista de Dados",
+            description="Atuar com SQL, Power BI e dashboards.",
+            linked_skills=(
+                StructuredJobSkill(
+                    name="SQL",
+                    normalized_name="sql",
+                    is_mandatory=True,
+                ),
+                StructuredJobSkill(
+                    name="Power BI",
+                    normalized_name="power bi",
+                    is_mandatory=True,
+                ),
+            ),
+        )
+    )
+
+    assert profile.area == "data"
+    assert "SQL" in profile.required_tools
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +534,20 @@ async def test_job_profile_json_e_hash_persistidos_corretamente(mock_repository)
     # Verificar que o perfil foi persistido
     assert saved_job is not None
     assert saved_job.job_profile_json is not None
-    assert saved_job.job_profile_hash == "xyz789"
+    assert saved_job.job_profile_hash == build_job_profile_hash(
+        title=saved_job.title,
+        description=saved_job.description,
+        requirements=saved_job.requirements,
+        seniority_level=saved_job.seniority_level,
+        minimum_years_experience=float(saved_job.minimum_years_experience) if saved_job.minimum_years_experience is not None else None,
+        minimum_education_level=saved_job.minimum_education_level,
+        job_area=saved_job.job_area,
+        responsibilities=saved_job.responsibilities,
+        experience_context=saved_job.experience_context,
+        behavioral_requirements=tuple(saved_job.behavioral_requirements or ()),
+        priority=saved_job.priority,
+        linked_skills=(),
+    )
     assert saved_job.job_profile_json["area"] == "data"
     assert saved_job.job_profile_json["target_level"] == "mid"
 

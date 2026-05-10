@@ -16,6 +16,10 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreModel,
+    ScoreModelVersionModel,
+)
 from src.infrastructure.database.models.user_model import UserModel
 
 
@@ -181,6 +185,13 @@ class SQLAlchemyPipelineRepository:
             .subquery()
         )
 
+        active_score_version = (
+            sa.select(ScoreModelVersionModel.id)
+            .where(ScoreModelVersionModel.is_active.is_(True))
+            .limit(1)
+            .scalar_subquery()
+        )
+
         result = await self._session.execute(
             sa.select(
                 CandidateJobPipelineModel.candidate_id,
@@ -192,6 +203,7 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.updated_at,
                 latest_keywords.c.top_skills,
                 latest_ai_status.c.ai_status,
+                CandidateJobScoreModel.final_score.label("final_score"),
             )
             .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
             .join(
@@ -203,6 +215,15 @@ class SQLAlchemyPipelineRepository:
                 latest_ai_status,
                 latest_ai_status.c.candidate_id == CandidateJobPipelineModel.candidate_id,
                 isouter=True,
+            )
+            .outerjoin(
+                CandidateJobScoreModel,
+                sa.and_(
+                    CandidateJobScoreModel.candidate_id == CandidateJobPipelineModel.candidate_id,
+                    CandidateJobScoreModel.job_id == CandidateJobPipelineModel.job_id,
+                    CandidateJobScoreModel.version_id == active_score_version,
+                    CandidateJobScoreModel.freshness_status == "fresh",
+                ),
             )
             .where(
                 CandidateJobPipelineModel.job_id == job_id,

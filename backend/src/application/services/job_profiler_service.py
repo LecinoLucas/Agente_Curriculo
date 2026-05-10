@@ -771,7 +771,6 @@ def _infer_job_area(source: JobProfileInput) -> str:
         return explicit
 
     skill_text = " ".join(skill.name for skill in source.linked_skills)
-    category_text = " ".join(filter(None, (skill.category or "" for skill in source.linked_skills)))
     text = normalize_skill_text(
         " ".join(
             filter(
@@ -784,7 +783,6 @@ def _infer_job_area(source: JobProfileInput) -> str:
                     source.responsibilities or "",
                     " ".join(source.behavioral_requirements),
                     skill_text,
-                    category_text,
                 ],
             )
         )
@@ -801,9 +799,8 @@ def _normalize_explicit_job_area(value: str | None) -> str | None:
 
 
 def _should_be_required_tool(skill: StructuredJobSkill) -> bool:
-    category = normalize_skill_text(skill.category or "")
     name = normalize_skill_text(skill.name)
-    return any(marker in category for marker in ("tech", "tool", "sistema", "backend", "frontend", "data", "erp")) or any(
+    return any(
         marker in name for marker in ("sql", "python", "excel", "power bi", "react", "fastapi", "protheus", "postgres", "mysql")
     )
 

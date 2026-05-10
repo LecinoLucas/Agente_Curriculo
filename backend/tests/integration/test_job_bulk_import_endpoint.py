@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 
-from .test_job_endpoints import _auth_headers, _create_active_user
+from .helpers import _auth_headers, _create_active_user
 
 
 def _bulk_payload(*jobs: dict, **options: dict) -> dict:

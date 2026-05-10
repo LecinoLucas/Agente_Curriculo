@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 
-from .test_job_endpoints import _auth_headers, _create_active_user
+from .helpers import _auth_headers, _create_active_user
 
 
 async def _create_skill(session: AsyncSession, name: str, normalized_name: str | None = None) -> SkillModel:
@@ -228,7 +228,7 @@ async def test_bulk_update_replaces_skills_when_sent(
     sql = await _create_skill(db_session, "SQL", "sql")
     power_bi = await _create_skill(db_session, "Power BI", "power bi")
     etl = await _create_skill(db_session, "ETL", "etl")
-    job = await _create_job(db_session, recruiter.id, title="Analista BI", job_area="Dados", location="Curitiba")
+    job = await _create_job(db_session, recruiter.id, title="Analista BI", job_area="data", location="Curitiba")
 
     db_session.add(
         JobRequiredSkillModel(

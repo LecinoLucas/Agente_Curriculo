@@ -14,6 +14,15 @@ from src.interface.api.schemas.candidate_schemas import CreateCandidateRequest
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
 
 
+class MockAsyncSession:
+    """Mock AsyncSession for testing."""
+    async def execute(self, *args, **kwargs):
+        return MagicMock()
+
+    async def begin_nested(self):
+        return MagicMock(__aenter__=AsyncMock(return_value=None), __aexit__=AsyncMock(return_value=None))
+
+
 class FakeCandidateRepository:
     def __init__(self) -> None:
         self.by_email: dict[str, CandidateModel] = {}
@@ -62,6 +71,7 @@ class FakeCandidateRepository:
 class FakeJobRepository:
     def __init__(self, job: JobModel) -> None:
         self.job = job
+        self._session = MockAsyncSession()  # Mock session for _invalidate_job_scores_and_matches
 
     async def find_active_by_id(self, job_id):
         return self.job if self.job.id == job_id else None

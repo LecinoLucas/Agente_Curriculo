@@ -4,7 +4,7 @@ import { SectionCard } from "../../../shared/components/layout/SectionCard";
 import { ReviewItem } from "../../../shared/components/data-display/ReviewItem";
 import { SummaryRow } from "../../../shared/components/data-display/SummaryRow";
 import { MessageList } from "../../../shared/components/feedback/MessageList";
-import { PRIORITY_OPTIONS, trimToNull } from "../jobFormConfig";
+import { PRIORITY_OPTIONS, trimToNull, formatJobArea } from "../jobFormConfig";
 import {
   formatEducationLevel,
   formatSeniority,
@@ -35,7 +35,7 @@ export function JobFormReviewStep({
       >
         <div className="grid gap-4 md:grid-cols-2">
           <ReviewItem label="Título" value={form.title || "—"} />
-          <ReviewItem label="Área" value={form.job_area || "—"} />
+          <ReviewItem label="Área" value={formatJobArea(form.job_area || null)} />
           <ReviewItem label="Senioridade" value={formatSeniority(form.seniority_level || null)} />
           <ReviewItem
             label="Prioridade"

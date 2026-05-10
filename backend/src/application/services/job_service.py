@@ -247,13 +247,13 @@ class JobService:
             JobProfileAnalysisModel,
         )
 
-        await self._repository.session.execute(
+        await self._repository._session.execute(
             sa.delete(CandidateJobScoreModel).where(CandidateJobScoreModel.job_id == job_id)
         )
-        await self._repository.session.execute(
+        await self._repository._session.execute(
             sa.delete(CandidateJobMatchModel).where(CandidateJobMatchModel.job_id == job_id)
         )
-        await self._repository.session.execute(
+        await self._repository._session.execute(
             sa.update(JobProfileAnalysisModel)
             .where(
                 JobProfileAnalysisModel.job_id == job_id,

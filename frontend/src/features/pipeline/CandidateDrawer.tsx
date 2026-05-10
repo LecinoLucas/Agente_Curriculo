@@ -16,6 +16,7 @@ import { useCandidateData } from "../candidates/drawer/hooks/useCandidateData";
 import { DocumentsTab as DocumentsTabComponent } from "../candidates/drawer/tabs/DocumentsTab";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
+import { analysisService } from "../../services/analysisService";
 import { pipelineService } from "../../services/pipelineService";
 import { toast } from "../../shared/utils/toast";
 import {
@@ -29,6 +30,8 @@ import type {
 } from "../../types/domain";
 import { type PanelTab, usePipeline } from "./PipelineContext";
 import { EditCandidateModal } from "./EditCandidateModal";
+import { LinkCandidateJobModal } from "../candidates/components/LinkCandidateJobModal";
+import { buildCandidateAnalysisSummary } from "../candidates/utils/analysisStatus";
 
 function isAnalysisInProgress(status: string | null | undefined): boolean {
   return status === "pending" || status === "processing";
@@ -171,6 +174,8 @@ export function CandidateDrawer({
   const [profileTabKey, setProfileTabKey] = useState<ProfileTabKey>("overview");
   const [detailTabsVisible, setDetailTabsVisible] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<CandidateActionFeedback | null>(null);
+  const [linkJobModalOpen, setLinkJobModalOpen] = useState(false);
+  const [analysisStarting, setAnalysisStarting] = useState(false);
 
   const stageSaving =
     stageSavingCandidateId !== null && stageSavingCandidateId === selectedCandidateId;
@@ -202,6 +207,15 @@ export function CandidateDrawer({
     candidateActiveJobId,
     jobs,
     rankingEntry,
+  });
+
+  const latestResume = candidateOverview?.resumes.find((resume) => resume.current_version_id) ?? candidateOverview?.resumes[0] ?? null;
+  const analysisSummary = buildCandidateAnalysisSummary({
+    activeJobId: candidateActiveJobId,
+    hasResume: Boolean(latestResume?.current_version_id),
+    latestAnalysis: candidateOverview?.latest_analysis,
+    analysisResult,
+    pollingAnalysisId,
   });
 
   useEffect(() => {
@@ -410,6 +424,10 @@ export function CandidateDrawer({
     setTransferJobModalOpen(true);
   }, [setTransferJobModalOpen]);
 
+  const handleOpenLinkJob = useCallback(() => {
+    setLinkJobModalOpen(true);
+  }, []);
+
   const handleProfileTabChange = useCallback(
     (tabKey: ProfileTabKey) => {
       setDetailTabsVisible(true);
@@ -425,6 +443,84 @@ export function CandidateDrawer({
     },
     [switchPanelTab],
   );
+
+  const handleStartAnalysis = useCallback(async () => {
+    if (!candidateOverview) return;
+
+    if (!candidateActiveJobId) {
+      toast.info("Vincule o candidato a uma vaga antes de iniciar a análise.");
+      handleOpenLinkJob();
+      return;
+    }
+
+    const resume = candidateOverview.resumes.find((item) => item.current_version_id) ?? candidateOverview.resumes[0] ?? null;
+
+    if (!resume?.current_version_id) {
+      toast.info("Envie ou atualize o currículo antes de iniciar a análise.");
+      handleProfileTabChange("documents");
+      return;
+    }
+
+    if (analysisSummary.inProgress || analysisStarting) {
+      toast.info("Já existe uma análise em andamento para este candidato.");
+      return;
+    }
+
+    setAnalysisStarting(true);
+    pushActionFeedback({
+      tone: "info",
+      pending: true,
+      title: "Iniciando análise",
+      detail: "O status será atualizado automaticamente neste workspace.",
+    });
+    feedback.requestAnalysis.processing();
+
+    try {
+      const response = await analysisService.request(resume.current_version_id, candidateActiveJobId);
+
+      await syncAnalysisStart({
+        candidateId: candidateOverview.candidate.id,
+        analysisId: response.analysis_id,
+        status: "pending",
+        jobId: candidateActiveJobId,
+        resumeId: resume.resume_id,
+        resumeTitle: resume.title,
+      });
+
+      startPolling(response.analysis_id, candidateOverview.candidate.id, "pending", candidateActiveJobId);
+      handleProfileTabChange("documents");
+
+      pushActionFeedback({
+        tone: "info",
+        title: "Análise iniciada",
+        detail: "A execução foi iniciada e já está sendo acompanhada nesta tela.",
+      });
+      feedback.requestAnalysis.success();
+    } catch (err: unknown) {
+      pushActionFeedback({
+        tone: "danger",
+        title: "Falha ao iniciar a análise",
+        detail: formatContextError(
+          err,
+          "Não foi possível iniciar a análise agora.",
+          "Revise o currículo e tente novamente.",
+        ),
+      });
+      feedback.requestAnalysis.error(err);
+    } finally {
+      setAnalysisStarting(false);
+    }
+  }, [
+    analysisStarting,
+    analysisSummary.inProgress,
+    candidateActiveJobId,
+    candidateOverview,
+    handleOpenLinkJob,
+    handleProfileTabChange,
+    pushActionFeedback,
+    startPolling,
+    syncAnalysisStart,
+  ]);
 
   useEffect(() => {
     if (!selectedCandidateId) return;
@@ -487,14 +583,24 @@ export function CandidateDrawer({
           actionFeedback={actionFeedback}
           interactionLocked={stageSaving || linkSaving}
           compact={mode === "overlay"}
+          hasLinkedJobs={candidateOverview.pipeline_entries.length > 0}
           onClose={closeCandidate}
           onAdvance={handleHeroAdvance}
           onTerminate={handleHeroTerminate}
           onViewAnalysis={handleHeroViewAnalysis}
           onTabChange={handleProfileTabChange}
+          onEditCandidate={() => setEditModalOpen(true)}
+          onLinkJob={handleOpenLinkJob}
+          onStartAnalysis={handleStartAnalysis}
+          onOpenDocuments={() => handleProfileTabChange("documents")}
           onNavigateToFull={mode === "overlay" ? () => navigate("/candidatos") : undefined}
           onBackToList={mode === "workspace" ? onBackToList : undefined}
           backToListLabel={backToListLabel}
+          analysisStatusLabel={analysisSummary.label}
+          analysisStatusDetail={analysisSummary.detail}
+          analysisStatusTone={analysisSummary.tone}
+          analysisActionLabel={analysisStarting ? "Iniciando análise…" : analysisSummary.actionLabel}
+          analysisActionDisabled={analysisStarting || analysisSummary.inProgress}
           activeJob={activeJob}
           activeJobId={candidateActiveJobId}
           canTransferCurrentJob={canTransferCurrentJob}
@@ -511,6 +617,7 @@ export function CandidateDrawer({
               activeJob={activeJob}
               activePipelineEntry={primaryPipelineEntry}
               onEdit={() => setEditModalOpen(true)}
+              onLinkJob={handleOpenLinkJob}
               historyCacheRef={historyCacheRef}
             />
           ) : null}
@@ -608,6 +715,22 @@ export function CandidateDrawer({
 
           await invalidateJobState(primaryPipelineEntry?.job_id ?? null);
           setTransferJobModalOpen(false);
+        }}
+      />
+
+      <LinkCandidateJobModal
+        isOpen={linkJobModalOpen}
+        candidateId={candidate?.id ?? null}
+        candidateName={candidate?.full_name ?? null}
+        linkedJobIds={candidateOverview?.pipeline_entries.map((entry) => entry.job_id) ?? []}
+        onClose={() => setLinkJobModalOpen(false)}
+        onLinked={async () => {
+          await invalidateJobState();
+          pushActionFeedback({
+            tone: "success",
+            title: "Vaga vinculada com sucesso",
+            detail: "O candidato já pode seguir para análise, score e acompanhamento no funil.",
+          });
         }}
       />
     </>

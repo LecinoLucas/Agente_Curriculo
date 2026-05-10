@@ -47,6 +47,14 @@ const AnalisesIaPage = lazy(() =>
   }))
 );
 
+const DashboardPage = lazy(() =>
+  import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
+);
+
+const ImportPage = lazy(() =>
+  import("../pages/ImportPage").then((m) => ({ default: m.ImportPage }))
+);
+
 const ChangePasswordPage = lazy(() =>
   import("../pages/ChangePasswordPage").then((m) => ({
     default: m.ChangePasswordPage,
@@ -94,7 +102,12 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/pipeline" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+
+        <Route
+          path="dashboard"
+          element={protectedPage(<DashboardPage />, STAFF_ROLES)}
+        />
 
         <Route
           path="pipeline"
@@ -114,6 +127,11 @@ export function AppRouter() {
         <Route
           path="vagas"
           element={protectedPage(<VagasPage />, STAFF_ROLES)}
+        />
+
+        <Route
+          path="importar"
+          element={protectedPage(<ImportPage />, ["admin", "recruiter"])}
         />
 
         <Route

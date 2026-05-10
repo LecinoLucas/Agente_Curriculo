@@ -5,6 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.models.user_model import UserModel
+from src.infrastructure.repositories.base_soft_delete_repository import BaseSoftDeleteRepository
 
 
 class UserStats(TypedDict):
@@ -19,9 +20,9 @@ class UserStats(TypedDict):
     candidates: int
 
 
-class SQLAlchemyUserAdminRepository:
+class SQLAlchemyUserAdminRepository(BaseSoftDeleteRepository[UserModel]):
     def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+        super().__init__(session, UserModel)
 
     async def list_active(
         self,
