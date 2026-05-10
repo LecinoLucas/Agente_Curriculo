@@ -40,6 +40,14 @@ class RequestAnalysisUseCase:
         self._resume_repo = resume_repo
 
     async def execute(self, command: RequestAnalysisCommand) -> RequestAnalysisResult:
+        if command.force_reanalyze:
+            logger.info(
+                "analysis.force_recompute_requested",
+                resume_version_id=str(command.resume_version_id),
+                job_id=str(command.job_id) if command.job_id else None,
+                requested_by=str(command.requested_by),
+            )
+
         # 1. Valida existência do resume_version
         version = await self._resume_repo.find_version_by_id(command.resume_version_id)
         if version is None:
@@ -177,7 +185,7 @@ class RequestAnalysisUseCase:
         )
         if command.force_reanalyze:
             import time
-            idempotency_key += f":{int(time.time())}"  # força unicidade na re-análise
+            idempotency_key += f":force:{int(time.time())}"  # força unicidade na re-análise
 
         # 7. Cria registro de análise
         from src.infrastructure.database.models.analysis_model import AnalysisModel

@@ -120,6 +120,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     # app is wrapped by CORSMiddleware, access the underlying FastAPI instance
     fastapi_app = app.app if hasattr(app, "app") else app
+    
+    from src.interface.api.dependencies import get_db
+    fastapi_app.dependency_overrides[get_db] = override_get_db
     fastapi_app.dependency_overrides[get_db_session] = override_get_db
 
     ac = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")

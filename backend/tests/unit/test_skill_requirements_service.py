@@ -14,18 +14,17 @@ def test_validate_skill_requirements_guarantees_all_levels() -> None:
 def test_validate_skill_requirements_removes_duplicates_across_levels() -> None:
     result = validate_skill_requirements(
         {
-            "critical_required": [" SQL ", "Power BI"],
-            "core_required": ["SQL", "Python"],
-            "important": ["Power-BI", "DAX"],
-            "nice_to_have": ["", "Python", "SAP"],
+            "priority": [" SQL ", "Power BI"],
+            "complementary": ["Power BI", "DAX"],
+            "eliminatory": ["SAP"],
         }
     )
 
+    # Power BI is in both priority and complementary. It should stay in priority because it is processed first.
     assert result == {
-        "critical_required": ["SQL", "Power BI"],
-        "core_required": ["Python"],
-        "important": ["DAX"],
-        "nice_to_have": ["SAP"],
+        "priority": ["SQL", "Power BI"],
+        "complementary": ["DAX"],
+        "eliminatory": ["SAP"],
     }
 
 
@@ -33,105 +32,76 @@ def test_validate_skill_requirements_rejects_invalid_group_type() -> None:
     with pytest.raises(ValueError):
         validate_skill_requirements(
             {
-                "critical_required": "SQL",
+                "priority": "SQL",
             }
         )
 
 
-def test_product_rules_block_more_than_three_critical() -> None:
+def test_product_rules_block_more_than_three_eliminatory() -> None:
     result = validate_skill_requirements_product_rules(
         {
-            "critical_required": ["SQL", "Python", "ETL", "Power BI"],
-            "core_required": ["DAX", "PostgreSQL", "Airflow", "Spark", "dbt", "Excel"],
-        },
-        job_area="data",
+            "eliminatory": ["SQL", "Python", "ETL", "Power BI"],
+        }
     )
 
-    assert "critical_required não pode ter mais de 3 skills." in result.errors
+    assert "Critérios eliminatórios de skill não podem ter mais de 3 itens." in result.errors
 
 
-def test_product_rules_block_critical_above_forty_percent() -> None:
+def test_product_rules_warns_more_than_five_priority() -> None:
     result = validate_skill_requirements_product_rules(
         {
-            "critical_required": ["SQL", "Python"],
-            "core_required": ["ETL"],
-            "important": ["DAX"],
-        },
-        job_area="data",
+            "priority": ["SQL", "Python", "ETL", "Power BI", "DAX", "PostgreSQL"],
+        }
     )
 
-    assert "critical_required não pode representar mais de 40% do total de skills." in result.errors
+    assert any("Muitas skills essenciais" in w for w in result.warnings)
 
 
-def test_product_rules_block_soft_skill_as_critical() -> None:
+def test_product_rules_block_soft_skill_as_eliminatory() -> None:
     result = validate_skill_requirements_product_rules(
         {
-            "critical_required": ["Comunicação"],
-            "core_required": ["SQL", "Python"],
-            "important": ["DAX", "ETL"],
-            "nice_to_have": ["Power BI"],
-        },
-        job_area="data",
+            "eliminatory": ["Comunicação"],
+            "priority": ["SQL", "Python"],
+        }
     )
 
-    assert "Comunicação não pode ser critical_required porque é soft skill." in result.errors
+    assert "Comunicação não pode ser eliminatória porque é soft skill." in result.errors
 
 
 def test_product_rules_block_cross_level_duplicate_when_requested() -> None:
     result = validate_skill_requirements_product_rules(
         {
-            "critical_required": ["SQL"],
-            "core_required": ["sql", "Python"],
+            "priority": ["SQL"],
+            "complementary": ["sql", "Python"],
         },
-        job_area="data",
         check_raw_duplicates=True,
     )
 
-    assert "SQL não pode aparecer em mais de um nível (critical_required, core_required)." in result.errors
+    assert "SQL não pode aparecer em mais de um nível (priority, complementary)." in result.errors
 
 
 def test_product_rules_remove_empty_values_and_accept_valid_structure() -> None:
     result = validate_skill_requirements_product_rules(
         {
-            "critical_required": [" SQL "],
-            "core_required": ["Python", "", "Python"],
-            "important": ["DAX"],
-            "nice_to_have": ["Power BI", " "],
-        },
-        job_area="data",
+            "priority": [" SQL "],
+            "complementary": ["Python", "", "Python"],
+            "eliminatory": ["Power BI", " "],
+        }
     )
 
     assert result.errors == []
     assert result.sanitized == {
-        "critical_required": ["SQL"],
-        "core_required": ["Python"],
-        "important": ["DAX"],
-        "nice_to_have": ["Power BI"],
+        "priority": ["SQL"],
+        "complementary": ["Python"],
+        "eliminatory": ["Power BI"],
     }
 
 
-def test_product_rules_block_missing_core_and_critical() -> None:
+def test_product_rules_block_missing_priority_and_eliminatory() -> None:
     result = validate_skill_requirements_product_rules(
         {
-            "important": ["DAX"],
-            "nice_to_have": ["Power BI"],
-        },
-        job_area="data",
+            "complementary": ["DAX"],
+        }
     )
 
-    assert "A vaga precisa ter pelo menos 1 skill em core_required ou critical_required." in result.errors
-
-
-def test_product_rules_block_erp_as_critical_for_data_jobs() -> None:
-    result = validate_skill_requirements_product_rules(
-        {
-            "critical_required": ["SAP"],
-            "core_required": ["SQL", "Python", "ETL", "DAX", "Power BI"],
-        },
-        job_area="data",
-    )
-
-    assert (
-        "SAP não deve ser critical_required em vaga de dados. Mova para important ou nice_to_have."
-        in result.errors
-    )
+    assert "A vaga precisa ter pelo menos 1 skill essencial ou eliminatória." in result.errors

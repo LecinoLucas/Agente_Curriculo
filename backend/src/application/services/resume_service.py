@@ -7,6 +7,7 @@ from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
+from src.infrastructure.storage.resume_files import write_resume_file
 from src.interface.api.schemas.resume_schemas import UpdateResumeRequest
 
 
@@ -53,6 +54,12 @@ class ResumeFileUpload:
 class ResumeDetails:
     resume: ResumeModel
     versions: list[ResumeVersionModel]
+
+
+@dataclass(frozen=True)
+class ResumeExtractionStatus:
+    resume: ResumeModel
+    version: ResumeVersionModel
 
 
 class ResumeService:
@@ -130,6 +137,17 @@ class ResumeService:
         versions = await self._repository.list_versions(resume.id)
         return ResumeDetails(resume=resume, versions=versions)
 
+    async def get_extraction_status(
+        self,
+        resume_id: UUID,
+        current_user: User,
+    ) -> ResumeExtractionStatus:
+        resume = await self._get_authorized_resume(resume_id, current_user)
+        version = await self._repository.find_version(resume.id, resume.current_version)
+        if version is None:
+            raise ResumeNotFoundError
+        return ResumeExtractionStatus(resume=resume, version=version)
+
     async def upload_pdf(
         self,
         resume_id: UUID,
@@ -149,42 +167,28 @@ class ResumeService:
         if candidate is None:
             raise ResumeNotFoundError
 
-        from src.infrastructure.pdf.candidate_prefill_extractor import extract_candidate_prefill
-        from src.infrastructure.pdf.text_extractor import PdfTextExtractionError, extract_pdf_text
-
-        try:
-            extracted = extract_pdf_text(content)
-        except PdfTextExtractionError as exc:
-            raise InvalidResumeFileError(str(exc)) from exc
-
         now = datetime.now(UTC)
         version.original_file_name = file_name
         version.file_size_bytes = len(content)
         version.file_hash_sha256 = sha256(content).hexdigest()
         version.mime_type = "application/pdf"
-        version.extracted_text = extracted.text
-        version.extraction_status = "completed"
+        version.extracted_text = None
+        version.extraction_status = "pending"
         version.extraction_error = None
-        version.page_count = extracted.page_count
-        version.word_count = extracted.word_count
+        version.page_count = None
+        version.word_count = None
         version.uploaded_by = current_user.id
         version.uploaded_at = now
-
-        prefilled_fields = self._apply_candidate_prefill(
-            candidate,
-            extract_candidate_prefill(extracted.text),
-        )
-        candidate.updated_at = now
+        write_resume_file(version.s3_key, content)
 
         resume.updated_at = now
-        await self._repository.save_candidate(candidate)
         await self._repository.save_version(version)
         await self._repository.save_resume(resume)
         return ResumeFileUpload(
             resume=resume,
             version=version,
             candidate=candidate,
-            prefilled_fields=prefilled_fields,
+            prefilled_fields=[],
         )
 
     async def update(

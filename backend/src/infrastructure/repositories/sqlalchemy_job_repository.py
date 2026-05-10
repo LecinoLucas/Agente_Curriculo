@@ -186,7 +186,14 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             )
             .join(SkillModel, JobRequiredSkillModel.skill_id == SkillModel.id)
             .where(JobRequiredSkillModel.job_id == job_id, SkillModel.deleted_at.is_(None))
-            .order_by(JobRequiredSkillModel.is_mandatory.desc(), SkillModel.name.asc())
+            .order_by(
+                sa.case(
+                    (JobRequiredSkillModel.priority_level == "eliminatory", 0),
+                    (JobRequiredSkillModel.priority_level == "priority", 1),
+                    else_=2,
+                ),
+                SkillModel.name.asc(),
+            )
         )
         return result.all()
 

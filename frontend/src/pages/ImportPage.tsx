@@ -1,25 +1,26 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { 
   FileUp, 
-  CheckCircle2, 
   AlertCircle, 
   Loader2, 
+  ArrowRight,
   X,
   FileText,
-  UserCheck
+  UserCheck,
+  Clock3,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { resumeService } from "../services/resumeService";
 import { formatContextError } from "../services/errorMessages";
-import { toast } from "../shared/utils/toast";
 
 interface ImportResult {
+  resumeId?: string;
   fileName: string;
   candidateName: string;
-  status: "success" | "error";
-  error?: string;
+  status: "pending" | "success" | "error";
+  message?: string;
 }
 
 export function ImportPage() {
@@ -28,6 +29,59 @@ export function ImportPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<ImportResult[]>([]);
+
+  useEffect(() => {
+    const pendingItems = results.filter(
+      (result) => result.status === "pending" && typeof result.resumeId === "string",
+    );
+
+    if (pendingItems.length === 0) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      void Promise.all(
+        pendingItems.map(async (result) => {
+          try {
+            const status = await resumeService.getExtractionStatus(result.resumeId!);
+
+            if (status.extraction_status === "completed") {
+              setResults((current) =>
+                current.map((item) =>
+                  item.resumeId === result.resumeId
+                    ? {
+                        ...item,
+                        status: "success",
+                        message: "Extração concluída.",
+                      }
+                    : item,
+                ),
+              );
+              return;
+            }
+
+            if (status.extraction_status === "failed") {
+              setResults((current) =>
+                current.map((item) =>
+                  item.resumeId === result.resumeId
+                    ? {
+                        ...item,
+                        status: "error",
+                        message: status.extraction_error || "Falha ao extrair o currículo.",
+                      }
+                    : item,
+                ),
+              );
+            }
+          } catch {
+            // Mantém estado pendente para próxima tentativa automática.
+          }
+        }),
+      );
+    }, 2500);
+
+    return () => window.clearTimeout(timerId);
+  }, [results]);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -41,7 +95,7 @@ export function ImportPage() {
           fileName: file.name,
           candidateName: "N/A",
           status: "error",
-          error: "Apenas arquivos PDF são permitidos."
+          message: "Apenas arquivos PDF são permitidos.",
         });
         continue;
       }
@@ -53,16 +107,18 @@ export function ImportPage() {
         const res = await resumeService.uploadPdf(init.resume_id, file);
         
         newResults.push({
+          resumeId: res.resume_id,
           fileName: file.name,
           candidateName: res.candidate_full_name,
-          status: "success"
+          status: "pending",
+          message: "Currículo enviado, extração em andamento.",
         });
       } catch (err) {
         newResults.push({
           fileName: file.name,
           candidateName: "Erro na importação",
           status: "error",
-          error: formatContextError(err, "Falha ao processar arquivo.")
+          message: formatContextError(err, "Falha ao processar arquivo."),
         });
       }
     }
@@ -180,23 +236,37 @@ export function ImportPage() {
                 <div 
                   key={idx}
                   className={`flex items-center gap-3 rounded-2xl border p-3 ${
-                    result.status === "success" 
-                      ? "border-emerald-100 bg-emerald-50/50 dark:border-emerald-900/20" 
-                      : "border-rose-100 bg-rose-50/50 dark:border-rose-900/20"
+                    result.status === "success"
+                      ? "border-emerald-100 bg-emerald-50/50 dark:border-emerald-900/20"
+                      : result.status === "pending"
+                        ? "border-amber-100 bg-amber-50/50 dark:border-amber-900/20"
+                        : "border-rose-100 bg-rose-50/50 dark:border-rose-900/20"
                   }`}
                 >
                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                    result.status === "success" ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"
+                    result.status === "success"
+                      ? "bg-emerald-500 text-white"
+                      : result.status === "pending"
+                        ? "bg-amber-500 text-white"
+                        : "bg-rose-500 text-white"
                   }`}>
-                    {result.status === "success" ? <UserCheck className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                    {result.status === "success" ? (
+                      <UserCheck className="h-4 w-4" />
+                    ) : result.status === "pending" ? (
+                      <Clock3 className="h-4 w-4" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-bold text-[hsl(var(--text))]">{result.fileName}</p>
                     <p className="truncate text-[10px] text-[hsl(var(--text-muted))]">
-                      {result.status === "success" ? result.candidateName : result.error}
+                      {result.status === "error"
+                        ? result.message
+                        : `${result.candidateName} • ${result.message ?? ""}`}
                     </p>
                   </div>
-                  {result.status === "success" && (
+                  {result.status !== "error" && (
                     <button 
                       onClick={() => navigate("/candidatos")}
                       className="rounded-lg p-1.5 hover:bg-black/5"

@@ -5,16 +5,37 @@ from typing import Any
 
 from src.application.services.skill_normalizer_service import normalize_skill_name
 
-SKILL_REQUIREMENT_LEVELS = (
+PRIMARY_SKILL_REQUIREMENT_LEVELS = (
+    "priority",
+    "complementary",
+    "eliminatory",
+)
+
+LEGACY_SKILL_REQUIREMENT_LEVELS = (
     "critical_required",
     "core_required",
     "important",
     "nice_to_have",
 )
 
+SKILL_REQUIREMENT_LEVELS = PRIMARY_SKILL_REQUIREMENT_LEVELS + LEGACY_SKILL_REQUIREMENT_LEVELS
+
 
 def empty_skill_requirements() -> dict[str, list[str]]:
-    return {level: [] for level in SKILL_REQUIREMENT_LEVELS}
+    return {
+        "priority": [],
+        "complementary": [],
+        "eliminatory": [],
+    }
+
+
+def _raw_items_for_level(data: dict[str, Any], level: str) -> list[Any]:
+    raw_items = data.get(level, [])
+    if raw_items is None:
+        return []
+    if not isinstance(raw_items, list):
+        raise ValueError(f"skill_requirements.{level} must be a list")
+    return raw_items
 
 
 def validate_skill_requirements(data: Any) -> dict[str, list[str]]:
@@ -23,24 +44,23 @@ def validate_skill_requirements(data: Any) -> dict[str, list[str]]:
 
     validated = empty_skill_requirements()
     seen: set[str] = set()
+    source_map = {
+        "priority": ("priority", "critical_required", "core_required"),
+        "complementary": ("complementary", "important", "nice_to_have"),
+        "eliminatory": ("eliminatory",),
+    }
 
-    for level in SKILL_REQUIREMENT_LEVELS:
-        raw_items = data.get(level, [])
-        if raw_items is None:
-            raw_items = []
-        if not isinstance(raw_items, list):
-            raise ValueError(f"skill_requirements.{level} must be a list")
-
+    for public_level, source_levels in source_map.items():
         cleaned_items: list[str] = []
-        for raw_item in raw_items:
-            cleaned = str(raw_item or "").strip()
-            normalized = normalize_skill_name(cleaned)
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            cleaned_items.append(cleaned)
-
-        validated[level] = cleaned_items
+        for source_level in source_levels:
+            for raw_item in _raw_items_for_level(data, source_level):
+                cleaned = str(raw_item or "").strip()
+                normalized = normalize_skill_name(cleaned)
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                cleaned_items.append(cleaned)
+        validated[public_level] = cleaned_items
 
     return validated
 
@@ -71,14 +91,6 @@ _SOFT_SKILL_NAMES = {
     "empatia",
 }
 
-_DATA_CRITICAL_ERP_MARKERS = {
-    "sap",
-    "sap mm",
-    "protheus",
-    "totvs",
-    "erp",
-}
-
 
 def validate_skill_requirements_product_rules(
     data: Any,
@@ -86,8 +98,10 @@ def validate_skill_requirements_product_rules(
     job_area: str | None = None,
     check_raw_duplicates: bool = False,
 ) -> SkillRequirementsProductValidationResult:
+    del job_area
     sanitized = validate_skill_requirements(data)
     errors: list[str] = []
+    warnings: list[str] = []
 
     if check_raw_duplicates:
         duplicates = _find_cross_level_duplicates(data)
@@ -98,46 +112,33 @@ def validate_skill_requirements_product_rules(
                 f"{skill_label} não pode aparecer em mais de um nível ({levels_label})."
             )
 
-    critical_required = list(sanitized["critical_required"])
-    core_required = list(sanitized["core_required"])
-    important = list(sanitized["important"])
-    nice_to_have = list(sanitized["nice_to_have"])
-    total_skills = len(critical_required) + len(core_required) + len(important) + len(nice_to_have)
+    priority_skills = list(sanitized["priority"])
+    complementary_skills = list(sanitized["complementary"])
+    eliminatory_skills = list(sanitized["eliminatory"])
 
-    if len(critical_required) > 3:
-        errors.append("critical_required não pode ter mais de 3 skills.")
+    if not priority_skills and not eliminatory_skills:
+        errors.append("A vaga precisa ter pelo menos 1 skill essencial ou eliminatória.")
 
-    if not critical_required and not core_required:
-        errors.append("A vaga precisa ter pelo menos 1 skill em core_required ou critical_required.")
+    if len(priority_skills) < 2:
+        warnings.append("A vaga fica mais precisa com pelo menos 2 skills essenciais.")
 
-    if total_skills > 0 and (len(critical_required) / total_skills) > 0.40:
-        errors.append("critical_required não pode representar mais de 40% do total de skills.")
+    if len(priority_skills) > 5:
+        warnings.append(
+            "Muitas skills essenciais podem deixar o ranking restritivo. Considere mover algumas para diferenciais."
+        )
 
-    for skill_name in critical_required:
+    if len(eliminatory_skills) > 3:
+        errors.append("Critérios eliminatórios de skill não podem ter mais de 3 itens.")
+
+    for skill_name in eliminatory_skills:
         normalized = normalize_skill_name(skill_name)
         if normalized in _SOFT_SKILL_NAMES:
-            errors.append(f"{skill_name} não pode ser critical_required porque é soft skill.")
-
-    normalized_area = normalize_skill_name(job_area)
-    if normalized_area == "data":
-        for skill_name in critical_required:
-            normalized = normalize_skill_name(skill_name)
-            normalized_tokens = set(normalized.split())
-            if any(
-                marker == normalized
-                or marker in normalized_tokens
-                or (marker != "erp" and marker in normalized)
-                for marker in _DATA_CRITICAL_ERP_MARKERS
-            ):
-                errors.append(
-                    f"{skill_name} não deve ser critical_required em vaga de dados. "
-                    "Mova para important ou nice_to_have."
-                )
+            errors.append(f"{skill_name} não pode ser eliminatória porque é soft skill.")
 
     return SkillRequirementsProductValidationResult(
         sanitized=sanitized,
         errors=list(dict.fromkeys(errors)),
-        warnings=[],
+        warnings=list(dict.fromkeys(warnings)),
     )
 
 
@@ -146,6 +147,15 @@ def _find_cross_level_duplicates(data: Any) -> list[tuple[str, list[str]]]:
         return []
 
     occurrences: dict[str, list[str]] = {}
+    public_map = {
+        "priority": "priority",
+        "critical_required": "priority",
+        "core_required": "priority",
+        "complementary": "complementary",
+        "important": "complementary",
+        "nice_to_have": "complementary",
+        "eliminatory": "eliminatory",
+    }
     for level in SKILL_REQUIREMENT_LEVELS:
         raw_items = data.get(level, [])
         if not isinstance(raw_items, list):
@@ -155,8 +165,9 @@ def _find_cross_level_duplicates(data: Any) -> list[tuple[str, list[str]]]:
             if not normalized:
                 continue
             levels = occurrences.setdefault(normalized, [])
-            if level not in levels:
-                levels.append(level)
+            public_level = public_map.get(level, level)
+            if public_level not in levels:
+                levels.append(public_level)
 
     return [(name, levels) for name, levels in occurrences.items() if len(levels) > 1]
 

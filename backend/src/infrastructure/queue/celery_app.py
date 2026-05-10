@@ -14,6 +14,7 @@ celery_app = Celery(
         "src.interface.workers.analysis_tasks",
         "src.interface.workers.matching_tasks",
         "src.interface.workers.document_ai_tasks",
+        "src.interface.workers.resume_extraction_tasks",
     ],
 )
 
@@ -62,6 +63,7 @@ celery_app.conf.update(
         "src.interface.workers.analysis_tasks.*": {"queue": "analysis"},
         "src.interface.workers.matching_tasks.*": {"queue": "matching"},
         "src.interface.workers.document_ai_tasks.*": {"queue": "document_ai"},
+        "src.interface.workers.resume_extraction_tasks.*": {"queue": "extraction"},
     },
 
     # ─────────────────────────────────────────
@@ -83,6 +85,10 @@ celery_app.conf.update(
 
         # DOCUMENT AI (OCR)
         "src.interface.workers.document_ai_tasks.process_document_ai_job": {
+            "max_retries": 0,
+            "time_limit": 180,
+        },
+        "src.interface.workers.resume_extraction_tasks.process_resume_extraction": {
             "max_retries": 0,
             "time_limit": 180,
         },

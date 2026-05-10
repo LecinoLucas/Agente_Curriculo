@@ -112,7 +112,7 @@ export function useJobsList() {
           const candidates =
             candidateResult?.status === "fulfilled" ? (candidateResult.value.data ?? []) : [];
           const scoredCandidates = candidates
-            .map((candidate) => Number(candidate.final_score ?? 0))
+            .map((candidate) => Number(candidate.job_fit_score ?? 0))
             .filter((score) => Number.isFinite(score));
 
           nextOperationalData[job.id] = {
@@ -120,7 +120,7 @@ export function useJobsList() {
             stageCounts: pipelineJob?.stage_counts ?? {},
             latestActivity: pipelineJob?.latest_activity ?? null,
             strongCandidates: candidates.filter((candidate) => {
-              const score = Number(candidate.final_score ?? 0);
+              const score = Number(candidate.job_fit_score ?? 0);
               return candidate.recommendation === "good_match" || score >= 70;
             }).length,
             topScore: scoredCandidates.length > 0 ? Math.max(...scoredCandidates) : null,

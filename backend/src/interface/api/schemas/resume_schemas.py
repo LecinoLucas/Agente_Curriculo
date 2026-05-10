@@ -69,6 +69,16 @@ class ResumeSummaryResponse(BaseModel):
     updated_at: datetime
 
 
+class ResumeExtractionStatusResponse(BaseModel):
+    resume_id: UUID
+    version_id: UUID
+    extraction_status: str
+    extraction_error: str | None = None
+    original_file_name: str
+    page_count: int | None = None
+    word_count: int | None = None
+
+
 class UpdateResumeRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
     status: Literal["active", "archived"] | None = None

@@ -172,6 +172,53 @@ Regras:
 - Score antigo pode existir apenas como histórico.
 - Score histórico não pode afetar vaga atual.
 
+### Vocabulário oficial de score, match e ranking
+
+UI oficial:
+
+- `Perfil Geral IA`
+- `Aderência à Vaga`
+- `Status na Vaga`
+
+Backend oficial:
+
+- `candidate_profile_analysis`
+- `job_profile_analysis`
+- `candidate_job_match`
+- `candidate_job_scores`
+- `candidate_job_pipeline`
+- `candidate_job_score_snapshots`
+- `candidate_job_score_factors`
+
+Regras semânticas obrigatórias:
+
+- Ranking não é nome de score.
+- Ranking = ordenação dos candidatos pela `Aderência à Vaga`.
+- Score oficial da vaga = `job_fit_score`.
+- `candidate_job_scores` é a fonte oficial do `job_fit_score`.
+- `candidate_job_match` guarda evidências, gaps e contexto analítico.
+- `candidate_job_pipeline` guarda apenas estado operacional.
+- `candidate_job_pipeline` nunca é fonte de score oficial.
+- `candidate_job_match` nunca é contrato público do score oficial.
+
+Nomes públicos proibidos:
+
+- `overall_score` quando significar score da vaga
+- `analysis_score`
+- `match_score` como score oficial
+- `final_score`
+- `ranking_score`
+- `explanation_text`
+- `reason_codes`
+- `freshness_status` sem escopo
+
+Mapeamento interno permitido:
+
+- Persistência interna pode manter `candidate_job_scores.final_score` temporariamente.
+- API e DTOs devem expor apenas `job_fit_score`.
+- Persistência interna pode manter `reason_codes`, `explanation_text` e `freshness_status` enquanto houver coluna legada.
+- API e DTOs devem expor apenas `reason_tags`, `ranking_summary_text` e `ranking_freshness_status`.
+
 ---
 
 ## Fluxos oficiais
@@ -571,6 +618,26 @@ Se houver conflito:
 ```text
 AGENTS.md vence
 ```
+
+## Matching e score
+
+Matching, ranking ou análise não podem criar pipeline ativo automaticamente.
+
+Pipeline ativo só pode ser criado pelos fluxos oficiais:
+
+- adicionar candidato à vaga
+- transferir candidato para outra vaga
+
+O match pode calcular aderência apenas se já existir vaga explícita e contexto válido, mas não pode transformar esse cálculo em vínculo ativo.
+
+Score decisório só é válido para a vaga do pipeline ativo.
+
+Análises globais ou simulações podem existir apenas como histórico, sugestão ou pré-avaliação, mas não podem definir:
+
+- vaga atual
+- score atual
+- pipeline ativo
+- ranking decisório
 
 ---
 

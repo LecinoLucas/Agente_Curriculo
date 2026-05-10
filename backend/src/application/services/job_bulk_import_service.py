@@ -138,7 +138,7 @@ class JobBulkImportService:
                 link = JobRequiredSkillModel(
                     job_id=job.id,
                     skill_id=skill.id,
-                    is_mandatory=skill_request.is_mandatory,
+                    priority_level=skill_request.priority_level,
                     minimum_level=skill_request.minimum_level,
                     minimum_years=skill_request.minimum_years,
                     weight=skill_request.weight,
@@ -146,6 +146,7 @@ class JobBulkImportService:
                 await self._job_repository.create_required_skill_link(link)
 
             if resolved_skills:
+                job = await self._job_service.sync_skill_requirements_snapshot(job.id)
                 await self._job_service._maybe_generate_job_profile(job)
 
             quality = await self._job_service.refresh_quality(job.id)

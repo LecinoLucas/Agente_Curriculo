@@ -147,7 +147,7 @@ async def _seed_scoring_case(
     job_python = JobRequiredSkillModel(
         job_id=job.id,
         skill_id=python_skill.id,
-        is_mandatory=True,
+        priority_level="priority",
         minimum_level="mid",
         weight=Decimal("1.5"),
     )
@@ -156,7 +156,7 @@ async def _seed_scoring_case(
     job_fastapi = JobRequiredSkillModel(
         job_id=job.id,
         skill_id=fastapi_skill.id,
-        is_mandatory=True,
+        priority_level="priority",
         minimum_level="mid",
         weight=Decimal("1.0"),
     )
@@ -302,26 +302,26 @@ async def _seed_scoring_case(
     pipeline.current_analysis_id = analysis.id
     await db_session.commit()
 
-    if include_ranking_row:
-        active_version = await db_session.scalar(
-            sa.select(ScoreModelVersionModel).where(ScoreModelVersionModel.is_active.is_(True))
+    active_version = await db_session.scalar(
+        sa.select(ScoreModelVersionModel).where(ScoreModelVersionModel.is_active.is_(True))
+    )
+    if active_version is None:
+        active_version = ScoreModelVersionModel(
+            version=f"test-score-{uuid4()}",
+            is_active=True,
+            weights={
+                "skill_match": 0.4,
+                "experience_match": 0.25,
+                "seniority_match": 0.2,
+                "education": 0.1,
+                "ai_confidence": 0.05,
+            },
+            thresholds={"high": 70, "low": 45},
         )
-        if active_version is None:
-            active_version = ScoreModelVersionModel(
-                version=f"test-score-{uuid4()}",
-                is_active=True,
-                weights={
-                    "skill_match": 0.4,
-                    "experience_match": 0.25,
-                    "seniority_match": 0.2,
-                    "education": 0.1,
-                    "ai_confidence": 0.05,
-                },
-                thresholds={"high": 70, "low": 45},
-            )
-            db_session.add(active_version)
-            await db_session.commit()
+        db_session.add(active_version)
+        await db_session.commit()
 
+    if include_ranking_row:
         await CandidateRankingService(db_session).compute_single_candidate(job.id, candidate.id)
         await db_session.commit()
 

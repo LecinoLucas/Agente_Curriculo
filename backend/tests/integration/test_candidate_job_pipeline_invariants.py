@@ -15,7 +15,13 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.analysis_model import (
+    AIModelModel,
+    AnalysisModel,
+    PromptTemplateModel,
+)
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
 from src.interface.api.schemas.pipeline_schemas import (
@@ -62,6 +68,71 @@ async def _seed_user_candidate_job(
     await db_session.commit()
 
     return user, candidate, job
+
+
+async def _seed_completed_analysis_for_candidate_job(
+    db_session: AsyncSession,
+    *,
+    candidate: CandidateModel,
+    job: JobModel,
+    requested_by: UserModel,
+) -> AnalysisModel:
+    resume = ResumeModel(
+        id=uuid4(),
+        candidate_id=candidate.id,
+        title="Resume",
+        status="active",
+        current_version=1,
+        created_by=requested_by.id,
+    )
+    db_session.add(resume)
+    await db_session.flush()
+
+    resume_version = ResumeVersionModel(
+        id=uuid4(),
+        resume_id=resume.id,
+        version_number=1,
+        original_file_name="resume.pdf",
+        file_size_bytes=1234,
+        file_hash_sha256=f"hash-{uuid4().hex}",
+        s3_bucket="bucket",
+        s3_key=f"resume/{uuid4().hex}.pdf",
+        extraction_status="completed",
+        uploaded_by=requested_by.id,
+    )
+    db_session.add(resume_version)
+
+    ai_model = AIModelModel(
+        id=uuid4(),
+        provider="google",
+        model_id=f"gemini-{uuid4().hex[:6]}",
+        model_name="Gemini",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        id=uuid4(),
+        name=f"prompt-{uuid4().hex[:6]}",
+        version=1,
+        template_type="candidate_analysis",
+        user_prompt_template="{}",
+        created_by=requested_by.id,
+        is_active=True,
+    )
+    db_session.add_all([ai_model, prompt])
+    await db_session.flush()
+
+    analysis = AnalysisModel(
+        id=uuid4(),
+        resume_version_id=resume_version.id,
+        job_id=job.id,
+        ai_model_id=ai_model.id,
+        prompt_template_id=prompt.id,
+        status="completed",
+        requested_by=requested_by.id,
+    )
+    db_session.add(analysis)
+    await db_session.commit()
+    return analysis
 
 
 @pytest.mark.asyncio
@@ -263,3 +334,89 @@ async def test_candidate_has_single_active_state_across_jobs(db_session: AsyncSe
         or 0
     )
     assert active_count == 1
+
+
+@pytest.mark.asyncio
+async def test_match_registration_does_not_create_pipeline_entry(db_session: AsyncSession) -> None:
+    user, candidate, job = await _seed_user_candidate_job(db_session)
+    analysis = await _seed_completed_analysis_for_candidate_job(
+        db_session,
+        candidate=candidate,
+        job=job,
+        requested_by=user,
+    )
+
+    repo = SQLAlchemyPipelineRepository(db_session)
+    await repo.upsert_and_record_transition(analysis.id, job.id)
+    await db_session.commit()
+
+    created_entry = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate.id,
+            CandidateJobPipelineModel.job_id == job.id,
+        )
+    )
+    assert created_entry is None
+
+
+@pytest.mark.asyncio
+async def test_match_registration_does_not_create_second_active_pipeline(db_session: AsyncSession) -> None:
+    user, candidate, source_job = await _seed_user_candidate_job(db_session)
+    target_job = JobModel(
+        id=uuid4(),
+        title="Target Job",
+        description="Desc",
+        status="published",
+        created_by=user.id,
+    )
+    db_session.add(target_job)
+    await db_session.flush()
+
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_id=candidate.id,
+            job_id=source_job.id,
+            pipeline_stage="entry",
+            link_status="active",
+            pipeline_status="active",
+            relationship_status="active",
+            is_terminal=False,
+            terminated_at=None,
+        )
+    )
+    await db_session.commit()
+
+    analysis = await _seed_completed_analysis_for_candidate_job(
+        db_session,
+        candidate=candidate,
+        job=target_job,
+        requested_by=user,
+    )
+    repo = SQLAlchemyPipelineRepository(db_session)
+    await repo.upsert_and_record_transition(analysis.id, target_job.id)
+    await db_session.commit()
+
+    active_count = int(
+        (
+            await db_session.scalar(
+                sa.select(sa.func.count())
+                .select_from(CandidateJobPipelineModel)
+                .where(
+                    CandidateJobPipelineModel.candidate_id == candidate.id,
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                    CandidateJobPipelineModel.relationship_status == "active",
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
+                )
+            )
+        )
+        or 0
+    )
+    target_entry = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate.id,
+            CandidateJobPipelineModel.job_id == target_job.id,
+        )
+    )
+    assert active_count == 1
+    assert target_entry is None

@@ -60,7 +60,29 @@ function requireFreshnessStatus(value: unknown): "fresh" | "stale" {
   if (value === "fresh" || value === "stale") {
     return value;
   }
-  throw new Error("Invalid ranking freshness_status");
+  throw new Error("Invalid ranking_freshness_status");
+}
+
+function parseScoreFactors(value: any) {
+  const buckets = ["positive", "negative", "contextual"] as const;
+  return Object.fromEntries(
+    buckets.map((bucket) => [
+      bucket,
+      Array.isArray(value?.[bucket])
+        ? value[bucket].map((item: any) => ({
+            factor_type: item?.factor_type ?? "",
+            factor_key: item?.factor_key ?? "",
+            factor_label: item?.factor_label ?? "",
+            impact_score: item?.impact_score != null ? Number(item.impact_score) : 0,
+            direction: item?.direction ?? "neutral",
+          }))
+        : [],
+    ]),
+  ) as {
+    positive: Array<any>;
+    negative: Array<any>;
+    contextual: Array<any>;
+  };
 }
 
 function requireNumber(value: unknown, label: string): number {
@@ -167,7 +189,7 @@ export async function listJobCandidates(
     job_id: response.job_id,
     stage: (entry.stage || "entry") as PipelineStage,
     candidate_status: entry.pipeline_status,
-    final_score: entry.final_score,
+    job_fit_score: entry.job_fit_score,
     recommendation: entry.decision_suggestion,
     top_skills: [],
     updated_at: entry.ranking_updated_at ?? entry.computed_at,
@@ -175,7 +197,7 @@ export async function listJobCandidates(
 
   let filtered = candidates;
   if (min_score != null) {
-    filtered = filtered.filter((c) => (c.final_score ?? 0) >= min_score);
+    filtered = filtered.filter((c) => (c.job_fit_score ?? 0) >= min_score);
   }
   if (seniority) {
     filtered = filtered.filter((c) => (c.seniority_level ?? "").toLowerCase() === seniority.toLowerCase());
@@ -204,6 +226,7 @@ export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
             job_id: item.job_id,
             stage: item.stage,
             candidate_status: item.candidate_status,
+            job_fit_score: item.job_fit_score != null ? requireNumber(item.job_fit_score, "pipeline.job_fit_score") : null,
             top_skills: Array.isArray(item.top_skills) ? item.top_skills.filter(Boolean) : [],
             updated_at: item.updated_at,
             ai_status: normalizeAiStatus(item.ai_status),
@@ -236,12 +259,15 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
         education_score: requireNumber(item?.score_breakdown?.education_score, "score_breakdown.education_score"),
         confidence_score: requireNumber(item?.score_breakdown?.confidence_score, "score_breakdown.confidence_score"),
         penalty_score: requireNumber(item?.score_breakdown?.penalty_score, "score_breakdown.penalty_score"),
-        final_score: requireNumber(item?.score_breakdown?.final_score, "score_breakdown.final_score"),
+        job_fit_score: requireNumber(
+          item?.score_breakdown?.job_fit_score,
+          "score_breakdown.job_fit_score",
+        ),
       },
-      final_score: requireNumber(item?.final_score, "final_score"),
+      job_fit_score: requireNumber(item?.job_fit_score, "job_fit_score"),
       decision_suggestion: item?.decision_suggestion ?? "review",
-      reason_codes: Array.isArray(item?.reason_codes)
-        ? item.reason_codes.map((reason: any) => ({
+      reason_tags: Array.isArray(item?.reason_tags)
+        ? item.reason_tags.map((reason: any) => ({
             type: reason?.type ?? "",
             field: reason?.field ?? "",
             impact: reason?.impact != null ? Number(reason.impact) : 0,
@@ -251,10 +277,19 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
             reason: reason?.reason ?? null,
           }))
         : [],
-      explanation_text: item?.explanation_text ?? "",
+      score_factors: parseScoreFactors(item?.score_factors),
+      data_confidence_score:
+        item?.data_confidence_score != null
+          ? requireNumber(item?.data_confidence_score, "data_confidence_score")
+          : undefined,
+      ranking_summary_text: item?.ranking_summary_text ?? "",
       entered_at: item?.entered_at ?? null,
       computed_at: item?.computed_at ?? new Date(0).toISOString(),
-      freshness_status: requireFreshnessStatus(item?.freshness_status),
+      ranking_freshness_status: requireFreshnessStatus(item?.ranking_freshness_status),
+      match_freshness_status:
+        item?.match_freshness_status != null
+          ? requireFreshnessStatus(item?.match_freshness_status)
+          : undefined,
       score_computed_at: item?.score_computed_at ?? item?.computed_at ?? null,
       source_analysis_id: item?.source_analysis_id ?? null,
       source_analysis_created_at: item?.source_analysis_created_at ?? null,

@@ -26,7 +26,7 @@ export type JobFormValues = {
 export type PendingJobSkill = {
   skill_id: string;
   skill_name: string;
-  is_mandatory: boolean;
+  priority_level: "priority" | "complementary" | "eliminatory";
   minimum_level: string | null;
   minimum_years: number | null;
   weight: number;
@@ -112,7 +112,7 @@ export function formatPublicationBlocker(blocker: string): string {
     job_area: "Área da vaga não definida",
     seniority_level: "Senioridade não definida",
     minimum_years_experience: "Experiência mínima não definida",
-    mandatory_skills: "Faltam pelo menos 2 skills obrigatórias",
+    priority_skills: "Faltam pelo menos 2 skills essenciais",
   };
 
   return labels[blocker] ?? blocker;

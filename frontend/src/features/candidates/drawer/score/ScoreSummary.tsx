@@ -11,7 +11,7 @@ interface ScoreSummaryProps {
   compatibilityScore: number | null;
   scoreBreakdown: JobRankingEntry["score_breakdown"] | null;
   scoreExplanation: ScoreExplanationResponse | null;
-  overallSummary?: string | null;
+  rankingSummaryText?: string | null;
 }
 
 function getQualitativeLabel(score: number | null): { label: string; color: string } {
@@ -64,15 +64,15 @@ export function ScoreSummary({
   compatibilityScore,
   scoreBreakdown,
   scoreExplanation,
-  overallSummary,
+  rankingSummaryText,
 }: ScoreSummaryProps) {
   const qualitativeLabel = getQualitativeLabel(compatibilityScore);
   const scorePercentage = normalizeScorePercent(compatibilityScore);
-  const summaryText = overallSummary || scoreExplanation?.explanation || null;
+  const summaryText = rankingSummaryText || scoreExplanation?.ranking_summary_text || null;
   const insights = getTopExplainabilityInsights(scoreExplanation, 3);
   const deltaLine = getExplainabilityDeltaLine(scoreExplanation);
   const freshnessLine = getExplainabilityFreshnessLine(
-    scoreExplanation?.freshness_status,
+    scoreExplanation?.ranking_freshness_status,
     scoreExplanation?.computed_at,
   );
 
@@ -93,7 +93,7 @@ export function ScoreSummary({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-            Compatibilidade Contextual
+            Aderência à Vaga
           </p>
           <div className="mt-2 flex items-end gap-2">
             <span
@@ -150,7 +150,7 @@ export function ScoreSummary({
       {insights.length > 0 ? (
         <div className="mt-4">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-            Por que este score?
+            Por que esta aderencia?
           </p>
           <div className="grid gap-2 xl:grid-cols-3">
             {insights.map((insight) => (

@@ -162,9 +162,9 @@ class CandidateService:
                 active_job_id=row["active_job_id"],
                 active_job_title=row["active_job_title"],
                 active_job_stage=row["active_job_stage"],
-                active_job_final_score=(
-                    float(row["active_job_final_score"])
-                    if row["active_job_final_score"] is not None
+                active_job_job_fit_score=(
+                    float(row["active_job_job_fit_score"])
+                    if row["active_job_job_fit_score"] is not None
                     else None
                 ),
                 ai_status=row["ai_status"],
@@ -196,8 +196,6 @@ class CandidateService:
                 candidate_id,
                 active_job_id,
             )
-        if latest_analysis_row is None:
-            latest_analysis_row = await self._repository.find_latest_analysis_summary(candidate_id)
 
         latest_analysis = (
             CandidateLatestAnalysisResponse(**latest_analysis_row)

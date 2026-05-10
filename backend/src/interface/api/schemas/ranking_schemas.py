@@ -5,12 +5,14 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+from src.interface.api.schemas.job_schemas import CandidateScoreExplanationFactorSummaryResponse
 
 DecisionStatus = Literal["approved", "review", "rejected_suggested"]
 FreshnessStatus = Literal["fresh", "stale"]
 
-class ReasonCode(BaseModel):
+class ReasonTag(BaseModel):
     """Filterable, auditable scoring signal with a quantified impact.
 
     impact > 0 means favorable; impact < 0 means penalizing.
@@ -25,6 +27,8 @@ class ReasonCode(BaseModel):
 
 
 class ScoreBreakdownResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     skill_match_score: Decimal
     experience_match_score: Decimal
     seniority_match_score: Decimal
@@ -32,10 +36,8 @@ class ScoreBreakdownResponse(BaseModel):
     confidence_score: Decimal
     penalty_score: Decimal
     validation_penalty_score: Decimal
-    final_score: Decimal
+    job_fit_score: Decimal
     raw_score: Decimal | None = None
-    final_score_before_cap: Decimal | None = None
-    final_score_after_cap: Decimal | None = None
     cap_applied: bool | None = None
     cap_reason: str | None = None
     validation_status: str | None = None
@@ -44,6 +46,18 @@ class ScoreBreakdownResponse(BaseModel):
     failed_dimension: str | None = None
     eligibility_status: str | None = None
     missing_required_skills: list[str] | None = None
+    matched_priority_skills: list[str] | None = None
+    missing_priority_skills: list[str] | None = None
+    matched_complementary_skills: list[str] | None = None
+    missing_complementary_skills: list[str] | None = None
+    matched_eliminatory_skills: list[str] | None = None
+    missing_eliminatory_skills: list[str] | None = None
+    priority_skills_matched: int | None = None
+    priority_skills_total: int | None = None
+    complementary_skills_matched: int | None = None
+    complementary_skills_total: int | None = None
+    eliminatory_skills_matched: int | None = None
+    eliminatory_skills_total: int | None = None
     education_detected: str | None = None
     minimum_education_required: str | None = None
     experience_detected: float | None = None
@@ -57,13 +71,16 @@ class CandidateRankingEntry(BaseModel):
     stage: str
     pipeline_status: str
     score_breakdown: ScoreBreakdownResponse
-    final_score: Decimal
+    job_fit_score: Decimal
     decision_suggestion: DecisionStatus
-    reason_codes: list[ReasonCode]
-    explanation_text: str
+    reason_tags: list[ReasonTag]
+    score_factors: CandidateScoreExplanationFactorSummaryResponse
+    data_confidence_score: float
+    ranking_summary_text: str
     entered_at: datetime | None
     computed_at: datetime
-    freshness_status: FreshnessStatus
+    ranking_freshness_status: FreshnessStatus
+    match_freshness_status: FreshnessStatus
     score_computed_at: datetime | None = None
     source_analysis_id: UUID | None = None
     source_analysis_created_at: datetime | None = None
@@ -101,8 +118,28 @@ class JobRankingResponse(BaseModel):
     data_quality_stats: DataQualityStats | None = None
 
 
+class ScoreDeltaEntry(BaseModel):
+    candidate_id: UUID
+    previous_score: Decimal | None
+    new_score: Decimal
+    delta: Decimal | None
+    monotonicity_decision: str | None
+
+
+class SingleCandidateScoringResponse(BaseModel):
+    candidate_id: UUID
+    job_id: UUID
+    previous_score: Decimal | None
+    job_fit_score: Decimal
+    delta: Decimal | None
+    monotonicity_decision: str | None
+    computed_at: datetime
+    score_version: str
+
+
 class ScoringComputeResponse(BaseModel):
     job_id: UUID
     candidates_scored: int
     score_version: str
     computed_at: datetime
+    score_deltas: list[ScoreDeltaEntry]

@@ -76,7 +76,7 @@ class CandidateJobMatchSummaryResponse(BaseModel):
     job_id: UUID
     job_title: str
     job_status: str
-    final_score: float | None = None
+    job_fit_score: float | None = None
     recommendation: str | None = None
     seniority_level: str | None = None
     total_experience_years: float | None = None
@@ -131,7 +131,7 @@ class CandidateListSummaryResponse(BaseModel):
     active_job_id: UUID | None = None
     active_job_title: str | None = None
     active_job_stage: str | None = None
-    active_job_final_score: float | None = None
+    active_job_job_fit_score: float | None = None
     ai_status: str | None = None
 
 

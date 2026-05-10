@@ -48,7 +48,7 @@ export function CandidateProfileHeader({
     .slice(0, 2) ?? "—";
 
   const semantics = deriveScoreSemantics({
-    finalScore: compatibilityScore,
+    jobFitScore: compatibilityScore,
     aiStatus,
     hasActiveJob,
   });

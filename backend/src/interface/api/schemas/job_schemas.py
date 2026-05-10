@@ -397,17 +397,16 @@ class CandidateScoreExplanationResponse(BaseModel):
     job_id: UUID
     candidate_id: UUID
     analysis_id: UUID | None = None
-    score: float
-    final_score: float
-    freshness_status: Literal["fresh", "stale"]
+    job_fit_score: float
+    ranking_freshness_status: Literal["fresh", "stale"]
     score_model_version: str | None = None
     explainability_version: str | None = None
     computed_at: datetime | None = None
     recommendation: str
     engine_used: str
-    explanation: str
+    ranking_summary_text: str
     breakdown: CandidateScoreExplanationBreakdownResponse = Field(default_factory=CandidateScoreExplanationBreakdownResponse)
-    factor_summary: CandidateScoreExplanationFactorSummaryResponse = Field(default_factory=CandidateScoreExplanationFactorSummaryResponse)
+    score_factors: CandidateScoreExplanationFactorSummaryResponse = Field(default_factory=CandidateScoreExplanationFactorSummaryResponse)
     delta: CandidateScoreExplanationDeltaResponse | None = None
     highlights: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
@@ -419,7 +418,7 @@ class CandidateScoreExplanationResponse(BaseModel):
     matched_equivalences: list[ScoreExplanationEvidenceResponse] = Field(default_factory=list)
     partial_matches: list[SkillPartialMatchResponse] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
-    confidence_score: float
+    data_confidence_score: float
     strengths: list[str] = Field(default_factory=list)
     feedback: MatchingFeedbackResponse | None = None
 
@@ -438,7 +437,7 @@ class JobQualityResponse(BaseModel):
 
 class BulkImportJobSkillRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    is_mandatory: bool = False
+    priority_level: Literal["priority", "complementary", "eliminatory"] = "complementary"
     minimum_level: Literal["intern", "junior", "mid", "senior", "lead", "principal", "director"] | None = None
     minimum_years: Decimal | None = Field(default=None, ge=0, le=80)
     weight: Decimal = Field(default=Decimal("1.00"), ge=0, le=10)

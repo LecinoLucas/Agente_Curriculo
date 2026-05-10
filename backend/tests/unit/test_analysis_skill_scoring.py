@@ -6,7 +6,10 @@ from types import SimpleNamespace
 import pytest
 
 from src.application.services.analysis_service import (
+    _canonical_component_weights,
     _compute_skill_scores,
+    _extract_resume_text_experience_years,
+    _extract_resume_text_skill_names,
     _skill_names_from_extracted_data,
 )
 
@@ -17,6 +20,22 @@ def _row(name: str, *, mandatory: bool = True):
         skill_name=name,
         JobRequiredSkillModel=SimpleNamespace(is_mandatory=mandatory),
     )
+
+
+def _overall_skill_score(job_skills: list, candidate_skills: set[str]) -> Decimal:
+    scores = _compute_skill_scores(job_skills, candidate_skills)
+    mandatory_total = sum(1 for row in job_skills if row.JobRequiredSkillModel.is_mandatory)
+    optional_total = sum(1 for row in job_skills if not row.JobRequiredSkillModel.is_mandatory)
+    weights = _canonical_component_weights(
+        total_mandatory=mandatory_total,
+        total_optional=optional_total,
+    )
+    return (
+        scores["mandatory_score_weighted"] * weights["mandatory"]
+        + scores["optional_score_weighted"] * weights["optional"]
+        + Decimal("100") * weights["experience"]
+        + Decimal("100") * weights["seniority"]
+    ).quantize(Decimal("0.01"))
 
 
 class TestAnalysisSkillScoring:
@@ -76,10 +95,94 @@ class TestAnalysisSkillScoring:
             {skill.lower() for skill in structured_skills},
         )
 
-        assert result["mandatory_matched"] == 3
-        assert result["matched_skill_names"] == ["TypeScript", "Node.js", "SQL Server"]
+        assert result["mandatory_matched"] == 1
+        assert result["matched_skill_names"] == ["Node.js"]
         assert "React Native" in result["missing_skill_names"]
+        assert [item["required"] for item in result["partial_matches"]] == ["TypeScript", "SQL Server"]
+
+    def test_exact_mandatory_match_is_not_degraded_without_context(self):
+        """Exact structured skill keeps full coverage even when evidence context is weak."""
+        result = _compute_skill_scores(
+            [_row("Node.js")],
+            {"node.js"},
+            candidate_skill_context={
+                "node.js": {"confidence": "medium", "has_context": False, "source": "skill_mention"},
+            },
+            weaken_uncontextualized=True,
+        )
+
+        assert result["mandatory_score_weighted"] == Decimal("100.00")
+        assert result["mandatory_matched"] == 1
         assert result["partial_matches"] == []
+        assert result["weak_evidence_required_skills"] == []
+        evidence = result["skill_evidence_details"][0]
+        assert evidence["match_type"] == "exact"
+        assert evidence["coverage"] == 1.0
+        assert evidence["evidence_strength"] == "weak"
+        assert evidence["context_missing"] is True
+
+    def test_keyword_only_skills_are_weakened_vs_contextual_evidence(self):
+        """Keyword stuffing without context must score below contextual experience."""
+        job_skills = [_row("SQL", mandatory=True), _row("Python", mandatory=True)]
+        candidate_skills = {"sql", "python"}
+
+        weak_result = _compute_skill_scores(
+            job_skills,
+            candidate_skills,
+            candidate_skill_context={
+                "sql": {"confidence": "low", "has_context": False, "source": "keyword_fallback"},
+                "python": {"confidence": "low", "has_context": False, "source": "keyword_fallback"},
+            },
+            weaken_uncontextualized=True,
+        )
+        strong_result = _compute_skill_scores(
+            job_skills,
+            candidate_skills,
+            candidate_skill_context={
+                "sql": {"confidence": "high", "has_context": True, "source": "experience"},
+                "python": {"confidence": "high", "has_context": True, "source": "experience"},
+            },
+            weaken_uncontextualized=True,
+        )
+
+        assert weak_result["mandatory_score_weighted"] < strong_result["mandatory_score_weighted"]
+        assert weak_result["mandatory_matched"] < strong_result["mandatory_matched"]
+        assert "SQL" in weak_result["weak_evidence_required_skills"]
+        assert "Python" in weak_result["weak_evidence_required_skills"]
+
+    def test_keyword_fallback_exact_term_is_still_weakened(self):
+        """Loose keyword fallback must not become full exact evidence."""
+        result = _compute_skill_scores(
+            [_row("Node.js", mandatory=True)],
+            {"node.js"},
+            candidate_skill_context={
+                "node.js": {"confidence": "low", "has_context": False, "source": "keyword_fallback"},
+            },
+            weaken_uncontextualized=True,
+        )
+
+        assert result["mandatory_matched"] == 0
+        assert result["mandatory_score_weighted"] == Decimal("55.00")
+        assert result["partial_matches"][0]["required"] == "Node.js"
+        assert result["partial_matches"][0]["weak_evidence"] is True
+
+    def test_typescript_to_javascript_skill_mention_keeps_strong_equivalence(self):
+        """Explicit skill mention with strong equivalence should keep mandatory coverage."""
+        result = _compute_skill_scores(
+            [_row("JavaScript", mandatory=True)],
+            {"typescript"},
+            candidate_skill_context={
+                "typescript": {"confidence": "medium", "has_context": False, "source": "skill_mention"},
+            },
+            weaken_uncontextualized=True,
+        )
+
+        assert result["mandatory_matched"] == 1
+        assert "JavaScript" in result["matched_skill_names"]
+        assert "JavaScript" not in result["missing_skill_names"]
+        assert result["mandatory_score_weighted"] >= Decimal("85")
+        assert result["partial_matches"] == []
+        assert result["mandatory_strong_coverage"] == Decimal("100.00")
 
     def test_protheus_partial_match_sap_mm_real_score(self):
         """Test 2: Protheus partially matches SAP MM in real score."""
@@ -179,6 +282,146 @@ class TestAnalysisSkillScoringEdgeCases:
         assert result["optional_matched"] == 1
         # Strong coverage only counts mandatory
         assert result["mandatory_strong_coverage"] == Decimal("0")
+
+    def test_strong_equivalence_satisfies_mandatory_even_with_weak_context(self):
+        """Strong canonical equivalence should count as mandatory ok."""
+        result = _compute_skill_scores(
+            [_row("SQL", mandatory=True)],
+            {"postgresql"},
+            candidate_skill_context={
+                "postgresql": {"confidence": "medium", "has_context": False, "source": "skill_mention"},
+            },
+            weaken_uncontextualized=True,
+        )
+
+        assert result["mandatory_matched"] == 1
+        assert result["mandatory_strong_coverage"] == Decimal("100.00")
+        assert result["mandatory_score_weighted"] >= Decimal("85")
+        assert "SQL" in result["matched_skill_names"]
+        assert "SQL" not in result["missing_skill_names"]
+        assert result["partial_matches"] == []
+        evidence = result["skill_evidence_details"][0]
+        assert evidence["equivalence_strength"] == "strong"
+        assert evidence["fulfills_requirement"] is True
+        assert evidence["weak_evidence"] is False
+
+    def test_keyword_fallback_strong_equivalence_does_not_satisfy_mandatory(self):
+        """Loose keyword fallback cannot satisfy a mandatory skill via equivalence alone."""
+        result = _compute_skill_scores(
+            [_row("SQL", mandatory=True)],
+            {"postgresql"},
+            candidate_skill_context={
+                "postgresql": {"confidence": "low", "has_context": False, "source": "keyword_fallback"},
+            },
+            weaken_uncontextualized=True,
+        )
+
+        assert result["mandatory_matched"] == 0
+        assert "SQL" in result["missing_skill_names"]
+        assert result["partial_matches"][0]["required"] == "SQL"
+        evidence = result["skill_evidence_details"][0]
+        assert evidence["equivalence_strength"] == "strong"
+        assert evidence["fulfills_requirement"] is False
+        assert evidence["weak_evidence"] is True
+
+    def test_partial_or_generic_match_does_not_satisfy_mandatory(self):
+        """Broad generic matches must remain partial, not mandatory ok."""
+        result = _compute_skill_scores(
+            [_row("Python", mandatory=True)],
+            {"node.js"},
+            candidate_skill_context={
+                "node.js": {"confidence": "medium", "has_context": False, "source": "skill_mention"},
+            },
+            weaken_uncontextualized=True,
+        )
+
+        assert result["mandatory_matched"] == 0
+        assert "Python" in result["missing_skill_names"]
+        assert result["partial_matches"][0]["required"] == "Python"
+
+    def test_candidate_with_mandatory_fit_stays_above_candidate_without_mandatory_fit(self):
+        """Strong mandatory coverage must outrank optional-only profiles."""
+        job_skills = [
+            *[_row(skill, mandatory=True) for skill in ("Python", "JavaScript", "Node.js", "SQL", "Backend", "Frontend")],
+            *[_row(skill, mandatory=False) for skill in (
+                "React", "Docker", "Kubernetes", "CI/CD", "PostgreSQL", "Redis",
+                "GraphQL", "RabbitMQ", "API", "Microservices", "Serverless", "Git",
+                "DevOps", "NoSQL", "API REST", "Testes",
+            )],
+        ]
+
+        strong_mandatory = _overall_skill_score(
+            job_skills,
+            {"python", "javascript", "node.js", "sql", "backend", "frontend", "react", "docker"},
+        )
+        no_mandatory = _overall_skill_score(
+            job_skills,
+            {"react", "docker", "kubernetes", "ci/cd", "postgresql", "redis", "graphql", "rabbitmq"},
+        )
+
+        assert strong_mandatory > no_mandatory
+
+    def test_increasing_optional_list_from_five_to_sixteen_does_not_crush_score(self):
+        """Extra optional requirements past the cap cannot derrubar drasticamente o score."""
+        mandatory_skills = [_row(skill, mandatory=True) for skill in ("Python", "JavaScript", "Node.js", "SQL", "Backend", "Frontend")]
+        job_five_optional = mandatory_skills + [_row(skill, mandatory=False) for skill in ("React", "Docker", "Kubernetes", "CI/CD", "PostgreSQL")]
+        job_sixteen_optional = mandatory_skills + [_row(skill, mandatory=False) for skill in (
+            "React", "Docker", "Kubernetes", "CI/CD", "PostgreSQL", "Redis", "GraphQL", "RabbitMQ",
+            "API", "Microservices", "Serverless", "Git", "DevOps", "NoSQL", "API REST", "Testes",
+        )]
+        candidate_skills = {"python", "javascript", "node.js", "sql", "backend", "frontend", "react", "docker"}
+
+        score_five = _overall_skill_score(job_five_optional, candidate_skills)
+        score_sixteen = _overall_skill_score(job_sixteen_optional, candidate_skills)
+
+        assert score_sixteen >= score_five
+        assert (score_sixteen - score_five) <= Decimal("5.00")
+
+    def test_optional_skills_add_limited_bonus_without_heavy_penalty(self):
+        """Optional requirements should increase score as bonus, not punish by list length."""
+        job_skills = [
+            *[_row(skill, mandatory=True) for skill in ("Python", "JavaScript", "Node.js", "SQL", "Backend", "Frontend")],
+            *[_row(skill, mandatory=False) for skill in (
+                "React", "Docker", "Kubernetes", "CI/CD", "PostgreSQL", "Redis", "GraphQL", "RabbitMQ",
+                "API", "Microservices", "Serverless", "Git", "DevOps", "NoSQL", "API REST", "Testes",
+            )],
+        ]
+
+        mandatory_only = _overall_skill_score(
+            job_skills,
+            {"python", "javascript", "node.js", "sql", "backend", "frontend"},
+        )
+        with_optional_bonus = _overall_skill_score(
+            job_skills,
+            {"python", "javascript", "node.js", "sql", "backend", "frontend", "react", "docker"},
+        )
+
+        assert with_optional_bonus > mandatory_only
+        assert (with_optional_bonus - mandatory_only) <= Decimal("7.00")
+
+    def test_resume_text_fallback_extracts_explicit_backend_and_declared_skills(self):
+        resume_text = (
+            "Nodejs | Typescript | Javascript | SQL | DevOps\n"
+            "Desenvolvimento de back-end\n"
+            "Desenvolvedor backend"
+        )
+        job_skills = [
+            _row("Backend", mandatory=True),
+            _row("JavaScript", mandatory=True),
+            _row("SQL", mandatory=True),
+            _row("Frontend", mandatory=True),
+        ]
+
+        extracted = _extract_resume_text_skill_names(resume_text, job_skills)
+
+        assert extracted == ["Backend", "JavaScript", "SQL"]
+
+    def test_resume_text_fallback_extracts_experience_years_from_duration(self):
+        years = _extract_resume_text_experience_years(
+            "outubro de 2020 - Present (5 anos 7 meses)"
+        )
+
+        assert years == Decimal("5.6")
 
     def test_empty_candidate_skills(self):
         """Empty candidate skills should result in no matches."""

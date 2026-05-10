@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 import sqlalchemy as sa
@@ -793,6 +794,8 @@ class PipelineService:
         # It is read-only here — stage moves never touch it.
         raw_ai_status = row.get("ai_status")
         ai_status = str(raw_ai_status) if raw_ai_status is not None else None
+        raw_job_fit_score = row.get("job_fit_score")
+        job_fit_score = Decimal(str(raw_job_fit_score)) if raw_job_fit_score is not None else None
 
         return JobMatchCandidateResponse(
             candidate_id=row["candidate_id"],
@@ -805,4 +808,5 @@ class PipelineService:
             top_skills=top_skills,
             updated_at=row["updated_at"],
             ai_status=ai_status,  # type: ignore[arg-type]
+            job_fit_score=job_fit_score,
         )

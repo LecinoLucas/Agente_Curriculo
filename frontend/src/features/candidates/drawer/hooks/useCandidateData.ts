@@ -40,9 +40,20 @@ export function useCandidateData({
   }, [rankingSyncTick, candidateActiveJobId, candidateOverview?.candidate.id]);
 
   useEffect(() => {
+    if (!candidateActiveJobId) {
+      setAnalysisResult(null);
+      setAnalysisResultError(null);
+      setAnalysisResultLoading(false);
+      return;
+    }
     const analysisId = candidateOverview?.latest_analysis?.analysis_id;
     const status = candidateOverview?.latest_analysis?.status;
-    if (!analysisId || status !== "completed") return;
+    const analysisJobId = candidateOverview?.latest_analysis?.job_id;
+    if (!analysisId || status !== "completed" || analysisJobId !== candidateActiveJobId) {
+      setAnalysisResult(null);
+      setAnalysisResultLoading(false);
+      return;
+    }
 
     const cached = analysisResultCacheRef.current.get(analysisId);
     if (cached) {
@@ -82,6 +93,7 @@ export function useCandidateData({
     };
   }, [
     candidateOverview?.latest_analysis?.analysis_id,
+    candidateOverview?.latest_analysis?.job_id,
     candidateOverview?.latest_analysis?.status,
     rankingSyncTick,
     candidateActiveJobId,

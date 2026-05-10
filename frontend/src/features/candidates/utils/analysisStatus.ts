@@ -8,12 +8,12 @@ export type CandidateAnalysisSummary = {
   inProgress: boolean;
 };
 
-function matchesActiveJob(
+export function getLatestAnalysisForActiveJob(
   latestAnalysis: CandidateLatestAnalysisOverview | null | undefined,
   activeJobId: string | null,
-): boolean {
-  if (!latestAnalysis || !activeJobId) return false;
-  return latestAnalysis.job_id === activeJobId;
+): CandidateLatestAnalysisOverview | null {
+  if (!latestAnalysis || !activeJobId) return null;
+  return latestAnalysis.job_id === activeJobId ? latestAnalysis : null;
 }
 
 export function buildCandidateAnalysisSummary({
@@ -30,8 +30,8 @@ export function buildCandidateAnalysisSummary({
   pollingAnalysisId: string | null;
 }): CandidateAnalysisSummary {
   const hasActiveJob = Boolean(activeJobId);
-  const latestForActiveJob = matchesActiveJob(latestAnalysis, activeJobId);
-  const latestStatus = latestForActiveJob ? latestAnalysis?.status ?? null : null;
+  const activeJobAnalysis = getLatestAnalysisForActiveJob(latestAnalysis, activeJobId);
+  const latestStatus = activeJobAnalysis?.status ?? null;
 
   if (!hasActiveJob) {
     return {
@@ -67,7 +67,7 @@ export function buildCandidateAnalysisSummary({
     return {
       label: "Falhou",
       detail:
-        latestAnalysis?.failure_reason?.trim() ||
+        activeJobAnalysis?.failure_reason?.trim() ||
         "A última análise não foi concluída. Revise o currículo e tente novamente.",
       tone: "danger",
       actionLabel: "Iniciar análise",

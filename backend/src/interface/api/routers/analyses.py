@@ -18,7 +18,7 @@ from src.application.services.analysis_service import (
 from src.application.services.audit_service import AuditService
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
-from src.domain.exceptions import ValidationException
+from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
@@ -118,6 +118,11 @@ def _handle_analysis_service_error(exc: Exception) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         )
+    if isinstance(exc, NotFoundException):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
     if isinstance(exc, AnalysisNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análise não encontrada")
     if isinstance(exc, AnalysisNotCompletedError):
@@ -188,6 +193,7 @@ async def request_analysis(
     resume_version_id: UUID,
     current_user: CurrentUser,
     job_id: UUID | None = Query(default=None),
+    force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisRequestResponse:
     if job_id is None:
@@ -205,7 +211,7 @@ async def request_analysis(
                 resume_version_id=resume_version_id,
                 requested_by=current_user.id,
                 job_id=job_id,
-                force_reanalyze=False,
+                force_reanalyze=force,
                 priority=5,
             )
         )
@@ -360,10 +366,19 @@ async def match_analysis_to_job(
     analysis_id: UUID,
     job_id: UUID,
     current_user: RecruiterOrAdmin,
+    force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisMatchResponse:
     try:
-        match = await _analysis_service(db).match_to_job(analysis_id, job_id, current_user)
+        service = _analysis_service(db)
+        if force:
+            match = await service.match_completed_analysis_to_job(
+                analysis_id,
+                job_id,
+                force_recompute=True,
+            )
+        else:
+            match = await service.match_to_job(analysis_id, job_id, current_user)
         await db.commit()
         return match
     except Exception as exc:

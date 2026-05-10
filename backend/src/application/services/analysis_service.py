@@ -1,8 +1,9 @@
 import logging
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,25 +11,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Penalidade de sobre-qualificação em senioridade só é aplicada quando
 # a diferença de níveis é >= este limiar (configurável).
 _SENIORITY_PENALTY_THRESHOLD = 2
-_CANONICAL_MANDATORY_WEIGHT = Decimal("0.45")
-_CANONICAL_OPTIONAL_WEIGHT = Decimal("0.15")
+_CANONICAL_PRIORITY_WEIGHT = Decimal("0.50")
+_CANONICAL_COMPLEMENTARY_WEIGHT = Decimal("0.10")
 _CANONICAL_EXPERIENCE_WEIGHT = Decimal("0.20")
 _CANONICAL_SENIORITY_WEIGHT = Decimal("0.10")
 _CANONICAL_AI_WEIGHT = Decimal("0.00")
-_MANDATORY_THRESHOLD = Decimal("60")
-_MANDATORY_SOFT_PENALTY_START = Decimal("80")
-_MANDATORY_SOFT_PENALTY_MAX = Decimal("12")
+_OPTIONAL_BONUS_CAP_SLOTS = 5
 _NO_REQUIREMENTS_SCORE_CAP = Decimal("44")
 _STRONG_MATCH_THRESHOLD = Decimal("85")
 _GOOD_MATCH_THRESHOLD = Decimal("70")
 _POTENTIAL_THRESHOLD = Decimal("55")
+_MANDATORY_THRESHOLD = Decimal("60")
+_MANDATORY_SOFT_PENALTY_START = Decimal("80")
+_MANDATORY_SOFT_PENALTY_MAX = Decimal("0")
 _MANDATORY_STRONG_COVERAGE_STRONG_MATCH = Decimal("80")
 _MANDATORY_STRONG_COVERAGE_GOOD_MATCH = Decimal("60")
-_MANDATORY_STRONG_COVERAGE_CAP_THRESHOLD = Decimal("50")
-_MANDATORY_STRONG_COVERAGE_CAP_SCORE = Decimal("54")
+_MANDATORY_STRONG_COVERAGE_CAP_THRESHOLD = Decimal("0")
+_MANDATORY_STRONG_COVERAGE_CAP_SCORE = Decimal("100")
 _MINIMUM_DOMAIN_FIT_CAP_SCORE = Decimal("49")
 _LOW_PROFILE_COMPLETENESS_THRESHOLD = Decimal("0.60")
-_SCORE_VERSION_EQUIVALENCE = "v3.1-equivalence"
+_SCORE_VERSION_EQUIVALENCE = "v4-priority-level"
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +43,16 @@ from src.application.services.job_profiler_service import (
     build_job_profile_hash,
     job_skill_from_row,
 )
+from src.application.services.job_skill_priority_service import (
+    is_complementary_skill,
+    is_eliminatory_skill,
+    is_priority_skill,
+)
 from src.application.services.skill_requirements_service import validate_skill_requirements
 from src.application.services.skill_equivalence_service import SkillEquivalenceService
 from src.application.services.skill_text_normalizer import (
+    contains_whole_phrase,
+    normalize_skill_name,
     normalize_skill_text,
 )
 from src.application.services.strict_payload import require_key
@@ -137,129 +146,356 @@ def _skill_matches_exact_only(
 def _compute_skill_scores(
     job_skill_rows: list,
     all_candidate_skills: set[str],
+    *,
+    candidate_skill_context: dict[str, dict[str, object]] | None = None,
+    weaken_uncontextualized: bool = False,
 ) -> dict:
     """Compute weighted skill scores using equivalence service.
 
     Uses exact normalized equality and SkillEquivalenceService for all equivalence logic.
 
-    Returns dict with:
-    - mandatory_score_weighted: Decimal (sum of scores / total * 100)
-    - optional_score_weighted: Decimal
-    - mandatory_strong_coverage: Decimal (% of skills with score >= 0.8)
-    - mandatory_matched: int (count with score >= 0.8)
-    - optional_matched: int
+    Returns dict with canonical priority/complementary/eliminatory breakdown.
+    Legacy mandatory/optional keys are emitted only as aliases.
     - matched_skill_names: list[str] (skills with score >= 0.8)
     - missing_skill_names: list[str] (skills with score == 0)
     - partial_matches: list[dict] (0 < score < 0.8)
-    - has_any_strong_mandatory: bool (at least one exact/strong match)
+    - has_any_strong_priority: bool (at least one exact/strong match)
+    - weak_evidence_priority_skills: list[str] (priority skills downgraded due weak context)
     """
     equivalence_service = SkillEquivalenceService()
-    mandatory_skills = [row for row in job_skill_rows if row.JobRequiredSkillModel.is_mandatory]
-    optional_skills = [row for row in job_skill_rows if not row.JobRequiredSkillModel.is_mandatory]
+    priority_skills = [
+        row
+        for row in job_skill_rows
+        if is_priority_skill(row.JobRequiredSkillModel.priority_level)
+    ]
+    complementary_skills = [
+        row
+        for row in job_skill_rows
+        if is_complementary_skill(row.JobRequiredSkillModel.priority_level)
+    ]
+    eliminatory_skills = [
+        row
+        for row in job_skill_rows
+        if is_eliminatory_skill(row.JobRequiredSkillModel.priority_level)
+    ]
 
-    mandatory_scores: list[Decimal] = []
-    optional_scores: list[Decimal] = []
+    priority_scores: list[Decimal] = []
+    complementary_scores: list[Decimal] = []
+    eliminatory_scores: list[Decimal] = []
     partial_matches: list[dict] = []
     matched_skill_names: list[str] = []
+    matched_priority_skill_names: list[str] = []
+    matched_complementary_skill_names: list[str] = []
+    matched_eliminatory_skill_names: list[str] = []
     missing_skill_names: list[str] = []
-    has_any_strong_mandatory = False
+    missing_complementary_skill_names: list[str] = []
+    missing_eliminatory_skill_names: list[str] = []
+    has_any_strong_priority = False
+    weak_evidence_priority_skills: list[str] = []
+    skill_evidence_details: list[dict] = []
 
-    # Process mandatory skills
-    for job_skill_row in mandatory_skills:
-        job_skill_name = job_skill_row.skill_name
+    def _fulfills_required_skill(
+        *,
+        match_type: str,
+        weak_evidence: bool,
+        best_evidence: object | None,
+    ) -> bool:
+        if match_type == "exact":
+            return not weak_evidence
+        evidence_strength = str(getattr(best_evidence, "strength", "") or "").strip().lower()
+        return evidence_strength == "strong" and not weak_evidence
+
+    def _apply_context_guardrail(
+        score: Decimal,
+        candidate_skill_name: str | None,
+        *,
+        match_type: str,
+        best_evidence: object | None = None,
+    ) -> tuple[Decimal, bool, str, bool]:
+        if not weaken_uncontextualized or score <= Decimal("0"):
+            return score, False, "strong", False
+        if not candidate_skill_name:
+            return score, False, "unknown", False
+
+        context_map = candidate_skill_context or {}
+        normalized = normalize_skill_text(candidate_skill_name)
+        context = context_map.get(normalized, {})
+        has_context = bool(context.get("has_context"))
+        confidence = str(context.get("confidence") or "medium").strip().lower()
+        source = str(context.get("source") or "").strip().lower()
+        context_missing = not has_context
+        equivalence_strength = str(getattr(best_evidence, "strength", "") or "").strip().lower()
+
+        if match_type == "exact" and source != "keyword_fallback":
+            evidence_strength = "strong" if has_context else "weak"
+            if confidence == "low":
+                evidence_strength = "weak"
+            return score, False, evidence_strength, context_missing
+
+        if (
+            match_type in {"relation", "group"}
+            and equivalence_strength == "strong"
+            and source == "skill_mention"
+            and confidence != "low"
+        ):
+            return score, False, "strong", context_missing
+
+        multiplier = Decimal("1.00")
+        if source == "keyword_fallback":
+            multiplier = Decimal("0.55")
+        elif not has_context and match_type == "relation":
+            multiplier = Decimal("0.85")
+        elif not has_context:
+            multiplier = Decimal("0.65")
+        elif confidence == "low":
+            multiplier = Decimal("0.85")
+        elif confidence == "medium":
+            multiplier = Decimal("0.95")
+
+        evidence_strength = "weak" if multiplier < Decimal("0.80") else "medium"
+        if multiplier >= Decimal("1.00"):
+            return score, False, "strong", context_missing
+        return (score * multiplier).quantize(Decimal("0.0001")), True, evidence_strength, context_missing
+
+    def _resolve_best_match(job_skill_name: str) -> tuple[Decimal, str | None, object | None, str]:
         best_score = Decimal("0.0")
         best_candidate = None
         best_evidence = None
+        best_match_type = "none"
 
         for candidate_skill in all_candidate_skills:
             if _skill_matches_exact_only(candidate_skill, job_skill_name):
-                best_score = Decimal("1.0")
-                best_candidate = candidate_skill
-                best_evidence = None
-                break
+                return Decimal("1.0"), candidate_skill, None, "exact"
 
-            # Use SkillEquivalenceService for ALL equivalence scoring
             evidence = equivalence_service.match_skill(candidate_skill, job_skill_name)
             if evidence.matched and evidence.score > float(best_score):
                 best_score = Decimal(str(evidence.score))
                 best_candidate = candidate_skill
                 best_evidence = evidence
+                best_match_type = "relation" if evidence.source == "relation" else "group"
 
-        mandatory_scores.append(best_score)
+        return best_score, best_candidate, best_evidence, best_match_type
 
-        # Track matched skills (score >= 0.8)
-        if best_score >= Decimal("0.8"):
-            matched_skill_names.append(job_skill_name)
-            has_any_strong_mandatory = True
+    def _append_partial_match(
+        *,
+        job_skill_name: str,
+        best_candidate: str | None,
+        adjusted_score: Decimal,
+        best_evidence: object | None,
+        weak_evidence: bool,
+    ) -> None:
+        if float(adjusted_score) <= 0 or float(adjusted_score) >= 0.8:
+            return
+        partial_matches.append({
+            "required": job_skill_name,
+            "candidate": best_candidate or "",
+            "score": float(adjusted_score),
+            "reason": best_evidence.reason if best_evidence else f'"{best_candidate}" parcialmente atende "{job_skill_name}".',
+            "source": best_evidence.source if best_evidence else "none",
+            "weak_evidence": weak_evidence,
+        })
 
-        # Track missing skills (score == 0)
-        if best_score == Decimal("0.0"):
-            missing_skill_names.append(job_skill_name)
+    # Process priority skills
+    for job_skill_row in priority_skills:
+        job_skill_name = job_skill_row.skill_name
+        best_score, best_candidate, best_evidence, best_match_type = _resolve_best_match(job_skill_name)
 
-        # Track partial matches (0 < score < 0.8)
-        if float(best_score) > 0 and float(best_score) < 0.8:
-            partial_matches.append({
+        adjusted_score, weak_evidence, evidence_strength, context_missing = _apply_context_guardrail(
+            best_score,
+            best_candidate,
+            match_type=best_match_type,
+            best_evidence=best_evidence,
+        )
+        fulfills_requirement = _fulfills_required_skill(
+            match_type=best_match_type,
+            weak_evidence=weak_evidence,
+            best_evidence=best_evidence,
+        )
+        priority_scores.append(adjusted_score)
+        if weak_evidence:
+            weak_evidence_priority_skills.append(job_skill_name)
+        if best_candidate and adjusted_score > Decimal("0"):
+            skill_evidence_details.append({
                 "required": job_skill_name,
-                "candidate": best_candidate or "",
-                "score": float(best_score),
-                "reason": best_evidence.reason if best_evidence else f'"{best_candidate}" parcialmente atende "{job_skill_name}".',
-                "source": best_evidence.source if best_evidence else "none",
+                "candidate": best_candidate,
+                "match_type": best_match_type,
+                "coverage": float(adjusted_score),
+                "raw_coverage": float(best_score),
+                "evidence_strength": evidence_strength,
+                "context_missing": context_missing,
+                "source": best_evidence.source if best_evidence else "exact",
+                "weak_evidence": weak_evidence,
+                "equivalence_strength": getattr(best_evidence, "strength", "exact") if best_evidence else "exact",
+                "fulfills_requirement": fulfills_requirement,
+                "priority_level": "priority",
             })
 
-    # Process optional skills
-    for job_skill_row in optional_skills:
-        job_skill_name = job_skill_row.skill_name
-        best_score = Decimal("0.0")
-        best_candidate = None
-
-        for candidate_skill in all_candidate_skills:
-            if _skill_matches_exact_only(candidate_skill, job_skill_name):
-                best_score = Decimal("1.0")
-                best_candidate = candidate_skill
-                break
-
-            # Use SkillEquivalenceService for ALL equivalence scoring
-            evidence = equivalence_service.match_skill(candidate_skill, job_skill_name)
-            if evidence.matched and evidence.score > float(best_score):
-                best_score = Decimal(str(evidence.score))
-                best_candidate = candidate_skill
-
-        optional_scores.append(best_score)
-
-        # Track matched optional skills (score >= 0.8)
-        if best_score >= Decimal("0.8"):
+        if fulfills_requirement:
             matched_skill_names.append(job_skill_name)
+            matched_priority_skill_names.append(job_skill_name)
+            has_any_strong_priority = True
+
+        if not fulfills_requirement:
+            missing_skill_names.append(job_skill_name)
+
+        _append_partial_match(
+            job_skill_name=job_skill_name,
+            best_candidate=best_candidate,
+            adjusted_score=adjusted_score,
+            best_evidence=best_evidence,
+            weak_evidence=weak_evidence,
+        )
+
+    # Process complementary skills
+    for job_skill_row in complementary_skills:
+        job_skill_name = job_skill_row.skill_name
+        best_score, best_candidate, best_evidence, best_match_type = _resolve_best_match(job_skill_name)
+
+        adjusted_score, _, evidence_strength, context_missing = _apply_context_guardrail(
+            best_score,
+            best_candidate,
+            match_type=best_match_type,
+            best_evidence=best_evidence,
+        )
+        complementary_scores.append(adjusted_score)
+        if best_candidate and adjusted_score > Decimal("0"):
+            skill_evidence_details.append({
+                "required": job_skill_name,
+                "candidate": best_candidate,
+                "match_type": best_match_type,
+                "coverage": float(adjusted_score),
+                "raw_coverage": float(best_score),
+                "evidence_strength": evidence_strength,
+                "context_missing": context_missing,
+                "source": "exact" if best_match_type == "exact" else "equivalence",
+                "equivalence_strength": getattr(best_evidence, "strength", "exact") if best_evidence else "exact",
+                "priority_level": "complementary",
+            })
+
+        if adjusted_score >= Decimal("0.8"):
+            matched_skill_names.append(job_skill_name)
+            matched_complementary_skill_names.append(job_skill_name)
+
+        if adjusted_score == Decimal("0.0"):
+            missing_complementary_skill_names.append(job_skill_name)
+
+    # Process eliminatory skills
+    for job_skill_row in eliminatory_skills:
+        job_skill_name = job_skill_row.skill_name
+        best_score, best_candidate, best_evidence, best_match_type = _resolve_best_match(job_skill_name)
+        adjusted_score, weak_evidence, evidence_strength, context_missing = _apply_context_guardrail(
+            best_score,
+            best_candidate,
+            match_type=best_match_type,
+            best_evidence=best_evidence,
+        )
+        fulfills_requirement = _fulfills_required_skill(
+            match_type=best_match_type,
+            weak_evidence=weak_evidence,
+            best_evidence=best_evidence,
+        )
+        eliminatory_scores.append(adjusted_score)
+        if best_candidate and adjusted_score > Decimal("0"):
+            skill_evidence_details.append({
+                "required": job_skill_name,
+                "candidate": best_candidate,
+                "match_type": best_match_type,
+                "coverage": float(adjusted_score),
+                "raw_coverage": float(best_score),
+                "evidence_strength": evidence_strength,
+                "context_missing": context_missing,
+                "source": best_evidence.source if best_evidence else "exact",
+                "weak_evidence": weak_evidence,
+                "equivalence_strength": getattr(best_evidence, "strength", "exact") if best_evidence else "exact",
+                "fulfills_requirement": fulfills_requirement,
+                "priority_level": "eliminatory",
+            })
+        if fulfills_requirement:
+            matched_skill_names.append(job_skill_name)
+            matched_eliminatory_skill_names.append(job_skill_name)
+        else:
+            missing_eliminatory_skill_names.append(job_skill_name)
+        _append_partial_match(
+            job_skill_name=job_skill_name,
+            best_candidate=best_candidate,
+            adjusted_score=adjusted_score,
+            best_evidence=best_evidence,
+            weak_evidence=weak_evidence,
+        )
 
     # Compute weighted scores
-    mandatory_score_weighted = (
-        sum(mandatory_scores) / Decimal(len(mandatory_scores)) * Decimal("100")
-        if mandatory_scores
+    priority_score_weighted = (
+        sum(priority_scores) / Decimal(len(priority_scores)) * Decimal("100")
+        if priority_scores
         else Decimal("0")
     ).quantize(Decimal("0.01"))
 
-    optional_score_weighted = (
-        sum(optional_scores) / Decimal(len(optional_scores)) * Decimal("100")
-        if optional_scores
+    complementary_score_raw_weighted = (
+        sum(complementary_scores) / Decimal(len(complementary_scores)) * Decimal("100")
+        if complementary_scores
         else Decimal("0")
     ).quantize(Decimal("0.01"))
 
-    # Compute strong coverage (% with score >= 0.8)
-    mandatory_strong_coverage = (
-        Decimal(sum(1 for s in mandatory_scores if s >= Decimal("0.8"))) / Decimal(len(mandatory_scores)) * Decimal("100")
-        if mandatory_scores
+    complementary_bonus_cap_slots = (
+        min(len(complementary_scores), _OPTIONAL_BONUS_CAP_SLOTS)
+        if complementary_scores
+        else 0
+    )
+    complementary_bonus_scores = (
+        sorted((score for score in complementary_scores if score > Decimal("0")), reverse=True)[:complementary_bonus_cap_slots]
+        if complementary_bonus_cap_slots > 0
+        else []
+    )
+    complementary_score_weighted = (
+        sum(complementary_bonus_scores) / Decimal(complementary_bonus_cap_slots) * Decimal("100")
+        if complementary_bonus_cap_slots > 0
+        else Decimal("0")
+    ).quantize(Decimal("0.01"))
+
+    priority_strong_coverage = (
+        Decimal(len(matched_priority_skill_names)) / Decimal(len(priority_scores)) * Decimal("100")
+        if priority_scores
         else Decimal("100")
     ).quantize(Decimal("0.01"))
 
+    eliminatory_score_weighted = (
+        sum(eliminatory_scores) / Decimal(len(eliminatory_scores)) * Decimal("100")
+        if eliminatory_scores
+        else Decimal("0")
+    ).quantize(Decimal("0.01"))
+
     return {
-        "mandatory_score_weighted": mandatory_score_weighted,
-        "optional_score_weighted": optional_score_weighted,
-        "mandatory_strong_coverage": mandatory_strong_coverage,
-        "mandatory_matched": sum(1 for s in mandatory_scores if s >= Decimal("0.8")),
-        "optional_matched": sum(1 for s in optional_scores if s >= Decimal("0.8")),
+        "priority_score_weighted": priority_score_weighted,
+        "complementary_score_weighted": complementary_score_weighted,
+        "complementary_score_raw_weighted": complementary_score_raw_weighted,
+        "priority_strong_coverage": priority_strong_coverage,
+        "priority_matched": len(matched_priority_skill_names),
+        "complementary_matched": sum(1 for s in complementary_scores if s >= Decimal("0.8")),
+        "eliminatory_matched": len(matched_eliminatory_skill_names),
+        "matched_priority_skill_names": matched_priority_skill_names,
+        "matched_complementary_skill_names": matched_complementary_skill_names,
+        "matched_eliminatory_skill_names": matched_eliminatory_skill_names,
+        "missing_complementary_skill_names": missing_complementary_skill_names,
+        "missing_eliminatory_skill_names": missing_eliminatory_skill_names,
+        "complementary_bonus_cap_slots": complementary_bonus_cap_slots,
         "matched_skill_names": matched_skill_names,
         "missing_skill_names": missing_skill_names,
         "partial_matches": partial_matches,
-        "has_any_strong_mandatory": has_any_strong_mandatory,
+        "has_any_strong_priority": has_any_strong_priority,
+        "weak_evidence_priority_skills": weak_evidence_priority_skills,
+        "skill_evidence_details": skill_evidence_details,
+        "eliminatory_score_weighted": eliminatory_score_weighted,
+        "mandatory_score_weighted": priority_score_weighted,
+        "optional_score_weighted": complementary_score_weighted,
+        "optional_score_raw_weighted": complementary_score_raw_weighted,
+        "mandatory_strong_coverage": priority_strong_coverage,
+        "mandatory_matched": len(matched_priority_skill_names),
+        "optional_matched": sum(1 for s in complementary_scores if s >= Decimal("0.8")),
+        "matched_mandatory_skill_names": matched_priority_skill_names,
+        "matched_optional_skill_names": matched_complementary_skill_names,
+        "missing_optional_skill_names": missing_complementary_skill_names,
+        "optional_bonus_cap_slots": complementary_bonus_cap_slots,
+        "weak_evidence_required_skills": weak_evidence_priority_skills,
     }
 
 
@@ -376,109 +612,6 @@ def _validate_experience(
     return ValidationResult(status="pass")
 
 
-def _evaluate_deal_breaker(
-    deal_breaker: dict,
-    candidate_result,
-) -> tuple[bool, str | None]:
-    """Evaluate if candidate triggers a deal-breaker criterion.
-
-    Deal-breaker rejects candidates that MATCH a specific criteria.
-
-    Structure: {
-        "field": "seniority_level",
-        "operator": "equals",  # equals | not_equals | contains | in
-        "value": "intern",  # single value or list for 'in' operator
-        "reason": "Vaga não aceita nível junior ou menos",
-        "is_active": true
-    }
-
-    Operators:
-    - equals: reject if candidate_value == value (case-insensitive for strings)
-    - not_equals: reject if candidate_value != value (case-insensitive for strings)
-    - contains: reject if value is in candidate_value (for lists/strings)
-    - in: reject if candidate_value is in values[] (for lists)
-
-    Returns:
-        (breaker_hit, reason) - True if deal-breaker is triggered, with reason
-    """
-    if not deal_breaker.get("is_active", True):
-        return False, None
-
-    field = deal_breaker.get("field")
-    operator = deal_breaker.get("operator", "equals")  # Default to equals for backward compat
-    value = deal_breaker.get("value")
-    reason = deal_breaker.get("reason", f"Não atende requisito: {field}")
-
-    if not field or value is None:
-        return False, None
-
-    # Prefer explicit persisted fields, but fall back to extracted_data when
-    # the matching phase is running from an AnalysisResultModel loaded from DB.
-    candidate_value = getattr(candidate_result, field, None)
-    if candidate_value is None:
-        extracted = getattr(candidate_result, "extracted_data", None) or {}
-        candidate_section = extracted.get("candidate") if isinstance(extracted, dict) else None
-        if isinstance(candidate_section, dict) and field in candidate_section:
-            candidate_value = candidate_section.get(field)
-        elif isinstance(extracted, dict):
-            candidate_value = extracted.get(field)
-
-    # No explicit data = no deal-breaker hit
-    if candidate_value is None:
-        return False, None
-
-    # Apply operator logic
-    if operator == "equals":
-        # Reject if candidate equals the prohibited value
-        if isinstance(candidate_value, str) and isinstance(value, str):
-            if candidate_value.lower() == value.lower():
-                return True, reason
-        elif candidate_value == value:
-            return True, reason
-
-    elif operator == "not_equals":
-        # Reject if candidate does NOT equal the required value
-        if isinstance(candidate_value, str) and isinstance(value, str):
-            if candidate_value.lower() != value.lower():
-                return True, f"{reason} (condição proibida: {candidate_value})"
-        elif candidate_value != value:
-            return True, f"{reason} (condição proibida: {candidate_value})"
-
-    elif operator == "contains":
-        # Reject if value appears in candidate_value (list or string)
-        if isinstance(candidate_value, list):
-            # Normalize strings in list for comparison
-            normalized_list = [
-                str(v).lower() if isinstance(v, str) else v
-                for v in candidate_value
-            ]
-            check_value = value.lower() if isinstance(value, str) else value
-            if check_value in normalized_list:
-                return True, reason
-        elif isinstance(candidate_value, str):
-            if isinstance(value, str) and value.lower() in candidate_value.lower():
-                return True, reason
-
-    elif operator == "in":
-        # Reject if candidate_value is in the values list
-        if not isinstance(value, list):
-            return False, None
-
-        if isinstance(candidate_value, str):
-            # Case-insensitive comparison for strings
-            normalized_values = [
-                v.lower() if isinstance(v, str) else v for v in value
-            ]
-            if candidate_value.lower() in normalized_values:
-                return True, reason
-        else:
-            # Direct comparison for non-strings
-            if candidate_value in value:
-                return True, reason
-
-    return False, None
-
-
 def _calculate_experience_score(
     candidate_years: Decimal | None,
     required_years: Decimal | None,
@@ -537,8 +670,8 @@ def _canonical_component_weights(
     total_mandatory: int,
     total_optional: int,
 ) -> dict[str, Decimal]:
-    w_mand = _CANONICAL_MANDATORY_WEIGHT
-    w_opt = _CANONICAL_OPTIONAL_WEIGHT
+    w_mand = _CANONICAL_PRIORITY_WEIGHT
+    w_opt = _CANONICAL_COMPLEMENTARY_WEIGHT
     w_exp = _CANONICAL_EXPERIENCE_WEIGHT
     w_sen = _CANONICAL_SENIORITY_WEIGHT
 
@@ -689,6 +822,155 @@ def _skill_names_from_extracted_data(extracted_data: dict | None) -> list[str]:
         and str(skill.get("name", "")).strip()
         and _looks_like_structured_skill_name(str(skill.get("name", "")).strip())
     ])
+
+
+def _resume_text_skill_search_terms(skill_name: str) -> set[str]:
+    normalized = normalize_skill_name(skill_name)
+    if not normalized:
+        return set()
+
+    terms = {
+        normalized,
+        normalize_skill_text(skill_name),
+        normalized.replace(".", ""),
+    }
+
+    alias_map = {
+        "backend": {
+            "backend",
+            "back end",
+            "back-end",
+            "desenvolvimento de back end",
+            "desenvolvedor backend",
+        },
+        "frontend": {
+            "frontend",
+            "front end",
+            "front-end",
+            "desenvolvimento de front end",
+            "desenvolvedor frontend",
+        },
+        "node.js": {"node.js", "nodejs"},
+        "javascript": {"javascript"},
+        "sql": {"sql"},
+        "typescript": {"typescript", "type script"},
+    }
+    terms.update(alias_map.get(normalized, set()))
+    return {
+        normalize_skill_name(term)
+        for term in terms
+        if normalize_skill_name(term)
+    }
+
+
+def _extract_resume_text_skill_names(
+    resume_text: str | None,
+    job_skill_rows: list,
+) -> list[str]:
+    if not resume_text or not isinstance(resume_text, str):
+        return []
+
+    normalized_text = normalize_skill_name(resume_text)
+    if not normalized_text:
+        return []
+
+    matched: list[str] = []
+    for row in job_skill_rows:
+        skill_name = str(getattr(row, "skill_name", "") or "").strip()
+        if not skill_name:
+            continue
+        for term in _resume_text_skill_search_terms(skill_name):
+            if contains_whole_phrase(term, normalized_text):
+                matched.append(skill_name)
+                break
+    return _unique_skill_names(matched)
+
+
+def _extract_resume_text_experience_years(resume_text: str | None) -> Decimal | None:
+    if not resume_text or not isinstance(resume_text, str):
+        return None
+
+    normalized_text = normalize_skill_name(resume_text)
+    if not normalized_text:
+        return None
+
+    patterns = [
+        r"\((\d+)\s+anos?(?:\s+(?:e\s+)?(\d+)\s+mes(?:es)?)?\)",
+        r"\((\d+)\s+years?(?:\s+(?:and\s+)?(\d+)\s+months?)?\)",
+        r"(\d+)\s+anos?(?:\s+(?:e\s+)?(\d+)\s+mes(?:es)?)",
+        r"(\d+)\s+years?(?:\s+(?:and\s+)?(\d+)\s+months?)",
+    ]
+
+    durations_in_months: list[int] = []
+    for pattern in patterns:
+        for years_raw, months_raw in re.findall(pattern, normalized_text):
+            years = int(years_raw or 0)
+            months = int(months_raw or 0)
+            total_months = (years * 12) + months
+            if total_months > 0:
+                durations_in_months.append(total_months)
+
+    if not durations_in_months:
+        return None
+
+    return (Decimal(max(durations_in_months)) / Decimal("12")).quantize(Decimal("0.1"))
+
+
+def _build_candidate_skill_context(extracted_data: dict | None) -> dict[str, dict[str, object]]:
+    if not isinstance(extracted_data, dict):
+        return {}
+
+    raw_skills = extracted_data.get("skills")
+    if not isinstance(raw_skills, list):
+        return {}
+
+    experience_terms: set[str] = set()
+    raw_experiences = extracted_data.get("experiences")
+    if isinstance(raw_experiences, list):
+        for exp in raw_experiences:
+            if not isinstance(exp, dict):
+                continue
+            activities = exp.get("activities") or []
+            if isinstance(activities, list):
+                experience_terms.update(
+                    normalize_skill_text(str(item))
+                    for item in activities
+                    if str(item or "").strip()
+                )
+            role = str(exp.get("role") or "").strip()
+            if role:
+                experience_terms.add(normalize_skill_text(role))
+
+    context: dict[str, dict[str, object]] = {}
+    for raw_skill in raw_skills:
+        if not isinstance(raw_skill, dict):
+            continue
+        display_name = str(raw_skill.get("name") or "").strip()
+        if not display_name or not _looks_like_structured_skill_name(display_name):
+            continue
+        normalized_name = normalize_skill_text(display_name)
+        if not normalized_name:
+            continue
+
+        confidence = str(raw_skill.get("confidence") or "medium").strip().lower()
+        evidence = raw_skill.get("evidence") if isinstance(raw_skill.get("evidence"), list) else []
+        evidence_terms = {
+            normalize_skill_text(str(item))
+            for item in evidence
+            if str(item or "").strip()
+        }
+        has_context = bool(evidence_terms) or any(
+            normalized_name in term or term in normalized_name
+            for term in experience_terms
+            if term
+        )
+        context[normalized_name] = {
+            "confidence": confidence,
+            "has_context": has_context,
+            "source": str(raw_skill.get("source") or "skill_mention"),
+        }
+
+    return context
 
 
 def _job_profile_analysis_is_incomplete(profile: JobProfileAnalysisModel) -> bool:
@@ -902,6 +1184,8 @@ class AnalysisService:
         analysis_id: UUID,
         job_id: UUID,
         score_model_version: ScoreModelVersionModel | None = None,
+        *,
+        force_recompute: bool = False,
     ) -> AnalysisMatchResponse:
         analysis = await self._repository.find_completed(analysis_id)
         if analysis is None:
@@ -913,7 +1197,10 @@ class AnalysisService:
 
         details = AnalysisResultDetails(analysis=analysis, result=result)
         return await self._match_details_to_job(
-            details, job_id, score_model_version=score_model_version
+            details,
+            job_id,
+            score_model_version=score_model_version,
+            force_recompute=force_recompute,
         )
 
     async def _log_discard_audit(
@@ -1024,7 +1311,12 @@ class AnalysisService:
         )
         return await self._repository.save_candidate_profile_analysis(profile)
 
-    async def _ensure_job_profile_analysis(self, job: object) -> JobProfileAnalysisModel:
+    async def _ensure_job_profile_analysis(
+        self,
+        job: object,
+        *,
+        force_refresh: bool = False,
+    ) -> JobProfileAnalysisModel:
         job_skills = await self._repository.list_active_job_skill_rows(job.id)
         linked_skills = [job_skill_from_row(row) for row in job_skills]
         signature_hash = build_job_profile_hash(
@@ -1054,11 +1346,25 @@ class AnalysisService:
             prompt_version=prompt_version,
             job_signature_hash=signature_hash,
         )
-        if cached is not None and not _job_profile_analysis_is_incomplete(cached):
+        if (
+            cached is not None
+            and not force_refresh
+            and not _job_profile_analysis_is_incomplete(cached)
+        ):
             job.job_profile_hash = signature_hash
             job.job_profile_json = dict(cached.raw_response_json)
             await _safe_session_flush(getattr(self._repository, "session", None))
             return cached
+
+        cached_any = cached
+        if cached_any is None:
+            cached_any = await self._repository.find_any_job_profile_analysis_by_signature(
+                job_id=job.id,
+                provider=provider,
+                model_id=model_id,
+                prompt_version=prompt_version,
+                job_signature_hash=signature_hash,
+            )
 
         ai_service = None
         if active_model is not None:
@@ -1067,8 +1373,7 @@ class AnalysisService:
             except UnsupportedAIProviderError:
                 ai_service = None
 
-        profiler_ai = ai_service if cached is None else None
-        profile = await JobProfilerService(ai_service=profiler_ai).generate_profile(
+        profile = await JobProfilerService(ai_service=ai_service).generate_profile(
             job.description or "",
             title=job.title,
             requirements=job.requirements,
@@ -1086,17 +1391,20 @@ class AnalysisService:
         job.job_profile_json = profile.to_dict()
         job.job_profile_hash = signature_hash
 
-        if cached is not None:
-            cached.job_area = profile.area
-            cached.seniority_required = profile.target_level
-            cached.education_required = job.minimum_education_level
-            cached.experience_required = job.minimum_years_experience
-            cached.responsibilities_json = list(profile.responsibilities)
-            cached.raw_response_json = profile.to_dict()
-            cached.is_active = True
-            cached.superseded_at = None
-            await _safe_session_flush(getattr(self._repository, "session", None))
-            return cached
+        if cached_any is not None:
+            was_active = bool(cached_any.is_active)
+            cached_any.job_area = profile.area
+            cached_any.seniority_required = profile.target_level
+            cached_any.education_required = job.minimum_education_level
+            cached_any.experience_required = job.minimum_years_experience
+            cached_any.responsibilities_json = list(profile.responsibilities)
+            cached_any.raw_response_json = profile.to_dict()
+            cached_any.is_active = True
+            cached_any.superseded_at = None
+            if was_active:
+                await _safe_session_flush(getattr(self._repository, "session", None))
+                return cached_any
+            return await self._repository.save_job_profile_analysis(cached_any)
 
         record = JobProfileAnalysisModel(
             job_id=job.id,
@@ -1122,6 +1430,8 @@ class AnalysisService:
         details: AnalysisResultDetails,
         job_id: UUID,
         score_model_version: ScoreModelVersionModel | None = None,
+        *,
+        force_recompute: bool = False,
     ) -> AnalysisMatchResponse:
         analysis_id = details.analysis.id
         result = details.result
@@ -1134,7 +1444,10 @@ class AnalysisService:
                 analysis=details.analysis,
                 result=result,
             )
-            job_profile_analysis = await self._ensure_job_profile_analysis(job)
+            job_profile_analysis = await self._ensure_job_profile_analysis(
+                job,
+                force_refresh=force_recompute,
+            )
         except Exception:
             logger.exception(
                 "profile_analysis.ensure_failed",
@@ -1146,20 +1459,33 @@ class AnalysisService:
             raise
 
         persisted_job_skills = await self._repository.list_active_job_skill_rows(job_id)
-        has_structured_requirements = _job_has_structured_requirements(
-            total_skills=len(persisted_job_skills),
-            seniority_level=job.seniority_level,
-            minimum_years_experience=job.minimum_years_experience,
-            minimum_education_level=job.minimum_education_level,
-            deal_breakers=job.deal_breakers,
-        )
         job_skills = persisted_job_skills
         extracted: dict = result.extracted_data or {}
+        resume_version = await self._repository.find_resume_version(details.analysis.resume_version_id)
+        resume_text = (
+            str(resume_version.extracted_text)
+            if resume_version is not None and isinstance(resume_version.extracted_text, str)
+            else None
+        )
+        candidate_skill_context = _build_candidate_skill_context(extracted)
         candidate_skill_names: set[str] = {
             normalize_skill_text(skill_name)
             for skill_name in _skill_names_from_extracted_data(extracted)
             if normalize_skill_text(skill_name)
         }
+        for skill_name in _extract_resume_text_skill_names(resume_text, job_skills):
+            normalized = normalize_skill_text(skill_name)
+            if not normalized:
+                continue
+            candidate_skill_names.add(normalized)
+            candidate_skill_context.setdefault(
+                normalized,
+                {
+                    "confidence": "medium",
+                    "has_context": True,
+                    "source": "resume_text_fallback",
+                },
+            )
         if candidate_skill_names:
             all_candidate_skills = candidate_skill_names
         else:
@@ -1168,30 +1494,43 @@ class AnalysisService:
                 for kw in (result.keywords or [])
                 if kw and normalize_skill_text(kw)
             }
+            candidate_skill_context = {
+                skill_name: {
+                    "confidence": "low",
+                    "has_context": False,
+                    "source": "keyword_fallback",
+                }
+                for skill_name in all_candidate_skills
+            }
 
-        # Separate mandatory and optional skills for computing totals
-        mandatory_skills = [row for row in job_skills if row.JobRequiredSkillModel.is_mandatory]
-        optional_skills = [row for row in job_skills if not row.JobRequiredSkillModel.is_mandatory]
+        priority_skills = [
+            row for row in job_skills if is_priority_skill(row.JobRequiredSkillModel.priority_level)
+        ]
+        complementary_skills = [
+            row for row in job_skills if is_complementary_skill(row.JobRequiredSkillModel.priority_level)
+        ]
+        eliminatory_skills = [
+            row for row in job_skills if is_eliminatory_skill(row.JobRequiredSkillModel.priority_level)
+        ]
 
         # Compute skill scores using equivalence service
-        skill_scores = _compute_skill_scores(job_skills, all_candidate_skills)
-        mandatory_matched = skill_scores["mandatory_matched"]
-        optional_matched = skill_scores["optional_matched"]
+        skill_scores = _compute_skill_scores(
+            job_skills,
+            all_candidate_skills,
+            candidate_skill_context=candidate_skill_context,
+            weaken_uncontextualized=True,
+        )
+        priority_matched = skill_scores["priority_matched"]
+        complementary_matched = skill_scores["complementary_matched"]
+        eliminatory_matched = skill_scores["eliminatory_matched"]
         matched_skill_names = skill_scores["matched_skill_names"]
         missing_skill_names = skill_scores["missing_skill_names"]
         partial_matches = skill_scores["partial_matches"]
+        weak_evidence_priority_skills = skill_scores["weak_evidence_priority_skills"]
 
-        def _is_bonus(cand_skill: str) -> bool:
-            """Check if candidate skill is not a job requirement (bonus skill)."""
-            for job_row in job_skills:
-                if _skill_matches(cand_skill, job_row.skill_name):
-                    return False
-            return True
-
-        bonus_skill_names = sorted(s for s in all_candidate_skills if s and _is_bonus(s))
-
-        total_mandatory = len(mandatory_skills)
-        total_optional = len(optional_skills)
+        total_priority = len(priority_skills)
+        total_complementary = len(complementary_skills)
+        total_eliminatory = len(eliminatory_skills)
 
         adaptive_explanation = None
         adaptive_strengths: list[str] = []
@@ -1204,7 +1543,7 @@ class AnalysisService:
         candidate_years = (
             Decimal(str(result.total_experience_years))
             if result.total_experience_years is not None
-            else None
+            else _extract_resume_text_experience_years(resume_text)
         )
         required_years = (
             Decimal(str(job.minimum_years_experience))
@@ -1212,16 +1551,14 @@ class AnalysisService:
             else None
         )
 
-        # Pure-Decimal scores using weighted equivalence matching
-        mandatory_score = skill_scores["mandatory_score_weighted"]
-        optional_score = skill_scores["optional_score_weighted"]
-        mandatory_strong_coverage = skill_scores["mandatory_strong_coverage"]
-        mandatory_percentage = mandatory_score
+        priority_score = skill_scores["priority_score_weighted"]
+        complementary_score = skill_scores["complementary_score_weighted"]
+        complementary_score_raw = skill_scores["complementary_score_raw_weighted"]
+        priority_strong_coverage = skill_scores["priority_strong_coverage"]
         experience_score = _calculate_experience_score(candidate_years, required_years)
-        weights_source = "canonical_v3_deterministic"
         weights = _canonical_component_weights(
-            total_mandatory=total_mandatory,
-            total_optional=total_optional,
+            total_mandatory=total_priority,
+            total_optional=total_complementary,
         )
         w_mand = weights["mandatory"]
         w_opt = weights["optional"]
@@ -1233,38 +1570,10 @@ class AnalysisService:
             job.seniority_level,
         )
 
-        overall = min(
-            mandatory_score * w_mand
-            + optional_score * w_opt
-            + experience_score * w_exp
-            + seniority_score * w_sen,
-            Decimal("100"),
-        ).quantize(Decimal("0.01"))
-
-        raw_weighted_score = overall
-
-        if total_mandatory > 0 and mandatory_percentage >= _MANDATORY_THRESHOLD:
-            overall = max(
-                Decimal("0"),
-                overall - _mandatory_soft_penalty(mandatory_percentage),
-            ).quantize(Decimal("0.01"))
-
-        # Cap score if strong coverage is too low (< 50%)
-        if total_mandatory > 0 and mandatory_strong_coverage < _MANDATORY_STRONG_COVERAGE_CAP_THRESHOLD:
-            overall = min(overall, _MANDATORY_STRONG_COVERAGE_CAP_SCORE).quantize(Decimal("0.01"))
-
-        # Cap for all-partial mandatory skills (no strong/exact matches)
-        all_mandatory_partial = (
-            total_mandatory > 0
-            and skill_scores["mandatory_matched"] == 0
-            and not skill_scores.get("has_any_strong_mandatory", False)
-            and bool(partial_matches)
-        )
-        if all_mandatory_partial:
-            overall = min(overall, Decimal("64")).quantize(Decimal("0.01"))
-
-        if not has_structured_requirements:
-            overall = min(overall, _NO_REQUIREMENTS_SCORE_CAP).quantize(Decimal("0.01"))
+        mandatory_component_impact = (priority_score * w_mand).quantize(Decimal("0.01"))
+        optional_component_impact = (complementary_score * w_opt).quantize(Decimal("0.01"))
+        experience_component_impact = (experience_score * w_exp).quantize(Decimal("0.01"))
+        seniority_component_impact = (seniority_score * w_sen).quantize(Decimal("0.01"))
 
         profile_completeness = _extract_profile_completeness(result)
         education_result = _validate_education(
@@ -1277,190 +1586,104 @@ class AnalysisService:
             required_years,
         )
 
-        final_score_before_cap = overall
-        cap_applied = False
-        cap_reason: str | None = None
         failed_rule: str | None = None
         failed_dimension: str | None = None
         eligibility_status = "PASS"
-        deal_breaker_failed = False
-        domain_fit_review = False
-        domain_fit_cap_applied = False
 
-        # Track validation status and missing evidence
-        validation_status = "pass"  # Default: everything is ok
-        missing_evidence = []  # Fields that returned UNKNOWN
-        validation_reasons = []  # All validation failure/unknown reasons
+        validation_status = "pass"
+        missing_evidence = []
+        validation_reasons = []
+        reason: str | None = None
+        weak_evidence_detected = bool(weak_evidence_priority_skills)
+        if weak_evidence_detected:
+            weak_skills = ", ".join(weak_evidence_priority_skills[:4])
+            validation_reasons.append(
+                f"Evidência contextual fraca para skills essenciais: {weak_skills}"
+            )
 
-        # Check education: if FAIL, mark as failed. If UNKNOWN, add to missing evidence.
         if education_result.status == "fail":
             validation_status = "fail"
             validation_reasons.append(education_result.reason)
-            logger.info(
-                f"[Objective Education Validation] {education_result.reason} FAIL."
-            )
         elif education_result.status == "unknown":
-            if validation_status != "fail":  # Only override if not already failed
+            if validation_status != "fail":
                 validation_status = "unknown"
             missing_evidence.append("education")
             validation_reasons.append(education_result.reason)
-            logger.info(
-                f"[Objective Education Validation] {education_result.reason} UNKNOWN."
-            )
 
-        # Check experience: if FAIL, mark as failed. If UNKNOWN, add to missing evidence.
         if experience_result.status == "fail":
             validation_status = "fail"
             validation_reasons.append(experience_result.reason)
-            logger.info(
-                f"[Objective Experience Validation] {experience_result.reason} FAIL."
-            )
         elif experience_result.status == "unknown":
-            if validation_status != "fail":  # Only override if not already failed
+            if validation_status != "fail":
                 validation_status = "unknown"
             missing_evidence.append("experience")
             validation_reasons.append(experience_result.reason)
-            logger.info(
-                f"[Objective Experience Validation] {experience_result.reason} UNKNOWN."
-            )
 
-        # ── DEAL-BREAKER EVALUATION ────────────────────────────────────────
-        # Check if candidate matches any active deal-breaker criteria
-        deal_breakers = job.deal_breakers or []
-        for deal_breaker in deal_breakers:
-            breaker_hit, breaker_reason = _evaluate_deal_breaker(deal_breaker, result)
-            if breaker_hit:
-                validation_status = "fail"  # Deal-breaker is a hard reject
-                validation_reasons.append(breaker_reason)
-                failed_rule = "explicit_deal_breaker"
-                failed_dimension = "deal_breaker"
-                deal_breaker_failed = True
-                logger.info(
-                    f"[Deal-Breaker] {breaker_reason} Candidate REJECTED."
-                )
-
-        # ── APPLY MANDATORY FILTER & OBJECTIVE VALIDATIONS ───────────────────
-        # Decision logic:
-        # 1. If FAIL: reject (score <= 39)
-        # 2. If only UNKNOWN: don't reject, but mark for manual review + light penalty
-        # 3. Otherwise: normal scoring
-
-        has_domain_evidence = mandatory_matched > 0 or optional_matched > 0 or bool(partial_matches)
-
-        if deal_breaker_failed:
-            # Objective validation FAILED (candidate below minimum threshold)
-            overall = min(overall, Decimal("39"))  # Cap score at 39 (below "potential")
-            cap_applied = True
-            cap_reason = "explicit_deal_breaker"
-            eligibility_status = "FAIL"
-            recommendation = "not_match"
-            reason = " | ".join(validation_reasons)
-            logger.info(
-                f"[Objective Validation] Candidate REJECTED. "
-                f"Reasons: {reason}. Score capped at 39."
-            )
-        elif education_result.status == "fail":
-            overall = min(overall, Decimal("39"))
-            cap_applied = True
-            cap_reason = "minimum_education"
+        has_domain_evidence = priority_matched > 0 or complementary_matched > 0 or bool(partial_matches)
+        missing_eliminatory_skills = list(skill_scores["missing_eliminatory_skill_names"])
+        if education_result.status == "fail":
             failed_rule = "minimum_education"
             failed_dimension = "education"
             eligibility_status = "FAIL"
             recommendation = "not_match"
             reason = " | ".join(validation_reasons)
         elif experience_result.status == "fail":
-            overall = min(overall, Decimal("39"))
-            cap_applied = True
-            cap_reason = "minimum_experience"
             failed_rule = "minimum_experience"
             failed_dimension = "experience"
             eligibility_status = "FAIL"
             recommendation = "not_match"
             reason = " | ".join(validation_reasons)
+        elif missing_eliminatory_skills:
+            failed_rule = "missing_eliminatory_skills"
+            failed_dimension = "skills"
+            eligibility_status = "FAIL"
+            recommendation = "not_match"
+            reason = (
+                "Não atende critérios eliminatórios de skill: "
+                + ", ".join(missing_eliminatory_skills[:4])
+            )
+            validation_reasons.append(reason)
         else:
-            if total_mandatory > 0 and mandatory_percentage < _MANDATORY_THRESHOLD:
-                reason = (
-                    f"Não atende integralmente habilidades obrigatórias "
-                    f"({mandatory_matched}/{total_mandatory})"
+            if total_priority > 0 and priority_matched == 0 and has_domain_evidence:
+                validation_reasons.append(
+                    f"Sem skill essencial atendida com evidência forte ({priority_matched}/{total_priority})."
                 )
-                validation_reasons.append(reason)
-                failed_rule = "missing_required_skills"
-                failed_dimension = "skills"
+
+            if weak_evidence_detected and validation_status != "fail":
                 eligibility_status = "REVIEW"
-                if has_domain_evidence:
-                    domain_fit_review = True
-                    logger.info(
-                        "[Domain Fit] Candidate has partial mandatory fit. "
-                        "Flagged for review without hard cap."
-                    )
-                else:
-                    domain_fit_review = True
-                    domain_fit_cap_applied = True
-                    cap_applied = True
-                    cap_reason = "minimum_domain_fit"
-                    failed_rule = "minimum_domain_fit"
-                    overall = min(overall, _MINIMUM_DOMAIN_FIT_CAP_SCORE).quantize(Decimal("0.01"))
-                    logger.info(
-                        "[Domain Fit] Candidate lacks minimum domain fit. "
-                        "Score capped for review."
-                    )
+                recommendation = "review_manually"
+                if not reason:
+                    reason = " | ".join(validation_reasons)
 
             if validation_status == "unknown":
                 eligibility_status = "REVIEW"
                 recommendation = "review_manually"
-                if not domain_fit_cap_applied:
-                    penalty = Decimal("0.90")  # Apply 10% penalty for missing evidence
-                    overall = (overall * penalty).quantize(Decimal("0.01"))
                 reason = (
                     f"Dados insuficientes: {', '.join(missing_evidence)}. "
                     f"{' | '.join(validation_reasons)}"
                 )
-                logger.info(
-                    f"[Objective Validation] Missing evidence detected. "
-                    f"Flagged for manual review. "
-                    f"Reasons: {' | '.join(validation_reasons)}"
-                )
-            elif domain_fit_review:
+            elif eligibility_status == "REVIEW":
                 recommendation = "review_manually"
                 reason = " | ".join(validation_reasons)
 
-            enough_mandatory_for_strong = (
-                mandatory_strong_coverage >= _MANDATORY_STRONG_COVERAGE_STRONG_MATCH
-                if total_mandatory else True
-            )
-            enough_mandatory_for_good = (
-                mandatory_strong_coverage >= _MANDATORY_STRONG_COVERAGE_GOOD_MATCH
-                if total_mandatory else True
-            )
-
-            if not domain_fit_review and validation_status != "unknown":
-                if overall >= _STRONG_MATCH_THRESHOLD and enough_mandatory_for_strong:
+            if eligibility_status == "PASS":
+                if priority_strong_coverage >= _MANDATORY_STRONG_COVERAGE_STRONG_MATCH:
                     recommendation = "strong_match"
-                elif overall >= _GOOD_MATCH_THRESHOLD and enough_mandatory_for_good:
+                elif priority_strong_coverage >= _MANDATORY_STRONG_COVERAGE_GOOD_MATCH:
                     recommendation = "good_match"
-                elif overall >= _POTENTIAL_THRESHOLD:
+                elif priority_matched > 0 or complementary_matched > 0 or partial_matches:
                     recommendation = "potential"
                 else:
                     recommendation = "not_recommended"
                 reason = None
 
-                # Prevent all-partial from becoming strong_match or good_match
-                if all_mandatory_partial and recommendation in ("strong_match", "good_match"):
-                    recommendation = "potential"
-
-        final_score_after_cap = overall
-
-        skills_score = (
-            mandatory_score * Decimal("0.75") + optional_score * Decimal("0.25")
-        ).quantize(Decimal("0.01"))
-
         if reason:
-            # Rejected due to mandatory filter
             summary = reason
         else:
             base_summary = (
-                f"{mandatory_matched}/{total_mandatory} skills obrigatórias e "
-                f"{optional_matched}/{total_optional} skills opcionais atendidas."
+                f"{priority_matched}/{total_priority} skills essenciais, "
+                f"{complementary_matched}/{total_complementary} diferenciais e "
+                f"{eliminatory_matched}/{total_eliminatory} eliminatórias atendidas."
             )
             if partial_matches and not adaptive_explanation:
                 partial_txt = ", ".join(f"{pm['candidate']}→{pm['required']}" for pm in partial_matches[:3])
@@ -1479,32 +1702,70 @@ class AnalysisService:
         if candidate_id is None or resume_version_id is None:
             raise ValueError("Could not resolve analysis context for candidate_job_match persistence")
 
-        pipeline_key = uuid5(NAMESPACE_URL, f"{candidate_id}:{job_id}")
+        active_pipeline_entry = await SQLAlchemyPipelineRepository(self._repository._session).find_active_entry(
+            candidate_id,
+            job_id,
+        )
+        pipeline_key = (
+            active_pipeline_entry.candidate_job_pipeline_id
+            if active_pipeline_entry is not None
+            else None
+        )
         skill_evidence_breakdown = {
             "partial_matches": partial_matches,
-            "mandatory_score_weighted": float(skill_scores["mandatory_score_weighted"]),
-            "mandatory_strong_coverage": float(mandatory_strong_coverage),
+            "priority_score_weighted": float(skill_scores["priority_score_weighted"]),
+            "complementary_score_weighted": float(complementary_score),
+            "complementary_score_raw_weighted": float(complementary_score_raw),
+            "priority_strong_coverage": float(priority_strong_coverage),
+            "eliminatory_score_weighted": float(skill_scores["eliminatory_score_weighted"]),
             "score_version": _SCORE_VERSION_EQUIVALENCE,
-            "raw_score": float(raw_weighted_score),
-            "final_score_before_cap": float(final_score_before_cap),
-            "final_score_after_cap": float(final_score_after_cap),
-            "cap_applied": cap_applied,
-            "cap_reason": cap_reason,
             "validation_status": validation_status,
             "validation_reasons": list(validation_reasons),
             "failed_rule": failed_rule,
             "failed_dimension": failed_dimension,
-            "missing_required_skills": list(missing_skill_names),
+            "matched_priority_skills": list(skill_scores["matched_priority_skill_names"]),
+            "missing_priority_skills": list(missing_skill_names),
+            "matched_complementary_skills": list(skill_scores["matched_complementary_skill_names"]),
+            "missing_complementary_skills": list(skill_scores["missing_complementary_skill_names"]),
+            "matched_eliminatory_skills": list(skill_scores["matched_eliminatory_skill_names"]),
+            "missing_eliminatory_skills": list(skill_scores["missing_eliminatory_skill_names"]),
+            "weak_evidence_priority_skills": list(weak_evidence_priority_skills),
+            "skill_evidence_details": list(skill_scores["skill_evidence_details"]),
             "education_detected": result.highest_education_level,
             "minimum_education_required": job.minimum_education_level,
             "experience_detected": float(candidate_years) if candidate_years is not None else None,
             "minimum_experience_required": float(required_years) if required_years is not None else None,
             "eligibility_status": eligibility_status,
-            "mandatory_skills_matched": mandatory_matched,
-            "mandatory_skills_total": total_mandatory,
-            "domain_fit_review": domain_fit_review,
+            "priority_skills_matched": priority_matched,
+            "priority_skills_total": total_priority,
+            "complementary_skills_matched": complementary_matched,
+            "complementary_skills_total": total_complementary,
+            "eliminatory_skills_matched": eliminatory_matched,
+            "eliminatory_skills_total": total_eliminatory,
+            "complementary_bonus_cap_slots": skill_scores["complementary_bonus_cap_slots"],
+            "priority_component_impact": float(mandatory_component_impact),
+            "complementary_component_impact": float(optional_component_impact),
+            "experience_component_impact": float(experience_component_impact),
+            "seniority_component_impact": float(seniority_component_impact),
             "has_domain_evidence": has_domain_evidence,
+            "mandatory_score_weighted": float(skill_scores["mandatory_score_weighted"]),
+            "optional_score_weighted": float(skill_scores["optional_score_weighted"]),
+            "optional_score_raw_weighted": float(skill_scores["optional_score_raw_weighted"]),
+            "mandatory_strong_coverage": float(skill_scores["mandatory_strong_coverage"]),
+            "matched_required_skills": list(skill_scores["matched_mandatory_skill_names"]),
+            "missing_required_skills": list(missing_skill_names),
+            "matched_optional_skills": list(skill_scores["matched_optional_skill_names"]),
+            "missing_optional_skills": list(skill_scores["missing_optional_skill_names"]),
+            "weak_evidence_required_skills": list(skill_scores["weak_evidence_required_skills"]),
+            "mandatory_skills_matched": skill_scores["mandatory_matched"],
+            "mandatory_skills_total": total_priority,
+            "optional_skills_matched": skill_scores["optional_matched"],
+            "optional_skills_total": total_complementary,
+            "optional_bonus_cap_slots": skill_scores["optional_bonus_cap_slots"],
+            "mandatory_component_impact": float(mandatory_component_impact),
+            "optional_component_impact": float(optional_component_impact),
         }
+        adaptive_score_breakdown = dict(skill_evidence_breakdown)
 
         if not job.job_profile_hash:
             raise ValueError(f"Job {job.id} missing job_profile_hash during match persistence")
@@ -1530,40 +1791,22 @@ class AnalysisService:
 
         await self._repository.upsert_candidate_job_match(persisted_match)
 
-        if cap_applied:
-            logger.info(
-                "score.cap_applied",
-                extra={
-                    "candidate_id": str(candidate_id),
-                    "job_id": str(job_id),
-                    "raw_score": float(raw_weighted_score),
-                    "final_score": float(final_score_after_cap),
-                    "validation_status": validation_status,
-                    "validation_reason": " | ".join(validation_reasons) if validation_reasons else None,
-                    "failed_rule": failed_rule,
-                    "failed_dimension": failed_dimension,
-                    "missing_required_skills": list(missing_skill_names),
-                    "education_detected": result.highest_education_level,
-                    "minimum_education_required": job.minimum_education_level,
-                    "experience_detected": float(candidate_years) if candidate_years is not None else None,
-                    "minimum_experience_required": float(required_years) if required_years is not None else None,
-                    "cap_reason": cap_reason,
-                },
-            )
-
         ranking_refresh_status = "unknown"
         ranking_freshness_status = "stale"
         ranking_refreshed_at = None
         ranking_warning = None
-        public_final_score = None
+        public_job_fit_score = None
         ranking_service = None
+        ranking_result = None
         try:
             from src.application.services.candidate_ranking_service import CandidateRankingService
 
             ranking_service = CandidateRankingService(self._repository._session)
             async with self._repository._session.begin_nested():
                 ranking_result = await ranking_service.compute_single_candidate(
-                    job_id, candidate_id, recompute_reason="post_match"
+                    job_id,
+                    candidate_id,
+                    recompute_reason="force_recompute" if force_recompute else "post_match",
                 )
 
             if ranking_result is None:
@@ -1571,9 +1814,14 @@ class AnalysisService:
                 ranking_warning = "Ranking incremental não encontrou contexto suficiente para o candidato."
             else:
                 ranking_refresh_status = "updated"
-                ranking_freshness_status = str(require_key(ranking_result, "freshness_status"))
+                ranking_freshness_status = str(
+                    require_key(ranking_result, "ranking_freshness_status")
+                )
                 ranking_refreshed_at = require_key(ranking_result, "computed_at")
-                public_final_score = float(require_key(ranking_result, "final_score"))
+                public_score = ranking_result.get("job_fit_score")
+                if public_score is None:
+                    raise ValueError("Ranking incremental retornou sem job_fit_score")
+                public_job_fit_score = float(public_score)
         except Exception:
             ranking_refresh_status = "failed"
             ranking_freshness_status = "stale"
@@ -1603,7 +1851,7 @@ class AnalysisService:
                         "source_analysis_created_at": details.analysis.created_at.isoformat(),
                         "score_model_version": score_model_version.version if score_model_version else None,
                         "ranking_version": score_model_version.version if score_model_version else None,
-                        "freshness_status": "stale",
+                        "ranking_freshness_status": "stale",
                         "recompute_reason": "match_to_job_sync",
                     },
                 ),
@@ -1624,15 +1872,37 @@ class AnalysisService:
                         },
                     )
 
+        if force_recompute:
+            logger.info(
+                "analysis.recomputed",
+                extra={
+                    "analysis_id": str(analysis_id),
+                    "candidate_id": str(candidate_id),
+                    "job_id": str(job_id),
+                    "resume_version_id": str(resume_version_id),
+                    "job_profile_analysis_id": str(job_profile_analysis.id),
+                    "previous_score": (
+                        ranking_result.get("previous_score")
+                        if isinstance(ranking_result, dict)
+                        else None
+                    ),
+                    "new_score": public_job_fit_score,
+                    "ranking_refresh_status": ranking_refresh_status,
+                    "ranking_freshness_status": ranking_freshness_status,
+                    "forced": True,
+                },
+            )
+
         return AnalysisMatchResponse(
             analysis_id=analysis_id,
             job_id=job_id,
-            final_score=public_final_score,
+            job_fit_score=public_job_fit_score,
+            match_freshness_status="fresh",
             recommendation=recommendation,
-            mandatory_skills_matched=mandatory_matched,
-            mandatory_skills_total=total_mandatory,
-            optional_skills_matched=optional_matched,
-            optional_skills_total=total_optional,
+            mandatory_skills_matched=priority_matched,
+            mandatory_skills_total=total_priority,
+            optional_skills_matched=complementary_matched,
+            optional_skills_total=total_complementary,
             seniority_score=float(seniority_score.quantize(Decimal("0.01"))),
             candidate_seniority=result.seniority_level,
             job_seniority=job.seniority_level,

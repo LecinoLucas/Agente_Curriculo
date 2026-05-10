@@ -57,7 +57,7 @@ class JobSkillResolverService:
             seen_keys.add(dedupe_key)
             canonical_request = BulkImportJobSkillRequest(
                 name=resolved.name,
-                is_mandatory=raw_skill.is_mandatory,
+                priority_level=raw_skill.priority_level,
                 minimum_level=raw_skill.minimum_level,
                 minimum_years=raw_skill.minimum_years,
                 weight=raw_skill.weight,

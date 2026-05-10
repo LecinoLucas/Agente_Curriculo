@@ -10,7 +10,7 @@ export const jobSkillsService = {
     jobId: string,
     payload: {
       skill_name: string;
-      is_mandatory?: boolean;
+      priority_level?: "priority" | "complementary" | "eliminatory";
       minimum_level?: string | null;
       minimum_years?: number | null;
       weight?: number;
@@ -26,7 +26,7 @@ export const jobSkillsService = {
   async updateJobSkill(
     jobId: string,
     skill: JobSkill,
-    payload: { is_mandatory?: boolean; minimum_level?: string | null; minimum_years?: number | null; weight?: number },
+    payload: { priority_level?: "priority" | "complementary" | "eliminatory"; minimum_level?: string | null; minimum_years?: number | null; weight?: number },
   ): Promise<JobSkill> {
     await this.removeJobSkill(jobId, skill.skill_id);
     return this.addJobSkill(jobId, { skill_name: skill.skill_name, ...payload });

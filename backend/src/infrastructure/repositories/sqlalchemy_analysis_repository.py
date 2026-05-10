@@ -55,6 +55,11 @@ class SQLAlchemyAnalysisRepository:
 
         return await self._session.scalar(query)
 
+    async def find_resume_version(self, resume_version_id: UUID) -> ResumeVersionModel | None:
+        return await self._session.scalar(
+            sa.select(ResumeVersionModel).where(ResumeVersionModel.id == resume_version_id)
+        )
+
     async def find_preferred_ai_model(self) -> AIModelModel | None:
         model = await self._session.scalar(
             sa.select(AIModelModel)
@@ -510,7 +515,7 @@ class SQLAlchemyAnalysisRepository:
                 CandidateJobMatchModel.job_id,
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
-                CandidateJobScoreModel.final_score,
+                CandidateJobScoreModel.final_score.label("job_fit_score"),
                 CandidateJobMatchModel.recommendation,
                 CandidateJobMatchModel.created_at,
             )
@@ -694,6 +699,30 @@ class SQLAlchemyAnalysisRepository:
                 JobProfileAnalysisModel.is_active.is_(True),
             )
             .order_by(JobProfileAnalysisModel.created_at.desc())
+        )
+
+    async def find_any_job_profile_analysis_by_signature(
+        self,
+        *,
+        job_id: UUID,
+        provider: str,
+        model_id: str,
+        prompt_version: str,
+        job_signature_hash: str,
+    ) -> JobProfileAnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(JobProfileAnalysisModel)
+            .where(
+                JobProfileAnalysisModel.job_id == job_id,
+                JobProfileAnalysisModel.provider == provider,
+                JobProfileAnalysisModel.model_id == model_id,
+                JobProfileAnalysisModel.prompt_version == prompt_version,
+                JobProfileAnalysisModel.job_signature_hash == job_signature_hash,
+            )
+            .order_by(
+                JobProfileAnalysisModel.is_active.desc(),
+                JobProfileAnalysisModel.created_at.desc(),
+            )
         )
 
     async def save_job_profile_analysis(

@@ -16,7 +16,13 @@ from tests.integration.test_resume_pipeline_smoke import _create_active_user, _a
 async def test_import_resume_does_not_create_pipeline_or_analysis(
     client: AsyncClient,
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ):
+    monkeypatch.setattr(
+        "src.interface.api.routers.resumes.enqueue_resume_extraction",
+        lambda version_id: None,
+    )
+
     # Setup: Recruiter user
     email = f"recruiter-{uuid4().hex[:6]}@test.com"
     await _create_active_user(db_session, email, "password123", UserRole.RECRUITER)
@@ -47,7 +53,8 @@ async def test_import_resume_does_not_create_pipeline_or_analysis(
         headers=headers,
         files={"file": ("resume.pdf", pdf_content, "application/pdf")}
     )
-    assert upload_resp.status_code == 200
+    assert upload_resp.status_code == 202
+    assert upload_resp.json()["extraction_status"] == "pending"
     
     # VERIFICATION: No pipeline, no analysis
     # Check Pipeline

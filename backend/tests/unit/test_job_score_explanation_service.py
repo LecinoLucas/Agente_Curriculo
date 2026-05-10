@@ -11,6 +11,7 @@ from src.application.services.job_score_explanation_service import (
     JobScoreExplanationService,
 )
 from src.domain.entities.user import UserRole
+from src.interface.api.schemas.job_schemas import CandidateScoreExplanationResponse
 
 
 def _score_head(*, analysis_id):
@@ -91,7 +92,7 @@ async def test_get_returns_canonical_payload_without_persisted_match():
         role=UserRole.RECRUITER,
     )
 
-    assert payload.final_score == 82.5
+    assert payload.job_fit_score == 82.5
     assert payload.analysis_id == analysis_id
     assert payload.recommendation == "strong_yes"
     assert payload.gaps == []
@@ -128,7 +129,7 @@ async def test_get_returns_canonical_payload_without_completed_analysis():
         role=UserRole.RECRUITER,
     )
 
-    assert payload.final_score == 82.5
+    assert payload.job_fit_score == 82.5
     assert payload.analysis_id == analysis_id
     assert payload.recommendation == "strong_yes"
     assert payload.gaps == ["Kubernetes"]
@@ -155,3 +156,60 @@ async def test_get_still_fails_when_official_score_head_is_missing():
             candidate_id=uuid4(),
             role=UserRole.RECRUITER,
         )
+
+
+def test_build_payload_normalizes_legacy_partial_matches_to_evidence_schema():
+    service = JobScoreExplanationService(AsyncMock())
+    payload = service._build_payload_from_score_head(
+        job_id=uuid4(),
+        candidate_id=uuid4(),
+        analysis_id=uuid4(),
+        version=SimpleNamespace(version="v2"),
+        score_head=_score_head(analysis_id=uuid4()),
+        persisted_match=None,
+        factors=[
+            {
+                "factor_type": "adjacent_skill_match",
+                "factor_key": "sql server",
+                "factor_label": "Experiência adjacente cobre parcialmente SQL Server",
+                "impact_score": 3.5,
+                "normalized_weight": 0.1667,
+                "direction": "neutral",
+                "evidence_json": {
+                    "required_skill": "SQL Server",
+                    "candidate_skill": "PostgreSQL",
+                    "partial_score": 0.75,
+                    "reason": "Banco relacional equivalente em parte.",
+                    "source": "group",
+                },
+                "display_order": 0,
+            }
+        ],
+    )
+
+    assert payload.partial_matches == [
+        {
+            "required": "SQL Server",
+            "candidate": "PostgreSQL",
+            "score": 0.75,
+            "reason": "Banco relacional equivalente em parte.",
+            "source": "group",
+        }
+    ]
+    assert payload.matched_equivalences == [
+        {
+            "requirement": "SQL Server",
+            "requirement_type": "required_skill",
+            "match_status": "partial",
+            "match_type": "partial_equivalence",
+            "evidence_quotes": [],
+            "evidence_strength": "medium",
+            "confidence": "medium",
+            "score_hint": 0.75,
+            "explanation": "Banco relacional equivalente em parte.",
+        }
+    ]
+
+    response = CandidateScoreExplanationResponse.model_validate(payload.to_dict())
+    assert response.matched_equivalences[0].requirement == "SQL Server"
+    assert response.partial_matches[0].required == "SQL Server"

@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.application.ports.ai_service import AIAnalysisResponse, AIService
 from src.application.services.job_profiler_service import (
     InMemoryJobProfileCache,
     JobProfilerService,
@@ -218,6 +219,74 @@ def test_build_deterministic_profile_nao_depende_de_categoria_legada():
 
     assert profile.area == "data"
     assert "SQL" in profile.required_tools
+
+
+def test_build_deterministic_profile_classifica_fullstack_como_technology():
+    profile = build_deterministic_job_profile(
+        JobProfileInput(
+            title="Desenvolvedor Fullstack Pleno",
+            description="Atuar com frontend React, backend Node.js e APIs REST.",
+            linked_skills=(
+                StructuredJobSkill(
+                    name="React",
+                    normalized_name="react",
+                    is_mandatory=True,
+                ),
+                StructuredJobSkill(
+                    name="SQL",
+                    normalized_name="sql",
+                    is_mandatory=False,
+                ),
+            ),
+        )
+    )
+
+    assert profile.area == "technology"
+
+
+class _FakeAIService(AIService):
+    async def analyze(self, request):  # type: ignore[override]
+        return AIAnalysisResponse(
+            content=json.dumps(
+                {
+                    "area": "data",
+                    "target_level": "mid",
+                    "main_mission": "Desenvolver e manter aplicações web",
+                    "critical_requirements": [],
+                    "desirable_requirements": [],
+                    "responsibilities": ["Construir APIs"],
+                    "required_tools": ["SQL", "React"],
+                    "required_capabilities": [],
+                    "seniority_signals": ["mid"],
+                    "adaptive_weights": AREA_WEIGHTS["data"],
+                    "job_completeness_score": 0.9,
+                    "confidence": "high",
+                }
+            ),
+            input_tokens=10,
+            output_tokens=10,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            processing_time_ms=1,
+            finish_reason="stop",
+        )
+
+
+@pytest.mark.asyncio
+async def test_generate_profile_corrige_area_fullstack_mesmo_quando_ia_retornou_data():
+    service = JobProfilerService(ai_service=_FakeAIService())
+
+    profile = await service.generate_profile(
+        "Atuar com frontend React, backend Node.js, APIs REST e banco relacional.",
+        title="Desenvolvedor Fullstack Pleno",
+        linked_skills=[
+            StructuredJobSkill(name="React", normalized_name="react", is_mandatory=True),
+            StructuredJobSkill(name="Node.js", normalized_name="node js", is_mandatory=True),
+            StructuredJobSkill(name="SQL", normalized_name="sql", is_mandatory=False),
+        ],
+    )
+
+    assert profile.area == "technology"
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +655,7 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
     mock_repository.find_required_skill_link.return_value = None
     mock_repository.create_required_skill_link.return_value = link
     mock_repository.list_required_skill_rows.return_value = [row]
+    mock_repository.save.return_value = job
 
     service = JobService(repository=mock_repository, job_profiler_service=mock_profiler_service)
     await service.add_required_skill(
@@ -593,7 +663,29 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
         MagicMock(skill_name="SQL", is_mandatory=True, minimum_level=None, minimum_years=None, weight=1),
     )
 
+    assert job.skill_requirements == {
+        "critical_required": [],
+        "core_required": ["SQL"],
+        "important": [],
+        "nice_to_have": [],
+    }
     mock_profiler_service.generate_profile.assert_called_once()
+
+
+def test_skill_requirements_snapshot_is_derived_from_required_skill_rows():
+    mandatory = MagicMock()
+    mandatory.skill_name = "Node.js"
+    mandatory.JobRequiredSkillModel.is_mandatory = True
+    optional = MagicMock()
+    optional.skill_name = "React"
+    optional.JobRequiredSkillModel.is_mandatory = False
+
+    assert JobService._skill_requirements_from_required_skill_rows([mandatory, optional]) == {
+        "critical_required": [],
+        "core_required": ["Node.js"],
+        "important": ["React"],
+        "nice_to_have": [],
+    }
 
 
 async def test_archive_continua_funcionando_quando_auditoria_falha(mock_repository):

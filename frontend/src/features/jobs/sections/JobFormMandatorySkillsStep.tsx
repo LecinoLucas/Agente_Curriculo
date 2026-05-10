@@ -1,4 +1,5 @@
-import type { JobSkill, PendingJobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { PendingJobSkill } from "../jobFormConfig";
 import { SkillSection } from "../components/SkillSection";
 
 type JobFormMandatorySkillsStepProps = {
@@ -7,7 +8,10 @@ type JobFormMandatorySkillsStepProps = {
   skillSearch: string;
   onSearchChange: (value: string) => void;
   savingSkillId: string | null;
-  onAddSkill: (skill: SkillEquivalenceGroup, isMandatory: boolean) => Promise<void>;
+  onAddSkill: (
+    skill: SkillEquivalenceGroup | string,
+    priorityLevel: "priority" | "complementary" | "eliminatory",
+  ) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
 };
@@ -24,19 +28,24 @@ export function JobFormMandatorySkillsStep({
 }: JobFormMandatorySkillsStepProps) {
   return (
     <SkillSection
-      title="Skills obrigatórias"
-      description="Defina o que realmente impacta o score e o ranking. A publicação exige pelo menos 2 skills obrigatórias."
-      emphasis={`${mandatorySkills.length} skill(s) obrigatória(s) • mínimo 2`}
+      title="Essenciais"
+      description="Use para as 3–5 competências centrais da vaga."
+      emphasis={`${mandatorySkills.length} skill(s) essencial(is) • mínimo 2`}
       availableSkills={availableSkills}
       linkedSkills={mandatorySkills}
       search={skillSearch}
       onSearchChange={onSearchChange}
-      addLabel="Obrigatória"
-      addMandatory
+      addLabel="Essencial"
+      addPriorityLevel="priority"
       savingSkillId={savingSkillId}
       onAddSkill={onAddSkill}
       onUpdateSkill={onUpdateSkill}
       onRemoveSkill={onRemoveSkill}
+      warning={
+        mandatorySkills.length > 5
+          ? "Muitas skills essenciais podem deixar o ranking restritivo. Considere mover algumas para diferenciais."
+          : null
+      }
     />
   );
 }

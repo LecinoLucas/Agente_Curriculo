@@ -238,7 +238,7 @@ class PipelineMetricsService:
         stale_detected_total = sum(
             1
             for e in [*recomputed, *recompute_failed]
-            if str(e.payload.get("freshness_status") or "") == "stale"
+            if str(e.payload.get("ranking_freshness_status") or "") == "stale"
         )
 
         stale_snapshot = await self._ranking_freshness_snapshot()

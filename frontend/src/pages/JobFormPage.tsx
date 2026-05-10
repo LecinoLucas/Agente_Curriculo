@@ -51,8 +51,8 @@ type StepId =
 const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
   { id: "basic", label: "Dados básicos", hint: "Contexto e resumo da vaga" },
   { id: "requirements", label: "Requisitos mínimos", hint: "Base obrigatória do matching" },
-  { id: "mandatory-skills", label: "Skills obrigatórias", hint: "Mínimo de 2 skills obrigatórias" },
-  { id: "differentials", label: "Diferenciais", hint: "Desejáveis, ferramentas e extras" },
+  { id: "mandatory-skills", label: "Essenciais", hint: "Use para as 3–5 competências centrais da vaga" },
+  { id: "differentials", label: "Diferenciais", hint: "Bônus controlado para ferramentas e extras" },
   { id: "deal-breakers", label: "Critérios eliminatórios", hint: "Regras de bloqueio explícitas" },
   { id: "review", label: "Revisão e publicação", hint: "Checklist final e mensagens do backend" },
 ];
@@ -101,6 +101,7 @@ export function JobFormPage() {
     setAllSkills,
     mandatorySkills,
     optionalSkills,
+    eliminatorySkills,
     availableSkills,
     handleAddSkill,
     handleUpdateSkill,
@@ -329,10 +330,10 @@ export function JobFormPage() {
             availableSkills={availableSkills}
             skillSearch={skillSearch}
             onSearchChange={setSkillSearch}
-            savingSkillId={savingSkillId}
-            onAddSkill={handleAddSkill}
-            onUpdateSkill={handleUpdateSkill}
-            onRemoveSkill={handleRemoveSkill}
+    savingSkillId={savingSkillId}
+    onAddSkill={handleAddSkill}
+    onUpdateSkill={handleUpdateSkill}
+    onRemoveSkill={handleRemoveSkill}
           />
         );
 
@@ -360,6 +361,14 @@ export function JobFormPage() {
         return (
           <JobFormDealBreakersStep
             form={form}
+            eliminatorySkills={eliminatorySkills}
+            availableSkills={availableSkills}
+            skillSearch={skillSearch}
+            onSearchChange={setSkillSearch}
+            savingSkillId={savingSkillId}
+            onAddSkill={handleAddSkill}
+            onUpdateSkill={handleUpdateSkill}
+            onRemoveSkill={handleRemoveSkill}
             dealBreakerDraft={dealBreakerDraft}
             onFormChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
             onDealBreakerDraftChange={(updates) =>
@@ -375,6 +384,7 @@ export function JobFormPage() {
             form={form}
             mandatorySkills={mandatorySkills}
             optionalSkills={optionalSkills}
+            eliminatorySkills={eliminatorySkills}
             jobQuality={jobQuality}
             backendPublishErrors={backendPublishErrors}
           />
@@ -534,8 +544,9 @@ export function JobFormPage() {
           <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5">
             <p className="text-sm font-semibold text-[hsl(var(--text))]">Resumo rápido</p>
             <div className="mt-4 space-y-3 text-sm">
-              <SummaryRow label="Skills obrigatórias" value={`${mandatorySkills.length}`} />
-              <SummaryRow label="Skills desejáveis" value={`${optionalSkills.length}`} />
+              <SummaryRow label="Essenciais" value={`${mandatorySkills.length}`} />
+              <SummaryRow label="Diferenciais" value={`${optionalSkills.length}`} />
+              <SummaryRow label="Skills eliminatórias" value={`${eliminatorySkills.length}`} />
               <SummaryRow label="Deal breakers ativos" value={`${(form.deal_breakers ?? []).filter((item) => item.is_active).length}`} />
               <SummaryRow label="Senioridade" value={formatSeniority(form.seniority_level || null)} />
               <SummaryRow label="Modelo de trabalho" value={formatWorkModel(form.work_model || null)} />

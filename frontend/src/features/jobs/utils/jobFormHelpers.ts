@@ -35,7 +35,7 @@ export function formatFieldLabel(field: string): string {
     seniority_level: "Senioridade",
     minimum_years_experience: "Anos mínimos de experiência",
     minimum_education_level: "Escolaridade mínima",
-    mandatory_skills: "Skills obrigatórias",
+    priority_skills: "Skills essenciais",
   };
   return labels[field] ?? field;
 }
@@ -45,6 +45,6 @@ export function buildFrontendPublicationBlockers(form: JobFormValues, mandatoryS
   if (!trimToNull(form.job_area ?? "")) blockers.push("job_area");
   if (!trimToNull(form.seniority_level ?? "")) blockers.push("seniority_level");
   if ((form.minimum_years_experience ?? 0) <= 0) blockers.push("minimum_years_experience");
-  if (mandatorySkillsCount < 2) blockers.push("mandatory_skills");
+  if (mandatorySkillsCount < 2) blockers.push("priority_skills");
   return blockers;
 }

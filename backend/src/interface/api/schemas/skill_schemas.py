@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -35,7 +35,7 @@ class JobRequiredSkillResponse(BaseModel):
     job_id: UUID
     skill_id: UUID
     skill_name: str
-    is_mandatory: bool
+    priority_level: Literal["priority", "complementary", "eliminatory"]
     minimum_level: Optional[str] = None
     minimum_years: Optional[Decimal] = None
     weight: Decimal
@@ -50,7 +50,7 @@ class JobRequiredSkillResponse(BaseModel):
 
 class AddJobSkillRequest(BaseModel):
     skill_name: str = Field(min_length=1, max_length=255)
-    is_mandatory: bool = False
+    priority_level: Literal["priority", "complementary", "eliminatory"] = "complementary"
     minimum_level: Optional[str] = Field(default=None, max_length=50)
     minimum_years: Optional[Decimal] = Field(default=None, ge=0, le=80)
     weight: Decimal = Field(default=Decimal("1.00"), ge=0, le=10)

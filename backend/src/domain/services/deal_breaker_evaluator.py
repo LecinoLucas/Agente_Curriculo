@@ -27,7 +27,7 @@ def evaluate_deal_breakers(
         candidate_row: Candidate data row from ranking query (with analysis results)
 
     Returns:
-        List of violation reason_codes (empty if no violations).
+        List of violation objects (empty if no violations).
         Each violation includes:
         - type: "deal_breaker"
         - field: deal-breaker field name

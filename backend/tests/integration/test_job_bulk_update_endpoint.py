@@ -226,7 +226,7 @@ async def test_bulk_update_replaces_skills_when_sent(
     recruiter = await _create_active_user(db_session, "bulk-update-replace@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-update-replace@test.com", "password123")
     sql = await _create_skill(db_session, "SQL", "sql")
-    power_bi = await _create_skill(db_session, "Power BI", "power bi")
+    bi = await _create_skill(db_session, "BI", "bi")
     etl = await _create_skill(db_session, "ETL", "etl")
     job = await _create_job(db_session, recruiter.id, title="Analista BI", job_area="data", location="Curitiba")
 
@@ -234,7 +234,7 @@ async def test_bulk_update_replaces_skills_when_sent(
         JobRequiredSkillModel(
             job_id=job.id,
             skill_id=sql.id,
-            is_mandatory=True,
+            priority_level="priority",
             weight=8,
         )
     )
@@ -247,8 +247,8 @@ async def test_bulk_update_replaces_skills_when_sent(
                 "job_id": str(job.id),
                 "data": {
                     "skills": [
-                        {"name": "Power BI", "is_mandatory": True, "weight": 9},
-                        {"name": "ETL", "is_mandatory": False, "weight": 6},
+                        {"name": "BI", "priority_level": "priority", "weight": 9},
+                        {"name": "ETL", "priority_level": "complementary", "weight": 6},
                     ]
                 },
             }
@@ -264,7 +264,7 @@ async def test_bulk_update_replaces_skills_when_sent(
         .order_by(SkillModel.name.asc())
     )
     linked = rows.all()
-    assert linked == [(etl.id, "ETL"), (power_bi.id, "Power BI")]
+    assert linked == [(bi.id, "BI"), (etl.id, "ETL")]
 
 
 @pytest.mark.asyncio
@@ -308,18 +308,18 @@ async def test_bulk_update_normalizes_flattened_non_standard_payload(
     assert updated.experience_context == "Vivência com indicadores e dashboards."
 
     rows = await db_session.execute(
-        sa.select(JobRequiredSkillModel.is_mandatory, JobRequiredSkillModel.weight, SkillModel.name)
+        sa.select(JobRequiredSkillModel.priority_level, JobRequiredSkillModel.weight, SkillModel.name)
         .join(SkillModel, SkillModel.id == JobRequiredSkillModel.skill_id)
         .where(JobRequiredSkillModel.job_id == job.id)
         .order_by(SkillModel.name.asc())
     )
     linked = rows.all()
-    assert {name for _, _, name in linked} == {"Power BI", "ETL"}
+    assert {name for _, _, name in linked} == {"BI", "ETL"}
 
-    power_bi_row = next(row for row in linked if row[2] == "Power BI")
+    bi_row = next(row for row in linked if row[2] == "BI")
     etl_row = next(row for row in linked if row[2] == "ETL")
 
-    assert power_bi_row[0] is True
-    assert str(power_bi_row[1]) in {"9", "9.00"}
-    assert etl_row[0] is False
+    assert bi_row[0] == "priority"
+    assert str(bi_row[1]) in {"9", "9.00"}
+    assert etl_row[0] == "complementary"
     assert str(etl_row[1]) in {"5", "5.00"}

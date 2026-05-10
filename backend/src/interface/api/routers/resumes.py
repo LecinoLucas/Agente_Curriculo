@@ -17,6 +17,7 @@ from src.application.services.resume_service import (
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.interface.api.dependencies import CurrentUser, get_db
 from src.interface.api.schemas.resume_schemas import (
+    ResumeExtractionStatusResponse,
     ResumeFileUploadResponse,
     ResumeResponse,
     ResumeSummaryResponse,
@@ -25,6 +26,7 @@ from src.interface.api.schemas.resume_schemas import (
     ResumeVersionResponse,
     UpdateResumeRequest,
 )
+from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
@@ -135,7 +137,11 @@ async def get_resume(
         raise
 
 
-@router.post("/{resume_id}/upload", response_model=ResumeFileUploadResponse)
+@router.post(
+    "/{resume_id}/upload",
+    response_model=ResumeFileUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def upload_resume_pdf(
     resume_id: UUID,
     current_user: CurrentUser,
@@ -151,6 +157,7 @@ async def upload_resume_pdf(
             current_user=current_user,
         )
         await db.commit()
+        enqueue_resume_extraction(uploaded.version.id)
 
         return ResumeFileUploadResponse(
             resume_id=uploaded.resume.id,
@@ -170,6 +177,31 @@ async def upload_resume_pdf(
         )
     except Exception as exc:
         await db.rollback()
+        _handle_resume_service_error(exc)
+        raise
+
+
+@router.get(
+    "/{resume_id}/extraction-status",
+    response_model=ResumeExtractionStatusResponse,
+)
+async def get_resume_extraction_status(
+    resume_id: UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> ResumeExtractionStatusResponse:
+    try:
+        extraction = await _resume_service(db).get_extraction_status(resume_id, current_user)
+        return ResumeExtractionStatusResponse(
+            resume_id=extraction.resume.id,
+            version_id=extraction.version.id,
+            extraction_status=extraction.version.extraction_status,
+            extraction_error=extraction.version.extraction_error,
+            original_file_name=extraction.version.original_file_name,
+            page_count=extraction.version.page_count,
+            word_count=extraction.version.word_count,
+        )
+    except Exception as exc:
         _handle_resume_service_error(exc)
         raise
 

@@ -30,12 +30,23 @@ export function OverviewTab({
     hasActiveRelationship
       ? activeJob?.title ?? activeEntryById?.job_title ?? "Nenhuma vaga ativa"
       : latestLinkedEntry?.job_title ?? "Nenhuma vaga vinculada";
-  const relationshipStatusLabel = hasActiveRelationship ? "Etapa atual" : "Status final";
   const relationshipStatusTitle =
     hasActiveRelationship
       ? activePipelineEntry?.candidate_status ?? "Não vinculado"
       : latestLinkedEntry?.candidate_status ?? "Não vinculado";
   const relationshipStatusDescription = hasActiveRelationship ? "Estado no pipeline" : "Candidatura encerrada";
+  const profileStatusTitle =
+    overview.latest_analysis?.status === "completed"
+      ? "Análise concluída"
+      : overview.latest_analysis?.status === "failed"
+        ? "Análise inconclusiva"
+        : overview.latest_analysis?.status === "processing" || overview.latest_analysis?.status === "pending"
+          ? "Processando análise"
+          : "Aguardando análise";
+  const profileStatusDescription =
+    overview.latest_analysis?.status === "completed"
+      ? "Resumo do perfil extraído pela IA."
+      : "O Perfil Geral IA depende da última análise concluída do currículo.";
 
   return (
     <div className="flex flex-col gap-5 p-5">
@@ -93,10 +104,15 @@ export function OverviewTab({
       {/* Score Section */}
       {hasLinkedJobs ? (
         <Section title={relationshipTitle}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <StatusCard label="Vaga" title={relationshipJobTitle} description="Score final disponível no ranking" />
+          <div className="grid gap-3 sm:grid-cols-3">
             <StatusCard
-              label={relationshipStatusLabel}
+              label="Perfil Geral IA"
+              title={profileStatusTitle}
+              description={profileStatusDescription}
+            />
+            <StatusCard label="Vaga" title={relationshipJobTitle} description="Aderência à Vaga disponível no ranking" />
+            <StatusCard
+              label="Status na Vaga"
               title={relationshipStatusTitle}
               description={relationshipStatusDescription}
             />

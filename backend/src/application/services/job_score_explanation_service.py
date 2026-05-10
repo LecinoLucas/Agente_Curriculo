@@ -40,17 +40,16 @@ class JobScoreExplanationPayload:
     job_id: UUID
     candidate_id: UUID
     analysis_id: UUID | None
-    score: float
-    final_score: float
-    freshness_status: str
+    job_fit_score: float
+    ranking_freshness_status: str
     score_model_version: str | None
     explainability_version: str | None
     computed_at: Any | None
     recommendation: str
     engine_used: str
-    explanation: str
+    ranking_summary_text: str
     breakdown: dict[str, Any]
-    factor_summary: dict[str, Any]
+    score_factors: dict[str, Any]
     delta: dict[str, Any] | None
     highlights: list[str]
     risks: list[str]
@@ -61,7 +60,7 @@ class JobScoreExplanationPayload:
     strongest_evidence: list[dict[str, Any]]
     matched_equivalences: list[dict[str, Any]]
     gaps: list[str]
-    confidence_score: float
+    data_confidence_score: float
     strengths: list[str]
     partial_matches: list[dict[str, Any]] | None = None
     feedback: dict[str, Any] | None = None
@@ -71,17 +70,16 @@ class JobScoreExplanationPayload:
             "job_id": self.job_id,
             "candidate_id": self.candidate_id,
             "analysis_id": self.analysis_id,
-            "score": self.score,
-            "final_score": self.final_score,
-            "freshness_status": self.freshness_status,
+            "job_fit_score": self.job_fit_score,
+            "ranking_freshness_status": self.ranking_freshness_status,
             "score_model_version": self.score_model_version,
             "explainability_version": self.explainability_version,
             "computed_at": self.computed_at,
             "recommendation": self.recommendation,
             "engine_used": self.engine_used,
-            "explanation": self.explanation,
+            "ranking_summary_text": self.ranking_summary_text,
             "breakdown": dict(self.breakdown),
-            "factor_summary": dict(self.factor_summary),
+            "score_factors": dict(self.score_factors),
             "delta": dict(self.delta) if self.delta else None,
             "highlights": list(self.highlights),
             "risks": list(self.risks),
@@ -92,7 +90,7 @@ class JobScoreExplanationPayload:
             "strongest_evidence": list(self.strongest_evidence),
             "matched_equivalences": list(self.matched_equivalences),
             "gaps": list(self.gaps),
-            "confidence_score": self.confidence_score,
+            "data_confidence_score": self.data_confidence_score,
             "strengths": list(self.strengths),
             "partial_matches": list(self.partial_matches) if self.partial_matches else [],
             "feedback": dict(self.feedback) if self.feedback else None,
@@ -137,8 +135,8 @@ class JobScoreExplanationService:
                 candidate_id=candidate_id,
                 analysis_id=persisted_payload.analysis_id,
                 engine_used=persisted_payload.engine_used,
-                score=persisted_payload.final_score,
-                confidence_score=persisted_payload.confidence_score,
+                score=persisted_payload.job_fit_score,
+                confidence_score=persisted_payload.data_confidence_score,
                 matched_skills=list(getattr(persisted_match, "matched_skills_json", None) or []),
                 missing_skills=list(getattr(persisted_match, "missing_skills_json", None) or []),
                 equivalences_used=list(persisted_payload.partial_matches or []),
@@ -190,17 +188,16 @@ class JobScoreExplanationService:
             job_id=payload.job_id,
             candidate_id=payload.candidate_id,
             analysis_id=payload.analysis_id,
-            score=payload.score,
-            final_score=payload.final_score,
-            freshness_status=payload.freshness_status,
+            job_fit_score=payload.job_fit_score,
+            ranking_freshness_status=payload.ranking_freshness_status,
             score_model_version=payload.score_model_version,
             explainability_version=payload.explainability_version,
             computed_at=payload.computed_at,
             recommendation=payload.recommendation,
             engine_used=payload.engine_used,
-            explanation=self._build_viewer_summary(payload),
+            ranking_summary_text=self._build_viewer_summary(payload),
             breakdown={},
-            factor_summary={"positive": [], "negative": [], "contextual": []},
+            score_factors={"positive": [], "negative": [], "contextual": []},
             delta=None,
             highlights=[],
             risks=[],
@@ -211,7 +208,7 @@ class JobScoreExplanationService:
             strongest_evidence=[],
             matched_equivalences=[],
             gaps=[],
-            confidence_score=payload.confidence_score,
+            data_confidence_score=payload.data_confidence_score,
             strengths=[],
             partial_matches=[],
             feedback=None,
@@ -305,9 +302,9 @@ class JobScoreExplanationService:
 
     @staticmethod
     def _build_viewer_summary(payload: JobScoreExplanationPayload) -> str:
-        score_label = f"{payload.final_score:.2f}"
+        score_label = f"{payload.job_fit_score:.2f}"
         return (
-            f"Score {score_label} calculado pelo motor canônico com recommendation "
+            f"Aderência à Vaga {score_label} calculada pelo motor canônico com recommendation "
             f"{payload.recommendation}. Consulte recrutador ou admin para o detalhamento."
         )
 
@@ -359,6 +356,110 @@ class JobScoreExplanationService:
         return partials
 
     @staticmethod
+    def _partial_score_to_match_type(score_hint: float) -> str:
+        if score_hint >= 0.8:
+            return "strong_equivalence"
+        if score_hint >= 0.5:
+            return "partial_equivalence"
+        if score_hint > 0:
+            return "weak_equivalence"
+        return "none"
+
+    @classmethod
+    def _normalize_matched_equivalence(
+        cls,
+        item: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if not item:
+            return None
+
+        requirement = str(
+            item.get("requirement")
+            or item.get("required_skill")
+            or item.get("required")
+            or ""
+        ).strip()
+        if not requirement:
+            return None
+
+        matched_skill = str(
+            item.get("matched_skill")
+            or item.get("candidate_skill")
+            or item.get("candidate")
+            or ""
+        ).strip()
+
+        raw_score_hint = item.get("score_hint")
+        if raw_score_hint is None:
+            raw_score_hint = item.get("score")
+        if raw_score_hint is None:
+            raw_score_hint = item.get("partial_score")
+        score_hint = float(cls._coerce_decimal(raw_score_hint).quantize(Decimal("0.01")))
+
+        match_type = str(item.get("match_type") or "").strip() or cls._partial_score_to_match_type(
+            score_hint
+        )
+        if match_type == "none" and matched_skill:
+            match_type = "weak_equivalence"
+
+        match_status = str(item.get("match_status") or "").strip()
+        if not match_status:
+            match_status = "matched" if match_type == "strong_equivalence" else "partial"
+
+        evidence_strength = str(item.get("evidence_strength") or item.get("strength") or "").strip()
+        if not evidence_strength:
+            evidence_strength = {
+                "strong_equivalence": "strong",
+                "partial_equivalence": "medium",
+                "weak_equivalence": "weak",
+                "none": "weak",
+            }.get(match_type, "medium")
+
+        confidence = str(item.get("confidence") or "").strip()
+        if not confidence:
+            confidence = "medium" if match_type in {"strong_equivalence", "partial_equivalence"} else "low"
+
+        evidence_quotes = item.get("evidence_quotes")
+        if not isinstance(evidence_quotes, list):
+            evidence_quotes = []
+
+        explanation = str(
+            item.get("explanation")
+            or item.get("reason")
+            or ""
+        ).strip()
+        if not explanation:
+            explanation = (
+                f"{matched_skill or 'Skill relacionada'} cobre parcialmente {requirement}"
+                if matched_skill
+                else f"Nenhuma equivalência válida encontrada para {requirement}"
+            )
+
+        return {
+            "requirement": requirement,
+            "requirement_type": str(item.get("requirement_type") or "required_skill"),
+            "match_status": match_status,
+            "match_type": match_type,
+            "evidence_quotes": [str(quote).strip() for quote in evidence_quotes if str(quote).strip()],
+            "evidence_strength": evidence_strength,
+            "confidence": confidence,
+            "score_hint": score_hint,
+            "explanation": explanation,
+        }
+
+    @classmethod
+    def _build_matched_equivalences(
+        cls,
+        partial_matches: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        for partial_match in partial_matches:
+            normalized_item = cls._normalize_matched_equivalence(dict(partial_match or {}))
+            if normalized_item is not None:
+                normalized.append(normalized_item)
+        return normalized
+
+    @staticmethod
     def _extract_gap_labels(factors: list[dict[str, Any]]) -> list[str]:
         gaps: list[str] = []
         for factor in factors:
@@ -392,6 +493,7 @@ class JobScoreExplanationService:
             current_score=Decimal(str(score_head.final_score))
         )
         partial_matches = self._extract_partial_matches_from_factors(factors)
+        matched_equivalences = self._build_matched_equivalences(partial_matches)
         positive_labels = [item["factor_label"] for item in factor_summary.get("positive", [])]
         negative_labels = [item["factor_label"] for item in factor_summary.get("negative", [])]
         gaps = self._extract_gap_labels(factors) or list(getattr(persisted_match, "missing_skills_json", None) or [])
@@ -400,7 +502,7 @@ class JobScoreExplanationService:
             for item in factor_summary.get("negative", [])
             if item.get("factor_type") == "data_confidence_penalty"
         ]
-        explanation = str(score_head.explanation_text or "").strip() or _render_score_explanation(
+        ranking_summary_text = str(score_head.explanation_text or "").strip() or _render_score_explanation(
             final_score=Decimal(str(score_head.final_score)),
             decision=score_head.decision_suggestion,
             factor_summary=factor_summary,
@@ -410,9 +512,8 @@ class JobScoreExplanationService:
             job_id=job_id,
             candidate_id=candidate_id,
             analysis_id=score_head.source_analysis_id or analysis_id,
-            score=float(Decimal(str(score_head.final_score))),
-            final_score=float(Decimal(str(score_head.final_score))),
-            freshness_status=score_head.freshness_status,
+            job_fit_score=float(Decimal(str(score_head.final_score))),
+            ranking_freshness_status=score_head.freshness_status,
             score_model_version=score_head.score_model_version or version.version,
             explainability_version=score_head.explainability_version,
             computed_at=score_head.computed_at,
@@ -420,9 +521,9 @@ class JobScoreExplanationService:
                 getattr(persisted_match, "recommendation", None) or score_head.decision_suggestion
             ),
             engine_used="canonical",
-            explanation=explanation,
+            ranking_summary_text=ranking_summary_text,
             breakdown=self._build_persisted_breakdown(score_head.breakdown),
-            factor_summary=factor_summary,
+            score_factors=factor_summary,
             delta=delta_summary,
             highlights=positive_labels,
             risks=negative_labels,
@@ -431,9 +532,9 @@ class JobScoreExplanationService:
             overestimation_risks=confidence_risks,
             recommended_questions=[],
             strongest_evidence=[],
-            matched_equivalences=partial_matches,
+            matched_equivalences=matched_equivalences,
             gaps=gaps,
-            confidence_score=float(
+            data_confidence_score=float(
                 self._coerce_decimal(
                     (score_head.breakdown or {}).get("confidence_score")
                 ).quantize(Decimal("0.01"))

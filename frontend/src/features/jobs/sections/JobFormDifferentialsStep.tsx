@@ -1,6 +1,7 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { JobSkill, PendingJobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { PendingJobSkill } from "../jobFormConfig";
 import { SkillSection } from "../components/SkillSection";
 import { SectionCard } from "../../../shared/components/layout/SectionCard";
 
@@ -15,7 +16,10 @@ type JobFormDifferentialsStepProps = {
   onSearchChange: (value: string) => void;
   onFormChange: (updates: { behavioral_requirements?: string[]; newBehavioralRequirement?: string }) => void;
   savingSkillId: string | null;
-  onAddSkill: (skill: SkillEquivalenceGroup, isMandatory: boolean) => Promise<void>;
+  onAddSkill: (
+    skill: SkillEquivalenceGroup | string,
+    priorityLevel: "priority" | "complementary" | "eliminatory",
+  ) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
   onAddBehavioralRequirement: () => void;
@@ -38,14 +42,14 @@ export function JobFormDifferentialsStep({
     <div className="space-y-6">
       <SkillSection
         title="Diferenciais"
-        description="Use skills desejáveis para ferramentas, certificações, idiomas e experiências extras que ajudam no matching sem bloquear candidatos."
-        emphasis={`${optionalSkills.length} skill(s) desejável(is)`}
+        description="Somam pontos no ranking, mas não punem forte se ausentes."
+        emphasis={`${optionalSkills.length} skill(s) diferencial(is)`}
         availableSkills={availableSkills}
         linkedSkills={optionalSkills}
         search={skillSearch}
         onSearchChange={onSearchChange}
-        addLabel="Desejável"
-        addMandatory={false}
+        addLabel="Diferencial"
+        addPriorityLevel="complementary"
         savingSkillId={savingSkillId}
         onAddSkill={onAddSkill}
         onUpdateSkill={onUpdateSkill}

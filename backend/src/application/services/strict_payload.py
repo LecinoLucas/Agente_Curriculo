@@ -58,7 +58,7 @@ def require_decimal(data: dict[str, Any], key: str) -> Decimal:
 
 def optional_dict(data: dict[str, Any], key: str, default: dict[str, Any] | None = None) -> dict[str, Any]:
     """Extract dict or return empty dict if missing/invalid. Logs warning on malformed data."""
-    if key not in data:
+    if key not in data or data[key] is None:
         return default or {}
     value = data[key]
     if not isinstance(value, dict):
@@ -69,10 +69,22 @@ def optional_dict(data: dict[str, Any], key: str, default: dict[str, Any] | None
 
 def optional_list(data: dict[str, Any], key: str, default: list[Any] | None = None) -> list[Any]:
     """Extract list or return empty list if missing/invalid. Logs warning on malformed data."""
-    if key not in data:
+    if key not in data or data[key] is None:
         return default or []
     value = data[key]
     if not isinstance(value, list):
         logger.warning("strict_payload.optional_list_invalid", key=key, type=type(value).__name__)
         return default or []
     return value
+
+
+def optional_str(data: dict[str, Any], key: str, default: str | None = None) -> str | None:
+    """Extract string or return default if missing/invalid. Logs warning on malformed data."""
+    if key not in data or data[key] is None:
+        return default
+    value = data[key]
+    if not isinstance(value, str):
+        logger.warning("strict_payload.optional_str_invalid", key=key, type=type(value).__name__)
+        return default
+    normalized = value.strip()
+    return normalized or default

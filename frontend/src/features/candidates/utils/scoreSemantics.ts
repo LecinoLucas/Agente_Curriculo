@@ -30,17 +30,17 @@ function normalizeConfidenceScore(value: number | null | undefined): number | nu
 }
 
 export function deriveScoreSemantics({
-  finalScore,
+  jobFitScore,
   aiStatus,
   hasActiveJob,
   confidenceScore,
 }: {
-  finalScore: number | null | undefined;
+  jobFitScore: number | null | undefined;
   aiStatus?: AnalysisStatus;
   hasActiveJob: boolean;
   confidenceScore?: number | null | undefined;
 }): ScoreSemantics {
-  const primaryScore = normalizeScorePercent(finalScore);
+  const primaryScore = normalizeScorePercent(jobFitScore);
   const secondaryScore = null;
   const confidence = normalizeConfidenceScore(confidenceScore);
   const hasConflict = false;
@@ -50,7 +50,7 @@ export function deriveScoreSemantics({
 
   if (!hasActiveJob) {
     return {
-      primaryLabel: "Score final",
+      primaryLabel: "Aderência à Vaga",
       primaryScore: null,
       primaryDisplay: "—",
       secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -58,7 +58,7 @@ export function deriveScoreSemantics({
       secondaryDisplay: secondaryScore != null ? formatScorePercent(secondaryScore) : null,
       statusLabel: "Sem vaga ativa",
       statusTone: "neutral",
-      contextLine: "Associe o candidato a uma vaga para calcular o score final.",
+      contextLine: "Associe o candidato a uma vaga para calcular a Aderência à Vaga.",
       detailLine: secondaryScore != null ? "Perfil Geral IA resume o perfil, mas não decide a vaga ativa." : null,
       state: "no_active_job",
       hasConflict: false,
@@ -67,7 +67,7 @@ export function deriveScoreSemantics({
 
   if (primaryScore == null) {
     return {
-      primaryLabel: "Score final",
+      primaryLabel: "Aderência à Vaga",
       primaryScore: null,
       primaryDisplay: "—",
       secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -77,7 +77,7 @@ export function deriveScoreSemantics({
       statusTone: aiFailed ? "low" : "mid",
       contextLine: aiFailed
         ? "A última análise da IA falhou. Valide manualmente antes de decidir."
-        : "O score final ainda não está disponível para esta decisão.",
+        : "A Aderência à Vaga ainda não está disponível para esta decisão.",
       detailLine: secondaryScore != null ? "Perfil Geral IA é apenas contexto enquanto a compatibilidade não chega." : null,
       state: "awaiting_match",
       hasConflict: false,
@@ -86,7 +86,7 @@ export function deriveScoreSemantics({
 
   if (aiFailed || hasConflict || lowConfidence) {
     return {
-      primaryLabel: "Score final",
+      primaryLabel: "Aderência à Vaga",
       primaryScore,
       primaryDisplay: formatScorePercent(primaryScore),
       secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -95,12 +95,12 @@ export function deriveScoreSemantics({
       statusLabel: aiFailed ? "Análise inconclusiva" : "Revisão recomendada",
       statusTone: aiFailed ? "low" : "mid",
       contextLine: aiFailed
-        ? "A última análise da IA falhou. O score final exibido pode depender de contexto anterior."
+        ? "A última análise da IA falhou. A Aderência à Vaga exibida pode depender de contexto anterior."
         : hasConflict
-          ? "Compatibilidade Contextual e Perfil Geral IA contam histórias diferentes."
+          ? "Aderência à Vaga e Perfil Geral IA contam histórias diferentes."
           : "A compatibilidade existe, mas a confiança da IA está baixa para decisão automática.",
       detailLine: hasConflict
-        ? "Use Compatibilidade Contextual e Aderência à Vaga para decidir esta vaga. Perfil Geral IA é contexto do perfil."
+        ? "Use Aderência à Vaga para decidir esta vaga. Perfil Geral IA e contexto do perfil."
         : secondaryScore != null
           ? "Perfil Geral IA continua disponível como contexto secundário."
           : null,
@@ -110,7 +110,7 @@ export function deriveScoreSemantics({
   }
 
   return {
-      primaryLabel: "Score final",
+      primaryLabel: "Aderência à Vaga",
     primaryScore,
     primaryDisplay: formatScorePercent(primaryScore),
     secondaryLabel: secondaryScore != null ? "Perfil Geral IA" : null,
@@ -118,7 +118,7 @@ export function deriveScoreSemantics({
     secondaryDisplay: secondaryScore != null ? formatScorePercent(secondaryScore) : null,
     statusLabel: null,
     statusTone: getScoreTone(primaryScore),
-    contextLine: "Score final é o primeiro sinal para decidir a vaga ativa.",
+    contextLine: "Aderência à Vaga é o primeiro sinal para decidir a vaga ativa.",
     detailLine: secondaryScore != null ? "Perfil Geral IA resume o perfil e não substitui a aderência desta vaga." : null,
     state: "ready",
     hasConflict: false,

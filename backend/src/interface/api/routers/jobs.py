@@ -26,6 +26,11 @@ from src.application.services.job_bulk_payload_normalizer import (
     JobBulkPayloadNormalizer,
 )
 from src.application.services.job_bulk_update_service import JobBulkUpdateService
+from src.application.services.analysis_service import (
+    AnalysisNotCompletedError,
+    AnalysisResultNotFoundError,
+    AnalysisService,
+)
 from src.application.services.job_score_explanation_service import (
     CandidateNotLinkedToJobError,
     CandidateScoreExplanationNotReadyError,
@@ -49,6 +54,9 @@ from src.application.services.pipeline_service import (
 from src.domain.entities.user import UserRole
 from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
+    SQLAlchemyAnalysisRepository,
+)
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
@@ -56,6 +64,7 @@ from src.application.services.candidate_ranking_service import (
     CandidateRankingService,
     NoActiveScoreVersionError,
     RankingJobNotFoundError,
+    CandidateNotInActivePipelineError,
 )
 from src.interface.api.dependencies import AdminOnly, CurrentUser, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.job_schemas import (
@@ -75,13 +84,15 @@ from src.interface.api.schemas.job_schemas import (
     MatchingFeedbackResponse,
     UpdateJobRequest,
 )
+from src.interface.api.schemas.analysis_schemas import ForceRecomputeResponse
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest as PipelineAddCandidateToJobRequest,
     AddCandidateToJobResponse as PipelineAddCandidateToJobResponse,
     JobMatchCandidateResponse,
 )
-from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse
+from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse, SingleCandidateScoringResponse
 from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
+from src.infrastructure.database.models.scoring_model import CandidateJobScoreSnapshotModel
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 _ANALYSIS_QUEUE = "analysis"
@@ -101,6 +112,10 @@ def _job_bulk_update_service(db: AsyncSession) -> JobBulkUpdateService:
 
 def _pipeline_service(db: AsyncSession) -> PipelineService:
     return PipelineService(SQLAlchemyPipelineRepository(db), db)
+
+
+def _analysis_service(db: AsyncSession) -> AnalysisService:
+    return AnalysisService(SQLAlchemyAnalysisRepository(db), audit_service=AuditService(db))
 
 
 async def _enqueue_latest_pending_analysis_for_candidate_job(
@@ -186,6 +201,61 @@ async def _enqueue_latest_pending_analysis_for_candidate_job(
             enqueue_analysis(refetched.id)
 
 
+async def _resolve_force_recompute_analysis_id(
+    db: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> UUID:
+    pipeline_entry = await SQLAlchemyPipelineRepository(db).find_active_entry(candidate_id, job_id)
+    if pipeline_entry is None:
+        raise ValidationException(
+            "Force recompute só é permitido para candidato com pipeline ativo nesta vaga."
+        )
+
+    analysis_repo = SQLAlchemyAnalysisRepository(db)
+    if pipeline_entry.current_analysis_id is not None:
+        completed = await analysis_repo.find_completed(pipeline_entry.current_analysis_id)
+        if completed is not None:
+            return completed.id
+
+    if pipeline_entry.resume_version_id is None:
+        raise ValidationException(
+            "O pipeline ativo não possui análise concluída vinculada para recalcular."
+        )
+
+    latest_completed = await analysis_repo.find_latest_completed_for_version(
+        resume_version_id=pipeline_entry.resume_version_id,
+        job_id=job_id,
+    )
+    if latest_completed is None:
+        raise ValidationException(
+            "Nenhuma análise concluída foi encontrada para o pipeline ativo desta vaga."
+        )
+    return latest_completed.id
+
+
+async def _load_latest_snapshot_score(
+    db: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> float | None:
+    snapshot_score = await db.scalar(
+        sa.select(CandidateJobScoreSnapshotModel.final_score)
+        .where(
+            CandidateJobScoreSnapshotModel.candidate_id == candidate_id,
+            CandidateJobScoreSnapshotModel.job_id == job_id,
+        )
+        .order_by(
+            CandidateJobScoreSnapshotModel.computed_at.desc(),
+            CandidateJobScoreSnapshotModel.id.desc(),
+        )
+        .limit(1)
+    )
+    return float(snapshot_score) if snapshot_score is not None else None
+
+
 def _quality_validator_service(db: AsyncSession) -> JobQualityValidatorService:
     return JobQualityValidatorService(SQLAlchemyJobRepository(db))
 
@@ -237,6 +307,11 @@ def _handle_job_service_error(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Nenhuma versão de scoring ativa. Configure uma versão ativa antes de calcular.",
+        )
+    if isinstance(exc, CandidateNotInActivePipelineError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato não possui pipeline ativo nesta vaga.",
         )
     if isinstance(exc, JobNotFoundForQualityError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vaga não encontrada")
@@ -645,16 +720,129 @@ async def compute_job_scoring(
     """
     try:
         svc = CandidateRankingService(db)
-        count = await svc.compute_and_persist(job_id)
+        score_deltas = await svc.compute_and_persist(job_id)
         version = await svc._load_active_version()
         await db.commit()
         from datetime import UTC, datetime
         return ScoringComputeResponse(
             job_id=job_id,
-            candidates_scored=count,
+            candidates_scored=len(score_deltas),
             score_version=version.version,
             computed_at=datetime.now(UTC),
+            score_deltas=score_deltas,
         )
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.post(
+    "/{job_id}/candidates/{candidate_id}/scoring",
+    response_model=SingleCandidateScoringResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def compute_single_candidate_scoring(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> SingleCandidateScoringResponse:
+    """Compute and persist score for a single candidate with an active pipeline.
+    
+    This endpoint explicitly requires the candidate to be actively in the job's pipeline.
+    It does not alter the candidate's active job and does not trigger new AI analysis.
+    """
+    try:
+        svc = CandidateRankingService(db)
+        await svc.assert_candidate_active_in_job(candidate_id, job_id)
+        
+        result = await svc.compute_single_candidate(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            recompute_reason="manual_rescore"
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Não foi possível calcular o score (faltam evidências ou análise inválida)."
+            )
+            
+        await db.commit()
+        return SingleCandidateScoringResponse(**result)
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.post(
+    "/{job_id}/candidates/{candidate_id}/force-recompute",
+    response_model=ForceRecomputeResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def force_recompute_job_candidate(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ForceRecomputeResponse:
+    try:
+        analysis_id = await _resolve_force_recompute_analysis_id(
+            db,
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+        old_score = await _load_latest_snapshot_score(
+            db,
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+
+        logger.info(
+            "analysis.force_recompute_requested",
+            candidate_id=str(candidate_id),
+            job_id=str(job_id),
+            analysis_id=str(analysis_id),
+            requested_by=str(current_user.id),
+            safe_mode=True,
+        )
+
+        match = await _analysis_service(db).match_completed_analysis_to_job(
+            analysis_id=analysis_id,
+            job_id=job_id,
+            force_recompute=True,
+        )
+        await db.commit()
+
+        new_score = float(match.job_fit_score) if match.job_fit_score is not None else None
+        score_delta = None
+        if old_score is not None and new_score is not None:
+            score_delta = round(new_score - old_score, 2)
+
+        return ForceRecomputeResponse(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            analysis_id=analysis_id,
+            old_score=old_score,
+            new_score=new_score,
+            score_delta=score_delta,
+            ranking_refresh_status=match.ranking_refresh_status,
+            ranking_freshness_status=match.ranking_freshness_status,
+            ranking_refreshed_at=match.ranking_refreshed_at,
+        )
+    except AnalysisNotCompletedError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A análise vinculada ao pipeline ativo ainda não foi concluída.",
+        ) from exc
+    except AnalysisResultNotFoundError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="O resultado da análise vinculada ao pipeline ativo não está disponível.",
+        ) from exc
     except Exception as exc:
         await db.rollback()
         _handle_job_service_error(exc)

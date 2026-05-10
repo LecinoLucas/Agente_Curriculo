@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AnalysisResult,
   CandidateOverview,
@@ -22,6 +22,12 @@ import {
   getExplainabilityQuickLine,
   getTopExplainabilityInsights,
 } from "../../utils/explainabilityUi";
+import { getLatestAnalysisForActiveJob } from "../../utils/analysisStatus";
+
+export interface ScoreTabFocusRequest {
+  intent: "analysis" | "review";
+  token: number;
+}
 
 function formatOptionalDateTime(value: string | null | undefined): string {
   if (!value) return "—";
@@ -95,6 +101,7 @@ export function ScoreTab({
   error,
   compatibilityGuidance,
   scoreExplanation: initialScoreExplanation,
+  focusRequest = null,
 }: {
   overview: CandidateOverview;
   activeJobId: string | null;
@@ -106,15 +113,23 @@ export function ScoreTab({
   error: string | null;
   compatibilityGuidance: ReturnType<typeof getCompatibilityGuidance>;
   scoreExplanation: ScoreExplanationResponse | null;
+  focusRequest?: ScoreTabFocusRequest | null;
 }) {
   const { user } = useAuth();
   const canSendMatchingFeedback = user?.role === "admin" || user?.role === "recruiter";
-  const compatibilityScore = rankingEntry?.final_score ?? null;
-  const latestActiveAnalysis = activeJobId ? overview.latest_analysis : null;
+  const compatibilityScore = rankingEntry?.job_fit_score ?? null;
+  const latestActiveAnalysis = getLatestAnalysisForActiveJob(
+    overview.latest_analysis,
+    activeJobId,
+  );
   // Use prop from parent (CandidateDrawer), only update locally for feedback
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(initialScoreExplanation);
   const [feedbackSaving, setFeedbackSaving] = useState<"liked" | "rejected" | "hired" | null>(null);
-  const dealBreakerViolations = rankingEntry?.reason_codes.filter((reason) => isDealBreakerReasonCode(reason)) ?? [];
+  const rankingDetailsRef = useRef<HTMLElement | null>(null);
+  const explainabilityRef = useRef<HTMLElement | null>(null);
+  const rankingDetailsDisclosureRef = useRef<HTMLDetailsElement | null>(null);
+  const explainabilityDisclosureRef = useRef<HTMLDetailsElement | null>(null);
+  const dealBreakerViolations = rankingEntry?.reason_tags.filter((reason) => isDealBreakerReasonCode(reason)) ?? [];
   const dealBreakerDetails = dealBreakerViolations.map((reasonCode) =>
     buildDealBreakerViolationDisplay({
       reasonCode,
@@ -126,11 +141,11 @@ export function ScoreTab({
   );
   const candidateId = overview.candidate.id;
   const hasRankingDetails =
-    Boolean(rankingEntry?.explanation_text) ||
-    Boolean(rankingEntry && rankingEntry.reason_codes.length > 0) ||
+    Boolean(rankingEntry?.ranking_summary_text) ||
+    Boolean(rankingEntry && rankingEntry.reason_tags.length > 0) ||
     Boolean(rankingEntry?.score_breakdown) ||
     dealBreakerDetails.length > 0;
-  const freshnessBadge = getFreshnessBadge(rankingEntry?.freshness_status, loading);
+  const freshnessBadge = getFreshnessBadge(rankingEntry?.ranking_freshness_status, loading);
   const rankingComputedAt = rankingEntry?.ranking_updated_at ?? rankingEntry?.score_computed_at ?? rankingEntry?.computed_at ?? null;
   const rankingRelativeTime = formatRelativeDateTime(rankingComputedAt);
   const rankingVersion = rankingEntry?.ranking_version ?? rankingEntry?.version ?? null;
@@ -138,7 +153,7 @@ export function ScoreTab({
   const explainabilityLine = getExplainabilityQuickLine(scoreExplanation);
   const deltaLine = getExplainabilityDeltaLine(scoreExplanation);
   const freshnessLine = getExplainabilityFreshnessLine(
-    scoreExplanation?.freshness_status ?? rankingEntry?.freshness_status,
+    scoreExplanation?.ranking_freshness_status ?? rankingEntry?.ranking_freshness_status,
     scoreExplanation?.computed_at ?? rankingComputedAt,
   );
 
@@ -147,12 +162,33 @@ export function ScoreTab({
     setScoreExplanation(initialScoreExplanation);
   }, [initialScoreExplanation]);
 
+  useEffect(() => {
+    if (!focusRequest) return;
+
+    if (focusRequest.intent === "analysis") {
+      if (rankingDetailsDisclosureRef.current) {
+        rankingDetailsDisclosureRef.current.open = true;
+      }
+      window.requestAnimationFrame(() => {
+        rankingDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+
+    if (explainabilityDisclosureRef.current) {
+      explainabilityDisclosureRef.current.open = true;
+    }
+    window.requestAnimationFrame(() => {
+      explainabilityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [focusRequest]);
+
   const semantics = deriveScoreSemantics({
-    finalScore: compatibilityScore,
+    jobFitScore: compatibilityScore,
     aiStatus: latestActiveAnalysis?.status,
     hasActiveJob: Boolean(activeJobId),
     confidenceScore:
-      scoreExplanation?.confidence_score ??
+      scoreExplanation?.data_confidence_score ??
       rankingEntry?.score_breakdown?.confidence_score ??
       null,
   });
@@ -184,10 +220,10 @@ export function ScoreTab({
 
   if (!activeJobId) {
     return (
-      <EmptyTab
-        title="Aguardando vaga"
-        description="Associe o candidato a uma vaga para liberar score e sinais de decisão."
-      />
+        <EmptyTab
+          title="Aguardando vaga"
+          description="Associe o candidato a uma vaga para liberar Aderência à Vaga e sinais de decisão."
+        />
     );
   }
 
@@ -195,7 +231,7 @@ export function ScoreTab({
     <div className="flex flex-col gap-5 p-5">
       <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-          Semântica do score
+          Semântica da aderência
         </p>
         <p className="mt-2 text-sm font-medium text-[hsl(var(--text))]">{semantics.contextLine}</p>
         {semantics.detailLine ? (
@@ -208,7 +244,7 @@ export function ScoreTab({
           compatibilityScore={compatibilityScore}
           scoreBreakdown={rankingEntry?.score_breakdown ?? null}
           scoreExplanation={scoreExplanation}
-          overallSummary={rankingEntry?.explanation_text}
+          rankingSummaryText={rankingEntry?.ranking_summary_text}
         />
       ) : null}
 
@@ -235,25 +271,26 @@ export function ScoreTab({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <DecisionCard
-            label="Score final"
+            label="Aderência à Vaga"
             value={compatibilityGuidance ? compatibilityGuidance.title : fmtScore(compatibilityScore)}
-            description={compatibilityGuidance?.description ?? "Fonte oficial persistida em CandidateJobScore.final_score."}
+            description={compatibilityGuidance?.description ?? "Fonte oficial persistida em candidate_job_scores."}
             valueClassName={compatibilityGuidance ? "text-[hsl(var(--text))]" : scoreColorClass(compatibilityScore)}
           />
           <DecisionCard
             label="Aderência à Vaga"
-            value={rankingEntry ? `#${rankingEntry.rank} · ${fmtScore(rankingEntry.final_score)}` : "—"}
+            value={rankingEntry ? `#${rankingEntry.rank} · ${fmtScore(rankingEntry.job_fit_score)}` : "—"}
             description={
               rankingEntry
                 ? `${freshnessBadge.label}. Posição atual do candidato no ranking desta vaga.`
                 : "Ainda não há posição persistida para este candidato nesta vaga."
             }
-            valueClassName={rankingEntry ? scoreColorClass(rankingEntry.final_score) : undefined}
+            valueClassName={rankingEntry ? scoreColorClass(rankingEntry.job_fit_score) : undefined}
           />
         </div>
       </Section>
 
       <Section title="Detalhamento do ranking">
+        <div ref={rankingDetailsRef} />
         {loading ? <SkeletonRows /> : null}
         {error ? (
           <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
@@ -265,7 +302,7 @@ export function ScoreTab({
           <div className="flex flex-col gap-4">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <MetaItem label="Posição" value={`#${rankingEntry.rank}`} />
-              <MetaItem label="Aderência à Vaga" value={fmtScore(rankingEntry.final_score)} />
+              <MetaItem label="Aderência à Vaga" value={fmtScore(rankingEntry.job_fit_score)} />
               <MetaItem label="Atualização" value={freshnessLine} />
               <MetaItem label="Atualizado em" value={formatOptionalDateTime(rankingComputedAt)} />
             </div>
@@ -314,9 +351,9 @@ export function ScoreTab({
               </div>
             ) : null}
 
-            {rankingEntry.reason_codes.filter((reason) => !isDealBreakerReasonCode(reason)).length > 0 ? (
+            {rankingEntry.reason_tags.filter((reason) => !isDealBreakerReasonCode(reason)).length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {rankingEntry.reason_codes
+                {rankingEntry.reason_tags
                   .filter((reason) => !isDealBreakerReasonCode(reason))
                   .slice(0, 3)
                   .map((reason, index) => (
@@ -334,27 +371,30 @@ export function ScoreTab({
               <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum critério eliminatório violado.</p>
             ) : null}
 
-            {rankingEntry.explanation_text ? (
+            {rankingEntry.ranking_summary_text ? (
               <p className="text-sm leading-relaxed text-[hsl(var(--text-muted))]">
-                {rankingEntry.explanation_text}
+                {rankingEntry.ranking_summary_text}
               </p>
             ) : null}
 
-            <details className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3">
+            <details
+              ref={rankingDetailsDisclosureRef}
+              className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3"
+            >
               <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
                 Ver detalhes da análise
               </summary>
               <div className="mt-4 flex flex-col gap-4">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <MetaItem label="Etapa no ranking" value={rankingEntry.stage || "—"} />
-                  <MetaItem label="Status do pipeline" value={rankingEntry.pipeline_status || "—"} />
+                  <MetaItem label="Status na Vaga" value={rankingEntry.pipeline_status || "—"} />
                   <MetaItem
                     label="Análise de origem"
                     value={rankingEntry.source_analysis_created_at ? formatOptionalDateTime(rankingEntry.source_analysis_created_at) : "—"}
                   />
                   <MetaItem label="Versão do ranking" value={rankingVersion || "—"} />
                   <MetaItem label="Modelo de score" value={rankingEntry.score_model_version || "—"} />
-                  <MetaItem label="Status do ranking" value={freshnessBadge.label} />
+                  <MetaItem label="Atualização do ranking" value={freshnessBadge.label} />
                 </div>
 
                 {rankingEntry.score_breakdown ? (
@@ -390,7 +430,8 @@ export function ScoreTab({
         ) : null}
       </Section>
 
-      <Section title="Por que este score?">
+      <Section title="Por que esta aderência?">
+        <div ref={explainabilityRef} />
         {scoreExplanation ? (
           <div className="flex flex-col gap-4">
             <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
@@ -400,7 +441,7 @@ export function ScoreTab({
                     Leitura operacional
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">
-                    {explainabilityLine || scoreExplanation.explanation}
+                    {explainabilityLine || scoreExplanation.ranking_summary_text}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -508,16 +549,19 @@ export function ScoreTab({
               </div>
             ) : null}
 
-            <details className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3">
+            <details
+              ref={explainabilityDisclosureRef}
+              className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3"
+            >
               <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
                 Ver detalhes da análise
               </summary>
               <div className="mt-4 flex flex-col gap-4">
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <MetaItem label="Score final" value={fmtScore(scoreExplanation.final_score)} />
+                  <MetaItem label="Aderência à Vaga" value={fmtScore(scoreExplanation.job_fit_score)} />
                   <MetaItem label="Recommendation" value={scoreExplanation.recommendation || "—"} />
                   <MetaItem label="Motor usado" value={scoreExplanation.engine_used || "—"} />
-                  <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.confidence_score)} />
+                  <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.data_confidence_score)} />
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
@@ -526,8 +570,8 @@ export function ScoreTab({
                       Breakdown do score
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                      <ExplanationBreakdownItem label="Obrigatórias" item={scoreExplanation.breakdown.mandatory ?? null} />
-                      <ExplanationBreakdownItem label="Opcionais" item={scoreExplanation.breakdown.optional ?? null} />
+                      <ExplanationBreakdownItem label="Essenciais" item={scoreExplanation.breakdown.mandatory ?? null} />
+                      <ExplanationBreakdownItem label="Diferenciais" item={scoreExplanation.breakdown.optional ?? null} />
                       <ExplanationBreakdownItem label="Experiência" item={scoreExplanation.breakdown.experience ?? null} />
                       <ExplanationBreakdownItem label="Senioridade" item={scoreExplanation.breakdown.seniority ?? null} />
                       <ExplanationBreakdownItem label="Ajuste IA" item={scoreExplanation.breakdown.ai_adjustment ?? null} />

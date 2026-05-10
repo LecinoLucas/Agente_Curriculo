@@ -24,6 +24,9 @@ from src.application.services.job_profiler_service import (
     build_job_profile_hash,
     job_skill_from_row,
 )
+from src.application.services.job_skill_priority_service import (
+    normalize_job_skill_priority_level,
+)
 from src.application.services.skill_requirements_service import (
     validate_skill_requirements_product_rules,
 )
@@ -152,6 +155,7 @@ class JobService:
     async def update(self, job_id: UUID, body: UpdateJobRequest) -> JobModel:
         job = await self.get(job_id)
         provided_fields = body.model_fields_set
+        skills_configuration_changed = "skill_requirements" in provided_fields
         if "status" in provided_fields and body.status == "archived":
             raise ValidationException("Use a ação específica de arquivar vaga.")
         salary_min = body.salary_min if "salary_min" in provided_fields else job.salary_min
@@ -233,6 +237,8 @@ class JobService:
         }):
             await self._invalidate_job_scores_and_matches(job_id)
             await self._maybe_generate_job_profile(saved_job)
+            if skills_configuration_changed:
+                await self._recompute_active_pipeline_matches(job_id)
 
         await self._maybe_refresh_quality(saved_job.id)
 
@@ -240,6 +246,8 @@ class JobService:
 
     async def _invalidate_job_scores_and_matches(self, job_id: UUID) -> None:
         """Hard-delete persisted ranking/matching data for this job after structural updates."""
+        if not hasattr(self._repository, "_session"):
+            return
         import sqlalchemy as sa
         from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
         from src.infrastructure.database.models.profile_analysis_model import (
@@ -264,6 +272,65 @@ class JobService:
                 superseded_at=datetime.now(timezone.utc),
             )
         )
+
+    async def _recompute_active_pipeline_matches(self, job_id: UUID) -> None:
+        if not hasattr(self._repository, "_session"):
+            return
+
+        import sqlalchemy as sa
+
+        from src.application.services.analysis_service import AnalysisService
+        from src.infrastructure.database.models.candidate_job_pipeline_model import (
+            CandidateJobPipelineModel,
+        )
+        from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
+            SQLAlchemyAnalysisRepository,
+        )
+
+        session = self._repository._session
+        active_entries = list(
+            (
+                await session.scalars(
+                    sa.select(CandidateJobPipelineModel).where(
+                        CandidateJobPipelineModel.job_id == job_id,
+                        CandidateJobPipelineModel.relationship_status == "active",
+                        CandidateJobPipelineModel.is_terminal.is_(False),
+                        CandidateJobPipelineModel.terminated_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+        if not active_entries:
+            return
+
+        analysis_repo = SQLAlchemyAnalysisRepository(session)
+        analysis_service = AnalysisService(analysis_repo)
+        for entry in active_entries:
+            resume_version_id = getattr(entry, "resume_version_id", None)
+            if resume_version_id is None:
+                continue
+
+            latest_completed = await analysis_repo.find_latest_completed_for_version(
+                resume_version_id,
+                job_id,
+            )
+            if latest_completed is None:
+                continue
+
+            try:
+                await analysis_service.match_completed_analysis_to_job(
+                    analysis_id=latest_completed.id,
+                    job_id=job_id,
+                    force_recompute=True,
+                )
+            except Exception:
+                logger.warning(
+                    "job.skill_recompute_failed",
+                    job_id=str(job_id),
+                    candidate_id=str(entry.candidate_id),
+                    analysis_id=str(latest_completed.id),
+                    exc_info=True,
+                )
 
     async def transition_status(self, job_id: UUID, next_status: str) -> JobModel:
         if next_status == "archived":
@@ -373,14 +440,16 @@ class JobService:
         link = JobRequiredSkillModel(
             job_id=job_id,
             skill_id=skill.id,
-            is_mandatory=body.is_mandatory,
+            priority_level=normalize_job_skill_priority_level(body.priority_level),
             minimum_level=body.minimum_level,
             minimum_years=body.minimum_years,
             weight=body.weight,
         )
         saved = await self._repository.create_required_skill_link(link)
-        job = await self.get(job_id)
+        job = await self.sync_skill_requirements_snapshot(job_id)
+        await self._invalidate_job_scores_and_matches(job_id)
         await self._maybe_generate_job_profile(job)
+        await self._recompute_active_pipeline_matches(job_id)
         await self._maybe_refresh_quality(job.id)
         return self._required_skill_response(saved, skill.name)
 
@@ -390,9 +459,18 @@ class JobService:
         if link is None:
             raise JobSkillLinkNotFoundError
         await self._repository.delete_required_skill_link(link)
-        job = await self.get(job_id)
+        job = await self.sync_skill_requirements_snapshot(job_id)
+        await self._invalidate_job_scores_and_matches(job_id)
         await self._maybe_generate_job_profile(job)
+        await self._recompute_active_pipeline_matches(job_id)
         await self._maybe_refresh_quality(job.id)
+
+    async def sync_skill_requirements_snapshot(self, job_id: UUID) -> JobModel:
+        job = await self.get(job_id)
+        rows = await self._repository.list_required_skill_rows(job_id)
+        job.skill_requirements = self._skill_requirements_from_required_skill_rows(rows)
+        job.updated_at = datetime.now(timezone.utc)
+        return await self._repository.save(job)
 
     @staticmethod
     def _validate_salary_range(salary_min, salary_max) -> None:
@@ -445,6 +523,34 @@ class JobService:
         return result.sanitized
 
     @staticmethod
+    def _skill_requirements_from_required_skill_rows(rows: list) -> dict[str, list[str]]:
+        priority: list[str] = []
+        complementary: list[str] = []
+        eliminatory: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            name = str(getattr(row, "skill_name", "") or "").strip()
+            normalized = normalize_skill_text(name)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            link = getattr(row, "JobRequiredSkillModel", row)
+            level = normalize_job_skill_priority_level(
+                getattr(link, "priority_level", "complementary")
+            )
+            if level == "priority":
+                priority.append(name)
+            elif level == "eliminatory":
+                eliminatory.append(name)
+            else:
+                complementary.append(name)
+        return {
+            "priority": priority,
+            "complementary": complementary,
+            "eliminatory": eliminatory,
+        }
+
+    @staticmethod
     def _set_status(job: JobModel, next_status: str) -> None:
         now = datetime.now(timezone.utc)
         job.status = next_status
@@ -468,7 +574,7 @@ class JobService:
             job_id=link.job_id,
             skill_id=link.skill_id,
             skill_name=skill_name,
-            is_mandatory=link.is_mandatory,
+            priority_level=normalize_job_skill_priority_level(link.priority_level),
             minimum_level=link.minimum_level,
             minimum_years=link.minimum_years,
             weight=link.weight,

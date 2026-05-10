@@ -166,7 +166,8 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
     active_job_id: typeof item.active_job_id === "string" ? item.active_job_id : null,
     active_job_title: item.active_job_title ?? null,
     active_job_stage: item.active_job_stage ?? null,
-    active_job_final_score: item.active_job_final_score != null ? Number(item.active_job_final_score) : null,
+    active_job_job_fit_score:
+      item.active_job_job_fit_score != null ? Number(item.active_job_job_fit_score) : null,
     ai_status: item.ai_status ?? null,
   };
 }

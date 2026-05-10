@@ -47,8 +47,8 @@
         "data",
         "business"
       ],
-      "type": "skill",
-      "strength": "strong"
+      "type": "category",
+      "strength": "weak"
     },
     {
       "canonical": "Excel",
@@ -97,12 +97,7 @@
         "JS",
         "ECMAScript",
         "TypeScript",
-        "TS",
-        "Node.js",
-        "React",
-        "Next.js",
-        "Vue",
-        "Angular"
+        "TS"
       ],
       "domain": [
         "technology",
@@ -135,7 +130,7 @@
         "technology"
       ],
       "type": "area",
-      "strength": "strong"
+      "strength": "weak"
     },
     {
       "canonical": "Frontend",
@@ -156,7 +151,7 @@
         "technology"
       ],
       "type": "area",
-      "strength": "strong"
+      "strength": "weak"
     },
     {
       "canonical": "Cloud",
@@ -173,29 +168,21 @@
         "technology",
         "infrastructure"
       ],
-      "type": "skill",
-      "strength": "strong"
+      "type": "category",
+      "strength": "weak"
     },
     {
       "canonical": "DevOps",
       "aliases": [
         "DevOps",
-        "CI/CD",
-        "Docker",
-        "Kubernetes",
-        "Terraform",
-        "GitHub Actions",
-        "GitLab CI",
-        "Jenkins",
-        "observability",
-        "monitoring"
+        "CI/CD"
       ],
       "domain": [
         "technology",
         "infrastructure"
       ],
       "type": "area",
-      "strength": "strong"
+      "strength": "weak"
     },
     {
       "canonical": "Git",
@@ -233,8 +220,8 @@
         "supply_chain",
         "administrative"
       ],
-      "type": "system",
-      "strength": "strong"
+      "type": "category",
+      "strength": "weak"
     },
     {
       "canonical": "SAP MM",
@@ -274,12 +261,8 @@
       "canonical": "Agile",
       "aliases": [
         "Agile",
-        "Scrum",
-        "Kanban",
         "metodologias ágeis",
-        "sprint",
-        "Jira",
-        "Trello"
+        "sprint"
       ],
       "domain": [
         "technology",
@@ -314,11 +297,6 @@
         "Análise de dados",
         "Data Analyst",
         "Analista de Dados",
-        "SQL",
-        "Power BI",
-        "Tableau",
-        "Excel",
-        "dashboards",
         "KPIs"
       ],
       "domain": [
@@ -333,12 +311,6 @@
       "aliases": [
         "Engenharia de Dados",
         "Data Engineer",
-        "ETL",
-        "ELT",
-        "Airflow",
-        "Spark",
-        "Databricks",
-        "dbt",
         "Data Lake",
         "Data Warehouse"
       ],
@@ -356,11 +328,7 @@
         "ML",
         "IA",
         "AI",
-        "modelos preditivos",
-        "scikit-learn",
-        "TensorFlow",
-        "PyTorch",
-        "LLM"
+        "modelos preditivos"
       ],
       "domain": [
         "ai",
@@ -371,15 +339,10 @@
       "strength": "strong"
     },
     {
-      "canonical": "Finance",
+      "canonical": "Financeiro",
       "aliases": [
         "Financeiro",
-        "contas a pagar",
-        "contas a receber",
-        "conciliação bancária",
-        "fluxo de caixa",
-        "FP&A",
-        "controladoria"
+        "Finance"
       ],
       "domain": [
         "finance"
@@ -388,17 +351,27 @@
       "strength": "strong"
     },
     {
-      "canonical": "HR",
+      "canonical": "Recursos Humanos",
       "aliases": [
         "RH",
         "Recursos Humanos",
         "People",
         "People Ops",
-        "DP",
-        "Departamento Pessoal",
+        "HR",
         "recrutamento",
-        "seleção",
-        "folha de pagamento"
+        "seleção"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "area",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Departamento Pessoal",
+      "aliases": [
+        "DP",
+        "Departamento Pessoal"
       ],
       "domain": [
         "hr"
@@ -477,11 +450,7 @@
       "aliases": [
         "QA",
         "Quality Assurance",
-        "Testes",
-        "Selenium",
-        "Cypress",
-        "Playwright",
-        "JUnit"
+        "Testes"
       ],
       "domain": [
         "technology",
@@ -671,9 +640,875 @@
       ],
       "type": "area",
       "strength": "strong"
+    },
+    {
+      "canonical": "Node.js",
+      "aliases": [
+        "Node.js",
+        "Node",
+        "nodejs"
+      ],
+      "domain": [
+        "technology",
+        "frontend",
+        "backend"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "React",
+      "aliases": [
+        "React",
+        "React.js",
+        "ReactJS"
+      ],
+      "domain": [
+        "technology",
+        "frontend",
+        "backend"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Next.js",
+      "aliases": [
+        "Next.js",
+        "Next",
+        "nextjs"
+      ],
+      "domain": [
+        "technology",
+        "frontend",
+        "backend"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Vue",
+      "aliases": [
+        "Vue",
+        "Vue.js",
+        "VueJS"
+      ],
+      "domain": [
+        "technology",
+        "frontend",
+        "backend"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Angular",
+      "aliases": [
+        "Angular",
+        "AngularJS",
+        "Angular.js"
+      ],
+      "domain": [
+        "technology",
+        "frontend",
+        "backend"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "API",
+      "aliases": [
+        "API",
+        "REST API"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "REST",
+      "aliases": [
+        "REST",
+        "RESTful"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "API REST",
+      "aliases": [
+        "API REST",
+        "APIs REST"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "GraphQL",
+      "aliases": [
+        "GraphQL"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Spring Boot",
+      "aliases": [
+        "Spring Boot",
+        "Spring"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Django",
+      "aliases": [
+        "Django"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "FastAPI",
+      "aliases": [
+        "FastAPI"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "C#",
+      "aliases": [
+        "C#",
+        "CSharp"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Laravel",
+      "aliases": [
+        "Laravel"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "HTML",
+      "aliases": [
+        "HTML",
+        "HTML5"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "CSS",
+      "aliases": [
+        "CSS",
+        "CSS3"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Tailwind",
+      "aliases": [
+        "Tailwind",
+        "Tailwind CSS",
+        "TailwindCSS"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "TypeScript",
+      "aliases": [
+        "TypeScript",
+        "TS"
+      ],
+      "domain": [
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "AWS",
+      "aliases": [
+        "AWS",
+        "Amazon Web Services"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Azure",
+      "aliases": [
+        "Azure",
+        "Microsoft Azure"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "GCP",
+      "aliases": [
+        "GCP",
+        "Google Cloud Platform",
+        "Google Cloud"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Oracle Cloud",
+      "aliases": [
+        "Oracle Cloud",
+        "OCI"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Docker",
+      "aliases": [
+        "Docker"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Kubernetes",
+      "aliases": [
+        "Kubernetes",
+        "K8s"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Terraform",
+      "aliases": [
+        "Terraform"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "GitHub Actions",
+      "aliases": [
+        "GitHub Actions"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "GitLab CI",
+      "aliases": [
+        "GitLab CI",
+        "GitLab CI/CD"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Jenkins",
+      "aliases": [
+        "Jenkins"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "observability",
+      "aliases": [
+        "observability",
+        "observabilidade"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "monitoring",
+      "aliases": [
+        "monitoring",
+        "monitoramento"
+      ],
+      "domain": [
+        "technology",
+        "infrastructure"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Scrum",
+      "aliases": [
+        "Scrum"
+      ],
+      "domain": [
+        "technology",
+        "product",
+        "business"
+      ],
+      "type": "tool",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Kanban",
+      "aliases": [
+        "Kanban"
+      ],
+      "domain": [
+        "technology",
+        "product",
+        "business"
+      ],
+      "type": "tool",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Jira",
+      "aliases": [
+        "Jira"
+      ],
+      "domain": [
+        "technology",
+        "product",
+        "business"
+      ],
+      "type": "tool",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Trello",
+      "aliases": [
+        "Trello"
+      ],
+      "domain": [
+        "technology",
+        "product",
+        "business"
+      ],
+      "type": "tool",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Power BI",
+      "aliases": [
+        "Power BI",
+        "PowerBI"
+      ],
+      "domain": [
+        "data",
+        "business"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Tableau",
+      "aliases": [
+        "Tableau"
+      ],
+      "domain": [
+        "data",
+        "business"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "dashboards",
+      "aliases": [
+        "dashboards",
+        "dashboard"
+      ],
+      "domain": [
+        "data",
+        "business"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Airflow",
+      "aliases": [
+        "Airflow",
+        "Apache Airflow"
+      ],
+      "domain": [
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Spark",
+      "aliases": [
+        "Spark",
+        "Apache Spark"
+      ],
+      "domain": [
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Databricks",
+      "aliases": [
+        "Databricks"
+      ],
+      "domain": [
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "dbt",
+      "aliases": [
+        "dbt",
+        "data build tool"
+      ],
+      "domain": [
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "scikit-learn",
+      "aliases": [
+        "scikit-learn",
+        "sklearn"
+      ],
+      "domain": [
+        "ai",
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "TensorFlow",
+      "aliases": [
+        "TensorFlow"
+      ],
+      "domain": [
+        "ai",
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "PyTorch",
+      "aliases": [
+        "PyTorch"
+      ],
+      "domain": [
+        "ai",
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "LLM",
+      "aliases": [
+        "LLM",
+        "Large Language Models"
+      ],
+      "domain": [
+        "ai",
+        "data",
+        "technology"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Selenium",
+      "aliases": [
+        "Selenium"
+      ],
+      "domain": [
+        "technology",
+        "quality"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Cypress",
+      "aliases": [
+        "Cypress"
+      ],
+      "domain": [
+        "technology",
+        "quality"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Playwright",
+      "aliases": [
+        "Playwright"
+      ],
+      "domain": [
+        "technology",
+        "quality"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "JUnit",
+      "aliases": [
+        "JUnit"
+      ],
+      "domain": [
+        "technology",
+        "quality"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Contas a Pagar",
+      "aliases": [
+        "Contas a Pagar",
+        "Contas pagar"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Contas a Receber",
+      "aliases": [
+        "Contas a Receber",
+        "Contas receber"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Conciliação Bancária",
+      "aliases": [
+        "Conciliação Bancária",
+        "Conciliação bancaria"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Faturamento",
+      "aliases": [
+        "Faturamento"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Cobrança",
+      "aliases": [
+        "Cobrança"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Emissão de Nota Fiscal",
+      "aliases": [
+        "Emissão de Nota Fiscal",
+        "Nota Fiscal",
+        "NF-e",
+        "Emissão de Nota"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Folha de Pagamento",
+      "aliases": [
+        "Folha de Pagamento",
+        "Folha"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Admissão",
+      "aliases": [
+        "Admissão"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Rescisão",
+      "aliases": [
+        "Rescisão"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Férias",
+      "aliases": [
+        "Férias"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Ponto Eletrônico",
+      "aliases": [
+        "Ponto Eletrônico",
+        "Ponto"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "Benefícios",
+      "aliases": [
+        "Benefícios"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
+      "canonical": "eSocial",
+      "aliases": [
+        "eSocial"
+      ],
+      "domain": [
+        "hr"
+      ],
+      "type": "skill",
+      "strength": "strong"
     }
   ],
   "relations": [
+    {
+      "from": "Contas a Pagar",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Contas a Pagar é uma rotina específica de Financeiro."
+    },
+    {
+      "from": "Contas a Receber",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Contas a Receber é uma rotina específica de Financeiro."
+    },
+    {
+      "from": "Conciliação Bancária",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Conciliação Bancária é uma rotina específica de Financeiro."
+    },
+    {
+      "from": "Faturamento",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Faturamento é uma rotina específica de Financeiro."
+    },
+    {
+      "from": "Cobrança",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Cobrança é uma rotina específica de Financeiro."
+    },
+    {
+      "from": "Emissão de Nota Fiscal",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Emissão de Nota Fiscal é uma rotina específica de Financeiro."
+    },
+    {
+      "from": "Folha de Pagamento",
+      "to": "Departamento Pessoal",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Folha de Pagamento é uma rotina específica de Departamento Pessoal."
+    },
+    {
+      "from": "Admissão",
+      "to": "Departamento Pessoal",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Admissão é uma rotina específica de Departamento Pessoal."
+    },
+    {
+      "from": "Rescisão",
+      "to": "Departamento Pessoal",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Rescisão é uma rotina específica de Departamento Pessoal."
+    },
+    {
+      "from": "Férias",
+      "to": "Departamento Pessoal",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Férias é uma rotina específica de Departamento Pessoal."
+    },
+    {
+      "from": "Ponto Eletrônico",
+      "to": "Departamento Pessoal",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Ponto Eletrônico é uma rotina específica de Departamento Pessoal."
+    },
+    {
+      "from": "Benefícios",
+      "to": "Departamento Pessoal",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Benefícios é uma rotina específica de Departamento Pessoal."
+    },
+    {
+      "from": "eSocial",
+      "to": "Departamento Pessoal",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "eSocial é uma ferramenta/rotina específica de Departamento Pessoal."
+    },
     {
       "from": "PostgreSQL",
       "to": "SQL",
@@ -733,23 +1568,23 @@
     {
       "from": "React",
       "to": "Frontend",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "React comprova experiência frontend moderna."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "React indica experiência frontend, mas Frontend é categoria ampla."
     },
     {
       "from": "Next.js",
       "to": "Frontend",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Next.js comprova frontend React e aplicações web."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Next.js indica experiência frontend, mas Frontend é categoria ampla."
     },
     {
       "from": "Node.js",
       "to": "Backend",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Node.js comprova experiência backend web."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Node.js indica experiência backend web, mas Backend é categoria ampla."
     },
     {
       "from": "Node.js",
@@ -761,37 +1596,37 @@
     {
       "from": "Spring Boot",
       "to": "Backend",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Spring Boot é stack backend consolidada."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Spring Boot indica experiência backend, mas Backend é categoria ampla."
     },
     {
       "from": ".NET",
       "to": "Backend",
-      "strength": "strong",
-      "score": 0.85,
-      "reason": ".NET é stack backend comum em sistemas corporativos."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": ".NET indica experiência backend, mas Backend é categoria ampla."
     },
     {
       "from": "AWS",
       "to": "Cloud",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "AWS comprova experiência prática em cloud."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "AWS indica experiência cloud, mas Cloud é categoria ampla."
     },
     {
       "from": "Azure",
       "to": "Cloud",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Azure comprova experiência prática em cloud."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Azure indica experiência cloud, mas Cloud é categoria ampla."
     },
     {
       "from": "GCP",
       "to": "Cloud",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "GCP comprova experiência prática em cloud."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "GCP indica experiência cloud, mas Cloud é categoria ampla."
     },
     {
       "from": "Docker",
@@ -831,23 +1666,23 @@
     {
       "from": "Protheus",
       "to": "ERP",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Protheus é um ERP."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "Protheus indica experiência em ERP, mas ERP é categoria ampla."
     },
     {
       "from": "TOTVS",
       "to": "ERP",
-      "strength": "strong",
-      "score": 0.85,
-      "reason": "TOTVS indica experiência em ERP."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "TOTVS indica experiência em ERP, mas ERP é categoria ampla."
     },
     {
       "from": "SAP",
       "to": "ERP",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "SAP é ERP corporativo."
+      "strength": "partial",
+      "score": 0.6,
+      "reason": "SAP indica experiência em ERP, mas ERP é categoria ampla."
     },
     {
       "from": "Protheus",
@@ -982,34 +1817,7 @@
       "score": 0.85,
       "reason": "Next.js comprova experiência prática com JavaScript/React."
     },
-    {
-      "from": "Contas a Pagar",
-      "to": "Financeiro",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Contas a pagar faz parte do financeiro."
-    },
-    {
-      "from": "Conciliação Bancária",
-      "to": "Financeiro",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Conciliação bancária comprova rotina financeira."
-    },
-    {
-      "from": "Folha de Pagamento",
-      "to": "Recursos Humanos",
-      "strength": "strong",
-      "score": 0.9,
-      "reason": "Folha de pagamento é rotina clássica de RH/DP."
-    },
-    {
-      "from": "Admissão",
-      "to": "Recursos Humanos",
-      "strength": "strong",
-      "score": 0.85,
-      "reason": "Admissão comprova atuação em RH."
-    },
+
     {
       "from": "Recepcionista",
       "to": "Atendimento",
@@ -1303,6 +2111,251 @@
       "strength": "strong",
       "score": 0.82,
       "reason": "Google Ads comprova mídia paga e performance."
+    },
+    {
+      "from": "Node.js",
+      "to": "JavaScript",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Node.js é amplamente associado a JavaScript."
+    },
+    {
+      "from": "Vue",
+      "to": "JavaScript",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Vue é amplamente associado a JavaScript."
+    },
+    {
+      "from": "Angular",
+      "to": "JavaScript",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Angular é amplamente associado a JavaScript."
+    },
+    {
+      "from": "API",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "API se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "REST",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "REST se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "GraphQL",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "GraphQL se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "Java",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Java se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "Python",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Python se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "Django",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Django se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "FastAPI",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "FastAPI se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "C#",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "C# se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "PHP",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "PHP se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "Laravel",
+      "to": "Backend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Laravel se relaciona a Backend, mas Backend é categoria ampla."
+    },
+    {
+      "from": "HTML",
+      "to": "Frontend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "HTML se relaciona a Frontend, mas Frontend é categoria ampla."
+    },
+    {
+      "from": "CSS",
+      "to": "Frontend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "CSS se relaciona a Frontend, mas Frontend é categoria ampla."
+    },
+    {
+      "from": "Tailwind",
+      "to": "Frontend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Tailwind se relaciona a Frontend, mas Frontend é categoria ampla."
+    },
+    {
+      "from": "TypeScript",
+      "to": "Frontend",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "TypeScript se relaciona a Frontend, mas Frontend é categoria ampla."
+    },
+    {
+      "from": "Oracle Cloud",
+      "to": "Cloud",
+      "strength": "partial",
+      "score": 0.55,
+      "reason": "Oracle Cloud se relaciona a Cloud, mas Cloud é categoria ampla."
+    },
+    {
+      "from": "GitHub Actions",
+      "to": "DevOps",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "GitHub Actions é amplamente associado a DevOps."
+    },
+    {
+      "from": "GitLab CI",
+      "to": "DevOps",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "GitLab CI é amplamente associado a DevOps."
+    },
+    {
+      "from": "Jenkins",
+      "to": "DevOps",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Jenkins é amplamente associado a DevOps."
+    },
+    {
+      "from": "observability",
+      "to": "DevOps",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "observability é amplamente associado a DevOps."
+    },
+    {
+      "from": "monitoring",
+      "to": "DevOps",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "monitoring é amplamente associado a DevOps."
+    },
+    {
+      "from": "Trello",
+      "to": "Agile",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Trello é amplamente associado a Agile."
+    },
+    {
+      "from": "SQL",
+      "to": "Data Analysis",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "SQL é amplamente associado a Data Analysis."
+    },
+    {
+      "from": "Power BI",
+      "to": "Data Analysis",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Power BI é amplamente associado a Data Analysis."
+    },
+    {
+      "from": "Tableau",
+      "to": "Data Analysis",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Tableau é amplamente associado a Data Analysis."
+    },
+    {
+      "from": "Excel",
+      "to": "Data Analysis",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Excel é amplamente associado a Data Analysis."
+    },
+    {
+      "from": "dashboards",
+      "to": "Data Analysis",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "dashboards é amplamente associado a Data Analysis."
+    },
+    {
+      "from": "ETL",
+      "to": "Data Engineering",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "ETL é amplamente associado a Data Engineering."
+    },
+    {
+      "from": "Databricks",
+      "to": "Data Engineering",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Databricks é amplamente associado a Data Engineering."
+    },
+    {
+      "from": "dbt",
+      "to": "Data Engineering",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "dbt é amplamente associado a Data Engineering."
+    },
+    {
+      "from": "LLM",
+      "to": "Machine Learning",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "LLM é amplamente associado a Machine Learning."
+    },
+    {
+      "from": "Selenium",
+      "to": "QA",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Selenium é amplamente associado a QA."
+    },
+    {
+      "from": "JUnit",
+      "to": "QA",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "JUnit é amplamente associado a QA."
     }
   ],
   "business_domains": [

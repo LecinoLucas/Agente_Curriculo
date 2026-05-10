@@ -19,6 +19,12 @@ from typing import Any
 import structlog
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIService
+from src.application.services.job_skill_priority_service import (
+    is_complementary_skill,
+    is_eliminatory_skill,
+    is_priority_skill,
+    normalize_job_skill_priority_level,
+)
 from src.application.services.skill_normalizer_service import contains_whole_phrase, normalize_skill_text
 from src.domain.value_objects.job_profile import (
     AREA_WEIGHTS,
@@ -38,7 +44,22 @@ _MAX_AI_OPTIONAL_SKILLS = 6
 _MAX_AI_TEXTUAL_REQUIREMENTS = 6
 
 _AREA_KEYWORDS: dict[str, set[str]] = {
-    "technology": {"python", "backend", "frontend", "api", "fastapi", "react", "software", "devops"},
+    "technology": {
+        "python",
+        "backend",
+        "frontend",
+        "fullstack",
+        "node",
+        "node js",
+        "javascript",
+        "typescript",
+        "api",
+        "fastapi",
+        "react",
+        "software",
+        "web",
+        "devops",
+    },
     "data": {"sql", "power bi", "bi", "dashboard", "etl", "elt", "pipeline", "analytics", "dados"},
     "administrative": {"administrativo", "office", "excel", "backoffice", "assistente", "secretariado"},
     "accounting": {"contabil", "contábil", "fiscal", "tribut", "sped", "ecd", "ecf", "crc"},
@@ -79,10 +100,22 @@ _CAPABILITY_HINTS: dict[str, str] = {
 class StructuredJobSkill:
     name: str
     normalized_name: str
-    is_mandatory: bool = False
+    priority_level: str = "complementary"
     minimum_level: str | None = None
     minimum_years: float | None = None
     weight: float = 1.0
+
+    @property
+    def is_priority(self) -> bool:
+        return is_priority_skill(self.priority_level)
+
+    @property
+    def is_eliminatory(self) -> bool:
+        return is_eliminatory_skill(self.priority_level)
+
+    @property
+    def is_priority_like(self) -> bool:
+        return self.is_priority or self.is_eliminatory
 
 
 @dataclass(slots=True, frozen=True)
@@ -218,6 +251,7 @@ class JobProfilerService:
             )
             profile = build_deterministic_job_profile(source)
 
+        profile = _reconcile_profile_area(profile, source)
         self._cache.set(desc_hash, profile.to_dict())
         return profile
 
@@ -279,7 +313,9 @@ def job_skill_from_row(row: Any) -> StructuredJobSkill:
         name=_clean_text(getattr(row, "skill_name", "")),
         normalized_name=_clean_text(getattr(row, "skill_normalized_name", ""))
         or normalize_skill_text(getattr(row, "skill_name", "")),
-        is_mandatory=bool(getattr(link, "is_mandatory", False)),
+        priority_level=normalize_job_skill_priority_level(
+            getattr(link, "priority_level", "complementary")
+        ),
         minimum_level=_clean_text(getattr(link, "minimum_level", "")) or None,
         minimum_years=_safe_float(getattr(link, "minimum_years", None), default=None),
         weight=_safe_float(getattr(link, "weight", 1.0), default=1.0) or 1.0,
@@ -326,12 +362,15 @@ def build_job_profile_text(
 
 
 def build_job_profile_ai_context(source: JobProfileInput) -> str:
-    mandatory_skills = [
-        skill.name for skill in source.linked_skills if skill.is_mandatory and _clean_text(skill.name)
+    priority_skills = [
+        skill.name for skill in source.linked_skills if skill.is_priority_like and _clean_text(skill.name)
     ][: _MAX_AI_REQUIRED_SKILLS]
-    optional_skills = [
-        skill.name for skill in source.linked_skills if not skill.is_mandatory and _clean_text(skill.name)
+    complementary_skills = [
+        skill.name for skill in source.linked_skills if is_complementary_skill(skill.priority_level) and _clean_text(skill.name)
     ][: _MAX_AI_OPTIONAL_SKILLS]
+    eliminatory_skills = [
+        skill.name for skill in source.linked_skills if skill.is_eliminatory and _clean_text(skill.name)
+    ][:3]
     textual_requirements = _extract_textual_requirements(source)[:_MAX_AI_TEXTUAL_REQUIREMENTS]
 
     sections: list[str] = []
@@ -346,11 +385,13 @@ def build_job_profile_ai_context(source: JobProfileInput) -> str:
     if source.minimum_education_level:
         sections.append(f"educacao_minima: {source.minimum_education_level}")
     sections.append(
-        "skills_obrigatorias: "
-        + (", ".join(mandatory_skills) if mandatory_skills else "nao identificado")
+        "skills_essenciais: "
+        + (", ".join(priority_skills) if priority_skills else "nao identificado")
     )
-    if optional_skills:
-        sections.append("skills_desejaveis: " + ", ".join(optional_skills))
+    if complementary_skills:
+        sections.append("skills_diferenciais: " + ", ".join(complementary_skills))
+    if eliminatory_skills:
+        sections.append("skills_eliminatorias: " + ", ".join(eliminatory_skills))
     if textual_requirements:
         sections.append("requisitos_textuais: " + ", ".join(textual_requirements))
     return "\n".join(sections)
@@ -387,12 +428,19 @@ def build_job_profile_hash(
             {
                 "name": skill.name,
                 "normalized_name": skill.normalized_name,
-                "is_mandatory": skill.is_mandatory,
+                "priority_level": skill.priority_level,
                 "minimum_level": skill.minimum_level,
                 "minimum_years": skill.minimum_years,
                 "weight": round(float(skill.weight or 1.0), 2),
             }
-            for skill in sorted(linked_skills or (), key=lambda item: (not item.is_mandatory, item.normalized_name, item.name))
+            for skill in sorted(
+                linked_skills or (),
+                key=lambda item: (
+                    0 if item.is_eliminatory else 1 if item.is_priority else 2,
+                    item.normalized_name,
+                    item.name,
+                ),
+            )
         ],
     }
     return _hash(json.dumps(payload, sort_keys=True, ensure_ascii=True))
@@ -415,7 +463,7 @@ def build_deterministic_job_profile(source: JobProfileInput) -> JobProfile:
         if not key:
             continue
         requirement = _job_requirement_from_skill(skill)
-        if skill.is_mandatory:
+        if skill.is_priority_like:
             critical_requirements.append(requirement)
         else:
             desirable_requirements.append(requirement)
@@ -436,10 +484,10 @@ def build_deterministic_job_profile(source: JobProfileInput) -> JobProfile:
                 JobRequirement(
                     name=candidate,
                     description=f"Requisito textual extraído da vaga: {candidate}",
-                    is_mandatory=True,
-                    importance_weight=1.1,
-                    evidence_examples=[candidate],
-                )
+                        is_mandatory=True,
+                        importance_weight=1.1,
+                        evidence_examples=[candidate],
+                    )
             )
             seen_requirements.add(key)
 
@@ -492,22 +540,22 @@ def merge_manual_skills_into_profile(profile: JobProfile, source: JobProfileInpu
 
     for skill in source.linked_skills:
         skill_keys = _skill_keys_for_matching(skill)
-        target_list = critical if skill.is_mandatory else desirable
-        target_index = critical_index if skill.is_mandatory else desirable_index
-        opposite_list = desirable if skill.is_mandatory else critical
-        opposite_index = desirable_index if skill.is_mandatory else critical_index
+        target_list = critical if skill.is_priority_like else desirable
+        target_index = critical_index if skill.is_priority_like else desirable_index
+        opposite_list = desirable if skill.is_priority_like else critical
+        opposite_index = desirable_index if skill.is_priority_like else critical_index
 
         matched_idx = _find_requirement_match(target_index, skill_keys)
         if matched_idx is None:
             opposite_idx = _find_requirement_match(opposite_index, skill_keys)
-            if opposite_idx is not None and skill.is_mandatory:
+            if opposite_idx is not None and skill.is_priority_like:
                 requirement = opposite_list.pop(opposite_idx)
                 critical.append(
                     JobRequirement(
                         name=skill.name,
                         description=requirement.description or _skill_description(skill),
                         is_mandatory=True,
-                        importance_weight=max(1.2, requirement.importance_weight, _mandatory_weight(skill)),
+                        importance_weight=max(1.2, requirement.importance_weight, _priority_weight(skill)),
                         evidence_examples=_dedupe(requirement.evidence_examples + [skill.name]),
                     )
                 )
@@ -522,8 +570,11 @@ def merge_manual_skills_into_profile(profile: JobProfile, source: JobProfileInpu
             target_list[matched_idx] = JobRequirement(
                 name=skill.name,
                 description=current.description or _skill_description(skill),
-                is_mandatory=skill.is_mandatory or current.is_mandatory,
-                importance_weight=max(current.importance_weight, _mandatory_weight(skill) if skill.is_mandatory else _optional_weight(skill)),
+                is_mandatory=skill.is_priority_like or current.is_mandatory,
+                importance_weight=max(
+                    current.importance_weight,
+                    _priority_weight(skill) if skill.is_priority_like else _complementary_weight(skill),
+                ),
                 evidence_examples=_dedupe(current.evidence_examples + [skill.name]),
             )
             target_index = _requirement_index(target_list)
@@ -662,7 +713,7 @@ def _format_structured_skills_context(linked_skills: tuple[StructuredJobSkill, .
     for skill in linked_skills:
         years = f"{skill.minimum_years:g}" if skill.minimum_years is not None else "-"
         level = skill.minimum_level or "-"
-        importance = "mandatory" if skill.is_mandatory else "optional"
+        importance = skill.priority_level
         lines.append(
             f"- name={skill.name}; importance={importance}; level={level}; min_years={years}; weight={skill.weight:.2f}"
         )
@@ -787,10 +838,83 @@ def _infer_job_area(source: JobProfileInput) -> str:
             )
         )
     )
-    for area in ("data", "administrative", "accounting", "financial", "commercial", "operational", "leadership", "technology"):
-        if any(_contains_keyword(text, keyword) for keyword in _AREA_KEYWORDS[area]):
-            return area
+    scored_areas: list[tuple[int, str]] = []
+    for area in (
+        "technology",
+        "data",
+        "administrative",
+        "accounting",
+        "financial",
+        "commercial",
+        "operational",
+        "leadership",
+    ):
+        hits = sum(1 for keyword in _AREA_KEYWORDS[area] if _contains_keyword(text, keyword))
+        if hits > 0:
+            scored_areas.append((hits, area))
+    if scored_areas:
+        scored_areas.sort(key=lambda item: (-item[0], item[1] != "technology"))
+        return scored_areas[0][1]
     return "other"
+
+
+def _reconcile_profile_area(profile: JobProfile, source: JobProfileInput) -> JobProfile:
+    explicit_area = _normalize_explicit_job_area(source.job_area)
+    if explicit_area:
+        return _copy_profile_with_area(profile, explicit_area)
+
+    inferred_area = _infer_job_area(source)
+    if inferred_area == "other":
+        return profile
+    if profile.area == inferred_area:
+        return profile
+
+    normalized_title = normalize_skill_text(source.title or "")
+    technology_hits = sum(
+        1
+        for keyword in _AREA_KEYWORDS["technology"]
+        if _contains_keyword(normalized_title, keyword)
+    )
+    technology_hits += sum(
+        1
+        for skill in source.linked_skills
+        if any(
+            _contains_keyword(normalize_skill_text(skill.name), keyword)
+            for keyword in _AREA_KEYWORDS["technology"]
+        )
+    )
+
+    should_override = profile.area == "other"
+    if inferred_area == "technology" and profile.area in {"data", "other"}:
+        should_override = should_override or technology_hits >= 2
+        should_override = should_override or contains_whole_phrase(normalized_title, "fullstack")
+        should_override = should_override or contains_whole_phrase(normalized_title, "backend")
+        should_override = should_override or contains_whole_phrase(normalized_title, "frontend")
+
+    if should_override:
+        return _copy_profile_with_area(profile, inferred_area)
+
+    return profile
+
+
+def _copy_profile_with_area(profile: JobProfile, area: str) -> JobProfile:
+    if area not in VALID_AREAS or profile.area == area:
+        return profile
+    return JobProfile(
+        area=area,
+        target_level=profile.target_level,
+        main_mission=profile.main_mission,
+        critical_requirements=list(profile.critical_requirements),
+        desirable_requirements=list(profile.desirable_requirements),
+        responsibilities=list(profile.responsibilities),
+        required_tools=list(profile.required_tools),
+        required_capabilities=list(profile.required_capabilities),
+        seniority_signals=list(profile.seniority_signals),
+        adaptive_weights=dict(AREA_WEIGHTS.get(area, DEFAULT_WEIGHTS)),
+        job_completeness_score=profile.job_completeness_score,
+        confidence=profile.confidence,
+        description_hash=profile.description_hash,
+    )
 
 
 def _normalize_explicit_job_area(value: str | None) -> str | None:
@@ -809,8 +933,8 @@ def _job_requirement_from_skill(skill: StructuredJobSkill) -> JobRequirement:
     return JobRequirement(
         name=skill.name,
         description=_skill_description(skill),
-        is_mandatory=skill.is_mandatory,
-        importance_weight=_mandatory_weight(skill) if skill.is_mandatory else _optional_weight(skill),
+        is_mandatory=skill.is_priority_like,
+        importance_weight=_priority_weight(skill) if skill.is_priority_like else _complementary_weight(skill),
         evidence_examples=_dedupe([skill.name]),
     )
 
@@ -824,11 +948,11 @@ def _skill_description(skill: StructuredJobSkill) -> str:
     return "; ".join(parts)
 
 
-def _mandatory_weight(skill: StructuredJobSkill) -> float:
+def _priority_weight(skill: StructuredJobSkill) -> float:
     return _clamp(max(1.2, float(skill.weight or 1.0)), 1.0, 2.0)
 
 
-def _optional_weight(skill: StructuredJobSkill) -> float:
+def _complementary_weight(skill: StructuredJobSkill) -> float:
     return _clamp(min(float(skill.weight or 0.7), 1.0), 0.3, 1.0)
 
 

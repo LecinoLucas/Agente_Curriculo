@@ -12,6 +12,7 @@ import {
   handleApiError,
 } from "../../../../shared/utils/errorHandler";
 import { toast } from "../../../../shared/utils/toast";
+import { getLatestAnalysisForActiveJob } from "../../utils/analysisStatus";
 
 type AnalysisStatus =
   | "pending"
@@ -37,6 +38,10 @@ function normalizeAnalysisStatus(status: string | null | undefined): AnalysisSta
 }
 
 function isAnalysisInProgress(status: string | null | undefined): boolean {
+  return status === "pending" || status === "processing";
+}
+
+function isExtractionInProgress(status: string | null | undefined): boolean {
   return status === "pending" || status === "processing";
 }
 
@@ -161,21 +166,77 @@ export function useDocumentHandlers(
     canSpendRealTokens,
     refreshCandidateOverview,
     startPolling,
-    switchPanelTab,
     syncAnalysisStart,
     notifyCandidatesChanged,
     onActionFeedback,
     pollingAnalysisId,
   } = params;
 
-  const { resumes, latest_analysis } = overview;
+  const { latest_analysis } = overview;
   const activeControllersRef = useRef<Set<AbortController>>(new Set());
   const pendingManualAnalysisRef = useRef<string | null>(null);
+  const extractionPollTimersRef = useRef<Map<string, number>>(new Map());
+
+  const stopExtractionPolling = useCallback((resumeId: string) => {
+    const timerId = extractionPollTimersRef.current.get(resumeId);
+    if (timerId !== undefined) {
+      window.clearTimeout(timerId);
+      extractionPollTimersRef.current.delete(resumeId);
+    }
+  }, []);
+
+  const startExtractionPolling = useCallback(
+    (resumeId: string, attempt = 0) => {
+      stopExtractionPolling(resumeId);
+
+      const nextTimer = window.setTimeout(async () => {
+        try {
+          const status = await resumeService.getExtractionStatus(resumeId);
+
+          if (status.extraction_status === "completed") {
+            stopExtractionPolling(resumeId);
+            await refreshCandidateOverview();
+            notifyCandidatesChanged();
+            return;
+          }
+
+          if (status.extraction_status === "failed") {
+            stopExtractionPolling(resumeId);
+            await refreshCandidateOverview();
+            notifyCandidatesChanged();
+            toast.error(
+              status.extraction_error || "Falha ao extrair o currículo enviado.",
+            );
+            return;
+          }
+
+          if (attempt >= 59) {
+            stopExtractionPolling(resumeId);
+            return;
+          }
+
+          startExtractionPolling(resumeId, attempt + 1);
+        } catch {
+          if (attempt >= 59) {
+            stopExtractionPolling(resumeId);
+            return;
+          }
+
+          startExtractionPolling(resumeId, attempt + 1);
+        }
+      }, 2000);
+
+      extractionPollTimersRef.current.set(resumeId, nextTimer);
+    },
+    [notifyCandidatesChanged, refreshCandidateOverview, stopExtractionPolling],
+  );
 
   useEffect(() => {
     return () => {
       activeControllersRef.current.forEach((controller) => controller.abort());
       activeControllersRef.current.clear();
+      extractionPollTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      extractionPollTimersRef.current.clear();
     };
   }, [overview.candidate.id]);
 
@@ -248,8 +309,12 @@ export function useDocumentHandlers(
       await refreshCandidateOverview();
       if (controller.signal.aborted) return;
 
-      switchPanelTab("score");
       feedback.uploadResume.success();
+      notifyCandidatesChanged();
+
+      if (isExtractionInProgress(uploaded.extraction_status)) {
+        startExtractionPolling(uploaded.resume_id);
+      }
 
       if (uploaded.analysis_auto_requested && uploaded.analysis_id) {
         const status = normalizeAnalysisStatus(uploaded.analysis_status);
@@ -266,8 +331,6 @@ export function useDocumentHandlers(
         if (!controller.signal.aborted) {
           startPolling(uploaded.analysis_id, overview.candidate.id, status, activeJobId);
         }
-      } else {
-        notifyCandidatesChanged();
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -286,10 +349,10 @@ export function useDocumentHandlers(
     activeJobId,
     clearFile,
     refreshCandidateOverview,
-    switchPanelTab,
     syncAnalysisStart,
     notifyCandidatesChanged,
     startPolling,
+    startExtractionPolling,
     setters,
   ]);
 
@@ -424,7 +487,9 @@ export function useDocumentHandlers(
         return;
       }
 
-      if (isAnalysisInProgress(latest_analysis?.status ?? null)) {
+      const activeJobAnalysis = getLatestAnalysisForActiveJob(latest_analysis, manualJobId);
+
+      if (isAnalysisInProgress(activeJobAnalysis?.status ?? null)) {
         toast.info("Já existe uma análise em andamento para este candidato.");
         return;
       }

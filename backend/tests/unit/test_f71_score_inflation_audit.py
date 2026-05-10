@@ -53,13 +53,13 @@ class TestF71ScoreInflationAudit:
     def test_mixed_exact_and_equivalence_scores(self):
         """Mix of exact and equivalence should not produce 100% score.
 
-        Job requires: SQL, Python, Spark
-        Candidate has: PostgreSQL (strong equiv), Python (exact), PySpark (strong equiv)
+        Job requires: SQL, Python, JavaScript
+        Candidate has: PostgreSQL (strong equiv), Python (exact), TypeScript (strong equiv)
 
         Expected:
         - SQL: 0.85 (PostgreSQL strong)
         - Python: 1.0 (exact)
-        - Spark: 0.85 (PySpark strong, if it's in catalog)
+        - JavaScript: 0.85 (TypeScript strong)
 
         Average = (0.85 + 1.0 + 0.85) / 3 * 100 = 90.0
         NOT 100.0
@@ -67,9 +67,9 @@ class TestF71ScoreInflationAudit:
         job_skills = [
             _row("SQL", mandatory=True),
             _row("Python", mandatory=True),
-            _row("Spark", mandatory=True),
+            _row("JavaScript", mandatory=True),
         ]
-        candidate_skills = {"postgresql", "python", "pyspark"}
+        candidate_skills = {"postgresql", "python", "typescript"}
 
         result = _compute_skill_scores(job_skills, candidate_skills)
 
@@ -83,7 +83,7 @@ class TestF71ScoreInflationAudit:
         # But strong_coverage can be 100% (all have >= 0.8)
         assert result["mandatory_strong_coverage"] == Decimal("100")
 
-        print(f"\n[PostgreSQL/Python/PySpark → SQL/Python/Spark]")
+        print(f"\n[PostgreSQL/Python/TypeScript → SQL/Python/JavaScript]")
         print(f"  Mandatory Score: {result['mandatory_score_weighted']}")
         print(f"  Strong Coverage: {result['mandatory_strong_coverage']}%")
         print(f"  Matched: {result['mandatory_matched']}/3")

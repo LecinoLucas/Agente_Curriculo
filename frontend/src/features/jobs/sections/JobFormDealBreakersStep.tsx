@@ -1,11 +1,24 @@
 import { Button } from "@/components/ui/button";
-import type { DealBreaker, JobFormValues } from "../../../types/domain";
+import type { DealBreaker, JobFormValues, JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { PendingJobSkill } from "../jobFormConfig";
 import { SectionCard } from "../../../shared/components/layout/SectionCard";
 import { Field } from "../../../shared/components/forms/Field";
 import { DEAL_BREAKER_FIELDS, DEAL_BREAKER_OPERATORS, type DealBreakerDraft } from "../utils/dealBreakerHelpers";
+import { SkillSection } from "../components/SkillSection";
 
 type JobFormDealBreakersStepProps = {
   form: JobFormValues;
+  eliminatorySkills: Array<JobSkill | PendingJobSkill>;
+  availableSkills: SkillEquivalenceGroup[];
+  skillSearch: string;
+  onSearchChange: (value: string) => void;
+  savingSkillId: string | null;
+  onAddSkill: (
+    skill: SkillEquivalenceGroup | string,
+    priorityLevel: "priority" | "complementary" | "eliminatory",
+  ) => Promise<void>;
+  onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
+  onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
   dealBreakerDraft: DealBreakerDraft;
   onFormChange: (updates: Partial<JobFormValues>) => void;
   onDealBreakerDraftChange: (updates: Partial<DealBreakerDraft>) => void;
@@ -14,6 +27,14 @@ type JobFormDealBreakersStepProps = {
 
 export function JobFormDealBreakersStep({
   form,
+  eliminatorySkills,
+  availableSkills,
+  skillSearch,
+  onSearchChange,
+  savingSkillId,
+  onAddSkill,
+  onUpdateSkill,
+  onRemoveSkill,
   dealBreakerDraft,
   onFormChange,
   onDealBreakerDraftChange,
@@ -21,8 +42,24 @@ export function JobFormDealBreakersStep({
 }: JobFormDealBreakersStepProps) {
   return (
     <div className="space-y-6">
-      <SectionCard
+      <SkillSection
         title="Critérios eliminatórios"
+        description="Use apenas para critérios que realmente impedem a contratação."
+        emphasis={`${eliminatorySkills.length} skill(s) eliminatória(s)`}
+        availableSkills={availableSkills}
+        linkedSkills={eliminatorySkills}
+        search={skillSearch}
+        onSearchChange={onSearchChange}
+        addLabel="Eliminatória"
+        addPriorityLevel="eliminatory"
+        savingSkillId={savingSkillId}
+        onAddSkill={onAddSkill}
+        onUpdateSkill={onUpdateSkill}
+        onRemoveSkill={onRemoveSkill}
+      />
+
+      <SectionCard
+        title="Regras eliminatórias"
         description="Use com parcimônia. Esses critérios servem para bloquear casos realmente incompatíveis."
       >
         <div className="grid gap-4 md:grid-cols-2">

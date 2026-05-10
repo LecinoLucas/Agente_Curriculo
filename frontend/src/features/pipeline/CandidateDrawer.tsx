@@ -31,7 +31,11 @@ import type {
 import { type PanelTab, usePipeline } from "./PipelineContext";
 import { EditCandidateModal } from "./EditCandidateModal";
 import { LinkCandidateJobModal } from "../candidates/components/LinkCandidateJobModal";
-import { buildCandidateAnalysisSummary } from "../candidates/utils/analysisStatus";
+import {
+  buildCandidateAnalysisSummary,
+  getLatestAnalysisForActiveJob,
+} from "../candidates/utils/analysisStatus";
+import type { ScoreTabFocusRequest } from "../candidates/drawer/tabs/ScoreTab";
 
 function isAnalysisInProgress(status: string | null | undefined): boolean {
   return status === "pending" || status === "processing";
@@ -176,6 +180,7 @@ export function CandidateDrawer({
   const [actionFeedback, setActionFeedback] = useState<CandidateActionFeedback | null>(null);
   const [linkJobModalOpen, setLinkJobModalOpen] = useState(false);
   const [analysisStarting, setAnalysisStarting] = useState(false);
+  const [scoreTabFocusRequest, setScoreTabFocusRequest] = useState<ScoreTabFocusRequest | null>(null);
 
   const stageSaving =
     stageSavingCandidateId !== null && stageSavingCandidateId === selectedCandidateId;
@@ -217,6 +222,10 @@ export function CandidateDrawer({
     analysisResult,
     pollingAnalysisId,
   });
+  const activeJobAnalysis = getLatestAnalysisForActiveJob(
+    candidateOverview?.latest_analysis,
+    candidateActiveJobId,
+  );
 
   useEffect(() => {
     if (mode !== "overlay" || !isOpen) return;
@@ -287,7 +296,7 @@ export function CandidateDrawer({
     const hasActiveContext =
       Boolean(candidateActiveJobId) &&
       Boolean(selectedCandidateId) &&
-      rankingEntry?.final_score != null;
+      rankingEntry?.job_fit_score != null;
 
     if (!hasActiveContext || !candidateActiveJobId || !selectedCandidateId) {
       setScoreExplanation(null);
@@ -310,7 +319,7 @@ export function CandidateDrawer({
     return () => {
       cancelled = true;
     };
-  }, [candidateActiveJobId, selectedCandidateId, rankingEntry?.final_score]);
+  }, [candidateActiveJobId, selectedCandidateId, rankingEntry?.job_fit_score]);
 
   const handleStageChange = useCallback(
     async (newStage: PipelineStage) => {
@@ -558,7 +567,15 @@ export function CandidateDrawer({
   const handleHeroViewAnalysis = useCallback(() => {
     setDetailTabsVisible(true);
     setProfileTabKey("score");
-    switchPanelTab("score");
+    switchPanelTab("analysis");
+    setScoreTabFocusRequest({ intent: "analysis", token: Date.now() });
+  }, [switchPanelTab]);
+
+  const handleHeroEvaluateBetter = useCallback(() => {
+    setDetailTabsVisible(true);
+    setProfileTabKey("score");
+    switchPanelTab("analysis");
+    setScoreTabFocusRequest({ intent: "review", token: Date.now() });
   }, [switchPanelTab]);
 
   const drawerContent = (
@@ -572,7 +589,7 @@ export function CandidateDrawer({
           activeJobCompatibilityScore={activeJobCompatibilityScore}
           hasActiveJob={Boolean(candidateActiveJobId)}
           aiScore={null}
-          aiStatus={candidateOverview.latest_analysis?.status ?? null}
+          aiStatus={activeJobAnalysis?.status ?? null}
           analysisResult={analysisResult}
           rankingEntry={rankingEntry}
           scoreExplanation={scoreExplanation}
@@ -588,6 +605,7 @@ export function CandidateDrawer({
           onAdvance={handleHeroAdvance}
           onTerminate={handleHeroTerminate}
           onViewAnalysis={handleHeroViewAnalysis}
+          onEvaluateBetter={handleHeroEvaluateBetter}
           onTabChange={handleProfileTabChange}
           onEditCandidate={() => setEditModalOpen(true)}
           onLinkJob={handleOpenLinkJob}
@@ -634,6 +652,7 @@ export function CandidateDrawer({
               error={rankingEntryError}
               compatibilityGuidance={compatibilityGuidance}
               scoreExplanation={scoreExplanation}
+              focusRequest={scoreTabFocusRequest}
             />
           ) : null}
 

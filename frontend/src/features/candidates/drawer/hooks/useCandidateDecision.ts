@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { CandidateOverview, Job, JobRankingEntry, PipelineStage } from "../../../../types/domain";
 import { formatScorePercent, getScoreTone, normalizeScorePercent } from "../../utils/scoreFormatting";
 import { isTransferTargetJob } from "../../../../utils/jobStatusRules";
+import { getLatestAnalysisForActiveJob } from "../../utils/analysisStatus";
 
 export function fmtScore(score: number | null | undefined): string {
   return formatScorePercent(score);
@@ -30,6 +31,7 @@ export function scoreBgClass(score: number | null | undefined): string {
 export function getCompatibilityGuidance(params: {
   hasJobLink: boolean;
   hasResume: boolean;
+  hasPersistedScore: boolean;
   analysisStatus: string | null | undefined;
 }): {
   title: string;
@@ -39,28 +41,31 @@ export function getCompatibilityGuidance(params: {
   if (!params.hasJobLink) {
     return {
       title: "Aguardando vaga",
-      description: "Associe o candidato a uma vaga para calcular a compatibilidade.",
+      description: "Associe o candidato a uma vaga para calcular a Aderência à Vaga.",
       tone: "neutral",
     };
   }
   if (!params.hasResume) {
     return {
-      title: "Compatibilidade indisponível",
-      description: "Envie um currículo para calcular a compatibilidade.",
+      title: "Aderência à Vaga indisponível",
+      description: "Envie um currículo para calcular a Aderência à Vaga.",
       tone: "neutral",
     };
+  }
+  if (params.hasPersistedScore) {
+    return null;
   }
   if (params.analysisStatus === "pending" || params.analysisStatus === "processing") {
     return {
       title: "Análise da IA em processamento",
-      description: "O cálculo da compatibilidade será atualizado quando a execução terminar.",
+      description: "A Aderência à Vaga será atualizada quando a execução terminar.",
       tone: "info",
     };
   }
   if (params.analysisStatus !== "completed") {
     return {
-      title: "Compatibilidade indisponível",
-      description: "Execute a análise da IA para liberar esta decisão.",
+      title: "Aderência à Vaga indisponível",
+      description: "Execute a análise da IA para liberar a Aderência à Vaga.",
       tone: "neutral",
     };
   }
@@ -96,7 +101,7 @@ export function useCandidateDecision({
     [jobs, candidateActiveJobId],
   );
 
-  const activeJobCompatibilityScore = normalizeScorePercent(rankingEntry?.final_score ?? null);
+  const activeJobCompatibilityScore = normalizeScorePercent(rankingEntry?.job_fit_score ?? null);
   const isTerminalPipelineStage = currentStage === "hired" || currentStage === "rejected";
 
   const transferAvailableJobs = useMemo(
@@ -111,11 +116,16 @@ export function useCandidateDecision({
 
   const canTransferCurrentJob = primaryPipelineEntry !== null && !isTerminalPipelineStage;
   const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
+  const activeJobAnalysis = getLatestAnalysisForActiveJob(
+    candidateOverview?.latest_analysis,
+    candidateActiveJobId,
+  );
 
   const compatibilityGuidance = getCompatibilityGuidance({
     hasJobLink: primaryPipelineEntry !== null,
     hasResume,
-    analysisStatus: candidateOverview?.latest_analysis?.status ?? null,
+    hasPersistedScore: rankingEntry?.job_fit_score != null,
+    analysisStatus: activeJobAnalysis?.status ?? null,
   });
 
   const activeJobLabel =

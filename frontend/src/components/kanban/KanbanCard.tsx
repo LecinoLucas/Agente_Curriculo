@@ -16,7 +16,7 @@ export function KanbanCard({
   onCardClick,
 }: KanbanCardProps) {
   const skills = (candidate.top_skills ?? []).slice(0, 3);
-  const finalScore = candidate.final_score;
+  const jobFitScore = candidate.job_fit_score;
   const seniority = candidate.seniority_level ? formatSeniority(candidate.seniority_level) : null;
   const experience =
     typeof candidate.total_experience_years === "number"
@@ -63,18 +63,18 @@ export function KanbanCard({
         </div>
       ) : null}
 
-      {/* Footer: saving state OR final score */}
+      {/* Footer: saving state OR official job fit score */}
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-[hsl(var(--border))]/80 pt-2.5">
         {isSaving ? (
           <span className="text-[10px] text-[hsl(var(--text-muted))]">Salvando…</span>
         ) : (
           <>
             <span className="text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Score final
+              Aderência à Vaga
             </span>
-            {finalScore !== null && finalScore !== undefined ? (
+            {jobFitScore !== null && jobFitScore !== undefined ? (
               <span className="rounded-full px-2 py-0.5 text-[10px] font-medium tabular-nums text-[hsl(var(--text))]">
-                {Math.round(finalScore)}%
+                {Math.round(jobFitScore)}%
               </span>
             ) : (
               <span className="rounded-full px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))] ring-1 ring-[hsl(var(--border))]">

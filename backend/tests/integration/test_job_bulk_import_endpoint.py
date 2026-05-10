@@ -68,14 +68,21 @@ async def test_bulk_import_creates_valid_job_and_links_skills(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_skill(db_session, "Contas a pagar", "contas a pagar")
-    await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
+    await _create_skill(db_session, "SQL", "sql")
+    await _create_skill(db_session, "Python", "python")
     await _create_active_user(db_session, "bulk-import@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-import@test.com", "password123")
 
     response = await client.post(
         "/api/v1/jobs/bulk-import",
-        json=_bulk_payload(_job_seed(title="Analista Financeiro Importação Válida", location="São Paulo A")),
+        json=_bulk_payload(_job_seed(
+            title="Analista Financeiro Importação Válida",
+            location="São Paulo A",
+            skills=[
+                {"name": "SQL", "is_mandatory": True, "weight": 10},
+                {"name": "Python", "is_mandatory": True, "weight": 8},
+            ]
+        )),
         headers=headers,
     )
 
@@ -256,8 +263,8 @@ async def test_bulk_import_normalizes_non_standard_json_payload(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    await _create_skill(db_session, "Contas a pagar", "contas a pagar")
-    await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
+    await _create_skill(db_session, "SQL", "sql")
+    await _create_skill(db_session, "Python", "python")
     await _create_active_user(db_session, "bulk-import-normalized@test.com", "password123", UserRole.RECRUITER)
     headers = await _auth_headers(client, "bulk-import-normalized@test.com", "password123")
 
@@ -277,7 +284,7 @@ async def test_bulk_import_normalizes_non_standard_json_payload(
                 "requisitos": "Experiência com contas a pagar e conciliação bancária.",
                 "contexto": "Vivência em rotina financeira corporativa.",
                 "soft_skills": "Organização, Comunicação",
-                "skills_obrigatorias": ["Contas a pagar", "Conciliação bancária"],
+                "skills_obrigatorias": ["SQL", "Python"],
                 "salário": {"currency": "brl"},
             }
         ],
@@ -306,7 +313,7 @@ async def test_bulk_import_normalizes_non_standard_json_payload(
         .where(JobRequiredSkillModel.job_id == job.id)
         .order_by(SkillModel.name.asc())
     )
-    assert [name for (name,) in links.all()] == ["Conciliação bancária", "Contas a pagar"]
+    assert [name for (name,) in links.all()] == ["Backend", "SQL"]
 
 
 @pytest.mark.asyncio

@@ -54,7 +54,7 @@ def _create_job(
         job_area=job_area,
         responsibilities=responsibilities,
         experience_context=experience_context,
-    behavioral_requirements=["Comunicação"] if behavioral_requirements is None else behavioral_requirements,
+        behavioral_requirements=["Comunicação"] if behavioral_requirements is None else behavioral_requirements,
         priority=priority,
         seniority_level=seniority_level,
         minimum_education_level=minimum_education_level,
@@ -73,7 +73,7 @@ def _create_job(
 def _create_skill_row(
     skill_id,
     skill_name,
-    is_mandatory=False,
+    priority_level="complementary",
     weight=1.0,
     minimum_level=None,
     minimum_years=None,
@@ -85,7 +85,7 @@ def _create_skill_row(
                 id=uuid4(),
                 job_id=uuid4(),
                 skill_id=skill_id,
-                is_mandatory=is_mandatory,
+                priority_level=priority_level,
                 weight=weight,
                 minimum_level=minimum_level,
                 minimum_years=minimum_years,
@@ -112,8 +112,8 @@ async def test_job_not_found_raises_error(service, mock_repository):
 
 
 @pytest.mark.asyncio
-async def test_weak_vaga_without_mandatory_skills(service, mock_repository):
-    """Test that vaga without mandatory skills is weak and cannot publish."""
+async def test_weak_vaga_without_priority_skills(service, mock_repository):
+    """Test that vaga without essential skills is weak and cannot publish."""
     job = _create_job(
         title="Dev",  # Too short
         description="",  # Empty
@@ -131,7 +131,7 @@ async def test_weak_vaga_without_mandatory_skills(service, mock_repository):
     assert result.status == "weak"
     assert not result.can_publish
     assert result.quality_score < 50
-    assert "mandatory_skills" in result.missing_fields
+    assert "priority_skills" in result.missing_fields
 
 
 @pytest.mark.asyncio
@@ -147,9 +147,9 @@ async def test_good_vaga_with_all_criteria(service, mock_repository):
     )
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=2.0),
-        _create_skill_row(uuid4(), "PostgreSQL", is_mandatory=True, weight=1.5),
-        _create_skill_row(uuid4(), "Docker", is_mandatory=False, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=2.0),
+        _create_skill_row(uuid4(), "PostgreSQL", priority_level="priority", weight=1.5),
+        _create_skill_row(uuid4(), "Docker", priority_level="complementary", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -161,13 +161,13 @@ async def test_good_vaga_with_all_criteria(service, mock_repository):
 
 
 @pytest.mark.asyncio
-async def test_linked_mandatory_skills_satisfy_skill_requirements_when_payload_is_absent(service, mock_repository):
+async def test_linked_priority_skills_satisfy_skill_requirements_when_payload_is_absent(service, mock_repository):
     job = _create_job()
     job.skill_requirements = None
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "React", is_mandatory=True, weight=1.0),
-        _create_skill_row(uuid4(), "Node.js", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "React", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "Node.js", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -175,6 +175,26 @@ async def test_linked_mandatory_skills_satisfy_skill_requirements_when_payload_i
     assert result.can_publish
     assert "skill_requirements" not in result.publication_blockers
     assert any("skills vinculadas" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_linked_skills_override_divergent_skill_requirements_snapshot(service, mock_repository):
+    job = _create_job()
+    job.skill_requirements = {
+        "priority": ["React"],
+        "complementary": [],
+        "eliminatory": [],
+    }
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "JavaScript", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "Node.js", priority_level="priority", weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert "skill_requirements" not in result.publication_blockers
+    assert any("divergente" in warning for warning in result.warnings)
 
 
 @pytest.mark.asyncio
@@ -189,7 +209,7 @@ async def test_acceptable_vaga_with_warnings(service, mock_repository):
     )
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -197,33 +217,33 @@ async def test_acceptable_vaga_with_warnings(service, mock_repository):
     assert result.status == "acceptable"
     assert not result.can_publish
     assert 50 <= result.quality_score < 75
-    assert "mandatory_skills" in result.publication_blockers
+    assert "priority_skills" in result.publication_blockers
 
 
 @pytest.mark.asyncio
-async def test_many_mandatory_skills_generates_warning(service, mock_repository):
-    """Test that vaga with >8 mandatory skills gets a warning."""
+async def test_many_priority_skills_generates_warning(service, mock_repository):
+    """Test that vaga with >5 essential skills gets a warning."""
     job = _create_job()
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), f"Skill {i}", is_mandatory=True, weight=1.0)
-        for i in range(10)  # 10 mandatory skills
+        _create_skill_row(uuid4(), f"Skill {i}", priority_level="priority", weight=1.0)
+        for i in range(10)
     ]
 
     result = await service.validate(job.id)
 
     assert len(result.warnings) > 0
-    assert any("Muitas skills obrigatórias" in w for w in result.warnings)
+    assert any("Muitas skills essenciais" in w for w in result.warnings)
 
 
 @pytest.mark.asyncio
-async def test_mandatory_skill_low_weight_generates_warning(service, mock_repository):
-    """Test that mandatory skill with weight < 0.5 generates warning."""
+async def test_priority_skill_low_weight_generates_warning(service, mock_repository):
+    """Test that essential skill with weight < 0.5 generates warning."""
     job = _create_job()
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=0.3),  # Low weight
-        _create_skill_row(uuid4(), "PostgreSQL", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=0.3),  # Low weight
+        _create_skill_row(uuid4(), "PostgreSQL", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -242,7 +262,7 @@ async def test_short_description_loses_points(service, mock_repository):
     )
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -279,8 +299,8 @@ async def test_missing_structural_fields_reduce_quality(service, mock_repository
     )
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
-        _create_skill_row(uuid4(), "PostgreSQL", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "PostgreSQL", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -299,8 +319,8 @@ async def test_missing_publication_blockers_prevent_publish_even_with_good_score
     )
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
-        _create_skill_row(uuid4(), "PostgreSQL", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "PostgreSQL", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -311,17 +331,17 @@ async def test_missing_publication_blockers_prevent_publish_even_with_good_score
 
 
 @pytest.mark.asyncio
-async def test_two_mandatory_skills_are_required_for_publication(service, mock_repository):
+async def test_two_priority_skills_are_required_for_publication(service, mock_repository):
     job = _create_job()
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
 
     assert not result.can_publish
-    assert "mandatory_skills" in result.publication_blockers
+    assert "priority_skills" in result.publication_blockers
 
 
 @pytest.mark.asyncio
@@ -348,7 +368,7 @@ async def test_deal_breakers_with_reason_adds_points(service, mock_repository):
     )
     mock_repository.find_active_by_id.return_value = job
     mock_repository.list_required_skill_rows.return_value = [
-        _create_skill_row(uuid4(), "Python", is_mandatory=True, weight=1.0),
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
     ]
 
     result = await service.validate(job.id)
@@ -366,6 +386,118 @@ async def test_no_skills_added_yet_warns(service, mock_repository):
 
     result = await service.validate(job.id)
 
-    assert "mandatory_skills" in result.missing_fields
+    assert "priority_skills" in result.missing_fields
     assert len(result.warnings) > 0
     assert any("Sem skills" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_technical_job_with_less_than_three_priority_skills_warns_permissive_ranking(service, mock_repository):
+    job = _create_job(title="Desenvolvedor Backend Pleno", job_area="technology")
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Node.js", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "SQL", priority_level="priority", weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert any("ranking pode ficar permissivo" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_full_stack_job_without_frontend_signal_warns(service, mock_repository):
+    job = _create_job(
+        title="Desenvolvedor Full Stack Pleno",
+        description="Atuacao full stack com foco em APIs e servicos de backend.",
+        job_area="technology",
+    )
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Node.js", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "SQL", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "API REST", priority_level="complementary", weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert any("skill clara de frontend" in warning for warning in result.warnings)
+    assert not any("skill clara de backend" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_full_stack_job_without_backend_signal_warns(service, mock_repository):
+    job = _create_job(
+        title="Full Stack Engineer",
+        description="Posicao full stack com participacao em interfaces e experiencia web.",
+        job_area="technology",
+    )
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "React", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "Frontend", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "Vue.js", priority_level="complementary", weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert any("skill clara de backend" in warning for warning in result.warnings)
+    assert not any("skill clara de frontend" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_more_than_twelve_complementary_skills_warns_about_clarity(service, mock_repository):
+    job = _create_job(title="Desenvolvedor Full Stack Pleno", job_area="technology")
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Node.js", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "SQL", priority_level="priority", weight=1.0),
+        *[
+            _create_skill_row(uuid4(), f"Diferencial {index}", priority_level="complementary", weight=1.0)
+            for index in range(13)
+        ],
+    ]
+
+    result = await service.validate(job.id)
+
+    assert any("Diferenciais em excesso" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_backend_job_does_not_warn_about_missing_frontend_signal(service, mock_repository):
+    job = _create_job(
+        title="Backend Developer Pleno",
+        description="Atuacao em backend, APIs e bancos relacionais para produtos internos.",
+        job_area="technology",
+    )
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Node.js", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "SQL", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "API REST", priority_level="complementary", weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert not any("skill clara de frontend" in warning for warning in result.warnings)
+    assert not any("skill clara de backend" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_frontend_job_does_not_warn_about_missing_backend_signal(service, mock_repository):
+    job = _create_job(
+        title="Frontend Developer Pleno",
+        description="Atuacao em interfaces web, componentes reutilizaveis e experiencia do usuario.",
+        job_area="technology",
+    )
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "React", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "Frontend", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "JavaScript", priority_level="complementary", weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert not any("skill clara de backend" in warning for warning in result.warnings)
+    assert not any("skill clara de frontend" in warning for warning in result.warnings)

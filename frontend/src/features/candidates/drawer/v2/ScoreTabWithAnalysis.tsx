@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AnalysisResult, CandidateOverview, Job, JobRankingEntry } from "../../../../types/domain";
 import type { ScoreExplanationResponse } from "../../../../services/scoreExplanationService";
-import { ScoreTab } from "../tabs/ScoreTab";
+import { ScoreTab, type ScoreTabFocusRequest } from "../tabs/ScoreTab";
 import { CandidateAnalysisSection } from "./CandidateAnalysisSection";
 import { getCompatibilityGuidance } from "../hooks/useCandidateDecision";
 
@@ -16,6 +16,7 @@ interface ScoreTabWithAnalysisProps {
   error: string | null;
   compatibilityGuidance: ReturnType<typeof getCompatibilityGuidance>;
   scoreExplanation: ScoreExplanationResponse | null;
+  focusRequest?: ScoreTabFocusRequest | null;
 }
 
 export function ScoreTabWithAnalysis({
@@ -29,8 +30,20 @@ export function ScoreTabWithAnalysis({
   error,
   compatibilityGuidance,
   scoreExplanation,
+  focusRequest = null,
 }: ScoreTabWithAnalysisProps) {
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const analysisSectionRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!focusRequest || focusRequest.intent !== "analysis") return;
+    if (!analysisResult) return;
+
+    setAnalysisOpen(true);
+    window.requestAnimationFrame(() => {
+      analysisSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [analysisResult, focusRequest]);
 
   return (
     <div className="flex flex-col">
@@ -45,14 +58,17 @@ export function ScoreTabWithAnalysis({
         error={error}
         compatibilityGuidance={compatibilityGuidance}
         scoreExplanation={scoreExplanation}
+        focusRequest={focusRequest}
       />
       {analysisResult && (
-        <CandidateAnalysisSection
-          analysisResult={analysisResult}
-          isLoading={loading}
-          isOpen={analysisOpen}
-          onToggle={() => setAnalysisOpen(!analysisOpen)}
-        />
+        <div ref={analysisSectionRef}>
+          <CandidateAnalysisSection
+            analysisResult={analysisResult}
+            isLoading={loading}
+            isOpen={analysisOpen}
+            onToggle={() => setAnalysisOpen(!analysisOpen)}
+          />
+        </div>
       )}
     </div>
   );

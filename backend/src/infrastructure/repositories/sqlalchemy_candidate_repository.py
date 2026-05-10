@@ -255,7 +255,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             .limit(1)
             .scalar_subquery()
         )
-        active_job_final_score_sq = (
+        active_job_job_fit_score_sq = (
             sa.select(CandidateJobScoreModel.final_score)
             .select_from(CandidateJobPipelineModel)
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
@@ -343,7 +343,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 active_job_id_sq.label("active_job_id"),
                 active_job_title_sq.label("active_job_title"),
                 active_job_stage_sq.label("active_job_stage"),
-                active_job_final_score_sq.label("active_job_final_score"),
+                active_job_job_fit_score_sq.label("active_job_job_fit_score"),
                 ai_status_sq.label("ai_status"),
             )
             .where(*filters)
@@ -491,7 +491,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 ResumeModel.candidate_id == candidate_id,
                 ResumeModel.deleted_at.is_(None),
                 AnalysisModel.job_id == job_id,
-                AnalysisModel.status == "completed",
+                AnalysisModel.status != "discarded",
             )
             .order_by(AnalysisModel.created_at.desc(), AnalysisModel.updated_at.desc())
             .limit(1)
@@ -610,7 +610,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 CandidateJobMatchModel.job_id,
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
-                CandidateJobScoreModel.final_score,
+                CandidateJobScoreModel.final_score.label("job_fit_score"),
                 CandidateJobMatchModel.recommendation,
                 CandidateProfileAnalysisModel.seniority_level,
                 CandidateProfileAnalysisModel.experience_years.label("total_experience_years"),

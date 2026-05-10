@@ -203,7 +203,7 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.updated_at,
                 latest_keywords.c.top_skills,
                 latest_ai_status.c.ai_status,
-                CandidateJobScoreModel.final_score.label("final_score"),
+                CandidateJobScoreModel.final_score.label("job_fit_score"),
             )
             .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
             .join(
@@ -532,46 +532,8 @@ class SQLAlchemyPipelineRepository:
 
         resume_version_id = await self._resolve_resume_version_id_from_analysis(analysis_id)
         now = datetime.now(UTC)
-        current = await self.find_any_entry(candidate_id, job_id)
-
+        current = await self.find_active_entry(candidate_id, job_id)
         if current is None:
-            pipeline_key = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
-            self._session.add(
-                CandidateJobPipelineModel(
-                    candidate_job_pipeline_id=pipeline_key,
-                    candidate_id=candidate_id,
-                    job_id=job_id,
-                    resume_version_id=resume_version_id,
-                    pipeline_stage="entry",
-                    link_status="active",
-                    pipeline_status="active",
-                    relationship_status="active",
-                    is_terminal=False,
-                    terminated_at=None,
-                    termination_reason=None,
-                    source="ai_match",
-                    current_analysis_id=analysis_id,
-                    entered_at=now,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            await self._session.flush()
-
-            self._session.add(
-                CandidateJobPipelineEventModel(
-                    candidate_id=candidate_id,
-                    job_id=job_id,
-                    event_type="match_registered",
-                    from_stage=None,
-                    to_stage="entry",
-                    actor_id=None,
-                    idempotency_key=f"pipeline:{pipeline_key}:match_registered:null:entry:null",
-                    metadata_payload={"trigger": "auto_match", "analysis_id": str(analysis_id)},
-                    created_at=now,
-                )
-            )
-            await self._session.flush()
             return
 
         if current.candidate_job_pipeline_id is None:

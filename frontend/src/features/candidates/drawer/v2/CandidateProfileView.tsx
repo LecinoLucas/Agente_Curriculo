@@ -43,6 +43,7 @@ interface CandidateProfileViewProps {
   onAdvance: () => void;
   onTerminate: () => void;
   onViewAnalysis: () => void;
+  onEvaluateBetter?: () => void;
   onTabChange: (tab: TabKey) => void;
   onEditCandidate?: () => void;
   onLinkJob?: () => void;
@@ -91,6 +92,7 @@ export function CandidateProfileView({
   onAdvance,
   onTerminate,
   onViewAnalysis,
+  onEvaluateBetter,
   onTabChange,
   onEditCandidate,
   onLinkJob,
@@ -237,6 +239,7 @@ export function CandidateProfileView({
           aiStatus={aiStatus}
           scoreExplanation={scoreExplanation}
           onViewAnalysis={onViewAnalysis}
+          onEvaluateBetter={onEvaluateBetter}
           compact={compact}
         />
       )}

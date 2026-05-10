@@ -1,4 +1,10 @@
-import { Resume, ResumeFileUploadResponse, ResumeSummary, ResumeUploadResponse } from "../types/domain";
+import {
+  Resume,
+  ResumeExtractionStatusResponse,
+  ResumeFileUploadResponse,
+  ResumeSummary,
+  ResumeUploadResponse,
+} from "../types/domain";
 import { httpRequest } from "./http";
 
 function normalizeResumeSummary(item: Partial<ResumeSummary> & { id?: string; candidate_id?: string; title?: string; status?: string; current_version?: number; updated_at?: string }): ResumeSummary {
@@ -35,6 +41,20 @@ function normalizeResumeFileUpload(item: Partial<ResumeFileUploadResponse>): Res
   };
 }
 
+function normalizeResumeExtractionStatus(
+  item: Partial<ResumeExtractionStatusResponse>,
+): ResumeExtractionStatusResponse {
+  return {
+    resume_id: item.resume_id ?? "",
+    version_id: item.version_id ?? "",
+    extraction_status: item.extraction_status ?? "pending",
+    extraction_error: item.extraction_error ?? null,
+    original_file_name: item.original_file_name ?? "",
+    page_count: item.page_count ?? null,
+    word_count: item.word_count ?? null,
+  };
+}
+
 export const resumeService = {
   list: () =>
     httpRequest<ResumeSummary[]>("/api/v1/resumes").then((payload) =>
@@ -57,6 +77,11 @@ export const resumeService = {
       body: formData,
     }).then(normalizeResumeFileUpload);
   },
+
+  getExtractionStatus: (id: string) =>
+    httpRequest<ResumeExtractionStatusResponse>(`/api/v1/resumes/${id}/extraction-status`).then(
+      normalizeResumeExtractionStatus,
+    ),
 
   update: (id: string, payload: { title?: string; status?: "active" | "archived" }) =>
     httpRequest<Resume>(`/api/v1/resumes/${id}`, { method: "PATCH", body: payload }),

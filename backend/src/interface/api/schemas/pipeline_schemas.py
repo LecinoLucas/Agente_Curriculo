@@ -49,8 +49,8 @@ class JobMatchCandidateResponse(BaseModel):
     # AI-controlled: processing state of the candidate's latest analysis.
     # null means no analysis has been requested yet.
     ai_status: AIAnalysisStatus | None = None
-    # Final matching score (0-100) if score exists and is fresh. Null if no score yet.
-    final_score: Decimal | None = None
+    # Official job fit score (0-100) if score exists and is fresh. Null if no score yet.
+    job_fit_score: Decimal | None = None
 
 
 class PipelineColumnResponse(BaseModel):

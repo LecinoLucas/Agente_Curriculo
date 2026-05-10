@@ -83,7 +83,7 @@ class JobRequiredSkillModel(Base):
     )
     job_id: Mapped[UUID] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("jobs.id"), nullable=False)
     skill_id: Mapped[UUID] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("skills.id"), nullable=False)
-    is_mandatory: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default="false")
+    priority_level: Mapped[str] = mapped_column(sa.String(20), nullable=False, server_default="complementary")
     minimum_level: Mapped[Optional[str]] = mapped_column(sa.String(50))
     minimum_years: Mapped[Optional[Decimal]] = mapped_column(sa.Numeric(4, 1))
     weight: Mapped[Decimal] = mapped_column(sa.Numeric(4, 2), nullable=False, server_default="1.00")

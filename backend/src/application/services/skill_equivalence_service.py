@@ -120,13 +120,23 @@ class SkillEquivalenceService:
         if common_groups:
             group_name = list(common_groups)[0]
             group = self._find_group_by_canonical(group_name)
-            strength = str(group.get("strength") or "partial") if group else "partial"
+            strength = self._resolve_group_match_strength_for_pair(
+                group,
+                candidate_norm=candidate_norm,
+                required_norm=required_norm,
+            )
             score = self._score_for_strength(strength)
             return SkillMatchEvidence(
                 matched=True,
                 strength=strength,
                 score=score,
-                reason=f'Ambas são do grupo "{group_name}".',
+                reason=self._build_group_match_reason(
+                    group_name,
+                    candidate_norm=candidate_norm,
+                    required_norm=required_norm,
+                    strength=strength,
+                    group=group,
+                ),
                 source="group",
             )
 
@@ -137,6 +147,88 @@ class SkillEquivalenceService:
             reason=f'"{candidate_skill}" não corresponde a "{required_skill}".',
             source="none",
         )
+
+    def _resolve_group_match_strength(self, group: dict[str, Any] | None) -> str:
+        if not group:
+            return "partial"
+        raw_strength = str(group.get("strength") or "partial").strip().lower()
+        group_type = normalize_skill_text(group.get("type") or "") or ""
+        if group_type in {"area", "macro_area", "domain"}:
+            return "weak"
+        if group_type in {"category", "ecosystem"} and raw_strength == "strong":
+            return "partial"
+        return raw_strength
+
+    def _resolve_group_match_strength_for_pair(
+        self,
+        group: dict[str, Any] | None,
+        *,
+        candidate_norm: str,
+        required_norm: str,
+    ) -> str:
+        base_strength = self._resolve_group_match_strength(group)
+        if not group:
+            return base_strength
+
+        canonical_norm = normalize_skill_text(group.get("canonical", ""))
+        if not canonical_norm:
+            return base_strength
+
+        candidate_is_canonical = candidate_norm == canonical_norm
+        required_is_canonical = required_norm == canonical_norm
+
+        # Candidate with concrete specialization can satisfy a broad canonical
+        # requirement with the group's base strength.
+        if required_is_canonical and not candidate_is_canonical:
+            return base_strength
+
+        # Broad generic candidate skill must not satisfy a specific requirement
+        # with the same weight as a direct specialization match.
+        if candidate_is_canonical and not required_is_canonical:
+            return self._downgrade_strength(base_strength)
+
+        # Different siblings inside the same broad family should not match as
+        # strong peers unless an explicit relation says so.
+        if not candidate_is_canonical and not required_is_canonical:
+            return self._downgrade_strength(base_strength)
+
+        return base_strength
+
+    @staticmethod
+    def _downgrade_strength(strength: str) -> str:
+        downgrade_map = {
+            "exact": "strong",
+            "strong": "partial",
+            "partial": "weak",
+            "weak": "weak",
+            "none": "none",
+        }
+        return downgrade_map.get(strength, "partial")
+
+    def _build_group_match_reason(
+        self,
+        group_name: str,
+        *,
+        candidate_norm: str,
+        required_norm: str,
+        strength: str,
+        group: dict[str, Any] | None,
+    ) -> str:
+        canonical_norm = normalize_skill_text(group.get("canonical", "")) if group else ""
+        candidate_is_canonical = candidate_norm == canonical_norm
+        required_is_canonical = required_norm == canonical_norm
+
+        if candidate_is_canonical and not required_is_canonical:
+            return (
+                f'Grupo "{group_name}": skill genérica não comprova a especialização '
+                f'com força alta ({strength}).'
+            )
+        if not candidate_is_canonical and not required_is_canonical:
+            return (
+                f'Grupo "{group_name}": skills irmãs no mesmo grupo recebem match '
+                f'reduzido sem relação explícita ({strength}).'
+            )
+        return f'Ambas são do grupo "{group_name}".'
 
     def _find_skill_in_groups(self, skill_name: str) -> set[str]:
         """Find which groups (canonical names) contain this skill."""

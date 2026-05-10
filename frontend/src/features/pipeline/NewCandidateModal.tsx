@@ -4,6 +4,7 @@ import { Modal } from "../../components/common/Modal";
 import { StatusPill } from "../../components/common/StatusPill";
 import { Badge } from "../../components/ui/badge";
 import { candidatesService } from "../../services/candidatesService";
+import { resumeService } from "../../services/resumeService";
 import { formatErrorDetails, handleApiError } from "../../shared/utils/errorHandler";
 import { feedback } from "../../services/feedback";
 import { HttpError } from "../../services/http";
@@ -21,9 +22,6 @@ type NewCandidateFormErrors = {
   cpf?: string;
   form?: string;
 };
-
-type CandidateLinkStatus = "idle" | "created_pending_link" | "linked" | "link_failed";
-type DuplicateJobStatus = "idle" | "checking" | "linked" | "unlinked";
 
 function formatCpfInput(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 11);
@@ -55,13 +53,14 @@ export function NewCandidateModal({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [cpf, setCpf] = useState("");
+  const [city, setCity] = useState("");
+  const [source, setSource] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [selectedJobId, setSelectedJobId] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<NewCandidateFormErrors>({});
   const [duplicate, setDuplicate] = useState<{ id: string; full_name: string } | null>(null);
-  const [createdCandidate, setCreatedCandidate] = useState<{ id: string; full_name: string } | null>(null);
-  const [linkStatus, setLinkStatus] = useState<CandidateLinkStatus>("idle");
-  const [duplicateJobStatus, setDuplicateJobStatus] = useState<DuplicateJobStatus>("idle");
 
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? null,
@@ -80,42 +79,15 @@ export function NewCandidateModal({
     setEmail("");
     setPhone("");
     setCpf("");
+    setCity("");
+    setSource("");
+    setInternalNotes("");
+    setResumeFile(null);
     setSelectedJobId(defaultJobId ?? "");
     setLoading(false);
     setErrors({});
     setDuplicate(null);
-    setCreatedCandidate(null);
-    setLinkStatus("idle");
-    setDuplicateJobStatus("idle");
   }, [defaultJobId, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || !duplicate || !selectedJobId) {
-      if (duplicate && !selectedJobId) {
-        setDuplicateJobStatus("idle");
-      }
-      return;
-    }
-
-    let cancelled = false;
-    setDuplicateJobStatus("checking");
-
-    void (async () => {
-      const overview = await candidatesService.getOverview(duplicate.id);
-      const linked = overview.pipeline_entries.some((entry) => entry.job_id === selectedJobId);
-      if (!cancelled) {
-        setDuplicateJobStatus(linked ? "linked" : "unlinked");
-      }
-    })().catch(() => {
-      if (!cancelled) {
-        setDuplicateJobStatus("idle");
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [duplicate, isOpen, selectedJobId]);
 
   if (!isOpen) return null;
 
@@ -126,11 +98,6 @@ export function NewCandidateModal({
 
   function clearDuplicate(field?: keyof NewCandidateFormErrors) {
     if (duplicate) setDuplicate(null);
-    if (createdCandidate) {
-      setCreatedCandidate(null);
-      setLinkStatus("idle");
-    }
-    setDuplicateJobStatus("idle");
     setErrors((current) => {
       if (!field && !current.form) return current;
       if (!field) return {};
@@ -171,42 +138,7 @@ export function NewCandidateModal({
     return { trimmedName, trimmedEmail, trimmedPhone, cpfDigits };
   }
 
-  async function ensureSelectedJobCanReceiveCandidates() {
-    if (!selectedJobId) return null;
-    if (!selectedJob) {
-      throw new Error("A vaga selecionada não foi encontrada.");
-    }
-    if (!selectedJobCanReceiveCandidates) {
-      throw new Error("A vaga selecionada precisa estar publicada ou pausada para receber candidatos.");
-    }
-    return selectedJob;
-  }
-
-  async function linkCandidateToSelectedJob(candidateId: string, job: Job) {
-    await pipelineService.addCandidateToJob(candidateId, {
-      job_id: job.id,
-      initial_stage: "entry",
-    });
-    await invalidateJobState(job.id);
-    notifyCandidatesChanged();
-    setLinkStatus("linked");
-  }
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-
-    try {
-      await ensureSelectedJobCanReceiveCandidates();
-    } catch (err: unknown) {
-      setErrors({
-        form: toFriendlyText(
-          err,
-          "A vaga selecionada não pode receber novos candidatos. Escolha uma vaga publicada ou pausada, ou limpe o campo para criar sem vínculo.",
-        ),
-      });
-      return;
-    }
-
+  async function handleSave(addToJob: boolean) {
     const validated = validateForm();
     if (!validated) return;
 
@@ -215,9 +147,6 @@ export function NewCandidateModal({
     setLoading(true);
     setErrors({});
     setDuplicate(null);
-    setCreatedCandidate(null);
-    setLinkStatus("idle");
-    setDuplicateJobStatus("idle");
     feedback.createCandidate.processing();
 
     try {
@@ -234,147 +163,78 @@ export function NewCandidateModal({
         setErrors({
           form: "Já existe um candidato com este email/CPF",
         });
+        setLoading(false);
         return;
       }
+
+      // Concatenar fonte e observações
+      const notes = [
+        source ? `Fonte: ${source}` : "",
+        internalNotes ? `Observações:\n${internalNotes}` : ""
+      ].filter(Boolean).join("\n\n");
 
       const candidate = await candidatesService.create({
         full_name: trimmedName,
         email: trimmedEmail,
         phone: trimmedPhone || undefined,
         cpf: cpfDigits || undefined,
+        location_city: city || undefined,
+        internal_notes: notes || undefined,
       });
 
-      notifyCandidatesChanged();
-      setCreatedCandidate({ id: candidate.id, full_name: candidate.full_name });
-
-      if (selectedJob && selectedJobCanReceiveCandidates) {
-        setLinkStatus("created_pending_link");
+      // Upload de currículo se houver
+      if (resumeFile) {
         try {
-          await linkCandidateToSelectedJob(candidate.id, selectedJob);
+          const uploadInit = await resumeService.initiateUpload(candidate.id);
+          await resumeService.uploadPdf(uploadInit.resume_id, resumeFile);
+          toast.success("Currículo enviado, extração em andamento.");
         } catch (err: unknown) {
-          setLinkStatus("link_failed");
+          toast.error("Candidato criado, mas falhou ao enviar o currículo.");
+        }
+      }
+
+      notifyCandidatesChanged();
+
+      // Vínculo com vaga (apenas se solicitado explicitamente)
+      if (addToJob && selectedJob && selectedJobCanReceiveCandidates) {
+        try {
+          await pipelineService.addCandidateToJob(candidate.id, {
+            job_id: selectedJob.id,
+            initial_stage: "entry",
+          });
+          await invalidateJobState(selectedJob.id);
+        } catch (err: unknown) {
           setErrors({
             form: toFriendlyText(
               err,
-              "Candidato criado, mas falhou ao vinculá-lo à vaga selecionada. Tente vincular novamente para concluir o pipeline.",
+              "Candidato criado, mas falhou ao vinculá-lo à vaga selecionada.",
             ),
           });
+          setLoading(false);
           return;
         }
-      } else {
-        setLinkStatus("created_pending_link");
       }
 
       await onCreated(candidate.id);
       feedback.createCandidate.success(
-        selectedJob
-          ? selectedJobCanReceiveCandidates
-            ? `Candidato adicionado à vaga ${selectedJob.title}`
-            : `Candidato criado. A vaga ${selectedJob.title} não permite vínculo.`
-          : "Candidato criado (Aguardando vaga)",
+        addToJob && selectedJob
+          ? `Candidato adicionado à vaga ${selectedJob.title}`
+          : "Candidato cadastrado com sucesso (Aguardando vaga)",
       );
+      onClose();
     } catch (err: unknown) {
       if (err instanceof HttpError) {
         if (err.status === 409) {
-          feedback.createCandidate.error(err);
-          setErrors({
-            form: "Já existe um candidato com este email/CPF",
-          });
+          setErrors({ form: "Já existe um candidato com este email/CPF" });
           return;
         }
         if (err.status === 422) {
-          feedback.createCandidate.error(err);
-          setErrors({
-            form: "Dados inválidos. Revise nome, e-mail e CPF antes de criar o candidato.",
-          });
+          setErrors({ form: "Dados inválidos. Revise os campos." });
           return;
         }
       }
-
-      feedback.createCandidate.error(err);
       setErrors({
-        form: toFriendlyText(err, "Não foi possível criar o candidato. Revise os dados e tente novamente."),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleRetryLink() {
-    if (!createdCandidate) return;
-
-    let job: Job | null;
-    try {
-      job = await ensureSelectedJobCanReceiveCandidates();
-      if (!job) {
-        setErrors({
-          form: "Selecione uma vaga publicada ou pausada para concluir o vínculo.",
-        });
-        return;
-      }
-    } catch (err: unknown) {
-      setErrors({
-        form: toFriendlyText(
-          err,
-          "Não foi possível vincular o candidato à vaga selecionada. Escolha uma vaga válida e tente novamente.",
-        ),
-      });
-      return;
-    }
-
-    setLoading(true);
-    setErrors({});
-    try {
-      await linkCandidateToSelectedJob(createdCandidate.id, job);
-      await onCreated(createdCandidate.id);
-      feedback.createCandidate.success(`Candidato adicionado à vaga ${job.title}`);
-    } catch (err: unknown) {
-      setLinkStatus("link_failed");
-      setErrors({
-        form: toFriendlyText(
-          err,
-          "Candidato criado, mas ainda não foi possível vinculá-lo à vaga. Tente novamente.",
-        ),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleOpenDuplicateCandidate() {
-    if (!duplicate) return;
-
-    setLoading(true);
-    setErrors({});
-    try {
-      await onCreated(duplicate.id);
-    } catch (err: unknown) {
-      setErrors({
-        form: toFriendlyText(err, "Não foi possível abrir o candidato existente. Tente novamente."),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleLinkDuplicateCandidate() {
-    if (!duplicate || !selectedJob || !selectedJobCanReceiveCandidates) return;
-
-    setLoading(true);
-    setErrors({});
-    setCreatedCandidate({ id: duplicate.id, full_name: duplicate.full_name });
-    try {
-      await linkCandidateToSelectedJob(duplicate.id, selectedJob);
-      setDuplicateJobStatus("linked");
-      await onCreated(duplicate.id);
-      feedback.createCandidate.success(`Candidato adicionado à vaga ${selectedJob.title}`);
-    } catch (err: unknown) {
-      setLinkStatus("link_failed");
-      setErrors({
-        form: toFriendlyText(
-          err,
-          "Falha ao vincular o candidato duplicado à vaga selecionada. Tente novamente.",
-        ),
+        form: toFriendlyText(err, "Não foi possível criar o candidato."),
       });
     } finally {
       setLoading(false);
@@ -383,120 +243,36 @@ export function NewCandidateModal({
 
   const selectedJobLabel = selectedJob
     ? `${selectedJob.title} · ${formatJobStatus(selectedJob.status)}`
-    : selectedJobId
-      ? "Vaga ainda não encontrada"
-      : "Sem vaga selecionada";
-
-  const primaryButtonLabel = selectedJobId ? "Criar e adicionar à vaga" : "Criar candidato sem vaga";
+    : "Sem vaga selecionada";
 
   return (
     <Modal
-      title="Novo candidato"
+      title="Cadastrar Candidato"
       onClose={onClose}
       contentClassName="sm:max-w-[720px]"
     >
-      <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-5 p-6">
+      <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-5 p-6">
         <div className="space-y-1">
           <p className="text-sm text-[hsl(var(--text-muted))]">
-            A vaga é opcional. Você pode vincular depois. Se quiser, já crie o candidato com uma vaga selecionada.
+            Preencha os dados do candidato. O cadastro inicial não cria vínculo automático com vagas.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="neutral">Criar candidato</Badge>
-            <Badge variant="outline">Vínculo opcional</Badge>
+            <Badge variant="neutral">Cadastro isolado</Badge>
+            <Badge variant="outline">Sem IA automática</Badge>
           </div>
         </div>
 
-        {selectedJobId ? (
-          <div
-            className={[
-              "rounded-xl border px-4 py-3",
-              selectedJobCanReceiveCandidates
-                ? "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]"
-                : "border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))]",
-            ].join(" ")}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                  Vaga selecionada
-                </p>
-                <p className="mt-1 text-sm font-semibold text-[hsl(var(--text))]">{selectedJobLabel}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedJobId("")}
-                disabled={loading}
-                className="rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))] disabled:opacity-50"
-              >
-                Limpar vaga
-              </button>
-            </div>
-            {selectedJob ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <StatusPill label={formatJobStatus(selectedJob.status)} tone={jobStatusTone(selectedJob.status)} />
-                {selectedJob.seniority_level ? (
-                  <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
-                    {formatSeniority(selectedJob.seniority_level)}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-            <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">
-              {selectedJobCanReceiveCandidates
-                ? "Este candidato será criado e vinculado automaticamente à vaga selecionada."
-                : "Para vincular, a vaga precisa estar publicada ou pausada. Você pode limpar o campo para criar sem vínculo."}
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-            <p className="text-sm font-medium text-[hsl(var(--text))]">Sem vaga selecionada</p>
+        {!selectedJobId && (
+          <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
+            <p className="text-sm font-medium text-[hsl(var(--warning))]">Aviso</p>
             <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-              O candidato será cadastrado com status <strong>Aguardando vaga</strong> e poderá ser vinculado depois.
+              Este candidato será criado sem vaga ativa e ficará com status <strong>Aguardando vaga</strong>.
             </p>
           </div>
         )}
 
-        {(createdCandidate || duplicate) && (linkStatus !== "idle" || duplicate) ? (
-          <div
-            className={[
-              "rounded-xl border px-4 py-3",
-              linkStatus === "linked"
-                ? "border-[hsl(var(--success))]/20 bg-[hsl(var(--success-soft))]"
-                : linkStatus === "link_failed"
-                  ? "border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))]"
-                  : "border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))]",
-            ].join(" ")}
-          >
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">
-              {createdCandidate
-                ? linkStatus === "linked"
-                  ? selectedJob
-                    ? `Candidato adicionado à vaga ${selectedJob.title}`
-                    : "Candidato criado"
-                  : linkStatus === "link_failed"
-                    ? "Falha ao vincular"
-                    : "Candidato criado, aguardando vínculo"
-                : duplicateJobStatus === "linked"
-                  ? "Candidato existente já vinculado"
-                  : "Candidato duplicado encontrado"}
-            </p>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-              {createdCandidate
-                ? linkStatus === "linked"
-                  ? "O candidato já foi cadastrado e entrou no pipeline, se a vaga foi selecionada."
-                  : linkStatus === "link_failed"
-                    ? "O cadastro foi salvo, mas o vínculo com a vaga precisa ser concluído manualmente."
-                    : selectedJobId
-                      ? "Candidato criado. Finalizando vínculo com a vaga."
-                      : "Candidato criado com status Aguardando vaga."
-                : duplicateJobStatus === "linked"
-                  ? "Já existe um candidato com este email/CPF e ele já está vinculado à vaga selecionada."
-                  : "Já existe um candidato com este email/CPF."}
-            </p>
-          </div>
-        ) : null}
-
         <div className="grid gap-4 md:grid-cols-2">
+          {/* Nome */}
           <label className="flex flex-col gap-1.5 md:col-span-2">
             <span className="text-sm font-medium text-[hsl(var(--text))]">Nome completo *</span>
             <input
@@ -504,8 +280,8 @@ export function NewCandidateModal({
               required
               autoFocus
               value={fullName}
-              onChange={(event) => {
-                setFullName(event.target.value);
+              onChange={(e) => {
+                setFullName(e.target.value);
                 clearDuplicate("fullName");
               }}
               placeholder="Nome do candidato"
@@ -519,14 +295,15 @@ export function NewCandidateModal({
             {errors.fullName ? <span className="text-xs text-red-600">{errors.fullName}</span> : null}
           </label>
 
+          {/* E-mail */}
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-[hsl(var(--text))]">E-mail *</span>
             <input
               type="email"
               required
               value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
+              onChange={(e) => {
+                setEmail(e.target.value);
                 clearDuplicate("email");
               }}
               placeholder="email@exemplo.com"
@@ -540,24 +317,26 @@ export function NewCandidateModal({
             {errors.email ? <span className="text-xs text-red-600">{errors.email}</span> : null}
           </label>
 
+          {/* Telefone */}
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-[hsl(var(--text))]">Telefone</span>
             <input
               type="tel"
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={(e) => setPhone(e.target.value)}
               placeholder="(11) 99999-9999"
               className="h-10 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
-          <label className="flex flex-col gap-1.5 md:col-span-2">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">CPF</span>
+          {/* CPF */}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-[hsl(var(--text))]">CPF (opcional)</span>
             <input
               type="text"
               value={cpf}
-              onChange={(event) => {
-                setCpf(formatCpfInput(event.target.value));
+              onChange={(e) => {
+                setCpf(formatCpfInput(e.target.value));
                 clearDuplicate("cpf");
               }}
               placeholder="000.000.000-00"
@@ -571,19 +350,62 @@ export function NewCandidateModal({
             />
             {errors.cpf ? <span className="text-xs text-red-600">{errors.cpf}</span> : null}
           </label>
-        </div>
 
-        <div className="flex flex-col gap-3">
+          {/* Cidade */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Vaga (opcional)</span>
+            <span className="text-sm font-medium text-[hsl(var(--text))]">Cidade</span>
+            <input
+              type="text"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Ex: São Paulo"
+              className="h-10 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          {/* Fonte do Candidato */}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-[hsl(var(--text))]">Fonte do candidato</span>
+            <input
+              type="text"
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder="Ex: LinkedIn, Indicação..."
+              className="h-10 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          {/* Currículo */}
+          <label className="flex flex-col gap-1.5 md:col-span-2">
+            <span className="text-sm font-medium text-[hsl(var(--text))]">Currículo / Anexo</span>
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+              className="w-full text-sm text-[hsl(var(--text))] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[hsl(var(--primary))] file:text-white hover:file:bg-[hsl(var(--primary))]/90"
+            />
+            <p className="text-xs text-[hsl(var(--text-muted))]">
+              O upload do currículo não disparará análise IA automaticamente.
+            </p>
+          </label>
+
+          {/* Observações Internas */}
+          <label className="flex flex-col gap-1.5 md:col-span-2">
+            <span className="text-sm font-medium text-[hsl(var(--text))]">Observações internas</span>
+            <textarea
+              value={internalNotes}
+              onChange={(e) => setInternalNotes(e.target.value)}
+              placeholder="Anotações sobre o candidato..."
+              className="h-24 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          {/* Vaga (Opcional) */}
+          <label className="flex flex-col gap-1.5 md:col-span-2">
+            <span className="text-sm font-medium text-[hsl(var(--text))]">Vaga (opcional para vínculo)</span>
             <select
               value={selectedJobId}
-              onChange={(event) => {
-                setSelectedJobId(event.target.value);
-                setErrors((current) => ({ ...current, form: undefined }));
-                setDuplicate(null);
-                setDuplicateJobStatus("idle");
-              }}
+              onChange={(e) => setSelectedJobId(e.target.value)}
               disabled={loading}
               className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
             >
@@ -595,13 +417,13 @@ export function NewCandidateModal({
               ))}
             </select>
           </label>
-
-          {errors.form ? (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {errors.form}
-            </p>
-          ) : null}
         </div>
+
+        {errors.form ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {errors.form}
+          </p>
+        ) : null}
 
         {duplicate ? (
           <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] p-4">
@@ -609,48 +431,24 @@ export function NewCandidateModal({
               Já existe um candidato com este email/CPF: <strong>{duplicate.full_name}</strong>
             </p>
             <p className="mt-1 text-sm text-[hsl(var(--warning))]">
-              {selectedJobId
-                ? duplicateJobStatus === "checking"
-                  ? "Verificando se ele já está vinculado à vaga selecionada..."
-                  : duplicateJobStatus === "linked"
-                    ? "Este candidato já está vinculado à vaga selecionada."
-                    : "Ele ainda não está vinculado à vaga selecionada."
-                : "Você pode abrir o candidato existente ou limpar a vaga para seguir sem vínculo."}
+              Deseja abrir o perfil do candidato existente?
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => void handleOpenDuplicateCandidate()}
-                disabled={loading || duplicateJobStatus === "checking"}
-                className="rounded-lg bg-[hsl(var(--warning))] px-3 py-1.5 text-sm font-medium text-white transition hover:bg-[hsl(var(--warning))]/90 disabled:opacity-50"
+                onClick={async () => {
+                  await onCreated(duplicate.id);
+                  onClose();
+                }}
+                className="rounded-lg bg-[hsl(var(--warning))] px-3 py-1.5 text-sm font-medium text-white transition hover:bg-[hsl(var(--warning))]/90"
               >
-                {duplicateJobStatus === "checking" ? "Verificando vínculo…" : "Abrir candidato existente"}
+                Abrir candidato existente
               </button>
-              {selectedJobId && duplicateJobStatus === "unlinked" ? (
-                <button
-                  type="button"
-                  onClick={() => void handleLinkDuplicateCandidate()}
-                  disabled={loading || !selectedJobCanReceiveCandidates}
-                  className="rounded-lg border border-[hsl(var(--warning))] px-3 py-1.5 text-sm font-medium text-[hsl(var(--warning))] transition hover:bg-[hsl(var(--warning-soft))] disabled:opacity-50"
-                >
-                  Adicionar à vaga
-                </button>
-              ) : null}
             </div>
           </div>
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-2 pt-1">
-          {createdCandidate && linkStatus === "link_failed" ? (
-            <button
-              type="button"
-              onClick={() => void handleRetryLink()}
-              disabled={loading || !selectedJobCanReceiveCandidates}
-              className="rounded-lg border border-[hsl(var(--danger))] px-4 py-2 text-sm font-medium text-[hsl(var(--danger))] transition hover:bg-[hsl(var(--danger-soft))] disabled:opacity-50"
-            >
-              Tentar vincular novamente
-            </button>
-          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -658,12 +456,26 @@ export function NewCandidateModal({
           >
             Cancelar
           </button>
+          
+          {/* Botão Principal: Salvar candidato (sem vaga) */}
           <button
-            type="submit"
-            disabled={loading || Boolean(createdCandidate)}
-            className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
+            type="button"
+            onClick={() => void handleSave(false)}
+            disabled={loading || Boolean(duplicate)}
+            className="rounded-lg border border-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-[hsl(var(--primary))] transition hover:bg-[hsl(var(--primary))]/5 disabled:opacity-40"
           >
-            {loading ? "Verificando…" : primaryButtonLabel}
+            {loading ? "Processando…" : "Salvar candidato"}
+          </button>
+
+          {/* Botão Secundário: Salvar e adicionar à vaga */}
+          <button
+            type="button"
+            onClick={() => void handleSave(true)}
+            disabled={loading || !selectedJobId || !selectedJobCanReceiveCandidates || Boolean(duplicate)}
+            className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40"
+            title={!selectedJobId ? "Selecione uma vaga para habilitar" : ""}
+          >
+            {loading ? "Processando…" : "Salvar e adicionar à vaga"}
           </button>
         </div>
       </form>

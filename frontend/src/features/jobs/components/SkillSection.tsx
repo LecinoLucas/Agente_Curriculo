@@ -1,6 +1,7 @@
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { JobSkill, PendingJobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { PendingJobSkill } from "../jobFormConfig";
 
 type SkillSectionProps = {
   title: string;
@@ -11,11 +12,15 @@ type SkillSectionProps = {
   search: string;
   onSearchChange: (value: string) => void;
   addLabel: string;
-  addMandatory: boolean;
+  addPriorityLevel: "priority" | "complementary" | "eliminatory";
   savingSkillId: string | null;
-  onAddSkill: (skill: SkillEquivalenceGroup, isMandatory: boolean) => Promise<void>;
+  onAddSkill: (
+    skill: SkillEquivalenceGroup | string,
+    priorityLevel: "priority" | "complementary" | "eliminatory",
+  ) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
+  warning?: string | null;
 };
 
 export function SkillSection({
@@ -27,11 +32,12 @@ export function SkillSection({
   search,
   onSearchChange,
   addLabel,
-  addMandatory,
+  addPriorityLevel,
   savingSkillId,
   onAddSkill,
   onUpdateSkill,
   onRemoveSkill,
+  warning,
 }: SkillSectionProps) {
   return (
     <div className="space-y-6">
@@ -42,6 +48,11 @@ export function SkillSection({
           <div className="inline-flex w-fit rounded-full border border-[hsl(var(--primary))]/20 bg-[hsl(var(--accent-soft))] px-3 py-1 text-xs font-medium text-[hsl(var(--primary))]">
             {emphasis}
           </div>
+          {warning ? (
+            <div className="mt-2 rounded-2xl border border-[hsl(var(--warning))]/25 bg-[hsl(var(--warning))]/10 px-3 py-2 text-xs text-[hsl(var(--warning))]">
+              {warning}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-5">
@@ -74,7 +85,7 @@ export function SkillSection({
                     size="sm"
                     variant="outline"
                     disabled={savingSkillId === skill.id}
-                    onClick={() => void onAddSkill(skill, addMandatory)}
+                    onClick={() => void onAddSkill(skill, addPriorityLevel)}
                   >
                     {savingSkillId === skill.id ? (
                       <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
@@ -86,9 +97,30 @@ export function SkillSection({
                 </div>
               </div>
             ))}
-            {availableSkills.length === 0 ? (
+            {availableSkills.length === 0 && !search.trim() ? (
               <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] px-4 py-6 text-sm text-[hsl(var(--text-muted))] md:col-span-2 xl:col-span-3">
                 Nenhuma skill disponível para este filtro.
+              </div>
+            ) : null}
+            {search.trim() && !availableSkills.some(s => s.canonical.toLowerCase() === search.trim().toLowerCase()) ? (
+              <div className="rounded-2xl border border-dashed border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary-soft))]/30 p-4 md:col-span-2 xl:col-span-3 flex items-center justify-between">
+                <div className="text-sm">
+                  <span className="font-semibold text-[hsl(var(--text))]">"{search.trim()}"</span> não foi encontrada no catálogo.
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  disabled={savingSkillId === search.trim()}
+                  onClick={() => void onAddSkill(search.trim(), addPriorityLevel)}
+                >
+                  {savingSkillId === search.trim() ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  Adicionar {addLabel}
+                </Button>
               </div>
             ) : null}
           </div>
@@ -115,7 +147,11 @@ export function SkillSection({
                 <div>
                   <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.skill_name}</p>
                   <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                    {skill.is_mandatory ? "Obrigatória" : "Desejável"}
+                    {skill.priority_level === "priority"
+                      ? "Essencial"
+                      : skill.priority_level === "eliminatory"
+                        ? "Eliminatória"
+                        : "Diferencial"}
                   </p>
                 </div>
 
@@ -174,18 +210,7 @@ export function SkillSection({
                   </label>
                 </div>
               </div>
-
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    void onUpdateSkill(skill, { is_mandatory: !skill.is_mandatory })
-                  }
-                >
-                  {skill.is_mandatory ? "Mover para desejáveis" : "Mover para obrigatórias"}
-                </Button>
                 <Button
                   type="button"
                   size="sm"

@@ -56,7 +56,7 @@ export const feedback = {
     processing: () =>
       toast.loading("Enviando currículo...", { key: FEEDBACK_KEY.uploadResume }),
     success: () =>
-      toast.success("Currículo enviado com sucesso", { key: FEEDBACK_KEY.uploadResume }),
+      toast.success("Currículo enviado, extração em andamento", { key: FEEDBACK_KEY.uploadResume }),
     error: (error?: unknown) =>
       toast.error(
         formatContextError(

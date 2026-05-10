@@ -38,7 +38,7 @@ export type CandidateListSummary = {
   active_job_id: string | null;
   active_job_title: string | null;
   active_job_stage: string | null;
-  active_job_final_score: number | null;
+  active_job_job_fit_score: number | null;
   ai_status: string | null;
 };
 
@@ -87,7 +87,7 @@ export type CandidateJobMatchOverview = {
   job_id: string;
   job_title: string;
   job_status: string;
-  final_score: number | null;
+  job_fit_score: number | null;
   recommendation: string | null;
   seniority_level: string | null;
   total_experience_years: number | null;
@@ -149,7 +149,7 @@ export type JobSkill = {
   job_id: string;
   skill_id: string;
   skill_name: string;
-  is_mandatory: boolean;
+  priority_level: "priority" | "complementary" | "eliminatory";
   minimum_level: string | null;
   minimum_years: number | null;
   weight: number;
@@ -194,7 +194,7 @@ export type PromptTemplate = {
 export type AnalysisMatch = {
   analysis_id: string;
   job_id: string;
-  final_score: number;
+  job_fit_score: number;
   recommendation: string;
   mandatory_skills_matched: number;
   mandatory_skills_total: number;
@@ -203,6 +203,7 @@ export type AnalysisMatch = {
   seniority_score: number;
   candidate_seniority: string | null;
   job_seniority: string | null;
+  match_freshness_status?: "fresh" | "stale" | null;
   ranking_refresh_status?: "updated" | "skipped" | "failed" | "unknown" | null;
   ranking_freshness_status?: "fresh" | "stale" | null;
   ranking_refreshed_at?: string | null;
@@ -232,6 +233,16 @@ export type ResumeFileUploadResponse = {
   page_count: number | null;
   word_count: number | null;
   prefilled_fields: string[];
+};
+
+export type ResumeExtractionStatusResponse = {
+  resume_id: string;
+  version_id: string;
+  extraction_status: string;
+  extraction_error: string | null;
+  original_file_name: string;
+  page_count: number | null;
+  word_count: number | null;
 };
 
 export type ResumeSummary = {
@@ -298,7 +309,7 @@ export type MatchingFeedback = {
   feedback_at: string | null;
 };
 
-export type RankingReasonCode = {
+export type RankingReasonTag = {
   type: string;
   field: string;
   impact: number;
@@ -315,7 +326,21 @@ export type JobRankingBreakdown = {
   education_score: number;
   confidence_score: number;
   penalty_score: number;
-  final_score: number;
+  job_fit_score: number;
+};
+
+export type JobRankingScoreFactorSummaryItem = {
+  factor_type: string;
+  factor_key: string;
+  factor_label: string;
+  impact_score: number;
+  direction: "positive" | "negative" | "neutral";
+};
+
+export type JobRankingScoreFactors = {
+  positive: JobRankingScoreFactorSummaryItem[];
+  negative: JobRankingScoreFactorSummaryItem[];
+  contextual: JobRankingScoreFactorSummaryItem[];
 };
 
 export type JobRankingEntry = {
@@ -325,13 +350,16 @@ export type JobRankingEntry = {
   stage: string;
   pipeline_status: string;
   score_breakdown: JobRankingBreakdown;
-  final_score: number;
+  job_fit_score: number;
   decision_suggestion: "approved" | "review" | "rejected_suggested";
-  reason_codes: RankingReasonCode[];
-  explanation_text: string;
+  reason_tags: RankingReasonTag[];
+  score_factors?: JobRankingScoreFactors;
+  data_confidence_score?: number;
   entered_at: string | null;
   computed_at: string;
-  freshness_status?: "fresh" | "stale";
+  ranking_summary_text: string;
+  ranking_freshness_status?: "fresh" | "stale";
+  match_freshness_status?: "fresh" | "stale";
   score_computed_at?: string | null;
   source_analysis_id?: string | null;
   source_analysis_created_at?: string | null;
@@ -372,7 +400,7 @@ export type JobCandidate = {
   // Only changed by recruiter actions (drag-and-drop, dropdown). Never by AI workers.
   stage?: PipelineStage;
   candidate_status?: string;
-  final_score?: number | null;
+  job_fit_score?: number | null;
   recommendation?: string | null;
   seniority_level?: string | null;
   total_experience_years?: number | null;
@@ -498,7 +526,7 @@ export type AnalysisPipelineMatch = {
   job_id: string;
   job_title: string;
   job_status: string;
-  final_score: number | null;
+  job_fit_score: number | null;
   recommendation: string | null;
   created_at: string;
 };

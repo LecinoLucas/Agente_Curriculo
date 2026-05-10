@@ -143,7 +143,7 @@ async def test_candidate_list_summaries_includes_linked_job_count():
             "active_job_id": None,
             "active_job_title": None,
             "active_job_stage": None,
-            "active_job_final_score": None,
+            "active_job_job_fit_score": None,
             "ai_status": "completed",
         }
     ]

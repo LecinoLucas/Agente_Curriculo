@@ -315,7 +315,7 @@ print_info "Subindo frontend, backend e worker Celery"
 
 cd "$BACKEND_DIR"
 .venv/bin/celery -A src.infrastructure.queue.celery_app worker \
-  --queues=analysis,matching,document_ai \
+  --queues=analysis,matching,document_ai,extraction \
   --loglevel=warning \
   --concurrency=2 &
 CELERY_PID=$!

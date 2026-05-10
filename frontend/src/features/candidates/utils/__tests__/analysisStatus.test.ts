@@ -1,8 +1,34 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCandidateAnalysisSummary } from "../analysisStatus";
+import { buildCandidateAnalysisSummary, getLatestAnalysisForActiveJob } from "../analysisStatus";
 
 describe("buildCandidateAnalysisSummary", () => {
+  it("ignora latest_analysis que não pertence à vaga ativa", () => {
+    const activeAnalysis = getLatestAnalysisForActiveJob(
+      {
+        analysis_id: "analysis-1",
+        job_id: "job-2",
+        resume_id: "resume-1",
+        resume_title: "Currículo principal",
+        status: "processing",
+        started_at: null,
+        completed_at: null,
+        failed_at: null,
+        failure_reason: null,
+        used_real_ai: true,
+        task_id: null,
+        worker_id: null,
+        seniority_level: null,
+        total_experience_years: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      "job-1",
+    );
+
+    expect(activeAnalysis).toBeNull();
+  });
+
   it("retorna Em andamento quando existe análise pendente para a vaga ativa", () => {
     const summary = buildCandidateAnalysisSummary({
       activeJobId: "job-1",
@@ -61,5 +87,34 @@ describe("buildCandidateAnalysisSummary", () => {
 
     expect(summary.label).toBe("Falhou");
     expect(summary.detail).toContain("Timeout no provedor");
+  });
+
+  it("não marca em andamento quando a análise pendente é de outra vaga", () => {
+    const summary = buildCandidateAnalysisSummary({
+      activeJobId: "job-1",
+      hasResume: true,
+      latestAnalysis: {
+        analysis_id: "analysis-1",
+        job_id: "job-2",
+        resume_id: "resume-1",
+        resume_title: "Currículo principal",
+        status: "processing",
+        started_at: null,
+        completed_at: null,
+        failed_at: null,
+        failure_reason: null,
+        used_real_ai: true,
+        task_id: null,
+        worker_id: null,
+        seniority_level: null,
+        total_experience_years: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      analysisResult: null,
+      pollingAnalysisId: null,
+    });
+
+    expect(summary.label).toBe("Não iniciada");
   });
 });

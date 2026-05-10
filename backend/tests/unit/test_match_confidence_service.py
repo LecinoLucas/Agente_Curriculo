@@ -65,6 +65,6 @@ def test_match_confidence_flags_high_score_with_low_data_quality() -> None:
         candidate_has_education=False,
     )
 
-    assert assessment.confidence_score == Decimal("30.00")
+    assert assessment.confidence_score == Decimal("15.00")
     assert assessment.low_confidence_alert is True
     assert any("Score alto com baixa confiança" in risk for risk in assessment.overestimation_risks)

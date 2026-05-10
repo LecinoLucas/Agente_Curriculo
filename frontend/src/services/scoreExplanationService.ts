@@ -68,15 +68,14 @@ export type ScoreExplanationResponse = {
   job_id: string;
   candidate_id: string;
   analysis_id?: string | null;
-  score: number;
-  final_score: number;
-  freshness_status: "fresh" | "stale";
+  job_fit_score: number;
+  ranking_freshness_status: "fresh" | "stale";
   score_model_version?: string | null;
   explainability_version?: string | null;
   computed_at?: string | null;
   recommendation: string;
   engine_used: string;
-  explanation: string;
+  ranking_summary_text: string;
   breakdown: {
     mandatory?: ScoreExplanationBreakdownItem | null;
     optional?: ScoreExplanationBreakdownItem | null;
@@ -84,7 +83,7 @@ export type ScoreExplanationResponse = {
     seniority?: ScoreExplanationBreakdownItem | null;
     ai_adjustment?: ScoreExplanationBreakdownItem | null;
   };
-  factor_summary: ScoreExplanationFactorSummary;
+  score_factors: ScoreExplanationFactorSummary;
   delta?: ScoreExplanationDelta | null;
   highlights: string[];
   risks: string[];
@@ -96,7 +95,7 @@ export type ScoreExplanationResponse = {
   matched_equivalences: ScoreExplanationEvidence[];
   partial_matches?: SkillPartialMatch[];
   gaps: string[];
-  confidence_score: number;
+  data_confidence_score: number;
   strengths: string[];
   feedback: MatchingFeedback | null;
 };

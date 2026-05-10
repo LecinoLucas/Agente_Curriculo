@@ -473,7 +473,7 @@ class JobBulkPayloadNormalizer:
                 result.append(
                     BulkImportJobSkillRequest(
                         name=name,
-                        is_mandatory=mandatory_default,
+                        priority_level="priority" if mandatory_default else "complementary",
                         weight=Decimal("8") if mandatory_default else Decimal("5"),
                     )
                 )
@@ -493,9 +493,20 @@ class JobBulkPayloadNormalizer:
                 BulkImportJobSkillRequest.model_validate(
                     {
                         "name": name,
-                        "is_mandatory": cls._coerce_boolean(
-                            cls._pick_first(obj, ["is_mandatory", "mandatory", "obrigatoria", "obrigatório", "required"]),
-                            mandatory_default,
+                        "priority_level": cls._normalize_priority_level(
+                            cls._pick_first(
+                                obj,
+                                [
+                                    "priority_level",
+                                    "priorityLevel",
+                                    "nivel_prioridade",
+                                    "mandatory",
+                                    "obrigatoria",
+                                    "obrigatório",
+                                    "required",
+                                ],
+                            ),
+                            default="priority" if mandatory_default else "complementary",
                         ),
                         "weight": cls._first_non_none(
                             cls._coerce_number(cls._pick_first(obj, ["weight", "peso", "importancia", "importância"])),
@@ -527,13 +538,33 @@ class JobBulkPayloadNormalizer:
                 merged[key] = BulkImportJobSkillRequest.model_validate(
                     {
                         "name": existing.name or skill.name,
-                        "is_mandatory": existing.is_mandatory or skill.is_mandatory,
+                        "priority_level": cls._merge_priority_levels(existing.priority_level, skill.priority_level),
                         "weight": max(existing.weight, skill.weight),
                         "minimum_level": existing.minimum_level or skill.minimum_level,
                         "minimum_years": max(existing.minimum_years or Decimal("0"), skill.minimum_years or Decimal("0")) or None,
                     }
                 )
         return list(merged.values())
+
+    @staticmethod
+    def _normalize_priority_level(value: Any, *, default: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"priority", "essencial"}:
+            return "priority"
+        if normalized in {"complementary", "diferencial", "optional", "desired"}:
+            return "complementary"
+        if normalized in {"eliminatory", "eliminatorio", "eliminatório"}:
+            return "eliminatory"
+        if normalized in {"true", "1", "yes", "sim"}:
+            return "priority"
+        if normalized in {"false", "0", "no", "nao", "não"}:
+            return "complementary"
+        return default
+
+    @staticmethod
+    def _merge_priority_levels(existing: str, incoming: str) -> str:
+        order = {"eliminatory": 0, "priority": 1, "complementary": 2}
+        return existing if order.get(existing, 9) <= order.get(incoming, 9) else incoming
 
 
     @staticmethod

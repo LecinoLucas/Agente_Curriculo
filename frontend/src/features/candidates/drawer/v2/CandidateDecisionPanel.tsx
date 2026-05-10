@@ -19,6 +19,7 @@ interface CandidateDecisionPanelProps {
   aiStatus: string | null | undefined;
   scoreExplanation: ScoreExplanationResponse | null;
   onViewAnalysis: () => void;
+  onEvaluateBetter?: () => void;
   compact?: boolean;
 }
 
@@ -80,7 +81,7 @@ function getRecommendation(
   if (semanticsState === "no_active_job" || semanticsState === "awaiting_match") {
     return {
       type: "pending",
-      label: "Match indisponível",
+      label: "Aderência indisponível",
       color: "text-slate-700",
       bgColor: "border-slate-200 bg-slate-50/80",
       icon: Clock3,
@@ -152,8 +153,8 @@ function getTopRisks(
 
   const risks: string[] = [];
 
-  if (rankingEntry?.reason_codes) {
-    const dealBreakerCodes = rankingEntry.reason_codes
+  if (rankingEntry?.reason_tags) {
+    const dealBreakerCodes = rankingEntry.reason_tags
       .filter((code) => code.type === "deal_breaker")
       .slice(0, 1);
     risks.push(...dealBreakerCodes.map((code) => code.description));
@@ -179,14 +180,15 @@ export function CandidateDecisionPanel({
   aiStatus,
   scoreExplanation,
   onViewAnalysis,
+  onEvaluateBetter,
   compact = false,
 }: CandidateDecisionPanelProps) {
   const confidenceScore =
-    scoreExplanation?.confidence_score ??
+    scoreExplanation?.data_confidence_score ??
     rankingEntry?.score_breakdown?.confidence_score ??
     null;
   const semantics = deriveScoreSemantics({
-    finalScore: compatibilityScore,
+    jobFitScore: compatibilityScore,
     aiStatus,
     hasActiveJob,
     confidenceScore,
@@ -200,7 +202,7 @@ export function CandidateDecisionPanel({
   const explainabilityLine = getExplainabilityQuickLine(scoreExplanation);
   const deltaLine = getExplainabilityDeltaLine(scoreExplanation);
   const freshnessLine = getExplainabilityFreshnessLine(
-    scoreExplanation?.freshness_status ?? rankingEntry?.freshness_status,
+    scoreExplanation?.ranking_freshness_status ?? rankingEntry?.ranking_freshness_status,
     scoreExplanation?.computed_at ?? rankingEntry?.ranking_updated_at ?? rankingEntry?.computed_at,
   );
   const contextText =
@@ -311,6 +313,16 @@ export function CandidateDecisionPanel({
               Ver análise
               <ArrowRight className="h-4 w-4" />
             </button>
+            {recommendation.type === "evaluate" ? (
+              <button
+                type="button"
+                onClick={onEvaluateBetter ?? onViewAnalysis}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+              >
+                Avaliar melhor
+                <ScanSearch className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
         </div>
 

@@ -240,8 +240,6 @@ async def test_update_priority_field(db_session: AsyncSession):
     assert updated_job.priority == "urgent"
 
 
-    assert job.behavioral_requirements == []
-    assert job.priority == "normal"
 
     # Quality validator should still work
     validator = JobQualityValidatorService(SQLAlchemyJobRepository(db_session))

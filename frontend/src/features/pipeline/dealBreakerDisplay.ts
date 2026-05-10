@@ -26,7 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
   work_model: "Modelo de trabalho",
   education_level: "Formação mínima",
   experience_years: "Experiência mínima",
-  skill: "Skill obrigatória",
+  skill: "Skill eliminatória",
   language: "Idioma",
   availability: "Disponibilidade",
   custom_text: "Critério da vaga",

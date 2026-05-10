@@ -44,12 +44,12 @@ function toInsight(
 }
 
 function getAllInsights(scoreExplanation: ScoreExplanationResponse | null): ExplainabilityInsight[] {
-  if (!scoreExplanation?.factor_summary) return [];
+  if (!scoreExplanation?.score_factors) return [];
 
   return [
-    ...(scoreExplanation.factor_summary.positive ?? []).map((item) => toInsight(item, "positive")),
-    ...(scoreExplanation.factor_summary.negative ?? []).map((item) => toInsight(item, "negative")),
-    ...(scoreExplanation.factor_summary.contextual ?? []).map((item) => toInsight(item, "contextual")),
+    ...(scoreExplanation.score_factors.positive ?? []).map((item) => toInsight(item, "positive")),
+    ...(scoreExplanation.score_factors.negative ?? []).map((item) => toInsight(item, "negative")),
+    ...(scoreExplanation.score_factors.contextual ?? []).map((item) => toInsight(item, "contextual")),
   ].sort((left, right) => Math.abs(right.impactScore) - Math.abs(left.impactScore));
 }
 
@@ -63,22 +63,22 @@ export function getTopExplainabilityInsights(
 export function getExplainabilityQuickLine(
   scoreExplanation: ScoreExplanationResponse | null,
 ): string | null {
-  const negative = scoreExplanation?.factor_summary?.negative?.[0];
+  const negative = scoreExplanation?.score_factors?.negative?.[0];
   if (negative?.factor_label) {
-    return `Compatibilidade reduzida por ${negative.factor_label.toLowerCase()}.`;
+    return `Aderência reduzida por ${negative.factor_label.toLowerCase()}.`;
   }
 
-  const positive = scoreExplanation?.factor_summary?.positive?.[0];
+  const positive = scoreExplanation?.score_factors?.positive?.[0];
   if (positive?.factor_label) {
-    return `Compatibilidade sustentada por ${positive.factor_label.toLowerCase()}.`;
+    return `Aderência sustentada por ${positive.factor_label.toLowerCase()}.`;
   }
 
-  const contextual = scoreExplanation?.factor_summary?.contextual?.[0];
+  const contextual = scoreExplanation?.score_factors?.contextual?.[0];
   if (contextual?.factor_label) {
     return contextual.factor_label;
   }
 
-  return scoreExplanation?.explanation ?? null;
+  return scoreExplanation?.ranking_summary_text ?? null;
 }
 
 function isSignificantDelta(delta: ScoreExplanationDelta | null | undefined): boolean {
@@ -101,8 +101,8 @@ export function getExplainabilityDeltaLine(
   switch (delta?.change_reason) {
     case "job_requirements_changed":
       return topChange
-        ? `Compatibilidade ${direction} após atualização da vaga: ${topChange}.`
-        : `Compatibilidade ${direction} após atualização da vaga.`;
+        ? `Aderência ${direction} após atualização da vaga: ${topChange}.`
+        : `Aderência ${direction} após atualização da vaga.`;
     case "score_model_changed":
       return `Score ${direction} após atualização do modelo de ranking.`;
     case "manual_recompute_same_inputs":
@@ -116,7 +116,7 @@ export function getExplainabilityDeltaLine(
 }
 
 export function getExplainabilityFreshnessLine(
-  status: ScoreExplanationResponse["freshness_status"] | "recomputing" | null | undefined,
+  status: ScoreExplanationResponse["ranking_freshness_status"] | "recomputing" | null | undefined,
   computedAt: string | null | undefined,
 ): string {
   if (status === "recomputing") return "Atualizando ranking...";

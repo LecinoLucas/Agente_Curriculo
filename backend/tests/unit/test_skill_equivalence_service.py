@@ -54,6 +54,46 @@ class TestSkillEquivalenceService:
         assert evidence.strength == "strong"
         assert evidence.score >= 0.85
 
+    def test_generic_sql_does_not_strongly_satisfy_postgresql(self, equivalence_service):
+        """SQL genérico não deve comprovar PostgreSQL com peso alto."""
+        evidence = equivalence_service.match_skill("SQL", "PostgreSQL")
+        assert evidence.matched is True
+        assert evidence.strength in {"partial", "weak"}
+        assert evidence.score < 0.85
+
+    def test_postgresql_does_not_strongly_satisfy_sql_server(self, equivalence_service):
+        """Skills específicas irmãs não devem virar strong sem relação explícita."""
+        evidence = equivalence_service.match_skill("PostgreSQL", "SQL Server")
+        assert evidence.matched is True
+        assert evidence.strength in {"partial", "weak"}
+        assert evidence.score < 0.85
+
+    def test_generic_javascript_does_not_strongly_satisfy_react(self, equivalence_service):
+        """JavaScript genérico não deve comprovar React com força alta."""
+        evidence = equivalence_service.match_skill("JavaScript", "React")
+        assert evidence.strength in {"partial", "weak", "none"}
+        assert evidence.score < 0.85
+
+    def test_generic_cloud_does_not_strongly_satisfy_aws(self, equivalence_service):
+        """Cloud genérico não deve comprovar AWS com força alta."""
+        evidence = equivalence_service.match_skill("Cloud", "AWS")
+        assert evidence.strength in {"partial", "weak", "none"}
+        assert evidence.score < 0.85
+
+    def test_generic_python_does_not_strongly_satisfy_fastapi(self, equivalence_service):
+        """Python genérico não deve comprovar FastAPI com força alta."""
+        evidence = equivalence_service.match_skill("Python", "FastAPI")
+        assert evidence.matched is True
+        assert evidence.strength in {"partial", "weak"}
+        assert evidence.score < 0.85
+
+    def test_generic_erp_does_not_strongly_satisfy_protheus(self, equivalence_service):
+        """ERP genérico não deve comprovar Protheus com força alta."""
+        evidence = equivalence_service.match_skill("ERP", "Protheus")
+        assert evidence.matched is True
+        assert evidence.strength in {"partial", "weak"}
+        assert evidence.score < 0.85
+
     def test_power_bi_satisfies_bi_as_strong(self, equivalence_service):
         """Test 3: Power BI satisfaz BI como strong (score >= 0.85)."""
         evidence = equivalence_service.match_skill("Power BI", "BI")
@@ -61,12 +101,12 @@ class TestSkillEquivalenceService:
         assert evidence.strength == "strong"
         assert evidence.score >= 0.85
 
-    def test_protheus_satisfies_erp_as_strong(self, equivalence_service):
-        """Test 4: Protheus satisfaz ERP como strong (score >= 0.85)."""
+    def test_protheus_satisfies_erp_as_category_related(self, equivalence_service):
+        """ERP is a broad category, not a strong concrete-skill equivalent."""
         evidence = equivalence_service.match_skill("Protheus", "ERP")
         assert evidence.matched is True
-        assert evidence.strength == "strong"
-        assert evidence.score >= 0.85
+        assert evidence.strength in {"partial", "weak"}
+        assert evidence.score < 0.85
 
     def test_protheus_satisfies_sap_mm_as_partial_only(self, equivalence_service):
         """Test 5: Protheus satisfaz SAP MM apenas como partial (0.3 <= score <= 0.6)."""
@@ -158,6 +198,14 @@ class TestSkillEquivalenceServiceEdgeCases:
         assert evidence.strength == "strong"
         assert evidence.score >= 0.85
 
+    def test_generic_bi_does_not_strongly_satisfy_power_bi(self):
+        """Broad BI should not satisfy Power BI like a direct tool match."""
+        service = SkillEquivalenceService()
+        evidence = service.match_skill("BI", "Power BI")
+        assert evidence.matched is True
+        assert evidence.strength in {"partial", "weak"}
+        assert evidence.score < 0.85
+
     def test_totvs_partial_match_sap_mm(self):
         """TOTVS should partial match SAP MM with lower score than Protheus."""
         service = SkillEquivalenceService()
@@ -165,6 +213,28 @@ class TestSkillEquivalenceServiceEdgeCases:
         assert evidence.matched is True
         assert evidence.strength == "partial"
         assert evidence.score < 0.50  # TOTVS has score 0.40
+
+    def test_area_level_match_is_partial_not_strong(self):
+        """Broad area relations must not inflate score like exact/strong matches."""
+        service = SkillEquivalenceService()
+        evidence = service.match_skill("Python", "Backend")
+        assert evidence.matched is True
+        assert evidence.strength in {"partial", "weak"}
+        assert evidence.score < 0.85
+
+    def test_directional_broad_categories_do_not_satisfy_specific_skills(self):
+        service = SkillEquivalenceService()
+        broad_to_specific = [
+            ("Backend", "Node.js"),
+            ("Frontend", "React"),
+            ("Cloud", "AWS"),
+            ("ERP", "SAP"),
+        ]
+
+        for candidate_skill, required_skill in broad_to_specific:
+            evidence = service.match_skill(candidate_skill, required_skill)
+            assert evidence.strength in {"partial", "weak", "none"}
+            assert evidence.score < 0.85
 
 
 class TestSkillEquivalenceCatalogCrud:

@@ -302,8 +302,8 @@ function RankedCandidateRow({
   error?: string; // era: string
   onAdd: () => void;
 }) {
-  const scorePercent = normalizeScorePercent(entry.final_score);
-  const scoreClass = scoreColorClass(entry.final_score);
+  const scorePercent = normalizeScorePercent(entry.job_fit_score);
+  const scoreClass = scoreColorClass(entry.job_fit_score);
 
   return (
     <div className="rounded-lg border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))]/20 p-3 hover:border-[hsl(var(--border))]/60 transition">

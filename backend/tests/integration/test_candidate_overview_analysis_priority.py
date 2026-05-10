@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.analysis_model import AnalysisModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.job_model import JobModel
 
 from .helpers import _auth_headers, _create_active_user, _seed_scoring_case
@@ -71,3 +72,53 @@ async def test_candidate_overview_prefers_active_job_completed_analysis(
     assert payload["latest_analysis"]["status"] == "completed"
     assert payload["latest_analysis_pipeline"] is not None
     assert payload["latest_analysis_pipeline"]["job_id"] == str(active_job_id)
+
+
+@pytest.mark.asyncio
+async def test_candidate_overview_does_not_fallback_to_global_analysis_without_active_pipeline(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-overview-nofallback-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    active_job_id, candidate_id, _ = await _seed_scoring_case(
+        db_session,
+        recruiter.id,
+        job_title="Pipeline Job",
+    )
+
+    pipeline_row = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == active_job_id,
+        )
+    )
+    assert pipeline_row is not None
+    pipeline_row.link_status = "transferred"
+    pipeline_row.relationship_status = "archived"
+    pipeline_row.pipeline_status = "terminal"
+    pipeline_row.is_terminal = True
+    pipeline_row.terminated_at = datetime.now(UTC)
+    pipeline_row.termination_reason = "candidate_transferred"
+    await db_session.commit()
+
+    response = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["active_job_id"] is None
+    assert payload["latest_analysis"] is None
+    assert payload["latest_analysis_pipeline"] is None
+
+    summary_response = await client.get("/api/v1/candidates/summaries?page=1&page_size=20", headers=headers)
+    assert summary_response.status_code == 200, summary_response.text
+    rows = summary_response.json().get("data") or []
+    target = next((row for row in rows if row.get("id") == str(candidate_id)), None)
+    assert target is not None
+    assert target.get("active_job_id") is None
+    assert target.get("active_job_job_fit_score") is None

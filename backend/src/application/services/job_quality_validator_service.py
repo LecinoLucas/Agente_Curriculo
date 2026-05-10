@@ -5,10 +5,16 @@ Scores jobs 0-100 based on completeness and skill configuration.
 """
 
 from dataclasses import dataclass, field
+import re
 from uuid import UUID
 
 import structlog
 
+from src.application.services.job_skill_priority_service import (
+    is_complementary_skill,
+    is_eliminatory_skill,
+    is_priority_skill,
+)
 from src.application.services.skill_requirements_service import (
     validate_skill_requirements,
     validate_skill_requirements_product_rules,
@@ -17,6 +23,25 @@ from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemy
 from src.infrastructure.database.models.job_model import JobModel
 
 logger = structlog.get_logger(__name__)
+
+_FULL_STACK_PATTERN = re.compile(r"\bfull[\s-]?stack\b", re.IGNORECASE)
+_TECHNICAL_ROLE_PATTERN = re.compile(
+    r"\b(developer|desenvolvedor|engineer|engenheiro|software|backend|frontend|full[\s-]?stack|data|devops|qa|mobile|platform|infra|cloud|security|api)\b",
+    re.IGNORECASE,
+)
+_FRONTEND_SKILL_HINTS = (
+    "frontend",
+    "react",
+    "vue",
+    "angular",
+)
+_BACKEND_SKILL_HINTS = (
+    "backend",
+    "node",
+    "java",
+    "python",
+    "api",
+)
 
 
 class JobNotFoundForQualityError(Exception):
@@ -65,7 +90,7 @@ class JobQualityValidatorService:
             {
                 "id": row.JobRequiredSkillModel.skill_id,
                 "name": row.skill_name,
-                "is_mandatory": row.JobRequiredSkillModel.is_mandatory,
+                "priority_level": row.JobRequiredSkillModel.priority_level,
                 "weight": float(row.JobRequiredSkillModel.weight),
                 "minimum_level": row.JobRequiredSkillModel.minimum_level,
                 "minimum_years": row.JobRequiredSkillModel.minimum_years,
@@ -90,9 +115,9 @@ class JobQualityValidatorService:
         - Seniority level filled: 8 pts
         - Minimum years experience: 4 pts
         - Minimum education level: 4 pts
-        - >= 2 mandatory skills: 12 pts
-        - Mandatory skills with weight >= 0.5: 7 pts
-        - < 8 mandatory skills: 5 pts
+        - >= 2 skills essenciais: 12 pts
+        - Skills essenciais com weight >= 0.5: 7 pts
+        - <= 5 skills essenciais: 5 pts
         - Deal-breakers with reason: 5 pts
 
         Total nominal: 103 points (score capped at 100)
@@ -186,8 +211,9 @@ class JobQualityValidatorService:
             missing_fields.append("minimum_education_level")
 
         # 11. Skills validation (24 pts total)
-        mandatory_skills = [s for s in skills if s["is_mandatory"]]
-        optional_skills = [s for s in skills if not s["is_mandatory"]]
+        priority_skills = [s for s in skills if is_priority_skill(s["priority_level"])]
+        complementary_skills = [s for s in skills if is_complementary_skill(s["priority_level"])]
+        eliminatory_skills = [s for s in skills if is_eliminatory_skill(s["priority_level"])]
         total_skills = len(skills)
         effective_skill_requirements = JobQualityValidatorService._resolve_effective_skill_requirements(
             job,
@@ -200,30 +226,43 @@ class JobQualityValidatorService:
             check_raw_duplicates=False,
         )
 
-        # Mandatory skills count (12 pts)
-        if len(mandatory_skills) >= 2:
+        # Essential skills count (12 pts)
+        if len(priority_skills) >= 2:
             score += 12
-        elif len(mandatory_skills) == 1:
+        elif len(priority_skills) == 1:
             score += 6
-            suggestions.append("Considere adicionar mais uma skill obrigatória para melhorar a precisão do matching.")
+            suggestions.append("Considere adicionar mais uma skill essencial para melhorar a precisão do matching.")
         else:
-            missing_fields.append("mandatory_skills")
-            suggestions.append("Adicione pelo menos 2 skills obrigatórias para melhorar o matching.")
-            warnings.append("Sem skills obrigatórias, o matching será menos preciso.")
+            missing_fields.append("priority_skills")
+            suggestions.append("Adicione pelo menos 2 skills essenciais para melhorar o matching.")
+            warnings.append("Sem skills essenciais, o matching será menos preciso.")
 
-        # Mandatory skills weight (7 pts)
-        low_weight_mandatory = [s for s in mandatory_skills if s["weight"] < 0.5]
-        if not low_weight_mandatory:
+        # Essential skills weight (7 pts)
+        low_weight_priority = [s for s in priority_skills if s["weight"] < 0.5]
+        if not low_weight_priority:
             score += 7
         else:
-            skill_names = ", ".join([s["name"] for s in low_weight_mandatory])
-            warnings.append(f"Skills obrigatórias com peso baixo: {skill_names}. Aumente o peso para impactar o ranking.")
+            skill_names = ", ".join([s["name"] for s in low_weight_priority])
+            warnings.append(f"Skills essenciais com peso baixo: {skill_names}. Aumente o peso para impactar o ranking.")
 
-        # Too many mandatory skills (5 pts penalty, not subtraction)
-        if len(mandatory_skills) >= 8:
-            warnings.append(f"Muitas skills obrigatórias ({len(mandatory_skills)}). Vagas muito exigentes são mais difíceis de preencher.")
+        if len(priority_skills) > 5:
+            warnings.append(
+                "Muitas skills essenciais podem deixar o ranking restritivo. Considere mover algumas para diferenciais."
+            )
         else:
             score += 5
+
+        if complementary_skills:
+            score += 2
+        if eliminatory_skills:
+            score += 2
+
+        JobQualityValidatorService._append_skill_configuration_alerts(
+            job=job,
+            priority_skills=priority_skills,
+            complementary_skills=complementary_skills,
+            warnings=warnings,
+        )
 
         # 8. Deal-breakers (5 pts)
         if job.deal_breakers:
@@ -247,8 +286,8 @@ class JobQualityValidatorService:
             publication_blockers.append("seniority_level")
         if job.minimum_years_experience is None or job.minimum_years_experience <= 0:
             publication_blockers.append("minimum_years_experience")
-        if len(mandatory_skills) < 2:
-            publication_blockers.append("mandatory_skills")
+        if len(priority_skills) < 2:
+            publication_blockers.append("priority_skills")
         if skill_requirements_validation.errors:
             publication_blockers.append("skill_requirements")
             validation_errors.extend(skill_requirements_validation.errors)
@@ -279,33 +318,123 @@ class JobQualityValidatorService:
         skills: list[dict],
         warnings: list[str],
     ) -> dict[str, list[str]]:
+        priority_skills = [
+            str(skill.get("name") or "").strip()
+            for skill in skills
+            if is_priority_skill(skill.get("priority_level")) and str(skill.get("name") or "").strip()
+        ]
+        complementary_skills = [
+            str(skill.get("name") or "").strip()
+            for skill in skills
+            if is_complementary_skill(skill.get("priority_level")) and str(skill.get("name") or "").strip()
+        ]
+        eliminatory_skills = [
+            str(skill.get("name") or "").strip()
+            for skill in skills
+            if is_eliminatory_skill(skill.get("priority_level")) and str(skill.get("name") or "").strip()
+        ]
+        if priority_skills or complementary_skills or eliminatory_skills:
+            derived = {
+                "priority": priority_skills,
+                "complementary": complementary_skills,
+                "eliminatory": eliminatory_skills,
+            }
+            if job.skill_requirements is not None and validate_skill_requirements(job.skill_requirements) != derived:
+                warnings.append(
+                    "skill_requirements divergente; usando skills vinculadas como requisitos efetivos."
+                )
+            elif job.skill_requirements is None:
+                warnings.append(
+                    "skill_requirements ausente; usando skills vinculadas como requisitos efetivos."
+                )
+            return derived
+
         if job.skill_requirements is not None:
             return validate_skill_requirements(job.skill_requirements)
 
-        core_required = [
-            str(skill.get("name") or "").strip()
-            for skill in skills
-            if skill.get("is_mandatory") and str(skill.get("name") or "").strip()
-        ]
-        important = [
-            str(skill.get("name") or "").strip()
-            for skill in skills
-            if not skill.get("is_mandatory") and str(skill.get("name") or "").strip()
-        ]
-        if core_required or important:
-            warnings.append(
-                "skill_requirements ausente; usando skills vinculadas como requisitos efetivos."
-            )
-            return {
-                "critical_required": [],
-                "core_required": core_required,
-                "important": important,
-                "nice_to_have": [],
-            }
-
         return {
-            "critical_required": [],
-            "core_required": [],
-            "important": [],
-            "nice_to_have": [],
+            "priority": [],
+            "complementary": [],
+            "eliminatory": [],
         }
+
+    @staticmethod
+    def _append_skill_configuration_alerts(
+        *,
+        job: JobModel,
+        priority_skills: list[dict],
+        complementary_skills: list[dict],
+        warnings: list[str],
+    ) -> None:
+        priority_names = [str(skill.get("name") or "").strip() for skill in priority_skills]
+        complementary_names = [str(skill.get("name") or "").strip() for skill in complementary_skills]
+        all_relevant_skills = [*priority_names, *complementary_names]
+
+        if JobQualityValidatorService._is_technical_job(job) and len(priority_names) < 3:
+            warnings.append(
+                "Poucas skills essenciais para uma vaga técnica. Com menos de 3 essenciais, o ranking pode ficar permissivo."
+            )
+
+        if len(complementary_names) > 12:
+            warnings.append(
+                "Diferenciais em excesso podem reduzir a clareza da vaga. Considere manter até 12 skills diferenciais."
+            )
+
+        if not JobQualityValidatorService._is_full_stack_job(job):
+            return
+
+        if not JobQualityValidatorService._contains_any_skill_hint(
+            all_relevant_skills,
+            _FRONTEND_SKILL_HINTS,
+        ):
+            warnings.append(
+                "Vaga Full Stack sem skill clara de frontend entre essenciais ou diferenciais. Considere incluir Frontend, React, Vue ou Angular."
+            )
+
+        if not JobQualityValidatorService._contains_any_skill_hint(
+            all_relevant_skills,
+            _BACKEND_SKILL_HINTS,
+        ):
+            warnings.append(
+                "Vaga Full Stack sem skill clara de backend entre essenciais ou diferenciais. Considere incluir Backend, Node.js, Java, Python ou API."
+            )
+
+    @staticmethod
+    def _is_technical_job(job: JobModel) -> bool:
+        normalized_area = str(job.job_area or "").strip().lower()
+        if normalized_area in {"technology", "tecnologia", "data", "dados"}:
+            return True
+
+        text = " ".join(
+            str(value or "").strip()
+            for value in (
+                job.title,
+                job.description,
+                job.requirements,
+                job.responsibilities,
+                job.experience_context,
+            )
+        )
+        return bool(_TECHNICAL_ROLE_PATTERN.search(text))
+
+    @staticmethod
+    def _is_full_stack_job(job: JobModel) -> bool:
+        text = " ".join(
+            str(value or "").strip()
+            for value in (
+                job.title,
+                job.description,
+                job.requirements,
+                job.responsibilities,
+            )
+        )
+        return bool(_FULL_STACK_PATTERN.search(text))
+
+    @staticmethod
+    def _contains_any_skill_hint(skill_names: list[str], hints: tuple[str, ...]) -> bool:
+        normalized_names = [str(name).strip().lower() for name in skill_names if str(name).strip()]
+        return any(
+            hint in normalized_name
+            for normalized_name in normalized_names
+            for hint in hints
+        )

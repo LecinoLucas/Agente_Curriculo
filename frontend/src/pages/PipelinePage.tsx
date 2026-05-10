@@ -45,9 +45,9 @@ function canUsePipeline(status: string | undefined) {
   return isPipelineOperationalJob(status);
 }
 
-function getRankingFreshnessLabel(status: JobRankingEntry["freshness_status"] | null | undefined) {
+function getRankingFreshnessLabel(status: JobRankingEntry["ranking_freshness_status"] | null | undefined) {
   if (status === "fresh") return "Atualizado";
-  if (status === "stale") return "Score desatualizado";
+  if (status === "stale") return "Aderência desatualizada";
   return "Aguardando reprocessamento";
 }
 
@@ -750,7 +750,7 @@ function RankingCard({
   job: PipelineJobSummary | null;
   onOpenCandidate: (candidateId: string) => Promise<void>;
 }) {
-  const dealBreakerReason = entry.reason_codes.find((reason) => isDealBreakerReasonCode(reason)) ?? null;
+  const dealBreakerReason = entry.reason_tags.find((reason) => isDealBreakerReasonCode(reason)) ?? null;
   const dealBreakerDisplay = dealBreakerReason
     ? buildDealBreakerViolationDisplay({
         reasonCode: dealBreakerReason,
@@ -760,13 +760,13 @@ function RankingCard({
   const hasDealBreakerRejection =
     Boolean(dealBreakerReason) &&
     entry.decision_suggestion === "rejected_suggested" &&
-    Math.round(entry.final_score) === 0;
-  const reasonPreview = entry.reason_codes
+    Math.round(entry.job_fit_score) === 0;
+  const reasonPreview = entry.reason_tags
     .filter((reason) => !isDealBreakerReasonCode(reason))
     .slice(0, 3)
     .map((reason) => reason.description)
     .filter(Boolean);
-  const freshnessLabel = getRankingFreshnessLabel(entry.freshness_status);
+  const freshnessLabel = getRankingFreshnessLabel(entry.ranking_freshness_status);
 
   return (
     <button
@@ -788,10 +788,10 @@ function RankingCard({
         </div>
         <div className="shrink-0 text-right">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Ranking da vaga
+            Aderência à Vaga
           </p>
           <p className="mt-1 text-lg font-extrabold tabular-nums text-[hsl(var(--text))]">
-            {Math.round(entry.final_score)}%
+            {Math.round(entry.job_fit_score)}%
           </p>
           {hasDealBreakerRejection ? (
             <div className="mt-2 flex justify-end">
@@ -827,7 +827,7 @@ function RankingCard({
       {reasonPreview.length > 0 ? (
         <div className="mt-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Por que este score?
+            Por que esta aderência?
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {reasonPreview.map((reason) => (
@@ -842,9 +842,9 @@ function RankingCard({
         </div>
       ) : null}
 
-      {entry.explanation_text ? (
+      {entry.ranking_summary_text ? (
         <p className="ui-text-muted mt-3 line-clamp-2 text-xs leading-relaxed">
-          {entry.explanation_text}
+          {entry.ranking_summary_text}
         </p>
       ) : (
         <p className="ui-text-muted mt-3 text-xs">

@@ -9,7 +9,7 @@ Ele apenas:
 - calcula dados auxiliares do currículo
 - gera um score interno de qualidade do perfil, NÃO compatibilidade com vaga
 
-O score final público vem de CandidateJobScore.final_score.
+O score oficial publico vem de CandidateJobScore.final_score, exposto como job_fit_score.
 """
 
 import json

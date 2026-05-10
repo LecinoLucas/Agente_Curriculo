@@ -23,7 +23,7 @@ function buildCandidate(overrides?: Partial<CandidateListSummary>): CandidateLis
     active_job_id: null,
     active_job_title: null,
     active_job_stage: null,
-    active_job_final_score: null,
+    active_job_job_fit_score: null,
     ai_status: null,
     ...overrides,
   };

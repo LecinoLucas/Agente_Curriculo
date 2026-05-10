@@ -1,10 +1,10 @@
 import { CheckCircle2, ShieldAlert } from "lucide-react";
-import type { JobFormValues, JobQualityResult, JobSkill, PendingJobSkill } from "../../../types/domain";
+import type { JobQualityResult, JobSkill } from "../../../types/domain";
 import { SectionCard } from "../../../shared/components/layout/SectionCard";
 import { ReviewItem } from "../../../shared/components/data-display/ReviewItem";
 import { SummaryRow } from "../../../shared/components/data-display/SummaryRow";
 import { MessageList } from "../../../shared/components/feedback/MessageList";
-import { PRIORITY_OPTIONS, trimToNull, formatJobArea } from "../jobFormConfig";
+import { PRIORITY_OPTIONS, trimToNull, formatJobArea, type JobFormValues, type PendingJobSkill } from "../jobFormConfig";
 import {
   formatEducationLevel,
   formatSeniority,
@@ -16,6 +16,7 @@ type JobFormReviewStepProps = {
   form: JobFormValues;
   mandatorySkills: Array<JobSkill | PendingJobSkill>;
   optionalSkills: Array<JobSkill | PendingJobSkill>;
+  eliminatorySkills: Array<JobSkill | PendingJobSkill>;
   jobQuality: JobQualityResult | null;
   backendPublishErrors: string[];
 };
@@ -24,6 +25,7 @@ export function JobFormReviewStep({
   form,
   mandatorySkills,
   optionalSkills,
+  eliminatorySkills,
   jobQuality,
   backendPublishErrors,
 }: JobFormReviewStepProps) {
@@ -48,12 +50,10 @@ export function JobFormReviewStep({
           />
           <ReviewItem label="Modelo de trabalho" value={formatWorkModel(form.work_model || null)} />
           <ReviewItem label="Localização" value={form.location || "—"} />
-          <ReviewItem label="Skills obrigatórias" value={`${mandatorySkills.length}`} />
-          <ReviewItem label="Skills desejáveis" value={`${optionalSkills.length}`} />
-          <ReviewItem
-            label="Deal breakers"
-            value={`${(form.deal_breakers ?? []).filter((item) => item.is_active).length}`}
-          />
+          <ReviewItem label="Essenciais" value={`${mandatorySkills.length}`} />
+          <ReviewItem label="Diferenciais" value={`${optionalSkills.length}`} />
+          <ReviewItem label="Skills eliminatórias" value={`${eliminatorySkills.length}`} />
+          <ReviewItem label="Deal breakers" value={`${(form.deal_breakers ?? []).filter((item) => item.is_active).length}`} />
         </div>
       </SectionCard>
 
@@ -66,7 +66,7 @@ export function JobFormReviewStep({
             { ok: trimToNull(form.job_area ?? "") !== null, label: "Área da vaga definida" },
             { ok: trimToNull(form.seniority_level ?? "") !== null, label: "Senioridade definida" },
             { ok: (form.minimum_years_experience ?? 0) > 0, label: "Experiência mínima preenchida" },
-            { ok: mandatorySkills.length >= 2, label: "Pelo menos 2 skills obrigatórias" },
+            { ok: mandatorySkills.length >= 2, label: "Pelo menos 2 skills essenciais" },
           ].map((item) => (
             <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--border))] px-4 py-3 text-sm">
               {item.ok ? (

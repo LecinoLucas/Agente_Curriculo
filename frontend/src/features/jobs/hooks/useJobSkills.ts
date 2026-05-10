@@ -1,10 +1,25 @@
 import { useMemo, useState } from "react";
 import { jobSkillsService } from "../../../services/jobSkillsService";
-import type { JobSkill, PendingJobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import { formatErrorForToast, handleApiError } from "../../../shared/utils/errorHandler";
+import { toast } from "../../../shared/utils/toast";
+import type { JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { PendingJobSkill } from "../jobFormConfig";
 
 interface UseJobSkillsOptions {
   currentJob: { id: string } | null;
   onRefreshQuality: (jobId: string) => Promise<void>;
+}
+
+function normalizeSkillName(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+export function isSkillAlreadyLinked(
+  linkedSkills: Array<JobSkill | PendingJobSkill>,
+  skillName: string,
+): boolean {
+  const normalizedSkillName = normalizeSkillName(skillName);
+  return linkedSkills.some((skill) => normalizeSkillName(skill.skill_name) === normalizedSkillName);
 }
 
 export function useJobSkills(options: UseJobSkillsOptions) {
@@ -27,12 +42,17 @@ export function useJobSkills(options: UseJobSkillsOptions) {
   }, [jobSkills, pendingSkills]);
 
   const mandatorySkills = useMemo(
-    () => combinedSkills.filter((skill) => skill.is_mandatory),
+    () => combinedSkills.filter((skill) => skill.priority_level === "priority"),
     [combinedSkills],
   );
 
   const optionalSkills = useMemo(
-    () => combinedSkills.filter((skill) => !skill.is_mandatory),
+    () => combinedSkills.filter((skill) => skill.priority_level === "complementary"),
+    [combinedSkills],
+  );
+
+  const eliminatorySkills = useMemo(
+    () => combinedSkills.filter((skill) => skill.priority_level === "eliminatory"),
     [combinedSkills],
   );
 
@@ -50,13 +70,26 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     });
   }, [allSkills, combinedSkills, skillSearch]);
 
-  async function handleAddSkill(skill: SkillEquivalenceGroup, isMandatory: boolean) {
-    setSavingSkillId(skill.id);
+  async function handleAddSkill(
+    skill: SkillEquivalenceGroup | string,
+    priorityLevel: "priority" | "complementary" | "eliminatory",
+  ) {
+    const skillName = typeof skill === "string" ? skill.trim() : skill.canonical;
+    const skillId = typeof skill === "string" ? crypto.randomUUID() : skill.id;
+
+    if (!skillName) return;
+
+    if (isSkillAlreadyLinked(combinedSkills, skillName)) {
+      toast.warning("Skill já vinculada a esta vaga.");
+      return;
+    }
+
+    setSavingSkillId(skillId);
     try {
       if (options.currentJob) {
         await jobSkillsService.addJobSkill(options.currentJob.id, {
-          skill_name: skill.canonical,
-          is_mandatory: isMandatory,
+          skill_name: skillName,
+          priority_level: priorityLevel,
           weight: 1,
         });
         const refreshedSkills = await jobSkillsService.listJobSkills(options.currentJob.id);
@@ -66,15 +99,26 @@ export function useJobSkills(options: UseJobSkillsOptions) {
         setPendingSkills((current) => [
           ...current,
           {
-            skill_id: skill.id,
-            skill_name: skill.canonical,
-            is_mandatory: isMandatory,
+            skill_id: skillId,
+            skill_name: skillName,
+            priority_level: priorityLevel,
             minimum_level: null,
             minimum_years: null,
             weight: 1,
           },
         ]);
       }
+    } catch (error) {
+      if (options.currentJob) {
+        try {
+          const refreshedSkills = await jobSkillsService.listJobSkills(options.currentJob.id);
+          setJobSkills(refreshedSkills);
+        } catch {
+          // Keep original error feedback if the follow-up refresh fails.
+        }
+      }
+      toast.error(formatErrorForToast(handleApiError(error)));
+      return;
     } finally {
       setSavingSkillId(null);
     }
@@ -88,7 +132,7 @@ export function useJobSkills(options: UseJobSkillsOptions) {
       setSavingSkillId(skill.skill_id);
       try {
         await jobSkillsService.updateJobSkill(options.currentJob.id, skill, {
-          is_mandatory: patch.is_mandatory ?? skill.is_mandatory,
+          priority_level: patch.priority_level ?? skill.priority_level,
           minimum_level: patch.minimum_level ?? skill.minimum_level,
           minimum_years: patch.minimum_years ?? skill.minimum_years,
           weight: patch.weight ?? skill.weight,
@@ -132,7 +176,7 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     for (const skill of pendingSkills) {
       await jobSkillsService.addJobSkill(jobIdToSync, {
         skill_name: skill.skill_name,
-        is_mandatory: skill.is_mandatory,
+        priority_level: skill.priority_level,
         minimum_level: skill.minimum_level ?? undefined,
         minimum_years: skill.minimum_years ?? undefined,
         weight: skill.weight,
@@ -157,6 +201,7 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     combinedSkills,
     mandatorySkills,
     optionalSkills,
+    eliminatorySkills,
     availableSkills,
     handleAddSkill,
     handleUpdateSkill,
