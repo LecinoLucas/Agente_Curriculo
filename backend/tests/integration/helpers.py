@@ -128,7 +128,7 @@ async def _seed_scoring_case(
         description="Test job description with Python, FastAPI, PostgreSQL requirements",
         location="Test Location",
         minimum_years_experience=Decimal("5.0"),
-        job_profile_hash=hashlib.sha256(b"test-job-profile").hexdigest(),
+        job_profile_hash=hashlib.sha256(b"test-job-profile").hexdigest()[:16],
         created_by=created_by,
     )
     db_session.add(job)
@@ -307,7 +307,7 @@ async def _seed_scoring_case(
     )
     if active_version is None:
         active_version = ScoreModelVersionModel(
-            version=f"test-score-{uuid4()}",
+            version=f"ts-{uuid4().hex[:10]}",
             is_active=True,
             weights={
                 "skill_match": 0.4,

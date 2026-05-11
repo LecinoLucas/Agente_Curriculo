@@ -37,6 +37,10 @@ logger = logging.getLogger(__name__)
 from src.domain.entities.user import User
 from src.domain.entities.user import UserRole
 from src.application.services.audit_service import AuditService
+from src.application.services.analysis_match_store import AnalysisMatchStore
+from src.application.services.analysis_ranking_refresh_service import (
+    AnalysisRankingRefreshService,
+)
 from src.application.services.eligibility_engine_service import EligibilityEngineService
 from src.application.services.job_profiler_service import (
     JobProfilerService,
@@ -55,7 +59,6 @@ from src.application.services.skill_text_normalizer import (
     normalize_skill_name,
     normalize_skill_text,
 )
-from src.application.services.strict_payload import require_key
 from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
@@ -63,7 +66,6 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
 )
 from src.infrastructure.database.models.profile_analysis_model import (
-    CandidateJobMatchModel,
     CandidateProfileAnalysisModel,
     JobProfileAnalysisModel,
 )
@@ -82,7 +84,6 @@ from src.interface.api.schemas.analysis_schemas import (
     AnalysisPipelineResponse,
 )
 from src.application.services.pipeline_service import PipelineService
-from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
 
 
 # ── Validation State ──────────────────────────────────────────────────────────
@@ -1012,6 +1013,11 @@ class AnalysisService:
         self._repository = repository
         self._eligibility_engine_service = eligibility_engine_service
         self._audit_service = audit_service
+        self._match_store = AnalysisMatchStore(repository)
+        self._ranking_refresh_service = AnalysisRankingRefreshService(
+            repository._session,
+            logger=logger,
+        )
 
     def _get_eligibility_engine_service(self) -> EligibilityEngineService:
         if self._eligibility_engine_service is not None:
@@ -1695,164 +1701,61 @@ class AnalysisService:
             job_id=job_id,
         )
 
-        candidate_id = await self._repository.get_candidate_id_from_analysis(analysis_id)
-        resume_version_id = await self._repository.get_resume_version_id_from_analysis(analysis_id)
-        if candidate_id is None or resume_version_id is None:
-            raise ValueError("Could not resolve analysis context for candidate_job_match persistence")
-
-        active_pipeline_entry = await SQLAlchemyPipelineRepository(self._repository._session).find_active_entry(
-            candidate_id,
-            job_id,
-        )
-        pipeline_key = (
-            active_pipeline_entry.candidate_job_pipeline_id
-            if active_pipeline_entry is not None
-            else None
-        )
-        skill_evidence_breakdown = {
-            "partial_matches": partial_matches,
-            "priority_score_weighted": float(skill_scores["priority_score_weighted"]),
-            "complementary_score_weighted": float(complementary_score),
-            "complementary_score_raw_weighted": float(complementary_score_raw),
-            "priority_strong_coverage": float(priority_strong_coverage),
-            "eliminatory_score_weighted": float(skill_scores["eliminatory_score_weighted"]),
-            "score_version": _SCORE_VERSION_EQUIVALENCE,
-            "validation_status": validation_status,
-            "validation_reasons": list(validation_reasons),
-            "failed_rule": failed_rule,
-            "failed_dimension": failed_dimension,
-            "matched_priority_skills": list(skill_scores["matched_priority_skill_names"]),
-            "missing_priority_skills": list(missing_skill_names),
-            "matched_complementary_skills": list(skill_scores["matched_complementary_skill_names"]),
-            "missing_complementary_skills": list(skill_scores["missing_complementary_skill_names"]),
-            "matched_eliminatory_skills": list(skill_scores["matched_eliminatory_skill_names"]),
-            "missing_eliminatory_skills": list(skill_scores["missing_eliminatory_skill_names"]),
-            "weak_evidence_priority_skills": list(weak_evidence_priority_skills),
-            "skill_evidence_details": list(skill_scores["skill_evidence_details"]),
-            "education_detected": result.highest_education_level,
-            "minimum_education_required": job.minimum_education_level,
-            "experience_detected": float(candidate_years) if candidate_years is not None else None,
-            "minimum_experience_required": float(required_years) if required_years is not None else None,
-            "eligibility_status": eligibility_status,
-            "priority_skills_matched": priority_matched,
-            "priority_skills_total": total_priority,
-            "complementary_skills_matched": complementary_matched,
-            "complementary_skills_total": total_complementary,
-            "eliminatory_skills_matched": eliminatory_matched,
-            "eliminatory_skills_total": total_eliminatory,
-            "complementary_bonus_cap_slots": skill_scores["complementary_bonus_cap_slots"],
-            "priority_component_impact": float(priority_component_impact),
-            "complementary_component_impact": float(complementary_component_impact),
-            "experience_component_impact": float(experience_component_impact),
-            "seniority_component_impact": float(seniority_component_impact),
-            "has_domain_evidence": has_domain_evidence,
-        }
-        adaptive_score_breakdown = dict(skill_evidence_breakdown)
-
-        if not job.job_profile_hash:
-            raise ValueError(f"Job {job.id} missing job_profile_hash during match persistence")
-
-        persisted_match = CandidateJobMatchModel(
-            candidate_id=candidate_id,
+        persisted_match_context = await self._match_store.persist_candidate_job_match(
+            analysis_id=analysis_id,
             job_id=job_id,
-            resume_version_id=resume_version_id,
-            candidate_profile_analysis_id=candidate_profile_analysis.id,
-            job_profile_analysis_id=job_profile_analysis.id,
-            candidate_job_pipeline_id=pipeline_key,
+            job=job,
+            candidate_profile_analysis=candidate_profile_analysis,
+            job_profile_analysis=job_profile_analysis,
+            result=result,
             recommendation=recommendation,
-            matched_skills_json=matched_skill_names,
-            missing_skills_json=missing_skill_names,
-            skill_evidence_breakdown=skill_evidence_breakdown,
-            explanation=summary,
+            matched_skill_names=matched_skill_names,
+            missing_skill_names=missing_skill_names,
+            skill_scores=skill_scores,
+            partial_matches=partial_matches,
+            weak_evidence_priority_skills=weak_evidence_priority_skills,
+            validation_status=validation_status,
+            validation_reasons=validation_reasons,
+            failed_rule=failed_rule,
+            failed_dimension=failed_dimension,
             eligibility_status=eligibility_status,
-            created_at=datetime.now(UTC),
-            score_version=_SCORE_VERSION_EQUIVALENCE if partial_matches else None,
-            freshness_status="fresh",
-            job_signature_hash=str(job.job_profile_hash),
+            candidate_years=candidate_years,
+            required_years=required_years,
+            priority_matched=priority_matched,
+            total_priority=total_priority,
+            complementary_matched=complementary_matched,
+            total_complementary=total_complementary,
+            eliminatory_matched=eliminatory_matched,
+            total_eliminatory=total_eliminatory,
+            priority_component_impact=priority_component_impact,
+            complementary_component_impact=complementary_component_impact,
+            experience_component_impact=experience_component_impact,
+            seniority_component_impact=seniority_component_impact,
+            has_domain_evidence=has_domain_evidence,
+            summary=summary,
+            score_version=_SCORE_VERSION_EQUIVALENCE,
+        )
+        candidate_id = persisted_match_context.candidate_id
+        resume_version_id = persisted_match_context.resume_version_id
+        adaptive_score_breakdown = dict(
+            persisted_match_context.persisted_match.skill_evidence_breakdown or {}
         )
 
-        await self._repository.upsert_candidate_job_match(persisted_match)
-
-        ranking_refresh_status = "unknown"
-        ranking_freshness_status = "stale"
-        ranking_refreshed_at = None
-        ranking_warning = None
-        public_job_fit_score = None
-        ranking_service = None
-        ranking_result = None
-        try:
-            from src.application.services.candidate_ranking_service import CandidateRankingService
-
-            ranking_service = CandidateRankingService(self._repository._session)
-            async with self._repository._session.begin_nested():
-                ranking_result = await ranking_service.compute_single_candidate(
-                    job_id,
-                    candidate_id,
-                    recompute_reason="force_recompute" if force_recompute else "post_match",
-                )
-
-            if ranking_result is None:
-                ranking_refresh_status = "skipped"
-                ranking_warning = "Ranking incremental não encontrou contexto suficiente para o candidato."
-            else:
-                ranking_refresh_status = "updated"
-                ranking_freshness_status = str(
-                    require_key(ranking_result, "ranking_freshness_status")
-                )
-                ranking_refreshed_at = require_key(ranking_result, "computed_at")
-                public_score = ranking_result.get("job_fit_score")
-                if public_score is None:
-                    raise ValueError("Ranking incremental retornou sem job_fit_score")
-                public_job_fit_score = float(public_score)
-        except Exception:
-            ranking_refresh_status = "failed"
-            ranking_freshness_status = "stale"
-            ranking_warning = (
-                "Match salvo, mas o ranking incremental falhou e pode estar desatualizado."
-            )
-            logger.warning(
-                "ranking.single_recompute_failed",
-                exc_info=True,
-                extra={
-                    "analysis_id": str(analysis_id),
-                    "candidate_id": str(candidate_id),
-                    "job_id": str(job_id),
-                    "resume_version_id": str(resume_version_id),
-                    "recompute_reason": "match_to_job_sync",
-                },
-            )
-            await publish_domain_event(
-                DomainEvent(
-                    event_type=DomainEventType.RANKING_RECOMPUTE_FAILED,
-                    entity_id=candidate_id,
-                    payload={
-                        "event": "ranking_recompute_failed",
-                        "candidate_id": str(candidate_id),
-                        "job_id": str(job_id),
-                        "source_analysis_id": str(analysis_id),
-                        "source_analysis_created_at": details.analysis.created_at.isoformat(),
-                        "score_model_version": score_model_version.version if score_model_version else None,
-                        "ranking_version": score_model_version.version if score_model_version else None,
-                        "ranking_freshness_status": "stale",
-                        "recompute_reason": "match_to_job_sync",
-                    },
-                ),
-                session=self._repository._session,
-            )
-            if ranking_service is not None:
-                try:
-                    async with self._repository._session.begin_nested():
-                        await ranking_service.mark_candidate_stale(job_id, candidate_id)
-                except Exception:
-                    logger.warning(
-                        "ranking.mark_stale_failed",
-                        exc_info=True,
-                        extra={
-                            "analysis_id": str(analysis_id),
-                            "candidate_id": str(candidate_id),
-                            "job_id": str(job_id),
-                        },
-                    )
+        ranking_refresh = await self._ranking_refresh_service.refresh_after_match(
+            analysis_id=analysis_id,
+            source_analysis_created_at=details.analysis.created_at,
+            job_id=job_id,
+            candidate_id=candidate_id,
+            resume_version_id=resume_version_id,
+            score_model_version=score_model_version,
+            force_recompute=force_recompute,
+        )
+        ranking_refresh_status = ranking_refresh.ranking_refresh_status
+        ranking_freshness_status = ranking_refresh.ranking_freshness_status
+        ranking_refreshed_at = ranking_refresh.ranking_refreshed_at
+        ranking_warning = ranking_refresh.ranking_warning
+        public_job_fit_score = ranking_refresh.public_job_fit_score
+        ranking_result = ranking_refresh.ranking_result
 
         if force_recompute:
             logger.info(

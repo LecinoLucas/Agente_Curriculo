@@ -8,10 +8,16 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.candidate_ranking_response_builder import (
+    CandidateRankingResponseBuilder,
+)
+from src.application.services.candidate_ranking_explanation_builder import (
+    CandidateRankingExplanationBuilder,
+)
 from src.application.services.candidate_ranking_service import (
-    _empty_delta_summary,
-    _render_score_explanation,
-    _summarize_score_factors,
+    _SCORE_DELTA_CHANGE_THRESHOLD,
+    _SCORE_DELTA_SUMMARY_LIMIT,
+    _to_decimal,
 )
 from src.application.services.matching_observability_service import (
     MatchingObservabilityService,
@@ -25,6 +31,13 @@ from src.infrastructure.database.models.scoring_model import (
 )
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import SQLAlchemyAnalysisRepository
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
+
+_response_builder = CandidateRankingResponseBuilder(
+    to_decimal=_to_decimal,
+    score_delta_change_threshold=_SCORE_DELTA_CHANGE_THRESHOLD,
+    score_delta_summary_limit=_SCORE_DELTA_SUMMARY_LIMIT,
+)
+_explanation_builder = CandidateRankingExplanationBuilder()
 
 
 class CandidateNotLinkedToJobError(Exception):
@@ -489,8 +502,8 @@ class JobScoreExplanationService:
         persisted_match: Any | None,
         factors: list[dict[str, Any]],
     ) -> JobScoreExplanationPayload:
-        factor_summary = dict(score_head.factor_summary_json or {}) or _summarize_score_factors(factors)
-        delta_summary = dict(score_head.delta_summary_json or {}) or _empty_delta_summary(
+        factor_summary = dict(score_head.factor_summary_json or {}) or _explanation_builder.summarize_score_factors(factors)
+        delta_summary = dict(score_head.delta_summary_json or {}) or _response_builder.empty_delta_summary(
             current_score=Decimal(str(score_head.final_score))
         )
         partial_matches = self._extract_partial_matches_from_factors(factors)
@@ -503,7 +516,7 @@ class JobScoreExplanationService:
             for item in factor_summary.get("negative", [])
             if item.get("factor_type") == "data_confidence_penalty"
         ]
-        ranking_summary_text = str(score_head.explanation_text or "").strip() or _render_score_explanation(
+        ranking_summary_text = str(score_head.explanation_text or "").strip() or _explanation_builder.render_score_explanation(
             final_score=Decimal(str(score_head.final_score)),
             decision=score_head.decision_suggestion,
             factor_summary=factor_summary,

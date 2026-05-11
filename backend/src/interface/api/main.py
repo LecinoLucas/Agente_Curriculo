@@ -89,8 +89,8 @@ app.include_router(dashboard.router, prefix=_PREFIX)
 
 # ── Static files ──────────────────────────────────────────────────────────────
 uploads_dir = Path(__file__).parent.parent.parent.parent / "uploads"
-if uploads_dir.exists():
-    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 
 # ── Exception handlers globais ───────────────────────────────────────────────

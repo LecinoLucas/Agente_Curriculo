@@ -52,6 +52,9 @@ known-first-party = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=src --cov-report=term-missing"
+markers = [
+    "postgres: integration tests that require a real PostgreSQL test database and must be run explicitly with -m postgres",
+]
 filterwarnings = [
     "ignore:'asyncio\\.iscoroutinefunction' is deprecated and slated for removal in Python 3\\.16:DeprecationWarning:fastapi\\.routing",
     "ignore:'asyncio\\.iscoroutinefunction' is deprecated and slated for removal in Python 3\\.16:DeprecationWarning:starlette\\._utils",
