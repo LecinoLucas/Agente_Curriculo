@@ -13,3 +13,11 @@ backend/.env
 frontend/.env
 *.pyc
 __pycache__/
+backend/uploads/
+uploads/
+*.db
+test_run.db
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
