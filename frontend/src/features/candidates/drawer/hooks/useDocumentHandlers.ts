@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { CandidateOverview } from "../../../../types/domain";
 import type { PanelTab } from "../../../pipeline/PipelineContext";
@@ -6,11 +6,13 @@ import type { CandidateActionFeedback } from "../v2/CandidateProfileView";
 import { resumeService } from "../../../../services/resumeService";
 import { analysisService } from "../../../../services/analysisService";
 import { feedback } from "../../../../services/feedback";
+import { useExtractionPolling } from "../../../../shared/hooks/useExtractionPolling";
 import {
   formatErrorForToast,
   getHttpStatus,
   handleApiError,
 } from "../../../../shared/utils/errorHandler";
+import { isExtractionInProgress } from "../../../../shared/utils/extractionStatus";
 import { toast } from "../../../../shared/utils/toast";
 import { getLatestAnalysisForActiveJob } from "../../utils/analysisStatus";
 
@@ -38,10 +40,6 @@ function normalizeAnalysisStatus(status: string | null | undefined): AnalysisSta
 }
 
 function isAnalysisInProgress(status: string | null | undefined): boolean {
-  return status === "pending" || status === "processing";
-}
-
-function isExtractionInProgress(status: string | null | undefined): boolean {
   return status === "pending" || status === "processing";
 }
 
@@ -172,72 +170,37 @@ export function useDocumentHandlers(
     pollingAnalysisId,
   } = params;
 
-  const { latest_analysis } = overview;
+  const { latest_analysis, resumes } = overview;
   const activeControllersRef = useRef<Set<AbortController>>(new Set());
   const pendingManualAnalysisRef = useRef<string | null>(null);
-  const extractionPollTimersRef = useRef<Map<string, number>>(new Map());
+  const [extractionPollingIds, setExtractionPollingIds] = useState<string[]>([]);
 
-  const stopExtractionPolling = useCallback((resumeId: string) => {
-    const timerId = extractionPollTimersRef.current.get(resumeId);
-    if (timerId !== undefined) {
-      window.clearTimeout(timerId);
-      extractionPollTimersRef.current.delete(resumeId);
-    }
-  }, []);
-
-  const startExtractionPolling = useCallback(
-    (resumeId: string, attempt = 0) => {
-      stopExtractionPolling(resumeId);
-
-      const nextTimer = window.setTimeout(async () => {
-        try {
-          const status = await resumeService.getExtractionStatus(resumeId);
-
-          if (status.extraction_status === "completed") {
-            stopExtractionPolling(resumeId);
-            await refreshCandidateOverview();
-            notifyCandidatesChanged();
-            return;
-          }
-
-          if (status.extraction_status === "failed") {
-            stopExtractionPolling(resumeId);
-            await refreshCandidateOverview();
-            notifyCandidatesChanged();
-            toast.error(
-              status.extraction_error || "Falha ao extrair o currículo enviado.",
-            );
-            return;
-          }
-
-          if (attempt >= 59) {
-            stopExtractionPolling(resumeId);
-            return;
-          }
-
-          startExtractionPolling(resumeId, attempt + 1);
-        } catch {
-          if (attempt >= 59) {
-            stopExtractionPolling(resumeId);
-            return;
-          }
-
-          startExtractionPolling(resumeId, attempt + 1);
-        }
-      }, 2000);
-
-      extractionPollTimersRef.current.set(resumeId, nextTimer);
+  useExtractionPolling({
+    items: extractionPollingIds,
+    enabled: extractionPollingIds.length > 0,
+    intervalMs: 2000,
+    onCompleted: async (resumeId) => {
+      setExtractionPollingIds((current) => current.filter((item) => item !== resumeId));
+      await refreshCandidateOverview();
+      notifyCandidatesChanged();
     },
-    [notifyCandidatesChanged, refreshCandidateOverview, stopExtractionPolling],
-  );
+    onFailed: async (resumeId, status) => {
+      setExtractionPollingIds((current) => current.filter((item) => item !== resumeId));
+      await refreshCandidateOverview();
+      notifyCandidatesChanged();
+      toast.error(status.extraction_error || "Falha ao extrair o currículo enviado.");
+    },
+  });
 
   useEffect(() => {
     return () => {
       activeControllersRef.current.forEach((controller) => controller.abort());
       activeControllersRef.current.clear();
-      extractionPollTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-      extractionPollTimersRef.current.clear();
     };
+  }, [overview.candidate.id]);
+
+  useEffect(() => {
+    setExtractionPollingIds([]);
   }, [overview.candidate.id]);
 
   useEffect(() => {
@@ -313,7 +276,9 @@ export function useDocumentHandlers(
       notifyCandidatesChanged();
 
       if (isExtractionInProgress(uploaded.extraction_status)) {
-        startExtractionPolling(uploaded.resume_id);
+        setExtractionPollingIds((current) =>
+          current.includes(uploaded.resume_id) ? current : [...current, uploaded.resume_id],
+        );
       }
 
       if (uploaded.analysis_auto_requested && uploaded.analysis_id) {
@@ -352,7 +317,6 @@ export function useDocumentHandlers(
     syncAnalysisStart,
     notifyCandidatesChanged,
     startPolling,
-    startExtractionPolling,
     setters,
   ]);
 

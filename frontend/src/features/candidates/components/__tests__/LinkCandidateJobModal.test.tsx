@@ -8,6 +8,11 @@ import { LinkCandidateJobModal } from "../LinkCandidateJobModal";
 import { OverviewTab } from "../../drawer/tabs/OverviewTab";
 import type { CandidateOverview, Job } from "../../../../types/domain";
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 const listJobsMock = vi.fn();
 const addCandidateToJobMock = vi.fn();
 const toastSuccessMock = vi.fn();
@@ -97,7 +102,7 @@ function OverviewLinkHarness() {
   const [overview, setOverview] = useState<CandidateOverview>(buildOverview());
 
   return (
-    <MemoryRouter>
+    <MemoryRouter future={routerFuture}>
       <OverviewTab
         overview={overview}
         activeJobId={overview.active_job_id}
@@ -163,7 +168,7 @@ describe("LinkCandidateJobModal", () => {
     addCandidateToJobMock.mockResolvedValue({});
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <LinkCandidateJobModal
           isOpen
           candidateId="candidate-1"
@@ -227,7 +232,7 @@ describe("LinkCandidateJobModal", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <LinkCandidateJobModal
           isOpen
           candidateId="candidate-1"

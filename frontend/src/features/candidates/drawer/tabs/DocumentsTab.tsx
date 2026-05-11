@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { CandidateOverview } from "../../../../types/domain";
 import type { PanelTab } from "../../../pipeline/PipelineContext";
 import type { CandidateActionFeedback } from "../v2/CandidateProfileView";
+import { getExtractionStatusLabel } from "../../../../shared/utils/extractionStatus";
 import { Section, StatusCard, EmptyTab } from "../components/DrawerSectionHelpers";
 import { useDocumentHandlers } from "../hooks/useDocumentHandlers";
 
@@ -45,13 +46,6 @@ const ANALYSIS_STATUS_LABEL: Record<AnalysisStatus, string> = {
   completed: "Concluída",
   failed: "Falhou",
   cancelled: "Cancelada",
-};
-
-const EXTRACTION_STATUS_LABEL: Record<string, string> = {
-  completed: "Pronto",
-  pending: "Pendente",
-  processing: "Extraindo…",
-  failed: "Falha",
 };
 
 export function DocumentsTab(props: DocumentsTabProps) {
@@ -141,8 +135,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
             label="Processamento do currículo"
             title={
               resumes[0]?.extraction_status
-                ? EXTRACTION_STATUS_LABEL[resumes[0].extraction_status] ??
-                  resumes[0].extraction_status
+                ? getExtractionStatusLabel(resumes[0].extraction_status)
                 : "Sem currículo"
             }
             description="Upload, extração do PDF e disponibilidade para análise."
@@ -333,9 +326,9 @@ export function DocumentsTab(props: DocumentsTabProps) {
                               : "bg-gray-50 text-gray-500 ring-gray-200",
                         ].join(" ")}
                       >
-                        {EXTRACTION_STATUS_LABEL[resume.extraction_status ?? ""] ??
-                          resume.extraction_status ??
-                          "—"}
+                        {resume.extraction_status
+                          ? getExtractionStatusLabel(resume.extraction_status)
+                          : "—"}
                       </span>
                     </div>
                   </div>

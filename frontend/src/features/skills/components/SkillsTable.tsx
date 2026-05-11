@@ -30,9 +30,9 @@ function renderAliasBadgesDisplay(aliases: string[]) {
 
   return (
     <div className="flex max-w-full flex-wrap gap-1.5">
-      {visible.map((alias) => (
+      {visible.map((alias, index) => (
         <span
-          key={alias}
+          key={`${alias}-${index}`}
           className="inline-flex max-w-full items-center truncate rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-xs text-[hsl(var(--text))]"
           title={alias}
         >
@@ -136,8 +136,8 @@ export function SkillsTable({
                       <TableCell className="py-4">
                         {skill.domains.length ? (
                           <div className="flex flex-wrap gap-1.5">
-                            {skill.domains.slice(0, 2).map((domain) => (
-                              <Badge key={domain} variant="secondary" className="max-w-full">
+                            {skill.domains.slice(0, 2).map((domain, index) => (
+                              <Badge key={`${skill.id}-${domain}-${index}`} variant="secondary" className="max-w-full">
                                 {domain}
                               </Badge>
                             ))}
@@ -194,8 +194,8 @@ export function SkillsTable({
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {skill.domains.length ? (
-                          skill.domains.map((domain) => (
-                            <Badge key={domain} variant="secondary">
+                          skill.domains.map((domain, index) => (
+                            <Badge key={`${skill.id}-${domain}-${index}`} variant="secondary">
                               {domain}
                             </Badge>
                           ))
