@@ -9,7 +9,7 @@ from sqlalchemy.dialects import postgresql
 
 from src.application.services.candidate_ranking_service import (
     CandidateRankingService,
-    _apply_critical_mandatory_guardrails,
+    _apply_eliminatory_skill_guardrails,
     _apply_deal_breaker_guardrails,
     _apply_validation_guardrails,
     _build_score_factors,
@@ -28,7 +28,6 @@ def _skill_row(name: str, *, priority_level: str = "priority") -> SimpleNamespac
         skill_name=name,
         JobRequiredSkillModel=SimpleNamespace(
             priority_level=priority_level,
-            is_mandatory=priority_level == "priority",
         ),
     )
 
@@ -38,7 +37,7 @@ def test_canonical_skill_evidence_requires_component_evidence():
     assert _has_canonical_skill_evidence({"skill_evidence_breakdown": {}}) is False
     assert (
         _has_canonical_skill_evidence(
-            {"skill_evidence_breakdown": {"mandatory_score_weighted": 67.55}}
+            {"skill_evidence_breakdown": {"priority_score_weighted": 67.55}}
         )
         is True
     )
@@ -64,13 +63,13 @@ def test_serialize_breakdown_maps_final_score_to_public_job_fit_score() -> None:
     serialized = _serialize_breakdown(
         {
             "final_score": Decimal("82.50"),
-            "mandatory_score_weighted": Decimal("90.00"),
+            "priority_score_weighted": Decimal("90.00"),
         }
     )
 
     assert serialized["final_score"] == 82.5
     assert serialized["job_fit_score"] == 82.5
-    assert serialized["mandatory_score_weighted"] == 90.0
+    assert serialized["priority_score_weighted"] == 90.0
 
 
 def test_normalize_score_breakdown_uses_public_job_fit_score_without_warning(monkeypatch) -> None:
@@ -86,16 +85,16 @@ def test_normalize_score_breakdown_uses_public_job_fit_score_without_warning(mon
             "confidence_score": 90,
             "penalty_score": 0,
             "validation_penalty_score": 0,
-            "mandatory_score_weighted": 100,
-            "optional_score_weighted": 25,
+            "priority_score_weighted": 100,
+            "complementary_score_weighted": 25,
             "score_source": "candidate_job_match_evidence",
         },
         public_job_fit_score=Decimal("82.50"),
     )
 
     assert breakdown["job_fit_score"] == Decimal("82.50")
-    assert breakdown["mandatory_score_weighted"] == Decimal("100.00")
-    assert breakdown["optional_score_weighted"] == Decimal("25.00")
+    assert breakdown["priority_score_weighted"] == Decimal("100.00")
+    assert breakdown["complementary_score_weighted"] == Decimal("25.00")
     assert breakdown["score_source"] == "candidate_job_match_evidence"
     assert "final_score" not in breakdown
     warning.assert_not_called()
@@ -125,7 +124,7 @@ def test_postgres_skill_evidence_filter_checks_json_object_and_required_key():
     key_sql = str(
         service._json_key_exists_filter(
             CandidateJobMatchModel.skill_evidence_breakdown,
-            "mandatory_score_weighted",
+            "priority_score_weighted",
         ).compile(dialect=postgresql.dialect())
     )
 
@@ -134,7 +133,7 @@ def test_postgres_skill_evidence_filter_checks_json_object_and_required_key():
     assert "->>" in key_sql
 
 
-def test_missing_critical_mandatory_caps_final_score() -> None:
+def test_missing_eliminatory_skill_caps_final_score() -> None:
     job = SimpleNamespace(skill_requirements={"priority": [], "complementary": [], "eliminatory": ["Python"]})
     job_skill_rows = [_skill_row("Python", priority_level="eliminatory")]
     row = {"missing_skills": ["Python"]}
@@ -144,14 +143,14 @@ def test_missing_critical_mandatory_caps_final_score() -> None:
         "cap_applied": False,
     }
 
-    _apply_critical_mandatory_guardrails(row=row, job=job, job_skill_rows=job_skill_rows, bd=bd)
+    _apply_eliminatory_skill_guardrails(row=row, job=job, job_skill_rows=job_skill_rows, bd=bd)
     assert bd["final_score"] == Decimal("49.00")
     assert bd["cap_applied"] is True
     assert bd["cap_reason"] == "missing_eliminatory_skills"
     assert bd["eligibility_status"] == "FAIL"
 
 
-def test_missing_core_without_critical_required_does_not_cap_final_score() -> None:
+def test_missing_priority_skill_without_eliminatory_requirement_does_not_cap_final_score() -> None:
     job = SimpleNamespace(skill_requirements={"priority": ["Python"], "complementary": [], "eliminatory": []})
     job_skill_rows = [_skill_row("Python", priority_level="priority")]
     row = {"missing_skills": ["Python"]}
@@ -161,12 +160,12 @@ def test_missing_core_without_critical_required_does_not_cap_final_score() -> No
         "cap_applied": False,
     }
 
-    _apply_critical_mandatory_guardrails(row=row, job=job, job_skill_rows=job_skill_rows, bd=bd)
+    _apply_eliminatory_skill_guardrails(row=row, job=job, job_skill_rows=job_skill_rows, bd=bd)
     assert bd["final_score"] == Decimal("88.00")
     assert bd["cap_applied"] is False
 
 
-def test_cap_factor_mentions_same_mandatory_guardrail_used_in_score() -> None:
+def test_cap_factor_mentions_same_eliminatory_guardrail_used_in_score() -> None:
     job = SimpleNamespace(
         minimum_years_experience=None,
         minimum_education_level=None,
@@ -187,7 +186,7 @@ def test_cap_factor_mentions_same_mandatory_guardrail_used_in_score() -> None:
         "cap_reason": "missing_eliminatory_skills",
         "failed_rule": "missing_eliminatory_skills",
         "failed_dimension": "skills",
-        "validation_reason": "missing mandatory",
+            "validation_reason": "missing eliminatory skill",
         "experience_match_score": Decimal("100.00"),
         "seniority_match_score": Decimal("100.00"),
         "education_score": Decimal("100.00"),
@@ -227,8 +226,8 @@ def test_ranking_recomputes_unknown_penalty_from_match_evidence() -> None:
         "education_level": "none",
         "seniority_level": "mid",
         "skill_evidence_breakdown": {
-            "mandatory_score_weighted": 0.0,
-            "optional_score_weighted": 0.0,
+            "priority_score_weighted": 0.0,
+            "complementary_score_weighted": 0.0,
             "optional_score_raw_weighted": 0.0,
             "validation_reasons": ["Dados insuficientes"],
             "missing_required_skills": [],
@@ -263,22 +262,22 @@ def test_breakdown_uses_persisted_experience_detected_when_row_years_is_missing(
         "education_level": "none",
         "seniority_level": "mid",
         "skill_evidence_breakdown": {
-            "mandatory_score_weighted": 100.0,
-            "optional_score_weighted": 0.0,
+            "priority_score_weighted": 100.0,
+            "complementary_score_weighted": 0.0,
             "optional_score_raw_weighted": 0.0,
             "experience_detected": 5.6,
-            "mandatory_component_impact": 39.21,
-            "optional_component_impact": 9.7,
+            "priority_component_impact": 39.21,
+            "complementary_component_impact": 9.7,
             "experience_component_impact": 20.0,
             "seniority_component_impact": 11.11,
             "matched_required_skills": ["Node.js"],
             "missing_required_skills": [],
-            "matched_optional_skills": [],
-            "missing_optional_skills": [],
-            "mandatory_skills_matched": 1,
-            "mandatory_skills_total": 1,
-            "optional_skills_matched": 0,
-            "optional_skills_total": 0,
+            "matched_complementary_skills": [],
+            "missing_complementary_skills": [],
+            "priority_skills_matched": 1,
+            "priority_skills_total": 1,
+            "complementary_skills_matched": 0,
+            "complementary_skills_total": 0,
         },
     }
 
@@ -328,36 +327,36 @@ def test_breakdown_preserves_separate_required_and_optional_impacts() -> None:
         "seniority_level": "mid",
         "skill_evidence_breakdown": {
             "validation_reasons": [],
-            "mandatory_score_weighted": 100.0,
-            "optional_score_weighted": 40.0,
-            "optional_score_raw_weighted": 33.33,
-            "mandatory_component_impact": 50.0,
-            "optional_component_impact": 6.67,
+            "priority_score_weighted": 100.0,
+            "complementary_score_weighted": 40.0,
+            "complementary_score_raw_weighted": 33.33,
+            "priority_component_impact": 50.0,
+            "complementary_component_impact": 6.67,
             "experience_component_impact": 22.22,
             "seniority_component_impact": 11.11,
             "matched_required_skills": ["Python", "Node.js"],
             "missing_required_skills": [],
-            "matched_optional_skills": ["React", "Docker"],
-            "missing_optional_skills": ["Kubernetes", "CI/CD", "PostgreSQL", "Redis"],
-            "mandatory_skills_matched": 2,
-            "mandatory_skills_total": 2,
-            "optional_skills_matched": 2,
-            "optional_skills_total": 6,
-            "optional_bonus_cap_slots": 5,
+            "matched_complementary_skills": ["React", "Docker"],
+            "missing_complementary_skills": ["Kubernetes", "CI/CD", "PostgreSQL", "Redis"],
+            "priority_skills_matched": 2,
+            "priority_skills_total": 2,
+            "complementary_skills_matched": 2,
+            "complementary_skills_total": 6,
+            "complementary_bonus_cap_slots": 5,
         },
     }
 
     breakdown = _compute_breakdown(row=row, job=job, job_skill_rows=job_skill_rows)
 
-    assert breakdown["mandatory_skills_matched"] == 2
-    assert breakdown["mandatory_skills_total"] == 2
-    assert breakdown["optional_skills_matched"] == 2
-    assert breakdown["optional_skills_total"] == 6
-    assert breakdown["matched_optional_skills"] == ["React", "Docker"]
-    assert breakdown["missing_optional_skills"] == ["Kubernetes", "CI/CD", "PostgreSQL", "Redis"]
-    assert breakdown["optional_score_weighted"] == Decimal("40.00")
-    assert breakdown["optional_score_raw_weighted"] == Decimal("33.33")
-    assert breakdown["optional_component_impact"] == Decimal("6.67")
+    assert breakdown["priority_skills_matched"] == 2
+    assert breakdown["priority_skills_total"] == 2
+    assert breakdown["complementary_skills_matched"] == 2
+    assert breakdown["complementary_skills_total"] == 6
+    assert breakdown["matched_complementary_skills"] == ["React", "Docker"]
+    assert breakdown["missing_complementary_skills"] == ["Kubernetes", "CI/CD", "PostgreSQL", "Redis"]
+    assert breakdown["complementary_score_weighted"] == Decimal("40.00")
+    assert breakdown["complementary_score_raw_weighted"] == Decimal("33.33")
+    assert breakdown["complementary_component_impact"] == Decimal("6.67")
 
 
 def test_score_explanation_separates_required_optional_and_deal_breakers() -> None:
@@ -367,7 +366,7 @@ def test_score_explanation_separates_required_optional_and_deal_breakers() -> No
         factor_summary={
             "positive": [
                 {"factor_type": "required_skill_match", "factor_label": "Skill obrigatória atendida: Python"},
-                {"factor_type": "optional_skill_bonus", "factor_label": "Skills desejáveis: 2/16 atendidas, bônus de 6.67 pts"},
+                {"factor_type": "complementary_skill_bonus", "factor_label": "Skills desejáveis: 2/16 atendidas, bônus de 6.67 pts"},
             ],
             "negative": [
                 {"factor_type": "deal_breaker_violation", "factor_label": "Critério eliminatório violado"},
@@ -376,15 +375,15 @@ def test_score_explanation_separates_required_optional_and_deal_breakers() -> No
         },
         delta_summary=None,
         breakdown={
-            "mandatory_skills_matched": 5,
-            "mandatory_skills_total": 6,
+            "priority_skills_matched": 5,
+            "priority_skills_total": 6,
             "missing_required_skills": ["SQL"],
-            "mandatory_component_impact": 41.25,
-            "optional_skills_matched": 2,
-            "optional_skills_total": 16,
-            "missing_optional_skills": [f"Skill {i}" for i in range(14)],
-            "optional_component_impact": 6.67,
-            "optional_bonus_cap_slots": 5,
+            "priority_component_impact": 41.25,
+            "complementary_skills_matched": 2,
+            "complementary_skills_total": 16,
+            "missing_complementary_skills": [f"Skill {i}" for i in range(14)],
+            "complementary_component_impact": 6.67,
+            "complementary_bonus_cap_slots": 5,
         },
     )
 

@@ -138,6 +138,17 @@ class CandidateJobPipelineModel(Base):
             "is_terminal",
         ),
         sa.Index(
+            "uq_candidate_job_pipeline_one_active_per_candidate",
+            "candidate_id",
+            unique=True,
+            postgresql_where=sa.text(
+                "relationship_status = 'active' AND is_terminal = false AND terminated_at IS NULL"
+            ),
+            sqlite_where=sa.text(
+                "relationship_status = 'active' AND is_terminal = 0 AND terminated_at IS NULL"
+            ),
+        ),
+        sa.Index(
             "idx_candidate_job_pipeline_analysis",
             "current_analysis_id",
         ),

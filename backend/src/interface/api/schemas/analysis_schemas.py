@@ -128,10 +128,10 @@ class AnalysisMatchResponse(BaseModel):
     job_id: UUID
     job_fit_score: float | None = None
     recommendation: str
-    mandatory_skills_matched: int
-    mandatory_skills_total: int
-    optional_skills_matched: int
-    optional_skills_total: int
+    priority_skills_matched: int
+    priority_skills_total: int
+    complementary_skills_matched: int
+    complementary_skills_total: int
     seniority_score: float
     candidate_seniority: str | None = None
     job_seniority: str | None = None

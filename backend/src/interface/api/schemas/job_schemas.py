@@ -324,8 +324,9 @@ class CandidateScoreExplanationBreakdownItemResponse(BaseModel):
 
 
 class CandidateScoreExplanationBreakdownResponse(BaseModel):
-    mandatory: CandidateScoreExplanationBreakdownItemResponse | None = None
-    optional: CandidateScoreExplanationBreakdownItemResponse | None = None
+    priority: CandidateScoreExplanationBreakdownItemResponse | None = None
+    complementary: CandidateScoreExplanationBreakdownItemResponse | None = None
+    eliminatory: CandidateScoreExplanationBreakdownItemResponse | None = None
     experience: CandidateScoreExplanationBreakdownItemResponse | None = None
     seniority: CandidateScoreExplanationBreakdownItemResponse | None = None
     ai_adjustment: CandidateScoreExplanationBreakdownItemResponse | None = None

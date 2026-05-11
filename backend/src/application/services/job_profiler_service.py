@@ -484,10 +484,10 @@ def build_deterministic_job_profile(source: JobProfileInput) -> JobProfile:
                 JobRequirement(
                     name=candidate,
                     description=f"Requisito textual extraído da vaga: {candidate}",
-                        is_mandatory=True,
-                        importance_weight=1.1,
-                        evidence_examples=[candidate],
-                    )
+                    priority_level="priority",
+                    importance_weight=1.1,
+                    evidence_examples=[candidate],
+                )
             )
             seen_requirements.add(key)
 
@@ -554,7 +554,7 @@ def merge_manual_skills_into_profile(profile: JobProfile, source: JobProfileInpu
                     JobRequirement(
                         name=skill.name,
                         description=requirement.description or _skill_description(skill),
-                        is_mandatory=True,
+                        priority_level=skill.priority_level,
                         importance_weight=max(1.2, requirement.importance_weight, _priority_weight(skill)),
                         evidence_examples=_dedupe(requirement.evidence_examples + [skill.name]),
                     )
@@ -570,7 +570,10 @@ def merge_manual_skills_into_profile(profile: JobProfile, source: JobProfileInpu
             target_list[matched_idx] = JobRequirement(
                 name=skill.name,
                 description=current.description or _skill_description(skill),
-                is_mandatory=skill.is_priority_like or current.is_mandatory,
+                priority_level=_merge_requirement_priority_levels(
+                    current.priority_level,
+                    skill.priority_level,
+                ),
                 importance_weight=max(
                     current.importance_weight,
                     _priority_weight(skill) if skill.is_priority_like else _complementary_weight(skill),
@@ -643,7 +646,10 @@ def _parse_profile(raw: dict[str, Any], desc_hash: str) -> JobProfile:
             JobRequirement(
                 name=name,
                 description=(r.get("description") or "").strip(),
-                is_mandatory=True,
+                priority_level=_requirement_priority_level_from_raw(
+                    r,
+                    default="priority",
+                ),
                 importance_weight=_clamp(float(r.get("importance_weight") or 1.0), 1.0, 2.0),
                 evidence_examples=[
                     str(e).strip() for e in (r.get("evidence_examples") or []) if str(e).strip()
@@ -660,7 +666,10 @@ def _parse_profile(raw: dict[str, Any], desc_hash: str) -> JobProfile:
             JobRequirement(
                 name=name,
                 description=(r.get("description") or "").strip(),
-                is_mandatory=False,
+                priority_level=_requirement_priority_level_from_raw(
+                    r,
+                    default="complementary",
+                ),
                 importance_weight=_clamp(float(r.get("importance_weight") or 0.5), 0.1, 1.0),
                 evidence_examples=[
                     str(e).strip() for e in (r.get("evidence_examples") or []) if str(e).strip()
@@ -675,15 +684,15 @@ def _parse_profile(raw: dict[str, Any], desc_hash: str) -> JobProfile:
             name = _clean_text(r.get("name"))
             if not name:
                 continue
-            is_mandatory = normalize_skill_text(r.get("priority") or "medium") == "high"
+            priority_level = _requirement_priority_level_from_raw(r, default="priority")
             evidence_hint = _clean_text(r.get("evidence_hint"))
-            target = critical if is_mandatory else desirable
+            target = critical if priority_level != "complementary" else desirable
             target.append(
                 JobRequirement(
                     name=name,
                     description=evidence_hint or _clean_text(r.get("type")) or name,
-                    is_mandatory=is_mandatory,
-                    importance_weight=1.2 if is_mandatory else 0.6,
+                    priority_level=priority_level,
+                    importance_weight=1.2 if priority_level != "complementary" else 0.6,
                     evidence_examples=[evidence_hint] if evidence_hint else [],
                 )
             )
@@ -933,10 +942,33 @@ def _job_requirement_from_skill(skill: StructuredJobSkill) -> JobRequirement:
     return JobRequirement(
         name=skill.name,
         description=_skill_description(skill),
-        is_mandatory=skill.is_priority_like,
+        priority_level=skill.priority_level,
         importance_weight=_priority_weight(skill) if skill.is_priority_like else _complementary_weight(skill),
         evidence_examples=_dedupe([skill.name]),
     )
+
+
+def _requirement_priority_level_from_raw(raw: dict[str, Any], *, default: str) -> str:
+    priority_level = normalize_skill_text(raw.get("priority_level") or "")
+    if priority_level in {"priority", "complementary", "eliminatory"}:
+        return priority_level
+
+    raw_priority = normalize_skill_text(raw.get("priority") or "")
+    if raw_priority in {"high", "essencial", "priority"}:
+        return "priority"
+    if raw_priority in {"eliminatory", "eliminatorio", "eliminatório"}:
+        return "eliminatory"
+    if raw_priority in {"medium", "low", "complementary", "diferencial", "optional", "desired"}:
+        return "complementary"
+    return default
+
+
+def _merge_requirement_priority_levels(current: str, incoming: str) -> str:
+    if current == "eliminatory" or incoming == "eliminatory":
+        return "eliminatory"
+    if current == "priority" or incoming == "priority":
+        return "priority"
+    return "complementary"
 
 
 def _skill_description(skill: StructuredJobSkill) -> str:

@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import UserRole
+from src.infrastructure.database.models.pipeline_event_model import PipelineEventModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -31,8 +32,8 @@ async def _seed_valid_scoring_case(db_session: AsyncSession, recruiter_id: str, 
         .where(CandidateJobMatchModel.id == match_id)
         .values(
             skill_evidence_breakdown={
-                "mandatory_score_weighted": 100.0,
-                "optional_score_weighted": 0.0,
+                "priority_score_weighted": 100.0,
+                "complementary_score_weighted": 0.0,
                 "optional_score_raw_weighted": 0.0,
                 "validation_reasons": [],
                 "matched_required_skills": ["Python", "FastAPI"],
@@ -110,7 +111,7 @@ async def test_analysis_match_persists_only_evidence_and_ranking_persists_offici
     )
     assert persisted_match is not None
     breakdown = dict(persisted_match.skill_evidence_breakdown or {})
-    assert "mandatory_score_weighted" in breakdown
+    assert "priority_score_weighted" in breakdown
     assert "final_score_after_cap" not in breakdown
     assert "final_score_before_cap" not in breakdown
 
@@ -158,6 +159,25 @@ async def test_single_candidate_recompute_returns_delta(client: AsyncClient, db_
     assert "job_fit_score" in data
     assert "delta" in data
     assert data["monotonicity_decision"] is not None
+    
+    # Verify domain event has actor_id
+    events = await db_session.scalars(
+        sa.select(PipelineEventModel)
+        .where(PipelineEventModel.entity_id == candidate_id)
+        .order_by(PipelineEventModel.created_at.desc())
+    )
+    event_list = events.all()
+    assert len(event_list) > 0
+    
+    # Find the ranking.recomputed event
+    ranking_event = None
+    for e in event_list:
+        if e.event_type == "ranking.recomputed":
+            ranking_event = e
+            break
+            
+    assert ranking_event is not None
+    assert ranking_event.payload["actor_id"] == str(recruiter.id)
 
 @pytest.mark.asyncio
 async def test_recompute_fails_for_inactive_pipeline(client: AsyncClient, db_session: AsyncSession) -> None:
@@ -317,4 +337,3 @@ async def test_viewer_receives_403_on_recompute(client: AsyncClient, db_session:
         headers=viewer_headers
     )
     assert response_bulk.status_code == 403
-

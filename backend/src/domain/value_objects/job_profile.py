@@ -103,6 +103,9 @@ VALID_LEVELS: frozenset[str] = frozenset(
     {"intern", "junior", "mid", "senior", "lead", "undefined"}
 )
 VALID_CONFIDENCE: frozenset[str] = frozenset({"high", "medium", "low"})
+VALID_REQUIREMENT_PRIORITY_LEVELS: frozenset[str] = frozenset(
+    {"priority", "complementary", "eliminatory"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -112,16 +115,18 @@ VALID_CONFIDENCE: frozenset[str] = frozenset({"high", "medium", "low"})
 
 @dataclass
 class JobRequirement:
-    """Uma competência exigida pela vaga — obrigatória ou desejável."""
+    """Uma competência exigida pela vaga com prioridade canônica."""
 
     name: str
     description: str
-    is_mandatory: bool
+    priority_level: str
     importance_weight: float = 1.0
     evidence_examples: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.importance_weight = float(self.importance_weight)
+        if self.priority_level not in VALID_REQUIREMENT_PRIORITY_LEVELS:
+            self.priority_level = "priority"
 
 
 @dataclass
@@ -133,8 +138,8 @@ class JobProfile:
       area                  — área profissional detectada (ver AREA_WEIGHTS)
       target_level          — nível de senioridade esperado
       main_mission          — frase que resume o propósito do cargo
-      critical_requirements — requisitos obrigatórios com peso e exemplos de evidência
-      desirable_requirements— requisitos opcionais
+      critical_requirements — requisitos canônicos priority/eliminatory com peso e evidência
+      desirable_requirements— requisitos canônicos complementary
       responsibilities      — lista de responsabilidades principais
       required_tools        — ferramentas, sistemas, tecnologias
       required_capabilities — capacidades comportamentais/transversais
@@ -178,10 +183,6 @@ class JobProfile:
     def is_well_described(self) -> bool:
         return self.job_completeness_score >= 0.60
 
-    @property
-    def mandatory_count(self) -> int:
-        return len(self.critical_requirements)
-
     def to_dict(self) -> dict:
         return {
             "area": self.area,
@@ -191,7 +192,7 @@ class JobProfile:
                 {
                     "name": r.name,
                     "description": r.description,
-                    "is_mandatory": r.is_mandatory,
+                    "priority_level": r.priority_level,
                     "importance_weight": r.importance_weight,
                     "evidence_examples": r.evidence_examples,
                 }
@@ -201,7 +202,7 @@ class JobProfile:
                 {
                     "name": r.name,
                     "description": r.description,
-                    "is_mandatory": r.is_mandatory,
+                    "priority_level": r.priority_level,
                     "importance_weight": r.importance_weight,
                     "evidence_examples": r.evidence_examples,
                 }
@@ -220,12 +221,18 @@ class JobProfile:
     @classmethod
     def from_dict(cls, data: dict) -> "JobProfile":
         area = data.get("area", "other")
+        def _requirement_from_dict(item: dict, default_priority_level: str) -> JobRequirement:
+            payload = dict(item)
+            if payload.get("priority_level") not in VALID_REQUIREMENT_PRIORITY_LEVELS:
+                payload["priority_level"] = default_priority_level
+            return JobRequirement(**payload)
+
         critical = [
-            JobRequirement(**r)
+            _requirement_from_dict(r, "priority")
             for r in (data.get("critical_requirements") or [])
         ]
         desirable = [
-            JobRequirement(**r)
+            _requirement_from_dict(r, "complementary")
             for r in (data.get("desirable_requirements") or [])
         ]
         return cls(

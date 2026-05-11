@@ -20,30 +20,29 @@ def _row(name: str, *, mandatory: bool = True):
         skill_name=name,
         JobRequiredSkillModel=SimpleNamespace(
             priority_level="priority" if mandatory else "complementary",
-            is_mandatory=mandatory,
         ),
     )
 
 
 def _overall_skill_score(job_skills: list, candidate_skills: set[str]) -> Decimal:
     scores = _compute_skill_scores(job_skills, candidate_skills)
-    mandatory_total = sum(
+    priority_total = sum(
         1
         for row in job_skills
         if getattr(row.JobRequiredSkillModel, "priority_level", "priority") == "priority"
     )
-    optional_total = sum(
+    complementary_total = sum(
         1
         for row in job_skills
         if getattr(row.JobRequiredSkillModel, "priority_level", "priority") == "complementary"
     )
     weights = _canonical_component_weights(
-        total_mandatory=mandatory_total,
-        total_optional=optional_total,
+        total_priority=priority_total,
+        total_complementary=complementary_total,
     )
     return (
-        scores["mandatory_score_weighted"] * weights["mandatory"]
-        + scores["optional_score_weighted"] * weights["optional"]
+        scores["priority_score_weighted"] * weights["priority"]
+        + scores["complementary_score_weighted"] * weights["complementary"]
         + Decimal("100") * weights["experience"]
         + Decimal("100") * weights["seniority"]
     ).quantize(Decimal("0.01"))
@@ -59,8 +58,8 @@ class TestAnalysisSkillScoring:
             {"postgresql"}
         )
         # PostgreSQL should be strong match for SQL
-        assert result["mandatory_score_weighted"] >= Decimal("85")
-        assert result["mandatory_matched"] >= 1
+        assert result["priority_score_weighted"] >= Decimal("85")
+        assert result["priority_matched"] >= 1
         assert "SQL" in result["matched_skill_names"]
 
     def test_typescript_satisfies_javascript_mandatory_skill(self):
@@ -69,8 +68,8 @@ class TestAnalysisSkillScoring:
             [_row("JavaScript"), _row("Node.js")],
             {"typescript", "node.js"},
         )
-        assert result["mandatory_matched"] == 2
-        assert result["mandatory_score_weighted"] >= Decimal("90")
+        assert result["priority_matched"] == 2
+        assert result["priority_score_weighted"] >= Decimal("90")
         assert "JavaScript" in result["matched_skill_names"]
         assert "Node.js" in result["matched_skill_names"]
 
@@ -80,8 +79,8 @@ class TestAnalysisSkillScoring:
             [_row("JavaScript"), _row("Node.js")],
             {"react", "node.js"},
         )
-        assert result["mandatory_matched"] == 2
-        assert result["mandatory_score_weighted"] >= Decimal("90")
+        assert result["priority_matched"] == 2
+        assert result["priority_score_weighted"] >= Decimal("90")
         assert "JavaScript" in result["matched_skill_names"]
         assert "Node.js" in result["matched_skill_names"]
 
@@ -106,7 +105,7 @@ class TestAnalysisSkillScoring:
             {skill.lower() for skill in structured_skills},
         )
 
-        assert result["mandatory_matched"] == 1
+        assert result["priority_matched"] == 1
         assert result["matched_skill_names"] == ["Node.js"]
         assert "React Native" in result["missing_skill_names"]
         assert [item["required"] for item in result["partial_matches"]] == ["TypeScript", "SQL Server"]
@@ -122,10 +121,10 @@ class TestAnalysisSkillScoring:
             weaken_uncontextualized=True,
         )
 
-        assert result["mandatory_score_weighted"] == Decimal("100.00")
-        assert result["mandatory_matched"] == 1
+        assert result["priority_score_weighted"] == Decimal("100.00")
+        assert result["priority_matched"] == 1
         assert result["partial_matches"] == []
-        assert result["weak_evidence_required_skills"] == []
+        assert result["weak_evidence_priority_skills"] == []
         evidence = result["skill_evidence_details"][0]
         assert evidence["match_type"] == "exact"
         assert evidence["coverage"] == 1.0
@@ -156,10 +155,10 @@ class TestAnalysisSkillScoring:
             weaken_uncontextualized=True,
         )
 
-        assert weak_result["mandatory_score_weighted"] < strong_result["mandatory_score_weighted"]
-        assert weak_result["mandatory_matched"] < strong_result["mandatory_matched"]
-        assert "SQL" in weak_result["weak_evidence_required_skills"]
-        assert "Python" in weak_result["weak_evidence_required_skills"]
+        assert weak_result["priority_score_weighted"] < strong_result["priority_score_weighted"]
+        assert weak_result["priority_matched"] < strong_result["priority_matched"]
+        assert "SQL" in weak_result["weak_evidence_priority_skills"]
+        assert "Python" in weak_result["weak_evidence_priority_skills"]
 
     def test_keyword_fallback_exact_term_is_still_weakened(self):
         """Loose keyword fallback must not become full exact evidence."""
@@ -172,8 +171,8 @@ class TestAnalysisSkillScoring:
             weaken_uncontextualized=True,
         )
 
-        assert result["mandatory_matched"] == 0
-        assert result["mandatory_score_weighted"] == Decimal("55.00")
+        assert result["priority_matched"] == 0
+        assert result["priority_score_weighted"] == Decimal("55.00")
         assert result["partial_matches"][0]["required"] == "Node.js"
         assert result["partial_matches"][0]["weak_evidence"] is True
 
@@ -188,12 +187,12 @@ class TestAnalysisSkillScoring:
             weaken_uncontextualized=True,
         )
 
-        assert result["mandatory_matched"] == 1
+        assert result["priority_matched"] == 1
         assert "JavaScript" in result["matched_skill_names"]
         assert "JavaScript" not in result["missing_skill_names"]
-        assert result["mandatory_score_weighted"] >= Decimal("85")
+        assert result["priority_score_weighted"] >= Decimal("85")
         assert result["partial_matches"] == []
-        assert result["mandatory_strong_coverage"] == Decimal("100.00")
+        assert result["priority_strong_coverage"] == Decimal("100.00")
 
     def test_protheus_partial_match_sap_mm_real_score(self):
         """Test 2: Protheus partially matches SAP MM in real score."""
@@ -202,8 +201,8 @@ class TestAnalysisSkillScoring:
             {"protheus"}
         )
         # Protheus partial for SAP MM should result in intermediate score
-        assert Decimal("30") < result["mandatory_score_weighted"] < Decimal("80")
-        assert result["mandatory_matched"] == 0  # Not a strong match
+        assert Decimal("30") < result["priority_score_weighted"] < Decimal("80")
+        assert result["priority_matched"] == 0  # Not a strong match
         assert len(result["partial_matches"]) == 1
         assert result["partial_matches"][0]["required"] == "SAP MM"
 
@@ -214,10 +213,10 @@ class TestAnalysisSkillScoring:
             {"protheus"}  # Protheus partial for SAP MM, no match for COBOL
         )
         # All mandatory are partial or missing
-        assert result["mandatory_matched"] == 0  # No strong matches
-        assert result["mandatory_strong_coverage"] == Decimal("0")
+        assert result["priority_matched"] == 0  # No strong matches
+        assert result["priority_strong_coverage"] == Decimal("0")
         # Score should be weighted but not sufficient for strong/good match
-        assert result["mandatory_score_weighted"] < Decimal("60")
+        assert result["priority_score_weighted"] < Decimal("60")
 
     def test_hiago_like_profile_real_scoring(self):
         """Test 4: Hiago-like profile with mixed exact and partial matches."""
@@ -235,11 +234,11 @@ class TestAnalysisSkillScoring:
         # Excel optional = no match
 
         # At least 2 strong matches (SQL, Power BI)
-        assert result["mandatory_matched"] >= 2
+        assert result["priority_matched"] >= 2
         # Strong coverage should be >= 60% (2/3 skills)
-        assert result["mandatory_strong_coverage"] >= Decimal("60")
+        assert result["priority_strong_coverage"] >= Decimal("60")
         # Weighted score should be between 60-90 (not capped)
-        assert Decimal("60") <= result["mandatory_score_weighted"] <= Decimal("90")
+        assert Decimal("60") <= result["priority_score_weighted"] <= Decimal("90")
 
         # Should have partial match for SAP MM
         assert len(result["partial_matches"]) >= 1
@@ -255,8 +254,8 @@ class TestAnalysisSkillScoringEdgeCases:
             [_row("Python")],
             {"python"}
         )
-        assert result["mandatory_matched"] == 1
-        assert result["mandatory_score_weighted"] == Decimal("100")
+        assert result["priority_matched"] == 1
+        assert result["priority_score_weighted"] == Decimal("100")
 
     def test_no_match_returns_0_score(self):
         """No match should contribute 0 to weighted score."""
@@ -264,8 +263,8 @@ class TestAnalysisSkillScoringEdgeCases:
             [_row("Fortran")],
             {"java"}
         )
-        assert result["mandatory_matched"] == 0
-        assert result["mandatory_score_weighted"] == Decimal("0")
+        assert result["priority_matched"] == 0
+        assert result["priority_score_weighted"] == Decimal("0")
         assert len(result["partial_matches"]) == 0
         assert "Fortran" in result["missing_skill_names"]
 
@@ -277,8 +276,8 @@ class TestAnalysisSkillScoringEdgeCases:
         )
         # Python = exact (1.0), SAP MM = partial; catalog score may vary inside the
         # allowed partial band.
-        assert Decimal("70") <= result["mandatory_score_weighted"] <= Decimal("80")
-        assert result["mandatory_matched"] == 1  # Only Python is strong
+        assert Decimal("70") <= result["priority_score_weighted"] <= Decimal("80")
+        assert result["priority_matched"] == 1  # Only Python is strong
         assert len(result["partial_matches"]) == 1
 
     def test_optional_skills_not_affecting_mandatory_coverage(self):
@@ -288,11 +287,11 @@ class TestAnalysisSkillScoringEdgeCases:
             {"protheus", "excel"}  # No match for Python, exact for Excel
         )
         # Mandatory: Python = no match (0)
-        assert result["mandatory_matched"] == 0
+        assert result["priority_matched"] == 0
         # Optional: Excel = exact (1)
-        assert result["optional_matched"] == 1
+        assert result["complementary_matched"] == 1
         # Strong coverage only counts mandatory
-        assert result["mandatory_strong_coverage"] == Decimal("0")
+        assert result["priority_strong_coverage"] == Decimal("0")
 
     def test_strong_equivalence_satisfies_mandatory_even_with_weak_context(self):
         """Strong canonical equivalence should count as mandatory ok."""
@@ -305,9 +304,9 @@ class TestAnalysisSkillScoringEdgeCases:
             weaken_uncontextualized=True,
         )
 
-        assert result["mandatory_matched"] == 1
-        assert result["mandatory_strong_coverage"] == Decimal("100.00")
-        assert result["mandatory_score_weighted"] >= Decimal("85")
+        assert result["priority_matched"] == 1
+        assert result["priority_strong_coverage"] == Decimal("100.00")
+        assert result["priority_score_weighted"] >= Decimal("85")
         assert "SQL" in result["matched_skill_names"]
         assert "SQL" not in result["missing_skill_names"]
         assert result["partial_matches"] == []
@@ -327,7 +326,7 @@ class TestAnalysisSkillScoringEdgeCases:
             weaken_uncontextualized=True,
         )
 
-        assert result["mandatory_matched"] == 0
+        assert result["priority_matched"] == 0
         assert "SQL" in result["missing_skill_names"]
         assert result["partial_matches"][0]["required"] == "SQL"
         evidence = result["skill_evidence_details"][0]
@@ -346,7 +345,7 @@ class TestAnalysisSkillScoringEdgeCases:
             weaken_uncontextualized=True,
         )
 
-        assert result["mandatory_matched"] == 0
+        assert result["priority_matched"] == 0
         assert "Python" in result["missing_skill_names"]
         assert result["partial_matches"][0]["required"] == "Python"
 
@@ -440,8 +439,8 @@ class TestAnalysisSkillScoringEdgeCases:
             [_row("Python"), _row("SQL")],
             set()
         )
-        assert result["mandatory_matched"] == 0
-        assert result["mandatory_score_weighted"] == Decimal("0")
+        assert result["priority_matched"] == 0
+        assert result["priority_score_weighted"] == Decimal("0")
         assert result["missing_skill_names"] == ["Python", "SQL"]
 
     def test_empty_job_skills(self):
@@ -450,6 +449,6 @@ class TestAnalysisSkillScoringEdgeCases:
             [],
             {"python", "sql"}
         )
-        assert result["mandatory_matched"] == 0
-        assert result["mandatory_score_weighted"] == Decimal("0")
-        assert result["mandatory_strong_coverage"] == Decimal("100")  # 0/0 defaults to 100
+        assert result["priority_matched"] == 0
+        assert result["priority_score_weighted"] == Decimal("0")
+        assert result["priority_strong_coverage"] == Decimal("100")  # 0/0 defaults to 100

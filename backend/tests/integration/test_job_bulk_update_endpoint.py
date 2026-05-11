@@ -171,7 +171,7 @@ async def test_bulk_update_fails_when_skill_does_not_exist(
                 "job_id": str(job.id),
                 "data": {
                     "skills": [
-                        {"name": "Skill Inexistente", "is_mandatory": True, "weight": 10},
+                        {"name": "Skill Inexistente", "priority_level": "priority", "weight": 10},
                     ]
                 },
             }

@@ -46,8 +46,8 @@ async def test_ranking_uses_only_active_pipeline_for_active_job(db_session: Asyn
     assert pipeline_row.current_analysis_id is not None
 
     match_row.skill_evidence_breakdown = {
-        "mandatory_score_weighted": 100.0,
-        "optional_score_weighted": 0.0,
+        "priority_score_weighted": 100.0,
+        "complementary_score_weighted": 0.0,
         "optional_score_raw_weighted": 0.0,
         "validation_reasons": [],
         "missing_required_skills": [],

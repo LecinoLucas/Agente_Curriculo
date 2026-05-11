@@ -269,7 +269,7 @@ class CandidateJobScoreFactorModel(Base):
             "'required_skill_match',"
             "'missing_required_skill',"
             "'adjacent_skill_match',"
-            "'optional_skill_bonus',"
+            "'complementary_skill_bonus',"
             "'experience_match',"
             "'insufficient_experience',"
             "'seniority_match',"

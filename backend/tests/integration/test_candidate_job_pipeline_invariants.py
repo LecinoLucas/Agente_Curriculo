@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.pipeline_service import (
@@ -133,6 +134,15 @@ async def _seed_completed_analysis_for_candidate_job(
     db_session.add(analysis)
     await db_session.commit()
     return analysis
+
+
+def _active_pipeline_filters(candidate_id) -> tuple:
+    return (
+        CandidateJobPipelineModel.candidate_id == candidate_id,
+        CandidateJobPipelineModel.relationship_status == "active",
+        CandidateJobPipelineModel.is_terminal.is_(False),
+        CandidateJobPipelineModel.terminated_at.is_(None),
+    )
 
 
 @pytest.mark.asyncio
@@ -324,11 +334,7 @@ async def test_candidate_has_single_active_state_across_jobs(db_session: AsyncSe
             await db_session.scalar(
                 sa.select(sa.func.count())
                 .select_from(CandidateJobPipelineModel)
-                .where(
-                    CandidateJobPipelineModel.candidate_id == candidate.id,
-                    CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.link_status == "active",
-                )
+                .where(*_active_pipeline_filters(candidate.id))
             )
         )
         or 0
@@ -401,13 +407,7 @@ async def test_match_registration_does_not_create_second_active_pipeline(db_sess
             await db_session.scalar(
                 sa.select(sa.func.count())
                 .select_from(CandidateJobPipelineModel)
-                .where(
-                    CandidateJobPipelineModel.candidate_id == candidate.id,
-                    CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.relationship_status == "active",
-                    CandidateJobPipelineModel.is_terminal.is_(False),
-                    CandidateJobPipelineModel.terminated_at.is_(None),
-                )
+                .where(*_active_pipeline_filters(candidate.id))
             )
         )
         or 0
@@ -420,3 +420,97 @@ async def test_match_registration_does_not_create_second_active_pipeline(db_sess
     )
     assert active_count == 1
     assert target_entry is None
+
+
+@pytest.mark.asyncio
+async def test_database_unique_index_blocks_second_active_pipeline(db_session: AsyncSession) -> None:
+    user, candidate, first_job = await _seed_user_candidate_job(db_session)
+    second_job = JobModel(
+        id=uuid4(),
+        title="Second Active Job",
+        description="Desc",
+        status="published",
+        created_by=user.id,
+    )
+    db_session.add(second_job)
+    await db_session.commit()
+
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_id=candidate.id,
+            job_id=first_job.id,
+            pipeline_stage="entry",
+            link_status="active",
+            pipeline_status="active",
+            relationship_status="active",
+            is_terminal=False,
+            terminated_at=None,
+        )
+    )
+    await db_session.commit()
+
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_id=candidate.id,
+            job_id=second_job.id,
+            pipeline_stage="entry",
+            link_status="active",
+            pipeline_status="active",
+            relationship_status="active",
+            is_terminal=False,
+            terminated_at=None,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+    await db_session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_terminal_pipeline_does_not_block_new_active_pipeline(db_session: AsyncSession) -> None:
+    user, candidate, first_job = await _seed_user_candidate_job(db_session)
+    second_job = JobModel(
+        id=uuid4(),
+        title="Replacement Job",
+        description="Desc",
+        status="published",
+        created_by=user.id,
+    )
+    db_session.add(second_job)
+    await db_session.commit()
+
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_id=candidate.id,
+            job_id=first_job.id,
+            pipeline_stage="rejected",
+            link_status="rejected",
+            pipeline_status="terminal",
+            relationship_status="rejected",
+            is_terminal=True,
+            terminated_at=sa.func.now(),
+        )
+    )
+    await db_session.commit()
+
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+    response = await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=second_job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    active_count = int(
+        (
+            await db_session.scalar(
+                sa.select(sa.func.count())
+                .select_from(CandidateJobPipelineModel)
+                .where(*_active_pipeline_filters(candidate.id))
+            )
+        )
+        or 0
+    )
+
+    assert response.job_id == second_job.id
+    assert active_count == 1

@@ -306,6 +306,18 @@ async def test_patch_pipeline_stage_v2_with_multiple_jobs(
     }
     assert str(candidate_id) in ids_b
 
+    active_count = await db_session.scalar(
+        sa.select(sa.func.count())
+        .select_from(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.relationship_status == "active",
+            CandidateJobPipelineModel.is_terminal.is_(False),
+            CandidateJobPipelineModel.terminated_at.is_(None),
+        )
+    )
+    assert active_count == 1
+
 
 @pytest.mark.asyncio
 async def test_patch_pipeline_stage_v2_invalid_transition(

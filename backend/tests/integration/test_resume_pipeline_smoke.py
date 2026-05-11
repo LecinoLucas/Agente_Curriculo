@@ -723,9 +723,9 @@ async def test_resume_pipeline_smoke_realish_pdfs(
 
     # Matching evidence
     assert matches_by_name["Helena Rocha Strong"]["recommendation"] != "not_match"
-    assert matches_by_name["Helena Rocha Strong"]["mandatory_skills_matched"] == 5
+    assert matches_by_name["Helena Rocha Strong"]["priority_skills_matched"] == 5
 
-    assert matches_by_name["Bruno Lima Gap"]["mandatory_skills_matched"] == 3
+    assert matches_by_name["Bruno Lima Gap"]["priority_skills_matched"] == 3
     assert matches_by_name["Bruno Lima Gap"]["recommendation"] != "strong_match"
 
     assert matches_by_name["Diego Messy Format"]["validation_status"] in {"fail", "unknown"}
@@ -736,8 +736,8 @@ async def test_resume_pipeline_smoke_realish_pdfs(
     reasons_text = " | ".join(matches_by_name["Diego Messy Format"]["rejection_reasons"]).lower()
     assert reasons_text
 
-    assert matches_by_name["Erica Ambiguous Skills"]["mandatory_skills_matched"] == 4
-    assert matches_by_name["Erica Ambiguous Skills"]["mandatory_skills_total"] == 5
+    assert matches_by_name["Erica Ambiguous Skills"]["priority_skills_matched"] == 4
+    assert matches_by_name["Erica Ambiguous Skills"]["priority_skills_total"] == 5
     assert matches_by_name["Erica Ambiguous Skills"]["recommendation"] != "strong_match"
 
     assert matches_by_name["Fabio No Dates"]["validation_status"] == "unknown"
@@ -768,7 +768,7 @@ async def test_resume_pipeline_smoke_realish_pdfs(
         )
         print(
             f"- {name}: years={parsed.total_experience_years} "
-            f"mandatory={match['mandatory_skills_matched']}/{match['mandatory_skills_total']} "
+            f"priority={match['priority_skills_matched']}/{match['priority_skills_total']} "
             f"validation={match['validation_status']} recommendation={match['recommendation']} "
             f"job_fit_score={ranking_entry['job_fit_score'] if ranking_entry else 'MISSING'} "
             f"decision={ranking_entry['decision_suggestion'] if ranking_entry else 'MISSING'}"
@@ -1085,15 +1085,15 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
         )
         print(
             f"- {name}: match={matches_by_name[name]['recommendation']} "
-            f"mandatory={matches_by_name[name]['mandatory_skills_matched']}/{matches_by_name[name]['mandatory_skills_total']} "
+            f"priority={matches_by_name[name]['priority_skills_matched']}/{matches_by_name[name]['priority_skills_total']} "
             f"decision={entry['decision_suggestion'] if entry else 'MISSING'} "
             f"score={entry['job_fit_score'] if entry else 'MISSING'}"
         )
 
     assert matches_by_name["Styled Python"]["recommendation"] != "not_match"
     assert matches_by_name["Phrase Python"]["recommendation"] != "not_match"
-    assert matches_by_name["Styled Python"]["mandatory_skills_matched"] == 3
-    assert matches_by_name["Phrase Python"]["mandatory_skills_matched"] == 3
+    assert matches_by_name["Styled Python"]["priority_skills_matched"] == 3
+    assert matches_by_name["Phrase Python"]["priority_skills_matched"] == 3
     assert ranking["total_candidates"] == len(ranking["candidates"])
     for entry in ranking["candidates"]:
         assert "job_fit_score" in entry

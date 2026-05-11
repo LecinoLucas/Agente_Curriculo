@@ -95,8 +95,8 @@ async def _prepare_ranked_candidate(
     profile.raw_response_json = {"analysis_result_fields": extracted_data or {}}
 
     match.skill_evidence_breakdown = {
-        "mandatory_score_weighted": 100.0,
-        "optional_score_weighted": 0.0,
+        "priority_score_weighted": 100.0,
+        "complementary_score_weighted": 0.0,
         "optional_score_raw_weighted": 0.0,
         "validation_reasons": [],
         "missing_required_skills": [],

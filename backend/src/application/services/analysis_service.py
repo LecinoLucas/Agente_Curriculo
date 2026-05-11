@@ -21,13 +21,13 @@ _NO_REQUIREMENTS_SCORE_CAP = Decimal("44")
 _STRONG_MATCH_THRESHOLD = Decimal("85")
 _GOOD_MATCH_THRESHOLD = Decimal("70")
 _POTENTIAL_THRESHOLD = Decimal("55")
-_MANDATORY_THRESHOLD = Decimal("60")
-_MANDATORY_SOFT_PENALTY_START = Decimal("80")
-_MANDATORY_SOFT_PENALTY_MAX = Decimal("0")
-_MANDATORY_STRONG_COVERAGE_STRONG_MATCH = Decimal("80")
-_MANDATORY_STRONG_COVERAGE_GOOD_MATCH = Decimal("60")
-_MANDATORY_STRONG_COVERAGE_CAP_THRESHOLD = Decimal("0")
-_MANDATORY_STRONG_COVERAGE_CAP_SCORE = Decimal("100")
+_PRIORITY_THRESHOLD = Decimal("60")
+_PRIORITY_SOFT_PENALTY_START = Decimal("80")
+_PRIORITY_SOFT_PENALTY_MAX = Decimal("0")
+_PRIORITY_STRONG_COVERAGE_STRONG_MATCH = Decimal("80")
+_PRIORITY_STRONG_COVERAGE_GOOD_MATCH = Decimal("60")
+_PRIORITY_STRONG_COVERAGE_CAP_THRESHOLD = Decimal("0")
+_PRIORITY_STRONG_COVERAGE_CAP_SCORE = Decimal("100")
 _MINIMUM_DOMAIN_FIT_CAP_SCORE = Decimal("49")
 _LOW_PROFILE_COMPLETENESS_THRESHOLD = Decimal("0.60")
 _SCORE_VERSION_EQUIVALENCE = "v4-priority-level"
@@ -155,7 +155,6 @@ def _compute_skill_scores(
     Uses exact normalized equality and SkillEquivalenceService for all equivalence logic.
 
     Returns dict with canonical priority/complementary/eliminatory breakdown.
-    Legacy mandatory/optional keys are emitted only as aliases.
     - matched_skill_names: list[str] (skills with score >= 0.8)
     - missing_skill_names: list[str] (skills with score == 0)
     - partial_matches: list[dict] (0 < score < 0.8)
@@ -485,17 +484,16 @@ def _compute_skill_scores(
         "weak_evidence_priority_skills": weak_evidence_priority_skills,
         "skill_evidence_details": skill_evidence_details,
         "eliminatory_score_weighted": eliminatory_score_weighted,
-        "mandatory_score_weighted": priority_score_weighted,
-        "optional_score_weighted": complementary_score_weighted,
-        "optional_score_raw_weighted": complementary_score_raw_weighted,
-        "mandatory_strong_coverage": priority_strong_coverage,
-        "mandatory_matched": len(matched_priority_skill_names),
-        "optional_matched": sum(1 for s in complementary_scores if s >= Decimal("0.8")),
-        "matched_mandatory_skill_names": matched_priority_skill_names,
-        "matched_optional_skill_names": matched_complementary_skill_names,
-        "missing_optional_skill_names": missing_complementary_skill_names,
-        "optional_bonus_cap_slots": complementary_bonus_cap_slots,
-        "weak_evidence_required_skills": weak_evidence_priority_skills,
+        "priority_score_weighted": priority_score_weighted,
+        "complementary_score_weighted": complementary_score_weighted,
+        "complementary_score_raw_weighted": complementary_score_raw_weighted,
+        "priority_strong_coverage": priority_strong_coverage,
+        "priority_matched": len(matched_priority_skill_names),
+        "complementary_matched": sum(1 for s in complementary_scores if s >= Decimal("0.8")),
+        "matched_priority_skill_names": matched_priority_skill_names,
+        "matched_complementary_skill_names": matched_complementary_skill_names,
+        "missing_complementary_skill_names": missing_complementary_skill_names,
+        "complementary_bonus_cap_slots": complementary_bonus_cap_slots,
     }
 
 
@@ -667,52 +665,52 @@ def _calculate_seniority_score(
 
 def _canonical_component_weights(
     *,
-    total_mandatory: int,
-    total_optional: int,
+    total_priority: int,
+    total_complementary: int,
 ) -> dict[str, Decimal]:
-    w_mand = _CANONICAL_PRIORITY_WEIGHT
-    w_opt = _CANONICAL_COMPLEMENTARY_WEIGHT
+    w_priority = _CANONICAL_PRIORITY_WEIGHT
+    w_complementary = _CANONICAL_COMPLEMENTARY_WEIGHT
     w_exp = _CANONICAL_EXPERIENCE_WEIGHT
     w_sen = _CANONICAL_SENIORITY_WEIGHT
 
-    if total_mandatory == 0 and total_optional > 0:
-        w_opt += w_mand
-        w_mand = Decimal("0")
-    elif total_mandatory == 0 and total_optional == 0:
-        w_exp += w_mand + (w_opt / 2)
-        w_sen += w_opt / 2
-        w_mand = Decimal("0")
-        w_opt = Decimal("0")
-    elif total_optional == 0:
-        w_mand += w_opt
-        w_opt = Decimal("0")
+    if total_priority == 0 and total_complementary > 0:
+        w_complementary += w_priority
+        w_priority = Decimal("0")
+    elif total_priority == 0 and total_complementary == 0:
+        w_exp += w_priority + (w_complementary / 2)
+        w_sen += w_complementary / 2
+        w_priority = Decimal("0")
+        w_complementary = Decimal("0")
+    elif total_complementary == 0:
+        w_priority += w_complementary
+        w_complementary = Decimal("0")
 
-    total = w_mand + w_opt + w_exp + w_sen
+    total = w_priority + w_complementary + w_exp + w_sen
     if total <= 0:
         return {
-            "mandatory": Decimal("0"),
-            "optional": Decimal("0"),
+            "priority": Decimal("0"),
+            "complementary": Decimal("0"),
             "experience": Decimal("0.67"),
             "seniority": Decimal("0.33"),
         }
 
     return {
-        "mandatory": w_mand / total,
-        "optional": w_opt / total,
+        "priority": w_priority / total,
+        "complementary": w_complementary / total,
         "experience": w_exp / total,
         "seniority": w_sen / total,
     }
 
 
-def _mandatory_soft_penalty(mandatory_percentage: Decimal) -> Decimal:
-    """Progressively penalize borderline mandatory coverage from 60% to 80%."""
-    if mandatory_percentage >= _MANDATORY_SOFT_PENALTY_START:
+def _priority_soft_penalty(priority_percentage: Decimal) -> Decimal:
+    """Progressively penalize borderline priority coverage from 60% to 80%."""
+    if priority_percentage >= _PRIORITY_SOFT_PENALTY_START:
         return Decimal("0")
 
-    coverage_window = _MANDATORY_SOFT_PENALTY_START - _MANDATORY_THRESHOLD
-    shortfall = _MANDATORY_SOFT_PENALTY_START - mandatory_percentage
+    coverage_window = _PRIORITY_SOFT_PENALTY_START - _PRIORITY_THRESHOLD
+    shortfall = _PRIORITY_SOFT_PENALTY_START - priority_percentage
     penalty_ratio = shortfall / coverage_window
-    return (penalty_ratio * _MANDATORY_SOFT_PENALTY_MAX).quantize(Decimal("0.01"))
+    return (penalty_ratio * _PRIORITY_SOFT_PENALTY_MAX).quantize(Decimal("0.01"))
 
 
 def _job_has_structured_requirements(
@@ -1557,11 +1555,11 @@ class AnalysisService:
         priority_strong_coverage = skill_scores["priority_strong_coverage"]
         experience_score = _calculate_experience_score(candidate_years, required_years)
         weights = _canonical_component_weights(
-            total_mandatory=total_priority,
-            total_optional=total_complementary,
+            total_priority=total_priority,
+            total_complementary=total_complementary,
         )
-        w_mand = weights["mandatory"]
-        w_opt = weights["optional"]
+        w_priority = weights["priority"]
+        w_complementary = weights["complementary"]
         w_exp = weights["experience"]
         w_sen = weights["seniority"]
 
@@ -1570,8 +1568,8 @@ class AnalysisService:
             job.seniority_level,
         )
 
-        mandatory_component_impact = (priority_score * w_mand).quantize(Decimal("0.01"))
-        optional_component_impact = (complementary_score * w_opt).quantize(Decimal("0.01"))
+        priority_component_impact = (priority_score * w_priority).quantize(Decimal("0.01"))
+        complementary_component_impact = (complementary_score * w_complementary).quantize(Decimal("0.01"))
         experience_component_impact = (experience_score * w_exp).quantize(Decimal("0.01"))
         seniority_component_impact = (seniority_score * w_sen).quantize(Decimal("0.01"))
 
@@ -1667,9 +1665,9 @@ class AnalysisService:
                 reason = " | ".join(validation_reasons)
 
             if eligibility_status == "PASS":
-                if priority_strong_coverage >= _MANDATORY_STRONG_COVERAGE_STRONG_MATCH:
+                if priority_strong_coverage >= _PRIORITY_STRONG_COVERAGE_STRONG_MATCH:
                     recommendation = "strong_match"
-                elif priority_strong_coverage >= _MANDATORY_STRONG_COVERAGE_GOOD_MATCH:
+                elif priority_strong_coverage >= _PRIORITY_STRONG_COVERAGE_GOOD_MATCH:
                     recommendation = "good_match"
                 elif priority_matched > 0 or complementary_matched > 0 or partial_matches:
                     recommendation = "potential"
@@ -1743,27 +1741,11 @@ class AnalysisService:
             "eliminatory_skills_matched": eliminatory_matched,
             "eliminatory_skills_total": total_eliminatory,
             "complementary_bonus_cap_slots": skill_scores["complementary_bonus_cap_slots"],
-            "priority_component_impact": float(mandatory_component_impact),
-            "complementary_component_impact": float(optional_component_impact),
+            "priority_component_impact": float(priority_component_impact),
+            "complementary_component_impact": float(complementary_component_impact),
             "experience_component_impact": float(experience_component_impact),
             "seniority_component_impact": float(seniority_component_impact),
             "has_domain_evidence": has_domain_evidence,
-            "mandatory_score_weighted": float(skill_scores["mandatory_score_weighted"]),
-            "optional_score_weighted": float(skill_scores["optional_score_weighted"]),
-            "optional_score_raw_weighted": float(skill_scores["optional_score_raw_weighted"]),
-            "mandatory_strong_coverage": float(skill_scores["mandatory_strong_coverage"]),
-            "matched_required_skills": list(skill_scores["matched_mandatory_skill_names"]),
-            "missing_required_skills": list(missing_skill_names),
-            "matched_optional_skills": list(skill_scores["matched_optional_skill_names"]),
-            "missing_optional_skills": list(skill_scores["missing_optional_skill_names"]),
-            "weak_evidence_required_skills": list(skill_scores["weak_evidence_required_skills"]),
-            "mandatory_skills_matched": skill_scores["mandatory_matched"],
-            "mandatory_skills_total": total_priority,
-            "optional_skills_matched": skill_scores["optional_matched"],
-            "optional_skills_total": total_complementary,
-            "optional_bonus_cap_slots": skill_scores["optional_bonus_cap_slots"],
-            "mandatory_component_impact": float(mandatory_component_impact),
-            "optional_component_impact": float(optional_component_impact),
         }
         adaptive_score_breakdown = dict(skill_evidence_breakdown)
 
@@ -1899,10 +1881,10 @@ class AnalysisService:
             job_fit_score=public_job_fit_score,
             match_freshness_status="fresh",
             recommendation=recommendation,
-            mandatory_skills_matched=priority_matched,
-            mandatory_skills_total=total_priority,
-            optional_skills_matched=complementary_matched,
-            optional_skills_total=total_complementary,
+            priority_skills_matched=priority_matched,
+            priority_skills_total=total_priority,
+            complementary_skills_matched=complementary_matched,
+            complementary_skills_total=total_complementary,
             seniority_score=float(seniority_score.quantize(Decimal("0.01"))),
             candidate_seniority=result.seniority_level,
             job_seniority=job.seniority_level,

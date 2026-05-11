@@ -170,7 +170,9 @@ async def test_candidate_transfer_flow_complete(client: AsyncClient, db_session)
     stmt_b = sa.select(CandidateJobPipelineModel).where(
         CandidateJobPipelineModel.candidate_id == candidate_id,
         CandidateJobPipelineModel.job_id == job_b_id,
-        CandidateJobPipelineModel.relationship_status == "active"
+        CandidateJobPipelineModel.relationship_status == "active",
+        CandidateJobPipelineModel.is_terminal.is_(False),
+        CandidateJobPipelineModel.terminated_at.is_(None),
     )
     active_pipeline = await db_session.scalar(stmt_b)
     assert active_pipeline is not None
@@ -189,7 +191,9 @@ async def test_candidate_transfer_flow_complete(client: AsyncClient, db_session)
     # C. GARANTIR A REGRA DE OURO: Apenas 1 pipeline ativo
     stmt_all = sa.select(sa.func.count()).select_from(CandidateJobPipelineModel).where(
         CandidateJobPipelineModel.candidate_id == candidate_id,
-        CandidateJobPipelineModel.relationship_status == "active"
+        CandidateJobPipelineModel.relationship_status == "active",
+        CandidateJobPipelineModel.is_terminal.is_(False),
+        CandidateJobPipelineModel.terminated_at.is_(None),
     )
     active_count = await db_session.scalar(stmt_all)
     assert active_count == 1

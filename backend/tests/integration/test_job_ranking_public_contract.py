@@ -80,8 +80,8 @@ async def test_get_job_ranking_uses_job_fit_score_contract(
     await db_session.flush()
 
     match.skill_evidence_breakdown = {
-        "mandatory_score_weighted": 100.0,
-        "optional_score_weighted": 0.0,
+        "priority_score_weighted": 100.0,
+        "complementary_score_weighted": 0.0,
         "optional_score_raw_weighted": 0.0,
         "validation_reasons": [],
         "missing_required_skills": [],
@@ -109,7 +109,7 @@ async def test_get_job_ranking_uses_job_fit_score_contract(
                 "confidence_score": 90,
                 "penalty_score": 0,
                 "validation_penalty_score": 0,
-                "mandatory_score_weighted": 100.0,
+                "priority_score_weighted": 100.0,
             },
             reason_codes=[
                 {
@@ -158,7 +158,7 @@ async def test_get_job_ranking_uses_job_fit_score_contract(
     assert "freshness_status" not in candidate
     assert Decimal(str(candidate["job_fit_score"])) == Decimal("82.50")
     assert Decimal(str(candidate["score_breakdown"]["job_fit_score"])) == Decimal("82.50")
-    assert Decimal(str(candidate["score_breakdown"]["mandatory_score_weighted"])) == Decimal("100.00")
+    assert Decimal(str(candidate["score_breakdown"]["priority_score_weighted"])) == Decimal("100.00")
     assert "final_score_before_cap" not in candidate["score_breakdown"]
     assert "final_score_after_cap" not in candidate["score_breakdown"]
     assert not any(call.args and call.args[0] == "ranking.score_breakdown_missing_keys" for call in ranking_warning.call_args_list)

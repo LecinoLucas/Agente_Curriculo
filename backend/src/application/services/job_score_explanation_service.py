@@ -324,8 +324,9 @@ class JobScoreExplanationService:
             }
 
         return {
-            "mandatory": _item("skill_match_score"),
-            "optional": None,
+            "priority": _item("priority_component_impact"),
+            "complementary": _item("complementary_component_impact"),
+            "eliminatory": _item("deal_breaker_penalty_score"),
             "experience": _item("experience_match_score"),
             "seniority": _item("seniority_match_score"),
             "ai_adjustment": _item("confidence_score"),

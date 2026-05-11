@@ -641,7 +641,6 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
     link.job_id = job_id
     link.skill_id = skill_id
     link.priority_level = "priority"
-    link.is_mandatory = True
     link.minimum_level = None
     link.minimum_years = None
     link.weight = 1
@@ -665,7 +664,6 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
         MagicMock(
             skill_name="SQL",
             priority_level="priority",
-            is_mandatory=True,
             minimum_level=None,
             minimum_years=None,
             weight=1,
@@ -684,11 +682,9 @@ def test_skill_requirements_snapshot_is_derived_from_required_skill_rows():
     mandatory = MagicMock()
     mandatory.skill_name = "Node.js"
     mandatory.JobRequiredSkillModel.priority_level = "priority"
-    mandatory.JobRequiredSkillModel.is_mandatory = True
     optional = MagicMock()
     optional.skill_name = "React"
     optional.JobRequiredSkillModel.priority_level = "complementary"
-    optional.JobRequiredSkillModel.is_mandatory = False
 
     assert JobService._skill_requirements_from_required_skill_rows([mandatory, optional]) == {
         "priority": ["Node.js"],

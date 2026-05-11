@@ -4,7 +4,7 @@ Validates that:
 1. PostgreSQL → SQL returns 0.85, not 1.0
 2. PySpark → Spark doesn't inflate to 1.0
 3. Exact matches only = 1.0 (Python → Python)
-4. mandatory_score != strong_coverage (they measure different things)
+4. priority_score != strong_coverage (they measure different things)
 """
 
 from decimal import Decimal
@@ -20,7 +20,6 @@ def _row(name: str, *, mandatory: bool = True):
         skill_name=name,
         JobRequiredSkillModel=SimpleNamespace(
             priority_level="priority" if mandatory else "complementary",
-            is_mandatory=mandatory,
         ),
     )
 
@@ -32,7 +31,7 @@ class TestF71ScoreInflationAudit:
         """PostgreSQL → SQL must be 0.85, not 1.0.
 
         This is a strong equivalence, not an exact match.
-        mandatory_score should reflect the evidence quality.
+        priority_score should reflect the evidence quality.
         """
         job_skills = [_row("SQL", mandatory=True)]
         candidate_skills = {"postgresql"}
@@ -40,18 +39,18 @@ class TestF71ScoreInflationAudit:
         result = _compute_skill_scores(job_skills, candidate_skills)
 
         # Must NOT be 100 (exact match)
-        assert result["mandatory_score_weighted"] != Decimal("100")
+        assert result["priority_score_weighted"] != Decimal("100")
 
         # Should be around 85 (strong equivalence from catalog)
-        assert Decimal("80") <= result["mandatory_score_weighted"] <= Decimal("90")
+        assert Decimal("80") <= result["priority_score_weighted"] <= Decimal("90")
 
         # Mandatory matched should be 1 (score >= 0.8)
-        assert result["mandatory_matched"] == 1
+        assert result["priority_matched"] == 1
 
         print(f"\n[PostgreSQL → SQL]")
-        print(f"  Score: {result['mandatory_score_weighted']}")
-        print(f"  Strong Coverage: {result['mandatory_strong_coverage']}%")
-        print(f"  Matched: {result['mandatory_matched']}")
+        print(f"  Score: {result['priority_score_weighted']}")
+        print(f"  Strong Coverage: {result['priority_strong_coverage']}%")
+        print(f"  Matched: {result['priority_matched']}")
 
     def test_mixed_exact_and_equivalence_scores(self):
         """Mix of exact and equivalence should not produce 100% score.
@@ -77,20 +76,20 @@ class TestF71ScoreInflationAudit:
         result = _compute_skill_scores(job_skills, candidate_skills)
 
         # Should be ~90, not 100
-        assert result["mandatory_score_weighted"] < Decimal("100")
-        assert result["mandatory_score_weighted"] >= Decimal("85")
+        assert result["priority_score_weighted"] < Decimal("100")
+        assert result["priority_score_weighted"] >= Decimal("85")
 
         # All should be matched (score >= 0.8)
-        assert result["mandatory_matched"] == 3
+        assert result["priority_matched"] == 3
 
         # But strong_coverage can be 100% (all have >= 0.8)
-        assert result["mandatory_strong_coverage"] == Decimal("100")
+        assert result["priority_strong_coverage"] == Decimal("100")
 
         print(f"\n[PostgreSQL/Python/TypeScript → SQL/Python/JavaScript]")
-        print(f"  Mandatory Score: {result['mandatory_score_weighted']}")
-        print(f"  Strong Coverage: {result['mandatory_strong_coverage']}%")
-        print(f"  Matched: {result['mandatory_matched']}/3")
-        print(f"  Issue: Score={result['mandatory_score_weighted']}, Coverage={result['mandatory_strong_coverage']}")
+        print(f"  Priority Score: {result['priority_score_weighted']}")
+        print(f"  Strong Coverage: {result['priority_strong_coverage']}%")
+        print(f"  Matched: {result['priority_matched']}/3")
+        print(f"  Issue: Score={result['priority_score_weighted']}, Coverage={result['priority_strong_coverage']}")
         print(f"  These should differ: score measures evidence quality, coverage measures count")
 
     def test_exact_only_equals_100(self):
@@ -104,11 +103,11 @@ class TestF71ScoreInflationAudit:
         result = _compute_skill_scores(job_skills, candidate_skills)
 
         # Both exact = 100%
-        assert result["mandatory_score_weighted"] == Decimal("100")
-        assert result["mandatory_strong_coverage"] == Decimal("100")
-        assert result["mandatory_matched"] == 2
+        assert result["priority_score_weighted"] == Decimal("100")
+        assert result["priority_strong_coverage"] == Decimal("100")
+        assert result["priority_matched"] == 2
 
-    def test_strong_coverage_vs_mandatory_score_distinction(self):
+    def test_strong_coverage_vs_priority_score_distinction(self):
         """Demonstrate the difference between coverage and score.
 
         Coverage = % of skills with evidence (score >= 0.8)
@@ -128,13 +127,13 @@ class TestF71ScoreInflationAudit:
         result = _compute_skill_scores(job_skills, candidate_skills)
 
         # Both metrics should be populated but different
-        coverage = result["mandatory_strong_coverage"]
-        score = result["mandatory_score_weighted"]
+        coverage = result["priority_strong_coverage"]
+        score = result["priority_score_weighted"]
 
         print(f"\n[Distinction: Coverage vs Score]")
         print(f"  Coverage (% >= 0.8): {coverage}%")
         print(f"  Score (avg quality): {score}")
-        print(f"  Matched: {result['mandatory_matched']}/3")
+        print(f"  Matched: {result['priority_matched']}/3")
 
         # Coverage should be 100 (all 3 skills >= 0.8)
         assert coverage == Decimal("100")
@@ -160,13 +159,13 @@ class TestF71ScoreInflationAudit:
 
         result = _compute_skill_scores(job_skills, candidate_skills)
 
-        score = result["mandatory_score_weighted"]
-        coverage = result["mandatory_strong_coverage"]
+        score = result["priority_score_weighted"]
+        coverage = result["priority_strong_coverage"]
 
         print(f"\n[Partial + Strong + Exact]")
         print(f"  Score: {score}")
         print(f"  Coverage: {coverage}%")
-        print(f"  Matched: {result['mandatory_matched']}")
+        print(f"  Matched: {result['priority_matched']}")
 
         # Score should be ~75-80 (average includes 0.45)
         assert Decimal("70") < score < Decimal("85")
@@ -175,7 +174,7 @@ class TestF71ScoreInflationAudit:
         assert coverage <= Decimal("70")
 
         # Matched should be 2 (only >= 0.8)
-        assert result["mandatory_matched"] == 2
+        assert result["priority_matched"] == 2
 
     def test_generic_finance_does_not_fully_satisfy_contas_a_pagar(self):
         """Área genérica não pode satisfazer rotina específica plenamente."""
@@ -184,8 +183,8 @@ class TestF71ScoreInflationAudit:
 
         result = _compute_skill_scores(job_skills, candidate_skills)
 
-        assert result["mandatory_matched"] == 0
-        assert result["mandatory_score_weighted"] < Decimal("80")
+        assert result["priority_matched"] == 0
+        assert result["priority_score_weighted"] < Decimal("80")
         assert "Contas a Pagar" in result["missing_skill_names"]
 
     def test_generic_dp_does_not_fully_satisfy_admissao(self):
@@ -195,8 +194,8 @@ class TestF71ScoreInflationAudit:
 
         result = _compute_skill_scores(job_skills, candidate_skills)
 
-        assert result["mandatory_matched"] == 0
-        assert result["mandatory_score_weighted"] < Decimal("80")
+        assert result["priority_matched"] == 0
+        assert result["priority_score_weighted"] < Decimal("80")
         assert "Admissão" in result["missing_skill_names"]
 
 

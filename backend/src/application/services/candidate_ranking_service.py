@@ -13,16 +13,16 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.analysis_service import (
-    _MANDATORY_STRONG_COVERAGE_CAP_SCORE,
-    _MANDATORY_STRONG_COVERAGE_CAP_THRESHOLD,
-    _MANDATORY_THRESHOLD,
     _MINIMUM_DOMAIN_FIT_CAP_SCORE,
     _NO_REQUIREMENTS_SCORE_CAP,
+    _PRIORITY_STRONG_COVERAGE_CAP_SCORE,
+    _PRIORITY_STRONG_COVERAGE_CAP_THRESHOLD,
+    _PRIORITY_THRESHOLD,
     _calculate_experience_score,
     _calculate_seniority_score,
     _canonical_component_weights,
     _job_has_structured_requirements,
-    _mandatory_soft_penalty,
+    _priority_soft_penalty,
     _validate_education,
     _validate_experience,
 )
@@ -178,6 +178,7 @@ class CandidateRankingService:
         job_id: UUID,
         candidate_id: UUID,
         recompute_reason: str = "manual",
+        actor_id: str | None = None,
     ) -> dict[str, Any] | None:
         job, version, threshold_high, threshold_low, job_skill_rows = await self._load_scoring_context(job_id)
         rows = await self._fetch_match_rows(job_id, candidate_id=candidate_id)
@@ -219,6 +220,7 @@ class CandidateRankingService:
             version=version,
             persist_result=persist_result,
             duration_ms=duration_ms,
+            actor_id=actor_id,
         )
         return {
             "candidate_id": candidate_id,
@@ -456,7 +458,7 @@ class CandidateRankingService:
                 self._json_shape_filter(CandidateJobMatchModel.skill_evidence_breakdown, "object"),
                 self._json_key_exists_filter(
                     CandidateJobMatchModel.skill_evidence_breakdown,
-                    "mandatory_score_weighted",
+                    "priority_score_weighted",
                 ),
             )
             .subquery("latest_match")
@@ -584,7 +586,7 @@ class CandidateRankingService:
                 self._json_shape_filter(CandidateJobMatchModel.skill_evidence_breakdown, "object"),
                 self._json_key_exists_filter(
                     CandidateJobMatchModel.skill_evidence_breakdown,
-                    "mandatory_score_weighted",
+                    "priority_score_weighted",
                 ),
             )
             .subquery("latest_match")
@@ -1075,7 +1077,7 @@ class CandidateRankingService:
             )
         _apply_validation_guardrails(row, bd)
         _apply_deal_breaker_guardrails(bd, deal_breaker_violations)
-        _apply_critical_mandatory_guardrails(row=row, job=job, job_skill_rows=job_skill_rows, bd=bd)
+        _apply_eliminatory_skill_guardrails(row=row, job=job, job_skill_rows=job_skill_rows, bd=bd)
         bd["final_score_after_cap"] = _to_decimal(bd["final_score"]).quantize(Decimal("0.01"))
         decision = _decide(bd["final_score"], threshold_high, threshold_low)
         if deal_breaker_missing_fields and not deal_breaker_violations and decision == "approved":
@@ -1141,6 +1143,7 @@ class CandidateRankingService:
         version: ScoreModelVersionModel,
         persist_result: dict[str, Any],
         duration_ms: int,
+        actor_id: str | None = None,
     ) -> None:
         source_analysis_created_at = _coerce_utc_datetime(payload.get("source_analysis_created_at"))
         ranking_updated_at = _coerce_utc_datetime(persist_result.get("ranking_updated_at"))
@@ -1172,6 +1175,7 @@ class CandidateRankingService:
             "trace_id": trace_id,
             "request_id": request_id,
             "input_hash": payload.get("input_hash"),
+            "actor_id": actor_id,
         }
         logger.info("ranking.recomputed", **base_payload)
         await publish_domain_event(
@@ -1276,7 +1280,7 @@ class CandidateRankingService:
 
 _MISSING_SKILL_PENALTY = Decimal("3")
 _MAX_PENALTY = Decimal("20")
-_CRITICAL_MANDATORY_MISSING_CAP = Decimal("49.00")
+_ELIMINATORY_MISSING_CAP = Decimal("49.00")
 _EXPLAINABILITY_VERSION = "v1_structured_factors"
 _SCORE_DELTA_CHANGE_THRESHOLD = Decimal("2.00")
 _SCORE_DELTA_SUMMARY_LIMIT = 4
@@ -1284,7 +1288,7 @@ _SCORE_FACTOR_SUMMARY_LIMIT = 4
 _ALLOWED_SCORE_FACTOR_TYPES = {
     "required_skill_match",
     "missing_required_skill",
-    "optional_skill_bonus",
+    "complementary_skill_bonus",
     "adjacent_skill_match",
     "experience_match",
     "insufficient_experience",
@@ -1375,43 +1379,28 @@ def _compute_breakdown(
         education = Decimal("100")
 
     weights = _canonical_component_weights(
-        total_mandatory=priority_total,
-        total_optional=complementary_total,
+        total_priority=priority_total,
+        total_complementary=complementary_total,
     )
     priority_score = _to_decimal(
         match_debug.get("priority_score_weighted"),
-        default=_to_decimal(
-            match_debug.get("mandatory_score_weighted"),
-            default=priority_score_fallback,
-        ),
+        default=priority_score_fallback,
     ).quantize(q)
     complementary_score = _to_decimal(
         match_debug.get("complementary_score_weighted"),
-        default=_to_decimal(
-            match_debug.get("optional_score_weighted"),
-            default=complementary_score_fallback,
-        ),
+        default=complementary_score_fallback,
     ).quantize(q)
     complementary_score_raw = _to_decimal(
         match_debug.get("complementary_score_raw_weighted"),
-        default=_to_decimal(
-            match_debug.get("optional_score_raw_weighted"),
-            default=complementary_score,
-        ),
+        default=complementary_score,
     ).quantize(q)
     priority_component_impact = _to_decimal(
         match_debug.get("priority_component_impact"),
-        default=_to_decimal(
-            match_debug.get("mandatory_component_impact"),
-            default=(priority_score * weights["mandatory"]),
-        ),
+        default=(priority_score * weights["priority"]),
     ).quantize(q)
     complementary_component_impact = _to_decimal(
         match_debug.get("complementary_component_impact"),
-        default=_to_decimal(
-            match_debug.get("optional_component_impact"),
-            default=(complementary_score * weights["optional"]),
-        ),
+        default=(complementary_score * weights["complementary"]),
     ).quantize(q)
     experience_component_impact = _to_decimal(
         match_debug.get("experience_component_impact"),
@@ -1422,18 +1411,15 @@ def _compute_breakdown(
         default=(seniority_match * weights["seniority"]),
     ).quantize(q)
     reconstructed = (
-        priority_score * weights["mandatory"]
-        + complementary_score * weights["optional"]
+        priority_score * weights["priority"]
+        + complementary_score * weights["complementary"]
         + experience_match * weights["experience"]
         + seniority_match * weights["seniority"]
     ).quantize(q)
 
     priority_strong_coverage = _to_decimal(
         match_debug.get("priority_strong_coverage"),
-        default=_to_decimal(
-            match_debug.get("mandatory_strong_coverage"),
-            default=priority_score,
-        ),
+        default=priority_score,
     ).quantize(q)
     partial_matches = list(match_debug.get("partial_matches") or [])
     weak_evidence_priority_skills = [
@@ -1538,9 +1524,6 @@ def _compute_breakdown(
 
     return {
         "skill_match_score": skill_match_score.quantize(q),
-        "mandatory_score_weighted": priority_score,
-        "optional_score_weighted": complementary_score,
-        "optional_score_raw_weighted": complementary_score_raw,
         "priority_score_weighted": priority_score,
         "complementary_score_weighted": complementary_score,
         "complementary_score_raw_weighted": complementary_score_raw,
@@ -1548,8 +1531,6 @@ def _compute_breakdown(
         "seniority_match_score": seniority_match.quantize(q),
         "education_score": education.quantize(q),
         "confidence_score": confidence_assessment.confidence_score.quantize(q),
-        "mandatory_component_impact": priority_component_impact,
-        "optional_component_impact": complementary_component_impact,
         "priority_component_impact": priority_component_impact,
         "complementary_component_impact": complementary_component_impact,
         "experience_component_impact": experience_component_impact,
@@ -1571,13 +1552,6 @@ def _compute_breakdown(
         "eligibility_status": eligibility_status,
         "missing_required_skills": list(match_debug.get("missing_required_skills") or []) or sorted(priority_names - matched_names),
         "matched_required_skills": list(match_debug.get("matched_required_skills") or []) or sorted(priority_names & matched_names),
-        "missing_optional_skills": list(match_debug.get("missing_optional_skills") or []) or sorted(complementary_names - matched_names),
-        "matched_optional_skills": list(match_debug.get("matched_optional_skills") or []) or sorted(complementary_names & matched_names),
-        "mandatory_skills_matched": int(match_debug.get("mandatory_skills_matched", priority_matched)),
-        "mandatory_skills_total": int(match_debug.get("mandatory_skills_total", priority_total)),
-        "optional_skills_matched": int(match_debug.get("optional_skills_matched", complementary_matched)),
-        "optional_skills_total": int(match_debug.get("optional_skills_total", complementary_total)),
-        "optional_bonus_cap_slots": int(match_debug.get("optional_bonus_cap_slots", min(complementary_total, 5))),
         "priority_skills_matched": int(match_debug.get("priority_skills_matched", priority_matched)),
         "priority_skills_total": int(match_debug.get("priority_skills_total", priority_total)),
         "complementary_skills_matched": int(match_debug.get("complementary_skills_matched", complementary_matched)),
@@ -1592,7 +1566,6 @@ def _compute_breakdown(
         "missing_eliminatory_skills": missing_eliminatory_skills,
         "complementary_bonus_cap_slots": int(match_debug.get("complementary_bonus_cap_slots", min(complementary_total, 5))),
         "priority_strong_coverage": priority_strong_coverage,
-        "mandatory_strong_coverage": priority_strong_coverage,
         "education_detected": match_debug.get("education_detected", row.get("education_level")),
         "minimum_education_required": match_debug.get("minimum_education_required", job.minimum_education_level),
         "experience_detected": match_debug.get("experience_detected", float(candidate_years) if candidate_years is not None else None),
@@ -1625,7 +1598,7 @@ def _apply_deal_breaker_guardrails(bd: dict[str, Decimal], violations: list[dict
         bd["final_score"] = Decimal("0.00")
 
 
-def _apply_critical_mandatory_guardrails(
+def _apply_eliminatory_skill_guardrails(
     *,
     row: dict[str, Any],
     job: JobModel,
@@ -1662,7 +1635,7 @@ def _apply_critical_mandatory_guardrails(
         return
 
     before_cap = _to_decimal(bd.get("final_score"))
-    after_cap = min(before_cap, _CRITICAL_MANDATORY_MISSING_CAP).quantize(q)
+    after_cap = min(before_cap, _ELIMINATORY_MISSING_CAP).quantize(q)
     bd["final_score"] = after_cap
     bd["eligibility_status"] = "FAIL"
     if after_cap < before_cap:
@@ -1712,11 +1685,11 @@ def _build_score_factors(
     partial_matches = breakdown.get("partial_matches", []) or []
 
     weights = _canonical_component_weights(
-        total_mandatory=len(priority_names),
-        total_optional=len(complementary_names),
+        total_priority=len(priority_names),
+        total_complementary=len(complementary_names),
     )
-    mandatory_slot_impact = (
-        (Decimal("100") * weights["mandatory"]) / Decimal(str(len(priority_names)))
+    priority_slot_impact = (
+        (Decimal("100") * weights["priority"]) / Decimal(str(len(priority_names)))
         if priority_names
         else Decimal("0")
     ).quantize(Decimal("0.01"))
@@ -1795,8 +1768,8 @@ def _build_score_factors(
             factor_type="required_skill_match",
             factor_key=skill.casefold(),
             factor_label=f"Skill essencial atendida: {skill}",
-            impact_score=mandatory_slot_impact,
-            normalized_weight=weights["mandatory"],
+            impact_score=priority_slot_impact,
+            normalized_weight=weights["priority"],
             direction="positive",
             evidence={"matched": True, "required_skill": skill},
         )
@@ -1809,8 +1782,8 @@ def _build_score_factors(
             factor_type="missing_required_skill",
             factor_key=skill.casefold(),
             factor_label=f"Skill essencial ausente: {skill}",
-            impact_score=-mandatory_slot_impact,
-            normalized_weight=weights["mandatory"],
+            impact_score=-priority_slot_impact,
+            normalized_weight=weights["priority"],
             direction="negative",
             evidence={"matched": False, "required_skill": skill},
         )
@@ -1825,8 +1798,8 @@ def _build_score_factors(
             factor_type="adjacent_skill_match",
             factor_key=required.casefold(),
             factor_label=f"Experiência adjacente cobre parcialmente {required}",
-            impact_score=(mandatory_slot_impact * partial_score).quantize(Decimal("0.01")),
-            normalized_weight=weights["mandatory"],
+            impact_score=(priority_slot_impact * partial_score).quantize(Decimal("0.01")),
+            normalized_weight=weights["priority"],
             direction="neutral",
             evidence={
                 "required_skill": required,
@@ -1837,44 +1810,42 @@ def _build_score_factors(
             },
         )
 
-    optional_total = int(
+    complementary_total = int(
         bd.get("complementary_skills_total")
-        or bd.get("optional_skills_total")
         or len(complementary_names)
     )
-    optional_matched = int(bd.get("complementary_skills_matched") or bd.get("optional_skills_matched") or 0)
-    optional_missing = len(bd.get("missing_complementary_skills") or bd.get("missing_optional_skills") or [])
-    optional_bonus_cap_slots = int(
+    complementary_matched = int(bd.get("complementary_skills_matched") or 0)
+    complementary_missing = len(bd.get("missing_complementary_skills") or [])
+    complementary_bonus_cap_slots = int(
         bd.get("complementary_bonus_cap_slots")
-        or bd.get("optional_bonus_cap_slots")
-        or min(optional_total, 5)
+        or min(complementary_total, 5)
     )
-    optional_bonus_impact = _to_decimal(
-        bd.get("complementary_component_impact") or bd.get("optional_component_impact")
+    complementary_bonus_impact = _to_decimal(
+        bd.get("complementary_component_impact")
     )
-    if optional_total > 0:
-        bonus_direction = "positive" if optional_bonus_impact > Decimal("0") else "neutral"
+    if complementary_total > 0:
+        bonus_direction = "positive" if complementary_bonus_impact > Decimal("0") else "neutral"
         bonus_label = (
-            f"Diferenciais: {optional_matched}/{optional_total} encontrados, bônus de {float(optional_bonus_impact):.2f} pts"
-            if optional_bonus_impact > Decimal("0")
-            else f"Diferenciais: {optional_matched}/{optional_total} encontrados, sem bônus aplicado"
+            f"Diferenciais: {complementary_matched}/{complementary_total} encontrados, bônus de {float(complementary_bonus_impact):.2f} pts"
+            if complementary_bonus_impact > Decimal("0")
+            else f"Diferenciais: {complementary_matched}/{complementary_total} encontrados, sem bônus aplicado"
         )
         add_factor(
-            factor_type="optional_skill_bonus",
-            factor_key="optional_skills",
+            factor_type="complementary_skill_bonus",
+            factor_key="complementary_skills",
             factor_label=bonus_label,
-            impact_score=optional_bonus_impact,
-            normalized_weight=weights["optional"],
+            impact_score=complementary_bonus_impact,
+            normalized_weight=weights["complementary"],
             direction=bonus_direction,
             evidence={
-                "matched_optional_skills": list(bd.get("matched_complementary_skills") or bd.get("matched_optional_skills") or []),
-                "missing_optional_skills": list(bd.get("missing_complementary_skills") or bd.get("missing_optional_skills") or []),
-                "optional_skills_matched": optional_matched,
-                "optional_skills_missing": optional_missing,
-                "optional_skills_total": optional_total,
-                "optional_bonus_cap_slots": optional_bonus_cap_slots,
-                "optional_score_weighted": float(_to_decimal(bd.get("complementary_score_weighted") or bd.get("optional_score_weighted")).quantize(Decimal("0.01"))),
-                "optional_score_raw_weighted": float(_to_decimal(bd.get("complementary_score_raw_weighted") or bd.get("optional_score_raw_weighted")).quantize(Decimal("0.01"))),
+                "matched_complementary_skills": list(bd.get("matched_complementary_skills") or []),
+                "missing_complementary_skills": list(bd.get("missing_complementary_skills") or []),
+                "complementary_skills_matched": complementary_matched,
+                "complementary_skills_missing": complementary_missing,
+                "complementary_skills_total": complementary_total,
+                "complementary_bonus_cap_slots": complementary_bonus_cap_slots,
+                "complementary_score_weighted": float(_to_decimal(bd.get("complementary_score_weighted")).quantize(Decimal("0.01"))),
+                "complementary_score_raw_weighted": float(_to_decimal(bd.get("complementary_score_raw_weighted")).quantize(Decimal("0.01"))),
             },
         )
 
@@ -1961,7 +1932,7 @@ def _build_reason_codes(factors: list[dict[str, Any]]) -> list[dict[str, Any]]:
         reason_type = {
             "required_skill_match": "skill_match",
             "missing_required_skill": "missing_skill",
-            "optional_skill_bonus": "desirable_skills",
+            "complementary_skill_bonus": "desirable_skills",
             "adjacent_skill_match": "adjacent_skill",
             "experience_match": "experience",
             "insufficient_experience": "experience",
@@ -2134,25 +2105,25 @@ def _render_score_explanation(
 
     parts = [f"Aderência à vaga em {score:.1f}/100."]
     if breakdown:
-        mandatory_matched = int(breakdown.get("priority_skills_matched") or breakdown.get("mandatory_skills_matched") or 0)
-        mandatory_total = int(breakdown.get("priority_skills_total") or breakdown.get("mandatory_skills_total") or 0)
-        mandatory_missing = len(breakdown.get("missing_priority_skills") or breakdown.get("missing_required_skills") or [])
-        mandatory_impact = float(_to_decimal(breakdown.get("priority_component_impact") or breakdown.get("mandatory_component_impact")).quantize(Decimal("0.01")))
-        optional_matched = int(breakdown.get("complementary_skills_matched") or breakdown.get("optional_skills_matched") or 0)
-        optional_total = int(breakdown.get("complementary_skills_total") or breakdown.get("optional_skills_total") or 0)
-        optional_missing = len(breakdown.get("missing_complementary_skills") or breakdown.get("missing_optional_skills") or [])
-        optional_impact = float(_to_decimal(breakdown.get("complementary_component_impact") or breakdown.get("optional_component_impact")).quantize(Decimal("0.01")))
-        optional_bonus_cap_slots = int(breakdown.get("complementary_bonus_cap_slots") or breakdown.get("optional_bonus_cap_slots") or 0)
+        priority_matched = int(breakdown.get("priority_skills_matched") or 0)
+        priority_total = int(breakdown.get("priority_skills_total") or 0)
+        priority_missing = len(breakdown.get("missing_priority_skills") or breakdown.get("missing_required_skills") or [])
+        priority_impact = float(_to_decimal(breakdown.get("priority_component_impact")).quantize(Decimal("0.01")))
+        complementary_matched = int(breakdown.get("complementary_skills_matched") or 0)
+        complementary_total = int(breakdown.get("complementary_skills_total") or 0)
+        complementary_missing = len(breakdown.get("missing_complementary_skills") or [])
+        complementary_impact = float(_to_decimal(breakdown.get("complementary_component_impact")).quantize(Decimal("0.01")))
+        complementary_bonus_cap_slots = int(breakdown.get("complementary_bonus_cap_slots") or 0)
         eliminatory_missing = list(breakdown.get("missing_eliminatory_skills") or [])
-        mandatory_missing_label = "ausente" if mandatory_missing == 1 else "ausentes"
-        optional_missing_label = "ausente" if optional_missing == 1 else "ausentes"
+        priority_missing_label = "ausente" if priority_missing == 1 else "ausentes"
+        complementary_missing_label = "ausente" if complementary_missing == 1 else "ausentes"
         parts.append(
-            f"Essenciais: {mandatory_matched}/{mandatory_total} atendidas, {mandatory_missing} {mandatory_missing_label}, impacto {mandatory_impact:.1f} pts."
+            f"Essenciais: {priority_matched}/{priority_total} atendidas, {priority_missing} {priority_missing_label}, impacto {priority_impact:.1f} pts."
         )
-        if optional_total > 0:
+        if complementary_total > 0:
             parts.append(
-                f"Diferenciais: {optional_matched}/{optional_total} encontrados, {optional_missing} {optional_missing_label}, bônus {optional_impact:.1f} pts"
-                f"{f' (cap em {optional_bonus_cap_slots} skills).' if optional_bonus_cap_slots > 0 else '.'}"
+                f"Diferenciais: {complementary_matched}/{complementary_total} encontrados, {complementary_missing} {complementary_missing_label}, bônus {complementary_impact:.1f} pts"
+                f"{f' (cap em {complementary_bonus_cap_slots} skills).' if complementary_bonus_cap_slots > 0 else '.'}"
             )
         else:
             parts.append("Diferenciais: não aplicáveis para esta vaga.")
@@ -2214,10 +2185,6 @@ def _to_decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
         return default
 
 
-def _is_skill_mandatory(item: Any) -> bool:
-    return _is_skill_priority(item)
-
-
 def _is_skill_priority(item: Any) -> bool:
     try:
         if not hasattr(item, "JobRequiredSkillModel"):
@@ -2257,6 +2224,14 @@ def _is_skill_eliminatory(item: Any) -> bool:
         return is_eliminatory_skill(item.JobRequiredSkillModel.priority_level)
     except Exception:
         return False
+
+
+def _skill_priority_label(item: Any) -> str:
+    if _is_skill_eliminatory(item):
+        return "eliminatory"
+    if _is_skill_priority(item):
+        return "priority"
+    return "complementary"
 
 
 def _resolve_thresholds(version: ScoreModelVersionModel) -> tuple[Decimal, Decimal]:
@@ -2341,7 +2316,7 @@ def _build_job_signature_hash(*, job: JobModel, job_skill_rows: list[Any]) -> st
                     ":".join(
                         [
                             str(item.skill_name or ""),
-                            "mandatory" if _is_skill_mandatory(item) else "optional",
+                            _skill_priority_label(item),
                             str(getattr(item.JobRequiredSkillModel, "minimum_level", None) or ""),
                             str(getattr(item.JobRequiredSkillModel, "minimum_years", None) or ""),
                             str(getattr(item.JobRequiredSkillModel, "weight", None) or ""),
@@ -2415,18 +2390,18 @@ def _normalize_score_breakdown(
             breakdown.get("job_fit_score", defaults["job_fit_score"]),
         ).quantize(q),
     }
-    optional_decimal_keys = (
+    decimal_keys = (
         "raw_score",
-        "mandatory_score_weighted",
-        "optional_score_weighted",
-        "optional_score_raw_weighted",
-        "mandatory_component_impact",
-        "optional_component_impact",
+        "priority_score_weighted",
+        "complementary_score_weighted",
+        "complementary_score_raw_weighted",
+        "priority_component_impact",
+        "complementary_component_impact",
         "experience_component_impact",
         "seniority_component_impact",
         "deal_breaker_penalty_score",
     )
-    for key in optional_decimal_keys:
+    for key in decimal_keys:
         if breakdown.get(key) is not None:
             normalized[key] = _to_decimal(breakdown.get(key)).quantize(q)
 
@@ -2507,7 +2482,7 @@ def _has_canonical_skill_evidence(row: dict[str, Any]) -> bool:
     evidence = row.get("skill_evidence_breakdown")
     if not isinstance(evidence, dict):
         return False
-    return evidence.get("mandatory_score_weighted") is not None
+    return evidence.get("priority_score_weighted") is not None
 
 
 def _has_valid_persisted_ranking_row(row: dict[str, Any]) -> bool:

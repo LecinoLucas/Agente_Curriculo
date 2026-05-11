@@ -19,8 +19,8 @@ DEFAULT_VERSION = "v3-canonical-det"
 
 # ⚠️ SOMA PRECISA DAR 1.0
 DEFAULT_WEIGHTS = {
-    "mandatory_skill_match": 0.500000,
-    "optional_skill_match": 0.166667,
+    "priority_skill_match": 0.500000,
+    "complementary_skill_match": 0.166667,
     "experience_match": 0.222222,
     "seniority_match": 0.111111,
     "ai_confidence": 0.000000,
@@ -34,7 +34,7 @@ DEFAULT_THRESHOLDS = {
     "potential": 55,
     "not_match": 0,
     "hard_fail_max_score": 39,
-    "mandatory_threshold": 60,
+    "priority_threshold": 60,
 }
 
 

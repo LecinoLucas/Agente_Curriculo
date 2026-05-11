@@ -760,7 +760,8 @@ async def compute_single_candidate_scoring(
         result = await svc.compute_single_candidate(
             job_id=job_id,
             candidate_id=candidate_id,
-            recompute_reason="manual_rescore"
+            recompute_reason="manual_rescore",
+            actor_id=str(current_user.id)
         )
         if result is None:
             raise HTTPException(

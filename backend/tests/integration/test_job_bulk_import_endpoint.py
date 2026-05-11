@@ -39,8 +39,8 @@ def _job_seed(**overrides) -> dict:
         "experience_context": "Vivência em rotina financeira corporativa com controles e fechamento.",
         "behavioral_requirements": ["Organização", "Comunicação"],
         "skills": [
-            {"name": "Contas a pagar", "is_mandatory": True, "weight": 10, "minimum_level": "mid", "minimum_years": 2},
-            {"name": "Conciliação bancária", "is_mandatory": True, "weight": 8, "minimum_level": "junior", "minimum_years": 1},
+            {"name": "Contas a pagar", "priority_level": "priority", "weight": 10, "minimum_level": "mid", "minimum_years": 2},
+            {"name": "Conciliação bancária", "priority_level": "priority", "weight": 8, "minimum_level": "junior", "minimum_years": 1},
         ],
         "deal_breakers": [],
     }
@@ -79,8 +79,8 @@ async def test_bulk_import_creates_valid_job_and_links_skills(
             title="Analista Financeiro Importação Válida",
             location="São Paulo A",
             skills=[
-                {"name": "SQL", "is_mandatory": True, "weight": 10},
-                {"name": "Python", "is_mandatory": True, "weight": 8},
+                {"name": "SQL", "priority_level": "priority", "weight": 10},
+                {"name": "Python", "priority_level": "priority", "weight": 8},
             ]
         )),
         headers=headers,
@@ -165,7 +165,7 @@ async def test_bulk_import_fails_when_skill_does_not_exist(
             _job_seed(
                 title="Analista Financeiro Skill Ausente",
                 location="São Paulo C",
-                skills=[{"name": "Skill Inexistente", "is_mandatory": True, "weight": 10}],
+                skills=[{"name": "Skill Inexistente", "priority_level": "priority", "weight": 10}],
             )
         ),
         headers=headers,
@@ -243,7 +243,7 @@ async def test_bulk_import_returns_aggregated_report(
             _job_seed(
                 title="Coordenador Financeiro",
                 location="Campinas B",
-                skills=[{"name": "Skill Inexistente", "is_mandatory": True, "weight": 10}],
+                skills=[{"name": "Skill Inexistente", "priority_level": "priority", "weight": 10}],
             ),
         ),
         headers=headers,
@@ -331,7 +331,7 @@ async def test_bulk_import_resolves_postgresql_as_sql(
                 title="Engenheiro Dados PostgreSQL",
                 location="São Paulo PG",
                 job_area="data",
-                skills=[{"name": "PostgreSQL", "is_mandatory": True, "weight": 10}],
+                skills=[{"name": "PostgreSQL", "priority_level": "priority", "weight": 10}],
             )
         ),
         headers=headers,
@@ -368,7 +368,7 @@ async def test_bulk_import_resolves_apis_rest_as_api_rest(
                 title="Backend APIs REST",
                 location="São Paulo REST",
                 job_area="technology",
-                skills=[{"name": "APIs REST", "is_mandatory": True, "weight": 10}],
+                skills=[{"name": "APIs REST", "priority_level": "priority", "weight": 10}],
             )
         ),
         headers=headers,
@@ -395,7 +395,7 @@ async def test_bulk_import_resolves_catalog_alias(
                 title="Backend Node Alias",
                 location="São Paulo Alias",
                 job_area="technology",
-                skills=[{"name": "Node", "is_mandatory": True, "weight": 10}],
+                skills=[{"name": "Node", "priority_level": "priority", "weight": 10}],
             )
         ),
         headers=headers,
