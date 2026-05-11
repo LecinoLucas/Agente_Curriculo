@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.interface.api.schemas.common import ORMAPISchemaModel
+
 
 class SkillEquivalenceGroupResponse(BaseModel):
     id: str
@@ -30,7 +32,7 @@ class UpdateSkillEquivalenceGroupRequest(BaseModel):
     strength: Optional[str] = Field(default=None, pattern="^(exact|strong|partial|weak)$")
 
 
-class JobRequiredSkillResponse(BaseModel):
+class JobRequiredSkillResponse(ORMAPISchemaModel):
     id: UUID
     job_id: UUID
     skill_id: UUID
@@ -39,13 +41,6 @@ class JobRequiredSkillResponse(BaseModel):
     minimum_level: Optional[str] = None
     minimum_years: Optional[Decimal] = None
     weight: Decimal
-
-    model_config = {
-        "from_attributes": True,
-        "json_encoders": {
-            Decimal: lambda v: float(v),
-        },
-    }
 
 
 class AddJobSkillRequest(BaseModel):

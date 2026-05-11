@@ -563,14 +563,14 @@ async def test_resume_pipeline_smoke_realish_pdfs(
         response = await client.post(
             f"/api/v1/jobs/{job_id}/skills",
             headers=recruiter_headers,
-            json={"skill_name": skill_names[skill_name], "is_mandatory": True},
+            json={"skill_name": skill_names[skill_name], "priority_level": "priority"},
         )
         assert response.status_code == 201
     for skill_name in ["Docker", "Kubernetes"]:
         response = await client.post(
             f"/api/v1/jobs/{job_id}/skills",
             headers=recruiter_headers,
-            json={"skill_name": skill_names[skill_name], "is_mandatory": False},
+            json={"skill_name": skill_names[skill_name], "priority_level": "complementary"},
         )
         assert response.status_code == 201
 
@@ -879,7 +879,7 @@ async def test_resume_pipeline_smoke_skill_normalization_real_flow(
         response = await client.post(
             f"/api/v1/jobs/{job_id}/skills",
             headers=recruiter_headers,
-            json={"skill_name": skill_names[skill_name], "is_mandatory": True},
+            json={"skill_name": skill_names[skill_name], "priority_level": "priority"},
         )
         assert response.status_code == 201
 

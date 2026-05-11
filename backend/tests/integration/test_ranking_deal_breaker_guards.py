@@ -268,13 +268,17 @@ async def test_ranking_missing_deal_breaker_data_forces_review_instead_of_silent
         )
     )
     assert persisted is not None
-    assert Decimal(str(persisted.final_score)) == Decimal("83.00")
+    assert Decimal(str(persisted.final_score)) == Decimal("92.22")
     assert persisted.decision_suggestion == "review"
+    assert persisted.breakdown["validation_status"] == "unknown"
+    assert "availability" in str(persisted.breakdown["validation_reason"]).lower()
 
     response = await client.get(f"/api/v1/jobs/{job_id}/ranking", headers=headers)
     assert response.status_code == 200
     candidate = response.json()["candidates"][0]
     assert candidate["candidate_id"] == str(candidate_id)
-    assert Decimal(str(candidate["job_fit_score"])) == Decimal("83.00")
+    assert Decimal(str(candidate["job_fit_score"])) == Decimal("92.22")
     assert candidate["decision_suggestion"] == "review"
+    assert candidate["score_breakdown"]["validation_status"] == "unknown"
+    assert "availability" in str(candidate["score_breakdown"]["validation_reason"]).lower()
     _assert_clean_public_contract(candidate)

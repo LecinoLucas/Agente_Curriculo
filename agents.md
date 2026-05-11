@@ -219,6 +219,106 @@ Mapeamento interno permitido:
 - Persistência interna pode manter `reason_codes`, `explanation_text` e `freshness_status` enquanto houver coluna legada.
 - API e DTOs devem expor apenas `reason_tags`, `ranking_summary_text` e `ranking_freshness_status`.
 
+### Configuração oficial de skills da vaga
+
+Modelo visual oficial:
+
+- `Essenciais`
+- `Diferenciais`
+- `Critérios eliminatórios`
+
+Modelo interno oficial:
+
+```text
+priority_level = priority | complementary | eliminatory
+```
+
+Regras obrigatórias:
+
+- `Essenciais` representam o núcleo da vaga.
+- `Diferenciais` somam bônus controlado.
+- `Critérios eliminatórios` são os únicos que podem reprovar, bloquear ou aplicar teto severo.
+- `is_mandatory` não pode ser fonte principal de decisão.
+- `mandatory/optional` não pode ser a regra principal do ranking.
+- `skill_requirements` deve usar apenas `priority`, `complementary` e `eliminatory`.
+- Não achatar `skill_requirements` para chaves legadas.
+- `job_required_skills` deve preservar `priority_level`.
+
+### Regras oficiais de score
+
+- `priority` pesa alto.
+- `complementary` é bônus controlado.
+- Ausência de `complementary` não deve derrubar fortemente o candidato.
+- Ausência de `priority` reduz score, mas não elimina automaticamente.
+- `eliminatory` é a única classe de skill que pode reprovar ou aplicar teto forte por ausência.
+- `confidence` é separada de score.
+- Currículo curto pode reduzir `confidence`, mas não deve destruir score automaticamente.
+- Ranking não pode usar caps genéricos herdados da lógica antiga de obrigatórias.
+
+### Invalidação e recompute
+
+- Ao editar skills da vaga, invalidar `candidate_job_match` e `candidate_job_scores` dessa vaga.
+- Recompute deve usar a configuração atual da vaga.
+- `force-recompute` refaz match + score com a configuração atual.
+- `/scoring` recalcula apenas score com base no match existente.
+- Não criar pipeline nesse processo.
+- Não criar análise IA automaticamente nesse processo.
+- Não usar `latest_analysis` global nesse processo.
+- Recompute deve considerar apenas candidatos com pipeline ativo na vaga.
+
+### Explainability obrigatória
+
+O breakdown e a explicação pública devem conseguir expor:
+
+- skills essenciais atendidas
+- skills essenciais ausentes
+- diferenciais encontrados
+- diferenciais ausentes
+- critérios eliminatórios acionados
+- `confidence`
+- motivo de teto, quando existir
+
+### Qualidade da vaga
+
+Alertas de qualidade não bloqueantes:
+
+- vaga técnica com menos de 3 skills essenciais → alerta de ranking permissivo
+- vaga com mais de 5 skills essenciais → alerta de ranking restritivo
+- vaga Full Stack sem sinal claro de frontend → alerta
+- vaga Full Stack sem sinal claro de backend → alerta
+- vaga com mais de 12 diferenciais → alerta de perda de clareza
+
+Alertas orientam configuração. Eles não podem:
+
+- alterar score diretamente
+- alterar pipeline
+- criar análise IA
+
+### Taxonomia e equivalência de skills
+
+Alias deve ser sinônimo real. Alias não é hierarquia.
+
+Regras obrigatórias:
+
+- rotina específica continua existindo como skill específica
+- área genérica pode servir como contexto, não como substituição automática
+- relação contextual não pode apagar evidência específica
+- skill genérica não satisfaz plenamente skill específica
+- skill específica pode contar como evidência contextual para área genérica, conforme a política de equivalência
+
+Exemplos proibidos:
+
+- `Contas a Pagar` virar alias de `Financeiro`
+- `Folha de Pagamento` virar alias de `Departamento Pessoal`
+- `Admissão` virar alias de `Recursos Humanos`
+
+Use relação direcional quando houver hierarquia:
+
+```text
+Contas a Pagar -> Financeiro
+Admissão -> Departamento Pessoal
+```
+
 ---
 
 ## Fluxos oficiais

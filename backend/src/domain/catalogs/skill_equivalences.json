@@ -1338,6 +1338,19 @@
       "strength": "strong"
     },
     {
+      "canonical": "Controle de Boletos",
+      "aliases": [
+        "Controle de Boletos",
+        "Boleto",
+        "Boletos"
+      ],
+      "domain": [
+        "finance"
+      ],
+      "type": "skill",
+      "strength": "strong"
+    },
+    {
       "canonical": "Folha de Pagamento",
       "aliases": [
         "Folha de Pagamento",
@@ -1459,6 +1472,13 @@
       "strength": "strong",
       "score": 0.85,
       "reason": "Emissão de Nota Fiscal é uma rotina específica de Financeiro."
+    },
+    {
+      "from": "Controle de Boletos",
+      "to": "Financeiro",
+      "strength": "strong",
+      "score": 0.85,
+      "reason": "Controle de Boletos é uma rotina específica de Financeiro."
     },
     {
       "from": "Folha de Pagamento",
@@ -2356,181 +2376,6 @@
       "strength": "strong",
       "score": 0.85,
       "reason": "JUnit é amplamente associado a QA."
-    }
-  ],
-  "business_domains": [
-    {
-      "canonical": "Financeiro",
-      "aliases": [
-        "Financeiro",
-        "Contas a Pagar",
-        "Contas a Receber",
-        "Fluxo de Caixa",
-        "Tesouraria",
-        "Conciliação Bancária",
-        "Faturamento",
-        "Cobrança",
-        "Boleto",
-        "Nota Fiscal",
-        "NF-e",
-        "Emissão de Nota",
-        "Fechamento Financeiro",
-        "Controladoria",
-        "FP&A"
-      ],
-      "domain": [
-        "finance"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Recursos Humanos",
-      "aliases": [
-        "RH",
-        "Recursos Humanos",
-        "People",
-        "Departamento Pessoal",
-        "DP",
-        "Folha de Pagamento",
-        "Admissão",
-        "Rescisão",
-        "Ponto Eletrônico",
-        "Benefícios",
-        "Recrutamento",
-        "Seleção",
-        "Treinamento",
-        "Onboarding"
-      ],
-      "domain": [
-        "hr"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Atendimento",
-      "aliases": [
-        "Atendimento",
-        "Atendimento ao Cliente",
-        "Recepção",
-        "Recepcionista",
-        "SAC",
-        "Suporte",
-        "Call Center",
-        "Telemarketing",
-        "Central de Atendimento"
-      ],
-      "domain": [
-        "customer_service"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Operacional",
-      "aliases": [
-        "Operacional",
-        "Operações",
-        "Serviços Gerais",
-        "Auxiliar Operacional",
-        "Produção",
-        "Chão de Fábrica",
-        "Operador de Máquina"
-      ],
-      "domain": [
-        "operations"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Limpeza",
-      "aliases": [
-        "Auxiliar de Limpeza",
-        "Serviços Gerais",
-        "Faxina",
-        "Higienização",
-        "Limpeza Predial",
-        "Conservação",
-        "Zeladoria"
-      ],
-      "domain": [
-        "facilities"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Portaria",
-      "aliases": [
-        "Porteiro",
-        "Portaria",
-        "Controle de Acesso",
-        "Vigia",
-        "Segurança Patrimonial"
-      ],
-      "domain": [
-        "security",
-        "facilities"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Vendas",
-      "aliases": [
-        "Vendas",
-        "Comercial",
-        "Vendedor",
-        "Consultor Comercial",
-        "Representante Comercial",
-        "Inside Sales",
-        "SDR",
-        "Atendimento Comercial"
-      ],
-      "domain": [
-        "sales"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Administrativo",
-      "aliases": [
-        "Administrativo",
-        "Auxiliar Administrativo",
-        "Assistente Administrativo",
-        "Secretária",
-        "Rotinas Administrativas",
-        "Arquivo",
-        "Digitação",
-        "Planilhas",
-        "Organização de Documentos"
-      ],
-      "domain": [
-        "administrative"
-      ],
-      "type": "business_area",
-      "strength": "strong"
-    },
-    {
-      "canonical": "Logística",
-      "aliases": [
-        "Logística",
-        "Estoque",
-        "Almoxarifado",
-        "Conferente",
-        "Expedição",
-        "Separação de Pedidos",
-        "Inventário",
-        "Carga e Descarga"
-      ],
-      "domain": [
-        "logistics"
-      ],
-      "type": "business_area",
-      "strength": "strong"
     }
   ]
 }

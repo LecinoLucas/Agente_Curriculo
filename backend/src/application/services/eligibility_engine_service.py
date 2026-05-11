@@ -18,66 +18,66 @@ class EligibilityEngineService:
         skill_requirements: dict,
         context: str | None = None,
     ) -> dict[str, Any]:
-        critical_required = list(skill_requirements.get("critical_required") or [])
-        core_required = list(skill_requirements.get("core_required") or [])
+        eliminatory_skills = list(skill_requirements.get("eliminatory") or [])
+        priority_skills = list(skill_requirements.get("priority") or [])
 
-        critical_evidences = await self._evaluate_group(
+        eliminatory_evidences = await self._evaluate_group(
             candidate_skills=candidate_skills,
-            required_skills=critical_required,
+            required_skills=eliminatory_skills,
             context=context,
         )
-        core_evidences = await self._evaluate_group(
+        priority_evidences = await self._evaluate_group(
             candidate_skills=candidate_skills,
-            required_skills=core_required,
+            required_skills=priority_skills,
             context=context,
         )
 
-        critical_score = self._average_score(critical_evidences, default=100.0)
-        core_score = self._average_score(core_evidences, default=100.0)
+        eliminatory_score = self._average_score(eliminatory_evidences, default=100.0)
+        priority_score = self._average_score(priority_evidences, default=100.0)
 
-        missing_critical = [
-            evidence["required_skill"] for evidence in critical_evidences if float(evidence["score"]) < 70
+        missing_eliminatory = [
+            evidence["required_skill"] for evidence in eliminatory_evidences if float(evidence["score"]) < 70
         ]
-        missing_core = [
-            evidence["required_skill"] for evidence in core_evidences if float(evidence["score"]) < 50
+        missing_priority = [
+            evidence["required_skill"] for evidence in priority_evidences if float(evidence["score"]) < 50
         ]
 
         reasons: list[str] = []
-        for evidence in critical_evidences:
+        for evidence in eliminatory_evidences:
             if float(evidence["score"]) >= 70:
                 reasons.append(
-                    f"Critical skill {evidence['required_skill']} atendida com score {int(evidence['score'])}."
+                    f"Skill eliminatória {evidence['required_skill']} atendida com score {int(evidence['score'])}."
                 )
             else:
                 reasons.append(
-                    f"Critical skill {evidence['required_skill']} não atendida: score {int(evidence['score'])} abaixo do mínimo 70."
+                    f"Skill eliminatória {evidence['required_skill']} não atendida: score {int(evidence['score'])} abaixo do mínimo 70."
                 )
 
         status = "PASS"
-        if missing_critical:
+        if missing_eliminatory:
             status = "FAIL"
-        elif core_score < 50:
+        elif priority_score < 50:
             status = "FAIL"
-            reasons.append(f"Core score {self._format_score(core_score)} abaixo de 50.")
-        elif 50 <= core_score < 70:
+            reasons.append(f"Score de skills essenciais {self._format_score(priority_score)} abaixo de 50.")
+        elif 50 <= priority_score < 70:
             status = "REVIEW"
-            reasons.append(f"Core score {self._format_score(core_score)} exige revisão.")
-        elif len(missing_core) > 2:
+            reasons.append(f"Score de skills essenciais {self._format_score(priority_score)} exige revisão.")
+        elif len(missing_priority) > 2:
             status = "REVIEW"
-            reasons.append("Mais de 2 core skills ausentes; candidato deve ser revisado.")
+            reasons.append("Mais de 2 skills essenciais ausentes; candidato deve ser revisado.")
 
         if status == "PASS":
-            reasons.append(f"Core score {self._format_score(core_score)} aprovado.")
+            reasons.append(f"Score de skills essenciais {self._format_score(priority_score)} aprovado.")
 
         return {
             "status": status,
-            "critical_score": critical_score,
-            "core_score": core_score,
-            "missing_critical": missing_critical,
-            "missing_core": missing_core,
+            "eliminatory_score": eliminatory_score,
+            "priority_score": priority_score,
+            "missing_eliminatory": missing_eliminatory,
+            "missing_priority": missing_priority,
             "reasons": reasons,
-            "critical_evidences": critical_evidences,
-            "core_evidences": core_evidences,
+            "eliminatory_evidences": eliminatory_evidences,
+            "priority_evidences": priority_evidences,
         }
 
     async def _evaluate_group(

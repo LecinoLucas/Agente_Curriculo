@@ -11,14 +11,7 @@ PRIMARY_SKILL_REQUIREMENT_LEVELS = (
     "eliminatory",
 )
 
-LEGACY_SKILL_REQUIREMENT_LEVELS = (
-    "critical_required",
-    "core_required",
-    "important",
-    "nice_to_have",
-)
-
-SKILL_REQUIREMENT_LEVELS = PRIMARY_SKILL_REQUIREMENT_LEVELS + LEGACY_SKILL_REQUIREMENT_LEVELS
+SKILL_REQUIREMENT_LEVELS = PRIMARY_SKILL_REQUIREMENT_LEVELS
 
 
 def empty_skill_requirements() -> dict[str, list[str]]:
@@ -42,24 +35,24 @@ def validate_skill_requirements(data: Any) -> dict[str, list[str]]:
     if not isinstance(data, dict):
         raise ValueError("skill_requirements must be an object")
 
+    unexpected_levels = sorted(set(data.keys()) - set(SKILL_REQUIREMENT_LEVELS))
+    if unexpected_levels:
+        raise ValueError(
+            "skill_requirements contains unsupported levels: "
+            + ", ".join(unexpected_levels)
+        )
+
     validated = empty_skill_requirements()
     seen: set[str] = set()
-    source_map = {
-        "priority": ("priority", "critical_required", "core_required"),
-        "complementary": ("complementary", "important", "nice_to_have"),
-        "eliminatory": ("eliminatory",),
-    }
-
-    for public_level, source_levels in source_map.items():
+    for public_level in PRIMARY_SKILL_REQUIREMENT_LEVELS:
         cleaned_items: list[str] = []
-        for source_level in source_levels:
-            for raw_item in _raw_items_for_level(data, source_level):
-                cleaned = str(raw_item or "").strip()
-                normalized = normalize_skill_name(cleaned)
-                if not normalized or normalized in seen:
-                    continue
-                seen.add(normalized)
-                cleaned_items.append(cleaned)
+        for raw_item in _raw_items_for_level(data, public_level):
+            cleaned = str(raw_item or "").strip()
+            normalized = normalize_skill_name(cleaned)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            cleaned_items.append(cleaned)
         validated[public_level] = cleaned_items
 
     return validated
@@ -147,15 +140,6 @@ def _find_cross_level_duplicates(data: Any) -> list[tuple[str, list[str]]]:
         return []
 
     occurrences: dict[str, list[str]] = {}
-    public_map = {
-        "priority": "priority",
-        "critical_required": "priority",
-        "core_required": "priority",
-        "complementary": "complementary",
-        "important": "complementary",
-        "nice_to_have": "complementary",
-        "eliminatory": "eliminatory",
-    }
     for level in SKILL_REQUIREMENT_LEVELS:
         raw_items = data.get(level, [])
         if not isinstance(raw_items, list):
@@ -165,9 +149,8 @@ def _find_cross_level_duplicates(data: Any) -> list[tuple[str, list[str]]]:
             if not normalized:
                 continue
             levels = occurrences.setdefault(normalized, [])
-            public_level = public_map.get(level, level)
-            if public_level not in levels:
-                levels.append(public_level)
+            if level not in levels:
+                levels.append(level)
 
     return [(name, levels) for name, levels in occurrences.items() if len(levels) > 1]
 

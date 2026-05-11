@@ -94,6 +94,38 @@ class TestSkillEquivalenceService:
         assert evidence.strength in {"partial", "weak"}
         assert evidence.score < 0.85
 
+    def test_specific_finance_routine_remains_specific_and_only_satisfies_area_directionally(self, equivalence_service):
+        evidence = equivalence_service.match_skill("Contas a Pagar", "Financeiro")
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert evidence.score >= 0.85
+
+        reverse_evidence = equivalence_service.match_skill("Financeiro", "Contas a Pagar")
+        assert reverse_evidence.strength in {"partial", "weak", "none"}
+        assert reverse_evidence.score < 0.85
+
+    def test_specific_dp_routine_remains_specific_and_only_satisfies_area_directionally(self, equivalence_service):
+        evidence = equivalence_service.match_skill("Admissão", "Departamento Pessoal")
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert evidence.score >= 0.85
+
+        reverse_evidence = equivalence_service.match_skill("Departamento Pessoal", "Admissão")
+        assert reverse_evidence.strength in {"partial", "weak", "none"}
+        assert reverse_evidence.score < 0.85
+
+    def test_nfe_alias_maps_to_emissao_de_nota_fiscal_without_losing_specificity(self, equivalence_service):
+        evidence = equivalence_service.match_skill("NF-e", "Emissão de Nota Fiscal")
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert evidence.score >= 0.85
+
+    def test_boleto_alias_maps_to_controle_de_boletos(self, equivalence_service):
+        evidence = equivalence_service.match_skill("Boleto", "Controle de Boletos")
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert evidence.score >= 0.85
+
     def test_power_bi_satisfies_bi_as_strong(self, equivalence_service):
         """Test 3: Power BI satisfaz BI como strong (score >= 0.85)."""
         evidence = equivalence_service.match_skill("Power BI", "BI")
@@ -144,6 +176,7 @@ class TestSkillEquivalenceCatalogContract:
         catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
         assert "additional_relations" not in catalog
         assert "additional_groups" not in catalog
+        assert "business_domains" not in catalog
         assert isinstance(catalog["relations"], list)
         assert isinstance(catalog["groups"], list)
 

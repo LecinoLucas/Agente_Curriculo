@@ -18,7 +18,10 @@ from src.application.services.analysis_service import _compute_skill_scores
 def _row(name: str, *, mandatory: bool = True):
     return SimpleNamespace(
         skill_name=name,
-        JobRequiredSkillModel=SimpleNamespace(is_mandatory=mandatory),
+        JobRequiredSkillModel=SimpleNamespace(
+            priority_level="priority" if mandatory else "complementary",
+            is_mandatory=mandatory,
+        ),
     )
 
 
@@ -173,6 +176,28 @@ class TestF71ScoreInflationAudit:
 
         # Matched should be 2 (only >= 0.8)
         assert result["mandatory_matched"] == 2
+
+    def test_generic_finance_does_not_fully_satisfy_contas_a_pagar(self):
+        """Área genérica não pode satisfazer rotina específica plenamente."""
+        job_skills = [_row("Contas a Pagar", mandatory=True)]
+        candidate_skills = {"financeiro"}
+
+        result = _compute_skill_scores(job_skills, candidate_skills)
+
+        assert result["mandatory_matched"] == 0
+        assert result["mandatory_score_weighted"] < Decimal("80")
+        assert "Contas a Pagar" in result["missing_skill_names"]
+
+    def test_generic_dp_does_not_fully_satisfy_admissao(self):
+        """Departamento Pessoal genérico não pode satisfazer Admissão plenamente."""
+        job_skills = [_row("Admissão", mandatory=True)]
+        candidate_skills = {"departamento pessoal"}
+
+        result = _compute_skill_scores(job_skills, candidate_skills)
+
+        assert result["mandatory_matched"] == 0
+        assert result["mandatory_score_weighted"] < Decimal("80")
+        assert "Admissão" in result["missing_skill_names"]
 
 
 class TestF71ScoreInflationRootCause:

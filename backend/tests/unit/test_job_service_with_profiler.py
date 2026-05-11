@@ -41,7 +41,7 @@ def mock_repository():
     repo = AsyncMock()
     repo.create = AsyncMock()
     repo.save = AsyncMock()
-    repo.find_active_by_id = AsyncMock()
+    repo.find_active_by_id = AsyncMock(return_value=None)
     repo.list_required_skill_rows = AsyncMock(return_value=[])
     repo.create_required_skill_link = AsyncMock()
     repo.delete_required_skill_link = AsyncMock()
@@ -206,12 +206,12 @@ def test_build_deterministic_profile_nao_depende_de_categoria_legada():
                 StructuredJobSkill(
                     name="SQL",
                     normalized_name="sql",
-                    is_mandatory=True,
+                    priority_level="priority",
                 ),
                 StructuredJobSkill(
                     name="Power BI",
                     normalized_name="power bi",
-                    is_mandatory=True,
+                    priority_level="priority",
                 ),
             ),
         )
@@ -230,12 +230,12 @@ def test_build_deterministic_profile_classifica_fullstack_como_technology():
                 StructuredJobSkill(
                     name="React",
                     normalized_name="react",
-                    is_mandatory=True,
+                    priority_level="priority",
                 ),
                 StructuredJobSkill(
                     name="SQL",
                     normalized_name="sql",
-                    is_mandatory=False,
+                    priority_level="complementary",
                 ),
             ),
         )
@@ -280,9 +280,9 @@ async def test_generate_profile_corrige_area_fullstack_mesmo_quando_ia_retornou_
         "Atuar com frontend React, backend Node.js, APIs REST e banco relacional.",
         title="Desenvolvedor Fullstack Pleno",
         linked_skills=[
-            StructuredJobSkill(name="React", normalized_name="react", is_mandatory=True),
-            StructuredJobSkill(name="Node.js", normalized_name="node js", is_mandatory=True),
-            StructuredJobSkill(name="SQL", normalized_name="sql", is_mandatory=False),
+            StructuredJobSkill(name="React", normalized_name="react", priority_level="priority"),
+            StructuredJobSkill(name="Node.js", normalized_name="node js", priority_level="priority"),
+            StructuredJobSkill(name="SQL", normalized_name="sql", priority_level="complementary"),
         ],
     )
 
@@ -640,6 +640,7 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
     link.id = uuid4()
     link.job_id = job_id
     link.skill_id = skill_id
+    link.priority_level = "priority"
     link.is_mandatory = True
     link.minimum_level = None
     link.minimum_years = None
@@ -658,16 +659,23 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
     mock_repository.save.return_value = job
 
     service = JobService(repository=mock_repository, job_profiler_service=mock_profiler_service)
+    service._recompute_active_pipeline_matches = AsyncMock()  # type: ignore[method-assign]
     await service.add_required_skill(
         job_id,
-        MagicMock(skill_name="SQL", is_mandatory=True, minimum_level=None, minimum_years=None, weight=1),
+        MagicMock(
+            skill_name="SQL",
+            priority_level="priority",
+            is_mandatory=True,
+            minimum_level=None,
+            minimum_years=None,
+            weight=1,
+        ),
     )
 
     assert job.skill_requirements == {
-        "critical_required": [],
-        "core_required": ["SQL"],
-        "important": [],
-        "nice_to_have": [],
+        "priority": ["SQL"],
+        "complementary": [],
+        "eliminatory": [],
     }
     mock_profiler_service.generate_profile.assert_called_once()
 
@@ -675,16 +683,17 @@ async def test_add_required_skill_regenera_job_profile(mock_repository, mock_pro
 def test_skill_requirements_snapshot_is_derived_from_required_skill_rows():
     mandatory = MagicMock()
     mandatory.skill_name = "Node.js"
+    mandatory.JobRequiredSkillModel.priority_level = "priority"
     mandatory.JobRequiredSkillModel.is_mandatory = True
     optional = MagicMock()
     optional.skill_name = "React"
+    optional.JobRequiredSkillModel.priority_level = "complementary"
     optional.JobRequiredSkillModel.is_mandatory = False
 
     assert JobService._skill_requirements_from_required_skill_rows([mandatory, optional]) == {
-        "critical_required": [],
-        "core_required": ["Node.js"],
-        "important": ["React"],
-        "nice_to_have": [],
+        "priority": ["Node.js"],
+        "complementary": ["React"],
+        "eliminatory": [],
     }
 
 

@@ -18,14 +18,25 @@ def _row(name: str, *, mandatory: bool = True):
     """Helper to create a job skill row."""
     return SimpleNamespace(
         skill_name=name,
-        JobRequiredSkillModel=SimpleNamespace(is_mandatory=mandatory),
+        JobRequiredSkillModel=SimpleNamespace(
+            priority_level="priority" if mandatory else "complementary",
+            is_mandatory=mandatory,
+        ),
     )
 
 
 def _overall_skill_score(job_skills: list, candidate_skills: set[str]) -> Decimal:
     scores = _compute_skill_scores(job_skills, candidate_skills)
-    mandatory_total = sum(1 for row in job_skills if row.JobRequiredSkillModel.is_mandatory)
-    optional_total = sum(1 for row in job_skills if not row.JobRequiredSkillModel.is_mandatory)
+    mandatory_total = sum(
+        1
+        for row in job_skills
+        if getattr(row.JobRequiredSkillModel, "priority_level", "priority") == "priority"
+    )
+    optional_total = sum(
+        1
+        for row in job_skills
+        if getattr(row.JobRequiredSkillModel, "priority_level", "priority") == "complementary"
+    )
     weights = _canonical_component_weights(
         total_mandatory=mandatory_total,
         total_optional=optional_total,

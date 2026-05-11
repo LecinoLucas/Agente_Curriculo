@@ -290,3 +290,31 @@ async def test_bulk_recompute_returns_deltas_for_all_active(client: AsyncClient,
     assert "new_score" in first_delta
     assert "delta" in first_delta
     assert "monotonicity_decision" in first_delta
+
+@pytest.mark.asyncio
+async def test_viewer_receives_403_on_recompute(client: AsyncClient, db_session: AsyncSession) -> None:
+    """Viewer should receive 403 Forbidden when trying to recompute score."""
+    recruiter = await _create_active_user(
+        db_session, f"recruiter-{uuid4().hex[:6]}@test.com", "password123", UserRole.RECRUITER
+    )
+    job_id, candidate_id, _ = await _seed_valid_scoring_case(db_session, recruiter.id)
+    
+    viewer = await _create_active_user(
+        db_session, f"viewer-{uuid4().hex[:6]}@test.com", "password123", UserRole.VIEWER
+    )
+    viewer_headers = await _auth_headers(client, viewer.email, "password123")
+    
+    # Try individual recompute
+    response_ind = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/scoring",
+        headers=viewer_headers
+    )
+    assert response_ind.status_code == 403
+    
+    # Try bulk recompute
+    response_bulk = await client.post(
+        f"/api/v1/jobs/{job_id}/scoring",
+        headers=viewer_headers
+    )
+    assert response_bulk.status_code == 403
+

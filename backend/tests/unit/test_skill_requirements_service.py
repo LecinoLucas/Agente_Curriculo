@@ -37,6 +37,15 @@ def test_validate_skill_requirements_rejects_invalid_group_type() -> None:
         )
 
 
+def test_validate_skill_requirements_rejects_legacy_levels() -> None:
+    with pytest.raises(ValueError, match="unsupported levels: critical_required"):
+        validate_skill_requirements(
+            {
+                "critical_required": ["SQL"],
+            }
+        )
+
+
 def test_product_rules_block_more_than_three_eliminatory() -> None:
     result = validate_skill_requirements_product_rules(
         {

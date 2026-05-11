@@ -23,6 +23,16 @@ from src.application.services.candidate_ranking_service import (
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 
 
+def _skill_row(name: str, *, priority_level: str = "priority") -> SimpleNamespace:
+    return SimpleNamespace(
+        skill_name=name,
+        JobRequiredSkillModel=SimpleNamespace(
+            priority_level=priority_level,
+            is_mandatory=priority_level == "priority",
+        ),
+    )
+
+
 def test_canonical_skill_evidence_requires_component_evidence():
     assert _has_canonical_skill_evidence({"skill_evidence_breakdown": None}) is False
     assert _has_canonical_skill_evidence({"skill_evidence_breakdown": {}}) is False
@@ -125,35 +135,25 @@ def test_postgres_skill_evidence_filter_checks_json_object_and_required_key():
 
 
 def test_missing_critical_mandatory_caps_final_score() -> None:
-    job = SimpleNamespace(skill_requirements={"critical_required": ["Python"], "core_required": []})
-    job_skill_rows = [
-        SimpleNamespace(
-            skill_name="Python",
-            JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-        )
-    ]
+    job = SimpleNamespace(skill_requirements={"priority": [], "complementary": [], "eliminatory": ["Python"]})
+    job_skill_rows = [_skill_row("Python", priority_level="eliminatory")]
     row = {"missing_skills": ["Python"]}
     bd = {
         "final_score": Decimal("88.00"),
-        "missing_required_skills": ["Python"],
+        "missing_eliminatory_skills": ["Python"],
         "cap_applied": False,
     }
 
     _apply_critical_mandatory_guardrails(row=row, job=job, job_skill_rows=job_skill_rows, bd=bd)
     assert bd["final_score"] == Decimal("49.00")
     assert bd["cap_applied"] is True
-    assert bd["cap_reason"] == "missing_critical_mandatory"
-    assert bd["eligibility_status"] == "REVIEW"
+    assert bd["cap_reason"] == "missing_eliminatory_skills"
+    assert bd["eligibility_status"] == "FAIL"
 
 
 def test_missing_core_without_critical_required_does_not_cap_final_score() -> None:
-    job = SimpleNamespace(skill_requirements={"critical_required": [], "core_required": ["Python"]})
-    job_skill_rows = [
-        SimpleNamespace(
-            skill_name="Python",
-            JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-        )
-    ]
+    job = SimpleNamespace(skill_requirements={"priority": ["Python"], "complementary": [], "eliminatory": []})
+    job_skill_rows = [_skill_row("Python", priority_level="priority")]
     row = {"missing_skills": ["Python"]}
     bd = {
         "final_score": Decimal("88.00"),
@@ -171,14 +171,9 @@ def test_cap_factor_mentions_same_mandatory_guardrail_used_in_score() -> None:
         minimum_years_experience=None,
         minimum_education_level=None,
         seniority_level="mid",
-        skill_requirements={"critical_required": ["Python"], "core_required": []},
+        skill_requirements={"priority": [], "complementary": [], "eliminatory": ["Python"]},
     )
-    job_skill_rows = [
-        SimpleNamespace(
-            skill_name="Python",
-            JobRequiredSkillModel=SimpleNamespace(is_mandatory=True),
-        )
-    ]
+    job_skill_rows = [_skill_row("Python", priority_level="eliminatory")]
     row = {
         "skill_evidence_breakdown": {"partial_matches": []},
         "total_experience_years": 6,
@@ -189,8 +184,8 @@ def test_cap_factor_mentions_same_mandatory_guardrail_used_in_score() -> None:
         "final_score": Decimal("49.00"),
         "raw_score": Decimal("88.00"),
         "cap_applied": True,
-        "cap_reason": "missing_critical_mandatory",
-        "failed_rule": "missing_critical_mandatory",
+        "cap_reason": "missing_eliminatory_skills",
+        "failed_rule": "missing_eliminatory_skills",
         "failed_dimension": "skills",
         "validation_reason": "missing mandatory",
         "experience_match_score": Decimal("100.00"),
@@ -211,7 +206,7 @@ def test_cap_factor_mentions_same_mandatory_guardrail_used_in_score() -> None:
     )
     cap_factor = next((item for item in factors if item["factor_type"] == "eligibility_cap"), None)
     assert cap_factor is not None
-    assert cap_factor["factor_key"] == "missing_critical_mandatory"
+    assert cap_factor["factor_key"] == "missing_eliminatory_skills"
 
 
 def test_ranking_recomputes_unknown_penalty_from_match_evidence() -> None:
@@ -221,8 +216,8 @@ def test_ranking_recomputes_unknown_penalty_from_match_evidence() -> None:
         seniority_level="mid",
     )
     job_skill_rows = [
-        SimpleNamespace(skill_name="JavaScript", JobRequiredSkillModel=SimpleNamespace(is_mandatory=True)),
-        SimpleNamespace(skill_name="Node.js", JobRequiredSkillModel=SimpleNamespace(is_mandatory=True)),
+        _skill_row("JavaScript", priority_level="priority"),
+        _skill_row("Node.js", priority_level="priority"),
     ]
     row = {
         "matched_skills": ["Node.js"],
@@ -246,8 +241,8 @@ def test_ranking_recomputes_unknown_penalty_from_match_evidence() -> None:
     breakdown = _compute_breakdown(row=row, job=job, job_skill_rows=job_skill_rows)
     _apply_validation_guardrails(row, breakdown)
 
-    assert breakdown["final_score"] == Decimal("20.00")
-    assert breakdown["validation_penalty_score"] == Decimal("2.22")
+    assert breakdown["final_score"] == Decimal("22.22")
+    assert breakdown["validation_penalty_score"] == Decimal("0.00")
     assert breakdown["score_source"] == "candidate_job_match_evidence"
 
 
@@ -258,7 +253,7 @@ def test_breakdown_uses_persisted_experience_detected_when_row_years_is_missing(
         seniority_level="mid",
     )
     job_skill_rows = [
-        SimpleNamespace(skill_name="Node.js", JobRequiredSkillModel=SimpleNamespace(is_mandatory=True)),
+        _skill_row("Node.js", priority_level="priority"),
     ]
     row = {
         "matched_skills": ["Node.js"],
@@ -315,14 +310,14 @@ def test_breakdown_preserves_separate_required_and_optional_impacts() -> None:
         seniority_level="mid",
     )
     job_skill_rows = [
-        SimpleNamespace(skill_name="Python", JobRequiredSkillModel=SimpleNamespace(is_mandatory=True)),
-        SimpleNamespace(skill_name="Node.js", JobRequiredSkillModel=SimpleNamespace(is_mandatory=True)),
-        SimpleNamespace(skill_name="React", JobRequiredSkillModel=SimpleNamespace(is_mandatory=False)),
-        SimpleNamespace(skill_name="Docker", JobRequiredSkillModel=SimpleNamespace(is_mandatory=False)),
-        SimpleNamespace(skill_name="Kubernetes", JobRequiredSkillModel=SimpleNamespace(is_mandatory=False)),
-        SimpleNamespace(skill_name="CI/CD", JobRequiredSkillModel=SimpleNamespace(is_mandatory=False)),
-        SimpleNamespace(skill_name="PostgreSQL", JobRequiredSkillModel=SimpleNamespace(is_mandatory=False)),
-        SimpleNamespace(skill_name="Redis", JobRequiredSkillModel=SimpleNamespace(is_mandatory=False)),
+        _skill_row("Python", priority_level="priority"),
+        _skill_row("Node.js", priority_level="priority"),
+        _skill_row("React", priority_level="complementary"),
+        _skill_row("Docker", priority_level="complementary"),
+        _skill_row("Kubernetes", priority_level="complementary"),
+        _skill_row("CI/CD", priority_level="complementary"),
+        _skill_row("PostgreSQL", priority_level="complementary"),
+        _skill_row("Redis", priority_level="complementary"),
     ]
     row = {
         "matched_skills": ["Python", "Node.js", "React", "Docker"],
@@ -393,6 +388,6 @@ def test_score_explanation_separates_required_optional_and_deal_breakers() -> No
         },
     )
 
-    assert "Obrigatórias: 5/6 atendidas, 1 ausente" in explanation
-    assert "Desejáveis: 2/16 atendidas, 14 ausentes, bônus 6.7 pts (cap em 5 skills)." in explanation
-    assert "Deal breakers: houve bloqueio ativo no ranking." in explanation
+    assert "Essenciais: 5/6 atendidas, 1 ausente" in explanation
+    assert "Diferenciais: 2/16 encontrados, 14 ausentes, bônus 6.7 pts (cap em 5 skills)." in explanation
+    assert "Critério eliminatório violado" in explanation

@@ -97,6 +97,10 @@ def _parse_required_json_object(raw: object, *, field_name: str) -> dict:
 
 
 def _parse_required_json_list(raw: object, *, field_name: str, required: bool = True) -> list:
+    if raw is None:
+        if required:
+            raise ValueError(f"{field_name} must be list or JSON array string")
+        return []
     if isinstance(raw, list):
         return raw
     if isinstance(raw, str):

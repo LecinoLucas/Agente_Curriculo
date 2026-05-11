@@ -51,7 +51,7 @@ def _evidence(
 
 
 @pytest.mark.asyncio
-async def test_eligibility_pass_when_critical_and_core_are_strong() -> None:
+async def test_eligibility_pass_when_eliminatory_and_priority_are_strong() -> None:
     stub = StubSkillEvidenceService(
         {
             "SQL": _evidence("SQL", 100),
@@ -65,20 +65,20 @@ async def test_eligibility_pass_when_critical_and_core_are_strong() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL", "Power BI", "Python", "ETL"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": ["Power BI", "Python", "ETL"],
+            "eliminatory": ["SQL"],
+            "priority": ["Power BI", "Python", "ETL"],
         },
     )
 
     assert result["status"] == "PASS"
-    assert result["critical_score"] == 100.0
-    assert result["core_score"] == 75.0
-    assert result["missing_critical"] == []
-    assert result["missing_core"] == []
+    assert result["eliminatory_score"] == 100.0
+    assert result["priority_score"] == 75.0
+    assert result["missing_eliminatory"] == []
+    assert result["missing_priority"] == []
 
 
 @pytest.mark.asyncio
-async def test_eligibility_fails_when_critical_skill_is_below_70() -> None:
+async def test_eligibility_fails_when_eliminatory_skill_is_below_70() -> None:
     stub = StubSkillEvidenceService(
         {
             "SAP MM": _evidence("SAP MM", 20, match_type="weak_equivalence", strength="weak"),
@@ -90,18 +90,18 @@ async def test_eligibility_fails_when_critical_skill_is_below_70() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["Protheus", "Power BI"],
         skill_requirements={
-            "critical_required": ["SAP MM"],
-            "core_required": ["Power BI"],
+            "eliminatory": ["SAP MM"],
+            "priority": ["Power BI"],
         },
     )
 
     assert result["status"] == "FAIL"
-    assert result["missing_critical"] == ["SAP MM"]
-    assert "Critical skill SAP MM não atendida: score 20 abaixo do mínimo 70." in result["reasons"]
+    assert result["missing_eliminatory"] == ["SAP MM"]
+    assert "Skill eliminatória SAP MM não atendida: score 20 abaixo do mínimo 70." in result["reasons"]
 
 
 @pytest.mark.asyncio
-async def test_eligibility_reviews_when_core_score_between_50_and_70() -> None:
+async def test_eligibility_reviews_when_priority_score_between_50_and_70() -> None:
     stub = StubSkillEvidenceService(
         {
             "SQL": _evidence("SQL", 100),
@@ -114,18 +114,18 @@ async def test_eligibility_reviews_when_core_score_between_50_and_70() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL", "Power BI", "Python"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": ["Power BI", "Python"],
+            "eliminatory": ["SQL"],
+            "priority": ["Power BI", "Python"],
         },
     )
 
     assert result["status"] == "REVIEW"
-    assert result["core_score"] == 62.5
-    assert "Core score 62.50 exige revisão." in result["reasons"]
+    assert result["priority_score"] == 62.5
+    assert "Score de skills essenciais 62.50 exige revisão." in result["reasons"]
 
 
 @pytest.mark.asyncio
-async def test_eligibility_reviews_when_more_than_two_core_are_missing_but_score_is_at_least_50() -> None:
+async def test_eligibility_reviews_when_more_than_two_priority_are_missing_but_score_is_at_least_50() -> None:
     stub = StubSkillEvidenceService(
         {
             "SQL": _evidence("SQL", 100),
@@ -142,19 +142,19 @@ async def test_eligibility_reviews_when_more_than_two_core_are_missing_but_score
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL", "DAX", "PostgreSQL", "SQL Server"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": ["Power BI", "Python", "ETL", "DAX", "PostgreSQL", "SQL Server"],
+            "eliminatory": ["SQL"],
+            "priority": ["Power BI", "Python", "ETL", "DAX", "PostgreSQL", "SQL Server"],
         },
     )
 
     assert result["status"] == "REVIEW"
-    assert result["core_score"] == 74.5
-    assert result["missing_core"] == ["Power BI", "Python", "ETL"]
-    assert "Mais de 2 core skills ausentes; candidato deve ser revisado." in result["reasons"]
+    assert result["priority_score"] == 74.5
+    assert result["missing_priority"] == ["Power BI", "Python", "ETL"]
+    assert "Mais de 2 skills essenciais ausentes; candidato deve ser revisado." in result["reasons"]
 
 
 @pytest.mark.asyncio
-async def test_eligibility_fails_when_core_score_is_below_50() -> None:
+async def test_eligibility_fails_when_priority_score_is_below_50() -> None:
     stub = StubSkillEvidenceService(
         {
             "SQL": _evidence("SQL", 100),
@@ -167,18 +167,18 @@ async def test_eligibility_fails_when_core_score_is_below_50() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": ["Power BI", "Python"],
+            "eliminatory": ["SQL"],
+            "priority": ["Power BI", "Python"],
         },
     )
 
     assert result["status"] == "FAIL"
-    assert result["core_score"] == 42.5
-    assert "Core score 42.50 abaixo de 50." in result["reasons"]
+    assert result["priority_score"] == 42.5
+    assert "Score de skills essenciais 42.50 abaixo de 50." in result["reasons"]
 
 
 @pytest.mark.asyncio
-async def test_eligibility_without_critical_does_not_fail_on_critical() -> None:
+async def test_eligibility_without_eliminatory_does_not_fail_on_eliminatory() -> None:
     stub = StubSkillEvidenceService(
         {
             "Power BI": _evidence("Power BI", 80),
@@ -189,18 +189,18 @@ async def test_eligibility_without_critical_does_not_fail_on_critical() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["Power BI"],
         skill_requirements={
-            "critical_required": [],
-            "core_required": ["Power BI"],
+            "eliminatory": [],
+            "priority": ["Power BI"],
         },
     )
 
     assert result["status"] == "PASS"
-    assert result["critical_score"] == 100.0
-    assert result["missing_critical"] == []
+    assert result["eliminatory_score"] == 100.0
+    assert result["missing_eliminatory"] == []
 
 
 @pytest.mark.asyncio
-async def test_eligibility_without_core_sets_core_score_to_100() -> None:
+async def test_eligibility_without_priority_sets_priority_score_to_100() -> None:
     stub = StubSkillEvidenceService(
         {
             "SQL": _evidence("SQL", 100),
@@ -211,18 +211,18 @@ async def test_eligibility_without_core_sets_core_score_to_100() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": [],
+            "eliminatory": ["SQL"],
+            "priority": [],
         },
     )
 
     assert result["status"] == "PASS"
-    assert result["core_score"] == 100.0
-    assert result["core_evidences"] == []
+    assert result["priority_score"] == 100.0
+    assert result["priority_evidences"] == []
 
 
 @pytest.mark.asyncio
-async def test_eligibility_ignores_important_and_nice_to_have() -> None:
+async def test_eligibility_ignores_complementary_for_blocking_decision() -> None:
     stub = StubSkillEvidenceService(
         {
             "SQL": _evidence("SQL", 100),
@@ -234,10 +234,9 @@ async def test_eligibility_ignores_important_and_nice_to_have() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL", "Power BI"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": ["Power BI"],
-            "important": ["DAX", "ETL"],
-            "nice_to_have": ["SAP"],
+            "eliminatory": ["SQL"],
+            "priority": ["Power BI"],
+            "complementary": ["DAX", "ETL", "SAP"],
         },
     )
 
@@ -260,8 +259,8 @@ async def test_eligibility_repasses_context_to_evidence_service() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL", "Power BI"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": ["Power BI"],
+            "eliminatory": ["SQL"],
+            "priority": ["Power BI"],
         },
         context="data",
     )
@@ -286,11 +285,11 @@ async def test_eligibility_returns_auditable_evidences() -> None:
     result = await service.evaluate_eligibility(
         candidate_skills=["SQL", "Power BI"],
         skill_requirements={
-            "critical_required": ["SQL"],
-            "core_required": ["Power BI"],
+            "eliminatory": ["SQL"],
+            "priority": ["Power BI"],
         },
     )
 
-    assert result["critical_evidences"] == [sql_evidence]
-    assert result["core_evidences"] == [bi_evidence]
-    assert result["reasons"][0] == "Critical skill SQL atendida com score 100."
+    assert result["eliminatory_evidences"] == [sql_evidence]
+    assert result["priority_evidences"] == [bi_evidence]
+    assert result["reasons"][0] == "Skill eliminatória SQL atendida com score 100."

@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.interface.api.schemas.common import APISchemaModel, ORMAPISchemaModel
+
 JOB_AREA = Literal[
     "technology",
     "data",
@@ -111,7 +113,7 @@ class DealBreaker(BaseModel):
         return value
 
 
-class JobResponse(BaseModel):
+class JobResponse(ORMAPISchemaModel):
     id: UUID
     title: str
     description: str
@@ -142,13 +144,6 @@ class JobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {
-        "from_attributes": True,
-        "json_encoders": {
-            Decimal: float,
-        },
-    }
-
     @field_validator("job_area", mode="before")
     @classmethod
     def normalize_job_area(cls, value):
@@ -175,7 +170,7 @@ class JobListResponse(BaseModel):
     summary: JobStatusSummaryResponse
 
 
-class CreateJobRequest(BaseModel):
+class CreateJobRequest(APISchemaModel):
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=10)
     requirements: str | None = None
@@ -195,12 +190,6 @@ class CreateJobRequest(BaseModel):
     behavioral_requirements: list[str] = Field(default_factory=list)
     priority: JOB_PRIORITY = "normal"
     skill_requirements: dict[str, list[str]] | None = None
-
-    model_config = {
-        "json_encoders": {
-            Decimal: float,
-        },
-    }
 
     @field_validator("job_area", mode="before")
     @classmethod
@@ -226,7 +215,7 @@ class CreateJobRequest(BaseModel):
         return normalized
 
 
-class UpdateJobRequest(BaseModel):
+class UpdateJobRequest(APISchemaModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
     description: str | None = Field(default=None, min_length=10)
     requirements: str | None = None
@@ -246,12 +235,6 @@ class UpdateJobRequest(BaseModel):
     behavioral_requirements: list[str] | None = None
     priority: JOB_PRIORITY | None = None
     skill_requirements: dict[str, list[str]] | None = None
-
-    model_config = {
-        "json_encoders": {
-            Decimal: float,
-        },
-    }
 
     @field_validator("job_area", mode="before")
     @classmethod
@@ -443,7 +426,7 @@ class BulkImportJobSkillRequest(BaseModel):
     weight: Decimal = Field(default=Decimal("1.00"), ge=0, le=10)
 
 
-class BulkImportJobItemRequest(BaseModel):
+class BulkImportJobItemRequest(APISchemaModel):
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1)
     requirements: str | None = None
@@ -463,12 +446,6 @@ class BulkImportJobItemRequest(BaseModel):
     behavioral_requirements: list[str] = Field(default_factory=list)
     priority: JOB_PRIORITY = "normal"
     skills: list[BulkImportJobSkillRequest] = Field(default_factory=list)
-
-    model_config = {
-        "json_encoders": {
-            Decimal: float,
-        },
-    }
 
     @field_validator("job_area", mode="before")
     @classmethod
@@ -536,7 +513,7 @@ class BulkUpdateMatchKeyRequest(BaseModel):
         return normalize_job_area_value(value)
 
 
-class BulkUpdateJobDataRequest(BaseModel):
+class BulkUpdateJobDataRequest(APISchemaModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
     description: str | None = Field(default=None, min_length=10)
     requirements: str | None = None
@@ -556,12 +533,6 @@ class BulkUpdateJobDataRequest(BaseModel):
     behavioral_requirements: list[str] | None = None
     priority: JOB_PRIORITY | None = None
     skills: list[BulkImportJobSkillRequest] | None = None
-
-    model_config = {
-        "json_encoders": {
-            Decimal: float,
-        },
-    }
 
     @field_validator("job_area", mode="before")
     @classmethod
