@@ -11,6 +11,7 @@ import { CandidateQuickJobActions } from "./CandidateQuickJobActions";
 import { CandidateProfileNavigation, type TabKey } from "./CandidateProfileNavigation";
 import { CandidateProfileContent } from "./CandidateProfileContent";
 import { getLinkCandidateCtaLabel } from "../../utils/jobLinking";
+import { CandidateAnalysisStatusCard } from "../components/CandidateAnalysisStatusCard";
 
 export type CandidateActionFeedback = {
   id: number;
@@ -25,12 +26,16 @@ interface CandidateProfileViewProps {
   currentStage: PipelineStage | null;
   activeJobLabel: string;
   activeJobCompatibilityScore: number | null;
+  hasPersistedCompatibilityScore: boolean;
   hasActiveJob: boolean;
+  hasResume: boolean;
   aiScore: number | null;
   aiStatus: string | null | undefined;
   analysisResult: AnalysisResult | null;
   rankingEntry: JobRankingEntry | null;
   scoreExplanation: ScoreExplanationResponse | null;
+  analysisHighlights?: string[];
+  analysisErrorMessage?: string | null;
   isLoading: boolean;
   isLoadingContent?: boolean;
   activeTab?: TabKey;
@@ -52,9 +57,6 @@ interface CandidateProfileViewProps {
   onNavigateToFull?: () => void;
   onBackToList?: () => void;
   backToListLabel?: string;
-  analysisStatusLabel?: string;
-  analysisStatusDetail?: string;
-  analysisStatusTone?: "neutral" | "info" | "success" | "danger" | "warning";
   analysisActionLabel?: string;
   analysisActionDisabled?: boolean;
   // Action panel props
@@ -74,12 +76,16 @@ export function CandidateProfileView({
   currentStage,
   activeJobLabel,
   activeJobCompatibilityScore,
+  hasPersistedCompatibilityScore,
   hasActiveJob,
+  hasResume,
   aiScore,
   aiStatus,
   analysisResult,
   rankingEntry,
   scoreExplanation,
+  analysisHighlights = [],
+  analysisErrorMessage = null,
   isLoading,
   isLoadingContent = false,
   activeTab = "overview",
@@ -101,9 +107,6 @@ export function CandidateProfileView({
   onNavigateToFull,
   onBackToList,
   backToListLabel,
-  analysisStatusLabel,
-  analysisStatusDetail,
-  analysisStatusTone = "neutral",
   analysisActionLabel = "Iniciar análise",
   analysisActionDisabled = false,
   activeJob = null,
@@ -175,9 +178,6 @@ export function CandidateProfileView({
         onNavigateToFull={onNavigateToFull}
         onBackToList={onBackToList}
         backToListLabel={backToListLabel}
-        analysisStatusLabel={analysisStatusLabel}
-        analysisStatusDetail={analysisStatusDetail}
-        analysisStatusTone={analysisStatusTone}
         actions={
           <>
             {onEditCandidate ? (
@@ -227,8 +227,33 @@ export function CandidateProfileView({
         </div>
       ) : null}
 
-      {/* Decision panel - AI first */}
-      {!isLoading && (
+      {!isLoading ? (
+        <CandidateAnalysisStatusCard
+          hasResume={hasResume}
+          activeJobId={activeJobId}
+          analysisStatus={aiStatus}
+          jobFitScore={activeJobCompatibilityScore}
+          scoreLabel={
+            hasPersistedCompatibilityScore
+              ? "Aderência à vaga"
+              : "Última aderência calculada"
+          }
+          aiStatus={aiStatus}
+          errorMessage={analysisErrorMessage}
+          highlights={analysisHighlights}
+          onPrimaryAction={
+            hasResume && hasActiveJob && activeJobCompatibilityScore !== null
+              ? onViewAnalysis
+              : !hasResume
+                ? onOpenDocuments
+                : !hasActiveJob
+                  ? onLinkJob
+                  : onStartAnalysis
+          }
+        />
+      ) : null}
+
+      {!isLoading && (activeJobCompatibilityScore !== null || currentStage === "hired" || currentStage === "rejected") ? (
         <CandidateDecisionPanel
           currentStage={currentStage}
           analysisResult={analysisResult}
@@ -242,7 +267,7 @@ export function CandidateProfileView({
           onEvaluateBetter={onEvaluateBetter}
           compact={compact}
         />
-      )}
+      ) : null}
 
       {/* Quick actions */}
       {!isLoading && (

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CandidateDecisionPanel } from "../CandidateDecisionPanel";
 
 describe("CandidateDecisionPanel", () => {
-  it("aciona ver análise e avaliar melhor quando a recomendação exige revisão", async () => {
+  it("aciona ver score e avaliar melhor quando a recomendação exige revisão", async () => {
     const user = userEvent.setup();
     const onViewAnalysis = vi.fn();
     const onEvaluateBetter = vi.fn();
@@ -52,7 +52,7 @@ describe("CandidateDecisionPanel", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Ver análise" }));
+    await user.click(screen.getByRole("button", { name: "Ver score" }));
     await user.click(screen.getByRole("button", { name: "Avaliar melhor" }));
 
     expect(onViewAnalysis).toHaveBeenCalledTimes(1);

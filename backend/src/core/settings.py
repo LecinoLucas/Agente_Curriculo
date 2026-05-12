@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS: float = 30.0
     GEMINI_CONCURRENCY_RETRY_INTERVAL_MS: int = 200
     GEMINI_CONCURRENCY_SLOT_TTL_SECONDS: int = 300
+    SKILL_CATALOG_SOURCE: str = "database"
+    SKILL_CATALOG_COMPARE_ON_MATCH: bool = False
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
@@ -89,6 +91,15 @@ class Settings(BaseSettings):
         allowed = {"anthropic", "google"}
         if normalized not in allowed:
             raise ValueError(f"AI_PROVIDER must be one of {allowed}")
+        return normalized
+
+    @field_validator("SKILL_CATALOG_SOURCE")
+    @classmethod
+    def validate_skill_catalog_source(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        allowed = {"json", "database"}
+        if normalized not in allowed:
+            raise ValueError(f"SKILL_CATALOG_SOURCE must be one of {allowed}")
         return normalized
 
     def model_post_init(self, __context: object) -> None:

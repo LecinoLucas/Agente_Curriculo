@@ -122,7 +122,7 @@ class SQLAlchemyAnalysisRepository:
             sa.update(AnalysisModel)
             .where(
                 AnalysisModel.resume_version_id.in_(candidate_resume_versions),
-                sa.cast(AnalysisModel.status, sa.String).in_(["queued", "pending", "processing"]),
+                sa.cast(AnalysisModel.status, sa.String).in_(["queued", "pending", "processing", "retry_scheduled"]),
             )
             .values(
                 status="cancelled",
@@ -168,7 +168,7 @@ class SQLAlchemyAnalysisRepository:
     ) -> AnalysisModel | None:
         conditions = [
             AnalysisModel.resume_version_id == resume_version_id,
-            sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing"]),
+            sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing", "retry_scheduled"]),
         ]
         if job_id:
             conditions.append(AnalysisModel.job_id == job_id)
@@ -670,14 +670,120 @@ class SQLAlchemyAnalysisRepository:
             .order_by(CandidateProfileAnalysisModel.created_at.desc())
         )
 
-    async def save_candidate_profile_analysis(
+    async def get_candidate_profile_analysis_by_version_model_prompt(
+        self,
+        *,
+        resume_version_id: UUID,
+        provider: str,
+        model_id: str,
+        prompt_version: str,
+    ) -> CandidateProfileAnalysisModel | None:
+        """Busca candidate_profile_analysis pela chave única da constraint."""
+        return await self._session.scalar(
+            sa.select(CandidateProfileAnalysisModel)
+            .where(
+                CandidateProfileAnalysisModel.resume_version_id == resume_version_id,
+                CandidateProfileAnalysisModel.provider == provider,
+                CandidateProfileAnalysisModel.model_id == model_id,
+                CandidateProfileAnalysisModel.prompt_version == prompt_version,
+            )
+        )
+
+    async def upsert_candidate_profile_analysis(
         self,
         profile: CandidateProfileAnalysisModel,
     ) -> CandidateProfileAnalysisModel:
+        """UPSERT idempotente para candidate_profile_analysis.
+
+        Garante que retry/concorrência do Celery não gere IntegrityError.
+
+        PostgreSQL: INSERT ... ON CONFLICT DO NOTHING RETURNING *
+          Se não retornar linha (já existia), faz SELECT pela chave.
+        SQLite (testes): find by key → return existing or insert.
+
+        A análise é imutável após criada — dados de tokens e resultado
+        não são sobrescritos; o registro mais antigo é preservado.
+        """
+        if self._is_postgresql():
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+            profile_id = profile.id if profile.id else uuid4()
+            now = datetime.now(UTC)
+            profile_created_at = profile.created_at if profile.created_at else now
+
+            stmt = (
+                pg_insert(CandidateProfileAnalysisModel)
+                .values(
+                    id=profile_id,
+                    candidate_id=profile.candidate_id,
+                    resume_version_id=profile.resume_version_id,
+                    provider=profile.provider,
+                    model_id=profile.model_id,
+                    prompt_version=profile.prompt_version,
+                    professional_area=profile.professional_area,
+                    seniority_level=profile.seniority_level,
+                    education_level=profile.education_level,
+                    experience_years=profile.experience_years,
+                    skills_json=profile.skills_json,
+                    summary=profile.summary,
+                    strengths_json=profile.strengths_json,
+                    weaknesses_json=profile.weaknesses_json,
+                    raw_response_json=profile.raw_response_json,
+                    input_tokens=profile.input_tokens,
+                    output_tokens=profile.output_tokens,
+                    created_at=profile_created_at,
+                )
+                .on_conflict_do_nothing(
+                    constraint="uq_candidate_profile_analysis_version_model_prompt"
+                )
+                .returning(CandidateProfileAnalysisModel)
+            )
+            result = await self._session.scalars(stmt)
+            row = result.first()
+
+            if row is not None:
+                return row
+
+            # ON CONFLICT DO NOTHING → linha já existia, buscar o existente
+            existing = await self.get_candidate_profile_analysis_by_version_model_prompt(
+                resume_version_id=profile.resume_version_id,
+                provider=profile.provider,
+                model_id=profile.model_id,
+                prompt_version=profile.prompt_version,
+            )
+            if existing is not None:
+                return existing
+            # Fallback improvável: concorrência extrema; tenta inserir novamente
+            self._session.add(profile)
+            await self._session.flush()
+            await self._session.refresh(profile)
+            return profile
+
+        # ── Fallback SQLite (testes) ────────────────────────────────────────
+        existing = await self.get_candidate_profile_analysis_by_version_model_prompt(
+            resume_version_id=profile.resume_version_id,
+            provider=profile.provider,
+            model_id=profile.model_id,
+            prompt_version=profile.prompt_version,
+        )
+        if existing is not None:
+            return existing
+
         self._session.add(profile)
         await self._session.flush()
         await self._session.refresh(profile)
         return profile
+
+    async def save_candidate_profile_analysis(
+        self,
+        profile: CandidateProfileAnalysisModel,
+    ) -> CandidateProfileAnalysisModel:
+        """Alias idempotente para upsert_candidate_profile_analysis.
+
+        Mantido para compatibilidade. Internamente usa UPSERT seguro
+        contra retry/concorrência.
+        """
+        return await self.upsert_candidate_profile_analysis(profile)
 
     async def find_job_profile_analysis_by_signature(
         self,
@@ -899,7 +1005,7 @@ class SQLAlchemyAnalysisRepository:
         """Count pending and processing analyses in the queue."""
         result = await self._session.scalar(
             sa.select(sa.func.count()).select_from(AnalysisModel).where(
-                sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing"])
+                sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing", "retry_scheduled"])
             )
         )
         return int(result or 0)

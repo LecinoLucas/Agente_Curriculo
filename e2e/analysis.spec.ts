@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
 
+const E2E_EMAIL = process.env.E2E_USER_EMAIL ?? 'admin@resume.ai';
+const E2E_PASSWORD = process.env.E2E_USER_PASSWORD ?? 'Admin123!';
+
 test('E2E: Análise de candidatos - Hiago Dantos e Christian Prado', async ({ page }) => {
   // Acessar a página inicial
   await page.goto('http://127.0.0.1:5173/');
@@ -14,8 +17,8 @@ test('E2E: Análise de candidatos - Hiago Dantos e Christian Prado', async ({ pa
   const needsLogin = await loginForm.isVisible().catch(() => false);
   if (needsLogin) {
     console.log('🔐 Fazendo login...');
-    await loginForm.fill('equipepioneiracolchoes@gmail.com');
-    await passwordInput.fill('senha123');
+    await loginForm.fill(E2E_EMAIL);
+    await passwordInput.fill(E2E_PASSWORD);
 
     const loginBtn = page.locator('button:has-text("Entrar no painel")').first();
     await loginBtn.click();

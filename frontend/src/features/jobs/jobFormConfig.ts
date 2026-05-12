@@ -51,23 +51,8 @@ export const EMPTY_FORM: JobFormValues = {
   location: "",
 };
 
-export const JOB_AREA_OPTIONS = [
-  { value: "technology", label: "Tecnologia" },
-  { value: "data", label: "Dados" },
-  { value: "financial", label: "Financeiro" },
-  { value: "fiscal", label: "Fiscal" },
-  { value: "accounting", label: "Contábil" },
-  { value: "administrative", label: "Administrativo" },
-  { value: "commercial", label: "Comercial" },
-  { value: "operational", label: "Operacional" },
-  { value: "hr", label: "RH" },
-  { value: "leadership", label: "Liderança" },
-] as const;
-
 export function formatJobArea(value: string | null | undefined): string {
-  if (!value) return "—";
-  const option = JOB_AREA_OPTIONS.find((opt) => opt.value === value);
-  return option ? option.label : value;
+  return value?.trim() ? value : "—";
 }
 
 export const PRIORITY_OPTIONS: Array<{ value: JobFormValues["priority"]; label: string }> = [

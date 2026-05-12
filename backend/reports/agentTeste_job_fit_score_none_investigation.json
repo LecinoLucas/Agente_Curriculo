@@ -1,0 +1,72 @@
+{
+  "candidate_id": "5329d4ba-3cc0-417a-a07f-4f8965d8a69a",
+  "candidate_name": "agentTeste",
+  "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+  "job_title": "Analista De Dados Senior",
+  "analysis_id": "80239e41-4689-4215-915d-c4338a21a34b",
+  "resume_version_id": "85155a4a-9c8d-4323-a4b0-07852e9e971e",
+  "source_json_result": {
+    "source_used": "json",
+    "score": null,
+    "recommendation": "review_manually",
+    "ranking_refresh_status": "skipped",
+    "ranking_warning": "Ranking incremental não encontrou contexto suficiente para o candidato.",
+    "matched_skills": [
+      "BI",
+      "Analytics"
+    ],
+    "missing_skills": [
+      "SQL Server"
+    ]
+  },
+  "source_database_result": {
+    "source_used": "database",
+    "score": null,
+    "recommendation": "review_manually",
+    "ranking_refresh_status": "skipped",
+    "ranking_warning": "Ranking incremental não encontrou contexto suficiente para o candidato.",
+    "matched_skills": [
+      "BI",
+      "Analytics"
+    ],
+    "missing_skills": [
+      "SQL Server"
+    ]
+  },
+  "diagnosis": {
+    "classification": "problema_de_dados_caso_incompleto",
+    "job_fit_score_none_occurs_in_both_sources": true,
+    "fallback_occurred": false,
+    "candidate_has_completed_analysis": true,
+    "resume_version_is_valid": true,
+    "candidate_profile_exists": true,
+    "candidate_profile_incomplete": true,
+    "candidate_profile_incomplete_reasons": [
+      "education_level=none",
+      "experience_years=null"
+    ],
+    "analysis_extracted_skills": [
+      "Analise de Dados",
+      "Excel",
+      "SQL",
+      "Power BI"
+    ],
+    "candidate_profile_skills": [
+      "Analise de Dados",
+      "Excel",
+      "SQL",
+      "Power BI"
+    ],
+    "job_profile_exists": true,
+    "job_has_required_and_desirable_skills": true,
+    "active_pipeline_entry_for_candidate_job": false,
+    "persisted_candidate_job_match_exists": true,
+    "persisted_candidate_job_scores_exists": false
+  },
+  "probable_cause": "O score público não foi gerado porque o ranking incremental foi pulado nas duas fontes. O candidato não possui entrada ativa em candidate_job_pipeline para essa vaga, então CandidateRankingService.compute_single_candidate() retorna None e AnalysisRankingRefreshService marca ranking_refresh_status=skipped. Isso indica caso incompleto/de dados, não regressão do catálogo database.",
+  "secondary_observations": [
+    "O match persistido foi salvo normalmente e usa a mesma recomendação review_manually nas duas fontes.",
+    "O catálogo database alterou levemente a cobertura parcial de SQL -> SQL Server (0.325 vs 0.2925), mas não mudou score público porque o ranking nem chegou a persistir score.",
+    "O candidate_profile_analysis reaproveitado está incompleto e com raw_response_json divergente do analysis_results atual, o que sugere reuso parcial de perfil antigo. Isso não explica o job_fit_score=None, mas merece limpeza separada."
+  ]
+}

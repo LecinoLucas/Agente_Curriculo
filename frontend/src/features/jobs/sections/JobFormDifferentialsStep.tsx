@@ -1,9 +1,10 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { JobSkill } from "../../../types/domain";
 import type { PendingJobSkill } from "../jobFormConfig";
 import { SkillSection } from "../components/SkillSection";
 import { SectionCard } from "../../../shared/components/layout/SectionCard";
+import type { SkillCatalog } from "../../../services/skillsService";
 
 type JobFormDifferentialsStepProps = {
   form: {
@@ -11,18 +12,19 @@ type JobFormDifferentialsStepProps = {
     newBehavioralRequirement: string;
   };
   optionalSkills: Array<JobSkill | PendingJobSkill>;
-  availableSkills: SkillEquivalenceGroup[];
+  availableSkills: SkillCatalog[];
   skillSearch: string;
   onSearchChange: (value: string) => void;
   onFormChange: (updates: { behavioral_requirements?: string[]; newBehavioralRequirement?: string }) => void;
   savingSkillId: string | null;
   onAddSkill: (
-    skill: SkillEquivalenceGroup | string,
+    skill: SkillCatalog | string,
     priorityLevel: "priority" | "complementary" | "eliminatory",
   ) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
   onAddBehavioralRequirement: () => void;
+  onSkillCreated: (skill: SkillCatalog) => void;
 };
 
 export function JobFormDifferentialsStep({
@@ -37,6 +39,7 @@ export function JobFormDifferentialsStep({
   onUpdateSkill,
   onRemoveSkill,
   onAddBehavioralRequirement,
+  onSkillCreated,
 }: JobFormDifferentialsStepProps) {
   return (
     <div className="space-y-6">
@@ -54,6 +57,7 @@ export function JobFormDifferentialsStep({
         onAddSkill={onAddSkill}
         onUpdateSkill={onUpdateSkill}
         onRemoveSkill={onRemoveSkill}
+        onSkillCreated={onSkillCreated}
       />
 
       <SectionCard

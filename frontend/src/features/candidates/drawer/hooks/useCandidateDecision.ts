@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { CandidateOverview, Job, JobRankingEntry, PipelineStage } from "../../../../types/domain";
+import { TRANSFER_ALLOWED_STAGES } from "../../../../types/domain";
 import { formatScorePercent, getScoreTone, normalizeScorePercent } from "../../utils/scoreFormatting";
 import { isTransferTargetJob } from "../../../../utils/jobStatusRules";
 import { getLatestAnalysisForActiveJob } from "../../utils/analysisStatus";
@@ -101,7 +102,17 @@ export function useCandidateDecision({
     [jobs, candidateActiveJobId],
   );
 
-  const activeJobCompatibilityScore = normalizeScorePercent(rankingEntry?.job_fit_score ?? null);
+  const activeJobMatch = useMemo(
+    () =>
+      candidateActiveJobId
+        ? candidateOverview?.top_matches.find((match) => match.job_id === candidateActiveJobId) ?? null
+        : null,
+    [candidateOverview?.top_matches, candidateActiveJobId],
+  );
+
+  const activeJobCompatibilityScore = normalizeScorePercent(
+    rankingEntry?.job_fit_score ?? activeJobMatch?.job_fit_score ?? null,
+  );
   const isTerminalPipelineStage = currentStage === "hired" || currentStage === "rejected";
 
   const transferAvailableJobs = useMemo(
@@ -114,7 +125,7 @@ export function useCandidateDecision({
     [jobs, candidateActiveJobId],
   );
 
-  const canTransferCurrentJob = primaryPipelineEntry !== null && !isTerminalPipelineStage;
+  const canTransferCurrentJob = primaryPipelineEntry !== null && currentStage !== null && TRANSFER_ALLOWED_STAGES.includes(currentStage);
   const hasResume = (candidateOverview?.resumes.length ?? 0) > 0;
   const activeJobAnalysis = getLatestAnalysisForActiveJob(
     candidateOverview?.latest_analysis,
@@ -140,6 +151,7 @@ export function useCandidateDecision({
     currentStage,
     activeJob,
     activeJobCompatibilityScore,
+    hasPersistedCompatibilityScore: rankingEntry?.job_fit_score != null,
     transferAvailableJobs,
     canTransferCurrentJob,
     hasResume,

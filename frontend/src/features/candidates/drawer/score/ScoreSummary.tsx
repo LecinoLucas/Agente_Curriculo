@@ -6,6 +6,7 @@ import {
   getExplainabilityFreshnessLine,
   getTopExplainabilityInsights,
 } from "../../utils/explainabilityUi";
+import { Info } from "lucide-react";
 
 interface ScoreSummaryProps {
   compatibilityScore: number | null;
@@ -44,6 +45,10 @@ function ScoreBar({
   if (percentage >= 75) barColor = "bg-[hsl(var(--success))]";
   else if (percentage >= 40) barColor = "bg-[hsl(var(--warning))]";
 
+  let confidenceMessage = "ℹ️ Currículo rico em detalhes e histórico profissional.";
+  if (percentage <= 40) confidenceMessage = "ℹ️ Currículo muito resumido ou incompleto. A nota pode não ser precisa.";
+  else if (percentage <= 70) confidenceMessage = "ℹ️ Currículo com detalhes suficientes para análise básica.";
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -56,6 +61,11 @@ function ScoreBar({
           style={{ width: `${Math.round(percentage)}%` }}
         />
       </div>
+      {label === "Confiança" && (
+        <p className="text-[10px] text-[hsl(var(--text-muted))] mt-0.5 leading-tight">
+          {confidenceMessage}
+        </p>
+      )}
     </div>
   );
 }

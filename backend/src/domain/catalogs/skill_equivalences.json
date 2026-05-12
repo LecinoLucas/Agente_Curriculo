@@ -535,7 +535,8 @@
         "Prometheus",
         "Datadog",
         "New Relic",
-        "monitoramento"
+        "monitoramento",
+        "observabilidade"
       ],
       "domain": [
         "devops",
@@ -988,19 +989,6 @@
       "canonical": "Jenkins",
       "aliases": [
         "Jenkins"
-      ],
-      "domain": [
-        "technology",
-        "infrastructure"
-      ],
-      "type": "skill",
-      "strength": "strong"
-    },
-    {
-      "canonical": "observability",
-      "aliases": [
-        "observability",
-        "observabilidade"
       ],
       "domain": [
         "technology",

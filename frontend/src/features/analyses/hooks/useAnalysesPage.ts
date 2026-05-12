@@ -8,7 +8,15 @@ import { usePipeline } from "../../pipeline/PipelineContext";
 import { feedback } from "../../../services/feedback";
 import { toast } from "../../../shared/utils/toast";
 
-export type StatusFilter = "all" | "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
+export type StatusFilter =
+  | "all"
+  | "pending"
+  | "processing"
+  | "retry_scheduled"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "discarded";
 export type AiFilter = "all" | "real" | "mock";
 
 const PAGE_SIZE = 20;

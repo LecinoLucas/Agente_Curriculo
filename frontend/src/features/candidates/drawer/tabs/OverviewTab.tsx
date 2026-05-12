@@ -35,18 +35,16 @@ export function OverviewTab({
       ? activePipelineEntry?.candidate_status ?? "Não vinculado"
       : latestLinkedEntry?.candidate_status ?? "Não vinculado";
   const relationshipStatusDescription = hasActiveRelationship ? "Estado no pipeline" : "Candidatura encerrada";
-  const profileStatusTitle =
+  const latestAnalysisLabel =
     overview.latest_analysis?.status === "completed"
       ? "Análise concluída"
       : overview.latest_analysis?.status === "failed"
-        ? "Análise inconclusiva"
-        : overview.latest_analysis?.status === "processing" || overview.latest_analysis?.status === "pending"
-          ? "Processando análise"
+        ? "Falha na análise"
+        : overview.latest_analysis?.status === "processing" ||
+            overview.latest_analysis?.status === "pending" ||
+            overview.latest_analysis?.status === "retry_scheduled"
+          ? "Analisando com IA"
           : "Aguardando análise";
-  const profileStatusDescription =
-    overview.latest_analysis?.status === "completed"
-      ? "Resumo do perfil extraído pela IA."
-      : "O Perfil Geral IA depende da última análise concluída do currículo.";
 
   return (
     <div className="flex flex-col gap-5 p-5">
@@ -105,16 +103,16 @@ export function OverviewTab({
       {hasLinkedJobs ? (
         <Section title={relationshipTitle}>
           <div className="grid gap-3 sm:grid-cols-3">
-            <StatusCard
-              label="Perfil Geral IA"
-              title={profileStatusTitle}
-              description={profileStatusDescription}
-            />
             <StatusCard label="Vaga" title={relationshipJobTitle} description="Aderência à Vaga disponível no ranking" />
             <StatusCard
               label="Status na Vaga"
               title={relationshipStatusTitle}
               description={relationshipStatusDescription}
+            />
+            <StatusCard
+              label="Próximo passo"
+              title={latestAnalysisLabel}
+              description="Use as abas de currículo e score para acompanhar análise, aderência e histórico."
             />
           </div>
         </Section>

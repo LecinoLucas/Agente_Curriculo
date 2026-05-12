@@ -1,13 +1,16 @@
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { JobSkill } from "../../../types/domain";
 import type { PendingJobSkill } from "../jobFormConfig";
+import type { SkillCatalog } from "../../../services/skillsService";
+import { useState } from "react";
+import { CreateSkillModal } from "./CreateSkillModal";
 
 type SkillSectionProps = {
   title: string;
   description: string;
   emphasis: string;
-  availableSkills: SkillEquivalenceGroup[];
+  availableSkills: SkillCatalog[];
   linkedSkills: Array<JobSkill | PendingJobSkill>;
   search: string;
   onSearchChange: (value: string) => void;
@@ -15,11 +18,12 @@ type SkillSectionProps = {
   addPriorityLevel: "priority" | "complementary" | "eliminatory";
   savingSkillId: string | null;
   onAddSkill: (
-    skill: SkillEquivalenceGroup | string,
+    skill: SkillCatalog | string,
     priorityLevel: "priority" | "complementary" | "eliminatory",
   ) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
+  onSkillCreated: (skill: SkillCatalog) => void;
   warning?: string | null;
 };
 
@@ -37,8 +41,10 @@ export function SkillSection({
   onAddSkill,
   onUpdateSkill,
   onRemoveSkill,
+  onSkillCreated,
   warning,
 }: SkillSectionProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6">
@@ -56,16 +62,29 @@ export function SkillSection({
         </div>
 
         <div className="mt-5">
-          <label className="flex flex-col gap-2 text-sm font-medium text-[hsl(var(--text))]">
-            Buscar skill
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Digite nome de skill, ferramenta ou certificação"
-              className="ui-input h-11 rounded-xl px-3 text-sm"
-            />
-          </label>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-end justify-between gap-3">
+              <label className="flex flex-col gap-2 text-sm font-medium text-[hsl(var(--text))] flex-1">
+                Buscar skill
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                  placeholder="Digite nome de skill, ferramenta ou certificação"
+                  className="ui-input h-11 rounded-xl px-3 text-sm"
+                />
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Nova skill
+              </Button>
+            </div>
+          </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {availableSkills.slice(0, 18).map((skill) => (
@@ -75,9 +94,9 @@ export function SkillSection({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.canonical}</p>
+                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.name}</p>
                     <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                      {skill.domains.join(", ") || skill.type || "Sem domínio"}
+                      {skill.category || "Sem categoria"}
                     </p>
                   </div>
                   <Button
@@ -102,24 +121,19 @@ export function SkillSection({
                 Nenhuma skill disponível para este filtro.
               </div>
             ) : null}
-            {search.trim() && !availableSkills.some(s => s.canonical.toLowerCase() === search.trim().toLowerCase()) ? (
-              <div className="rounded-2xl border border-dashed border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary-soft))]/30 p-4 md:col-span-2 xl:col-span-3 flex items-center justify-between">
-                <div className="text-sm">
-                  <span className="font-semibold text-[hsl(var(--text))]">"{search.trim()}"</span> não foi encontrada no catálogo.
+            {search.trim() && availableSkills.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-6 text-center md:col-span-2 xl:col-span-3 flex flex-col items-center gap-3">
+                <div className="text-sm text-[hsl(var(--text-muted))]">
+                  Nenhuma skill encontrada para <span className="font-semibold text-[hsl(var(--text))]">"{search.trim()}"</span>
                 </div>
                 <Button
                   type="button"
+                  variant="secondary"
                   size="sm"
-                  variant="default"
-                  disabled={savingSkillId === search.trim()}
-                  onClick={() => void onAddSkill(search.trim(), addPriorityLevel)}
+                  onClick={() => setIsModalOpen(true)}
                 >
-                  {savingSkillId === search.trim() ? (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                  )}
-                  Adicionar {addLabel}
+                  <Plus className="mr-1 h-4 w-4" />
+                  Criar "{search.trim()}"
                 </Button>
               </div>
             ) : null}
@@ -231,6 +245,13 @@ export function SkillSection({
           ) : null}
         </div>
       </section>
+      
+      <CreateSkillModal
+        open={isModalOpen}
+        initialName={search.trim()}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={onSkillCreated}
+      />
     </div>
   );
 }

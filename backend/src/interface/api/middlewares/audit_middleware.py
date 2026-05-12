@@ -40,7 +40,12 @@ class AuditMiddleware(BaseHTTPMiddleware):
         )
 
         if response.status_code in _AUDIT_ON_STATUS:
-            await self._write_http_error_audit(request, response.status_code, duration_ms)
+            user_id = getattr(request.state, "user_id", None)
+            # Evita logar 401s anônimos para evitar falhas de partição (tabela audit_logs sem default) e ruído
+            if response.status_code == 401 and not user_id:
+                pass
+            else:
+                await self._write_http_error_audit(request, response.status_code, duration_ms)
 
         structlog.contextvars.clear_contextvars()
         return response
@@ -72,6 +77,14 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 )
                 session.add(log)
                 await session.commit()
-        except Exception:
+        except Exception as exc:
             # Auditoria nunca pode quebrar a resposta ao usuário
-            logger.warning("audit.write_failed", path=request.url.path, status=status_code)
+            logger.warning(
+                "audit.write_failed",
+                path=request.url.path,
+                status=status_code,
+                method=request.method,
+                request_id=str(request_id) if request_id else None,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )

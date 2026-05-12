@@ -1,0 +1,1247 @@
+{
+  "cases": [
+    {
+      "aliases_used_database": [
+        {
+          "candidate": "sql",
+          "coverage": 0.325,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.5,
+          "reason": "group",
+          "required": "PostgreSQL"
+        },
+        {
+          "candidate": "sql",
+          "coverage": 0.325,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.5,
+          "reason": "group",
+          "required": "SQL Server"
+        }
+      ],
+      "aliases_used_json": [
+        {
+          "candidate": "sql",
+          "coverage": 0.2925,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.45,
+          "reason": "group",
+          "required": "PostgreSQL"
+        },
+        {
+          "candidate": "sql",
+          "coverage": 0.2925,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.45,
+          "reason": "group",
+          "required": "SQL Server"
+        }
+      ],
+      "analysis_id": "51a2aaff-c45e-4cd3-94fd-e171ac9449a6",
+      "candidate_id": "6124dcdf-3aef-48b4-bf99-b9603f3a67ac",
+      "candidate_name": "lecino lUcas",
+      "classification": "acceptable",
+      "delta_score": 0.0,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "4eb678ba-e2c7-4726-a34d-bffda6e9da69",
+      "job_title": "Especialista Protheus",
+      "notes": [],
+      "partial_matches_database": [
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "PostgreSQL",
+          "score": 0.325,
+          "source": "group",
+          "weak_evidence": true
+        },
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "SQL Server",
+          "score": 0.325,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "partial_matches_json": [
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "PostgreSQL",
+          "score": 0.2925,
+          "source": "group",
+          "weak_evidence": true
+        },
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "SQL Server",
+          "score": 0.2925,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'protheus', 'impact': 11.11, 'description': 'Skill essencial atendida: Protheus'}",
+        "{'type': 'skill_match', 'field': 'advpl', 'impact': 11.11, 'description': 'Skill essencial atendida: ADVPL'}",
+        "{'type': 'missing_skill', 'field': 'tlpp', 'impact': -11.11, 'description': 'Skill essencial ausente: TLPP'}",
+        "{'type': 'adjacent_skill', 'field': 'postgresql', 'impact': 3.61, 'description': 'Experiência adjacente cobre parcialmente PostgreSQL'}",
+        "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 3.61, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 2.22, 'description': 'Diferenciais: 1/9 encontrados, bônus de 2.22 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 6.25, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [
+          "{'type': 'adjacent_skill', 'field': 'postgresql', 'impact': 3.61, 'description': 'Experiência adjacente cobre parcialmente PostgreSQL'}",
+          "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 3.61, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}"
+        ],
+        "only_json": [
+          "{'type': 'adjacent_skill', 'field': 'postgresql', 'impact': 3.25, 'description': 'Experiência adjacente cobre parcialmente PostgreSQL'}",
+          "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 3.25, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}"
+        ]
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'protheus', 'impact': 11.11, 'description': 'Skill essencial atendida: Protheus'}",
+        "{'type': 'skill_match', 'field': 'advpl', 'impact': 11.11, 'description': 'Skill essencial atendida: ADVPL'}",
+        "{'type': 'missing_skill', 'field': 'tlpp', 'impact': -11.11, 'description': 'Skill essencial ausente: TLPP'}",
+        "{'type': 'adjacent_skill', 'field': 'postgresql', 'impact': 3.25, 'description': 'Experiência adjacente cobre parcialmente PostgreSQL'}",
+        "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 3.25, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 2.22, 'description': 'Diferenciais: 1/9 encontrados, bônus de 2.22 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 6.25, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "recommendation_database": "not_match",
+      "recommendation_json": "not_match",
+      "relations_used_database": [],
+      "relations_used_json": [],
+      "required_skills_missing_database": [
+        "PostgreSQL",
+        "SQL Server",
+        "TLPP"
+      ],
+      "required_skills_missing_json": [
+        "PostgreSQL",
+        "SQL Server",
+        "TLPP"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "4bb65fb7-0b37-4802-ad60-171d9eb76a31",
+      "score_database": 39.0,
+      "score_json": 39.0,
+      "skills_matched_database": [
+        "Protheus",
+        "ADVPL",
+        "TOTVS"
+      ],
+      "skills_matched_json": [
+        "Protheus",
+        "ADVPL",
+        "TOTVS"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [
+        {
+          "candidate": "cloud",
+          "coverage": 0.2375,
+          "equivalence_strength": "weak",
+          "priority_level": "priority",
+          "raw_coverage": 0.25,
+          "reason": "group",
+          "required": "Azure"
+        }
+      ],
+      "aliases_used_json": [
+        {
+          "candidate": "cloud",
+          "coverage": 0.2375,
+          "equivalence_strength": "weak",
+          "priority_level": "priority",
+          "raw_coverage": 0.25,
+          "reason": "group",
+          "required": "Azure"
+        }
+      ],
+      "analysis_id": "bc6e27af-c481-490a-8758-5bf3cc2a513a",
+      "candidate_id": "5329d4ba-3cc0-417a-a07f-4f8965d8a69a",
+      "candidate_name": "agentTeste",
+      "classification": "acceptable",
+      "delta_score": 0.0,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d45cd0aa-d800-4765-b068-1e73bbd4184e",
+      "job_title": "Cibersegurança",
+      "notes": [],
+      "partial_matches_database": [
+        {
+          "candidate": "cloud",
+          "reason": "Grupo \"Cloud\": skill genérica não comprova a especialização com força alta (weak).",
+          "required": "Azure",
+          "score": 0.2375,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "partial_matches_json": [
+        {
+          "candidate": "cloud",
+          "reason": "Grupo \"Cloud\": skill genérica não comprova a especialização com força alta (weak).",
+          "required": "Azure",
+          "score": 0.2375,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'cloud', 'impact': 16.67, 'description': 'Skill essencial atendida: Cloud'}",
+        "{'type': 'skill_match', 'field': 'aws', 'impact': 16.67, 'description': 'Skill essencial atendida: AWS'}",
+        "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+        "{'type': 'adjacent_skill', 'field': 'azure', 'impact': 3.96, 'description': 'Experiência adjacente cobre parcialmente Azure'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [],
+        "only_json": []
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'cloud', 'impact': 16.67, 'description': 'Skill essencial atendida: Cloud'}",
+        "{'type': 'skill_match', 'field': 'aws', 'impact': 16.67, 'description': 'Skill essencial atendida: AWS'}",
+        "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+        "{'type': 'adjacent_skill', 'field': 'azure', 'impact': 3.96, 'description': 'Experiência adjacente cobre parcialmente Azure'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [],
+      "relations_used_json": [],
+      "required_skills_missing_database": [
+        "API",
+        "Azure"
+      ],
+      "required_skills_missing_json": [
+        "API",
+        "Azure"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "85155a4a-9c8d-4323-a4b0-07852e9e971e",
+      "score_database": 64.52,
+      "score_json": 64.52,
+      "skills_matched_database": [
+        "Cloud",
+        "AWS"
+      ],
+      "skills_matched_json": [
+        "Cloud",
+        "AWS"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [],
+      "aliases_used_json": [
+        {
+          "candidate": "python",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "API"
+        }
+      ],
+      "analysis_id": "9a26b074-7171-4453-9bd2-a7bed3555451",
+      "candidate_id": "0699cafb-e94f-4caa-9524-0bcad1755808",
+      "candidate_name": "hiago4",
+      "classification": "acceptable",
+      "delta_score": -0.6,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+      "job_title": "Analista De Dados Senior",
+      "notes": [],
+      "partial_matches_database": [],
+      "partial_matches_json": [],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 7.41, 'description': 'Diferenciais: 2/3 encontrados, bônus de 7.41 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 7.41, 'description': 'Diferenciais: 2/3 encontrados, bônus de 7.41 pts'}"
+        ],
+        "only_json": [
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.01, 'description': 'Diferenciais: 2/3 encontrados, bônus de 8.01 pts'}"
+        ]
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.01, 'description': 'Diferenciais: 2/3 encontrados, bônus de 8.01 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [],
+      "relations_used_json": [],
+      "required_skills_missing_database": [],
+      "required_skills_missing_json": [],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "28b8db52-f61f-4198-929a-ae47ea9ce7db",
+      "score_database": 96.3,
+      "score_json": 96.9,
+      "skills_matched_database": [
+        "SQL Server",
+        "BI",
+        "Python",
+        "Analytics"
+      ],
+      "skills_matched_json": [
+        "SQL Server",
+        "BI",
+        "Python",
+        "Analytics"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [
+        {
+          "candidate": "devops",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "CI/CD"
+        },
+        {
+          "candidate": "node.js",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "GraphQL"
+        }
+      ],
+      "aliases_used_json": [
+        {
+          "candidate": "node.js",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "Python"
+        },
+        {
+          "candidate": "devops",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "CI/CD"
+        },
+        {
+          "candidate": "javascript",
+          "coverage": 0.2375,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "React"
+        },
+        {
+          "candidate": "node.js",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "GraphQL"
+        }
+      ],
+      "analysis_id": "c10dc12e-1595-4a95-b9e0-e95ad961bb8f",
+      "candidate_id": "ca01ebf7-1c47-436b-9b23-e8d7a7d25f14",
+      "candidate_name": "Christian Prado",
+      "classification": "acceptable",
+      "delta_score": 0.77,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d7798d96-7d5e-4a47-aaae-e177fab3b6f4",
+      "job_title": "Desenvolvedor Fullstack Pleno",
+      "notes": [
+        "matched skills only in database: Python"
+      ],
+      "partial_matches_database": [],
+      "partial_matches_json": [],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'sql', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL'}",
+        "{'type': 'skill_match', 'field': 'node.js', 'impact': 27.78, 'description': 'Skill essencial atendida: Node.js'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 10.79, 'description': 'Diferenciais: 5/20 encontrados, bônus de 10.79 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 10.0, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 10.79, 'description': 'Diferenciais: 5/20 encontrados, bônus de 10.79 pts'}"
+        ],
+        "only_json": [
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 10.02, 'description': 'Diferenciais: 4/20 encontrados, bônus de 10.02 pts'}"
+        ]
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'sql', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL'}",
+        "{'type': 'skill_match', 'field': 'node.js', 'impact': 27.78, 'description': 'Skill essencial atendida: Node.js'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 10.02, 'description': 'Diferenciais: 4/20 encontrados, bônus de 10.02 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 10.0, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [
+        {
+          "candidate": "backend",
+          "coverage": 0.855,
+          "equivalence_strength": "strong",
+          "priority_level": "complementary",
+          "raw_coverage": 0.9,
+          "reason": "equivalence",
+          "required": "Python"
+        },
+        {
+          "candidate": "typescript",
+          "coverage": 0.4675,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.55,
+          "reason": "equivalence",
+          "required": "Frontend"
+        },
+        {
+          "candidate": "node.js",
+          "coverage": 0.51,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.6,
+          "reason": "equivalence",
+          "required": "API"
+        }
+      ],
+      "relations_used_json": [
+        {
+          "candidate": "typescript",
+          "coverage": 0.4675,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.55,
+          "reason": "equivalence",
+          "required": "Frontend"
+        },
+        {
+          "candidate": "node.js",
+          "coverage": 0.51,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.6,
+          "reason": "equivalence",
+          "required": "API"
+        }
+      ],
+      "required_skills_missing_database": [],
+      "required_skills_missing_json": [],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "b7939e5f-b578-440e-9b0f-d17a4b959321",
+      "score_database": 97.46,
+      "score_json": 96.69,
+      "skills_matched_database": [
+        "SQL",
+        "Node.js",
+        "Python",
+        "JavaScript",
+        "PostgreSQL",
+        "DevOps",
+        "Backend"
+      ],
+      "skills_matched_json": [
+        "SQL",
+        "Node.js",
+        "JavaScript",
+        "PostgreSQL",
+        "DevOps",
+        "Backend"
+      ],
+      "skills_only_database": [
+        "Python"
+      ],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [
+        {
+          "candidate": "ia",
+          "coverage": 0.85,
+          "equivalence_strength": "strong",
+          "priority_level": "complementary",
+          "raw_coverage": 0.85,
+          "reason": "equivalence",
+          "required": "Machine Learning"
+        }
+      ],
+      "aliases_used_json": [
+        {
+          "candidate": "ia",
+          "coverage": 0.85,
+          "equivalence_strength": "strong",
+          "priority_level": "complementary",
+          "raw_coverage": 0.85,
+          "reason": "equivalence",
+          "required": "Machine Learning"
+        }
+      ],
+      "analysis_id": "40cb7226-90e0-485f-943a-fa973ac69eae",
+      "candidate_id": "616051d9-a927-4c0e-a160-c6b1623aa13c",
+      "candidate_name": "LIDER IA 2",
+      "classification": "acceptable",
+      "delta_score": 0.0,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "ed4aad2a-4a72-41e0-8728-571ad2bbd7bd",
+      "job_title": "Líder de IA e Automação",
+      "notes": [],
+      "partial_matches_database": [],
+      "partial_matches_json": [],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'ia', 'impact': 11.11, 'description': 'Skill essencial atendida: IA'}",
+        "{'type': 'skill_match', 'field': 'automação', 'impact': 11.11, 'description': 'Skill essencial atendida: Automação'}",
+        "{'type': 'missing_skill', 'field': 'gestão de projetos', 'impact': -11.11, 'description': 'Skill essencial ausente: Gestão de projetos'}",
+        "{'type': 'missing_skill', 'field': 'governança de ia', 'impact': -11.11, 'description': 'Skill essencial ausente: Governança de IA'}",
+        "{'type': 'missing_skill', 'field': 'integração de sistemas', 'impact': -11.11, 'description': 'Skill essencial ausente: Integração de sistemas'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.56, 'description': 'Diferenciais: 4/5 encontrados, bônus de 8.56 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 0.0, 'description': 'Experiência abaixo do esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 0.0, 'description': 'Senioridade abaixo da desejada'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [],
+        "only_json": []
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'ia', 'impact': 11.11, 'description': 'Skill essencial atendida: IA'}",
+        "{'type': 'skill_match', 'field': 'automação', 'impact': 11.11, 'description': 'Skill essencial atendida: Automação'}",
+        "{'type': 'missing_skill', 'field': 'gestão de projetos', 'impact': -11.11, 'description': 'Skill essencial ausente: Gestão de projetos'}",
+        "{'type': 'missing_skill', 'field': 'governança de ia', 'impact': -11.11, 'description': 'Skill essencial ausente: Governança de IA'}",
+        "{'type': 'missing_skill', 'field': 'integração de sistemas', 'impact': -11.11, 'description': 'Skill essencial ausente: Integração de sistemas'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.56, 'description': 'Diferenciais: 4/5 encontrados, bônus de 8.56 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 0.0, 'description': 'Experiência abaixo do esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 0.0, 'description': 'Senioridade abaixo da desejada'}"
+      ],
+      "recommendation_database": "potential",
+      "recommendation_json": "potential",
+      "relations_used_database": [],
+      "relations_used_json": [],
+      "required_skills_missing_database": [
+        "Gestão de projetos",
+        "Governança de IA",
+        "Integração de sistemas"
+      ],
+      "required_skills_missing_json": [
+        "Gestão de projetos",
+        "Governança de IA",
+        "Integração de sistemas"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "ea5f0543-edae-490b-8c83-1845586b549a",
+      "score_database": 47.44,
+      "score_json": 47.44,
+      "skills_matched_database": [
+        "IA",
+        "Automação",
+        "BI",
+        "Dados",
+        "Analytics",
+        "Machine Learning"
+      ],
+      "skills_matched_json": [
+        "IA",
+        "Automação",
+        "BI",
+        "Dados",
+        "Analytics",
+        "Machine Learning"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [],
+      "aliases_used_json": [],
+      "analysis_id": "5b88d626-ca3f-4e6d-85ea-4251e592f2cc",
+      "candidate_id": "a6cce7ec-a91b-47b2-9420-1fd7fcf088e6",
+      "candidate_name": "Gust",
+      "classification": "acceptable",
+      "delta_score": 0.0,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d45cd0aa-d800-4765-b068-1e73bbd4184e",
+      "job_title": "Cibersegurança",
+      "notes": [],
+      "partial_matches_database": [],
+      "partial_matches_json": [],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+        "{'type': 'missing_skill', 'field': 'azure', 'impact': -16.67, 'description': 'Skill essencial ausente: Azure'}",
+        "{'type': 'missing_skill', 'field': 'cloud', 'impact': -16.67, 'description': 'Skill essencial ausente: Cloud'}",
+        "{'type': 'missing_skill', 'field': 'aws', 'impact': -16.67, 'description': 'Skill essencial ausente: AWS'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [],
+        "only_json": []
+      },
+      "reason_codes_json": [
+        "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+        "{'type': 'missing_skill', 'field': 'azure', 'impact': -16.67, 'description': 'Skill essencial ausente: Azure'}",
+        "{'type': 'missing_skill', 'field': 'cloud', 'impact': -16.67, 'description': 'Skill essencial ausente: Cloud'}",
+        "{'type': 'missing_skill', 'field': 'aws', 'impact': -16.67, 'description': 'Skill essencial ausente: AWS'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [],
+      "relations_used_json": [],
+      "required_skills_missing_database": [
+        "API",
+        "Azure",
+        "Cloud",
+        "AWS"
+      ],
+      "required_skills_missing_json": [
+        "API",
+        "Azure",
+        "Cloud",
+        "AWS"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "04e3262e-9e32-4e9a-8fbe-31f53cd066ad",
+      "score_database": 33.33,
+      "score_json": 33.33,
+      "skills_matched_database": [],
+      "skills_matched_json": [],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [],
+      "aliases_used_json": [
+        {
+          "candidate": "python",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "API"
+        }
+      ],
+      "analysis_id": "7c75d4fa-471e-435c-b68f-00295a971e01",
+      "candidate_id": "d24d32ce-be59-4a1c-b8bc-fc037388906e",
+      "candidate_name": "Hiago Dantas",
+      "classification": "acceptable",
+      "delta_score": -0.6,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+      "job_title": "Analista De Dados Senior",
+      "notes": [],
+      "partial_matches_database": [],
+      "partial_matches_json": [],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 7.41, 'description': 'Diferenciais: 2/3 encontrados, bônus de 7.41 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 7.41, 'description': 'Diferenciais: 2/3 encontrados, bônus de 7.41 pts'}"
+        ],
+        "only_json": [
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.01, 'description': 'Diferenciais: 2/3 encontrados, bônus de 8.01 pts'}"
+        ]
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.01, 'description': 'Diferenciais: 2/3 encontrados, bônus de 8.01 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [],
+      "relations_used_json": [],
+      "required_skills_missing_database": [],
+      "required_skills_missing_json": [],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "cf52af6b-9922-4231-aa19-fd6f34edad93",
+      "score_database": 96.3,
+      "score_json": 96.9,
+      "skills_matched_database": [
+        "SQL Server",
+        "BI",
+        "Python",
+        "Analytics"
+      ],
+      "skills_matched_json": [
+        "SQL Server",
+        "BI",
+        "Python",
+        "Analytics"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [
+        {
+          "candidate": "sql",
+          "coverage": 0.475,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.5,
+          "reason": "equivalence",
+          "required": "PostgreSQL"
+        }
+      ],
+      "aliases_used_json": [
+        {
+          "candidate": "python",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "priority",
+          "raw_coverage": 0.25,
+          "reason": "group",
+          "required": "Node.js"
+        },
+        {
+          "candidate": "sql",
+          "coverage": 0.4275,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.45,
+          "reason": "equivalence",
+          "required": "PostgreSQL"
+        },
+        {
+          "candidate": "python",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "API"
+        },
+        {
+          "candidate": "python",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "GraphQL"
+        }
+      ],
+      "analysis_id": "174837ce-5811-4437-98a9-3d96237a049f",
+      "candidate_id": "d24d32ce-be59-4a1c-b8bc-fc037388906e",
+      "candidate_name": "Hiago Dantas",
+      "classification": "review",
+      "delta_score": null,
+      "delta_status": "unavailable",
+      "fallback_occurred": false,
+      "job_id": "d7798d96-7d5e-4a47-aaae-e177fab3b6f4",
+      "job_title": "Desenvolvedor Fullstack Pleno",
+      "notes": [
+        "numeric score unavailable for at least one source"
+      ],
+      "partial_matches_database": [],
+      "partial_matches_json": [
+        {
+          "candidate": "python",
+          "reason": "Grupo \"Backend\": skills irmãs no mesmo grupo recebem match reduzido sem relação explícita (weak).",
+          "required": "Node.js",
+          "score": 0.1625,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "ranking_refresh_status_database": "skipped",
+      "ranking_refresh_status_json": "skipped",
+      "ranking_warning_database": "Ranking incremental não encontrou contexto suficiente para o candidato.",
+      "ranking_warning_json": "Ranking incremental não encontrou contexto suficiente para o candidato.",
+      "reason_codes_database": [],
+      "reason_codes_diff": {
+        "only_database": [],
+        "only_json": []
+      },
+      "reason_codes_json": [],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [
+        {
+          "candidate": "python",
+          "coverage": 0.4675,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.55,
+          "reason": "equivalence",
+          "required": "Backend"
+        }
+      ],
+      "relations_used_json": [
+        {
+          "candidate": "python",
+          "coverage": 0.4675,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.55,
+          "reason": "equivalence",
+          "required": "Backend"
+        }
+      ],
+      "required_skills_missing_database": [
+        "Node.js"
+      ],
+      "required_skills_missing_json": [
+        "Node.js"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "cf52af6b-9922-4231-aa19-fd6f34edad93",
+      "score_database": null,
+      "score_json": null,
+      "skills_matched_database": [
+        "SQL",
+        "Python"
+      ],
+      "skills_matched_json": [
+        "SQL",
+        "Python"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [],
+      "aliases_used_json": [],
+      "analysis_id": "d85cb174-0170-43d0-a8e6-48b10dd03163",
+      "candidate_id": "349c06df-703b-4206-8f5d-f0cc89da0bdd",
+      "candidate_name": "Codex Failed 20260511213044",
+      "classification": "acceptable",
+      "delta_score": 0.0,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d45cd0aa-d800-4765-b068-1e73bbd4184e",
+      "job_title": "Cibersegurança",
+      "notes": [],
+      "partial_matches_database": [],
+      "partial_matches_json": [],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+        "{'type': 'missing_skill', 'field': 'azure', 'impact': -16.67, 'description': 'Skill essencial ausente: Azure'}",
+        "{'type': 'missing_skill', 'field': 'cloud', 'impact': -16.67, 'description': 'Skill essencial ausente: Cloud'}",
+        "{'type': 'missing_skill', 'field': 'aws', 'impact': -16.67, 'description': 'Skill essencial ausente: AWS'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 0.0, 'description': 'Experiência abaixo do esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [],
+        "only_json": []
+      },
+      "reason_codes_json": [
+        "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+        "{'type': 'missing_skill', 'field': 'azure', 'impact': -16.67, 'description': 'Skill essencial ausente: Azure'}",
+        "{'type': 'missing_skill', 'field': 'cloud', 'impact': -16.67, 'description': 'Skill essencial ausente: Cloud'}",
+        "{'type': 'missing_skill', 'field': 'aws', 'impact': -16.67, 'description': 'Skill essencial ausente: AWS'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 0.0, 'description': 'Experiência abaixo do esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [],
+      "relations_used_json": [],
+      "required_skills_missing_database": [
+        "API",
+        "Azure",
+        "Cloud",
+        "AWS"
+      ],
+      "required_skills_missing_json": [
+        "API",
+        "Azure",
+        "Cloud",
+        "AWS"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "6f19c4d8-27d8-422a-ba9c-e3b9e63390f6",
+      "score_database": 16.11,
+      "score_json": 16.11,
+      "skills_matched_database": [],
+      "skills_matched_json": [],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [
+        {
+          "candidate": "sql",
+          "coverage": 0.325,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.5,
+          "reason": "group",
+          "required": "SQL Server"
+        }
+      ],
+      "aliases_used_json": [
+        {
+          "candidate": "sql",
+          "coverage": 0.2925,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.45,
+          "reason": "group",
+          "required": "SQL Server"
+        },
+        {
+          "candidate": "node.js",
+          "coverage": 0.1625,
+          "equivalence_strength": "weak",
+          "priority_level": "complementary",
+          "raw_coverage": 0.25,
+          "reason": "equivalence",
+          "required": "Python"
+        }
+      ],
+      "analysis_id": "85a829db-cecf-4b1b-b591-aed7b8bd7673",
+      "candidate_id": "f4651356-f584-4b6d-ba39-8fdff55c04b6",
+      "candidate_name": "christian",
+      "classification": "acceptable",
+      "delta_score": 0.31,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+      "job_title": "Analista De Dados Senior",
+      "notes": [],
+      "partial_matches_database": [
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "SQL Server",
+          "score": 0.325,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "partial_matches_json": [
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "SQL Server",
+          "score": 0.2925,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 9.03, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 1.89, 'description': 'Diferenciais: 0/3 encontrados, bônus de 1.89 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [
+          "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 9.03, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 1.89, 'description': 'Diferenciais: 0/3 encontrados, bônus de 1.89 pts'}"
+        ],
+        "only_json": [
+          "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 8.13, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+          "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 2.49, 'description': 'Diferenciais: 0/3 encontrados, bônus de 2.49 pts'}"
+        ]
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 8.13, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 2.49, 'description': 'Diferenciais: 0/3 encontrados, bônus de 2.49 pts'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [
+        {
+          "candidate": "node.js",
+          "coverage": 0.51,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.6,
+          "reason": "equivalence",
+          "required": "API"
+        }
+      ],
+      "relations_used_json": [
+        {
+          "candidate": "node.js",
+          "coverage": 0.51,
+          "equivalence_strength": "partial",
+          "priority_level": "complementary",
+          "raw_coverage": 0.6,
+          "reason": "equivalence",
+          "required": "API"
+        }
+      ],
+      "required_skills_missing_database": [
+        "SQL Server"
+      ],
+      "required_skills_missing_json": [
+        "SQL Server"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "1319c71f-bf18-4704-809e-ce484f68d156",
+      "score_database": 72.03,
+      "score_json": 71.72,
+      "skills_matched_database": [
+        "BI"
+      ],
+      "skills_matched_json": [
+        "BI"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    },
+    {
+      "aliases_used_database": [
+        {
+          "candidate": "sql",
+          "coverage": 0.325,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.5,
+          "reason": "group",
+          "required": "SQL Server"
+        }
+      ],
+      "aliases_used_json": [
+        {
+          "candidate": "sql",
+          "coverage": 0.2925,
+          "equivalence_strength": "partial",
+          "priority_level": "priority",
+          "raw_coverage": 0.45,
+          "reason": "group",
+          "required": "SQL Server"
+        }
+      ],
+      "analysis_id": "0f39756e-544b-4bb9-9b66-9872c4011179",
+      "candidate_id": "51bef5bd-6645-419a-90f0-b8464e9111f5",
+      "candidate_name": "Lecino Lucas",
+      "classification": "acceptable",
+      "delta_score": 0.9,
+      "delta_status": "acceptable",
+      "fallback_occurred": false,
+      "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+      "job_title": "Analista De Dados Senior",
+      "notes": [],
+      "partial_matches_database": [
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "SQL Server",
+          "score": 0.325,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "partial_matches_json": [
+        {
+          "candidate": "sql",
+          "reason": "Grupo \"SQL\": skill genérica não comprova a especialização com força alta (partial).",
+          "required": "SQL Server",
+          "score": 0.2925,
+          "source": "group",
+          "weak_evidence": true
+        }
+      ],
+      "ranking_refresh_status_database": "updated",
+      "ranking_refresh_status_json": "updated",
+      "ranking_warning_database": null,
+      "ranking_warning_json": null,
+      "reason_codes_database": [
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 9.03, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 0.0, 'description': 'Diferenciais: 0/3 encontrados, sem bônus aplicado'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 3.75, 'description': 'Senioridade alinhada à vaga'}",
+        "{'type': 'education', 'field': 'education', 'impact': 5.0, 'description': 'Formação compatível com a vaga'}"
+      ],
+      "reason_codes_diff": {
+        "only_database": [
+          "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 9.03, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}"
+        ],
+        "only_json": [
+          "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 8.13, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}"
+        ]
+      },
+      "reason_codes_json": [
+        "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+        "{'type': 'adjacent_skill', 'field': 'sql server', 'impact': 8.13, 'description': 'Experiência adjacente cobre parcialmente SQL Server'}",
+        "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 0.0, 'description': 'Diferenciais: 0/3 encontrados, sem bônus aplicado'}",
+        "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+        "{'type': 'seniority', 'field': 'seniority', 'impact': 3.75, 'description': 'Senioridade alinhada à vaga'}",
+        "{'type': 'education', 'field': 'education', 'impact': 5.0, 'description': 'Formação compatível com a vaga'}"
+      ],
+      "recommendation_database": "review_manually",
+      "recommendation_json": "review_manually",
+      "relations_used_database": [
+        {
+          "candidate": "power bi",
+          "coverage": 0.9,
+          "equivalence_strength": "strong",
+          "priority_level": "priority",
+          "raw_coverage": 0.9,
+          "reason": "relation",
+          "required": "BI"
+        }
+      ],
+      "relations_used_json": [
+        {
+          "candidate": "power bi",
+          "coverage": 0.9,
+          "equivalence_strength": "strong",
+          "priority_level": "priority",
+          "raw_coverage": 0.9,
+          "reason": "relation",
+          "required": "BI"
+        }
+      ],
+      "required_skills_missing_database": [
+        "SQL Server"
+      ],
+      "required_skills_missing_json": [
+        "SQL Server"
+      ],
+      "required_skills_missing_only_database": [],
+      "required_skills_missing_only_json": [],
+      "resume_version_id": "51ba4380-9af3-4b9e-9d88-42dfc3dc4d2c",
+      "score_database": 64.58,
+      "score_json": 63.68,
+      "skills_matched_database": [
+        "BI"
+      ],
+      "skills_matched_json": [
+        "BI"
+      ],
+      "skills_only_database": [],
+      "skills_only_json": [],
+      "source_used_database": "database",
+      "source_used_json": "json"
+    }
+  ],
+  "summary": {
+    "acceptable_cases": 10,
+    "avg_delta": 0.32,
+    "blocked_cases": 0,
+    "changed_recommendations_count": 0,
+    "fallback_count": 0,
+    "max_delta": 0.9,
+    "missing_required_skill_cases": 0,
+    "review_cases": 1,
+    "total_cases": 11
+  }
+}

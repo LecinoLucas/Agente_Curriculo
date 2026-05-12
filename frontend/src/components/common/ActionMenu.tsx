@@ -14,9 +14,10 @@ type ActionMenuProps = {
   className?: string;
   buttonClassName?: string;
   buttonLabel?: string;
+  direction?: "up" | "down";
 };
 
-export function ActionMenu({ items, className, buttonClassName, buttonLabel = "Abrir menu" }: ActionMenuProps) {
+export function ActionMenu({ items, className, buttonClassName, buttonLabel = "Abrir menu", direction = "down" }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
 
   const visibleItems = useMemo(() => items.filter(Boolean), [items]);
@@ -46,7 +47,10 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
             aria-label="Fechar menu"
             onClick={() => setOpen(false)}
           />
-          <div className="ui-card absolute right-0 top-11 z-30 w-48 overflow-hidden rounded-xl">
+          <div className={cn(
+            "ui-card absolute right-0 z-30 w-48 overflow-hidden rounded-xl",
+            direction === "up" ? "bottom-11" : "top-11"
+          )}>
             {visibleItems.map((item) => (
               <button
                 key={item.label}

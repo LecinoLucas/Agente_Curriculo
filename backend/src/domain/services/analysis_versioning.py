@@ -62,7 +62,7 @@ class AnalysisVersioningService:
         - Se FAILED ou CANCELLED → permitido (nova tentativa)
         - force=True: bypassa a checagem para análises COMPLETED (admin override)
         """
-        if existing_status in ("pending", "processing"):
+        if existing_status in ("pending", "processing", "retry_scheduled"):
             return False, "Uma análise já está em andamento para este currículo."
 
         if existing_status == "completed" and not force:

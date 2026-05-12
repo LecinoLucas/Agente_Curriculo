@@ -32,22 +32,7 @@ import {
 import type { Job } from "../types/domain";
 
 function formatJobArea(value: string | null | undefined) {
-  if (!value) return null;
-
-  const labels: Record<string, string> = {
-    technology: "Tecnologia",
-    data: "Dados",
-    administrative: "Administrativo",
-    finance: "Financeiro",
-    fiscal: "Fiscal",
-    accounting: "Contábil",
-    commercial: "Comercial",
-    operations: "Operacional",
-    hr: "RH",
-    leadership: "Liderança",
-  };
-
-  return labels[value] ?? value;
+  return value?.trim() || null;
 }
 
 function formatStatusFilterLabel(value: JobStatusFilter) {
@@ -361,6 +346,7 @@ export function VagasPage() {
             handleRestore,
             handleDelete,
           );
+          const isLast = filteredJobs.indexOf(job) === filteredJobs.length - 1;
 
           return (
             <tr
@@ -454,7 +440,11 @@ export function VagasPage() {
                     )}
                     {primaryAction.label}
                   </Button>
-                  <ActionMenu buttonLabel={`Ações da vaga ${job.title}`} items={actionItems} />
+                  <ActionMenu 
+                    buttonLabel={`Ações da vaga ${job.title}`} 
+                    items={actionItems} 
+                    direction={isLast ? "up" : "down"}
+                  />
                 </div>
               </td>
             </tr>

@@ -101,5 +101,8 @@ describe("ScoreTab", () => {
 
     expect(screen.getAllByText("Aderência à Vaga").length).toBeGreaterThan(0);
     expect(screen.queryByText("Score final")).not.toBeInTheDocument();
+    const technicalLabels = screen.getAllByText("Detalhes técnicos da análise");
+    expect(technicalLabels.length).toBeGreaterThan(0);
+    expect(technicalLabels[technicalLabels.length - 1].closest("details")).not.toHaveAttribute("open");
   });
 });

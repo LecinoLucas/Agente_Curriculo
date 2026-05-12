@@ -1,0 +1,322 @@
+{
+  "executed_at": "2026-05-12T13:43:55.262902+00:00",
+  "environment": {
+    "APP_ENV": "staging",
+    "SKILL_CATALOG_SOURCE": "database",
+    "fallback_enabled": true
+  },
+  "summary": {
+    "cases_tested": [
+      "analise_nova",
+      "reanalise",
+      "ranking",
+      "score_explanation",
+      "skill_search_and_runtime_filter"
+    ],
+    "source_used": [
+      "database"
+    ],
+    "fallback_total": 0,
+    "source_usage_totals": {
+      "json": 0,
+      "database": 3,
+      "database_failed_fallback_json": 0
+    },
+    "load_durations_ms": [
+      71.9,
+      0.0,
+      0.0
+    ],
+    "errors_found": 0
+  },
+  "cases": [
+    {
+      "case": "analise_nova",
+      "matching_result": {
+        "status": "completed",
+        "analysis_id": "80239e41-4689-4215-915d-c4338a21a34b",
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+        "job_fit_score": "None",
+        "recommendation": "review_manually"
+      },
+      "source_events": [
+        {
+          "level": "info",
+          "event": "skill_catalog.source=database",
+          "source": "database",
+          "skills_count": 99,
+          "aliases_count": 225,
+          "relations_count": 139,
+          "cache_used": false,
+          "load_duration_ms": 71.9,
+          "usage_count": 1,
+          "source_usage_totals": {
+            "json": 0,
+            "database": 1,
+            "database_failed_fallback_json": 0
+          },
+          "fallback_total": 0
+        }
+      ],
+      "analysis_id": "80239e41-4689-4215-915d-c4338a21a34b",
+      "status": "completed",
+      "created_at": "2026-05-12T13:32:42.877188+00:00",
+      "updated_at": "2026-05-12T13:40:31.764023+00:00",
+      "failure_reason": null,
+      "candidate_id": "5329d4ba-3cc0-417a-a07f-4f8965d8a69a",
+      "candidate_name": "agentTeste",
+      "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b"
+    },
+    {
+      "case": "reanalise",
+      "matching_result": {
+        "status": "completed",
+        "analysis_id": "086a40e5-ee48-450c-bf17-ebeca5e8d819",
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+        "job_fit_score": "96.3",
+        "recommendation": "review_manually"
+      },
+      "source_events": [
+        {
+          "level": "info",
+          "event": "skill_catalog.source=database",
+          "source": "database",
+          "skills_count": 99,
+          "aliases_count": 225,
+          "relations_count": 139,
+          "cache_used": true,
+          "load_duration_ms": 0.0,
+          "usage_count": 2,
+          "source_usage_totals": {
+            "json": 0,
+            "database": 2,
+            "database_failed_fallback_json": 0
+          },
+          "fallback_total": 0
+        }
+      ],
+      "analysis_id": "086a40e5-ee48-450c-bf17-ebeca5e8d819",
+      "status": "completed",
+      "created_at": "2026-05-12T13:32:42.944132+00:00",
+      "updated_at": "2026-05-12T13:40:33.724717+00:00",
+      "failure_reason": null,
+      "candidate_id": "0699cafb-e94f-4caa-9524-0bcad1755808",
+      "candidate_name": "hiago4",
+      "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b"
+    },
+    {
+      "case": "ranking",
+      "ranking": {
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+        "total_candidates": 3,
+        "score_version": "v3-canonical-det",
+        "candidate_entry": {
+          "rank": 1,
+          "candidate_id": "0699cafb-e94f-4caa-9524-0bcad1755808",
+          "candidate_name": "hiago4",
+          "stage": "entry",
+          "pipeline_status": "active",
+          "score_breakdown": {
+            "skill_match_score": "93.33",
+            "experience_match_score": "100.00",
+            "seniority_match_score": "100.00",
+            "education_score": "50.00",
+            "confidence_score": "60.00",
+            "penalty_score": "0.00",
+            "validation_penalty_score": "0.00",
+            "job_fit_score": "96.30",
+            "raw_score": "96.30",
+            "priority_score_weighted": "100.00",
+            "complementary_score_weighted": "66.67",
+            "complementary_score_raw_weighted": "66.67",
+            "priority_component_impact": "55.56",
+            "complementary_component_impact": "7.41",
+            "experience_component_impact": "22.22",
+            "seniority_component_impact": "11.11",
+            "deal_breaker_penalty_score": "0.00",
+            "cap_reason": null,
+            "cap_applied": false,
+            "failed_rule": null,
+            "score_source": "candidate_job_match_evidence",
+            "failed_dimension": null,
+            "validation_reason": "Educação ausente ou inconclusiva no currículo (exigido: bachelor) | Educação ausente ou inconclusiva no currículo (exigido: bachelor)",
+            "validation_status": "unknown",
+            "education_detected": "none",
+            "eligibility_status": "REVIEW",
+            "experience_detected": 10.2,
+            "priority_skills_total": 2,
+            "matched_priority_skills": [
+              "SQL Server",
+              "BI"
+            ],
+            "matched_required_skills": [
+              "BI",
+              "SQL Server"
+            ],
+            "missing_priority_skills": [],
+            "missing_required_skills": [],
+            "priority_skills_matched": 2,
+            "eliminatory_skills_total": 0,
+            "priority_strong_coverage": 100.0,
+            "complementary_skills_total": 3,
+            "eliminatory_skills_matched": 0,
+            "matched_eliminatory_skills": [],
+            "minimum_education_required": "bachelor",
+            "missing_eliminatory_skills": [],
+            "minimum_experience_required": 2.0,
+            "complementary_skills_matched": 2,
+            "matched_complementary_skills": [
+              "Python",
+              "Analytics"
+            ],
+            "missing_complementary_skills": [
+              "API"
+            ],
+            "complementary_bonus_cap_slots": 3
+          },
+          "decision_suggestion": "approved",
+          "reason_tags": [
+            {
+              "type": "skill_match",
+              "field": "sql server",
+              "impact": 27.78,
+              "description": "Skill essencial atendida: SQL Server"
+            },
+            {
+              "type": "skill_match",
+              "field": "bi",
+              "impact": 27.78,
+              "description": "Skill essencial atendida: BI"
+            },
+            {
+              "type": "desirable_skills",
+              "field": "complementary_skills",
+              "impact": 7.41,
+              "description": "Diferenciais: 2/3 encontrados, bônus de 7.41 pts"
+            },
+            {
+              "type": "experience",
+              "field": "experience",
+              "impact": 12.5,
+              "description": "Experiência atende ou supera o esperado"
+            },
+            {
+              "type": "seniority",
+              "field": "seniority",
+              "impact": 7.5,
+              "description": "Senioridade alinhada à vaga"
+            }
+          ],
+          "score_factors": {
+            "positive": [
+              {
+                "direction": "positive",
+                "factor_key": "sql server",
+                "factor_type": "required_skill_match",
+                "factor_label": "Skill essencial atendida: SQL Server",
+                "impact_score": 27.78
+              },
+              {
+                "direction": "positive",
+                "factor_key": "bi",
+                "factor_type": "required_skill_match",
+                "factor_label": "Skill essencial atendida: BI",
+                "impact_score": 27.78
+              },
+              {
+                "direction": "positive",
+                "factor_key": "experience",
+                "factor_type": "experience_match",
+                "factor_label": "Experiência atende ou supera o esperado",
+                "impact_score": 12.5
+              },
+              {
+                "direction": "positive",
+                "factor_key": "seniority",
+                "factor_type": "seniority_match",
+                "factor_label": "Senioridade alinhada à vaga",
+                "impact_score": 7.5
+              }
+            ],
+            "negative": [],
+            "contextual": []
+          },
+          "ranking_summary_text": "Aderência à vaga em 96.3/100. Essenciais: 2/2 atendidas, 0 ausentes, impacto 55.6 pts. Diferenciais: 2/3 encontrados, 1 ausente, bônus 7.4 pts (cap em 3 skills). Critérios eliminatórios: nenhum bloqueio ativo. Pontos fortes: Skill essencial atendida: SQL Server, Skill essencial atendida: BI. Perfil recomendado para avançar.",
+          "job_fit_score": "96.30",
+          "data_confidence_score": 60.0,
+          "entered_at": "2026-05-11 18:39:20.036329+00:00",
+          "computed_at": "2026-05-12 13:43:55.017170+00:00",
+          "ranking_freshness_status": "fresh",
+          "match_freshness_status": "fresh",
+          "recalculation_required": false,
+          "stale_reason": null,
+          "score_computed_at": "2026-05-12 13:43:55.017170+00:00",
+          "source_analysis_id": "086a40e5-ee48-450c-bf17-ebeca5e8d819",
+          "source_analysis_created_at": "2026-05-12 13:32:42.944132+00:00",
+          "score_model_version": "v3-canonical-det",
+          "match_updated_at": "2026-05-12 13:43:54.991855+00:00",
+          "ranking_updated_at": "2026-05-12 13:43:55.017170+00:00",
+          "version": "v3-canonical-det",
+          "ranking_version": "v3-canonical-det",
+          "data_quality_status": "unknown"
+        },
+        "top_candidate_ids": [
+          "0699cafb-e94f-4caa-9524-0bcad1755808",
+          "f4651356-f584-4b6d-ba39-8fdff55c04b6",
+          "51bef5bd-6645-419a-90f0-b8464e9111f5"
+        ]
+      },
+      "source_events": []
+    },
+    {
+      "case": "score_explanation",
+      "explanation": {
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+        "candidate_id": "0699cafb-e94f-4caa-9524-0bcad1755808",
+        "analysis_id": "086a40e5-ee48-450c-bf17-ebeca5e8d819",
+        "job_fit_score": 96.3,
+        "recommendation": "review_manually",
+        "engine_used": "canonical",
+        "matched_equivalences_count": 0,
+        "partial_matches_count": 0
+      },
+      "source_events": []
+    },
+    {
+      "case": "skill_search_and_runtime_filter",
+      "skill_checks": {
+        "search_total": 1,
+        "search_names": [
+          "Python"
+        ],
+        "inactive_skill_sample": "Codex Skill Validation 1778552032890",
+        "archived_skill_sample": null,
+        "inactive_excluded_from_runtime": true,
+        "archived_excluded_from_runtime": null,
+        "inactive_excluded_from_matching_groups": true,
+        "archived_excluded_from_matching_groups": null
+      },
+      "source_events": [
+        {
+          "level": "info",
+          "event": "skill_catalog.source=database",
+          "source": "database",
+          "skills_count": 99,
+          "aliases_count": 225,
+          "relations_count": 139,
+          "cache_used": true,
+          "load_duration_ms": 0.0,
+          "usage_count": 3,
+          "source_usage_totals": {
+            "json": 0,
+            "database": 3,
+            "database_failed_fallback_json": 0
+          },
+          "fallback_total": 0
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "recommendation": "Apto para continuar rollout controlado em validacao/staging com source=database; manter producao em json ate ampliar amostra real e executar mais de 20 casos."
+}

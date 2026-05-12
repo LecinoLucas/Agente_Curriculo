@@ -66,7 +66,7 @@ class ResumeService:
     def __init__(self, repository: SQLAlchemyResumeRepository) -> None:
         self._repository = repository
 
-    async def list_summaries(self, current_user: User) -> list[dict]:
+    async def list_summaries(self, current_user: User, page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:
         """
         List resumes filtered by user role.
 
@@ -80,15 +80,23 @@ class ResumeService:
         If current_user.role == "candidate", this method implements candidate portal access
         by finding the Candidate where user_id = current_user.id.
         """
+        limit = page_size
+        offset = (page - 1) * page_size
+
         if self._can_manage_all(current_user):
             # Internal user (recruiter/admin/viewer): access all resumes
-            return await self._repository.list_summaries()
+            total = await self._repository.count_summaries()
+            items = await self._repository.list_summaries(limit=limit, offset=offset)
+            return items, total
 
         candidate = await self._repository.find_candidate_by_user_id(current_user.id)
         if candidate is None:
             # User with role="candidate" should always have linked Candidate
-            return []
-        return await self._repository.list_summaries(candidate.id)
+            return [], 0
+
+        total = await self._repository.count_summaries(candidate.id)
+        items = await self._repository.list_summaries(candidate.id, limit=limit, offset=offset)
+        return items, total
 
     async def initiate_dev_upload(
         self,

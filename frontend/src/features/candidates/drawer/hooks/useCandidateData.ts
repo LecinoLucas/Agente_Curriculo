@@ -3,7 +3,6 @@ import type { AnalysisResult, CandidateOverview, JobRankingEntry } from "../../.
 import { analysisService } from "../../../../services/analysisService";
 import { getJobRanking } from "../../../../services/jobsService";
 import { formatContextError } from "../../../../services/errorMessages";
-import { getHttpStatus } from "../../../../shared/utils/errorHandler";
 import type { PanelTab } from "../../../pipeline/PipelineContext";
 
 interface UseCandidateDataInput {
@@ -19,6 +18,8 @@ export function useCandidateData({
   activePanelTab,
   rankingSyncTick,
 }: UseCandidateDataInput) {
+  const shouldLoadScoreData = activePanelTab === "score" || activePanelTab === "analysis";
+  const candidateId = candidateOverview?.candidate.id ?? null;
   const analysisResultCacheRef = useRef<Map<string, AnalysisResult>>(new Map());
   const rankingEntryCacheRef = useRef<Map<string, JobRankingEntry | null>>(new Map());
 
@@ -37,9 +38,14 @@ export function useCandidateData({
     setAnalysisResultError(null);
     setRankingEntry(null);
     setRankingEntryError(null);
-  }, [rankingSyncTick, candidateActiveJobId, candidateOverview?.candidate.id]);
+  }, [rankingSyncTick, candidateActiveJobId, candidateId]);
 
   useEffect(() => {
+    if (!shouldLoadScoreData) {
+      setAnalysisResultLoading(false);
+      return;
+    }
+
     if (!candidateActiveJobId) {
       setAnalysisResult(null);
       setAnalysisResultError(null);
@@ -92,6 +98,7 @@ export function useCandidateData({
       abortController.abort();
     };
   }, [
+    shouldLoadScoreData,
     candidateOverview?.latest_analysis?.analysis_id,
     candidateOverview?.latest_analysis?.job_id,
     candidateOverview?.latest_analysis?.status,
@@ -100,14 +107,19 @@ export function useCandidateData({
   ]);
 
   useEffect(() => {
-    if (!candidateActiveJobId || !candidateOverview) {
+    if (!shouldLoadScoreData) {
+      setRankingEntryLoading(false);
+      return;
+    }
+
+    if (!candidateActiveJobId || !candidateId) {
       setRankingEntry(null);
       setRankingEntryError(null);
       setRankingEntryLoading(false);
       return;
     }
 
-    const cacheKey = `${candidateActiveJobId}:${candidateOverview.candidate.id}`;
+    const cacheKey = `${candidateActiveJobId}:${candidateId}`;
     const cached = rankingEntryCacheRef.current.get(cacheKey);
     if (cached !== undefined) {
       setRankingEntry(cached);
@@ -124,7 +136,7 @@ export function useCandidateData({
       .then((ranking) => {
         if (abortController.signal.aborted) return;
         const entry = ranking.candidates.find(
-          (candidate) => candidate.candidate_id === candidateOverview.candidate.id,
+          (candidate) => candidate.candidate_id === candidateId,
         ) ?? null;
         rankingEntryCacheRef.current.set(cacheKey, entry);
         setRankingEntry(entry);
@@ -147,7 +159,7 @@ export function useCandidateData({
     return () => {
       abortController.abort();
     };
-  }, [candidateActiveJobId, candidateOverview, rankingSyncTick]);
+  }, [shouldLoadScoreData, candidateActiveJobId, candidateId, rankingSyncTick]);
 
   return {
     analysisResult,

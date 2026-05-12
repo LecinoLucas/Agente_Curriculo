@@ -87,23 +87,26 @@ class TestAIConfigurationFromSettings:
             f"Check source:\n{source[:1000]}"
         )
 
-    def test_gemini_adapter_uses_settings_retries(self):
-        """Verify: gemini_adapter uses settings retries, not hardcoded."""
+    def test_analysis_retry_policy_is_owned_by_worker(self):
+        """Verify: resilient retries are handled by Celery worker, not Gemini adapter."""
         from src.infrastructure.ai.gemini_adapter import GeminiAdapter
+        from src.interface.workers import analysis_tasks
         import inspect
 
-        source = inspect.getsource(GeminiAdapter._analyze_with_retries)
+        adapter_source = inspect.getsource(GeminiAdapter._analyze_with_retries)
+        worker_source = inspect.getsource(analysis_tasks.process_analysis)
 
-        # Should use settings.AI_MAX_RETRIES
-        assert "settings.AI_MAX_RETRIES" in source, (
-            f"GeminiAdapter should use settings.AI_MAX_RETRIES. "
-            f"Check source"
+        assert "settings.AI_MAX_RETRIES" not in adapter_source, (
+            "GeminiAdapter should not own retry policy anymore. "
+            "Temporary provider failures must bubble to the Celery worker."
         )
 
-        # Should NOT have MAX_RETRIES constant reference
-        assert "MAX_RETRIES" not in source or "settings.AI_MAX_RETRIES" in source, (
-            f"GeminiAdapter should not reference hardcoded MAX_RETRIES. "
-            f"Check source"
+        assert "max_retries=MAX_ANALYSIS_RETRIES" in worker_source, (
+            "process_analysis should declare the worker-level retry budget."
+        )
+
+        assert "self.retry(" in worker_source, (
+            "process_analysis should requeue temporary provider failures through Celery."
         )
 
     def test_no_hardcoded_ai_provider_timeout_constant(self):

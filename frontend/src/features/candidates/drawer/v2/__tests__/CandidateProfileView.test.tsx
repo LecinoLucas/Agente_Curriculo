@@ -35,7 +35,9 @@ describe("CandidateProfileView", () => {
         currentStage={null}
         activeJobLabel="Sem vaga"
         activeJobCompatibilityScore={null}
+        hasPersistedCompatibilityScore={false}
         hasActiveJob={false}
+        hasResume={false}
         aiScore={null}
         aiStatus={null}
         analysisResult={null}
@@ -52,9 +54,6 @@ describe("CandidateProfileView", () => {
         onLinkJob={onLinkJob}
         onStartAnalysis={onStartAnalysis}
         onOpenDocuments={onOpenDocuments}
-        analysisStatusLabel="Não iniciada"
-        analysisStatusDetail="Inicie a análise da vaga atual para liberar score e recomendação."
-        analysisStatusTone="warning"
       />
     );
 
@@ -62,8 +61,7 @@ describe("CandidateProfileView", () => {
     expect(screen.getByRole("button", { name: "Currículos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Vincular vaga" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Iniciar análise" })).toBeInTheDocument();
-    expect(screen.getByText("Análise IA")).toBeInTheDocument();
-    expect(screen.getByText("Não iniciada")).toBeInTheDocument();
+    expect(screen.getByText("Sem currículo")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Currículos" }));
     await user.click(screen.getByRole("button", { name: "Vincular vaga" }));

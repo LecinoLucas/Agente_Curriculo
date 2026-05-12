@@ -16,6 +16,10 @@ export type Candidate = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  archive_reason?: string | null;
+  archive_reason_note?: string | null;
   data_quality_status?: "valid" | "unknown" | "no_resume" | "empty_resume" | "parsing_failed" | "invalid_manual";
   data_quality_reason?: string | null;
   data_quality_marked_at?: string | null;
@@ -29,6 +33,8 @@ export type CandidateListSummary = {
   cpf: string | null;
   tags: string[];
   created_at: string;
+  archived_at?: string | null;
+  archive_reason?: string | null;
   resume_count: number;
   linked_job_count: number;
   latest_job_id: string | null;
@@ -58,7 +64,7 @@ export type CandidateLatestAnalysisOverview = {
   job_id: string | null;
   resume_id: string;
   resume_title: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
+  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
   started_at: string | null;
   completed_at: string | null;
   failed_at: string | null;
@@ -225,7 +231,7 @@ export type ResumeFileUploadResponse = {
   version_id: string;
   analysis_auto_requested: boolean;
   analysis_id: string | null;
-  analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded" | null;
+  analysis_status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded" | null;
   original_file_name: string;
   file_size_bytes: number;
   file_hash_sha256: string;
@@ -389,7 +395,7 @@ export type JobRanking = {
   data_quality_stats?: DataQualityStats;
 };
 
-export type AIAnalysisStatus = "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
+export type AIAnalysisStatus = "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
 
 export type JobCandidate = {
   candidate_id: string;
@@ -420,6 +426,8 @@ export type PipelineStage =
   | "offer"
   | "hired"
   | "rejected";
+
+export const TRANSFER_ALLOWED_STAGES: PipelineStage[] = ["entry", "screening"];
 
 export type PipelineColumn = {
   stage: PipelineStage;
@@ -512,7 +520,7 @@ export type TransferCandidateJobResponse = {
 
 export type AnalysisStatus = {
   analysis_id: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
+  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
   retry_count: number;
   failure_reason: string | null;
   next_retry_at: string | null;
@@ -534,7 +542,7 @@ export type AnalysisPipelineMatch = {
 export type AnalysisPipelineStatus = {
   analysis_id: string;
   job_id: string | null;
-  analysis_status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
+  analysis_status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
   matching_status: "waiting_analysis" | "processing" | "completed" | "blocked" | "idle";
   matching_error?: string | null;
   published_jobs_total: number;
@@ -599,7 +607,7 @@ export type AnalysisGlobalItem = {
   candidate_email: string | null;
   resume_file_name: string | null;
   resume_version_id: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
+  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
   failure_reason: string | null;
   discarded_at?: string | null;
   discarded_by?: string | null;
@@ -622,7 +630,7 @@ export type AnalysisSummary = {
   resume_title: string | null;
   resume_file_name: string | null;
   job_id: string | null;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "discarded";
+  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
   priority: number;
   retry_count: number;
   requested_by: string;
@@ -634,4 +642,12 @@ export type AnalysisSummary = {
   discard_reason_note?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PaginatedResponse<T> = {
+  data: T[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
 };

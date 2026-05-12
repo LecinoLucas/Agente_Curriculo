@@ -19,6 +19,11 @@ const THEMES: Array<{
     label: "Tema 2",
     description: "Marajó suave",
   },
+  {
+    value: "theme-3",
+    label: "Tema 3",
+    description: "Nova modernidade",
+  },
 ];
 
 export function VisualThemeSwitcher() {

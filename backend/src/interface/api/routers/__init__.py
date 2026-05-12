@@ -1,4 +1,5 @@
 from src.interface.api.routers import (
+    admin_audit_logs,
     ai_models,
     analyses,
     auth,
@@ -17,6 +18,7 @@ from src.interface.api.routers import (
 __all__ = [
     "auth",
     "users",
+    "admin_audit_logs",
     "candidates",
     "resumes",
     "analyses",

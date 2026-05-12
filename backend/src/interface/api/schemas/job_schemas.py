@@ -7,19 +7,6 @@ from pydantic import BaseModel, Field, field_validator
 
 from src.interface.api.schemas.common import APISchemaModel, ORMAPISchemaModel
 
-JOB_AREA = Literal[
-    "technology",
-    "data",
-    "financial",
-    "fiscal",
-    "accounting",
-    "administrative",
-    "commercial",
-    "operational",
-    "hr",
-    "leadership",
-]
-
 JOB_PRIORITY = Literal["low", "normal", "high", "urgent"]
 
 DEAL_BREAKER_FIELDS = Literal[
@@ -33,36 +20,15 @@ DEAL_BREAKER_FIELDS = Literal[
     "custom_text",
 ]
 
-VALID_JOB_AREAS = {
-    "technology",
-    "data",
-    "financial",
-    "fiscal",
-    "accounting",
-    "administrative",
-    "commercial",
-    "operational",
-    "hr",
-    "leadership",
-}
-
-
 def normalize_job_area_value(value: str | None) -> str | None:
     if value is None:
         return None
 
-    cleaned = str(value).strip().casefold()
+    cleaned = " ".join(str(value).strip().split())
 
     if not cleaned:
         return None
-
-    if cleaned in VALID_JOB_AREAS:
-        return cleaned
-
-    raise ValueError(
-        f"Invalid job_area value: {value}. "
-        f"Expected one of {sorted(VALID_JOB_AREAS)}"
-    )
+    return cleaned
 
 
 class DealBreaker(BaseModel):
@@ -128,7 +94,7 @@ class JobResponse(ORMAPISchemaModel):
     salary_min: Decimal | None = None
     salary_max: Decimal | None = None
     salary_currency: str
-    job_area: JOB_AREA | None = None
+    job_area: str | None = None
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] = Field(default_factory=list)
@@ -184,7 +150,7 @@ class CreateJobRequest(APISchemaModel):
     salary_min: Decimal | None = None
     salary_max: Decimal | None = None
     salary_currency: str = Field(default="BRL", min_length=3, max_length=10)
-    job_area: JOB_AREA | None = None
+    job_area: str | None = None
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] = Field(default_factory=list)
@@ -229,7 +195,7 @@ class UpdateJobRequest(APISchemaModel):
     salary_min: Decimal | None = None
     salary_max: Decimal | None = None
     salary_currency: str | None = Field(default=None, min_length=3, max_length=10)
-    job_area: JOB_AREA | None = None
+    job_area: str | None = None
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] | None = None
@@ -441,7 +407,7 @@ class BulkImportJobItemRequest(APISchemaModel):
     salary_min: Decimal | None = None
     salary_max: Decimal | None = None
     salary_currency: str = Field(default="BRL", min_length=3, max_length=10)
-    job_area: JOB_AREA | None = None
+    job_area: str | None = None
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] = Field(default_factory=list)
@@ -505,7 +471,7 @@ class BulkImportJobsResponse(BaseModel):
 
 class BulkUpdateMatchKeyRequest(BaseModel):
     title: str = Field(min_length=1, max_length=255)
-    job_area: JOB_AREA | None = None
+    job_area: str | None = None
     location: str | None = Field(default=None, max_length=255)
 
     @field_validator("job_area", mode="before")
@@ -528,7 +494,7 @@ class BulkUpdateJobDataRequest(APISchemaModel):
     salary_min: Decimal | None = None
     salary_max: Decimal | None = None
     salary_currency: str | None = Field(default=None, min_length=3, max_length=10)
-    job_area: JOB_AREA | None = None
+    job_area: str | None = None
     responsibilities: str | None = None
     experience_context: str | None = None
     behavioral_requirements: list[str] | None = None

@@ -288,54 +288,53 @@
 
   :root[data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 — Grafite Dourado
+       Visual Theme 1 — Marajó Red & White
        -----------------------------------------------------------------------
        Direção:
-       - Tema 1 continua institucional, mas a navbar deixa de ser vinho.
-       - Navbar em cinza escuro/grafite com dourado envelhecido.
-       - O vermelho Marajó continua como ação principal no sistema.
-       - O dourado entra como acabamento premium, sem virar cor de CTA.
+       - Fundo branco/off-white limpo e moderno.
+       - Navbar em vermelho Marajó sólido com texto branco.
+       - Ações principais em vermelho vibrante.
        ----------------------------------------------------------------------- */
 
-    --brand:               356 86% 55%;
-    --brand-dark:          356 78% 42%;
-    --brand-soft:          356 88% 95%;
-    --brand-glow:          356 90% 62%;
+    --brand:               356 45% 50%;
+    --brand-dark:          356 45% 40%;
+    --brand-soft:          356 45% 95%;
+    --brand-glow:          356 45% 62%;
 
-    --bg:                  42 50% 93%;
-    --surface:             42 44% 98%;
-    --surface-muted:       39 34% 90%;
-    --border:              34 26% 77%;
-    --border-strong:       32 22% 62%;
+    --bg:                  0 0% 98%;
+    --surface:             0 0% 100%;
+    --surface-muted:       0 0% 94%;
+    --border:              0 0% 88%;
+    --border-strong:       0 0% 70%;
 
-    --background:          42 50% 93%;
-    --card:                42 44% 98%;
-    --popover:             42 44% 98%;
-    --secondary:           39 34% 90%;
-    --muted:               39 34% 90%;
+    --background:          0 0% 98%;
+    --card:                0 0% 100%;
+    --popover:             0 0% 100%;
+    --secondary:           0 0% 94%;
+    --muted:               0 0% 94%;
 
-    --primary:             356 86% 55%;
+    --primary:             356 45% 50%;
     --primary-foreground:  0 0% 100%;
-    --ring:                356 86% 55%;
+    --ring:                356 45% 50%;
 
-    --accent:              42 62% 91%;
-    --accent-foreground:   38 42% 24%;
-    --accent-soft:         42 62% 91%;
+    --accent:              356 45% 95%;
+    --accent-foreground:   356 45% 40%;
+    --accent-soft:         356 45% 95%;
 
-    --nav-bg:              38 12% 18%;
-    --nav-text:            42 62% 92%;
-    --nav-muted:           42 42% 72%;
-    --nav-active-bg:       42 48% 28%;
-    --nav-border:          42 28% 34%;
+    --nav-bg:              356 45% 40%;
+    --nav-text:            0 0% 100%;
+    --nav-muted:           356 45% 80%;
+    --nav-active-bg:       356 45% 30%;
+    --nav-border:          356 45% 30%;
 
-    --sidebar-accent:      356 86% 55%;
-    --hero-start:          356 86% 55%;
-    --hero-end:            32 72% 48%;
+    --sidebar-accent:      356 45% 50%;
+    --hero-start:          356 45% 50%;
+    --hero-end:            0 0% 100%;
 
-    --page-glow-start:     42 78% 90%;
-    --page-glow-end:       356 88% 94%;
-    --page-gradient-start: 42 50% 94%;
-    --page-gradient-end:   39 36% 89%;
+    --page-glow-start:     356 45% 95%;
+    --page-glow-end:       0 0% 100%;
+    --page-gradient-start: 0 0% 98%;
+    --page-gradient-end:   0 0% 95%;
   }
 
   :root[data-visual-theme="theme-2"] {
@@ -391,54 +390,102 @@
     --page-gradient-end:   82 28% 88%;
   }
 
-  :root[data-theme="dark"][data-visual-theme="theme-1"] {
+  :root[data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 Dark — Neon Obsidian
+       Visual Theme 3 — Nova Modernidade (Neo-Holográfico)
        -----------------------------------------------------------------------
        Direção:
-       - Dark novo, mais negro, mais profundo e mais colorido.
-       - Fundo obsidiana com reflexos vermelho, violeta, azul e dourado.
-       - Cards em preto azulado/vinho profundo.
-       - CTA vermelho rubi vivo.
-       - Navbar quase preta com detalhe dourado escuro.
+       - Fundo ultra-limpo, quase cristalino.
+       - Ação principal em Violeta Digital vibrante.
+       - Navbar em gradiente holográfico ou tom escuro moderno para contraste.
+       ----------------------------------------------------------------------- */
+    --brand:               260 85% 60%;
+    --brand-dark:          260 75% 45%;
+    --brand-soft:          260 85% 96%;
+    --brand-glow:          260 90% 68%;
+
+    --bg:                  210 50% 98%;
+    --surface:             0 0% 100%;
+    --surface-muted:       210 30% 94%;
+    --border:              210 20% 85%;
+    --border-strong:       260 40% 70%;
+
+    --background:          210 50% 98%;
+    --card:                0 0% 100%;
+    --popover:             0 0% 100%;
+    --secondary:           210 30% 94%;
+    --muted:               210 30% 94%;
+
+    --primary:             260 85% 60%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                260 85% 60%;
+
+    --accent:              190 90% 92%;
+    --accent-foreground:   190 90% 20%;
+    --accent-soft:         190 90% 92%;
+
+    --nav-bg:              260 30% 15%;
+    --nav-text:            210 50% 95%;
+    --nav-muted:           260 20% 70%;
+    --nav-active-bg:       260 40% 25%;
+    --nav-border:          260 30% 22%;
+
+    --sidebar-accent:      260 85% 60%;
+    --hero-start:          260 85% 60%;
+    --hero-end:            190 90% 50%;
+
+    --page-glow-start:     260 100% 95%;
+    --page-glow-end:       190 100% 95%;
+    --page-gradient-start: 210 50% 98%;
+    --page-gradient-end:   210 30% 95%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-1"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 1 Dark — Marajó Red & Dark
+       -----------------------------------------------------------------------
+       Direção:
+       - Fundo vinho escuro/marrom avermelhado profundo.
+       - Navbar sólida em vermelho escuro.
+       - Detalhes em branco e vermelho brilhante.
        ----------------------------------------------------------------------- */
 
-    --brand:               356 92% 64%;
-    --brand-dark:          356 74% 46%;
-    --brand-soft:          356 44% 20%;
-    --brand-glow:          356 96% 68%;
+    --brand:               356 45% 60%;
+    --brand-dark:          356 45% 45%;
+    --brand-soft:          356 40% 20%;
+    --brand-glow:          356 45% 68%;
 
-    --bg:                  250 26% 7%;
-    --surface:             252 24% 11%;
-    --surface-muted:       258 24% 16%;
-    --border:              266 20% 25%;
-    --border-strong:       44 32% 42%;
+    --bg:                  356 40% 6%;
+    --surface:             356 30% 11%;
+    --surface-muted:       356 20% 16%;
+    --border:              356 15% 24%;
+    --border-strong:       356 40% 42%;
 
-    --background:          250 26% 7%;
-    --card:                252 24% 11%;
-    --popover:             252 24% 11%;
-    --secondary:           258 24% 16%;
-    --muted:               258 24% 16%;
+    --background:          356 40% 6%;
+    --card:                356 30% 11%;
+    --popover:             356 30% 11%;
+    --secondary:           356 20% 16%;
+    --muted:               356 20% 16%;
 
-    --primary:             356 92% 64%;
+    --primary:             356 45% 60%;
     --primary-foreground:  0 0% 100%;
-    --ring:                356 92% 64%;
+    --ring:                356 45% 60%;
 
-    --accent:              268 46% 20%;
-    --accent-foreground:   42 66% 92%;
-    --accent-soft:         268 46% 20%;
+    --accent:              356 40% 20%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         356 40% 20%;
 
-    --nav-bg:              240 18% 6%;
-    --nav-text:            42 68% 90%;
-    --nav-muted:           42 38% 68%;
-    --nav-active-bg:       268 44% 22%;
-    --nav-border:          42 30% 30%;
+    --nav-bg:              356 40% 4%;
+    --nav-text:            0 0% 100%;
+    --nav-muted:           356 20% 70%;
+    --nav-active-bg:       356 40% 15%;
+    --nav-border:          356 30% 20%;
 
-    --sidebar-accent:      356 92% 64%;
-    --hero-start:          356 92% 64%;
-    --hero-end:            268 82% 62%;
+    --sidebar-accent:      356 45% 60%;
+    --hero-start:          356 45% 60%;
+    --hero-end:            356 40% 20%;
 
-    --page-glow-start:     356 92% 44%;
+    --page-glow-start:     356 45% 44%;
     --page-glow-end:       268 90% 48%;
     --page-gradient-start: 250 26% 7%;
     --page-gradient-end:   222 30% 6%;
@@ -494,6 +541,55 @@
     --page-glow-end:       10 90% 52%;
     --page-gradient-start: 196 44% 7%;
     --page-gradient-end:   226 42% 7%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-3"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 3 Dark — Cyber Quartz (Nova Modernidade)
+       -----------------------------------------------------------------------
+       Direção:
+       - Dark futurista com fundo azul/violeta profundo.
+       - Efeitos neon controlados em Cyan e Violeta.
+       ----------------------------------------------------------------------- */
+    --brand:               190 100% 50%;
+    --brand-dark:          190 100% 35%;
+    --brand-soft:          260 40% 15%;
+    --brand-glow:          190 100% 65%;
+
+    --bg:                  240 30% 8%;
+    --surface:             240 25% 12%;
+    --surface-muted:       240 20% 16%;
+    --border:              240 15% 24%;
+    --border-strong:       190 70% 40%;
+
+    --background:          240 30% 8%;
+    --card:                240 25% 12%;
+    --popover:             240 25% 12%;
+    --secondary:           240 20% 16%;
+    --muted:               240 20% 16%;
+
+    --primary:             190 100% 50%;
+    --primary-foreground:  240 30% 5%;
+    --ring:                190 100% 50%;
+
+    --accent:              260 60% 25%;
+    --accent-foreground:   260 100% 90%;
+    --accent-soft:         260 60% 25%;
+
+    --nav-bg:              240 40% 5%;
+    --nav-text:            190 100% 90%;
+    --nav-muted:           240 20% 70%;
+    --nav-active-bg:       240 30% 15%;
+    --nav-border:          190 50% 20%;
+
+    --sidebar-accent:      190 100% 50%;
+    --hero-start:          260 100% 60%;
+    --hero-end:            190 100% 50%;
+
+    --page-glow-start:     260 70% 30%;
+    --page-glow-end:       190 80% 25%;
+    --page-gradient-start: 240 30% 8%;
+    --page-gradient-end:   240 20% 5%;
   }
 
   /* ==========================================================================
@@ -858,6 +954,11 @@
     background:
       linear-gradient(135deg, hsl(176 54% 30%), hsl(8 82% 54%)),
       linear-gradient(180deg, hsl(50 48% 95%), hsl(166 56% 88%));
+  }
+
+  .visual-theme-preview-theme-3 {
+    background:
+      linear-gradient(135deg, hsl(260 85% 60%), hsl(190 90% 50%));
   }
 
   .visual-theme-option-copy {

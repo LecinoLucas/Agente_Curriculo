@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 class AnalysisStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
+    RETRY_SCHEDULED = "retry_scheduled"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -42,8 +43,11 @@ class Analysis:
     failed_at: Optional[datetime] = None
     failure_reason: Optional[str] = None
     retry_count: int = 0
-    max_retries: int = 3
+    max_retries: int = 4
+    attempts: int = 0
     next_retry_at: Optional[datetime] = None
+    provider_error_type: Optional[str] = None
+    provider_status_code: Optional[int] = None
     queue_name: str = "analysis"
     worker_id: Optional[str] = None
     task_id: Optional[str] = None

@@ -10,7 +10,7 @@ interface EditCandidateModalProps {
   isOpen: boolean;
   onClose: () => void;
   candidate: CandidateOverview["candidate"] | undefined;
-  onSuccess: (candidateId: string) => Promise<void> | void;
+  onSuccess: (candidate: CandidateOverview["candidate"]) => Promise<void> | void;
 }
 
 type EditCandidateErrors = {
@@ -130,14 +130,14 @@ export function EditCandidateModal({
       const isValidDuplicateState = await validateDuplicate(trimmedEmail, cpfDigits);
       if (!isValidDuplicateState) return;
 
-      await candidatesService.update(candidate.id, {
+      const updatedCandidate = await candidatesService.update(candidate.id, {
         full_name: trimmedName,
         email: trimmedEmail,
         phone: trimmedPhone || undefined,
         cpf: cpfDigits || undefined,
       });
 
-      await onSuccess(candidate.id);
+      await onSuccess(updatedCandidate);
       toast.success("Dados do candidato atualizados");
       onClose();
     } catch (err: unknown) {

@@ -407,11 +407,11 @@ async def test_bulk_import_resolves_catalog_alias(
 
 
 @pytest.mark.asyncio
-async def test_bulk_import_normalizes_job_area_english_value(
+async def test_bulk_import_preserves_job_area_raw_value(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """Test that job_area='data' (English) is accepted and stored as 'data'."""
+    """Test that raw job_area values are stored without legacy normalization."""
     await _create_skill(db_session, "Contas a pagar", "contas a pagar")
     await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
     await _create_active_user(db_session, "bulk-job-area-en@test.com", "password123", UserRole.RECRUITER)
@@ -439,11 +439,11 @@ async def test_bulk_import_normalizes_job_area_english_value(
 
 
 @pytest.mark.asyncio
-async def test_bulk_import_normalizes_job_area_portuguese_value(
+async def test_bulk_import_preserves_job_area_portuguese_value(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """Test that job_area='Dados' (Portuguese) is accepted and normalized to 'data'."""
+    """Test that Portuguese labels are stored as provided."""
     await _create_skill(db_session, "Contas a pagar", "contas a pagar")
     await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
     await _create_active_user(db_session, "bulk-job-area-pt@test.com", "password123", UserRole.RECRUITER)
@@ -467,15 +467,15 @@ async def test_bulk_import_normalizes_job_area_portuguese_value(
 
     job = await db_session.scalar(sa.select(JobModel).where(JobModel.title == "Data Scientist Portuguese"))
     assert job is not None
-    assert job.job_area == "data"
+    assert job.job_area == "Dados"
 
 
 @pytest.mark.asyncio
-async def test_bulk_import_normalizes_job_area_portuguese_lowercase(
+async def test_bulk_import_preserves_job_area_portuguese_lowercase(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
-    """Test that job_area='dados' (lowercase Portuguese) is also normalized to 'data'."""
+    """Test that lowercase labels are also stored as provided."""
     await _create_skill(db_session, "Contas a pagar", "contas a pagar")
     await _create_skill(db_session, "Conciliação bancária", "conciliacao bancaria")
     await _create_active_user(db_session, "bulk-job-area-pt-lower@test.com", "password123", UserRole.RECRUITER)
@@ -499,4 +499,4 @@ async def test_bulk_import_normalizes_job_area_portuguese_lowercase(
 
     job = await db_session.scalar(sa.select(JobModel).where(JobModel.title == "Data Scientist Portuguese Lower"))
     assert job is not None
-    assert job.job_area == "data"
+    assert job.job_area == "dados"

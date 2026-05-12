@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import type { JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
 
@@ -6,14 +6,18 @@ interface KanbanCardProps {
   candidate: JobCandidate;
   isSaving: boolean;
   enterDelay: number;
-  onCardClick?: () => void;
+  onCardClick?: (candidateId: string) => void;
+  isTopMatch?: boolean;
+  rank?: number;
 }
 
-export function KanbanCard({
+export const KanbanCard = memo(function KanbanCard({
   candidate,
   isSaving,
   enterDelay,
   onCardClick,
+  isTopMatch = false,
+  rank,
 }: KanbanCardProps) {
   const skills = (candidate.top_skills ?? []).slice(0, 3);
   const jobFitScore = candidate.job_fit_score;
@@ -26,7 +30,7 @@ export function KanbanCard({
 
   return (
     <div
-      onClick={onCardClick}
+      onClick={onCardClick ? () => onCardClick(candidate.candidate_id) : undefined}
       className={[
         "ui-card select-none rounded-2xl p-3.5 transition-all duration-150",
         "hover:border-[hsl(var(--border-strong))] hover:shadow-md",
@@ -39,14 +43,30 @@ export function KanbanCard({
       style={{ "--enter-delay": `${enterDelay}ms` } as CSSProperties}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <span className="line-clamp-2 text-sm font-semibold leading-snug text-[hsl(var(--text))]">
-            {candidate.candidate_name}
-          </span>
-          {meta.length > 0 ? (
-            <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">{meta.join(" · ")}</p>
-          ) : null}
+        <div className="flex items-center gap-2 min-w-0">
+          {rank && rank <= 3 && (
+            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+              rank === 1 ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400" :
+              rank === 2 ? "bg-slate-400/20 text-slate-600 dark:text-slate-300" :
+              rank === 3 ? "bg-amber-600/20 text-amber-700 dark:text-amber-400" : ""
+            }`}>
+              {rank}
+            </span>
+          )}
+          <div className="min-w-0">
+            <span className="line-clamp-2 text-sm font-semibold leading-snug text-[hsl(var(--text))]">
+              {candidate.candidate_name}
+            </span>
+            {meta.length > 0 ? (
+              <p className="mt-1 text-[11px] text-[hsl(var(--text-muted))]">{meta.join(" · ")}</p>
+            ) : null}
+          </div>
         </div>
+        {isTopMatch && (
+          <span className="shrink-0 rounded-full bg-[hsl(var(--primary))]/10 px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--primary))]">
+            Mais aderente
+          </span>
+        )}
       </div>
 
       {/* Top skills */}
@@ -86,4 +106,4 @@ export function KanbanCard({
       </div>
     </div>
   );
-}
+});

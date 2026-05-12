@@ -3,11 +3,7 @@ import type { ScoreExplanationResponse } from "../../../../services/scoreExplana
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, ScanSearch, XCircle } from "lucide-react";
 import { getScoreTone, normalizeScorePercent } from "../../utils/scoreFormatting";
 import { deriveScoreSemantics, type ScoreSemanticState } from "../../utils/scoreSemantics";
-import {
-  getExplainabilityDeltaLine,
-  getExplainabilityFreshnessLine,
-  getExplainabilityQuickLine,
-} from "../../utils/explainabilityUi";
+import { getExplainabilityQuickLine } from "../../utils/explainabilityUi";
 
 interface CandidateDecisionPanelProps {
   currentStage: PipelineStage | null;
@@ -200,11 +196,6 @@ export function CandidateDecisionPanel({
   const RecommendationIcon = recommendation.icon;
   const hasInsights = strengths.length > 0 || risks.length > 0;
   const explainabilityLine = getExplainabilityQuickLine(scoreExplanation);
-  const deltaLine = getExplainabilityDeltaLine(scoreExplanation);
-  const freshnessLine = getExplainabilityFreshnessLine(
-    scoreExplanation?.ranking_freshness_status ?? rankingEntry?.ranking_freshness_status,
-    scoreExplanation?.computed_at ?? rankingEntry?.ranking_updated_at ?? rankingEntry?.computed_at,
-  );
   const contextText =
     currentStage === "hired"
       ? "Ação aplicada. O candidato foi aprovado para a vaga ativa."
@@ -219,20 +210,7 @@ export function CandidateDecisionPanel({
       : semantics.detailLine;
 
   if (compatibilityScore === null && !analysisResult && !scoreExplanation) {
-    return (
-      <div className="px-5 py-4">
-        <div className="rounded-2xl border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-4">
-          <p className="text-sm font-semibold text-[hsl(var(--text))]">
-            {hasActiveJob ? "Análise não disponível" : "Candidato sem vaga ativa"}
-          </p>
-          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-            {hasActiveJob
-              ? "Solicite análise para ver a recomendação."
-              : "Associe o candidato por um fluxo de vaga para liberar compatibilidade e recomendação."}
-          </p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -267,16 +245,6 @@ export function CandidateDecisionPanel({
                 {explainabilityLine}
               </p>
             ) : null}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-[hsl(var(--border))]/60 bg-white/55 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
-                {freshnessLine}
-              </span>
-              {deltaLine ? (
-                <span className="rounded-full border border-[hsl(var(--border))]/60 bg-white/55 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
-                  {deltaLine}
-                </span>
-              ) : null}
-            </div>
             {semantics.secondaryDisplay ? (
               <div className="mt-3 inline-flex items-center rounded-full border border-[hsl(var(--border))]/60 bg-white/60 px-3 py-1 text-xs font-medium text-[hsl(var(--text-muted))]">
                 {semantics.secondaryLabel}: {semantics.secondaryDisplay}
@@ -284,33 +252,13 @@ export function CandidateDecisionPanel({
             ) : null}
           </div>
 
-          <div className="flex items-start justify-between gap-3 xl:block xl:min-w-[140px]">
-            <div className="rounded-xl border border-[hsl(var(--border))]/50 bg-white/70 px-3 py-2.5 text-right shadow-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--text-muted))]">
-                {semantics.primaryLabel}
-              </p>
-              <p
-                className={[
-                  "mt-1 text-2xl font-semibold tracking-[-0.02em] tabular-nums text-[hsl(var(--text))]",
-                  getScoreTone(compatibilityScore) === "high"
-                    ? "text-emerald-900"
-                    : getScoreTone(compatibilityScore) === "mid"
-                      ? "text-amber-900"
-                      : getScoreTone(compatibilityScore) === "low"
-                        ? "text-rose-900"
-                        : "",
-                ].join(" ")}
-              >
-                {scoreLabel}
-              </p>
-            </div>
-
+          <div className="flex items-start justify-between gap-3 xl:block xl:min-w-[180px]">
             <button
               type="button"
               onClick={onViewAnalysis}
               className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-white/70 px-3 text-sm font-medium text-[hsl(var(--text))] transition hover:bg-white"
             >
-              Ver análise
+              Ver score
               <ArrowRight className="h-4 w-4" />
             </button>
             {recommendation.type === "evaluate" ? (

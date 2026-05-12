@@ -291,7 +291,9 @@ describe("useJobConfigurationAlerts", () => {
         title: "Backend Engineer",
         description: "Build scalable backend systems with Python and PostgreSQL",
         job_area: "Tecnologia",
-        responsibilities: "Develop APIs",
+        responsibilities: "Develop and maintain APIs for internal hiring workflows",
+        experience_context: "Experience with backend services and relational databases",
+        behavioral_requirements: ["Ownership", "Communication"],
         minimum_years_experience: 3,
       })
     );
@@ -300,7 +302,7 @@ describe("useJobConfigurationAlerts", () => {
     expect(result.current.alerts).toContainEqual(
       expect.objectContaining({
         level: "success",
-        message: expect.stringContaining("pronta para publicação"),
+        message: expect.stringContaining("Configuração base concluída"),
       })
     );
   });
@@ -389,8 +391,8 @@ describe("False Negative Prevention - Analista de Dados", () => {
     // Should warn about suspicious deal-breakers
     expect(result.current.alerts.some((a) => a.icon === "🚨")).toBe(true);
 
-    // Should warn about Master degree requirement
-    expect(result.current.alerts.some((a) => a.message.includes("Master"))).toBe(true);
+    // Should warn about master degree requirement
+    expect(result.current.alerts.some((a) => a.message.includes("Educação mínima alta (master)"))).toBe(true);
 
     // Should warn about 10 years requirement
     expect(result.current.alerts.some((a) => a.message.includes("10 anos"))).toBe(true);

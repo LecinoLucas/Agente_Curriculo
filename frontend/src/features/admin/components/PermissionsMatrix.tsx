@@ -3,7 +3,7 @@ import { ROLES, SCREENS } from "../config/adminConfig";
 
 export function PermissionsMatrix() {
   return (
-    <Card className="shadow-sm">
+    <Card className="shadow-sm bg-[hsl(var(--surface-muted))]">
       <CardHeader>
         <CardTitle className="text-base">Matriz de permissões</CardTitle>
         <CardDescription>
@@ -14,8 +14,8 @@ export function PermissionsMatrix() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="h-11 px-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-44">
+              <tr className="border-b border-border">
+                <th className="h-11 px-4 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground w-44">
                   Tela
                 </th>
                 {ROLES.map((r) => (
@@ -33,11 +33,11 @@ export function PermissionsMatrix() {
               {SCREENS.map((screen) => (
                 <tr
                   key={screen.path}
-                  className="border-b border-gray-100 last:border-0 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/30"
+                  className="border-b border-border last:border-0 hover:bg-muted/50"
                 >
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{screen.label}</p>
-                    <p className="text-xs text-gray-400">{screen.path}</p>
+                    <p className="font-medium text-foreground">{screen.label}</p>
+                    <p className="text-xs text-muted-foreground">{screen.path}</p>
                   </td>
                   {ROLES.map((role) => (
                     <td key={role.key} className="px-4 py-3 text-center">

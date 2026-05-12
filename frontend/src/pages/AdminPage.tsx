@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, ShieldCheck, Users } from "lucide-react";
+import { CheckCircle2, FileSearch, ShieldCheck, Tags, Users } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -35,7 +35,7 @@ export function AdminPage() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <AdminQuickAction
           icon={<Users className="h-4 w-4 text-blue-600" />}
           title="Gerenciar usuários internos"
@@ -46,11 +46,28 @@ export function AdminPage() {
         />
 
         <AdminQuickAction
+          icon={<Tags className="h-4 w-4 text-purple-600" />}
+          title="Cadastros"
+          description="Skills, áreas e outros catálogos do sistema."
+          buttonLabel="Acessar cadastros"
+          onButtonClick={() => navigate("/admin/cadastros")}
+          variant="default"
+        />
+
+        <AdminQuickAction
+          icon={<FileSearch className="h-4 w-4 text-amber-600" />}
+          title="Auditoria"
+          description="Acompanhe ações realizadas no sistema, alterações de cadastros e eventos administrativos."
+          buttonLabel="Ver auditoria"
+          onButtonClick={() => navigate("/admin/auditoria")}
+          variant="default"
+        />
+
+        <AdminQuickAction
           icon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
           title="Como funciona o acesso"
-          description="Cada usuário tem um perfil que define quais telas ele pode acessar.
-              Para liberar ou restringir, altere o perfil na tabela de usuários."
-          buttonLabel="Consulte a matriz de permissões abaixo para ver as regras por perfil."
+          description="Cada usuário tem um perfil que define quais telas ele pode acessar. Para liberar ou restringir, altere o perfil na tabela de usuários."
+          buttonLabel="Matriz de permissões"
           onButtonClick={() => {}}
           variant="default"
         />

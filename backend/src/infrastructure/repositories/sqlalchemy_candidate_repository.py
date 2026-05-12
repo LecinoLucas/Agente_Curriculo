@@ -64,6 +64,15 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             sa.select(CandidateModel).where(
                 CandidateModel.id == candidate_id,
                 CandidateModel.deleted_at.is_(None),
+                CandidateModel.archived_at.is_(None),
+            )
+        )
+
+    async def find_by_id(self, candidate_id: UUID) -> CandidateModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateModel).where(
+                CandidateModel.id == candidate_id,
+                CandidateModel.deleted_at.is_(None),
             )
         )
 
@@ -72,6 +81,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             sa.select(CandidateModel).where(
                 CandidateModel.email == email,
                 CandidateModel.deleted_at.is_(None),
+                CandidateModel.archived_at.is_(None),
             )
         )
 
@@ -80,6 +90,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             sa.select(CandidateModel).where(
                 CandidateModel.cpf == cpf,
                 CandidateModel.deleted_at.is_(None),
+                CandidateModel.archived_at.is_(None),
             )
         )
 
@@ -88,8 +99,13 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         page: int,
         page_size: int,
         search: str | None = None,
+        archived: bool = False,
     ) -> tuple[list[CandidateModel], int]:
         filters = [CandidateModel.deleted_at.is_(None)]
+        if archived:
+            filters.append(CandidateModel.archived_at.is_not(None))
+        else:
+            filters.append(CandidateModel.archived_at.is_(None))
         if search:
             term = f"%{search.lower().strip()}%"
             filters.append(
@@ -124,6 +140,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         search: str | None = None,
         has_resume: bool | None = None,
         ai_status_filter: list[str] | None = None,
+        archived: bool = False,
     ) -> tuple[list[dict], int]:
         active_score_version = (
             sa.select(ScoreModelVersionModel.id)
@@ -298,6 +315,10 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             .scalar_subquery()
         )
         filters = [CandidateModel.deleted_at.is_(None)]
+        if archived:
+            filters.append(CandidateModel.archived_at.is_not(None))
+        else:
+            filters.append(CandidateModel.archived_at.is_(None))
         if search:
             term = f"%{search.lower().strip()}%"
             filters.append(
@@ -334,6 +355,8 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 CandidateModel.cpf,
                 CandidateModel.tags,
                 CandidateModel.created_at,
+                CandidateModel.archived_at,
+                CandidateModel.archive_reason,
                 resume_count_sq.label("resume_count"),
                 linked_job_count_sq.label("linked_job_count"),
                 latest_job_id_sq.label("latest_job_id"),
@@ -384,6 +407,10 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                     created_by=created_by,
                     created_at=candidate.created_at,
                     updated_at=candidate.updated_at,
+                    archived_at=getattr(candidate, "archived_at", None),
+                    archived_by=getattr(candidate, "archived_by", None),
+                    archive_reason=getattr(candidate, "archive_reason", None),
+                    archive_reason_note=getattr(candidate, "archive_reason_note", None),
                     deleted_at=candidate.deleted_at,
                     data_quality_status=getattr(candidate, "data_quality_status", "unknown"),
                     data_quality_reason=getattr(candidate, "data_quality_reason", None),
@@ -404,6 +431,10 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 model.internal_notes = candidate.internal_notes
                 model.tags = list(candidate.tags or [])
                 model.updated_at = candidate.updated_at
+                model.archived_at = getattr(candidate, "archived_at", model.archived_at)
+                model.archived_by = getattr(candidate, "archived_by", model.archived_by)
+                model.archive_reason = getattr(candidate, "archive_reason", model.archive_reason)
+                model.archive_reason_note = getattr(candidate, "archive_reason_note", model.archive_reason_note)
                 model.deleted_at = candidate.deleted_at
                 model.data_quality_status = getattr(candidate, "data_quality_status", model.data_quality_status)
                 model.data_quality_reason = getattr(candidate, "data_quality_reason", model.data_quality_reason)

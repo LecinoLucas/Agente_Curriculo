@@ -1,0 +1,155 @@
+{
+  "summary": {
+    "json_skill_count": 99,
+    "db_skill_count": 99,
+    "json_alias_count": 239,
+    "db_alias_count": 225,
+    "json_relation_count": 135,
+    "db_relation_count": 139,
+    "missing_skills_count": 0,
+    "extra_skills_count": 0,
+    "missing_aliases_count": 5,
+    "extra_aliases_count": 0,
+    "conflicts_count": 9,
+    "metadata_gaps_count": 0,
+    "equivalence_percent": 95.86,
+    "missing_aliases_by_type": {
+      "duplicate_ownership": 3,
+      "invalid_legacy_alias": 1,
+      "alias_should_be_relation": 1
+    },
+    "conflicts_by_type": {
+      "alias_should_be_relation": 9
+    },
+    "resolved_by_relation_count": 9
+  },
+  "missing_skills": [],
+  "extra_skills": [],
+  "missing_aliases": [
+    {
+      "alias": "JS",
+      "canonical": ".NET",
+      "classification": "invalid_legacy_alias",
+      "db_owner": "JavaScript",
+      "related_skill": "JavaScript",
+      "suggestion": "O alias legado mistura duas stacks sem equivalência semântica confiável."
+    },
+    {
+      "alias": "Google Cloud Platform",
+      "canonical": "Cloud",
+      "classification": "duplicate_ownership",
+      "db_owner": "GCP",
+      "related_skill": "GCP",
+      "suggestion": "O alias já pertence a outra skill e exige decisão manual de ownership."
+    },
+    {
+      "alias": "TS",
+      "canonical": "JavaScript",
+      "classification": "duplicate_ownership",
+      "db_owner": "TypeScript",
+      "related_skill": "TypeScript",
+      "suggestion": "O alias já pertence a outra skill e exige decisão manual de ownership."
+    },
+    {
+      "alias": "monitoramento",
+      "canonical": "Observability",
+      "classification": "duplicate_ownership",
+      "db_owner": "monitoring",
+      "related_skill": "monitoring",
+      "suggestion": "O alias já pertence a outra skill e exige decisão manual de ownership."
+    },
+    {
+      "alias": "Spring",
+      "canonical": "Spring Boot",
+      "classification": "alias_should_be_relation",
+      "db_owner": "Java",
+      "related_skill": "Java",
+      "suggestion": "Spring Boot é uma especialização técnica relacionada a Spring, não um alias textual puro."
+    }
+  ],
+  "extra_aliases": [],
+  "conflicts": [
+    {
+      "type": "alias_should_be_relation",
+      "alias": "C#",
+      "json_canonical": ".NET",
+      "db_canonical": "C#",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter C# como skill canônica e criar relação .NET -> C# em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "Django",
+      "json_canonical": "Backend",
+      "db_canonical": "Django",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter Django como skill canônica e criar relação Backend -> Django em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "FastAPI",
+      "json_canonical": "Backend",
+      "db_canonical": "FastAPI",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter FastAPI como skill canônica e criar relação Backend -> FastAPI em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "Python",
+      "json_canonical": "Backend",
+      "db_canonical": "Python",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter Python como skill canônica e criar relação Backend -> Python em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "Machine Learning",
+      "json_canonical": "Data Science",
+      "db_canonical": "Machine Learning",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter Machine Learning como skill canônica e criar relação Data Science -> Machine Learning em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "JavaScript",
+      "json_canonical": "Frontend",
+      "db_canonical": "JavaScript",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter JavaScript como skill canônica e criar relação Frontend -> JavaScript em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "TypeScript",
+      "json_canonical": "Frontend",
+      "db_canonical": "TypeScript",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter TypeScript como skill canônica e criar relação Frontend -> TypeScript em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "Spring Boot",
+      "json_canonical": "Java",
+      "db_canonical": "Spring Boot",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter Spring Boot como skill canônica e criar relação Java -> Spring Boot em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    },
+    {
+      "type": "alias_should_be_relation",
+      "alias": "Laravel",
+      "json_canonical": "PHP",
+      "db_canonical": "Laravel",
+      "impact": "O legado trata esse termo como alias, mas o catálogo atual o representa de forma mais segura como relation entre skill ampla e skill específica.",
+      "suggestion": "Manter Laravel como skill canônica e criar relação PHP -> Laravel em vez de alias direto.",
+      "resolution": "resolved_by_relation"
+    }
+  ],
+  "metadata_gaps": []
+}

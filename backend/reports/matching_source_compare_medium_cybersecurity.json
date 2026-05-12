@@ -1,0 +1,292 @@
+{
+  "aliases_used_database": [
+    {
+      "candidate": "cloud",
+      "coverage": 0.2375,
+      "equivalence_strength": "weak",
+      "priority_level": "priority",
+      "raw_coverage": 0.25,
+      "reason": "group",
+      "required": "Azure"
+    }
+  ],
+  "aliases_used_json": [
+    {
+      "candidate": "cloud",
+      "coverage": 0.2375,
+      "equivalence_strength": "weak",
+      "priority_level": "priority",
+      "raw_coverage": 0.25,
+      "reason": "group",
+      "required": "Azure"
+    }
+  ],
+  "analysis_id": "bc6e27af-c481-490a-8758-5bf3cc2a513a",
+  "candidate_id": "5329d4ba-3cc0-417a-a07f-4f8965d8a69a",
+  "candidate_name": "agentTeste",
+  "database_run": {
+    "aliases_used": [
+      {
+        "candidate": "cloud",
+        "coverage": 0.2375,
+        "equivalence_strength": "weak",
+        "priority_level": "priority",
+        "raw_coverage": 0.25,
+        "reason": "group",
+        "required": "Azure"
+      }
+    ],
+    "analysis_id": "bc6e27af-c481-490a-8758-5bf3cc2a513a",
+    "candidate_id": "5329d4ba-3cc0-417a-a07f-4f8965d8a69a",
+    "candidate_name": "agentTeste",
+    "fallback_occurred": false,
+    "job_id": "d45cd0aa-d800-4765-b068-1e73bbd4184e",
+    "job_title": "Cibersegurança",
+    "load_duration_ms": 134.45,
+    "matched_skills": [
+      "Cloud",
+      "AWS"
+    ],
+    "missing_skills": [
+      "API",
+      "Azure"
+    ],
+    "partial_matches": [
+      {
+        "candidate": "cloud",
+        "reason": "Grupo \"Cloud\": skill genérica não comprova a especialização com força alta (weak).",
+        "required": "Azure",
+        "score": 0.2375,
+        "source": "group",
+        "weak_evidence": true
+      }
+    ],
+    "ranking_refresh_status": "updated",
+    "ranking_warning": null,
+    "reason_codes": [
+      "{'type': 'skill_match', 'field': 'cloud', 'impact': 16.67, 'description': 'Skill essencial atendida: Cloud'}",
+      "{'type': 'skill_match', 'field': 'aws', 'impact': 16.67, 'description': 'Skill essencial atendida: AWS'}",
+      "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+      "{'type': 'adjacent_skill', 'field': 'azure', 'impact': 3.96, 'description': 'Experiência adjacente cobre parcialmente Azure'}",
+      "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+      "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+    ],
+    "recommendation": "review_manually",
+    "relations_used": [],
+    "requested_source": "database",
+    "resume_version_id": "85155a4a-9c8d-4323-a4b0-07852e9e971e",
+    "score": 64.52,
+    "skill_evidence_details": [
+      {
+        "candidate": "cloud",
+        "context_missing": false,
+        "coverage": 0.2375,
+        "equivalence_strength": "weak",
+        "evidence_strength": "medium",
+        "fulfills_requirement": false,
+        "match_type": "group",
+        "priority_level": "priority",
+        "raw_coverage": 0.25,
+        "required": "Azure",
+        "source": "group",
+        "weak_evidence": true
+      },
+      {
+        "candidate": "cloud",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "Cloud",
+        "source": "exact",
+        "weak_evidence": false
+      },
+      {
+        "candidate": "aws",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "AWS",
+        "source": "exact",
+        "weak_evidence": false
+      }
+    ],
+    "source_used": "database"
+  },
+  "delta_score": 0.0,
+  "delta_status": "acceptable",
+  "fallback_occurred": false,
+  "job_id": "d45cd0aa-d800-4765-b068-1e73bbd4184e",
+  "job_title": "Cibersegurança",
+  "json_run": {
+    "aliases_used": [
+      {
+        "candidate": "cloud",
+        "coverage": 0.2375,
+        "equivalence_strength": "weak",
+        "priority_level": "priority",
+        "raw_coverage": 0.25,
+        "reason": "group",
+        "required": "Azure"
+      }
+    ],
+    "analysis_id": "bc6e27af-c481-490a-8758-5bf3cc2a513a",
+    "candidate_id": "5329d4ba-3cc0-417a-a07f-4f8965d8a69a",
+    "candidate_name": "agentTeste",
+    "fallback_occurred": false,
+    "job_id": "d45cd0aa-d800-4765-b068-1e73bbd4184e",
+    "job_title": "Cibersegurança",
+    "load_duration_ms": 255.02,
+    "matched_skills": [
+      "Cloud",
+      "AWS"
+    ],
+    "missing_skills": [
+      "API",
+      "Azure"
+    ],
+    "partial_matches": [
+      {
+        "candidate": "cloud",
+        "reason": "Grupo \"Cloud\": skill genérica não comprova a especialização com força alta (weak).",
+        "required": "Azure",
+        "score": 0.2375,
+        "source": "group",
+        "weak_evidence": true
+      }
+    ],
+    "ranking_refresh_status": "updated",
+    "ranking_warning": null,
+    "reason_codes": [
+      "{'type': 'skill_match', 'field': 'cloud', 'impact': 16.67, 'description': 'Skill essencial atendida: Cloud'}",
+      "{'type': 'skill_match', 'field': 'aws', 'impact': 16.67, 'description': 'Skill essencial atendida: AWS'}",
+      "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+      "{'type': 'adjacent_skill', 'field': 'azure', 'impact': 3.96, 'description': 'Experiência adjacente cobre parcialmente Azure'}",
+      "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+      "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+    ],
+    "recommendation": "review_manually",
+    "relations_used": [],
+    "requested_source": "json",
+    "resume_version_id": "85155a4a-9c8d-4323-a4b0-07852e9e971e",
+    "score": 64.52,
+    "skill_evidence_details": [
+      {
+        "candidate": "cloud",
+        "context_missing": false,
+        "coverage": 0.2375,
+        "equivalence_strength": "weak",
+        "evidence_strength": "medium",
+        "fulfills_requirement": false,
+        "match_type": "group",
+        "priority_level": "priority",
+        "raw_coverage": 0.25,
+        "required": "Azure",
+        "source": "group",
+        "weak_evidence": true
+      },
+      {
+        "candidate": "cloud",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "Cloud",
+        "source": "exact",
+        "weak_evidence": false
+      },
+      {
+        "candidate": "aws",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "AWS",
+        "source": "exact",
+        "weak_evidence": false
+      }
+    ],
+    "source_used": "json"
+  },
+  "label": "medium_cybersecurity",
+  "partial_matches_database": [
+    {
+      "candidate": "cloud",
+      "reason": "Grupo \"Cloud\": skill genérica não comprova a especialização com força alta (weak).",
+      "required": "Azure",
+      "score": 0.2375,
+      "source": "group",
+      "weak_evidence": true
+    }
+  ],
+  "partial_matches_json": [
+    {
+      "candidate": "cloud",
+      "reason": "Grupo \"Cloud\": skill genérica não comprova a especialização com força alta (weak).",
+      "required": "Azure",
+      "score": 0.2375,
+      "source": "group",
+      "weak_evidence": true
+    }
+  ],
+  "ranking_refresh_status_database": "updated",
+  "ranking_refresh_status_json": "updated",
+  "ranking_warning_database": null,
+  "ranking_warning_json": null,
+  "reason_codes_database": [
+    "{'type': 'skill_match', 'field': 'cloud', 'impact': 16.67, 'description': 'Skill essencial atendida: Cloud'}",
+    "{'type': 'skill_match', 'field': 'aws', 'impact': 16.67, 'description': 'Skill essencial atendida: AWS'}",
+    "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+    "{'type': 'adjacent_skill', 'field': 'azure', 'impact': 3.96, 'description': 'Experiência adjacente cobre parcialmente Azure'}",
+    "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+    "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+  ],
+  "reason_codes_diff": {
+    "only_database": [],
+    "only_json": []
+  },
+  "reason_codes_json": [
+    "{'type': 'skill_match', 'field': 'cloud', 'impact': 16.67, 'description': 'Skill essencial atendida: Cloud'}",
+    "{'type': 'skill_match', 'field': 'aws', 'impact': 16.67, 'description': 'Skill essencial atendida: AWS'}",
+    "{'type': 'missing_skill', 'field': 'api', 'impact': -16.67, 'description': 'Skill essencial ausente: API'}",
+    "{'type': 'adjacent_skill', 'field': 'azure', 'impact': 3.96, 'description': 'Experiência adjacente cobre parcialmente Azure'}",
+    "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+    "{'type': 'seniority', 'field': 'seniority', 'impact': -0.75, 'description': 'Senioridade abaixo da desejada'}"
+  ],
+  "recommendation_database": "review_manually",
+  "recommendation_json": "review_manually",
+  "relations_used_database": [],
+  "relations_used_json": [],
+  "resume_version_id": "85155a4a-9c8d-4323-a4b0-07852e9e971e",
+  "score_database": 64.52,
+  "score_json": 64.52,
+  "skills_matched_database": [
+    "Cloud",
+    "AWS"
+  ],
+  "skills_matched_json": [
+    "Cloud",
+    "AWS"
+  ],
+  "skills_only_database": [],
+  "skills_only_json": [],
+  "source_used_database": "database",
+  "source_used_json": "json"
+}

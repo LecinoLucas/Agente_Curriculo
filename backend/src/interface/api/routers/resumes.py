@@ -1,6 +1,7 @@
+import math
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.analysis_service import AnalysisService
@@ -16,6 +17,7 @@ from src.application.services.resume_service import (
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.interface.api.dependencies import CurrentUser, get_db
+from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.resume_schemas import (
     ResumeExtractionStatusResponse,
     ResumeFileUploadResponse,
@@ -75,14 +77,16 @@ def _resume_response(details: ResumeDetails) -> ResumeResponse:
     )
 
 
-@router.get("", response_model=list[ResumeSummaryResponse])
+@router.get("", response_model=PaginatedResponse[ResumeSummaryResponse])
 async def list_resumes(
     current_user: CurrentUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-) -> list[ResumeSummaryResponse]:
-    rows = await _resume_service(db).list_summaries(current_user)
+) -> PaginatedResponse[ResumeSummaryResponse]:
+    rows, total = await _resume_service(db).list_summaries(current_user, page=page, page_size=page_size)
 
-    return [
+    items = [
         ResumeSummaryResponse(
             id=row["id"],
             candidate_id=row["candidate_id"],
@@ -97,6 +101,13 @@ async def list_resumes(
         )
         for row in rows
     ]
+    return PaginatedResponse[ResumeSummaryResponse](
+        data=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=math.ceil(total / page_size) if total > 0 else 1,
+    )
 
 
 @router.post("", response_model=ResumeUploadResponse, status_code=status.HTTP_202_ACCEPTED)

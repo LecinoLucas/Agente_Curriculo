@@ -14,6 +14,7 @@ import { candidatesService } from "../../services/candidatesService";
 import { formatErrorDetails, handleApiError } from "../../shared/utils/errorHandler";
 import { getJobPipeline, listJobs } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
+import { moveBoardCandidate, updateBoardCandidate } from "./pipelineBoardState";
 import {
   AIAnalysisStatus,
   AnalysisStatus,
@@ -29,7 +30,7 @@ import {
 export type PanelTab = "summary" | "score" | "analysis" | "documents" | "history" | "actions";
 
 interface PipelineState {
-  // Jobs list — loaded once on mount, shared across all consumers
+  // Jobs catalog — loaded lazily by candidate-centric flows that need the full job payload
   jobs: Job[];
   jobsLoading: boolean;
   jobsError: string | null;
@@ -60,10 +61,12 @@ interface PipelineState {
 export interface PipelineContextValue extends PipelineState {
   // Jobs
   loadJobs: (force?: boolean) => Promise<void>;
+  invalidateJobs: (reload?: boolean) => Promise<void>;
 
   // Board
   setActiveJob: (jobId: string) => void;
   refreshBoard: () => Promise<void>;
+  invalidateBoard: (jobId?: string | null, reload?: boolean) => Promise<void>;
 
   // Candidate panel
   openCandidate: (candidateId: string, initialTab?: PanelTab) => Promise<void>;
@@ -71,6 +74,20 @@ export interface PipelineContextValue extends PipelineState {
   switchPanelTab: (tab: PanelTab) => void;
   refreshCandidateOverview: () => Promise<void>;
   syncCandidateOverview: (candidateId: string) => Promise<void>;
+  invalidateCandidateOverview: (candidateId?: string | null, reload?: boolean) => Promise<void>;
+  invalidateCandidate: (
+    candidateId: string,
+    options?: {
+      reloadOverview?: boolean;
+      reloadBoard?: boolean;
+      jobId?: string | null;
+      notify?: boolean;
+    },
+  ) => Promise<void>;
+  patchCandidate: (
+    candidateId: string,
+    payload: Partial<CandidateOverview["candidate"]>,
+  ) => void;
 
   // Kanban drag
   moveCandidateStage: (candidateId: string, toStage: PipelineStage) => Promise<void>;
@@ -334,27 +351,62 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     (candidateId: string, status: AIAnalysisStatus | null) => {
       setState((prev) => {
         if (!prev.board) return prev;
+        const nextBoard = updateBoardCandidate(prev.board, candidateId, (candidate) => {
+          if (candidate.ai_status === status) {
+            return candidate;
+          }
 
-        let changed = false;
-        const columns = prev.board.columns.map((column) => ({
-          ...column,
-          candidates: column.candidates.map((candidate) => {
-            if (candidate.candidate_id !== candidateId || candidate.ai_status === status) {
-              return candidate;
-            }
-            changed = true;
-            return { ...candidate, ai_status: status };
-          }),
-        }));
-
-        if (!changed) return prev;
-
-        const nextBoard = { ...prev.board, columns };
+          return { ...candidate, ai_status: status };
+        });
+        if (nextBoard === prev.board) return prev;
         boardCacheRef.current.set(nextBoard.job_id, nextBoard);
         return { ...prev, board: nextBoard };
       });
     },
     [],
+  );
+
+  const patchBoardCandidate = useCallback(
+    (candidateId: string, updater: (candidate: JobCandidate) => JobCandidate) => {
+      setState((prev) => {
+        if (!prev.board) return prev;
+        const nextBoard = updateBoardCandidate(prev.board, candidateId, updater);
+        if (nextBoard === prev.board) return prev;
+        boardCacheRef.current.set(nextBoard.job_id, nextBoard);
+        return { ...prev, board: nextBoard };
+      });
+    },
+    [],
+  );
+
+  const patchCandidate = useCallback(
+    (candidateId: string, payload: Partial<CandidateOverview["candidate"]>) => {
+      const cached = candidateCacheRef.current.get(candidateId);
+      if (cached) {
+        const nextOverview: CandidateOverview = {
+          ...cached,
+          candidate: {
+            ...cached.candidate,
+            ...payload,
+          },
+        };
+
+        candidateCacheRef.current.set(candidateId, nextOverview);
+        setState((prev) =>
+          prev.selectedCandidateId === candidateId
+            ? { ...prev, candidateOverview: nextOverview, candidateError: null }
+            : prev,
+        );
+      }
+
+      if (payload.full_name) {
+        patchBoardCandidate(candidateId, (candidate) => ({
+          ...candidate,
+          candidate_name: payload.full_name ?? candidate.candidate_name,
+        }));
+      }
+    },
+    [patchBoardCandidate],
   );
 
   const fetchCandidateOverview = useCallback(async (candidateId: string, force = false): Promise<CandidateOverview> => {
@@ -651,35 +703,118 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     }
   }, [fetchCandidateOverview]);
 
-  const invalidateJobState = useCallback(
-    async (jobId?: string | null) => {
+  const invalidateJobs = useCallback(
+    async (reload = true) => {
       jobsLoadedRef.current = false;
+      jobsFetchInFlightRef.current = null;
 
-      if (jobId) {
-        boardCacheRef.current.delete(jobId);
-      } else {
-        boardCacheRef.current.clear();
+      if (!reload) {
+        return;
       }
 
-      candidateCacheRef.current.clear();
-      candidateFetchInFlightRef.current.clear();
+      await loadJobs(true);
+    },
+    [loadJobs],
+  );
 
+  const invalidateBoard = useCallback(
+    async (jobId?: string | null, reload = true) => {
+      const targetJobId = jobId ?? activeJobIdRef.current;
+      if (!targetJobId) return;
+
+      boardCacheRef.current.delete(targetJobId);
+      boardFetchInFlightRef.current.delete(targetJobId);
+
+      if (!reload) {
+        return;
+      }
+
+      if (activeJobIdRef.current === targetJobId) {
+        await loadBoard(targetJobId, true);
+      }
+    },
+    [loadBoard],
+  );
+
+  const invalidateCandidateOverview = useCallback(
+    async (candidateId?: string | null, reload = true) => {
+      const targetCandidateId = candidateId ?? selectedCandidateIdRef.current;
+      if (!targetCandidateId) return;
+
+      candidateCacheRef.current.delete(targetCandidateId);
+      candidateFetchInFlightRef.current.delete(targetCandidateId);
+
+      if (!reload) {
+        return;
+      }
+
+      if (selectedCandidateIdRef.current === targetCandidateId) {
+        await syncCandidateOverview(targetCandidateId);
+      }
+    },
+    [syncCandidateOverview],
+  );
+
+  const invalidateCandidate = useCallback(
+    async (
+      candidateId: string,
+      options: {
+        reloadOverview?: boolean;
+        reloadBoard?: boolean;
+        jobId?: string | null;
+        notify?: boolean;
+      } = {},
+    ) => {
+      const {
+        reloadOverview = true,
+        reloadBoard = false,
+        jobId,
+        notify = true,
+      } = options;
+
+      await invalidateCandidateOverview(candidateId, reloadOverview);
+
+      if (reloadBoard) {
+        await invalidateBoard(jobId, true);
+      }
+
+      if (notify) {
+        notifyCandidatesChanged();
+      }
+    },
+    [invalidateBoard, invalidateCandidateOverview, notifyCandidatesChanged],
+  );
+
+  const invalidateJobState = useCallback(
+    async (jobId?: string | null) => {
       invalidateRanking();
       notifyCandidatesChanged();
+      await invalidateJobs(true);
 
-      await loadJobs(true);
-
-      const activeJobId = activeJobIdRef.current;
-      if (activeJobId && (!jobId || activeJobId === jobId)) {
-        await loadBoard(activeJobId, true);
+      if (jobId) {
+        await invalidateBoard(jobId, true);
+      } else {
+        boardCacheRef.current.clear();
+        boardFetchInFlightRef.current.clear();
+        const activeJobId = activeJobIdRef.current;
+        if (activeJobId) {
+          await loadBoard(activeJobId, true);
+        }
       }
 
       const selectedCandidateId = selectedCandidateIdRef.current;
       if (selectedCandidateId) {
-        await syncCandidateOverview(selectedCandidateId);
+        await invalidateCandidateOverview(selectedCandidateId, true);
       }
     },
-    [invalidateRanking, loadBoard, loadJobs, notifyCandidatesChanged, syncCandidateOverview],
+    [
+      invalidateBoard,
+      invalidateCandidateOverview,
+      invalidateJobs,
+      invalidateRanking,
+      loadBoard,
+      notifyCandidatesChanged,
+    ],
   );
 
   const ensureAnalysisMatch = useCallback(
@@ -714,7 +849,15 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           status: "completed",
           error: null,
         });
-        await invalidateJobState(jobId);
+        invalidateRanking();
+        notifyCandidatesChanged();
+        notifyAnalysesChanged();
+        if (activeJobIdRef.current === jobId) {
+          await invalidateBoard(jobId, true);
+        }
+        if (selectedCandidateIdRef.current === candidateId) {
+          void syncCandidateOverview(candidateId);
+        }
         return;
       }
 
@@ -728,7 +871,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       notifyCandidatesChanged();
 
       try {
-        await matchToJob(analysisId, jobId);
+        const match = await matchToJob(analysisId, jobId);
         matchingAttemptRef.current.set(key, { status: "completed" });
         patchCandidateOverviewMatching(candidateId, {
           analysisId,
@@ -736,9 +879,24 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           status: "completed",
           error: null,
         });
+        patchBoardCandidate(candidateId, (candidate) => {
+          if (candidate.job_id !== jobId) {
+            return candidate;
+          }
+
+          return {
+            ...candidate,
+            job_fit_score: match.job_fit_score,
+            recommendation: match.recommendation,
+            ai_status: "completed",
+          };
+        });
+        invalidateRanking();
         notifyCandidatesChanged();
         notifyAnalysesChanged();
-        await invalidateJobState(jobId);
+        if (selectedCandidateIdRef.current === candidateId) {
+          void syncCandidateOverview(candidateId);
+        }
       } catch (err) {
         const message = toFriendlyText(err, "Falha ao persistir o matching explícito.");
         matchingAttemptRef.current.set(key, { status: "failed", error: message });
@@ -753,10 +911,13 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       }
     },
     [
-      invalidateJobState,
+      invalidateBoard,
+      invalidateRanking,
       notifyAnalysesChanged,
       notifyCandidatesChanged,
+      patchBoardCandidate,
       patchCandidateOverviewMatching,
+      syncCandidateOverview,
     ],
   );
 
@@ -814,47 +975,25 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       patchCandidateOverviewStage(candidateId, { jobId, stage: toStage });
 
       // Optimistic update: move the card immediately in local state.
-      // On API failure we reload the board from server to revert.
+      // On API failure we restore the previous local snapshot.
       setState((prev) => {
         previousBoard = prev.board;
         if (!prev.board) return prev;
-
-        let movingCard: JobCandidate | undefined;
-        const stripped = prev.board.columns.map((col) => {
-          const found = col.candidates.find((c) => c.candidate_id === candidateId);
-          if (found) movingCard = found;
-          return {
-            ...col,
-            candidates: col.candidates.filter((c) => c.candidate_id !== candidateId),
-          };
-        });
-
-        if (!movingCard) return prev;
-
-        const updatedCard: JobCandidate = { ...movingCard, stage: toStage };
-        const inserted = stripped.map((col) =>
-          col.stage === toStage
-            ? { ...col, candidates: [updatedCard, ...col.candidates] }
-            : col,
+        const nextBoard = moveBoardCandidate(
+          prev.board,
+          candidateId,
+          toStage,
+          PIPELINE_STAGE_STATUS_LABEL[toStage],
         );
-
-        const nextBoard = { ...prev.board!, columns: inserted };
+        if (nextBoard === prev.board) return prev;
         boardCacheRef.current.set(nextBoard.job_id, nextBoard);
         return { ...prev, board: nextBoard };
       });
 
       try {
         await pipelineService.moveCandidateStage(jobId, candidateId, { stage: toStage });
-        // Invalidate cache: pipeline_entries inside the overview are now stale
-        candidateCacheRef.current.delete(candidateId);
         invalidateRanking();
         notifyCandidatesChanged();
-        if (selectedCandidateIdRef.current === candidateId) {
-          void refreshCandidateOverview();
-        }
-        if (activeJobIdRef.current === jobId) {
-          void loadBoard(jobId, true);
-        }
       } catch (err) {
         if (previousOverview) {
           candidateCacheRef.current.set(candidateId, previousOverview);
@@ -880,10 +1019,8 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     },
     [
       invalidateRanking,
-      loadBoard,
       notifyCandidatesChanged,
       patchCandidateOverviewStage,
-      refreshCandidateOverview,
       syncCandidateOverview,
     ],
   );
@@ -970,10 +1107,11 @@ export function PipelineProvider({ children }: PropsWithChildren) {
             stopPolling();
             return;
           } else {
-            invalidateRanking();
+            const candidateId = pollingCandidateIdRef.current;
             stopPolling();
-            void refreshCandidateOverview();
-            void refreshBoard();
+            if (candidateId) {
+              void invalidateCandidateOverview(candidateId, true);
+            }
             return;
           }
         }
@@ -1027,11 +1165,6 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     return () => document.removeEventListener("visibilitychange", handle);
   }, []);
 
-  // Auto-load jobs when the authenticated shell mounts
-  useEffect(() => {
-    void loadJobs();
-  }, [loadJobs]);
-
   // Cancel any pending timer on unmount
   useEffect(() => () => clearPollingTimer(), [clearPollingTimer]);
 
@@ -1043,13 +1176,18 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     () => ({
       ...state,
       loadJobs,
+      invalidateJobs,
       setActiveJob,
       refreshBoard,
+      invalidateBoard,
       openCandidate,
       closeCandidate,
       switchPanelTab,
       refreshCandidateOverview,
       syncCandidateOverview,
+      invalidateCandidateOverview,
+      invalidateCandidate,
+      patchCandidate,
       moveCandidateStage,
       setCandidateAiStatus,
       syncAnalysisStart,
@@ -1064,13 +1202,18 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     [
       state,
       loadJobs,
+      invalidateJobs,
       setActiveJob,
       refreshBoard,
+      invalidateBoard,
       openCandidate,
       closeCandidate,
       switchPanelTab,
       refreshCandidateOverview,
       syncCandidateOverview,
+      invalidateCandidateOverview,
+      invalidateCandidate,
+      patchCandidate,
       moveCandidateStage,
       setCandidateAiStatus,
       syncAnalysisStart,

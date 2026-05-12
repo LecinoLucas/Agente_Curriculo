@@ -227,14 +227,7 @@ class GeminiAdapter(AIService):
         queue_name: str,
     ) -> AIAnalysisResponse:
         last_error: Exception | None = None
-        configured_max_retries = settings.AI_MAX_RETRIES
-        max_retries = max(
-            1,
-            _safe_int_setting(
-                configured_max_retries,
-                2,
-            ),
-        )
+        max_retries = 0
 
         for attempt in range(max_retries + 1):
             elapsed_ms = int(time.monotonic() * 1000) - start_ms
@@ -263,39 +256,6 @@ class GeminiAdapter(AIService):
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
                 retry_after_seconds = self._extract_retry_after_seconds(e.response)
 
-                if should_retry and attempt < max_retries:
-                    delay_ms = self._calculate_retry_delay_ms(
-                        attempt,
-                        is_rate_limit=(status_code == 429),
-                        retry_after_seconds=retry_after_seconds,
-                    )
-
-                    if status_code == 429:
-                        logger.warning(
-                            "gemini.rate_limit_detected",
-                            model=self._model_id,
-                            attempt=attempt + 1,
-                            max_retries=max_retries,
-                            elapsed_ms=elapsed_ms,
-                            delay_ms=delay_ms,
-                            retry_after_seconds=retry_after_seconds,
-                            queue_name=queue_name,
-                        )
-
-                    logger.info(
-                        "gemini.retry_scheduled",
-                        model=self._model_id,
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        status_code=status_code,
-                        delay_ms=delay_ms,
-                        elapsed_ms=elapsed_ms,
-                        queue_name=queue_name,
-                    )
-
-                    await asyncio.sleep(delay_ms / 1000)
-                    continue
-
                 if status_code == 429:
                     logger.error(
                         "gemini.final_failure_429",
@@ -317,12 +277,7 @@ class GeminiAdapter(AIService):
                     queue_name=queue_name,
                 )
 
-                if not should_retry:
-                    raise e
-
-                raise RuntimeError(
-                    f"Max retries exceeded for Gemini API: status_code={status_code}"
-                ) from e
+                raise e
 
             except (
                 httpx.ConnectError,
@@ -333,23 +288,6 @@ class GeminiAdapter(AIService):
                 last_error = e
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
 
-                if attempt < max_retries:
-                    delay_ms = self._calculate_retry_delay_ms(attempt)
-
-                    logger.info(
-                        "gemini.retry_scheduled",
-                        model=self._model_id,
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        error_type=type(e).__name__,
-                        delay_ms=delay_ms,
-                        elapsed_ms=elapsed_ms,
-                        queue_name=queue_name,
-                    )
-
-                    await asyncio.sleep(delay_ms / 1000)
-                    continue
-
                 logger.error(
                     "gemini.connection_error_final",
                     model=self._model_id,
@@ -359,9 +297,7 @@ class GeminiAdapter(AIService):
                     queue_name=queue_name,
                 )
 
-                raise RuntimeError(
-                    f"Failed to connect to Gemini API: {type(e).__name__}"
-                ) from e
+                raise e
 
             except RuntimeError:
                 raise

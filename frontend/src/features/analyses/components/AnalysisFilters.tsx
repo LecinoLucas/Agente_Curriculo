@@ -51,6 +51,7 @@ export function AnalysisFilters({
         <option value="all">Todos os status</option>
         <option value="pending">Aguardando</option>
         <option value="processing">Processando</option>
+        <option value="retry_scheduled">Nova tentativa agendada</option>
         <option value="completed">Concluída</option>
         <option value="failed">Falhou</option>
         <option value="cancelled">Cancelado</option>

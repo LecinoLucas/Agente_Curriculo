@@ -38,6 +38,11 @@ from src.infrastructure.database.models.job_model import (
     SkillModel,
 )
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.database.models.skill_catalog_model import (
+    SkillAliasModel,
+    SkillCatalogModel,
+    SkillRelationModel,
+)
 from src.infrastructure.database.models.user_model import (
     PasswordResetTokenModel,
     UserModel,
@@ -53,6 +58,9 @@ __all__ = [
     "CandidateJobPipelineEventModel",
     "ResumeModel",
     "ResumeVersionModel",
+    "SkillCatalogModel",
+    "SkillAliasModel",
+    "SkillRelationModel",
     "AIModelModel",
     "PromptTemplateModel",
     "AnalysisModel",

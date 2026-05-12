@@ -104,7 +104,7 @@ export function CandidateActionPanel({
           ) : null}
 
           {/* Change stage */}
-          {hasActivePipeline && activeJob ? (
+          {hasActivePipeline ? (
             <div>
               <label className="block mb-2 text-sm font-semibold text-[hsl(var(--text))]">
                 Mover para etapa
@@ -172,7 +172,7 @@ export function CandidateActionPanel({
           ) : null}
 
           {/* Job actions */}
-          {canTransferCurrentJob && (
+          {canTransferCurrentJob ? (
             <button
               type="button"
               onClick={onOpenTransferJob}
@@ -181,6 +181,15 @@ export function CandidateActionPanel({
             >
               ↔️ Transferir para outra vaga
             </button>
+          ) : (
+            currentStage !== null && currentStage !== "hired" && currentStage !== "rejected" && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-semibold text-amber-900">Transferência bloqueada</p>
+                <p className="mt-1 text-xs text-amber-700">
+                  Este candidato já avançou no processo. Reprove ou encerre o vínculo atual antes de movê-lo para outra vaga.
+                </p>
+              </div>
+            )
           )}
         </div>
       )}

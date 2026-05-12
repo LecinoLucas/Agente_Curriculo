@@ -7,6 +7,7 @@ import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
 import { useAuth } from "../features/auth/useAuth";
+import { ArchiveCandidateModal } from "../features/candidates/components/ArchiveCandidateModal";
 import { DeleteCandidateModal } from "../features/candidates/components/DeleteCandidateModal";
 import { useCandidatesFilters } from "../features/candidates/hooks/useCandidatesFilters";
 import { CandidateAiStatusBadge } from "../features/candidates/components/CandidateAiStatusBadge";
@@ -44,8 +45,10 @@ export function CandidatesPage() {
   const [showNewCandidate, setShowNewCandidate] = useState(false);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CandidateListSummary | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<CandidateListSummary | null>(null);
   const [linkTarget, setLinkTarget] = useState<CandidateListSummary | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(false);
   const {
     searchInput,
     setSearchInput,
@@ -68,7 +71,7 @@ export function CandidatesPage() {
 
     const aiStatus =
       aiFilter === "all" ? undefined :
-      aiFilter === "processing_or_pending" ? ["processing", "pending"] :
+      aiFilter === "processing_or_pending" ? ["processing", "pending", "retry_scheduled"] :
       [aiFilter];
 
     void run(() =>
@@ -114,7 +117,9 @@ export function CandidatesPage() {
   const candidates = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
+  const canArchiveCandidates = Boolean(user);
   const canDeleteCandidates = user?.role === "admin";
+  const showActionsColumn = canArchiveCandidates || canDeleteCandidates;
   const isRefreshing = loading && candidates.length > 0;
   const showInitialLoading = loading && candidates.length === 0 && !error;
   const showCandidatesList = !isWorkspaceOpen || !workspaceFocused;
@@ -145,6 +150,33 @@ export function CandidatesPage() {
       }
     },
     [closeCandidate, deleteTarget, fetchCandidates, notifyCandidatesChanged, selectedCandidateId],
+  );
+
+  const handleArchiveCandidate = useCallback(
+    async (payload: { reason: string; note?: string }) => {
+      if (!archiveTarget) return;
+
+      setArchiveLoading(true);
+      try {
+        await candidatesService.archive(archiveTarget.id, payload);
+        toast.success("Candidato arquivado com sucesso.");
+        if (selectedCandidateId === archiveTarget.id) {
+          closeCandidate();
+          setWorkspaceFocused(false);
+        }
+        setArchiveTarget(null);
+        notifyCandidatesChanged();
+        fetchCandidates();
+      } catch (err: unknown) {
+        toast.error(
+          formatErrorDetails(handleApiError(err))[0] ??
+            "Não foi possível arquivar o candidato.",
+        );
+      } finally {
+        setArchiveLoading(false);
+      }
+    },
+    [archiveTarget, closeCandidate, fetchCandidates, notifyCandidatesChanged, selectedCandidateId],
   );
 
   return (
@@ -288,8 +320,8 @@ export function CandidatesPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Criado em
                     </th>
-                    {canDeleteCandidates ? (
-                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {showActionsColumn ? (
+                      <th className="sticky right-0 bg-[hsl(var(--surface-muted))] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Ações
                       </th>
                     ) : null}
@@ -305,7 +337,9 @@ export function CandidatesPage() {
                         setWorkspaceFocused(true);
                         void openCandidate(c.id);
                       }}
+                      canArchive={canArchiveCandidates}
                       canDelete={canDeleteCandidates}
+                      onArchive={() => setArchiveTarget(c)}
                       onDelete={() => setDeleteTarget(c)}
                       onLinkJob={c.linked_job_count === 0 ? () => setLinkTarget(c) : undefined}
                     />
@@ -366,6 +400,17 @@ export function CandidatesPage() {
         onConfirm={handleDeleteCandidate}
       />
 
+      <ArchiveCandidateModal
+        isOpen={archiveTarget !== null}
+        candidateName={archiveTarget?.full_name ?? "este candidato"}
+        loading={archiveLoading}
+        onClose={() => {
+          if (archiveLoading) return;
+          setArchiveTarget(null);
+        }}
+        onConfirm={handleArchiveCandidate}
+      />
+
       <LinkCandidateJobModal
         isOpen={linkTarget !== null}
         candidateId={linkTarget?.id ?? null}
@@ -387,14 +432,18 @@ export function CandidateRow({
   candidate: c,
   isActive = false,
   onOpen,
+  canArchive = false,
   canDelete = false,
+  onArchive,
   onDelete,
   onLinkJob,
 }: {
   candidate: CandidateListSummary;
   isActive?: boolean;
   onOpen: () => void;
+  canArchive?: boolean;
   canDelete?: boolean;
+  onArchive?: () => void;
   onDelete?: () => void;
   onLinkJob?: () => void;
 }) {
@@ -430,12 +479,26 @@ export function CandidateRow({
       : c.active_job_id
         ? `${c.linked_job_count} vaga${c.linked_job_count !== 1 ? "s" : ""}`
         : "—";
+  const actionItems = [];
+  if (canArchive) {
+    actionItems.push({
+      label: "Arquivar candidato",
+      onClick: () => onArchive?.(),
+    });
+  }
+  if (canDelete) {
+    actionItems.push({
+      label: "Excluir candidato",
+      tone: "danger" as const,
+      onClick: () => onDelete?.(),
+    });
+  }
 
   return (
     <tr
       onClick={onOpen}
       className={[
-        "cursor-pointer transition-colors hover:bg-[hsl(var(--accent-soft))]",
+        "group cursor-pointer transition-colors hover:bg-[hsl(var(--accent-soft))]",
         isActive ? "bg-[hsl(var(--accent-soft))]/70" : "",
       ].join(" ")}
     >
@@ -503,17 +566,18 @@ export function CandidateRow({
       <td className="ui-text-muted px-4 py-4 text-xs">
         {formatCandidateDate(c.created_at)}
       </td>
-      {canDelete ? (
-        <td className="px-4 py-4 text-right" onClick={(event) => event.stopPropagation()}>
+      {actionItems.length > 0 ? (
+        <td 
+          className={[
+            "px-4 py-4 text-right sticky right-0",
+            isActive ? "bg-[hsl(var(--accent-soft))]/70" : "bg-[hsl(var(--surface))]",
+            "group-hover:bg-[hsl(var(--accent-soft))]"
+          ].join(" ")} 
+          onClick={(event) => event.stopPropagation()}
+        >
           <ActionMenu
             buttonLabel={`Ações do candidato ${c.full_name}`}
-            items={[
-              {
-                label: "Excluir candidato",
-                tone: "danger",
-                onClick: () => onDelete?.(),
-              },
-            ]}
+            items={actionItems}
           />
         </td>
       ) : null}

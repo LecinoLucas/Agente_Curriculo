@@ -2,16 +2,34 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import functools
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from time import monotonic, perf_counter
 from typing import Any
 
+import structlog
+
+from src.application.services.skill_catalog_comparison_service import (
+    SkillCatalogComparisonService,
+)
+from src.application.services.skill_catalog_runtime_service import (
+    SkillCatalogRuntimeService,
+)
 from src.application.services.skill_normalizer_service import (
     normalize_skill_text,
 )
+from src.core.settings import settings
+from src.infrastructure.database.connection import create_celery_async_sessionmaker
+from src.infrastructure.repositories.sqlalchemy_skill_catalog_repository import (
+    SQLAlchemySkillCatalogRepository,
+)
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,12 +43,40 @@ class SkillMatchEvidence:
     source: str  # "exact" | "relation" | "group" | "none"
 
 
+@dataclass(frozen=True, slots=True)
+class _CatalogLoadResult:
+    catalog: dict[str, Any]
+    source: str
+    skills_count: int
+    aliases_count: int
+    relations_count: int
+    cache_used: bool
+    duration_ms: float
+
+
 class SkillEquivalenceService:
     """Service for evaluating skill equivalence with scoring."""
 
-    def __init__(self, catalog_path: Path | None = None) -> None:
+    _db_cache_ttl_seconds = 300
+    _db_cache_entry: tuple[float, dict[str, Any], tuple[int, int, int]] | None = None
+    _source_usage_totals: dict[str, int] = {
+        "json": 0,
+        "database": 0,
+        "database_failed_fallback_json": 0,
+    }
+    _fallback_total = 0
+    _counter_lock = threading.Lock()
+
+    def __init__(
+        self,
+        catalog_path: Path | None = None,
+        *,
+        catalog: dict[str, Any] | None = None,
+        source: str = "json",
+    ) -> None:
         self._catalog_path = catalog_path or self._default_catalog_path()
-        self._catalog = self._load_catalog(self._catalog_path)
+        self._catalog = catalog if catalog is not None else self._load_catalog(self._catalog_path)
+        self._source = source
 
     @staticmethod
     def _default_catalog_path() -> Path:
@@ -49,6 +95,257 @@ class SkillEquivalenceService:
     @classmethod
     def clear_catalog_cache(cls) -> None:
         cls._load_catalog.cache_clear()
+        cls._db_cache_entry = None
+
+    @classmethod
+    def reset_observability_counters(cls) -> None:
+        with cls._counter_lock:
+            cls._source_usage_totals = {
+                "json": 0,
+                "database": 0,
+                "database_failed_fallback_json": 0,
+            }
+            cls._fallback_total = 0
+
+    @classmethod
+    def for_matching(cls, catalog_path: Path | None = None) -> "SkillEquivalenceService":
+        source = settings.SKILL_CATALOG_SOURCE
+        json_result = cls._load_json_catalog_with_stats(catalog_path)
+
+        if source == "json":
+            cls._maybe_log_catalog_comparison(json_result, catalog_path)
+            cls._log_catalog_source(json_result)
+            return cls(catalog_path, catalog=json_result.catalog, source=json_result.source)
+
+        try:
+            db_result = cls._load_database_catalog_with_stats()
+            cls._maybe_log_catalog_comparison(json_result, catalog_path, db_result=db_result)
+            cls._log_catalog_source(db_result)
+            return cls(catalog_path, catalog=db_result.catalog, source=db_result.source)
+        except Exception as exc:
+            context = structlog.contextvars.get_contextvars()
+            logger.warning(
+                "skill_catalog.source=database_failed_fallback_json",
+                requested_source="database",
+                fallback_source="json",
+                error=str(exc),
+                exception_class=exc.__class__.__name__,
+                correlation_id=context.get("correlation_id"),
+                request_id=context.get("request_id"),
+                operation="skill_catalog_load_for_matching",
+                fallback_count=cls._peek_fallback_total() + 1,
+                exc_info=True,
+            )
+            cls._maybe_log_catalog_comparison(json_result, catalog_path)
+            fallback_result = _CatalogLoadResult(
+                catalog=json_result.catalog,
+                source="database_failed_fallback_json",
+                skills_count=json_result.skills_count,
+                aliases_count=json_result.aliases_count,
+                relations_count=json_result.relations_count,
+                cache_used=json_result.cache_used,
+                duration_ms=json_result.duration_ms,
+            )
+            cls._log_catalog_source(fallback_result)
+            return cls(catalog_path, catalog=json_result.catalog, source=fallback_result.source)
+
+    @classmethod
+    def _load_json_catalog_with_stats(
+        cls,
+        catalog_path: Path | None = None,
+    ) -> _CatalogLoadResult:
+        resolved_path = catalog_path or cls._default_catalog_path()
+        before = cls._load_catalog.cache_info()
+        started_at = perf_counter()
+        catalog = cls._load_catalog(resolved_path)
+        duration_ms = round((perf_counter() - started_at) * 1000, 2)
+        after = cls._load_catalog.cache_info()
+        skills_count, aliases_count, relations_count = cls._catalog_counts(catalog)
+        return _CatalogLoadResult(
+            catalog=catalog,
+            source="json",
+            skills_count=skills_count,
+            aliases_count=aliases_count,
+            relations_count=relations_count,
+            cache_used=after.hits > before.hits,
+            duration_ms=duration_ms,
+        )
+
+    @classmethod
+    def _load_database_catalog_with_stats(cls) -> _CatalogLoadResult:
+        started_at = perf_counter()
+        now = monotonic()
+        cached = cls._db_cache_entry
+        if cached is not None and cached[0] > now:
+            catalog = cached[1]
+            skills_count, aliases_count, relations_count = cached[2]
+            return _CatalogLoadResult(
+                catalog=catalog,
+                source="database",
+                skills_count=skills_count,
+                aliases_count=aliases_count,
+                relations_count=relations_count,
+                cache_used=True,
+                duration_ms=round((perf_counter() - started_at) * 1000, 2),
+            )
+
+        catalog, counts = cls._run_async_sync(cls._fetch_catalog_from_database())
+        cls._db_cache_entry = (
+            now + cls._db_cache_ttl_seconds,
+            catalog,
+            counts,
+        )
+        return _CatalogLoadResult(
+            catalog=catalog,
+            source="database",
+            skills_count=counts[0],
+            aliases_count=counts[1],
+            relations_count=counts[2],
+            cache_used=False,
+            duration_ms=round((perf_counter() - started_at) * 1000, 2),
+        )
+
+    @classmethod
+    async def _fetch_catalog_from_database(
+        cls,
+    ) -> tuple[dict[str, Any], tuple[int, int, int]]:
+        engine, session_factory = await create_celery_async_sessionmaker()
+        try:
+            async with session_factory() as session:
+                repository = SQLAlchemySkillCatalogRepository(session)
+                runtime_service = SkillCatalogRuntimeService(repository, ttl_seconds=300)
+                snapshot = await runtime_service.get_runtime_snapshot(include_inactive=False)
+                catalog = await runtime_service.get_legacy_compatible_catalog(include_inactive=False)
+                return (
+                    catalog,
+                    (
+                        snapshot.total_skills,
+                        snapshot.total_aliases,
+                        snapshot.total_relations,
+                    ),
+                )
+        finally:
+            await engine.dispose()
+
+    @classmethod
+    def _run_async_sync(cls, coro):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+        result: dict[str, Any] = {}
+        error: dict[str, BaseException] = {}
+
+        def _runner() -> None:
+            try:
+                result["value"] = asyncio.run(coro)
+            except BaseException as exc:  # pragma: no cover - defensive thread boundary
+                error["value"] = exc
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join()
+        if "value" in error:
+            raise error["value"]
+        return result["value"]
+
+    @classmethod
+    def _maybe_log_catalog_comparison(
+        cls,
+        json_result: _CatalogLoadResult,
+        catalog_path: Path | None = None,
+        *,
+        db_result: _CatalogLoadResult | None = None,
+    ) -> None:
+        if not settings.SKILL_CATALOG_COMPARE_ON_MATCH:
+            return
+
+        try:
+            effective_db_result = db_result or cls._load_database_catalog_with_stats()
+            comparison_service = SkillCatalogComparisonService()
+            json_groups, json_relations = comparison_service.build_legacy_snapshot(
+                json_result.catalog
+            )
+            db_groups, db_relations = comparison_service.build_legacy_snapshot(
+                effective_db_result.catalog
+            )
+            report = comparison_service.compare(
+                legacy_groups=json_groups,
+                db_groups=db_groups,
+                legacy_relations=json_relations,
+                db_relations=db_relations,
+            )
+            logger.info(
+                "skill_catalog.compare_on_match",
+                requested_source=settings.SKILL_CATALOG_SOURCE,
+                json_skills=json_result.skills_count,
+                db_skills=effective_db_result.skills_count,
+                missing_skills=report.summary["missing_skills_count"],
+                extra_skills=report.summary["extra_skills_count"],
+                missing_aliases=report.summary["missing_aliases_count"],
+                extra_aliases=report.summary["extra_aliases_count"],
+                conflicts=report.summary["conflicts_count"],
+                metadata_gaps=report.summary["metadata_gaps_count"],
+                equivalence_percent=report.summary["equivalence_percent"],
+            )
+        except Exception as exc:
+            logger.exception(
+                "skill_catalog.compare_on_match_failed",
+                requested_source=settings.SKILL_CATALOG_SOURCE,
+                catalog_path=str(catalog_path or cls._default_catalog_path()),
+                error=str(exc),
+            )
+
+    @staticmethod
+    def _catalog_counts(catalog: dict[str, Any]) -> tuple[int, int, int]:
+        groups = list(catalog.get("groups", []) or [])
+        relations = list(catalog.get("relations", []) or [])
+        alias_count = 0
+        for group in groups:
+            canonical_norm = normalize_skill_text(group.get("canonical", ""))
+            seen_aliases: set[str] = set()
+            for alias in group.get("aliases", []) or []:
+                normalized_alias = normalize_skill_text(alias)
+                if not normalized_alias or normalized_alias == canonical_norm:
+                    continue
+                if normalized_alias in seen_aliases:
+                    continue
+                seen_aliases.add(normalized_alias)
+            alias_count += len(seen_aliases)
+        return len(groups), alias_count, len(relations)
+
+    @staticmethod
+    def _log_catalog_source(result: _CatalogLoadResult) -> None:
+        usage_count, usage_totals, fallback_total = SkillEquivalenceService._register_source_usage(
+            result.source
+        )
+        logger.info(
+            f"skill_catalog.source={result.source}",
+            source=result.source,
+            skills_count=result.skills_count,
+            aliases_count=result.aliases_count,
+            relations_count=result.relations_count,
+            cache_used=result.cache_used,
+            load_duration_ms=result.duration_ms,
+            usage_count=usage_count,
+            source_usage_totals=usage_totals,
+            fallback_total=fallback_total,
+        )
+
+    @classmethod
+    def _register_source_usage(cls, source: str) -> tuple[int, dict[str, int], int]:
+        with cls._counter_lock:
+            current = cls._source_usage_totals.get(source, 0) + 1
+            cls._source_usage_totals[source] = current
+            if source == "database_failed_fallback_json":
+                cls._fallback_total += 1
+            return current, dict(cls._source_usage_totals), cls._fallback_total
+
+    @classmethod
+    def _peek_fallback_total(cls) -> int:
+        with cls._counter_lock:
+            return cls._fallback_total
 
     def match_skill(
         self,

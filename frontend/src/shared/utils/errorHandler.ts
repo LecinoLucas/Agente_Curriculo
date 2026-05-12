@@ -16,9 +16,6 @@ type PydanticDetailItem = {
   type?: string;
 };
 
-const JOB_AREA_HINT =
-  'Valores válidos: technology = Tecnologia, data = Dados, financial = Financeiro, fiscal = Fiscal, accounting = Contábil, administrative = Administrativo, commercial = Comercial, operational = Operacional, hr = RH, leadership = Liderança.';
-
 const FIELD_LABELS: Record<string, string> = {
   job_area: 'área da vaga',
   seniority_level: 'senioridade',
@@ -41,7 +38,6 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 const PYDANTIC_ENUM_HINTS: Record<string, string> = {
-  job_area: JOB_AREA_HINT,
   seniority_level:
     'Valores válidos: intern, junior, mid, senior, lead, principal ou director.',
   work_model: 'Valores válidos: remote, hybrid ou onsite.',
@@ -130,11 +126,6 @@ function buildFieldMessage(field: string, message: string, input?: unknown, item
   const inputText = input != null && String(input).trim() ? ` Valor recebido: "${String(input)}".` : '';
   const normalizedMessage = message.trim();
   const loweredType = normalizedMessage.toLowerCase();
-
-  if (field === 'job_area') {
-    const received = input ?? extractInputValue(normalizedMessage);
-    return `${prefix}: campo ${friendlyField} inválido.${received ? ` Valor recebido: "${String(received)}".` : ''} Use um dos valores aceitos. ${JOB_AREA_HINT}`;
-  }
 
   if (field === 'deal_breakers') {
     return `${prefix}: ${friendlyField} inválidos.${inputText} Revise a estrutura enviada para os critérios eliminatórios.`;

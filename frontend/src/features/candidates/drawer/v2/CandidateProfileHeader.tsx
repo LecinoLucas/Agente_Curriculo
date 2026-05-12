@@ -17,9 +17,6 @@ interface CandidateProfileHeaderProps {
   onBackToList?: () => void;
   backToListLabel?: string;
   actions?: ReactNode;
-  analysisStatusLabel?: string;
-  analysisStatusDetail?: string;
-  analysisStatusTone?: "neutral" | "info" | "success" | "danger" | "warning";
 }
 
 export function CandidateProfileHeader({
@@ -36,9 +33,6 @@ export function CandidateProfileHeader({
   onBackToList,
   backToListLabel = "Candidatos",
   actions,
-  analysisStatusLabel,
-  analysisStatusDetail,
-  analysisStatusTone = "neutral",
 }: CandidateProfileHeaderProps) {
   const initials = candidate?.full_name
     ?.split(" ")
@@ -68,17 +62,6 @@ export function CandidateProfileHeader({
       : currentStage === "rejected"
         ? "border-rose-200 bg-rose-50 text-rose-900"
         : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 text-[hsl(var(--text-muted))]";
-  const analysisBadgeClass =
-    analysisStatusTone === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-      : analysisStatusTone === "danger"
-        ? "border-rose-200 bg-rose-50 text-rose-900"
-        : analysisStatusTone === "info"
-          ? "border-sky-200 bg-sky-50 text-sky-900"
-          : analysisStatusTone === "warning"
-            ? "border-amber-200 bg-amber-50 text-amber-900"
-            : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]";
-
   return (
     <div className="shrink-0 border-b border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-5 py-4">
       <div className="flex items-start justify-between gap-4">
@@ -126,38 +109,15 @@ export function CandidateProfileHeader({
                   <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors duration-300 ${stageBadgeClass}`}>
                     {currentStage ? STAGE_LABEL[currentStage] ?? currentStage : "Sem etapa"}
                   </span>
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${scoreColor} border-current/15 bg-current/5`}>
-                    {semantics.primaryLabel} {semantics.primaryDisplay}
-                  </span>
-                  {semantics.secondaryDisplay ? (
-                    <span className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
-                      {semantics.secondaryLabel} {semantics.secondaryDisplay}
-                    </span>
-                  ) : null}
-                  {semantics.statusLabel ? (
-                    <span className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
-                      {semantics.statusLabel}
+                  {compatibilityScore !== null ? (
+                    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${scoreColor} border-current/15 bg-current/5`}>
+                      {semantics.primaryLabel} {semantics.primaryDisplay}
                     </span>
                   ) : null}
                   <span className="max-w-[260px] truncate text-[11px] text-[hsl(var(--text-muted))]">
                     {candidate?.email ?? "Sem e-mail"}
                   </span>
                 </div>
-                {analysisStatusLabel ? (
-                  <div className="mt-3 flex flex-col gap-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                        Análise IA
-                      </span>
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${analysisBadgeClass}`}>
-                        {analysisStatusLabel}
-                      </span>
-                    </div>
-                    {analysisStatusDetail ? (
-                      <p className="text-xs text-[hsl(var(--text-muted))]">{analysisStatusDetail}</p>
-                    ) : null}
-                  </div>
-                ) : null}
                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   {onNavigateToFull ? (
                     <button

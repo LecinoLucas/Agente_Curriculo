@@ -1,6 +1,6 @@
-import { BarChart3, FileText, UserRound } from "lucide-react";
+import { BarChart3, FileText, UserRound, Calendar } from "lucide-react";
 
-type TabKey = "overview" | "score" | "documents";
+type TabKey = "overview" | "score" | "documents" | "interview";
 
 interface CandidateProfileNavigationProps {
   activeTab: TabKey;
@@ -11,6 +11,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof UserRound }> = [
   { key: "overview", label: "Resumo", icon: UserRound },
   { key: "score", label: "Análise", icon: BarChart3 },
   { key: "documents", label: "Documentos", icon: FileText },
+  { key: "interview", label: "Entrevista", icon: Calendar },
 ];
 
 export function CandidateProfileNavigation({

@@ -16,19 +16,65 @@ type NavItem = {
   roles: UserRole[];
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { to: "/dashboard",   label: "Dashboard",    caption: "Visão geral",          roles: ["admin", "recruiter", "viewer"] },
-  { to: "/pipeline",    label: "Pipeline",     caption: "Fluxo e etapas",       roles: ["admin", "recruiter", "viewer"] },
-  { to: "/candidatos",  label: "Candidatos",   caption: "Base de perfis",        roles: ["admin", "recruiter", "viewer"] },
-  { to: "/vagas",       label: "Vagas",        caption: "Oportunidades abertas", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/importar",    label: "Importar",     caption: "Carga de CVs",          roles: ["admin", "recruiter"] },
-  { to: "/analises-ia", label: "Análises IA",  caption: "Execuções e status",    roles: ["admin", "recruiter"] },
-];
+type NavGroup = {
+  label: string;
+  caption: string;
+  roles: UserRole[];
+  isDropdown: boolean;
+  items: NavItem[];
+};
 
-const ADMIN_ITEMS: NavItem[] = [
-  { to: "/admin",                label: "Painel admin",      caption: "Visão geral",                roles: ["admin"] },
-  { to: "/admin/usuarios",       label: "Usuários internos", caption: "Equipe e acessos",           roles: ["admin"] },
-  { to: "/admin/skills",         label: "Skills",            caption: "Competências e tecnologias", roles: ["admin"] },
+const NAVIGATION_CONFIG: NavGroup[] = [
+  {
+    label: "Dashboard",
+    caption: "Visão geral",
+    roles: ["admin", "recruiter", "viewer"],
+    isDropdown: false,
+    items: [{ to: "/dashboard", label: "Dashboard", caption: "Visão geral", roles: ["admin", "recruiter", "viewer"] }],
+  },
+  {
+    label: "Processo Seletivo",
+    caption: "Gestão e Pipeline",
+    roles: ["admin", "recruiter", "viewer"],
+    isDropdown: true,
+    items: [
+      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer"] },
+      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer"] },
+      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer"] },
+      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer"] },
+    ],
+  },
+  {
+    label: "Ferramentas",
+    caption: "Importação e IA",
+    roles: ["admin", "recruiter"],
+    isDropdown: true,
+    items: [
+      { to: "/importar", label: "Importação Manual", caption: "Carga de CVs", roles: ["admin", "recruiter"] },
+      { to: "/importar-formulario", label: "Formulários", caption: "Google Forms / Drive", roles: ["admin", "recruiter"] },
+      { to: "/analises-ia", label: "Análises IA", caption: "Status e execuções", roles: ["admin", "recruiter"] },
+    ],
+  },
+  {
+    label: "Admin",
+    caption: "Gerenciamento",
+    roles: ["admin"],
+    isDropdown: true,
+    items: [
+      { to: "/admin", label: "Painel admin", caption: "Visão geral", roles: ["admin"] },
+      { to: "/admin/usuarios", label: "Usuários", caption: "Equipe e acessos", roles: ["admin"] },
+      { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ["admin"] },
+      { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ["admin"] },
+      { to: "/candidato/espaco", label: "Portal do Candidato", caption: "Preview", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Portal do Candidato",
+    caption: "Sua candidatura",
+    roles: ["candidate"],
+    isDropdown: false,
+    items: [{ to: "/candidato/espaco", label: "Portal do Candidato", caption: "Sua candidatura", roles: ["candidate"] }],
+  },
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -45,33 +91,30 @@ export function AppShell() {
   const { theme, toggleTheme } = useTheme();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
-  const adminDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
 
-  const visibleItems = useMemo(
-    () => NAV_ITEMS.filter((item) => user && item.roles.includes(user.role)),
-    [user],
-  );
-  const visibleAdminItems = useMemo(
-    () => ADMIN_ITEMS.filter((item) => user && item.roles.includes(user.role)),
+  const visibleGroups = useMemo(
+    () => NAVIGATION_CONFIG.filter((group) => user && group.roles.includes(user.role)),
     [user],
   );
 
-  const isAdminActive = useMemo(
-    () => visibleAdminItems.some((item) => location.pathname.startsWith(item.to)),
-    [location.pathname, visibleAdminItems],
-  );
+  const activeGroupLabel = useMemo(() => {
+    const activeGroup = visibleGroups.find((group) =>
+      group.items.some((item) => location.pathname.startsWith(item.to))
+    );
+    return activeGroup?.label || null;
+  }, [location.pathname, visibleGroups]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [user?.role]);
 
   useEffect(() => {
-    setAdminDropdownOpen(false);
+    setOpenDropdownLabel(null);
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!adminDropdownOpen) {
+    if (!openDropdownLabel) {
       return;
     }
 
@@ -80,73 +123,25 @@ export function AppShell() {
       if (!(target instanceof Node)) {
         return;
       }
-      if (adminDropdownRef.current?.contains(target)) {
+      if ((target as HTMLElement).closest('[data-dropdown]')) {
         return;
       }
-      setAdminDropdownOpen(false);
+      setOpenDropdownLabel(null);
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
     };
-  }, [adminDropdownOpen]);
+  }, [openDropdownLabel]);
 
-  // ── Desktop nav link — rendered on the dark navbar ────────────────
-  function renderDesktopLink(item: NavItem) {
-    return (
-      <NavLink
-        key={item.to}
-        to={item.to}
-        end={item.to === "/admin"}
-        className={({ isActive }) =>
-          cn(
-            "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
-            isActive
-              ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
-              : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
-          )
-        }
-      >
-        <span className="text-sm font-semibold tracking-tight">{item.label}</span>
-        <span className="mt-0.5 text-[11px] leading-tight opacity-70">
-          {item.caption}
-        </span>
-      </NavLink>
-    );
-  }
 
-  // ── Mobile nav link ───────────────────────────────────────────────
-  function renderMobileLink(item: NavItem) {
-    return (
-      <NavLink
-        key={item.to}
-        to={item.to}
-        end={item.to === "/admin"}
-        onClick={() => setMobileMenuOpen(false)}
-        className={({ isActive }) =>
-          cn(
-            "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
-            isActive
-              ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-              : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
-          )
-        }
-      >
-        <div className="min-w-0">
-          <p className="text-sm font-semibold tracking-tight">{item.label}</p>
-          <p className="mt-0.5 text-xs opacity-70">{item.caption}</p>
-        </div>
-        <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
-      </NavLink>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
 
       {/* ── Top navigation bar (dark in light mode, darker-dark in dark mode) ── */}
-      <header className="sticky top-0 z-40 border-b border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))]/95 shadow-[0_18px_40px_-34px_hsl(var(--text)/0.18)] backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--nav-bg))]/88">
+      <header className="sticky top-0 z-40 border-b border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] shadow-[0_18px_40px_-34px_hsl(var(--text)/0.18)]">
         <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-3.5 sm:px-6">
 
           {/* Brand */}
@@ -172,62 +167,90 @@ export function AppShell() {
 
           {/* Desktop nav */}
           <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
-            {visibleItems.map(renderDesktopLink)}
-            {visibleAdminItems.length > 0 ? (
-              <div ref={adminDropdownRef} className="relative">
-                <button
-                  type="button"
-                  className={cn(
-                    "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
-                    isAdminActive
-                      ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
-                      : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
-                  )}
-                  onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                  aria-expanded={adminDropdownOpen}
-                  aria-haspopup="menu"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold tracking-tight">Admin</span>
-                    <ChevronDown className={cn("h-4 w-4 transition-transform", adminDropdownOpen && "rotate-180")} />
-                  </div>
-                  <span className="mt-0.5 text-[11px] leading-tight opacity-70">
-                    Gerenciamento
-                  </span>
-                </button>
+            {visibleGroups.map((group) => {
+              if (!group.isDropdown) {
+                const item = group.items[0];
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === "/admin"}
+                    className={({ isActive }) =>
+                      cn(
+                        "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
+                        isActive
+                          ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
+                          : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+                      )
+                    }
+                  >
+                    <span className="text-sm font-semibold tracking-tight">{item.label}</span>
+                    <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                      {item.caption}
+                    </span>
+                  </NavLink>
+                );
+              }
 
-                {/* Dropdown menu */}
-                <div
-                  className={cn(
-                    "absolute left-0 top-full mt-2 w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))]/98 shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] backdrop-blur transition-all duration-150",
-                    adminDropdownOpen ? "block" : "hidden",
-                  )}
-                  role="menu"
-                >
-                  {visibleAdminItems.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.to === "/admin"}
-                      onClick={() => setAdminDropdownOpen(false)}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex flex-col px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl",
-                          isActive
-                            ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-                            : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--text))]",
-                        )
-                      }
-                    >
-                      <span className="text-sm font-semibold tracking-tight">{item.label}</span>
-                      <span className="mt-0.5 text-[11px] leading-tight opacity-70">
-                        {item.caption}
-                      </span>
-                    </NavLink>
-                  ))}
+              const isGroupActive = group.items.some((item) => location.pathname.startsWith(item.to));
+              const isOpen = openDropdownLabel === group.label;
+
+              return (
+                <div key={group.label} className="relative" data-dropdown="true">
+                  <button
+                    type="button"
+                    className={cn(
+                      "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
+                      isGroupActive
+                        ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
+                        : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+                    )}
+                    onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
+                    aria-expanded={isOpen}
+                    aria-haspopup="menu"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold tracking-tight">{group.label}</span>
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
+                    </div>
+                    <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                      {group.caption}
+                    </span>
+                  </button>
+
+                  {/* Dropdown menu */}
+                  <div
+                    className={cn(
+                      "absolute left-0 top-full mt-2 w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))] shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] transition-all duration-150 z-50",
+                      isOpen ? "block" : "hidden",
+                    )}
+                    role="menu"
+                  >
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === "/admin"}
+                        onClick={() => setOpenDropdownLabel(null)}
+                        className={({ isActive }) =>
+                          cn(
+                            "flex flex-col px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl min-w-[160px]",
+                            isActive
+                              ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                              : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--text))]",
+                          )
+                        }
+                      >
+                        <span className="text-sm font-semibold tracking-tight">{item.label}</span>
+                        <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                          {item.caption}
+                        </span>
+                      </NavLink>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              );
+            })}
           </nav>
 
           {/* Right-side controls */}
@@ -262,9 +285,17 @@ export function AppShell() {
                   {user?.role ? ROLE_LABELS[user.role] : ""}
                 </p>
               </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white shadow-[0_16px_30px_-22px_hsl(var(--primary)/0.68)]">
-                {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
-              </div>
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.full_name}
+                  className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-[0_16px_30px_-22px_hsl(var(--primary)/0.68)]"
+                />
+              ) : (
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white shadow-[0_16px_30px_-22px_hsl(var(--primary)/0.68)]">
+                  {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
+                </div>
+              )}
             </button>
 
             {/* Action menu (logout) */}
@@ -299,9 +330,17 @@ export function AppShell() {
 
               {/* Profile summary */}
               <div className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--nav-border))]/70 bg-[hsl(var(--nav-active-bg))] px-4 py-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white">
-                  {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
-                </div>
+                {user?.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt={user.full_name}
+                    className="h-10 w-10 shrink-0 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white">
+                    {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
+                  </div>
+                )}
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[hsl(var(--nav-text))]">
                     {user?.full_name}
@@ -312,30 +351,79 @@ export function AppShell() {
                 </div>
               </div>
 
-              <nav className="flex flex-col gap-1">
-                {visibleItems.map(renderMobileLink)}
-              </nav>
+              <nav className="flex flex-col gap-3">
+                {visibleGroups.map((group) => {
+                  if (!group.isDropdown) {
+                    const item = group.items[0];
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === "/admin"}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={({ isActive }) =>
+                          cn(
+                            "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                            isActive
+                              ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                              : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
+                          )
+                        }
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold tracking-tight">{item.label}</p>
+                          <p className="mt-0.5 text-xs opacity-70">{item.caption}</p>
+                        </div>
+                        <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
+                      </NavLink>
+                    );
+                  }
 
-              {visibleAdminItems.length > 0 ? (
-                <div className="flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                    className="flex items-center justify-between rounded-2xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
-                  >
-                    <div className="min-w-0 text-left">
-                      <p className="text-sm font-semibold tracking-tight text-[hsl(var(--nav-text))]">Admin</p>
-                      <p className="mt-0.5 text-xs opacity-70">Gerenciamento</p>
+                  const isOpen = openDropdownLabel === group.label;
+
+                  return (
+                    <div key={group.label} className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
+                        className="flex items-center justify-between rounded-2xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
+                      >
+                        <div className="min-w-0 text-left">
+                          <p className="text-sm font-semibold tracking-tight text-[hsl(var(--nav-text))]">{group.label}</p>
+                          <p className="mt-0.5 text-xs opacity-70">{group.caption}</p>
+                        </div>
+                        <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", isOpen && "rotate-180")} />
+                      </button>
+                      {isOpen ? (
+                        <div className="flex flex-col gap-1 rounded-2xl bg-[hsl(var(--nav-active-bg))]/40 p-2">
+                          {group.items.map((item) => (
+                            <NavLink
+                              key={item.to}
+                              to={item.to}
+                              end={item.to === "/admin"}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={({ isActive }) =>
+                                cn(
+                                  "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                                  isActive
+                                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                                    : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
+                                )
+                              }
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold tracking-tight">{item.label}</p>
+                                <p className="mt-0.5 text-xs opacity-70">{item.caption}</p>
+                              </div>
+                              <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
+                            </NavLink>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                    <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", adminDropdownOpen && "rotate-180")} />
-                  </button>
-                  {adminDropdownOpen ? (
-                    <div className="flex flex-col gap-1 rounded-2xl bg-[hsl(var(--nav-active-bg))]/40 p-2">
-                      {visibleAdminItems.map(renderMobileLink)}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+                  );
+                })}
+              </nav>
 
               <div className="flex flex-col gap-2 border-t border-[hsl(var(--nav-border))] pt-3">
                 <button
@@ -368,6 +456,12 @@ export function AppShell() {
           <Outlet />
         </div>
       </main>
+
+      <footer className="w-full border-t border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-4 text-center text-sm text-[hsl(var(--nav-muted))]">
+        <div className="mx-auto max-w-[1600px] px-4 sm:px-6">
+          @LecinoLucas Developer 2026 Rede Marajo RH IA
+        </div>
+      </footer>
     </div>
   );
 }

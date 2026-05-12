@@ -4,6 +4,7 @@ import {
   ResumeFileUploadResponse,
   ResumeSummary,
   ResumeUploadResponse,
+  PaginatedResponse,
 } from "../types/domain";
 import { httpRequest } from "./http";
 
@@ -56,10 +57,15 @@ function normalizeResumeExtractionStatus(
 }
 
 export const resumeService = {
-  list: () =>
-    httpRequest<ResumeSummary[]>("/api/v1/resumes").then((payload) =>
-      Array.isArray(payload) ? payload.map(normalizeResumeSummary) : [],
-    ),
+  list: (page = 1, pageSize = 20) =>
+    httpRequest<PaginatedResponse<ResumeSummary>>(`/api/v1/resumes?page=${page}&page_size=${pageSize}`).then((payload) => {
+      // The backend now returns { data, page, page_size, total, total_pages }
+      // We map over data to ensure format
+      return {
+        ...payload,
+        data: Array.isArray(payload?.data) ? payload.data.map(normalizeResumeSummary) : [],
+      };
+    }),
 
   get: (id: string) => httpRequest<Resume>(`/api/v1/resumes/${id}`),
 

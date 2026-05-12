@@ -36,6 +36,11 @@ export type DeleteCandidatePayload = {
   confirmation: string;
 };
 
+export type ArchiveCandidatePayload = {
+  reason: string;
+  note?: string;
+};
+
 export type UpdateCandidateStagePayload = {
   job_id: string;
   stage: PipelineStage;
@@ -47,6 +52,11 @@ export type UpdateCandidateStageResponse = {
   stage: PipelineStage;
   candidate_status: string;
   updated_at: string;
+};
+
+export type ListCandidatesParams = {
+  search?: string;
+  archived?: boolean;
 };
 
 function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_name?: string; created_by?: string; created_at?: string; updated_at?: string }): Candidate {
@@ -68,6 +78,10 @@ function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_
     created_by: candidate.created_by ?? "",
     created_at: candidate.created_at ?? new Date(0).toISOString(),
     updated_at: candidate.updated_at ?? new Date(0).toISOString(),
+    archived_at: candidate.archived_at ?? null,
+    archived_by: candidate.archived_by ?? null,
+    archive_reason: candidate.archive_reason ?? null,
+    archive_reason_note: candidate.archive_reason_note ?? null,
   };
 }
 
@@ -157,6 +171,8 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
     cpf: item.cpf ?? null,
     tags: Array.isArray(item.tags) ? item.tags : [],
     created_at: item.created_at ?? new Date(0).toISOString(),
+    archived_at: item.archived_at ?? null,
+    archive_reason: item.archive_reason ?? null,
     resume_count: item.resume_count ?? 0,
     linked_job_count: item.linked_job_count ?? 0,
     latest_job_id: typeof item.latest_job_id === "string" ? item.latest_job_id : null,
@@ -173,10 +189,17 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
 }
 
 export const candidatesService = {
-  async list(page = 1, pageSize = 20, search?: string): Promise<Paginated<Candidate>> {
-    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-    if (search) params.set("search", search);
-    return httpRequest<Paginated<Candidate>>(`/api/v1/candidates?${params.toString()}`).then((payload) => ({
+  async list(
+    page = 1,
+    pageSize = 20,
+    params: string | ListCandidatesParams = {},
+  ): Promise<Paginated<Candidate>> {
+    const urlParams = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    const search = typeof params === "string" ? params : params.search;
+    const archived = typeof params === "string" ? undefined : params.archived;
+    if (search) urlParams.set("search", search);
+    if (archived !== undefined) urlParams.set("archived", String(archived));
+    return httpRequest<Paginated<Candidate>>(`/api/v1/candidates?${urlParams.toString()}`).then((payload) => ({
       data: Array.isArray(payload?.data) ? payload.data.map(normalizeCandidate) : [],
       total: payload?.total ?? 0,
       page: payload?.page ?? page,
@@ -199,11 +222,13 @@ export const candidatesService = {
     search?: string,
     hasResume?: boolean,
     aiStatus?: string[],
+    archived?: boolean,
   ): Promise<Paginated<CandidateListSummary>> {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     if (search) params.set("search", search);
     if (hasResume !== undefined) params.set("has_resume", String(hasResume));
     if (aiStatus?.length) aiStatus.forEach((s) => params.append("ai_status", s));
+    if (archived !== undefined) params.set("archived", String(archived));
     return httpRequest<Paginated<CandidateListSummary>>(
       `/api/v1/candidates/summaries?${params.toString()}`,
     ).then((payload) => ({
@@ -232,6 +257,14 @@ export const candidatesService = {
 
   async delete(id: string, payload: DeleteCandidatePayload): Promise<void> {
     return httpRequest<void>(`/api/v1/candidates/${id}`, { method: "DELETE", body: payload });
+  },
+
+  async archive(id: string, payload: ArchiveCandidatePayload): Promise<Candidate> {
+    return httpRequest<Candidate>(`/api/v1/candidates/${id}/archive`, { method: "PATCH", body: payload });
+  },
+
+  async restore(id: string): Promise<Candidate> {
+    return httpRequest<Candidate>(`/api/v1/candidates/${id}/restore`, { method: "PATCH" });
   },
 
   async updateStage(id: string, payload: UpdateCandidateStagePayload): Promise<UpdateCandidateStageResponse> {

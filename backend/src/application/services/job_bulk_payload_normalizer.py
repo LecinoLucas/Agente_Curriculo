@@ -23,29 +23,6 @@ class BulkJobPayloadNormalizationError(ValueError):
     pass
 
 
-_JOB_AREA_MAP = {
-    "tecnologia": "technology",
-    "tech": "technology",
-    "ti": "technology",
-    "dados": "data",
-    "data": "data",
-    "financeiro": "financial",
-    "financas": "financial",
-    "fiscal": "fiscal",
-    "contabil": "accounting",
-    "contabilidade": "accounting",
-    "administrativo": "administrative",
-    "administracao": "administrative",
-    "comercial": "commercial",
-    "vendas": "commercial",
-    "operacional": "operational",
-    "operacoes": "operational",
-    "rh": "hr",
-    "recursos humanos": "hr",
-    "lideranca": "leadership",
-    "gestao": "leadership",
-}
-
 _PRIORITY_MAP = {
     "low": "low",
     "baixa": "low",
@@ -651,8 +628,7 @@ class JobBulkPayloadNormalizer:
     def _normalize_job_area(cls, value: Any) -> str | None:
         if value is None:
             return None
-        normalized = cls._normalize_text(value)
-        return _JOB_AREA_MAP.get(normalized, cls._to_string_or_none(value))
+        return cls._to_string_or_none(value)
 
     @classmethod
     def _normalize_priority(cls, value: Any) -> str:

@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { jobSkillsService } from "../../../services/jobSkillsService";
+import { skillsService, SkillCatalog } from "../../../services/skillsService";
 import { formatErrorForToast, handleApiError } from "../../../shared/utils/errorHandler";
 import { toast } from "../../../shared/utils/toast";
-import type { JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { JobSkill } from "../../../types/domain";
 import type { PendingJobSkill } from "../jobFormConfig";
 
 interface UseJobSkillsOptions {
@@ -27,7 +28,24 @@ export function useJobSkills(options: UseJobSkillsOptions) {
   const [pendingSkills, setPendingSkills] = useState<PendingJobSkill[]>([]);
   const [skillSearch, setSkillSearch] = useState("");
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
-  const [allSkills, setAllSkills] = useState<SkillEquivalenceGroup[]>([]);
+  const [allSkills, setAllSkills] = useState<SkillCatalog[]>([]);
+
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      try {
+        const response = await skillsService.listSkills({
+          search: skillSearch.trim() || undefined,
+          page_size: 50,
+          is_active: true,
+        });
+        setAllSkills(response.data);
+      } catch (error) {
+        console.error("Erro ao buscar skills:", error);
+      }
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [skillSearch]);
 
   const combinedSkills = useMemo<Array<JobSkill | PendingJobSkill>>(() => {
     if (jobSkills.length === 0) return pendingSkills;
@@ -60,21 +78,15 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     const linkedIds = new Set(combinedSkills.map((skill) => skill.skill_id));
     return allSkills.filter((skill) => {
       if (linkedIds.has(skill.id)) return false;
-      if (!skillSearch.trim()) return true;
-      const query = skillSearch.trim().toLowerCase();
-      return (
-        skill.canonical.toLowerCase().includes(query) ||
-        skill.aliases.some((alias) => alias.toLowerCase().includes(query)) ||
-        skill.domains.some((domain) => domain.toLowerCase().includes(query))
-      );
+      return true;
     });
-  }, [allSkills, combinedSkills, skillSearch]);
+  }, [allSkills, combinedSkills]);
 
   async function handleAddSkill(
-    skill: SkillEquivalenceGroup | string,
+    skill: SkillCatalog | string,
     priorityLevel: "priority" | "complementary" | "eliminatory",
   ) {
-    const skillName = typeof skill === "string" ? skill.trim() : skill.canonical;
+    const skillName = typeof skill === "string" ? skill.trim() : skill.name;
     const skillId = typeof skill === "string" ? crypto.randomUUID() : skill.id;
 
     if (!skillName) return;
@@ -188,6 +200,10 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     setPendingSkills([]);
   }
 
+  const onSkillCreated = (skill: SkillCatalog) => {
+    setAllSkills((current) => [skill, ...current]);
+  };
+
   return {
     jobSkills,
     setJobSkills,
@@ -207,5 +223,6 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     handleUpdateSkill,
     handleRemoveSkill,
     syncPendingSkills,
+    onSkillCreated,
   };
 }

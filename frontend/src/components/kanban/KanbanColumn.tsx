@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import type { PipelineColumn, PipelineStage } from "../../types/domain";
 import { KanbanCard } from "./KanbanCard";
 
@@ -12,13 +12,15 @@ interface KanbanColumnProps {
   colIndex: number;
   onCardClick?: (candidateId: string) => void;
   disabled?: boolean;
+  showTopMatchHighlight?: boolean;
 }
 
-export function KanbanColumn({
+export const KanbanColumn = memo(function KanbanColumn({
   column,
   colIndex,
   onCardClick,
   disabled = false,
+  showTopMatchHighlight = false,
 }: KanbanColumnProps) {
   const baseCls = COL_CLS[column.stage] ?? "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/72";
   const disabledCls = disabled ? "opacity-60 pointer-events-none" : "";
@@ -45,15 +47,27 @@ export function KanbanColumn({
       </div>
 
       <div className="flex flex-col gap-2.5">
-        {column.candidates.map((c, cardIndex) => (
-          <KanbanCard
-            key={c.candidate_id}
-            candidate={c}
-            isSaving={false}
-            enterDelay={colIndex * 65 + cardIndex * 30}
-            onCardClick={onCardClick ? () => onCardClick(c.candidate_id) : undefined}
-          />
-        ))}
+        {column.candidates.map((c, cardIndex) => {
+          const isTopMatch =
+            showTopMatchHighlight &&
+            cardIndex === 0 &&
+            c.job_fit_score !== null &&
+            c.job_fit_score !== undefined;
+            
+          const rank = showTopMatchHighlight ? cardIndex + 1 : undefined;
+            
+          return (
+            <KanbanCard
+              key={c.candidate_id}
+              candidate={c}
+              isSaving={false}
+              isTopMatch={isTopMatch}
+              rank={rank}
+              enterDelay={colIndex * 65 + cardIndex * 30}
+              onCardClick={onCardClick}
+            />
+          );
+        })}
 
         {column.candidates.length === 0 ? (
           <div
@@ -68,4 +82,4 @@ export function KanbanColumn({
       </div>
     </div>
   );
-}
+});

@@ -94,8 +94,9 @@ function AvatarBadge({
       await onUpload(file);
       setPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch {
+    } catch (err) {
       setPreview(null);
+      toast.error(formatErrorForToast(handleApiError(err)));
     }
   };
 

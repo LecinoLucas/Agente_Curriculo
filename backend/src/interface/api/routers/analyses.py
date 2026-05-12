@@ -53,9 +53,11 @@ def _analysis_service(db: AsyncSession) -> AnalysisService:
 
 
 def _is_rate_limited_analysis_blocked(analysis) -> bool:
+    if analysis.status != "retry_scheduled":
+        return False
     if analysis.next_retry_at is None:
         return False
-    if "status_code=429" not in (analysis.failure_reason or ""):
+    if analysis.provider_error_type != "rate_limited":
         return False
     return analysis.next_retry_at > datetime.now(UTC)
 
@@ -491,7 +493,10 @@ async def bulk_retry_analyses(
         analysis.failed_at = None
         analysis.started_at = None
         analysis.retry_count = 0
+        analysis.attempts = 0
         analysis.next_retry_at = None
+        analysis.provider_error_type = None
+        analysis.provider_status_code = None
         analysis.updated_at = now
         to_enqueue.append(analysis.id)
         processed += 1
@@ -557,7 +562,10 @@ async def retry_analysis(
         analysis.failed_at = None
         analysis.started_at = None
         analysis.retry_count = 0
+        analysis.attempts = 0
         analysis.next_retry_at = None
+        analysis.provider_error_type = None
+        analysis.provider_status_code = None
         analysis.updated_at = now
 
         await db.commit()

@@ -52,6 +52,10 @@ class CandidateModel(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=sa.text("NOW()"),
     )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True), nullable=True, index=True)
+    archived_by: Mapped[Optional[UUID]] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True)
+    archive_reason: Mapped[Optional[str]] = mapped_column(sa.String(100), nullable=True)
+    archive_reason_note: Mapped[Optional[str]] = mapped_column(sa.Text, nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
     data_quality_status: Mapped[str] = mapped_column(
         sa.String(50),

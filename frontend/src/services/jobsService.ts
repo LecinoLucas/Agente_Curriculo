@@ -46,6 +46,7 @@ function normalizeAiStatus(value: unknown): JobCandidate["ai_status"] {
   if (
     value === "pending" ||
     value === "processing" ||
+    value === "retry_scheduled" ||
     value === "completed" ||
     value === "failed" ||
     value === "cancelled" ||

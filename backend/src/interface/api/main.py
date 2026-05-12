@@ -22,6 +22,7 @@ from src.infrastructure.database.connection import check_database_health, engine
 from src.interface.api.middlewares.audit_middleware import AuditMiddleware
 from src.interface.api.middlewares.request_id_middleware import RequestIDMiddleware
 from src.interface.api.routers import (
+    admin_audit_logs,
     ai_models,
     analyses,
     auth,
@@ -33,8 +34,10 @@ from src.interface.api.routers import (
     pipeline,
     resumes,
     skill_equivalences,
+    skills,
     users,
     dashboard,
+    job_areas,
 )
 from src.observability.logging import configure_structured_logging
 
@@ -75,12 +78,15 @@ _PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(users.router, prefix=_PREFIX)
 app.include_router(internal_users.router, prefix=_PREFIX)
+app.include_router(admin_audit_logs.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
 app.include_router(analyses.router, prefix=_PREFIX)
 app.include_router(jobs.router, prefix=_PREFIX)
 app.include_router(pipeline.router, prefix=_PREFIX)
 app.include_router(skill_equivalences.router, prefix=_PREFIX)
+app.include_router(skills.router, prefix=_PREFIX)
+app.include_router(job_areas.router, prefix=_PREFIX)
 app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)
 app.include_router(observability.router, prefix=_PREFIX)

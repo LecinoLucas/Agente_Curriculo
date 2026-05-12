@@ -22,6 +22,7 @@ from src.application.services.pipeline_service import (
     PipelineSameStageError,
     PipelineService,
     PipelineTerminalStageError,
+    PipelineTransferBlockedAdvancedStageError,
     PipelineTransferNotAllowedError,
 )
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
@@ -212,6 +213,11 @@ def _handle(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A transferência só pode ser feita para vagas publicadas.",
+        )
+    if isinstance(exc, PipelineTransferBlockedAdvancedStageError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Candidato já avançou no processo. Reprove ou encerre o vínculo atual antes de transferir.",
         )
     if isinstance(exc, PipelineCandidateAlreadyHiredError):
         raise HTTPException(

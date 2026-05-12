@@ -1,0 +1,270 @@
+{
+  "aliases_used_database": [],
+  "aliases_used_json": [
+    {
+      "candidate": "python",
+      "coverage": 0.1625,
+      "equivalence_strength": "weak",
+      "priority_level": "complementary",
+      "raw_coverage": 0.25,
+      "reason": "equivalence",
+      "required": "API"
+    }
+  ],
+  "analysis_id": "9a26b074-7171-4453-9bd2-a7bed3555451",
+  "candidate_id": "0699cafb-e94f-4caa-9524-0bcad1755808",
+  "candidate_name": "hiago4",
+  "database_run": {
+    "aliases_used": [],
+    "analysis_id": "9a26b074-7171-4453-9bd2-a7bed3555451",
+    "candidate_id": "0699cafb-e94f-4caa-9524-0bcad1755808",
+    "candidate_name": "hiago4",
+    "fallback_occurred": false,
+    "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+    "job_title": "Analista De Dados Senior",
+    "load_duration_ms": 153.18,
+    "matched_skills": [
+      "SQL Server",
+      "BI",
+      "Python",
+      "Analytics"
+    ],
+    "missing_skills": [],
+    "partial_matches": [],
+    "ranking_refresh_status": "updated",
+    "ranking_warning": null,
+    "reason_codes": [
+      "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+      "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+      "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 7.41, 'description': 'Diferenciais: 2/3 encontrados, bônus de 7.41 pts'}",
+      "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+      "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+    ],
+    "recommendation": "review_manually",
+    "relations_used": [],
+    "requested_source": "database",
+    "resume_version_id": "28b8db52-f61f-4198-929a-ae47ea9ce7db",
+    "score": 96.3,
+    "skill_evidence_details": [
+      {
+        "candidate": "sql server",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "SQL Server",
+        "source": "exact",
+        "weak_evidence": false
+      },
+      {
+        "candidate": "bi",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "BI",
+        "source": "exact",
+        "weak_evidence": false
+      },
+      {
+        "candidate": "python",
+        "context_missing": true,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "weak",
+        "match_type": "exact",
+        "priority_level": "complementary",
+        "raw_coverage": 1.0,
+        "required": "Python",
+        "source": "exact"
+      },
+      {
+        "candidate": "analytics",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "match_type": "exact",
+        "priority_level": "complementary",
+        "raw_coverage": 1.0,
+        "required": "Analytics",
+        "source": "exact"
+      }
+    ],
+    "source_used": "database"
+  },
+  "delta_score": -0.6,
+  "delta_status": "acceptable",
+  "fallback_occurred": false,
+  "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+  "job_title": "Analista De Dados Senior",
+  "json_run": {
+    "aliases_used": [
+      {
+        "candidate": "python",
+        "coverage": 0.1625,
+        "equivalence_strength": "weak",
+        "priority_level": "complementary",
+        "raw_coverage": 0.25,
+        "reason": "equivalence",
+        "required": "API"
+      }
+    ],
+    "analysis_id": "9a26b074-7171-4453-9bd2-a7bed3555451",
+    "candidate_id": "0699cafb-e94f-4caa-9524-0bcad1755808",
+    "candidate_name": "hiago4",
+    "fallback_occurred": false,
+    "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+    "job_title": "Analista De Dados Senior",
+    "load_duration_ms": 255.03,
+    "matched_skills": [
+      "SQL Server",
+      "BI",
+      "Python",
+      "Analytics"
+    ],
+    "missing_skills": [],
+    "partial_matches": [],
+    "ranking_refresh_status": "updated",
+    "ranking_warning": null,
+    "reason_codes": [
+      "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+      "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+      "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.01, 'description': 'Diferenciais: 2/3 encontrados, bônus de 8.01 pts'}",
+      "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+      "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+    ],
+    "recommendation": "review_manually",
+    "relations_used": [],
+    "requested_source": "json",
+    "resume_version_id": "28b8db52-f61f-4198-929a-ae47ea9ce7db",
+    "score": 96.9,
+    "skill_evidence_details": [
+      {
+        "candidate": "sql server",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "SQL Server",
+        "source": "exact",
+        "weak_evidence": false
+      },
+      {
+        "candidate": "bi",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "fulfills_requirement": true,
+        "match_type": "exact",
+        "priority_level": "priority",
+        "raw_coverage": 1.0,
+        "required": "BI",
+        "source": "exact",
+        "weak_evidence": false
+      },
+      {
+        "candidate": "python",
+        "context_missing": true,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "weak",
+        "match_type": "exact",
+        "priority_level": "complementary",
+        "raw_coverage": 1.0,
+        "required": "Python",
+        "source": "exact"
+      },
+      {
+        "candidate": "analytics",
+        "context_missing": false,
+        "coverage": 1.0,
+        "equivalence_strength": "exact",
+        "evidence_strength": "strong",
+        "match_type": "exact",
+        "priority_level": "complementary",
+        "raw_coverage": 1.0,
+        "required": "Analytics",
+        "source": "exact"
+      },
+      {
+        "candidate": "python",
+        "context_missing": true,
+        "coverage": 0.1625,
+        "equivalence_strength": "weak",
+        "evidence_strength": "weak",
+        "match_type": "group",
+        "priority_level": "complementary",
+        "raw_coverage": 0.25,
+        "required": "API",
+        "source": "equivalence"
+      }
+    ],
+    "source_used": "json"
+  },
+  "label": "strong_data_senior",
+  "partial_matches_database": [],
+  "partial_matches_json": [],
+  "ranking_refresh_status_database": "updated",
+  "ranking_refresh_status_json": "updated",
+  "ranking_warning_database": null,
+  "ranking_warning_json": null,
+  "reason_codes_database": [
+    "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+    "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+    "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 7.41, 'description': 'Diferenciais: 2/3 encontrados, bônus de 7.41 pts'}",
+    "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+    "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+  ],
+  "reason_codes_diff": {
+    "only_database": [
+      "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 7.41, 'description': 'Diferenciais: 2/3 encontrados, bônus de 7.41 pts'}"
+    ],
+    "only_json": [
+      "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.01, 'description': 'Diferenciais: 2/3 encontrados, bônus de 8.01 pts'}"
+    ]
+  },
+  "reason_codes_json": [
+    "{'type': 'skill_match', 'field': 'sql server', 'impact': 27.78, 'description': 'Skill essencial atendida: SQL Server'}",
+    "{'type': 'skill_match', 'field': 'bi', 'impact': 27.78, 'description': 'Skill essencial atendida: BI'}",
+    "{'type': 'desirable_skills', 'field': 'complementary_skills', 'impact': 8.01, 'description': 'Diferenciais: 2/3 encontrados, bônus de 8.01 pts'}",
+    "{'type': 'experience', 'field': 'experience', 'impact': 12.5, 'description': 'Experiência atende ou supera o esperado'}",
+    "{'type': 'seniority', 'field': 'seniority', 'impact': 7.5, 'description': 'Senioridade alinhada à vaga'}"
+  ],
+  "recommendation_database": "review_manually",
+  "recommendation_json": "review_manually",
+  "relations_used_database": [],
+  "relations_used_json": [],
+  "resume_version_id": "28b8db52-f61f-4198-929a-ae47ea9ce7db",
+  "score_database": 96.3,
+  "score_json": 96.9,
+  "skills_matched_database": [
+    "SQL Server",
+    "BI",
+    "Python",
+    "Analytics"
+  ],
+  "skills_matched_json": [
+    "SQL Server",
+    "BI",
+    "Python",
+    "Analytics"
+  ],
+  "skills_only_database": [],
+  "skills_only_json": [],
+  "source_used_database": "database",
+  "source_used_json": "json"
+}

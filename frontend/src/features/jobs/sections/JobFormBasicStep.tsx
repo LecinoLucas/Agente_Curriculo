@@ -1,7 +1,10 @@
+import { useState, useEffect } from "react";
 import { SectionCard } from "../../../shared/components/layout/SectionCard";
 import { Field } from "../../../shared/components/forms/Field";
 import type { JobFormValues } from "../jobFormConfig";
-import { JOB_AREA_OPTIONS, PRIORITY_OPTIONS } from "../jobFormConfig";
+import { PRIORITY_OPTIONS } from "../jobFormConfig";
+import { jobAreasService, JobArea } from "../../../services/jobAreasService";
+import { CreateJobAreaModal } from "../components/CreateJobAreaModal";
 
 type JobFormBasicStepProps = {
   form: JobFormValues;
@@ -9,6 +12,29 @@ type JobFormBasicStepProps = {
 };
 
 export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) {
+  const [areas, setAreas] = useState<JobArea[]>([]);
+  const [loadingAreas, setLoadingAreas] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    async function fetchAreas() {
+      setLoadingAreas(true);
+      try {
+        const response = await jobAreasService.listJobAreas({ page_size: 100 });
+        setAreas(response.data);
+      } catch (error) {
+        console.error("Erro ao carregar áreas:", error);
+      } finally {
+        setLoadingAreas(false);
+      }
+    }
+    fetchAreas();
+  }, []);
+
+  const handleAreaCreated = (newArea: JobArea) => {
+    setAreas((prev) => [...prev, newArea]);
+    onFormChange({ job_area: newArea.name });
+  };
   return (
     <div className="space-y-6">
       <SectionCard
@@ -24,20 +50,33 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
               placeholder="Ex: Analista de Dados Pleno"
             />
           </Field>
+          
           <Field label="Área *">
-            <select
-              value={form.job_area}
-              onChange={(event) => onFormChange({ job_area: event.target.value })}
-              className="ui-input h-11 rounded-xl px-3 text-sm"
-            >
-              <option value="">Selecione</option>
-              {JOB_AREA_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={form.job_area}
+                onChange={(event) => onFormChange({ job_area: event.target.value })}
+                className="ui-input h-11 rounded-xl px-3 text-sm flex-1"
+                disabled={loadingAreas}
+              >
+                <option value="">Selecione</option>
+                {areas.map((area) => (
+                  <option key={area.id} value={area.name}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="h-11 w-11 flex items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] hover:bg-[hsl(var(--surface-hover))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text))]"
+                title="Criar nova área"
+              >
+                +
+              </button>
+            </div>
           </Field>
+
           <Field label="Senioridade *">
             <select
               value={form.seniority_level}
@@ -80,6 +119,12 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
           />
         </Field>
       </SectionCard>
+
+      <CreateJobAreaModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSuccess={handleAreaCreated}
+      />
     </div>
   );
 }

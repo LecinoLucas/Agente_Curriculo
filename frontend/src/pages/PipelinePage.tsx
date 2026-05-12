@@ -23,6 +23,7 @@ import {
   jobStatusTone,
 } from "../utils/jobFormatters";
 import { isPipelineOperationalJob } from "../utils/jobStatusRules";
+import { sortCandidatesByScore } from "../utils/pipelineSort";
 import {
   buildDealBreakerViolationDisplay,
   isDealBreakerReasonCode,
@@ -70,9 +71,12 @@ export function PipelinePage() {
   const [showNewCandidate, setShowNewCandidate] = useState(false);
   const [showSourceCandidates, setShowSourceCandidates] = useState(false);
   const [showRanking, setShowRanking] = useState(resolveInitialShowRanking);
+  const [sortOrder, setSortOrder] = useState<"score_desc" | "score_asc" | "name_az">("score_desc");
   const [ranking, setRanking] = useState<JobRanking | null>(null);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingError, setRankingError] = useState<string | null>(null);
+  // Canonical source for PipelinePage job selection/meta.
+  // Candidate-centric flows load the broader jobs catalog lazily from PipelineContext.
   const [pipelineJobs, setPipelineJobs] = useState<PipelineJobSummary[]>([]);
   const [pipelineJobsLoading, setPipelineJobsLoading] = useState(true);
   const [pipelineJobsError, setPipelineJobsError] = useState<string | null>(null);
@@ -179,6 +183,12 @@ export function PipelinePage() {
       return;
     }
 
+    if (!showRanking) {
+      setRankingLoading(false);
+      setRankingError(null);
+      return;
+    }
+
     let cancelled = false;
     setRankingLoading(true);
     setRankingError(null);
@@ -206,7 +216,7 @@ export function PipelinePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeJobId, rankingSyncTick]);
+  }, [activeJobId, rankingSyncTick, showRanking]);
 
   // ── Effect 2: auto-redirect when no jobId in URL ──────────────────────────
   // /pipeline (no :jobId) is a valid entry point. Once jobs are ready,
@@ -245,16 +255,24 @@ export function PipelinePage() {
 
   const mainCols = useMemo(
     () =>
-      (board?.columns ?? []).filter((c) =>
-        (MAIN_STAGES as ReadonlyArray<string>).includes(c.stage),
-      ),
-    [board],
+      (board?.columns ?? [])
+        .filter((c) => (MAIN_STAGES as ReadonlyArray<string>).includes(c.stage))
+        .map((col) => ({
+          ...col,
+          candidates: sortCandidatesByScore(col.candidates, sortOrder),
+        })),
+    [board, sortOrder],
   );
 
-  const rejectedCol = useMemo(
-    () => board?.columns.find((c) => c.stage === "rejected") ?? null,
-    [board],
-  );
+  const rejectedCol = useMemo(() => {
+    const col = board?.columns.find((c) => c.stage === "rejected") ?? null;
+    if (!col) return null;
+    
+    return {
+      ...col,
+      candidates: sortCandidatesByScore(col.candidates, sortOrder),
+    };
+  }, [board, sortOrder]);
 
   const totalActive = mainCols.reduce((n, c) => n + c.candidates.length, 0);
   const totalRejected = rejectedCol?.candidates.length ?? 0;
@@ -448,6 +466,9 @@ export function PipelinePage() {
                       {totalRejected} reprovado{totalRejected !== 1 ? "s" : ""}
                     </span>
                   ) : null}
+                  <span className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
+                    Ordenado por aderência
+                  </span>
                 </div>
                 <h2 className="mt-2 truncate text-base font-semibold text-[hsl(var(--text))] sm:text-lg">
                   {selectedJob ? selectedJob.title : "Candidatos"}
@@ -457,6 +478,15 @@ export function PipelinePage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 self-start lg:self-end">
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as any)}
+                  className="ui-input h-9 rounded-xl px-2 text-xs font-medium border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))]"
+                >
+                  <option value="score_desc">Maior aderência</option>
+                  <option value="score_asc">Menor aderência</option>
+                  <option value="name_az">Nome A-Z</option>
+                </select>
                 {isBoardRefreshing ? (
                   <span className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--primary))]/18 bg-[hsl(var(--accent-soft))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--primary))]">
                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -494,6 +524,7 @@ export function PipelinePage() {
                       colIndex={idx}
                       onCardClick={openCandidate}
                       disabled={!canUse}
+                      showTopMatchHighlight={sortOrder === "score_desc"}
                     />
                   ))}
 
@@ -505,6 +536,7 @@ export function PipelinePage() {
                         colIndex={mainCols.length}
                         onCardClick={openCandidate}
                         disabled={!canUse}
+                        showTopMatchHighlight={sortOrder === "score_desc"}
                       />
                     </>
                   ) : null}

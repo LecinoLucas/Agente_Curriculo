@@ -55,7 +55,7 @@ def test_rate_limit_delay_uses_multiplier_and_retry_after() -> None:
 
 
 @pytest.mark.asyncio
-async def test_analyze_with_retries_honors_retry_after_on_429() -> None:
+async def test_analyze_with_retries_bubbles_up_429_without_local_retry() -> None:
     adapter = GeminiAdapter("gemini-2.5-flash")
 
     http_error = httpx.HTTPStatusError(
@@ -64,53 +64,12 @@ async def test_analyze_with_retries_honors_retry_after_on_429() -> None:
         response=_make_http_429_response(retry_after="2"),
     )
 
-    fake_result = AIAnalysisResponse(
-        content='{"ok": true}',
-        input_tokens=1,
-        output_tokens=1,
-        cache_read_tokens=0,
-        cache_write_tokens=0,
-        processing_time_ms=1,
-    )
-
     with (
         patch.object(adapter, "_call_gemini_api", new_callable=AsyncMock) as mock_call,
-        patch.object(adapter, "_parse_response", return_value=fake_result),
-        patch("src.infrastructure.ai.gemini_adapter.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
-    ):
-        mock_call.side_effect = [http_error, {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}]
-
-        result = await adapter._analyze_with_retries(
-            url="https://example.com",
-            payload={},
-            start_ms=0,
-            queue_name="analysis.default",
-        )
-
-        assert result.content == '{"ok": true}'
-        assert mock_call.call_count == 2
-        mock_sleep.assert_awaited_once()
-        sleep_seconds = mock_sleep.await_args.args[0]
-        assert sleep_seconds >= 2.0
-
-
-@pytest.mark.asyncio
-async def test_analyze_with_retries_raises_after_final_429() -> None:
-    adapter = GeminiAdapter("gemini-2.5-flash")
-    http_error = httpx.HTTPStatusError(
-        "Too Many Requests",
-        request=httpx.Request("POST", "https://example.com"),
-        response=_make_http_429_response(retry_after="1"),
-    )
-
-    with (
-        patch.object(adapter, "_call_gemini_api", new_callable=AsyncMock) as mock_call,
-        patch("src.infrastructure.ai.gemini_adapter.asyncio.sleep", new_callable=AsyncMock),
-        patch("src.infrastructure.ai.gemini_adapter.settings.AI_MAX_RETRIES", 1),
     ):
         mock_call.side_effect = http_error
 
-        with pytest.raises(RuntimeError, match="status_code=429"):
+        with pytest.raises(httpx.HTTPStatusError):
             await adapter._analyze_with_retries(
                 url="https://example.com",
                 payload={},
@@ -118,7 +77,29 @@ async def test_analyze_with_retries_raises_after_final_429() -> None:
                 queue_name="analysis.default",
             )
 
-        assert mock_call.call_count == 2
+        assert mock_call.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_retries_bubbles_up_connection_error_without_local_retry() -> None:
+    adapter = GeminiAdapter("gemini-2.5-flash")
+    connect_error = httpx.ConnectError(
+        "connection refused",
+        request=httpx.Request("POST", "https://example.com"),
+    )
+
+    with patch.object(adapter, "_call_gemini_api", new_callable=AsyncMock) as mock_call:
+        mock_call.side_effect = connect_error
+
+        with pytest.raises(httpx.ConnectError):
+            await adapter._analyze_with_retries(
+                url="https://example.com",
+                payload={},
+                start_ms=0,
+                queue_name="analysis.default",
+            )
+
+        assert mock_call.call_count == 1
 
 
 @pytest.mark.asyncio

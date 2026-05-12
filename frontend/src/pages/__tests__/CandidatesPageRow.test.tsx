@@ -30,7 +30,7 @@ function buildCandidate(overrides?: Partial<CandidateListSummary>): CandidateLis
 }
 
 describe("CandidateRow", () => {
-  it("exibe badge e ação rápida para candidato sem vaga sem depender de hover", async () => {
+  it("exibe badge e ação rápida para candidato aguardando vaga sem depender de hover", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
     const onLinkJob = vi.fn();
@@ -47,12 +47,37 @@ describe("CandidateRow", () => {
       </table>,
     );
 
-    expect(screen.getAllByText("Sem vaga").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Aguardando vaga").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Vincular vaga" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Vincular vaga" }));
 
     expect(onLinkJob).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("expõe a ação de arquivar candidato sem abrir o drawer", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const onArchive = vi.fn();
+
+    render(
+      <table>
+        <tbody>
+          <CandidateRow
+            candidate={buildCandidate({ linked_job_count: 1, active_job_id: "job-1" })}
+            onOpen={onOpen}
+            canArchive
+            onArchive={onArchive}
+          />
+        </tbody>
+      </table>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Ações do candidato Pessoa Teste/i }));
+    await user.click(screen.getByRole("button", { name: "Arquivar candidato" }));
+
+    expect(onArchive).toHaveBeenCalledTimes(1);
     expect(onOpen).not.toHaveBeenCalled();
   });
 });

@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from src.application.services.skill_equivalence_service import SkillEquivalenceService
+from src.application.services.skill_equivalence_service import (
+    SkillEquivalenceService,
+    _CatalogLoadResult,
+)
 
 
 CATALOG_PATH = (
@@ -268,6 +271,249 @@ class TestSkillEquivalenceServiceEdgeCases:
             evidence = service.match_skill(candidate_skill, required_skill)
             assert evidence.strength in {"partial", "weak", "none"}
             assert evidence.score < 0.85
+
+
+class TestSkillEquivalenceSourceSelection:
+    def test_for_matching_uses_json_source_by_default(self, monkeypatch, tmp_path):
+        catalog_path = tmp_path / "skill_equivalences.json"
+        catalog_path.write_text(
+            json.dumps(
+                {
+                    "version": "test",
+                    "groups": [
+                        {
+                            "canonical": "JavaScript",
+                            "aliases": ["TypeScript"],
+                            "domain": ["technology"],
+                            "type": "skill",
+                            "strength": "strong",
+                        }
+                    ],
+                    "relations": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        SkillEquivalenceService.clear_catalog_cache()
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_SOURCE",
+            "json",
+        )
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_COMPARE_ON_MATCH",
+            False,
+        )
+
+        service = SkillEquivalenceService.for_matching(catalog_path)
+
+        evidence = service.match_skill("TypeScript", "JavaScript")
+        assert service._source == "json"
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+
+    def test_for_matching_uses_database_source_when_flag_enabled(self, monkeypatch):
+        SkillEquivalenceService.clear_catalog_cache()
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_SOURCE",
+            "database",
+        )
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_COMPARE_ON_MATCH",
+            False,
+        )
+        monkeypatch.setattr(
+            SkillEquivalenceService,
+            "_load_database_catalog_with_stats",
+            classmethod(
+                lambda cls: _CatalogLoadResult(
+                    catalog={
+                        "version": "db",
+                        "groups": [
+                            {
+                                "canonical": "JavaScript",
+                                "aliases": ["TypeScript"],
+                                "domain": ["technology"],
+                                "type": "skill",
+                                "strength": "strong",
+                            }
+                        ],
+                        "relations": [],
+                    },
+                    source="database",
+                    skills_count=1,
+                    aliases_count=1,
+                    relations_count=0,
+                    cache_used=False,
+                    duration_ms=1.0,
+                )
+            ),
+        )
+
+        service = SkillEquivalenceService.for_matching()
+
+        evidence = service.match_skill("TypeScript", "JavaScript")
+        assert service._source == "database"
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+
+    def test_for_matching_falls_back_to_json_when_database_fails(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        catalog_path = tmp_path / "skill_equivalences.json"
+        catalog_path.write_text(
+            json.dumps(
+                {
+                    "version": "test",
+                    "groups": [
+                        {
+                            "canonical": "BI",
+                            "aliases": ["Power BI"],
+                            "domain": ["data"],
+                            "type": "skill",
+                            "strength": "strong",
+                        }
+                    ],
+                    "relations": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        SkillEquivalenceService.clear_catalog_cache()
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_SOURCE",
+            "database",
+        )
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_COMPARE_ON_MATCH",
+            False,
+        )
+        monkeypatch.setattr(
+            SkillEquivalenceService,
+            "_load_database_catalog_with_stats",
+            classmethod(lambda cls: (_ for _ in ()).throw(RuntimeError("db unavailable"))),
+        )
+        warning_calls: list[tuple[str, dict[str, object]]] = []
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.logger.warning",
+            lambda event, **kwargs: warning_calls.append((event, kwargs)),
+        )
+
+        service = SkillEquivalenceService.for_matching(catalog_path)
+
+        evidence = service.match_skill("Power BI", "BI")
+        assert service._source == "database_failed_fallback_json"
+        assert evidence.matched is True
+        assert evidence.strength == "strong"
+        assert warning_calls
+        event, payload = warning_calls[0]
+        assert event == "skill_catalog.source=database_failed_fallback_json"
+        assert payload["requested_source"] == "database"
+        assert payload["fallback_source"] == "json"
+        assert payload["exception_class"] == "RuntimeError"
+
+    def test_source_logging_tracks_cumulative_usage_counts(self, monkeypatch):
+        SkillEquivalenceService.reset_observability_counters()
+        logged: list[tuple[str, dict[str, object]]] = []
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.logger.info",
+            lambda event, **kwargs: logged.append((event, kwargs)),
+        )
+
+        SkillEquivalenceService._log_catalog_source(
+            _CatalogLoadResult(
+                catalog={"groups": [], "relations": []},
+                source="json",
+                skills_count=1,
+                aliases_count=2,
+                relations_count=3,
+                cache_used=False,
+                duration_ms=4.5,
+            )
+        )
+        SkillEquivalenceService._log_catalog_source(
+            _CatalogLoadResult(
+                catalog={"groups": [], "relations": []},
+                source="database",
+                skills_count=1,
+                aliases_count=2,
+                relations_count=3,
+                cache_used=True,
+                duration_ms=1.2,
+            )
+        )
+
+        assert logged[0][0] == "skill_catalog.source=json"
+        assert logged[0][1]["usage_count"] == 1
+        assert logged[0][1]["source_usage_totals"]["json"] == 1
+        assert logged[1][0] == "skill_catalog.source=database"
+        assert logged[1][1]["usage_count"] == 1
+        assert logged[1][1]["source_usage_totals"]["database"] == 1
+        assert logged[1][1]["fallback_total"] == 0
+
+    def test_database_catalog_format_is_compatible_with_matching(self, monkeypatch):
+        SkillEquivalenceService.clear_catalog_cache()
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_SOURCE",
+            "database",
+        )
+        monkeypatch.setattr(
+            "src.application.services.skill_equivalence_service.settings.SKILL_CATALOG_COMPARE_ON_MATCH",
+            False,
+        )
+        monkeypatch.setattr(
+            SkillEquivalenceService,
+            "_load_database_catalog_with_stats",
+            classmethod(
+                lambda cls: _CatalogLoadResult(
+                    catalog={
+                        "version": "db",
+                        "groups": [
+                            {
+                                "canonical": "Spring Boot",
+                                "aliases": [],
+                                "domain": ["technology"],
+                                "type": "skill",
+                                "strength": "strong",
+                            },
+                            {
+                                "canonical": "JavaScript",
+                                "aliases": ["TypeScript"],
+                                "domain": ["technology"],
+                                "type": "skill",
+                                "strength": "strong",
+                            },
+                        ],
+                        "relations": [
+                            {
+                                "from": "Spring Boot",
+                                "to": "Spring",
+                                "type": None,
+                                "strength": "strong",
+                                "score": 0.8,
+                                "reason": "relation",
+                            }
+                        ],
+                    },
+                    source="database",
+                    skills_count=2,
+                    aliases_count=1,
+                    relations_count=1,
+                    cache_used=True,
+                    duration_ms=0.5,
+                )
+            ),
+        )
+
+        service = SkillEquivalenceService.for_matching()
+
+        alias_evidence = service.match_skill("TypeScript", "JavaScript")
+        relation_evidence = service.match_skill("Spring Boot", "Spring")
+        assert alias_evidence.matched is True
+        assert alias_evidence.strength == "strong"
+        assert relation_evidence.matched is True
+        assert relation_evidence.source == "relation"
 
 
 class TestSkillEquivalenceCatalogCrud:

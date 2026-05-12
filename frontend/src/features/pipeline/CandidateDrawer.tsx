@@ -14,9 +14,11 @@ import { useCandidateDecision } from "../candidates/drawer/hooks/useCandidateDec
 import { useCandidateDrawerActions } from "../candidates/drawer/hooks/useCandidateDrawerActions";
 import { useCandidateData } from "../candidates/drawer/hooks/useCandidateData";
 import { DocumentsTab as DocumentsTabComponent } from "../candidates/drawer/tabs/DocumentsTab";
+import { InterviewTab } from "../candidates/drawer/tabs/InterviewTab";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { analysisService } from "../../services/analysisService";
+import { listJobs } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import { toast } from "../../shared/utils/toast";
 import {
@@ -36,6 +38,7 @@ import {
   getLatestAnalysisForActiveJob,
 } from "../candidates/utils/analysisStatus";
 import type { ScoreTabFocusRequest } from "../candidates/drawer/tabs/ScoreTab";
+import { isTransferTargetJob } from "../../utils/jobStatusRules";
 
 function isAnalysisInProgress(status: string | null | undefined): boolean {
   return status === "pending" || status === "processing";
@@ -145,7 +148,8 @@ export function CandidateDrawer({
     startPolling,
     notifyCandidatesChanged,
     moveCandidateStage,
-    invalidateJobState,
+    invalidateBoard,
+    patchCandidate,
   } = usePipeline();
 
   const { user } = useAuth();
@@ -156,6 +160,7 @@ export function CandidateDrawer({
   const candidateActiveJobId = candidateOverview?.active_job_id ?? null;
 
   const historyCacheRef = useRef<Map<string, CandidatePipelineHistory>>(new Map());
+  const scoreExplanationCacheRef = useRef<Map<string, ScoreExplanationResponse>>(new Map());
   const visibleCandidateIdRef = useRef<string | null>(selectedCandidateId);
   const pendingStageCandidateRef = useRef<string | null>(null);
   const pendingLinkCandidateRef = useRef<string | null>(null);
@@ -176,11 +181,12 @@ export function CandidateDrawer({
   const [linkSavingCandidateId, setLinkSavingCandidateId] = useState<string | null>(null);
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(null);
   const [profileTabKey, setProfileTabKey] = useState<ProfileTabKey>("overview");
-  const [detailTabsVisible, setDetailTabsVisible] = useState(false);
+  const [detailTabsVisible, setDetailTabsVisible] = useState(true);
   const [actionFeedback, setActionFeedback] = useState<CandidateActionFeedback | null>(null);
   const [linkJobModalOpen, setLinkJobModalOpen] = useState(false);
   const [analysisStarting, setAnalysisStarting] = useState(false);
   const [scoreTabFocusRequest, setScoreTabFocusRequest] = useState<ScoreTabFocusRequest | null>(null);
+  const shouldLoadScoreExplanation = activePanelTab === "score" || activePanelTab === "analysis";
 
   const stageSaving =
     stageSavingCandidateId !== null && stageSavingCandidateId === selectedCandidateId;
@@ -203,6 +209,7 @@ export function CandidateDrawer({
     currentStage,
     activeJob,
     activeJobCompatibilityScore,
+    hasPersistedCompatibilityScore,
     transferAvailableJobs,
     canTransferCurrentJob,
     compatibilityGuidance,
@@ -226,6 +233,10 @@ export function CandidateDrawer({
     candidateOverview?.latest_analysis,
     candidateActiveJobId,
   );
+  const analysisHighlights =
+    scoreExplanation?.highlights?.slice(0, 3) ??
+    analysisResult?.strengths?.slice(0, 3) ??
+    [];
 
   useEffect(() => {
     if (mode !== "overlay" || !isOpen) return;
@@ -293,13 +304,23 @@ export function CandidateDrawer({
   }, [candidateOverview, ensureAnalysisMatch]);
 
   useEffect(() => {
+    setScoreExplanation(null);
+  }, [selectedCandidateId, candidateActiveJobId]);
+
+  useEffect(() => {
     const hasActiveContext =
       Boolean(candidateActiveJobId) &&
       Boolean(selectedCandidateId) &&
       rankingEntry?.job_fit_score != null;
 
-    if (!hasActiveContext || !candidateActiveJobId || !selectedCandidateId) {
-      setScoreExplanation(null);
+    if (!shouldLoadScoreExplanation || !hasActiveContext || !candidateActiveJobId || !selectedCandidateId) {
+      return;
+    }
+
+    const cacheKey = `${candidateActiveJobId}:${selectedCandidateId}`;
+    const cached = scoreExplanationCacheRef.current.get(cacheKey);
+    if (cached) {
+      setScoreExplanation(cached);
       return;
     }
 
@@ -309,6 +330,7 @@ export function CandidateDrawer({
       .get(candidateActiveJobId, selectedCandidateId)
       .then((payload) => {
         if (cancelled) return;
+        scoreExplanationCacheRef.current.set(cacheKey, payload);
         setScoreExplanation(payload);
       })
       .catch(() => {
@@ -319,7 +341,12 @@ export function CandidateDrawer({
     return () => {
       cancelled = true;
     };
-  }, [candidateActiveJobId, selectedCandidateId, rankingEntry?.job_fit_score]);
+  }, [
+    candidateActiveJobId,
+    selectedCandidateId,
+    rankingEntry?.job_fit_score,
+    shouldLoadScoreExplanation,
+  ]);
 
   const handleStageChange = useCallback(
     async (newStage: PipelineStage) => {
@@ -396,7 +423,10 @@ export function CandidateDrawer({
         initial_stage: "entry",
       });
 
-      await invalidateJobState();
+      await Promise.all([
+        syncCandidateOverview(targetCandidateId),
+        refreshBoard(),
+      ]);
 
       pushActionFeedbackForCandidate(targetCandidateId, {
         tone: "success",
@@ -425,8 +455,9 @@ export function CandidateDrawer({
   }, [
     selectedCandidateId,
     activeBoardJobId,
-    invalidateJobState,
     pushActionFeedbackForCandidate,
+    refreshBoard,
+    syncCandidateOverview,
   ]);
 
   const handleOpenTransferJob = useCallback(() => {
@@ -446,6 +477,7 @@ export function CandidateDrawer({
         overview: "summary",
         score: "score",
         documents: "documents",
+        interview: "actions",
       };
 
       switchPanelTab(panelTabMap[tabKey]);
@@ -540,12 +572,12 @@ export function CandidateDrawer({
       analysis: "score",
       documents: "documents",
       history: "overview",
-      actions: "overview",
+      actions: "interview",
     };
 
     const nextTab = panelToProfileTab[activePanelTab];
     setProfileTabKey(nextTab);
-    setDetailTabsVisible(activePanelTab !== "summary");
+    setDetailTabsVisible(true);
     setActionFeedback(null);
   }, [selectedCandidateId, activePanelTab]);
 
@@ -587,12 +619,16 @@ export function CandidateDrawer({
           currentStage={currentStage}
           activeJobLabel={activeJobLabel}
           activeJobCompatibilityScore={activeJobCompatibilityScore}
+          hasPersistedCompatibilityScore={hasPersistedCompatibilityScore}
           hasActiveJob={Boolean(candidateActiveJobId)}
+          hasResume={Boolean(latestResume?.current_version_id)}
           aiScore={null}
           aiStatus={activeJobAnalysis?.status ?? null}
           analysisResult={analysisResult}
           rankingEntry={rankingEntry}
           scoreExplanation={scoreExplanation}
+          analysisHighlights={analysisHighlights}
+          analysisErrorMessage={activeJobAnalysis?.failure_reason ?? null}
           isLoading={candidateLoading}
           isLoadingContent={profileTabKey === "score" && rankingEntryLoading}
           activeTab={profileTabKey}
@@ -614,9 +650,6 @@ export function CandidateDrawer({
           onNavigateToFull={mode === "overlay" ? () => navigate("/candidatos") : undefined}
           onBackToList={mode === "workspace" ? onBackToList : undefined}
           backToListLabel={backToListLabel}
-          analysisStatusLabel={analysisSummary.label}
-          analysisStatusDetail={analysisSummary.detail}
-          analysisStatusTone={analysisSummary.tone}
           analysisActionLabel={analysisStarting ? "Iniciando análise…" : analysisSummary.actionLabel}
           analysisActionDisabled={analysisStarting || analysisSummary.inProgress}
           activeJob={activeJob}
@@ -671,6 +704,10 @@ export function CandidateDrawer({
               onActionFeedback={pushActionFeedback}
             />
           ) : null}
+
+          {profileTabKey === "interview" ? (
+            <InterviewTab />
+          ) : null}
         </CandidateProfileView>
       ) : null}
 
@@ -716,9 +753,10 @@ export function CandidateDrawer({
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         candidate={candidate}
-        onSuccess={async (candidateId) => {
-          await Promise.all([syncCandidateOverview(candidateId), refreshBoard()]);
+        onSuccess={async (updatedCandidate) => {
+          patchCandidate(updatedCandidate.id, updatedCandidate);
           notifyCandidatesChanged();
+          void syncCandidateOverview(updatedCandidate.id);
         }}
       />
 
@@ -732,7 +770,10 @@ export function CandidateDrawer({
         onSuccess={async () => {
           if (!candidate?.id) return;
 
-          await invalidateJobState(primaryPipelineEntry?.job_id ?? null);
+          await Promise.all([
+            syncCandidateOverview(candidate.id),
+            refreshBoard(),
+          ]);
           setTransferJobModalOpen(false);
         }}
       />
@@ -743,8 +784,13 @@ export function CandidateDrawer({
         candidateName={candidate?.full_name ?? null}
         linkedJobIds={candidateOverview?.pipeline_entries.map((entry) => entry.job_id) ?? []}
         onClose={() => setLinkJobModalOpen(false)}
-        onLinked={async () => {
-          await invalidateJobState();
+        onLinked={async (jobId) => {
+          if (candidate?.id) {
+            await syncCandidateOverview(candidate.id);
+          }
+          if (jobId === activeBoardJobId) {
+            await invalidateBoard(jobId, true);
+          }
           pushActionFeedback({
             tone: "success",
             title: "Vaga vinculada com sucesso",
@@ -801,11 +847,11 @@ export function CandidateDrawer({
   );
 }
 
-function TransferJobModal({
+export function TransferJobModal({
   isOpen,
   candidateId,
   fromJobId,
-  availableJobs,
+  availableJobs: preloadedJobs,
   canTransfer,
   onClose,
   onSuccess,
@@ -818,6 +864,9 @@ function TransferJobModal({
   onClose: () => void;
   onSuccess: () => Promise<void>;
 }) {
+  const [availableJobs, setAvailableJobs] = useState<Job[]>(preloadedJobs);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState<string | null>(null);
   const [jobId, setJobId] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -826,10 +875,67 @@ function TransferJobModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    setJobId(availableJobs[0]?.id ?? "");
+    setAvailableJobs(preloadedJobs);
     setReason("");
     setSaving(false);
     setError(null);
+    setJobsError(null);
+  }, [isOpen, preloadedJobs]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+
+    if (preloadedJobs.length > 0) {
+      setJobsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setJobsLoading(true);
+    setJobsError(null);
+
+    void listJobs(1, 100, { statusFilter: "all" })
+      .then((response) => {
+        if (cancelled) return;
+        setAvailableJobs(
+          response.data.filter(
+            (job) => job.id !== fromJobId && isTransferTargetJob(job.status),
+          ),
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setJobsError(
+          formatContextError(
+            err,
+            "Não foi possível carregar as vagas disponíveis para transferência.",
+            "Tente novamente.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setJobsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fromJobId, isOpen, preloadedJobs]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setJobId((current) => {
+      if (current && availableJobs.some((job) => job.id === current)) {
+        return current;
+      }
+      return availableJobs[0]?.id ?? "";
+    });
   }, [isOpen, availableJobs]);
 
   if (!isOpen) return null;
@@ -919,10 +1025,12 @@ function TransferJobModal({
             <select
               value={jobId}
               onChange={(event) => setJobId(event.target.value)}
-              disabled={saving || availableJobs.length === 0}
+              disabled={saving || jobsLoading || availableJobs.length === 0}
               className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
             >
-              {availableJobs.length === 0 ? (
+              {jobsLoading ? (
+                <option value="">Carregando vagas…</option>
+              ) : availableJobs.length === 0 ? (
                 <option value="">Nenhuma vaga disponível</option>
               ) : (
                 availableJobs.map((job) => (
@@ -937,6 +1045,12 @@ function TransferJobModal({
           <p className="text-xs text-[hsl(var(--text-muted))]">
             Apenas vagas publicadas podem receber transferência.
           </p>
+
+          {jobsError ? (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {jobsError}
+            </p>
+          ) : null}
 
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-[hsl(var(--text))]">

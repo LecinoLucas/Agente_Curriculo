@@ -67,6 +67,10 @@ class CandidateCriticalHistoryError(Exception):
     pass
 
 
+class CandidateArchiveReasonRequiredError(Exception):
+    pass
+
+
 class CandidateService:
     def __init__(
         self,
@@ -130,8 +134,9 @@ class CandidateService:
         page: int,
         page_size: int,
         search: str | None = None,
+        archived: bool = False,
     ) -> tuple[list[CandidateModel], int]:
-        return await self._repository.list_active(page, page_size, search)
+        return await self._repository.list_active(page, page_size, search, archived)
 
     async def list_summaries(
         self,
@@ -140,9 +145,10 @@ class CandidateService:
         search: str | None = None,
         has_resume: bool | None = None,
         ai_status_filter: list[str] | None = None,
+        archived: bool = False,
     ) -> tuple[list[CandidateListSummaryResponse], int]:
         rows, total = await self._repository.list_summaries(
-            page, page_size, search, has_resume, ai_status_filter
+            page, page_size, search, has_resume, ai_status_filter, archived
         )
         items = [
             CandidateListSummaryResponse(
@@ -153,6 +159,8 @@ class CandidateService:
                 cpf=row["cpf"],
                 tags=row["tags"] or [],
                 created_at=row["created_at"],
+                archived_at=row.get("archived_at"),
+                archive_reason=row.get("archive_reason"),
                 resume_count=int(row["resume_count"] or 0),
                 linked_job_count=int(row["linked_job_count"] or 0),
                 latest_job_id=row.get("latest_job_id"),
@@ -330,6 +338,71 @@ class CandidateService:
         candidate.updated_at = datetime.now(UTC)
         return await self._repository.save(candidate)
 
+    async def archive(
+        self,
+        candidate_id: UUID,
+        *,
+        actor: User,
+        reason: str | None,
+        note: str | None,
+    ) -> CandidateModel:
+        candidate = await self._get_any(candidate_id)
+        archive_reason = self._clean_optional_text(reason)
+        if archive_reason is None:
+            raise CandidateArchiveReasonRequiredError
+        if candidate.archived_at is not None:
+            return candidate
+
+        previous_state = {"archived": False}
+        now = datetime.now(UTC)
+        candidate.archived_at = now
+        candidate.archived_by = actor.id
+        candidate.archive_reason = archive_reason
+        candidate.archive_reason_note = self._clean_optional_text(note)
+        candidate.updated_at = now
+        saved = await self._repository.save(candidate)
+        await self._log_state_audit(
+            action="archive_candidate",
+            candidate=saved,
+            actor=actor,
+            reason=archive_reason,
+            note=candidate.archive_reason_note,
+            before_state=previous_state,
+            after_state={"archived": True},
+        )
+        return saved
+
+    async def restore(
+        self,
+        candidate_id: UUID,
+        *,
+        actor: User,
+    ) -> CandidateModel:
+        candidate = await self._get_any(candidate_id)
+        if candidate.archived_at is None:
+            return candidate
+
+        before_state = {
+            "archived": True,
+            "archive_reason": candidate.archive_reason,
+        }
+        candidate.archived_at = None
+        candidate.archived_by = None
+        candidate.archive_reason = None
+        candidate.archive_reason_note = None
+        candidate.updated_at = datetime.now(UTC)
+        saved = await self._repository.save(candidate)
+        await self._log_state_audit(
+            action="restore_candidate",
+            candidate=saved,
+            actor=actor,
+            reason=None,
+            note=None,
+            before_state=before_state,
+            after_state={"archived": False},
+        )
+        return saved
+
     async def soft_delete(self, candidate_id: UUID) -> None:
         candidate = await self.get(candidate_id)
         now = datetime.now(UTC)
@@ -396,6 +469,12 @@ class CandidateService:
                         full_name=candidate.full_name,
                     )
         return CandidateCheckResponse(exists=False)
+
+    async def _get_any(self, candidate_id: UUID) -> CandidateModel:
+        candidate = await self._repository.find_by_id(candidate_id)
+        if candidate is None:
+            raise CandidateNotFoundError
+        return candidate
 
     @staticmethod
     def _clean_email(email: str | None) -> str | None:
@@ -522,3 +601,43 @@ class CandidateService:
             if not path.is_absolute() or not path.exists() or not path.is_file():
                 continue
             path.unlink(missing_ok=True)
+
+    async def _log_state_audit(
+        self,
+        *,
+        action: str,
+        candidate: CandidateModel,
+        actor: User,
+        reason: str | None,
+        note: str | None,
+        before_state: dict[str, object],
+        after_state: dict[str, object],
+    ) -> None:
+        if self._audit_service is None:
+            return
+        try:
+            await self._audit_service.log_event(
+                action=action,
+                resource_type="candidate",
+                resource_id=candidate.id,
+                user_id=actor.id,
+                metadata={
+                    "entityType": "candidate",
+                    "entityId": str(candidate.id),
+                    "candidate_name": candidate.full_name,
+                    "candidate_email": candidate.email,
+                    "reason": reason,
+                    "note": note,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+                before_state=before_state,
+                after_state=after_state,
+            )
+        except Exception as exc:
+            logger.warning(
+                "candidate_state_audit_log_failed",
+                action=action,
+                candidate_id=str(candidate.id),
+                actor_id=str(actor.id),
+                error=str(exc),
+            )

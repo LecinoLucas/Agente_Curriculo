@@ -162,7 +162,7 @@ def _compute_skill_scores(
     - has_any_strong_priority: bool (at least one exact/strong match)
     - weak_evidence_priority_skills: list[str] (priority skills downgraded due weak context)
     """
-    equivalence_service = SkillEquivalenceService()
+    equivalence_service = SkillEquivalenceService.for_matching()
     priority_skills = [
         row
         for row in job_skill_rows
@@ -755,7 +755,10 @@ def _skill_matches(
     if candidate_normalized == job_normalized:
         return True
 
-    return SkillEquivalenceService().match_skill(candidate_skill_name, job_skill_name).matched
+    return SkillEquivalenceService.for_matching().match_skill(
+        candidate_skill_name,
+        job_skill_name,
+    ).matched
 
 
 def _unique_skill_names(skill_names: list[str]) -> list[str]:
@@ -1088,7 +1091,7 @@ class AnalysisService:
         analysis = await self.get(analysis_id, current_user)
         if analysis.status == "discarded":
             raise ValidationException("A análise já está descartada.")
-        if analysis.status == "processing":
+        if analysis.status in {"processing", "retry_scheduled"}:
             raise ValidationException("Não é possível descartar uma análise em processamento.")
 
         if (
@@ -1241,6 +1244,57 @@ class AnalysisService:
         analysis: AnalysisModel,
         result: AnalysisResultModel,
     ) -> CandidateProfileAnalysisModel:
+        # ── Resolver provider/model/prompt_version para a chave única ──────────
+        ai_prompt_row = await self._repository._session.execute(
+            sa.select(AIModelModel.provider, AIModelModel.model_id, PromptTemplateModel.version)
+            .select_from(AnalysisModel)
+            .join(AIModelModel, AIModelModel.id == AnalysisModel.ai_model_id)
+            .join(PromptTemplateModel, PromptTemplateModel.id == AnalysisModel.prompt_template_id)
+            .where(AnalysisModel.id == analysis.id)
+        )
+        config = ai_prompt_row.first()
+        provider = str(config[0]) if config is not None else "unknown"
+        model_id = str(config[1]) if config is not None else "unknown"
+        prompt_version = str(config[2]) if config is not None else "unknown"
+
+        # ── 1. Busca pela chave completa (idempotente contra retry/concorrência) ──
+        existing_exact = await self._repository.get_candidate_profile_analysis_by_version_model_prompt(
+            resume_version_id=analysis.resume_version_id,
+            provider=provider,
+            model_id=model_id,
+            prompt_version=prompt_version,
+        )
+        if existing_exact is not None:
+            logger.info(
+                "candidate_profile.reused",
+                extra={
+                    "profile_id": str(existing_exact.id),
+                    "resume_version_id": str(analysis.resume_version_id),
+                    "provider": provider,
+                    "model_id": model_id,
+                    "prompt_version": prompt_version,
+                    "analysis_id": str(analysis.id),
+                },
+            )
+            # Atualiza campos incompletos caso o registro existente esteja incompleto
+            if _candidate_profile_analysis_is_incomplete(existing_exact):
+                extracted = result.extracted_data or {}
+                refreshed_skills = _skill_names_from_extracted_data(extracted)
+                if not refreshed_skills:
+                    refreshed_skills = _unique_skill_names([
+                        str(skill)
+                        for skill in (result.keywords or [])
+                        if str(skill).strip()
+                    ])
+                existing_exact.education_level = result.highest_education_level
+                existing_exact.experience_years = result.total_experience_years
+                existing_exact.seniority_level = result.seniority_level
+                existing_exact.skills_json = refreshed_skills
+                existing_exact.summary = result.candidate_summary
+                await _safe_session_flush(getattr(self._repository, "_session", None))
+            return existing_exact
+
+        # ── 2. Busca genérica por resume_version (fallback legado) ─────────────
         cached = await self._repository.find_latest_candidate_profile_analysis_for_resume(
             analysis.resume_version_id
         )
@@ -1262,18 +1316,7 @@ class AnalysisService:
             await _safe_session_flush(getattr(self._repository, "_session", None))
             return cached
 
-        ai_prompt_row = await self._repository._session.execute(
-            sa.select(AIModelModel.provider, AIModelModel.model_id, PromptTemplateModel.version)
-            .select_from(AnalysisModel)
-            .join(AIModelModel, AIModelModel.id == AnalysisModel.ai_model_id)
-            .join(PromptTemplateModel, PromptTemplateModel.id == AnalysisModel.prompt_template_id)
-            .where(AnalysisModel.id == analysis.id)
-        )
-        config = ai_prompt_row.first()
-        provider = str(config[0]) if config is not None else "unknown"
-        model_id = str(config[1]) if config is not None else "unknown"
-        prompt_version = str(config[2]) if config is not None else "unknown"
-
+        # ── 3. Não existe: criar via UPSERT seguro ───────────────────────────
         candidate_id = await self._repository.get_candidate_id_from_analysis(analysis.id)
         if candidate_id is None:
             raise RuntimeError("Candidate not found for analysis when ensuring profile analysis")
@@ -1313,7 +1356,7 @@ class AnalysisService:
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
         )
-        return await self._repository.save_candidate_profile_analysis(profile)
+        return await self._repository.upsert_candidate_profile_analysis(profile)
 
     async def _ensure_job_profile_analysis(
         self,

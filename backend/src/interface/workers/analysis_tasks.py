@@ -1,10 +1,12 @@
 import asyncio
+import random
 import re
 import socket
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import httpx
 import sqlalchemy as sa
 import structlog
 
@@ -30,6 +32,15 @@ PROMPT_SUSPICIOUS_PATTERNS = (
     r"(?i)system\s*prompt",
     r"(?i)<script",
 )
+MAX_ANALYSIS_RETRIES = 4
+RETRY_BACKOFF_SCHEDULE_SECONDS = {
+    1: 15,
+    2: 45,
+    3: 120,
+    4: 300,
+}
+RETRY_JITTER_MAX_SECONDS = 5
+TEMPORARY_RETRY_MESSAGE = "Alta demanda no provedor IA. Tentando novamente automaticamente."
 
 
 @dataclass(slots=True)
@@ -46,6 +57,16 @@ class AnalysisFailureDetails:
     user_prompt_chars: int | None = None
     prompt_chars_total: int | None = None
     prompt_version_used: str | None = None
+    provider: str | None = None
+    model_id: str | None = None
+
+
+@dataclass(slots=True)
+class AnalysisErrorClassification:
+    provider_error_type: str
+    is_temporary: bool
+    status_code: int | None = None
+    retry_after_seconds: float | None = None
 
 
 class AnalysisExecutionError(RuntimeError):
@@ -63,6 +84,165 @@ class AnalysisExecutionError(RuntimeError):
         finish_reason = (self.details.finish_reason or "").upper()
         message = str(self).lower()
         return finish_reason == "MAX_TOKENS" or "truncated" in message
+
+
+def _iter_exception_chain(exc: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    current: BaseException | None = exc
+    seen: set[int] = set()
+
+    while current is not None and id(current) not in seen:
+        chain.append(current)
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+
+    return chain
+
+
+def _extract_retry_after_from_http_error(error: httpx.HTTPStatusError) -> float | None:
+    retry_after = error.response.headers.get("retry-after")
+    if retry_after:
+        try:
+            return max(0.0, float(retry_after))
+        except ValueError:
+            pass
+
+    match = re.search(r"retry(?:_after_seconds| in)\s*=?\s*([0-9]+(?:\.[0-9]+)?)", str(error), re.IGNORECASE)
+    if match:
+        try:
+            return max(0.0, float(match.group(1)))
+        except ValueError:
+            return None
+
+    return None
+
+
+def _classify_analysis_exception(exc: Exception) -> AnalysisErrorClassification:
+    if isinstance(exc, AnalysisExecutionError) and exc.is_non_retryable:
+        return AnalysisErrorClassification(
+            provider_error_type="payload_invalid",
+            is_temporary=False,
+        )
+
+    for current in _iter_exception_chain(exc):
+        if isinstance(current, httpx.HTTPStatusError):
+            status_code = int(current.response.status_code)
+            retry_after_seconds = _extract_retry_after_from_http_error(current)
+
+            if status_code == 429:
+                return AnalysisErrorClassification(
+                    provider_error_type="rate_limited",
+                    is_temporary=True,
+                    status_code=status_code,
+                    retry_after_seconds=retry_after_seconds,
+                )
+            if status_code in {500, 502, 503, 504}:
+                return AnalysisErrorClassification(
+                    provider_error_type="provider_unavailable",
+                    is_temporary=True,
+                    status_code=status_code,
+                )
+            if status_code == 400:
+                return AnalysisErrorClassification(
+                    provider_error_type="bad_request",
+                    is_temporary=False,
+                    status_code=status_code,
+                )
+            if status_code == 401:
+                return AnalysisErrorClassification(
+                    provider_error_type="unauthorized",
+                    is_temporary=False,
+                    status_code=status_code,
+                )
+            if status_code == 403:
+                return AnalysisErrorClassification(
+                    provider_error_type="forbidden",
+                    is_temporary=False,
+                    status_code=status_code,
+                )
+            if status_code == 404:
+                return AnalysisErrorClassification(
+                    provider_error_type="not_found",
+                    is_temporary=False,
+                    status_code=status_code,
+                )
+            return AnalysisErrorClassification(
+                provider_error_type="provider_http_error",
+                is_temporary=False,
+                status_code=status_code,
+            )
+
+        if isinstance(current, (asyncio.TimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout)):
+            return AnalysisErrorClassification(
+                provider_error_type="timeout",
+                is_temporary=True,
+            )
+
+        if isinstance(current, httpx.ConnectError):
+            return AnalysisErrorClassification(
+                provider_error_type="connection_error",
+                is_temporary=True,
+            )
+
+    message = str(exc).lower()
+    payload_error_markers = (
+        "failed to parse ai response",
+        "invalid json body",
+        "response is too large",
+        "returned no candidates",
+        "without content parts",
+        "missing required fields",
+        "payload invalid",
+    )
+    if any(marker in message for marker in payload_error_markers):
+        return AnalysisErrorClassification(
+            provider_error_type="payload_invalid",
+            is_temporary=False,
+        )
+
+    if "timed out" in message or "timeout" in message:
+        return AnalysisErrorClassification(
+            provider_error_type="timeout",
+            is_temporary=True,
+        )
+
+    return AnalysisErrorClassification(
+        provider_error_type="unexpected_error",
+        is_temporary=False,
+    )
+
+
+def _build_retry_delay_seconds(
+    retry_count: int,
+    *,
+    retry_after_seconds: float | None = None,
+) -> int:
+    base_seconds = RETRY_BACKOFF_SCHEDULE_SECONDS.get(
+        retry_count,
+        RETRY_BACKOFF_SCHEDULE_SECONDS[MAX_ANALYSIS_RETRIES],
+    )
+    jitter_seconds = random.randint(0, RETRY_JITTER_MAX_SECONDS)
+    countdown_seconds = base_seconds + jitter_seconds
+
+    if retry_after_seconds is not None:
+        countdown_seconds = max(countdown_seconds, int(retry_after_seconds + 0.999))
+
+    return countdown_seconds
+
+
+def _build_final_failure_reason(
+    *,
+    classification: AnalysisErrorClassification,
+    error: str,
+) -> str:
+    if classification.is_temporary:
+        return (
+            "Alta demanda no provedor IA após múltiplas tentativas. "
+            f"Detalhe técnico: {error[:700]}"
+        )
+    if classification.provider_error_type == "payload_invalid":
+        return f"Payload inválido retornado pelo provedor IA. {error[:700]}"
+    return error[:1000]
 
 
 def _normalize_provider(provider: str) -> str:
@@ -359,7 +539,7 @@ def _normalize_real_ai_result(
 @celery_app.task(
     bind=True,
     name="src.interface.workers.analysis_tasks.process_analysis",
-    max_retries=3,
+    max_retries=MAX_ANALYSIS_RETRIES,
     soft_time_limit=120,
     time_limit=180,
 )
@@ -383,18 +563,23 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
 
     except Exception as exc:
         error_str = str(exc)
-        is_quota_exceeded = "status_code=429" in error_str
         is_not_found = "not_found" in error_str.lower() or "disappeared" in error_str.lower()
         failure_details = _extract_failure_details(exc)
+        classification = _classify_analysis_exception(exc)
+        attempt = self.request.retries + 1
 
         logger.exception(
             "analysis.task_failed",
             analysis_id=analysis_id,
             task_id=task_id,
             retries=self.request.retries,
+            attempt=attempt,
             error=error_str,
-            is_quota_exceeded=is_quota_exceeded,
             is_not_found=is_not_found,
+            provider=failure_details.provider if failure_details else None,
+            model_id=failure_details.model_id if failure_details else None,
+            provider_error_type=classification.provider_error_type,
+            status_code=classification.status_code,
         )
 
         if is_not_found:
@@ -407,42 +592,20 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
             )
             return {"analysis_id": analysis_id, "status": "not_found"}
 
-        if is_quota_exceeded:
-            # 429 quota exceeded: mark as failed immediately with retry_after
-            logger.warning(
-                "analysis.quota_exceeded_final",
-                analysis_id=analysis_id,
-                task_id=task_id,
-            )
+        if not classification.is_temporary:
             _run_async(_mark_analysis_failed_async(
                 analysis_id=analysis_id,
                 task_id=task_id,
                 error=error_str,
                 retry_count=self.request.retries,
-                failure_details=failure_details,
-                expected_worker_claim_id=task_id,
-            ))
-            raise
-
-        if isinstance(exc, AnalysisExecutionError) and exc.is_non_retryable:
-            logger.warning(
-                "analysis.non_retryable_failure",
-                analysis_id=analysis_id,
-                task_id=task_id,
-                finish_reason=failure_details.finish_reason if failure_details else None,
-            )
-            _run_async(_mark_analysis_failed_async(
-                analysis_id=analysis_id,
-                task_id=task_id,
-                error=error_str,
-                retry_count=self.request.retries,
+                attempts=attempt,
+                classification=classification,
                 failure_details=failure_details,
                 expected_worker_claim_id=task_id,
             ))
             raise
 
         retry_count = self.request.retries + 1
-        countdown = min(300, (2**self.request.retries) * 30)
 
         if retry_count > self.max_retries:
             _run_async(_mark_analysis_failed_async(
@@ -450,10 +613,29 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
                 task_id=task_id,
                 error=error_str,
                 retry_count=self.request.retries,
+                attempts=attempt,
+                classification=classification,
                 failure_details=failure_details,
                 expected_worker_claim_id=task_id,
             ))
             raise
+
+        countdown = _build_retry_delay_seconds(
+            retry_count,
+            retry_after_seconds=classification.retry_after_seconds,
+        )
+
+        logger.warning(
+            "analysis.retry_scheduled",
+            analysis_id=analysis_id,
+            provider=failure_details.provider if failure_details else None,
+            model_id=failure_details.model_id if failure_details else None,
+            attempt=attempt,
+            retry_count=retry_count,
+            retry_in_seconds=countdown,
+            status_code=classification.status_code,
+            provider_error_type=classification.provider_error_type,
+        )
 
         _run_async(_mark_analysis_retry_scheduled_async(
             analysis_id=analysis_id,
@@ -461,6 +643,8 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
             error=error_str,
             retry_count=retry_count,
             countdown_seconds=countdown,
+            attempts=attempt,
+            classification=classification,
             failure_details=failure_details,
             expected_worker_claim_id=task_id,
         ))
@@ -519,7 +703,7 @@ async def _process_analysis_with_session(
         if current_status is None:
             logger.warning("analysis.not_found", analysis_id=str(analysis_uuid))
             return {"analysis_id": str(analysis_uuid), "status": "not_found"}
-        if current_status in {"completed", "failed", "cancelled"}:
+        if current_status in {"completed", "failed", "cancelled", "discarded"}:
             logger.info(
                 "analysis.skipped_terminal",
                 analysis_id=str(analysis_uuid),
@@ -614,7 +798,7 @@ async def _process_analysis_with_session(
         model_id=model_id,
         timeout_seconds=settings.AI_PROVIDER_TIMEOUT_SECONDS,
         max_tokens=prompt_max_tokens,
-        max_retries=settings.AI_MAX_RETRIES,
+        max_retries=MAX_ANALYSIS_RETRIES,
         job_id=str(job_id) if job_id else None,
     )
 
@@ -732,6 +916,7 @@ async def _claim_analysis_for_processing(
                 AnalysisModel.id == analysis_id,
                 sa.or_(
                     AnalysisModel.status == "pending",
+                    AnalysisModel.status == "retry_scheduled",
                     sa.and_(
                         AnalysisModel.status == "processing",
                         sa.or_(
@@ -757,6 +942,8 @@ async def _claim_analysis_for_processing(
                 failure_reason=None,
                 failed_at=None,
                 next_retry_at=None,
+                provider_error_type=None,
+                provider_status_code=None,
                 updated_at=now,
             )
         )
@@ -860,7 +1047,7 @@ async def _run_real_ai_analysis(
         model_id=model_id,
         timeout_seconds=settings.AI_PROVIDER_TIMEOUT_SECONDS,
         max_tokens=ai_request.max_tokens,
-        max_retries=settings.AI_MAX_RETRIES,
+        max_retries=MAX_ANALYSIS_RETRIES,
         queue_name=queue_name,
     )
 
@@ -879,6 +1066,8 @@ async def _run_real_ai_analysis(
                 user_prompt_chars=len(user_prompt),
                 prompt_chars_total=len(PROMPT_INSTRUCTION) + len(user_prompt),
                 prompt_version_used=prompt_version_used,
+                provider=provider,
+                model_id=model_id,
             ),
         ) from exc
     except Exception as exc:
@@ -895,6 +1084,8 @@ async def _run_real_ai_analysis(
                 user_prompt_chars=len(user_prompt),
                 prompt_chars_total=len(PROMPT_INSTRUCTION) + len(user_prompt),
                 prompt_version_used=prompt_version_used,
+                provider=provider,
+                model_id=model_id,
             ),
         ) from exc
 
@@ -922,10 +1113,33 @@ async def _run_real_ai_analysis(
                 user_prompt_chars=len(user_prompt),
                 prompt_chars_total=len(PROMPT_INSTRUCTION) + len(user_prompt),
                 prompt_version_used=prompt_version_used,
+                provider=provider,
+                model_id=model_id,
             ),
         ) from exc
 
-    _validate_result_fields(result_fields)
+    try:
+        _validate_result_fields(result_fields)
+    except Exception as exc:
+        raise AnalysisExecutionError(
+            str(exc),
+            details=AnalysisFailureDetails(
+                finish_reason=ai_response.finish_reason,
+                raw_llm_response=ai_response.content,
+                input_tokens=ai_response.input_tokens,
+                output_tokens=ai_response.output_tokens,
+                cache_read_tokens=ai_response.cache_read_tokens,
+                cache_write_tokens=ai_response.cache_write_tokens,
+                processing_time_ms=ai_response.processing_time_ms,
+                max_tokens_used=ai_request.max_tokens,
+                system_prompt_chars=len(PROMPT_INSTRUCTION),
+                user_prompt_chars=len(user_prompt),
+                prompt_chars_total=len(PROMPT_INSTRUCTION) + len(user_prompt),
+                prompt_version_used=prompt_version_used,
+                provider=provider,
+                model_id=model_id,
+            ),
+        ) from exc
 
     return (
         result_fields,
@@ -1073,6 +1287,9 @@ async def _persist_completed_analysis(
         analysis.failure_reason = None
         analysis.failed_at = None
         analysis.next_retry_at = None
+        analysis.provider_error_type = None
+        analysis.provider_status_code = None
+        analysis.attempts = 0
         analysis.worker_claim_id = None
         analysis.claimed_at = None
         analysis.stale_at = None
@@ -1089,6 +1306,8 @@ async def _mark_analysis_retry_scheduled(
     error: str,
     retry_count: int,
     countdown_seconds: int,
+    attempts: int,
+    classification: AnalysisErrorClassification,
     failure_details: AnalysisFailureDetails | None = None,
     expected_worker_claim_id: str | None = None,
     sessionmaker=None,
@@ -1125,12 +1344,16 @@ async def _mark_analysis_retry_scheduled(
                 failure_details=failure_details,
             )
 
-            analysis.status = "pending"
+            analysis.status = "retry_scheduled"
             analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
             analysis.retry_count = retry_count
-            analysis.failure_reason = error[:1000]
+            analysis.attempts = attempts
+            analysis.failure_reason = TEMPORARY_RETRY_MESSAGE
             analysis.failed_at = None
+            analysis.started_at = None
             analysis.next_retry_at = now + timedelta(seconds=countdown_seconds)
+            analysis.provider_error_type = classification.provider_error_type
+            analysis.provider_status_code = classification.status_code
             analysis.worker_claim_id = None
             analysis.claimed_at = None
             analysis.stale_at = None
@@ -1155,6 +1378,8 @@ async def _mark_analysis_failed(
     task_id: str | None,
     error: str,
     retry_count: int,
+    attempts: int,
+    classification: AnalysisErrorClassification,
     failure_details: AnalysisFailureDetails | None = None,
     expected_worker_claim_id: str | None = None,
     sessionmaker=None,
@@ -1195,19 +1420,15 @@ async def _mark_analysis_failed(
             analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
             analysis.queue_name = ANALYSIS_QUEUE
             analysis.retry_count = retry_count
-
-            # Use friendly message for quota errors, full error for others
-            if "status_code=429" in error:
-                analysis.failure_reason = "Limite de uso da IA atingido. " + error[:500]
-            else:
-                analysis.failure_reason = error[:1000]
-
+            analysis.attempts = attempts
+            analysis.failure_reason = _build_final_failure_reason(
+                classification=classification,
+                error=error,
+            )
             analysis.failed_at = now
-            cooldown_seconds = _extract_rate_limit_retry_after_seconds(error)
-            if cooldown_seconds is not None:
-                analysis.next_retry_at = now + timedelta(seconds=cooldown_seconds)
-            else:
-                analysis.next_retry_at = None
+            analysis.next_retry_at = None
+            analysis.provider_error_type = classification.provider_error_type
+            analysis.provider_status_code = classification.status_code
             analysis.worker_claim_id = None
             analysis.claimed_at = None
             analysis.stale_at = None
@@ -1220,6 +1441,9 @@ async def _mark_analysis_failed(
                 task_id=str(task_id) if task_id is not None else None,
                 queue=ANALYSIS_QUEUE,
                 status="failed",
+                provider_error_type=classification.provider_error_type,
+                status_code=classification.status_code,
+                attempts=attempts,
             )
             return True
     except (RuntimeError, sa.exc.SQLAlchemyError):
@@ -1309,6 +1533,8 @@ async def _mark_analysis_retry_scheduled_async(
     error: str,
     retry_count: int,
     countdown_seconds: int,
+    attempts: int,
+    classification: AnalysisErrorClassification,
     failure_details: AnalysisFailureDetails | None = None,
     expected_worker_claim_id: str | None = None,
 ) -> None:
@@ -1323,6 +1549,8 @@ async def _mark_analysis_retry_scheduled_async(
             error=error,
             retry_count=retry_count,
             countdown_seconds=countdown_seconds,
+            attempts=attempts,
+            classification=classification,
             failure_details=failure_details,
             expected_worker_claim_id=expected_worker_claim_id,
             sessionmaker=celery_sessionmaker,
@@ -1337,6 +1565,8 @@ async def _mark_analysis_failed_async(
     task_id: str | None,
     error: str,
     retry_count: int,
+    attempts: int,
+    classification: AnalysisErrorClassification,
     failure_details: AnalysisFailureDetails | None = None,
     expected_worker_claim_id: str | None = None,
 ) -> None:
@@ -1350,6 +1580,8 @@ async def _mark_analysis_failed_async(
             task_id=task_id,
             error=error,
             retry_count=retry_count,
+            attempts=attempts,
+            classification=classification,
             failure_details=failure_details,
             expected_worker_claim_id=expected_worker_claim_id,
             sessionmaker=celery_sessionmaker,

@@ -1,8 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Modal } from "../../components/common/Modal";
-import { StatusPill } from "../../components/common/StatusPill";
-import { Badge } from "../../components/ui/badge";
 import { candidatesService } from "../../services/candidatesService";
 import { resumeService } from "../../services/resumeService";
 import { formatErrorDetails, handleApiError } from "../../shared/utils/errorHandler";
@@ -13,6 +11,7 @@ import { usePipeline } from "./PipelineContext";
 import type { Job } from "../../types/domain";
 import { formatJobStatus, formatSeniority, jobStatusTone } from "../../utils/jobFormatters";
 import { isPipelineOperationalJob } from "../../utils/jobStatusRules";
+import { toast } from "../../shared/utils/toast";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,7 +47,14 @@ export function NewCandidateModal({
   onClose,
   onCreated,
 }: NewCandidateModalProps) {
-  const { jobs, notifyCandidatesChanged, invalidateJobState } = usePipeline();
+  const {
+    jobs,
+    jobsError,
+    jobsLoading,
+    loadJobs,
+    notifyCandidatesChanged,
+    invalidateBoard,
+  } = usePipeline();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -61,6 +67,7 @@ export function NewCandidateModal({
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<NewCandidateFormErrors>({});
   const [duplicate, setDuplicate] = useState<{ id: string; full_name: string } | null>(null);
+  const [keepOpen, setKeepOpen] = useState(false);
 
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? null,
@@ -72,9 +79,11 @@ export function NewCandidateModal({
   );
 
   const selectedJobCanReceiveCandidates = canLinkToJob(selectedJob);
+  const uploadStatusText = resumeFile
+    ? `Currículo selecionado: ${resumeFile.name}`
+    : "Você pode anexar o currículo agora ou depois no drawer do candidato.";
 
-  useEffect(() => {
-    if (!isOpen) return;
+  function resetForm() {
     setFullName("");
     setEmail("");
     setPhone("");
@@ -87,7 +96,17 @@ export function NewCandidateModal({
     setLoading(false);
     setErrors({});
     setDuplicate(null);
+  }
+
+  useEffect(() => {
+    if (!isOpen) return;
+    resetForm();
   }, [defaultJobId, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || jobsLoading || jobsError || jobs.length > 0) return;
+    void loadJobs();
+  }, [isOpen, jobs.length, jobsError, jobsLoading, loadJobs]);
 
   if (!isOpen) return null;
 
@@ -195,6 +214,7 @@ export function NewCandidateModal({
 
       notifyCandidatesChanged();
 
+      let linkedToJob = false;
       // Vínculo com vaga (apenas se solicitado explicitamente)
       if (addToJob && selectedJob && selectedJobCanReceiveCandidates) {
         try {
@@ -202,26 +222,30 @@ export function NewCandidateModal({
             job_id: selectedJob.id,
             initial_stage: "entry",
           });
-          await invalidateJobState(selectedJob.id);
+          await invalidateBoard(selectedJob.id, true);
+          linkedToJob = true;
         } catch (err: unknown) {
-          setErrors({
-            form: toFriendlyText(
-              err,
-              "Candidato criado, mas falhou ao vinculá-lo à vaga selecionada.",
-            ),
-          });
-          setLoading(false);
-          return;
+          toast.error("Candidato criado, mas falhou ao vinculá-lo à vaga selecionada.");
         }
       }
 
-      await onCreated(candidate.id);
       feedback.createCandidate.success(
-        addToJob && selectedJob
+        linkedToJob && selectedJob
           ? `Candidato adicionado à vaga ${selectedJob.title}`
           : "Candidato cadastrado com sucesso (Aguardando vaga)",
       );
-      onClose();
+
+      try {
+        await onCreated(candidate.id);
+      } catch (err: unknown) {
+        console.error("Failed in onCreated", err);
+      }
+
+      if (keepOpen) {
+        resetForm();
+      } else {
+        onClose();
+      }
     } catch (err: unknown) {
       if (err instanceof HttpError) {
         if (err.status === 409) {
@@ -251,15 +275,11 @@ export function NewCandidateModal({
       onClose={onClose}
       contentClassName="sm:max-w-[720px]"
     >
-      <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-5 p-6">
+      <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-5 p-6 max-h-[70vh] overflow-y-auto">
         <div className="space-y-1">
           <p className="text-sm text-[hsl(var(--text-muted))]">
-            Preencha os dados do candidato. O cadastro inicial não cria vínculo automático com vagas.
+            Foque no cadastro inicial. O vínculo com vaga e a análise IA podem continuar depois, no drawer do candidato.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="neutral">Cadastro isolado</Badge>
-            <Badge variant="outline">Sem IA automática</Badge>
-          </div>
         </div>
 
         {!selectedJobId && (
@@ -376,7 +396,7 @@ export function NewCandidateModal({
           </label>
 
           {/* Currículo */}
-          <label className="flex flex-col gap-1.5 md:col-span-2">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <span className="text-sm font-medium text-[hsl(var(--text))]">Currículo / Anexo</span>
             <input
               type="file"
@@ -384,10 +404,18 @@ export function NewCandidateModal({
               onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
               className="w-full text-sm text-[hsl(var(--text))] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[hsl(var(--primary))] file:text-white hover:file:bg-[hsl(var(--primary))]/90"
             />
-            <p className="text-xs text-[hsl(var(--text-muted))]">
-              O upload do currículo não disparará análise IA automaticamente.
-            </p>
-          </label>
+            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                Status do currículo
+              </p>
+              <p className="mt-1 text-sm text-[hsl(var(--text))]">
+                {resumeFile ? "Currículo pronto para envio" : "Currículo opcional neste momento"}
+              </p>
+              <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                {uploadStatusText}
+              </p>
+            </div>
+          </div>
 
           {/* Observações Internas */}
           <label className="flex flex-col gap-1.5 md:col-span-2">
@@ -449,6 +477,18 @@ export function NewCandidateModal({
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-2 pt-1">
+          <div className="flex items-center gap-2 mr-auto">
+            <input
+              type="checkbox"
+              id="keepOpen"
+              checked={keepOpen}
+              onChange={(e) => setKeepOpen(e.target.checked)}
+              className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+            />
+            <label htmlFor="keepOpen" className="text-sm font-medium text-[hsl(var(--text-muted))]">
+              Cadastrar outro
+            </label>
+          </div>
           <button
             type="button"
             onClick={onClose}

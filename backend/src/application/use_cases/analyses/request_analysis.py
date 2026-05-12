@@ -12,7 +12,6 @@ Fluxo completo de requisição de análise:
 """
 
 import structlog
-from datetime import UTC, datetime
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand, RequestAnalysisResult
 from src.domain.exceptions import NotFoundException, ValidationException
@@ -69,34 +68,7 @@ class RequestAnalysisUseCase:
                 "Currículo ainda em processamento. Faça upload do PDF e aguarde extração antes de solicitar análise."
             )
 
-        # 2. Evita retry imediato após rate limit (429)
-        latest_for_scope = await self._analysis_repo.find_latest_for_version(
-            resume_version_id=command.resume_version_id,
-            job_id=command.job_id,
-        )
-        if (
-            latest_for_scope is not None
-            and latest_for_scope.status == "failed"
-            and latest_for_scope.next_retry_at is not None
-            and latest_for_scope.next_retry_at > datetime.now(UTC)
-            and "status_code=429" in (latest_for_scope.failure_reason or "")
-            and not command.force_reanalyze
-        ):
-            wait_seconds = int(
-                (latest_for_scope.next_retry_at - datetime.now(UTC)).total_seconds()
-            )
-            logger.warning(
-                "analysis.skipped_due_to_rate_limit",
-                analysis_id=str(latest_for_scope.id),
-                resume_version_id=str(command.resume_version_id),
-                job_id=str(command.job_id),
-                retry_after_seconds=max(wait_seconds, 1),
-            )
-            raise ValidationException(
-                "Análise bloqueada temporariamente por limite da IA. Aguarde alguns minutos antes de tentar novamente."
-            )
-
-        # 3. Busca análise em andamento para este resume_version + job (se houver)
+        # 2. Busca análise em andamento para este resume_version + job (se houver)
         existing = await self._analysis_repo.find_active_for_version(
             resume_version_id=command.resume_version_id,
             job_id=command.job_id,
@@ -135,7 +107,7 @@ class RequestAnalysisUseCase:
             if not allowed:
                 raise ValidationException(reason)
 
-        # 4. Reutiliza análise concluída para o mesmo resume_version + vaga (cache)
+        # 3. Reutiliza análise concluída para o mesmo resume_version + vaga (cache)
         latest_completed = await self._analysis_repo.find_latest_completed_for_version(
             resume_version_id=command.resume_version_id,
             job_id=command.job_id,
@@ -169,14 +141,14 @@ class RequestAnalysisUseCase:
             job_id=str(command.job_id),
         )
 
-        # 5. Busca configurações ativas de IA
+        # 4. Busca configurações ativas de IA
         active_model = await self._analysis_repo.find_preferred_ai_model()
         if active_model is None:
             raise ValidationException("Nenhum modelo de IA ativo configurado")
 
         active_prompt = await self._analysis_repo.find_preferred_prompt_template("full_analysis")
 
-        # 6. Gera chave de idempotência
+        # 5. Gera chave de idempotência
         idempotency_key = AnalysisVersioningService.build_idempotency_key(
             resume_version_id=command.resume_version_id,
             prompt_template_id=active_prompt.id,
@@ -187,7 +159,7 @@ class RequestAnalysisUseCase:
             import time
             idempotency_key += f":force:{int(time.time())}"  # força unicidade na re-análise
 
-        # 7. Cria registro de análise
+        # 6. Cria registro de análise
         from src.infrastructure.database.models.analysis_model import AnalysisModel
 
         analysis = AnalysisModel(

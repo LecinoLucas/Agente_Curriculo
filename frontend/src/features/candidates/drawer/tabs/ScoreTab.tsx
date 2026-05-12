@@ -6,6 +6,7 @@ import type {
   JobRankingEntry,
 } from "../../../../types/domain";
 import { Badge } from "../../../../components/ui/badge";
+import { Info } from "lucide-react";
 import { EmptyTab, Section, DecisionCard, MetaItem, BreakdownItem } from "../components/DrawerSectionHelpers";
 import { SkeletonRows } from "../../../../components/common/Skeleton";
 import { fmtScore, fmtPercentValue, scoreColorClass, getCompatibilityGuidance } from "../hooks/useCandidateDecision";
@@ -16,8 +17,8 @@ import { toast } from "../../../../shared/utils/toast";
 import { buildDealBreakerViolationDisplay, isDealBreakerReasonCode } from "../../../pipeline/dealBreakerDisplay";
 import { ScoreSummary } from "../score/ScoreSummary";
 import { deriveScoreSemantics } from "../../utils/scoreSemantics";
-import {
-  getExplainabilityDeltaLine,
+import { normalizeScorePercent } from "../../utils/scoreFormatting";
+import {  getExplainabilityDeltaLine,
   getExplainabilityFreshnessLine,
   getExplainabilityQuickLine,
   getTopExplainabilityInsights,
@@ -125,6 +126,7 @@ export function ScoreTab({
   // Use prop from parent (CandidateDrawer), only update locally for feedback
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(initialScoreExplanation);
   const [feedbackSaving, setFeedbackSaving] = useState<"liked" | "rejected" | "hired" | null>(null);
+  const [showConfidenceDetails, setShowConfidenceDetails] = useState(false);
   const rankingDetailsRef = useRef<HTMLElement | null>(null);
   const explainabilityRef = useRef<HTMLElement | null>(null);
   const rankingDetailsDisclosureRef = useRef<HTMLDetailsElement | null>(null);
@@ -227,11 +229,20 @@ export function ScoreTab({
     );
   }
 
+  const confidenceScoreValue = scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0;
+  const confidencePercent = normalizeScorePercent(confidenceScoreValue) ?? 0;
+  let confidenceMessage = "Currículo com boa confiança";
+  if (confidencePercent < 40) {
+    confidenceMessage = "Currículo com baixa confiança";
+  } else if (confidencePercent < 75) {
+    confidenceMessage = "Currículo com pouca confiança";
+  }
+
   return (
     <div className="flex flex-col gap-5 p-5">
       <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-          Semântica da aderência
+          Resumo operacional
         </p>
         <p className="mt-2 text-sm font-medium text-[hsl(var(--text))]">{semantics.contextLine}</p>
         {semantics.detailLine ? (
@@ -239,7 +250,7 @@ export function ScoreTab({
         ) : null}
       </div>
 
-      {rankingEntry?.score_breakdown || scoreExplanation ? (
+      {compatibilityScore !== null || rankingEntry?.score_breakdown || scoreExplanation ? (
         <ScoreSummary
           compatibilityScore={compatibilityScore}
           scoreBreakdown={rankingEntry?.score_breakdown ?? null}
@@ -248,49 +259,7 @@ export function ScoreTab({
         />
       ) : null}
 
-      <Section title="Indicadores da vaga ativa">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
-              Aderência à Vaga
-            </p>
-            <p className="mt-1 text-sm text-[hsl(var(--text))]" title={freshnessBadge.description}>
-              Este score representa a aderência do candidato à vaga com base na análise mais recente disponível.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={freshnessBadge.variant} title={freshnessBadge.description}>
-              {freshnessBadge.label}
-            </Badge>
-            {rankingComputedAt ? (
-              <span className="text-xs text-[hsl(var(--text-muted))]">
-                Atualizado {rankingRelativeTime}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <DecisionCard
-            label="Aderência à Vaga"
-            value={compatibilityGuidance ? compatibilityGuidance.title : fmtScore(compatibilityScore)}
-            description={compatibilityGuidance?.description ?? "Fonte oficial persistida em candidate_job_scores."}
-            valueClassName={compatibilityGuidance ? "text-[hsl(var(--text))]" : scoreColorClass(compatibilityScore)}
-          />
-          <DecisionCard
-            label="Aderência à Vaga"
-            value={rankingEntry ? `#${rankingEntry.rank} · ${fmtScore(rankingEntry.job_fit_score)}` : "—"}
-            description={
-              rankingEntry
-                ? `${freshnessBadge.label}. Posição atual do candidato no ranking desta vaga.`
-                : "Ainda não há posição persistida para este candidato nesta vaga."
-            }
-            valueClassName={rankingEntry ? scoreColorClass(rankingEntry.job_fit_score) : undefined}
-          />
-        </div>
-      </Section>
-
-      <Section title="Detalhamento do ranking">
-        <div ref={rankingDetailsRef} />
+      <Section title="Resumo da vaga ativa">
         {loading ? <SkeletonRows /> : null}
         {error ? (
           <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
@@ -302,9 +271,9 @@ export function ScoreTab({
           <div className="flex flex-col gap-4">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <MetaItem label="Posição" value={`#${rankingEntry.rank}`} />
-              <MetaItem label="Aderência à Vaga" value={fmtScore(rankingEntry.job_fit_score)} />
-              <MetaItem label="Atualização" value={freshnessLine} />
-              <MetaItem label="Atualizado em" value={formatOptionalDateTime(rankingComputedAt)} />
+              <MetaItem label="Aderência" value={fmtScore(rankingEntry.job_fit_score)} />
+              <MetaItem label="Atualização" value={freshnessBadge.label} />
+              <MetaItem label="Recomendação" value={scoreExplanation?.recommendation || "—"} />
             </div>
 
             {dealBreakerDetails.length > 0 ? (
@@ -377,42 +346,6 @@ export function ScoreTab({
               </p>
             ) : null}
 
-            <details
-              ref={rankingDetailsDisclosureRef}
-              className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3"
-            >
-              <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
-                Ver detalhes da análise
-              </summary>
-              <div className="mt-4 flex flex-col gap-4">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <MetaItem label="Etapa no ranking" value={rankingEntry.stage || "—"} />
-                  <MetaItem label="Status na Vaga" value={rankingEntry.pipeline_status || "—"} />
-                  <MetaItem
-                    label="Análise de origem"
-                    value={rankingEntry.source_analysis_created_at ? formatOptionalDateTime(rankingEntry.source_analysis_created_at) : "—"}
-                  />
-                  <MetaItem label="Versão do ranking" value={rankingVersion || "—"} />
-                  <MetaItem label="Modelo de score" value={rankingEntry.score_model_version || "—"} />
-                  <MetaItem label="Atualização do ranking" value={freshnessBadge.label} />
-                </div>
-
-                {rankingEntry.score_breakdown ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <BreakdownItem label="Skills" value={rankingEntry.score_breakdown.skill_match_score} />
-                    <BreakdownItem label="Experiência" value={rankingEntry.score_breakdown.experience_match_score} />
-                    <BreakdownItem label="Senioridade" value={rankingEntry.score_breakdown.seniority_match_score} />
-                    <BreakdownItem label="Educação" value={rankingEntry.score_breakdown.education_score} />
-                    <BreakdownItem
-                      label="Confiança dos dados"
-                      value={rankingEntry.score_breakdown.confidence_score}
-                    />
-                    <BreakdownItem label="Penalidade" value={rankingEntry.score_breakdown.penalty_score} />
-                  </div>
-                ) : null}
-              </div>
-            </details>
-
             {!hasRankingDetails ? (
               <p className="text-sm text-[hsl(var(--text-muted))]">
                 O detalhamento do ranking ainda não está disponível neste contexto.
@@ -420,19 +353,11 @@ export function ScoreTab({
             ) : null}
           </div>
         ) : null}
-
-        {!loading && !error && !rankingEntry ? (
-          <EmptyTab
-            title="O detalhamento do ranking ainda não está disponível neste contexto."
-            description="A vaga ativa ainda não tem uma entrada persistida de ranking para este candidato."
-            compact
-          />
-        ) : null}
       </Section>
 
-      <Section title="Por que esta aderência?">
-        <div ref={explainabilityRef} />
-        {scoreExplanation ? (
+      {scoreExplanation ? (
+        <Section title="Leitura da análise">
+          <div ref={explainabilityRef} />
           <div className="flex flex-col gap-4">
             <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -459,7 +384,7 @@ export function ScoreTab({
             {explainabilityInsights.length > 0 ? (
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                  Principais fatores
+                  Principais sinais
                 </p>
                 <div className="grid gap-2 md:grid-cols-3">
                   {explainabilityInsights.map((insight) => (
@@ -483,89 +408,143 @@ export function ScoreTab({
                 </div>
               </div>
             ) : null}
+          </div>
+        </Section>
+      ) : null}
 
-            {canSendMatchingFeedback ? (
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                      Feedback humano
-                    </p>
-                    <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-                      Registra se o matching ajudou ou não na decisão.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleMatchingFeedback("liked")}
-                      disabled={feedbackSaving !== null}
-                      className={[
-                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
-                        scoreExplanation.feedback?.liked
-                          ? "border-[hsl(var(--success))]/30 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]"
-                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
-                        feedbackSaving === "liked" ? "opacity-70" : "",
-                      ].join(" ")}
-                    >
-                      {feedbackSaving === "liked" ? "Salvando…" : "👍 Útil"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleMatchingFeedback("rejected")}
-                      disabled={feedbackSaving !== null}
-                      className={[
-                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
-                        scoreExplanation.feedback?.rejected
-                          ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]"
-                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
-                        feedbackSaving === "rejected" ? "opacity-70" : "",
-                      ].join(" ")}
-                    >
-                      {feedbackSaving === "rejected" ? "Salvando…" : "👎 Não ajudou"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleMatchingFeedback("hired")}
-                      disabled={feedbackSaving !== null}
-                      className={[
-                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
-                        scoreExplanation.feedback?.hired
-                          ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]"
-                          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
-                        feedbackSaving === "hired" ? "opacity-70" : "",
-                      ].join(" ")}
-                    >
-                      {feedbackSaving === "hired" ? "Salvando…" : "Contratado"}
-                    </button>
-                  </div>
-                </div>
+      {!scoreExplanation ? (
+        <EmptyTab
+          title="Explicação ainda não gerada para a vaga ativa"
+          description="O score contextual desta vaga ainda não possui explicação detalhada disponível."
+          compact
+        />
+      ) : null}
 
-                {scoreExplanation.feedback?.feedback_at ? (
-                  <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
-                    Último feedback registrado em {formatOptionalDateTime(scoreExplanation.feedback.feedback_at)}.
-                  </p>
-                ) : null}
+      {canSendMatchingFeedback && scoreExplanation ? (
+        <Section title="Feedback humano">
+          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  Feedback do recrutador
+                </p>
+                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                  Registra se o matching ajudou ou não na decisão.
+                </p>
               </div>
-            ) : null}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleMatchingFeedback("liked")}
+                  disabled={feedbackSaving !== null}
+                  className={[
+                    "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                    scoreExplanation.feedback?.liked
+                      ? "border-[hsl(var(--success))]/30 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]"
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                    feedbackSaving === "liked" ? "opacity-70" : "",
+                  ].join(" ")}
+                >
+                  {feedbackSaving === "liked" ? "Salvando…" : "👍 Útil"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleMatchingFeedback("rejected")}
+                  disabled={feedbackSaving !== null}
+                  className={[
+                    "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                    scoreExplanation.feedback?.rejected
+                      ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]"
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                    feedbackSaving === "rejected" ? "opacity-70" : "",
+                  ].join(" ")}
+                >
+                  {feedbackSaving === "rejected" ? "Salvando…" : "👎 Não ajudou"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleMatchingFeedback("hired")}
+                  disabled={feedbackSaving !== null}
+                  className={[
+                    "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                    scoreExplanation.feedback?.hired
+                      ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]"
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                    feedbackSaving === "hired" ? "opacity-70" : "",
+                  ].join(" ")}
+                >
+                  {feedbackSaving === "hired" ? "Salvando…" : "Contratado"}
+                </button>
+              </div>
+            </div>
 
-            <details
-              ref={explainabilityDisclosureRef}
-              className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3"
-            >
-              <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
-                Ver detalhes da análise
-              </summary>
-              <div className="mt-4 flex flex-col gap-4">
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <MetaItem label="Aderência à Vaga" value={fmtScore(scoreExplanation.job_fit_score)} />
-                  <MetaItem label="Recommendation" value={scoreExplanation.recommendation || "—"} />
-                  <MetaItem label="Motor usado" value={scoreExplanation.engine_used || "—"} />
-                  <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.data_confidence_score)} />
+            {scoreExplanation.feedback?.feedback_at ? (
+              <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
+                Último feedback registrado em {formatOptionalDateTime(scoreExplanation.feedback.feedback_at)}.
+              </p>
+            ) : null}
+          </div>
+        </Section>
+      ) : null}
+
+      <Section title="Detalhes técnicos da análise">
+        <div ref={rankingDetailsRef} />
+        <details
+          ref={rankingDetailsDisclosureRef}
+          className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3"
+        >
+          <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
+            Detalhes técnicos da análise
+          </summary>
+          <div className="mt-4 flex flex-col gap-4">
+            {rankingEntry ? (
+              <>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <MetaItem label="Etapa no ranking" value={rankingEntry.stage || "—"} />
+                  <MetaItem label="Status na vaga" value={rankingEntry.pipeline_status || "—"} />
+                  <MetaItem
+                    label="Análise de origem"
+                    value={rankingEntry.source_analysis_created_at ? formatOptionalDateTime(rankingEntry.source_analysis_created_at) : "—"}
+                  />
+                  <MetaItem label="Versão do ranking" value={rankingVersion || "—"} />
+                  <MetaItem label="Modelo de score" value={rankingEntry.score_model_version || "—"} />
+                  <MetaItem label="Atualizado em" value={formatOptionalDateTime(rankingComputedAt)} />
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 lg:col-span-2">
+                {rankingEntry.score_breakdown ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <BreakdownItem label="Skills" value={rankingEntry.score_breakdown.skill_match_score} />
+                    <BreakdownItem label="Experiência" value={rankingEntry.score_breakdown.experience_match_score} />
+                    <BreakdownItem label="Senioridade" value={rankingEntry.score_breakdown.seniority_match_score} />
+                    <BreakdownItem label="Educação" value={rankingEntry.score_breakdown.education_score} />
+                    <BreakdownItem label="Confiança dos dados" value={rankingEntry.score_breakdown.confidence_score} />
+                    <BreakdownItem label="Penalidade" value={rankingEntry.score_breakdown.penalty_score} />
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-sm text-[hsl(var(--text-muted))]">
+                O detalhamento técnico do ranking ainda não está disponível neste contexto.
+              </p>
+            )}
+
+            {scoreExplanation ? (
+              <details
+                ref={explainabilityDisclosureRef}
+                className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3"
+              >
+                <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
+                  Breakdown e evidências
+                </summary>
+                <div className="mt-4 flex flex-col gap-4">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetaItem label="Aderência à vaga" value={fmtScore(scoreExplanation.job_fit_score)} />
+                    <MetaItem label="Recommendation" value={scoreExplanation.recommendation || "—"} />
+                    <MetaItem label="Motor usado" value={scoreExplanation.engine_used || "—"} />
+                    <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.data_confidence_score)} />
+                  </div>
+
+                  <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
                       Breakdown do score
                     </p>
@@ -578,29 +557,23 @@ export function ScoreTab({
                     </div>
                   </div>
 
-                  <InsightListBlock
-                    title="Destaques"
-                    items={scoreExplanation.highlights}
-                    empty="Sem destaques relevantes."
-                  />
-                  <InsightListBlock
-                    title="Riscos"
-                    items={scoreExplanation.risks}
-                    empty="Sem riscos relevantes."
-                  />
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <InsightListBlock
+                      title="Destaques"
+                      items={scoreExplanation.highlights}
+                      empty="Sem destaques relevantes."
+                    />
+                    <InsightListBlock
+                      title="Riscos"
+                      items={scoreExplanation.risks}
+                      empty="Sem riscos relevantes."
+                    />
+                  </div>
                 </div>
-              </div>
-            </details>
+              </details>
+            ) : null}
           </div>
-        ) : null}
-
-        {!scoreExplanation ? (
-          <EmptyTab
-            title="Explicação ainda não gerada para a vaga ativa"
-            description="O score contextual desta vaga ainda não possui explicação detalhada disponível."
-            compact
-          />
-        ) : null}
+        </details>
       </Section>
     </div>
   );

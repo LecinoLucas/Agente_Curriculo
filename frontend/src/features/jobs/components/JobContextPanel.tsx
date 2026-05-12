@@ -46,22 +46,7 @@ interface JobContextPanelProps {
 }
 
 function formatJobArea(value: string | null | undefined) {
-  if (!value) return null;
-
-  const labels: Record<string, string> = {
-    technology: "Tecnologia",
-    data: "Dados",
-    administrative: "Administrativo",
-    finance: "Financeiro",
-    fiscal: "Fiscal",
-    accounting: "Contábil",
-    commercial: "Comercial",
-    operations: "Operacional",
-    hr: "RH",
-    leadership: "Liderança",
-  };
-
-  return labels[value] ?? value;
+  return value?.trim() || null;
 }
 
 function getAttractivenessLabel(snapshot: ReturnType<typeof getJobPipelineSnapshot>) {

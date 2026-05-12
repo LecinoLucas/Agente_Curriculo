@@ -28,6 +28,10 @@ class CandidateResponse(BaseModel):
     created_by: UUID
     created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None = None
+    archived_by: UUID | None = None
+    archive_reason: str | None = None
+    archive_reason_note: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -122,6 +126,8 @@ class CandidateListSummaryResponse(BaseModel):
     cpf: str | None = None
     tags: list[str]
     created_at: datetime
+    archived_at: datetime | None = None
+    archive_reason: str | None = None
     resume_count: int
     linked_job_count: int = 0
     latest_job_id: UUID | None = None
@@ -170,3 +176,8 @@ class DeleteCandidateRequest(BaseModel):
     reason: str | None = None
     note: str | None = None
     confirmation: str | None = None
+
+
+class ArchiveCandidateRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=1000)

@@ -8,6 +8,23 @@ export type CandidateAnalysisSummary = {
   inProgress: boolean;
 };
 
+export type CandidateAnalysisUiStateValue =
+  | "no_resume"
+  | "waiting_job"
+  | "ready"
+  | "processing"
+  | "completed"
+  | "failed";
+
+export type CandidateAnalysisUiState = {
+  state: CandidateAnalysisUiStateValue;
+  title: string;
+  description: string;
+  primaryAction: string;
+  severity: "neutral" | "info" | "success" | "danger" | "warning";
+  inProgress: boolean;
+};
+
 export function getLatestAnalysisForActiveJob(
   latestAnalysis: CandidateLatestAnalysisOverview | null | undefined,
   activeJobId: string | null,
@@ -29,67 +46,128 @@ export function buildCandidateAnalysisSummary({
   analysisResult: AnalysisResult | null;
   pollingAnalysisId: string | null;
 }): CandidateAnalysisSummary {
-  const hasActiveJob = Boolean(activeJobId);
   const activeJobAnalysis = getLatestAnalysisForActiveJob(latestAnalysis, activeJobId);
-  const latestStatus = activeJobAnalysis?.status ?? null;
+  const uiState = getCandidateAnalysisUiState({
+    hasResume,
+    activeJobId,
+    analysisStatus: activeJobAnalysis?.status ?? null,
+    jobFitScore: analysisResult?.job_fit_score ?? null,
+    aiStatus: activeJobAnalysis?.status ?? null,
+    errorMessage: activeJobAnalysis?.failure_reason ?? null,
+    pollingAnalysisId,
+  });
 
-  if (!hasActiveJob) {
-    return {
-      label: "Aguardando vaga",
-      detail: "Vincule o candidato a uma vaga antes de iniciar a análise.",
-      tone: "neutral",
-      actionLabel: "Iniciar análise",
-      inProgress: false,
-    };
-  }
+  return {
+    label: uiState.title,
+    detail: uiState.description,
+    tone: uiState.severity,
+    actionLabel: uiState.primaryAction,
+    inProgress: uiState.inProgress,
+  };
+}
 
+export function getCandidateAnalysisUiState({
+  hasResume,
+  activeJobId,
+  analysisStatus,
+  jobFitScore,
+  aiStatus,
+  errorMessage,
+  pollingAnalysisId = null,
+}: {
+  hasResume: boolean;
+  activeJobId: string | null;
+  analysisStatus: CandidateLatestAnalysisOverview["status"] | null | undefined;
+  jobFitScore: number | null | undefined;
+  aiStatus: string | null | undefined;
+  errorMessage?: string | null;
+  pollingAnalysisId?: string | null;
+}): CandidateAnalysisUiState {
   if (!hasResume) {
     return {
-      label: "Sem currículo",
-      detail: "Envie ou atualize o currículo para iniciar a análise da vaga atual.",
-      tone: "warning",
-      actionLabel: "Iniciar análise",
+      state: "no_resume",
+      title: "Sem currículo",
+      description: "Adicione um currículo para iniciar a análise.",
+      primaryAction: "Adicionar currículo",
+      severity: "warning",
       inProgress: false,
     };
   }
 
-  if (pollingAnalysisId || latestStatus === "pending" || latestStatus === "processing") {
+  if (!activeJobId) {
     return {
-      label: "Em andamento",
-      detail: "A análise da vaga atual está em processamento neste momento.",
-      tone: "info",
-      actionLabel: "Análise em andamento",
+      state: "waiting_job",
+      title: "Aguardando vaga",
+      description: "Vincule o candidato a uma vaga para calcular aderência.",
+      primaryAction: "Vincular vaga",
+      severity: "neutral",
+      inProgress: false,
+    };
+  }
+
+  const normalizedStatus = analysisStatus ?? aiStatus ?? null;
+  const hasScore = jobFitScore !== null && jobFitScore !== undefined;
+
+  if (hasScore || normalizedStatus === "completed") {
+    if (!hasScore) {
+      return {
+        state: "processing",
+        title: "Atualizando aderência",
+        description: "Currículo analisado. Finalizando o cálculo da aderência da vaga.",
+        primaryAction: "Acompanhar análise",
+        severity: "info",
+        inProgress: true,
+      };
+    }
+
+    return {
+      state: "completed",
+      title: "Aderência pronta",
+      description: "A análise da vaga atual está pronta para consulta.",
+      primaryAction: "Ver score completo",
+      severity: "success",
+      inProgress: false,
+    };
+  }
+
+  if (
+    pollingAnalysisId ||
+    normalizedStatus === "pending" ||
+    normalizedStatus === "processing" ||
+    normalizedStatus === "retry_scheduled"
+  ) {
+    return {
+      state: "processing",
+      title: "Analisando com IA",
+      description:
+        normalizedStatus === "retry_scheduled"
+          ? "Alta demanda no provedor IA. Tentando novamente automaticamente."
+          : "Analisando currículo com IA...",
+      primaryAction: "Acompanhar análise",
+      severity: "info",
       inProgress: true,
     };
   }
 
-  if (latestStatus === "failed" || latestStatus === "cancelled") {
+  if (normalizedStatus === "failed" || normalizedStatus === "cancelled") {
     return {
-      label: "Falhou",
-      detail:
-        activeJobAnalysis?.failure_reason?.trim() ||
-        "A última análise não foi concluída. Revise o currículo e tente novamente.",
-      tone: "danger",
-      actionLabel: "Iniciar análise",
-      inProgress: false,
-    };
-  }
-
-  if (analysisResult) {
-    return {
-      label: "Concluída",
-      detail: "A análise da vaga atual está pronta para consulta no score e no resumo.",
-      tone: "success",
-      actionLabel: "Reanalisar",
+      state: "failed",
+      title: "Falha na análise",
+      description:
+        errorMessage?.trim() ||
+        "Não foi possível concluir a análise.",
+      primaryAction: "Tentar novamente",
+      severity: "danger",
       inProgress: false,
     };
   }
 
   return {
-    label: "Não iniciada",
-    detail: "Inicie a análise da vaga atual para liberar score e recomendação.",
-    tone: "warning",
-    actionLabel: "Iniciar análise",
+    state: "ready",
+    title: "Currículo recebido",
+    description: "Currículo recebido. Inicie a análise para calcular a aderência desta vaga.",
+    primaryAction: "Iniciar análise",
+    severity: "info",
     inProgress: false,
   };
 }

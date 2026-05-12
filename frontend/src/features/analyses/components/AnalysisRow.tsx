@@ -42,7 +42,9 @@ export function AnalysisRow({
   onDiscard,
 }: AnalysisRowProps) {
   const isFailed = item.status === "failed";
-  const isStuck = item.status === "pending" || item.status === "processing";
+  const isRetryScheduled = item.status === "retry_scheduled";
+  const isStuck =
+    item.status === "pending" || item.status === "processing" || isRetryScheduled;
   const isDiscarded = item.status === "discarded";
   const hasCandidate = Boolean(item.candidate_id);
   const actionItems = [
@@ -121,6 +123,11 @@ export function AnalysisRow({
       <td className="px-4 py-4">
         <div className="flex flex-col gap-1">
           <StatusBadge status={item.status} />
+          {isRetryScheduled ? (
+            <span className="max-w-[240px] text-xs text-[hsl(var(--text-muted))]">
+              Alta demanda no provedor IA. Tentando novamente automaticamente.
+            </span>
+          ) : null}
           {isFailed && item.failure_reason ? (
             <span className="max-w-[200px] truncate text-xs text-[hsl(var(--danger))]" title={item.failure_reason}>
               {item.failure_reason}

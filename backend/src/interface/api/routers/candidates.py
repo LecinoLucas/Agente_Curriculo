@@ -10,6 +10,7 @@ from src.application.services.candidate_service import (
     CandidateCriticalHistoryError,
     CandidateDeleteConfirmationError,
     CandidateDeleteReasonRequiredError,
+    CandidateArchiveReasonRequiredError,
     CandidateEmailConflictError,
     CandidateNotAllowedUserIdError,
     CandidateNotFoundError,
@@ -32,6 +33,7 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidateOverviewResponse,
     CandidateResponse,
     CreateCandidateRequest,
+    ArchiveCandidateRequest,
     DeleteCandidateRequest,
     UpdateCandidateRequest,
 )
@@ -100,6 +102,11 @@ def _handle_candidate_service_error(exc: Exception) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Digite EXCLUIR para confirmar a exclusão definitiva.",
         )
+    if isinstance(exc, CandidateArchiveReasonRequiredError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Informe o motivo do arquivamento.",
+        )
     if isinstance(exc, CandidateCriticalHistoryError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -133,9 +140,10 @@ async def list_candidates(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None, description="Busca por nome ou e-mail"),
+    archived: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[CandidateResponse]:
-    candidates, total_items = await _candidate_service(db).list(page, page_size, search)
+    candidates, total_items = await _candidate_service(db).list(page, page_size, search, archived)
 
     return PaginatedResponse[CandidateResponse](
         data=[CandidateResponse.model_validate(c) for c in candidates],
@@ -154,10 +162,11 @@ async def list_candidate_summaries(
     search: str | None = Query(default=None),
     has_resume: bool | None = Query(default=None),
     ai_status: list[str] | None = Query(default=None),
+    archived: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[CandidateListSummaryResponse]:
     items, total = await _candidate_service(db).list_summaries(
-        page, page_size, search, has_resume, ai_status
+        page, page_size, search, has_resume, ai_status, archived
     )
     return PaginatedResponse[CandidateListSummaryResponse](
         data=items,
@@ -215,6 +224,46 @@ async def update_candidate(
 ) -> CandidateResponse:
     try:
         candidate = await _candidate_service(db).update(candidate_id, body)
+        await db.commit()
+        await db.refresh(candidate)
+        return CandidateResponse.model_validate(candidate)
+    except Exception as exc:
+        await db.rollback()
+        _handle_candidate_service_error(exc)
+        raise
+
+
+@router.patch("/{candidate_id}/archive", response_model=CandidateResponse)
+async def archive_candidate(
+    candidate_id: UUID,
+    body: ArchiveCandidateRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateResponse:
+    try:
+        candidate = await _candidate_service(db).archive(
+            candidate_id,
+            actor=current_user,
+            reason=body.reason,
+            note=body.note,
+        )
+        await db.commit()
+        await db.refresh(candidate)
+        return CandidateResponse.model_validate(candidate)
+    except Exception as exc:
+        await db.rollback()
+        _handle_candidate_service_error(exc)
+        raise
+
+
+@router.patch("/{candidate_id}/restore", response_model=CandidateResponse)
+async def restore_candidate(
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateResponse:
+    try:
+        candidate = await _candidate_service(db).restore(candidate_id, actor=current_user)
         await db.commit()
         await db.refresh(candidate)
         return CandidateResponse.model_validate(candidate)

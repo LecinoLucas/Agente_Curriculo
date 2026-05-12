@@ -107,6 +107,7 @@ export function JobFormPage() {
     handleUpdateSkill,
     handleRemoveSkill,
     syncPendingSkills,
+    onSkillCreated,
   } = useJobSkills({
     currentJob,
     onRefreshQuality: refreshQuality,
@@ -129,20 +130,7 @@ export function JobFormPage() {
   const canManage = user?.role === "admin" || user?.role === "recruiter";
   const { alerts } = useJobConfigurationAlerts(form);
 
-  useEffect(() => {
-    if (!canManage) return;
 
-    let cancelled = false;
-    void skillEquivalencesService.list().then((items) => {
-      if (!cancelled) {
-        setAllSkills(items);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canManage]);
 
   useEffect(() => {
     if (!isEditing || !jobId) {
@@ -296,6 +284,16 @@ export function JobFormPage() {
     }
   }
 
+  async function handleTabClick(stepId: StepId) {
+    if (isEditing && jobId) {
+      try {
+        await persistJob({ silent: true });
+      } catch {
+        // Silent fail
+      }
+    }
+    setActiveStep(stepId);
+  }
 
   function renderStepContent() {
     if (pageLoading) {
@@ -330,10 +328,11 @@ export function JobFormPage() {
             availableSkills={availableSkills}
             skillSearch={skillSearch}
             onSearchChange={setSkillSearch}
-    savingSkillId={savingSkillId}
-    onAddSkill={handleAddSkill}
-    onUpdateSkill={handleUpdateSkill}
-    onRemoveSkill={handleRemoveSkill}
+            savingSkillId={savingSkillId}
+            onAddSkill={handleAddSkill}
+            onUpdateSkill={handleUpdateSkill}
+            onRemoveSkill={handleRemoveSkill}
+            onSkillCreated={onSkillCreated}
           />
         );
 
@@ -354,6 +353,7 @@ export function JobFormPage() {
             onUpdateSkill={handleUpdateSkill}
             onRemoveSkill={handleRemoveSkill}
             onAddBehavioralRequirement={addBehavioralRequirement}
+            onSkillCreated={onSkillCreated}
           />
         );
 
@@ -375,6 +375,7 @@ export function JobFormPage() {
               setDealBreakerDraft((current) => ({ ...current, ...updates }))
             }
             onAddDealBreaker={addDealBreaker}
+            onSkillCreated={onSkillCreated}
           />
         );
 
@@ -393,8 +394,8 @@ export function JobFormPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-6 pb-12">
-      <div className="sticky top-[72px] z-20 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/95 p-4 shadow-sm backdrop-blur">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 sm:px-6 py-6 pb-12">
+      <div className="sticky top-[20px] z-20 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/95 p-4 shadow-sm backdrop-blur mb-2">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-start gap-3">
             <Button type="button" variant="outline" onClick={() => navigate("/vagas")}>
@@ -432,47 +433,40 @@ export function JobFormPage() {
         <MessageList tone="danger" title="Problemas no formulário" items={formErrors} />
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
-          <section className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {STEPS.map((step, index) => {
-                const isActive = step.id === activeStep;
-                const isDone = index < currentStepIndex;
-                return (
-                  <button
-                    key={step.id}
-                    type="button"
-                    onClick={() => setActiveStep(step.id)}
-                    className={[
-                      "rounded-2xl border px-4 py-3 text-left transition",
-                      isActive
-                        ? "border-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]"
-                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary))]/35 hover:bg-[hsl(var(--surface-muted))]",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-start gap-3">
-                      {isDone ? (
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-[hsl(var(--success))]" />
-                      ) : isActive ? (
-                        <Circle className="mt-0.5 h-4 w-4 fill-[hsl(var(--primary))] text-[hsl(var(--primary))]" />
-                      ) : (
-                        <Circle className="mt-0.5 h-4 w-4 text-[hsl(var(--text-muted))]" />
-                      )}
-                      <div>
-                        <p className="text-sm font-semibold text-[hsl(var(--text))]">{step.label}</p>
-                        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{step.hint}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          <div className="flex border border-[hsl(var(--border))] bg-[hsl(var(--surface))] rounded-2xl overflow-x-auto shadow-sm">
+            {STEPS.map((step, index) => {
+              const isActive = step.id === activeStep;
+              const isDone = index < currentStepIndex;
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => void handleTabClick(step.id)}
+                  className={`flex flex-1 flex-col items-center gap-2 p-4 text-center border-b-2 transition-colors min-w-[120px] ${
+                    isActive
+                      ? "border-b-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]"
+                      : "border-b-transparent hover:bg-[hsl(var(--surface-muted))]"
+                  }`}
+                >
+                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold shrink-0 ${
+                    isDone ? "bg-[hsl(var(--success))] text-white" : isActive ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--text-muted))]"
+                  }`}>
+                    {isDone ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                  </span>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-sm font-medium ${isActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--text))]"}`}>{step.label}</span>
+                    <span className="text-[11px] text-[hsl(var(--text-muted))] hidden xl:block mt-0.5">{step.hint}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
           {renderStepContent()}
 
-          <div className="flex flex-col gap-3 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/95 p-5 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-[hsl(var(--text))]">{currentStep.label}</p>
               <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{currentStep.hint}</p>

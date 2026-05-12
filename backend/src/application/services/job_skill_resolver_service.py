@@ -71,7 +71,7 @@ class JobSkillResolverService:
         if self._catalog_loaded:
             return
 
-        for group in SkillEquivalenceService().list_groups(limit=500):
+        for group in SkillEquivalenceService.for_matching().list_groups(limit=500):
             canonical_name = group["canonical"]
             canonical_key = normalize_skill_text(canonical_name)
             canonical_skill = await self._ensure_active_skill(canonical_name, canonical_key)

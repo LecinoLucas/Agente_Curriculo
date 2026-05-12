@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.pipeline_service import (
     PipelineCandidateAlreadyActiveInAnotherJobError,
     PipelineService,
+    PipelineTransferBlockedAdvancedStageError,
 )
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
@@ -268,6 +269,49 @@ async def test_transfer_marks_source_terminal_and_destination_active(db_session:
     assert destination.link_status == "active"
     assert destination.pipeline_status == "active"
     assert destination.pipeline_stage == "entry"
+
+
+@pytest.mark.asyncio
+async def test_transfer_blocked_if_advanced_stage(db_session: AsyncSession) -> None:
+    user, candidate, source_job = await _seed_user_candidate_job(db_session)
+
+    destination_job = JobModel(
+        id=uuid4(),
+        title="New Job",
+        description="Desc",
+        status="published",
+        created_by=user.id,
+    )
+    db_session.add(destination_job)
+    await db_session.commit()
+
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+    await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=source_job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    # Move to advanced stage
+    await svc.move_candidate(
+        candidate_id=candidate.id,
+        body=MoveCandidateRequest(stage="hr_interview", job_id=source_job.id),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    # Attempt transfer
+    with pytest.raises(PipelineTransferBlockedAdvancedStageError):
+        await svc.transfer_candidate_job(
+            candidate_id=candidate.id,
+            body=TransferCandidateJobRequest(
+                from_job_id=source_job.id,
+                to_job_id=destination_job.id,
+                reason="reposicao",
+            ),
+            moved_by=user.id,
+        )
 
 
 @pytest.mark.asyncio

@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 
-export type VisualTheme = "theme-1" | "theme-2";
+export type VisualTheme = "theme-1" | "theme-2" | "theme-3";
 
 const VISUAL_THEME_KEY = "visual-theme";
 const VISUAL_THEME_EVENT = "resume_ai_visual_theme_changed";
 const DEFAULT_VISUAL_THEME: VisualTheme = "theme-1";
 
 function isVisualTheme(value: string | null): value is VisualTheme {
-  return value === "theme-1" || value === "theme-2";
+  return value === "theme-1" || value === "theme-2" || value === "theme-3";
 }
 
 function resolveInitialVisualTheme(): VisualTheme {

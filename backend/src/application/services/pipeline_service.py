@@ -37,6 +37,8 @@ from src.interface.api.schemas.pipeline_schemas import (
     UpdateCandidateStageResponse,
 )
 
+TRANSFER_ALLOWED_STAGES: list[str] = ["entry", "screening"]
+
 KANBAN_STAGES: list[str] = [
     "entry",
     "screening",
@@ -221,6 +223,10 @@ class PipelineDestinationJobUnavailableError(Exception):
 
 
 class PipelineTransferNotAllowedError(Exception):
+    pass
+
+
+class PipelineTransferBlockedAdvancedStageError(Exception):
     pass
 
 
@@ -518,6 +524,9 @@ class PipelineService:
             raise PipelineCandidateWithoutActiveJobError
         if source_entry.job_id != body.from_job_id:
             raise PipelineEntryNotFoundError
+
+        if source_entry.pipeline_stage not in TRANSFER_ALLOWED_STAGES:
+            raise PipelineTransferBlockedAdvancedStageError
 
         destination_active_entry = await self._repository.find_active_entry(candidate_id, body.to_job_id)
         if destination_active_entry is not None:

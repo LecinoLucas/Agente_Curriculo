@@ -365,7 +365,7 @@ function OtherCandidateRow({
 
   const isLinkedError = addError?.code === "CANDIDATE_LINKED";
 
-  const showOpenAction = isLinked && isLinkedError;
+  const showOpenAction = isLinked;
 
   return (
     <div className={`rounded-lg border p-3 transition ${
@@ -399,11 +399,13 @@ function OtherCandidateRow({
 
         <button
           onClick={onAdd}
-          disabled={isAdding || isAdded}
+          disabled={isAdding || isAdded || isLinked}
           className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition disabled:opacity-50 ${
             isAdded
               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              : isLinked
+                ? "border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))]/10 text-[hsl(var(--text-muted))]"
+                : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
           }`}
         >
           {isAdding ? "Adicionando…" : isAdded ? "✓ Adicionado" : "Adicionar"}
@@ -421,7 +423,7 @@ function OtherCandidateRow({
             title="Abrir candidato no workspace"
           >
             <ArrowRight className="h-3 w-3" />
-            Abrir
+            Ver candidato
           </button>
         </div>
       )}

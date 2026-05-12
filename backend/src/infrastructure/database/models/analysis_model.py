@@ -106,6 +106,7 @@ class AnalysisModel(Base):
         sa.Enum(
             "pending",
             "processing",
+            "retry_scheduled",
             "completed",
             "failed",
             "cancelled",
@@ -127,8 +128,11 @@ class AnalysisModel(Base):
     failed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     failure_reason: Mapped[str | None] = mapped_column(sa.Text)
     retry_count: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="0")
-    max_retries: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="3")
+    max_retries: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="4")
+    attempts: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="0")
     next_retry_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    provider_error_type: Mapped[str | None] = mapped_column(sa.String(50))
+    provider_status_code: Mapped[int | None] = mapped_column(sa.Integer)
     worker_claim_id: Mapped[str | None] = mapped_column(sa.String(255))
     claimed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     stale_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))

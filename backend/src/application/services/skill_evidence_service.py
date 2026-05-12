@@ -7,7 +7,7 @@ from src.application.services.skill_equivalence_service import SkillEquivalenceS
 
 class SkillEvidenceService:
     def __init__(self) -> None:
-        self._equivalence_service = SkillEquivalenceService()
+        self._equivalence_service = SkillEquivalenceService.for_matching()
 
     async def resolve_skill_evidence(
         self,

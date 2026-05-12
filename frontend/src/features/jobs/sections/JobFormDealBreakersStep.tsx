@@ -1,20 +1,21 @@
 import { Button } from "@/components/ui/button";
-import type { DealBreaker, JobFormValues, JobSkill, SkillEquivalenceGroup } from "../../../types/domain";
+import type { DealBreaker, JobFormValues, JobSkill } from "../../../types/domain";
 import type { PendingJobSkill } from "../jobFormConfig";
 import { SectionCard } from "../../../shared/components/layout/SectionCard";
 import { Field } from "../../../shared/components/forms/Field";
 import { DEAL_BREAKER_FIELDS, DEAL_BREAKER_OPERATORS, type DealBreakerDraft } from "../utils/dealBreakerHelpers";
 import { SkillSection } from "../components/SkillSection";
+import type { SkillCatalog } from "../../../services/skillsService";
 
 type JobFormDealBreakersStepProps = {
   form: JobFormValues;
   eliminatorySkills: Array<JobSkill | PendingJobSkill>;
-  availableSkills: SkillEquivalenceGroup[];
+  availableSkills: SkillCatalog[];
   skillSearch: string;
   onSearchChange: (value: string) => void;
   savingSkillId: string | null;
   onAddSkill: (
-    skill: SkillEquivalenceGroup | string,
+    skill: SkillCatalog | string,
     priorityLevel: "priority" | "complementary" | "eliminatory",
   ) => Promise<void>;
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
@@ -23,6 +24,7 @@ type JobFormDealBreakersStepProps = {
   onFormChange: (updates: Partial<JobFormValues>) => void;
   onDealBreakerDraftChange: (updates: Partial<DealBreakerDraft>) => void;
   onAddDealBreaker: () => void;
+  onSkillCreated: (skill: SkillCatalog) => void;
 };
 
 export function JobFormDealBreakersStep({
@@ -39,6 +41,7 @@ export function JobFormDealBreakersStep({
   onFormChange,
   onDealBreakerDraftChange,
   onAddDealBreaker,
+  onSkillCreated,
 }: JobFormDealBreakersStepProps) {
   return (
     <div className="space-y-6">
@@ -56,6 +59,7 @@ export function JobFormDealBreakersStep({
         onAddSkill={onAddSkill}
         onUpdateSkill={onUpdateSkill}
         onRemoveSkill={onRemoveSkill}
+        onSkillCreated={onSkillCreated}
       />
 
       <SectionCard

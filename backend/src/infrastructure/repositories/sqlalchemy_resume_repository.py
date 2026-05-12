@@ -64,7 +64,15 @@ class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
             )
         )
 
-    async def list_summaries(self, candidate_id: UUID | None = None) -> list[dict]:
+    async def count_summaries(self, candidate_id: UUID | None = None) -> int:
+        query = sa.select(sa.func.count()).select_from(ResumeModel).where(ResumeModel.deleted_at.is_(None))
+        if candidate_id is not None:
+            query = query.where(ResumeModel.candidate_id == candidate_id)
+        return await self._session.scalar(query) or 0
+
+    async def list_summaries(
+        self, candidate_id: UUID | None = None, limit: int = 100, offset: int = 0
+    ) -> list[dict]:
         query = (
             sa.select(
                 ResumeModel.id,
@@ -92,6 +100,8 @@ class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
         )
         if candidate_id is not None:
             query = query.where(ResumeModel.candidate_id == candidate_id)
+
+        query = query.limit(limit).offset(offset)
 
         result = await self._session.execute(query)
         return [dict(row) for row in result.mappings().all()]

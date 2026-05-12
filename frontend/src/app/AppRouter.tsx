@@ -41,6 +41,14 @@ const SkillsPage = lazy(() =>
   import("../pages/SkillsPage").then((m) => ({ default: m.SkillsPage }))
 );
 
+const CadastrosPage = lazy(() =>
+  import("../pages/CadastrosPage").then((m) => ({ default: m.CadastrosPage }))
+);
+
+const AuditLogsPage = lazy(() =>
+  import("../pages/AuditLogsPage").then((m) => ({ default: m.AuditLogsPage }))
+);
+
 const AnalisesIaPage = lazy(() =>
   import("../pages/AnalisesIaPage").then((m) => ({
     default: m.AnalisesIaPage,
@@ -51,8 +59,16 @@ const DashboardPage = lazy(() =>
   import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 );
 
+const AgendaPage = lazy(() =>
+  import("../pages/AgendaPage").then((m) => ({ default: m.AgendaPage }))
+);
+
 const ImportPage = lazy(() =>
   import("../pages/ImportPage").then((m) => ({ default: m.ImportPage }))
+);
+
+const GoogleImportPage = lazy(() =>
+  import("../pages/GoogleImportPage").then((m) => ({ default: m.GoogleImportPage }))
 );
 
 const ChangePasswordPage = lazy(() =>
@@ -61,10 +77,17 @@ const ChangePasswordPage = lazy(() =>
   }))
 );
 
+const CandidatePortalPage = lazy(() =>
+  import("../pages/CandidatePortalPage").then((m) => ({
+    default: m.CandidatePortalPage,
+  }))
+);
+
 type UserRole = "admin" | "recruiter" | "candidate" | "viewer";
 
 const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer"];
 const ADMIN_ROLES: UserRole[] = ["admin"];
+const CANDIDATE_AREA_ROLES: UserRole[] = ["candidate", "admin"];
 const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer"];
 
 function PageLoader() {
@@ -110,6 +133,11 @@ export function AppRouter() {
         />
 
         <Route
+          path="agenda"
+          element={protectedPage(<AgendaPage />, STAFF_ROLES)}
+        />
+
+        <Route
           path="pipeline"
           element={protectedPage(<PipelinePage />, STAFF_ROLES)}
         />
@@ -132,6 +160,11 @@ export function AppRouter() {
         <Route
           path="importar"
           element={protectedPage(<ImportPage />, ["admin", "recruiter"])}
+        />
+
+        <Route
+          path="importar-formulario"
+          element={protectedPage(<GoogleImportPage />, ["admin", "recruiter"])}
         />
 
         <Route
@@ -160,6 +193,11 @@ export function AppRouter() {
         />
 
         <Route
+          path="candidato/espaco"
+          element={protectedPage(<CandidatePortalPage />, CANDIDATE_AREA_ROLES)}
+        />
+
+        <Route
           path="admin"
           element={protectedPage(<AdminPage />, ADMIN_ROLES)}
         />
@@ -172,6 +210,16 @@ export function AppRouter() {
         <Route
           path="admin/skills"
           element={protectedPage(<SkillsPage />, ADMIN_ROLES)}
+        />
+
+        <Route
+          path="admin/cadastros"
+          element={protectedPage(<CadastrosPage />, ADMIN_ROLES)}
+        />
+
+        <Route
+          path="admin/auditoria"
+          element={protectedPage(<AuditLogsPage />, ADMIN_ROLES)}
         />
       </Route>
 

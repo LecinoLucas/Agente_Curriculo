@@ -64,7 +64,7 @@ describe("OverviewTab", () => {
     expect(onLinkJob).toHaveBeenCalledTimes(1);
   });
 
-  it("mostra os rótulos oficiais do ATS quando existe vaga vinculada", () => {
+  it("mostra resumo operacional enxuto quando existe vaga vinculada", () => {
     render(
       <OverviewTab
         overview={buildOverview({
@@ -121,7 +121,7 @@ describe("OverviewTab", () => {
       />,
     );
 
-    expect(screen.getByText("Perfil Geral IA")).toBeInTheDocument();
     expect(screen.getByText("Status na Vaga")).toBeInTheDocument();
+    expect(screen.getByText("Próximo passo")).toBeInTheDocument();
   });
 });
