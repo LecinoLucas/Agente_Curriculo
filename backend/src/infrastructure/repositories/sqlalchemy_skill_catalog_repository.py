@@ -59,6 +59,7 @@ class SQLAlchemySkillCatalogRepository:
         page_size: int = 50,
         search: Optional[str] = None,
         category: Optional[str] = None,
+        catalog_type: Optional[str] = None,
         is_active: Optional[bool] = None,
         archived: bool = False,
     ) -> tuple[Sequence[SkillCatalogModel], int]:
@@ -79,6 +80,9 @@ class SQLAlchemySkillCatalogRepository:
 
         if category:
             stmt = stmt.where(SkillCatalogModel.category == category)
+
+        if catalog_type:
+            stmt = stmt.where(SkillCatalogModel.catalog_type == catalog_type)
 
         if search:
             normalized_search = normalize_skill_name(search)

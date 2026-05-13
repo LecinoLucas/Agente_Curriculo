@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.core.app_metadata import APP_VERSION
 from src.core.settings import settings
 from src.domain.exceptions import (
     ConflictException,
@@ -22,16 +23,22 @@ from src.infrastructure.database.connection import check_database_health, engine
 from src.interface.api.middlewares.audit_middleware import AuditMiddleware
 from src.interface.api.middlewares.request_id_middleware import RequestIDMiddleware
 from src.interface.api.routers import (
+    admin_diagnostics,
+    admin_bi,
     admin_audit_logs,
+    admin_system_health,
     ai_models,
     analyses,
+    assessments,
     auth,
     candidates,
     document_ai,
     internal_users,
+    interview_schedules,
     jobs,
     observability,
     pipeline,
+    public,
     resumes,
     skill_equivalences,
     skills,
@@ -39,9 +46,8 @@ from src.interface.api.routers import (
     dashboard,
     job_areas,
 )
+from src.interface.api.routers.integrations import google_calendar
 from src.observability.logging import configure_structured_logging
-
-_APP_VERSION = "1.0.0"
 
 
 @asynccontextmanager
@@ -54,7 +60,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
 
 app = FastAPI(
     title="Resume AI System",
-    version=_APP_VERSION,
+    version=APP_VERSION,
     description="Sistema de análise inteligente de currículos com IA",
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,
@@ -75,18 +81,25 @@ _cors_allow_origin_regex = (
 # ── Routers ──────────────────────────────────────────────────────────────────
 _PREFIX = "/api/v1"
 
+app.include_router(public.router, prefix=_PREFIX)
 app.include_router(auth.router, prefix=_PREFIX)
 app.include_router(users.router, prefix=_PREFIX)
 app.include_router(internal_users.router, prefix=_PREFIX)
+app.include_router(admin_bi.router, prefix=_PREFIX)
+app.include_router(admin_diagnostics.router, prefix=_PREFIX)
 app.include_router(admin_audit_logs.router, prefix=_PREFIX)
+app.include_router(admin_system_health.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
 app.include_router(analyses.router, prefix=_PREFIX)
+app.include_router(assessments.router, prefix=_PREFIX)
 app.include_router(jobs.router, prefix=_PREFIX)
 app.include_router(pipeline.router, prefix=_PREFIX)
 app.include_router(skill_equivalences.router, prefix=_PREFIX)
 app.include_router(skills.router, prefix=_PREFIX)
 app.include_router(job_areas.router, prefix=_PREFIX)
+app.include_router(interview_schedules.router, prefix=_PREFIX)
+app.include_router(google_calendar.router, prefix=_PREFIX)
 app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)
 app.include_router(observability.router, prefix=_PREFIX)
@@ -160,7 +173,7 @@ async def health() -> dict[str, Any]:
     database_connected = await check_database_health()
     return {
         "status": "ok" if database_connected else "degraded",
-        "version": _APP_VERSION,
+        "version": APP_VERSION,
         "database": {
             "connected": database_connected,
         },

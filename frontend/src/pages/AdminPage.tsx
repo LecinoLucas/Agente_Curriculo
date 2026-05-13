@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, FileSearch, ShieldCheck, Tags, Users } from "lucide-react";
+import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, ShieldCheck, Tags, Users } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -8,6 +8,7 @@ import { KpiCard } from "../features/admin/components/KpiCard";
 import { AdminQuickAction } from "../features/admin/components/AdminQuickAction";
 import { PermissionsMatrix } from "../features/admin/components/PermissionsMatrix";
 import { RoleCard } from "../features/admin/components/RoleCard";
+import { CandidateJobFlowDiagnosticsCard } from "../features/admin/components/CandidateJobFlowDiagnosticsCard";
 import { ROLES } from "../features/admin/config/adminConfig";
 
 export function AdminPage() {
@@ -64,6 +65,33 @@ export function AdminPage() {
         />
 
         <AdminQuickAction
+          icon={<Activity className="h-4 w-4 text-rose-600" />}
+          title="Health do Sistema"
+          description="Monitore backend, filas, banco e uso de IA."
+          buttonLabel="Ver health"
+          onButtonClick={() => navigate("/admin/health")}
+          variant="default"
+        />
+
+        <AdminQuickAction
+          icon={<BarChart3 className="h-4 w-4 text-blue-600" />}
+          title="BI de Recrutamento"
+          description="Indicadores de vagas, candidatos, análises e uso de IA."
+          buttonLabel="Ver BI"
+          onButtonClick={() => navigate("/admin/bi")}
+          variant="default"
+        />
+
+        <AdminQuickAction
+          icon={<ClipboardList className="h-4 w-4 text-cyan-700" />}
+          title="Avaliações"
+          description="Gerencie testes e pesquisas comportamentais usados nas vagas."
+          buttonLabel="Gerenciar avaliações"
+          onButtonClick={() => navigate("/avaliacoes")}
+          variant="default"
+        />
+
+        <AdminQuickAction
           icon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
           title="Como funciona o acesso"
           description="Cada usuário tem um perfil que define quais telas ele pode acessar. Para liberar ou restringir, altere o perfil na tabela de usuários."
@@ -75,6 +103,15 @@ export function AdminPage() {
 
       {/* Permissions matrix */}
       <PermissionsMatrix />
+
+      {/* Candidate+job diagnostics */}
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold text-[hsl(var(--text))]">Diagnóstico operacional</h2>
+        <p className="text-sm text-[hsl(var(--text-muted))]">
+          Use este painel para investigar inconsistências de análise e aderência por candidata(o) e vaga.
+        </p>
+        <CandidateJobFlowDiagnosticsCard />
+      </section>
 
       {/* Role cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

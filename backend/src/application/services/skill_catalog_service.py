@@ -27,6 +27,7 @@ class SkillCatalogService:
         page_size: int = 50,
         search: Optional[str] = None,
         category: Optional[str] = None,
+        catalog_type: Optional[str] = None,
         is_active: Optional[bool] = None,
         archived: bool = False,
     ) -> tuple[Sequence[SkillCatalogModel], int]:
@@ -35,6 +36,7 @@ class SkillCatalogService:
             page_size=page_size,
             search=search,
             category=category,
+            catalog_type=catalog_type,
             is_active=is_active,
             archived=archived,
         )

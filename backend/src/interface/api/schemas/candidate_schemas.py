@@ -2,6 +2,9 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
+from src.interface.api.schemas.assessment_schemas import RecruiterCandidateAssessmentResponse
+
+ApplicationSource = str
 
 
 class CandidateCheckResponse(BaseModel):
@@ -32,6 +35,7 @@ class CandidateResponse(BaseModel):
     archived_by: UUID | None = None
     archive_reason: str | None = None
     archive_reason_note: str | None = None
+    application_source: ApplicationSource | None = None
 
     model_config = {"from_attributes": True}
 
@@ -116,6 +120,7 @@ class CandidateOverviewResponse(BaseModel):
     active_job_id: UUID | None = None
     active_job: CandidateActiveJobResponse | None = None
     pipeline_entries: list[CandidatePipelineEntryResponse] = Field(default_factory=list)
+    assessments: list[RecruiterCandidateAssessmentResponse] = Field(default_factory=list)
 
 
 class CandidateListSummaryResponse(BaseModel):
@@ -128,6 +133,7 @@ class CandidateListSummaryResponse(BaseModel):
     created_at: datetime
     archived_at: datetime | None = None
     archive_reason: str | None = None
+    application_source: ApplicationSource | None = None
     resume_count: int
     linked_job_count: int = 0
     latest_job_id: UUID | None = None

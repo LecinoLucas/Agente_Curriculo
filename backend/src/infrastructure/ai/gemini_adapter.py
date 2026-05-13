@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import random
 import re
@@ -10,6 +11,7 @@ import httpx
 import structlog
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIAnalysisResponse, AIService
+from src.core.log_sanitizer import sanitize_log_text, sanitize_url
 from src.core.settings import settings
 from src.infrastructure.cache.redis_client import get_redis
 
@@ -75,6 +77,35 @@ def _safe_int_setting(value: Any, default: int) -> int:
             return default
     return default
 
+
+def _sanitize_http_status_error(error: httpx.HTTPStatusError) -> httpx.HTTPStatusError:
+    request = error.request
+    response = error.response
+    sanitized_request = httpx.Request(
+        request.method,
+        sanitize_url(str(request.url)),
+        headers={
+            key: value
+            for key, value in request.headers.items()
+            if key.lower() not in {"authorization", "x-goog-api-key"}
+        },
+    )
+    # Use stream= to avoid automatic content decoding which can fail for malformed responses
+    content_stream = io.BytesIO(response.content) if response.content else io.BytesIO(b"")
+    content_stream.seek(0)  # Ensure stream is at the beginning
+    sanitized_response = httpx.Response(
+        response.status_code,
+        headers=response.headers,
+        stream=content_stream,
+        request=sanitized_request,
+        extensions=response.extensions,
+    )
+    return httpx.HTTPStatusError(
+        sanitize_log_text(str(error)) or f"HTTP {response.status_code} from Gemini API",
+        request=sanitized_request,
+        response=sanitized_response,
+    )
+
 _ACQUIRE_SLOT_LUA = """
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -107,6 +138,111 @@ return redis.call("DECR", key)
 _LOCAL_GEMINI_SEMAPHORE = asyncio.Semaphore(
     max(1, settings.GEMINI_MAX_CONCURRENT_REQUESTS)
 )
+_GEMINI_KEY_COOLDOWNS: dict[int, float] = {}
+_GEMINI_INVALID_KEYS: set[int] = set()
+
+
+def _get_google_api_keys() -> list[str]:
+    return list(settings.google_api_keys)
+
+
+def _key_label(index: int) -> str:
+    return f"key_{index + 1}"
+
+
+def _build_gemini_url(model_id: str, api_key: str) -> str:
+    return (
+        f"{settings.GEMINI_API_BASE_URL}/models/{model_id}:generateContent"
+        f"?key={api_key}"
+    )
+
+
+def _cooldown_seconds_for_key(index: int, *, now: float | None = None) -> float:
+    current = time.monotonic() if now is None else now
+    cooldown_until = _GEMINI_KEY_COOLDOWNS.get(index)
+    if cooldown_until is None:
+        return 0.0
+    remaining = cooldown_until - current
+    if remaining <= 0:
+        _GEMINI_KEY_COOLDOWNS.pop(index, None)
+        return 0.0
+    return remaining
+
+
+def _is_invalid_key_error(error: httpx.HTTPStatusError) -> bool:
+    if error.response.status_code != 400:
+        return False
+    # Extract error message from response body to check if it's an invalid key error
+    try:
+        payload = error.response.json()
+        if isinstance(payload, dict):
+            msg = payload.get("error", {})
+            if isinstance(msg, dict):
+                message = msg.get("message", "")
+            else:
+                message = str(msg)
+        else:
+            message = ""
+    except Exception:
+        message = ""
+
+    message_lower = message.lower()
+    return ("api key not valid" in message_lower or
+            "invalid api key" in message_lower or
+            "all configured gemini api keys are invalid" in message_lower)
+
+
+def get_gemini_key_health() -> dict[str, Any]:
+    keys = _get_google_api_keys()
+    now = time.monotonic()
+    cooldowns = [
+        {
+            "key_label": _key_label(index),
+            "retry_after_seconds": int(_cooldown_seconds_for_key(index, now=now) + 0.999),
+        }
+        for index in range(len(keys))
+        if _cooldown_seconds_for_key(index, now=now) > 0
+    ]
+    cooldown_count = len(cooldowns)
+    invalid_key_count = len(_GEMINI_INVALID_KEYS)
+    available_count = max(0, len(keys) - cooldown_count - invalid_key_count)
+    return {
+        "configured_key_count": len(keys),
+        "available_key_count": available_count,
+        "cooldown_key_count": cooldown_count,
+        "cooldowns": cooldowns,
+        "invalid_key_count": invalid_key_count,
+        "invalid_keys": [_key_label(i) for i in sorted(_GEMINI_INVALID_KEYS)],
+    }
+
+
+def _build_all_keys_rate_limited_error(model_id: str, retry_after_seconds: float) -> httpx.HTTPStatusError:
+    sanitized_url = sanitize_url(_build_gemini_url(model_id, "[REDACTED]"))
+    response = httpx.Response(
+        status_code=429,
+        headers={"retry-after": str(max(1, int(retry_after_seconds + 0.999)))},
+        json={"error": {"message": "All configured Gemini API keys are in rate-limit cooldown."}},
+        request=httpx.Request("POST", sanitized_url),
+    )
+    return httpx.HTTPStatusError(
+        "All configured Gemini API keys are in rate-limit cooldown.",
+        request=response.request,
+        response=response,
+    )
+
+
+def _build_all_keys_invalid_error(model_id: str) -> httpx.HTTPStatusError:
+    sanitized_url = sanitize_url(_build_gemini_url(model_id, "[REDACTED]"))
+    response = httpx.Response(
+        status_code=400,
+        json={"error": {"message": "All configured Gemini API keys are invalid."}},
+        request=httpx.Request("POST", sanitized_url),
+    )
+    return httpx.HTTPStatusError(
+        "All configured Gemini API keys are invalid.",
+        request=response.request,
+        response=response,
+    )
 
 
 class GeminiAdapter(AIService):
@@ -123,8 +259,9 @@ class GeminiAdapter(AIService):
         )
 
     async def analyze(self, request: AIAnalysisRequest) -> AIAnalysisResponse:
-        if not settings.GOOGLE_API_KEY:
-            raise RuntimeError("GOOGLE_API_KEY is not configured")
+        api_keys = _get_google_api_keys()
+        if not api_keys:
+            raise RuntimeError("GOOGLE_API_KEYS or GOOGLE_API_KEY is not configured")
 
         start_ms = int(time.monotonic() * 1000)
         queue_name = request.queue_name or "unknown"
@@ -134,11 +271,6 @@ class GeminiAdapter(AIService):
                 getattr(settings, "AI_PROVIDER_TIMEOUT_SECONDS", 90.0),
                 90.0,
             ),
-        )
-
-        url = (
-            f"{settings.GEMINI_API_BASE_URL}/models/{self._model_id}:generateContent"
-            f"?key={settings.GOOGLE_API_KEY}"
         )
 
         payload = self._build_payload(request)
@@ -158,8 +290,8 @@ class GeminiAdapter(AIService):
             return await self._run_with_concurrency_limit(
                 queue_name=queue_name,
                 run_call=lambda: asyncio.wait_for(
-                    self._analyze_with_retries(
-                        url=url,
+                    self._analyze_with_key_failover(
+                        api_keys=api_keys,
                         payload=payload,
                         start_ms=start_ms,
                         queue_name=queue_name,
@@ -218,6 +350,117 @@ class GeminiAdapter(AIService):
             "generationConfig": generation_config,
         }
 
+    async def _analyze_with_key_failover(
+        self,
+        *,
+        api_keys: list[str],
+        payload: dict[str, Any],
+        start_ms: int,
+        queue_name: str,
+    ) -> AIAnalysisResponse:
+        last_rate_limit_error: httpx.HTTPStatusError | None = None
+        last_invalid_key_error: httpx.HTTPStatusError | None = None
+        skipped_cooldowns: list[float] = []
+
+        for index, api_key in enumerate(api_keys):
+            if index in _GEMINI_INVALID_KEYS:
+                logger.error(
+                    "gemini.key_skipped_invalid",
+                    model=self._model_id,
+                    key_label=_key_label(index),
+                    queue_name=queue_name,
+                )
+                continue
+
+            remaining_cooldown = _cooldown_seconds_for_key(index)
+            if remaining_cooldown > 0:
+                skipped_cooldowns.append(remaining_cooldown)
+                logger.warning(
+                    "gemini.key_skipped_cooldown",
+                    model=self._model_id,
+                    key_label=_key_label(index),
+                    retry_after_seconds=int(remaining_cooldown + 0.999),
+                    queue_name=queue_name,
+                )
+                continue
+
+            try:
+                response = await self._analyze_with_retries(
+                    url=_build_gemini_url(self._model_id, api_key),
+                    payload=payload,
+                    start_ms=start_ms,
+                    queue_name=queue_name,
+                    key_label=_key_label(index),
+                )
+                if index > 0:
+                    logger.warning(
+                        "gemini.key_failover_success",
+                        model=self._model_id,
+                        key_label=_key_label(index),
+                        queue_name=queue_name,
+                    )
+                return response
+
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    last_rate_limit_error = exc
+                    retry_after_seconds = self._extract_retry_after_seconds(exc.response)
+                    cooldown_seconds = (
+                        retry_after_seconds
+                        if retry_after_seconds is not None
+                        else float(settings.AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS)
+                    )
+                    _GEMINI_KEY_COOLDOWNS[index] = time.monotonic() + cooldown_seconds
+                    logger.warning(
+                        "gemini.key_rate_limited",
+                        model=self._model_id,
+                        key_label=_key_label(index),
+                        retry_after_seconds=retry_after_seconds,
+                        cooldown_seconds=int(cooldown_seconds + 0.999),
+                        fallback_available=index + 1 < len(api_keys),
+                        queue_name=queue_name,
+                    )
+                elif _is_invalid_key_error(exc):
+                    _GEMINI_INVALID_KEYS.add(index)
+                    last_invalid_key_error = exc
+                    logger.error(
+                        "gemini.key_invalid",
+                        model=self._model_id,
+                        key_label=_key_label(index),
+                        fallback_available=index + 1 < len(api_keys),
+                        queue_name=queue_name,
+                    )
+                else:
+                    raise
+
+        if last_invalid_key_error is not None and last_rate_limit_error is None:
+            logger.error(
+                "gemini.keys_exhausted_invalid",
+                model=self._model_id,
+                configured_key_count=len(api_keys),
+                queue_name=queue_name,
+            )
+            raise _build_all_keys_invalid_error(self._model_id)
+
+        if last_rate_limit_error is not None:
+            logger.error(
+                "gemini.keys_exhausted_rate_limited",
+                model=self._model_id,
+                configured_key_count=len(api_keys),
+                queue_name=queue_name,
+            )
+            raise last_rate_limit_error
+
+        next_retry_seconds = min(skipped_cooldowns) if skipped_cooldowns else float(settings.AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS)
+        logger.error(
+            "gemini.keys_all_in_cooldown",
+            model=self._model_id,
+            configured_key_count=len(api_keys),
+            retry_after_seconds=int(next_retry_seconds + 0.999),
+            queue_name=queue_name,
+        )
+        raise _build_all_keys_rate_limited_error(self._model_id, next_retry_seconds)
+
     async def _analyze_with_retries(
         self,
         *,
@@ -225,6 +468,7 @@ class GeminiAdapter(AIService):
         payload: dict[str, Any],
         start_ms: int,
         queue_name: str,
+        key_label: str | None = None,
     ) -> AIAnalysisResponse:
         last_error: Exception | None = None
         max_retries = 0
@@ -238,6 +482,7 @@ class GeminiAdapter(AIService):
                 max_attempts=max_retries + 1,
                 elapsed_ms=elapsed_ms,
                 queue_name=queue_name,
+                key_label=key_label,
             )
             try:
                 body = await self._call_gemini_api(url=url, payload=payload)
@@ -265,6 +510,7 @@ class GeminiAdapter(AIService):
                         elapsed_ms=elapsed_ms,
                         retry_after_seconds=retry_after_seconds,
                         queue_name=queue_name,
+                        key_label=key_label,
                     )
 
                 logger.error(
@@ -275,6 +521,7 @@ class GeminiAdapter(AIService):
                     attempts=attempt + 1,
                     elapsed_ms=elapsed_ms,
                     queue_name=queue_name,
+                    key_label=key_label,
                 )
 
                 raise e
@@ -332,7 +579,10 @@ class GeminiAdapter(AIService):
         if response.status_code >= 400:
             self._log_api_error_details(response)
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise _sanitize_http_status_error(exc) from None
 
         try:
             body = response.json()
@@ -347,7 +597,7 @@ class GeminiAdapter(AIService):
             logger.error(
                 "gemini.invalid_api_json",
                 model=self._model_id,
-                response_text=response.text[:2000],
+                response_text=(sanitize_log_text(response.text) or "")[:2000],
                 response_chars=len(response.text or ""),
             )
             raise RuntimeError("Gemini API returned invalid JSON body") from e
@@ -874,7 +1124,7 @@ class GeminiAdapter(AIService):
                 "gemini.api_error_details",
                 model=self._model_id,
                 status_code=response.status_code,
-                error_message=error_message or "unknown",
+                error_message=sanitize_log_text(error_message) or "unknown",
             )
 
         except Exception:
@@ -882,5 +1132,5 @@ class GeminiAdapter(AIService):
                 "gemini.api_error_no_details",
                 model=self._model_id,
                 status_code=response.status_code,
-                response_preview=response.text[:500],
+                response_preview=(sanitize_log_text(response.text) or "")[:500],
             )

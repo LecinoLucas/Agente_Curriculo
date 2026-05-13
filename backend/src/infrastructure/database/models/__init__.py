@@ -4,6 +4,7 @@ from src.infrastructure.database.models.admission_model import (
     CandidateDocument,
     DocumentRequirement,
 )
+from src.infrastructure.database.models.calendar_sync_event_model import CalendarSyncEventModel
 from src.infrastructure.database.models.document_ai_analysis_model import (
     DocumentAIAnalysisModel,
 )
@@ -26,8 +27,11 @@ from src.infrastructure.database.models.analysis_model import (
     MatchingObservationModel,
     PromptTemplateModel,
 )
+from src.infrastructure.database.models.ai_usage_log_model import AIUsageLogModel
 from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.candidate_auth_token_model import CandidateAuthTokenModel
+from src.infrastructure.database.models.google_calendar_connection_model import GoogleCalendarConnectionModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
     CandidateJobPipelineModel,
@@ -48,12 +52,23 @@ from src.infrastructure.database.models.user_model import (
     UserModel,
     UserSessionModel,
 )
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
+from src.infrastructure.database.models.assessment_model import (
+    AssessmentOptionModel,
+    AssessmentQuestionModel,
+    AssessmentTemplateModel,
+    CandidateAssessmentAnswerModel,
+    CandidateAssessmentAssignmentModel,
+    JobAssessmentModel,
+)
 
 __all__ = [
     "UserModel",
     "UserSessionModel",
     "PasswordResetTokenModel",
     "CandidateModel",
+    "CandidateAuthTokenModel",
+    "GoogleCalendarConnectionModel",
     "CandidateJobPipelineModel",
     "CandidateJobPipelineEventModel",
     "ResumeModel",
@@ -66,6 +81,7 @@ __all__ = [
     "AnalysisModel",
     "AnalysisResultModel",
     "MatchingObservationModel",
+    "AIUsageLogModel",
     "JobModel",
     "JobRequiredSkillModel",
     "SkillModel",
@@ -82,4 +98,11 @@ __all__ = [
     "CandidateProfileAnalysisModel",
     "JobProfileAnalysisModel",
     "CandidateJobMatchModel",
+    "InterviewScheduleModel",
+    "AssessmentTemplateModel",
+    "AssessmentQuestionModel",
+    "AssessmentOptionModel",
+    "JobAssessmentModel",
+    "CandidateAssessmentAssignmentModel",
+    "CandidateAssessmentAnswerModel",
 ]

@@ -8,6 +8,12 @@ type JobFormMandatorySkillsStepProps = {
   availableSkills: SkillCatalog[];
   skillSearch: string;
   onSearchChange: (value: string) => void;
+  skillCategoryFilter: string;
+  onSkillCategoryFilterChange: (value: string) => void;
+  skillCategoryOptions: string[];
+  skillTypeFilter: string;
+  onSkillTypeFilterChange: (value: string) => void;
+  skillTypeOptions: string[];
   savingSkillId: string | null;
   onAddSkill: (
     skill: SkillCatalog | string,
@@ -23,6 +29,12 @@ export function JobFormMandatorySkillsStep({
   availableSkills,
   skillSearch,
   onSearchChange,
+  skillCategoryFilter,
+  onSkillCategoryFilterChange,
+  skillCategoryOptions,
+  skillTypeFilter,
+  onSkillTypeFilterChange,
+  skillTypeOptions,
   savingSkillId,
   onAddSkill,
   onUpdateSkill,
@@ -38,6 +50,12 @@ export function JobFormMandatorySkillsStep({
       linkedSkills={mandatorySkills}
       search={skillSearch}
       onSearchChange={onSearchChange}
+      categoryFilter={skillCategoryFilter}
+      onCategoryFilterChange={onSkillCategoryFilterChange}
+      categoryOptions={skillCategoryOptions}
+      typeFilter={skillTypeFilter}
+      onTypeFilterChange={onSkillTypeFilterChange}
+      typeOptions={skillTypeOptions}
       addLabel="Essencial"
       addPriorityLevel="priority"
       savingSkillId={savingSkillId}
@@ -45,6 +63,10 @@ export function JobFormMandatorySkillsStep({
       onUpdateSkill={onUpdateSkill}
       onRemoveSkill={onRemoveSkill}
       onSkillCreated={onSkillCreated}
+      secondaryAction={{
+        label: "Tornar diferencial",
+        targetPriorityLevel: "complementary",
+      }}
       warning={
         mandatorySkills.length > 5
           ? "Muitas skills essenciais podem deixar o ranking restritivo. Considere mover algumas para diferenciais."

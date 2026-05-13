@@ -1,0 +1,145 @@
+import { useState, useCallback } from "react";
+import { cleanCpf, validateCpf } from "../utils/cpf";
+import { cleanPhone, validatePhone } from "../utils/phone";
+import type { ApplicationErrors, FormData, Step } from "../types";
+
+const INITIAL_FORM: FormData = {
+  fullName: "",
+  cpf: "",
+  email: "",
+  phone: "",
+  city: "",
+  state: "SP",
+  password: "",
+  confirmPassword: "",
+  salaryExpectation: "",
+  desiredContractType: "CLT",
+  worksAtMarajoGroup: false,
+  jobId: null,
+  resumeFile: null,
+  lgpdConsent: false,
+};
+
+export function useApplicationForm() {
+  const [currentStep, setCurrentStep] = useState<Step>("method");
+  const [form, setForm] = useState<FormData>(INITIAL_FORM);
+  const [errors, setErrors] = useState<ApplicationErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const updateForm = useCallback((field: keyof FormData, value: unknown) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    // Limpar erro do campo ao editar
+    setErrors((prev) => ({ ...prev, [field]: undefined }));
+  }, []);
+
+  const validateStep = useCallback((): boolean => {
+    const newErrors: ApplicationErrors = {};
+
+    if (currentStep === "personal-data") {
+      if (!form.fullName.trim()) {
+        newErrors.fullName = "Nome completo é obrigatório";
+      } else if (form.fullName.split(/\s+/).length < 2) {
+        newErrors.fullName = "Nome deve ter pelo menos 2 palavras";
+      }
+
+      if (!form.cpf) {
+        newErrors.cpf = "CPF é obrigatório";
+      } else if (!validateCpf(form.cpf)) {
+        newErrors.cpf = "CPF inválido";
+      }
+
+      if (!form.email) {
+        newErrors.email = "E-mail é obrigatório";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+        newErrors.email = "E-mail inválido";
+      }
+
+      if (!form.phone) {
+        newErrors.phone = "Telefone é obrigatório";
+      } else if (!validatePhone(form.phone)) {
+        newErrors.phone = "Telefone deve ter 10 ou 11 dígitos";
+      }
+
+      if (!form.city.trim()) {
+        newErrors.city = "Cidade é obrigatória";
+      }
+
+      if (!form.state) {
+        newErrors.state = "Estado é obrigatório";
+      }
+
+      if (!form.password) {
+        newErrors.password = "Senha é obrigatória";
+      } else if (form.password.length < 8) {
+        newErrors.password = "Senha deve ter no mínimo 8 caracteres";
+      }
+
+      if (!form.confirmPassword) {
+        newErrors.confirmPassword = "Confirmação de senha é obrigatória";
+      } else if (form.confirmPassword !== form.password) {
+        newErrors.confirmPassword = "Confirmação de senha não confere";
+      }
+    }
+
+    if (currentStep === "job-resume") {
+      if (!form.resumeFile) {
+        newErrors.resumeFile = "Currículo é obrigatório";
+      } else if (!form.resumeFile.name.endsWith(".pdf")) {
+        newErrors.resumeFile = "Arquivo deve ser um PDF";
+      } else if (form.resumeFile.size > 10 * 1024 * 1024) {
+        newErrors.resumeFile = "Arquivo deve ter no máximo 10 MB";
+      }
+
+      if (!form.desiredContractType) {
+        newErrors.desiredContractType = "Regime desejado é obrigatório";
+      }
+    }
+
+    if (currentStep === "review") {
+      if (!form.lgpdConsent) {
+        newErrors.lgpdConsent = "É necessário aceitar os termos";
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [currentStep, form]);
+
+  const nextStep = useCallback(() => {
+    if (!validateStep()) return;
+
+    const steps: Step[] = ["method", "personal-data", "job-resume", "review"];
+    const currentIndex = steps.indexOf(currentStep);
+    if (currentIndex < steps.length - 1) {
+      setCurrentStep(steps[currentIndex + 1]);
+    }
+  }, [currentStep, validateStep]);
+
+  const prevStep = useCallback(() => {
+    const steps: Step[] = ["method", "personal-data", "job-resume", "review"];
+    const currentIndex = steps.indexOf(currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(steps[currentIndex - 1]);
+    }
+  }, [currentStep]);
+
+  const reset = useCallback(() => {
+    setForm(INITIAL_FORM);
+    setErrors({});
+    setCurrentStep("method");
+    setIsSubmitting(false);
+  }, []);
+
+  return {
+    currentStep,
+    form,
+    errors,
+    isSubmitting,
+    setIsSubmitting,
+    updateForm,
+    nextStep,
+    prevStep,
+    reset,
+    validateStep,
+  };
+}

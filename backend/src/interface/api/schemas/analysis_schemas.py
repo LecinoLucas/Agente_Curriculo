@@ -9,12 +9,19 @@ from pydantic import BaseModel, Field
 class AnalysisRequestResponse(BaseModel):
     analysis_id: UUID
     status: str
+    created: bool = True
+    blocked: bool = False
+    reused: bool = False
+    stuck: bool = False
+    reason: str = "analysis_created"
 
 
 class AnalysisStatusResponse(BaseModel):
     analysis_id: UUID
     status: str
     retry_count: int
+    stuck: bool = False
+    reason: str | None = None
     failure_reason: str | None = None
     next_retry_at: datetime | None = None
     started_at: datetime | None = None
@@ -117,6 +124,11 @@ class AnalysisGlobalItemResponse(BaseModel):
     discard_reason_note: str | None = None
     used_real_ai: bool | None = None
     retry_count: int
+    next_retry_at: datetime | None = None
+    provider_error_type: str | None = None
+    provider_status_code: int | None = None
+    stuck: bool = False
+    reason: str | None = None
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None

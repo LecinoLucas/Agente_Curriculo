@@ -3,6 +3,7 @@ import {
   CandidateLatestAnalysisOverview,
   CandidateListSummary,
   CandidateOverview,
+  RecruiterCandidateAssessment,
   PipelineStage,
 } from "../types/domain";
 import { Paginated } from "../types/api";
@@ -57,6 +58,7 @@ export type UpdateCandidateStageResponse = {
 export type ListCandidatesParams = {
   search?: string;
   archived?: boolean;
+  application_source?: string;
 };
 
 function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_name?: string; created_by?: string; created_at?: string; updated_at?: string }): Candidate {
@@ -66,6 +68,7 @@ function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_
     email: candidate.email ?? null,
     phone: candidate.phone ?? null,
     cpf: candidate.cpf ?? null,
+    application_source: candidate.application_source ?? null,
     location_city: candidate.location_city ?? null,
     location_state: candidate.location_state ?? null,
     location_country: candidate.location_country ?? "Brasil",
@@ -140,6 +143,35 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
       }))
     : [];
 
+  const normalizedAssessments: RecruiterCandidateAssessment[] = Array.isArray(item.assessments)
+    ? item.assessments.map((assessment) => ({
+        id: assessment?.id ?? "",
+        type: (assessment?.type ?? "behavioral_test") as RecruiterCandidateAssessment["type"],
+        title: assessment?.title ?? "",
+        description: assessment?.description ?? null,
+        status: (assessment?.status ?? "pending") as RecruiterCandidateAssessment["status"],
+        required: Boolean(assessment?.required),
+        due_at: assessment?.due_at ?? null,
+        assigned_at: assessment?.assigned_at ?? new Date(0).toISOString(),
+        started_at: assessment?.started_at ?? null,
+        completed_at: assessment?.completed_at ?? null,
+        result_summary: assessment?.result_summary ?? null,
+        answers: Array.isArray((assessment as any)?.answers)
+          ? (assessment as any).answers.map((answer: any) => ({
+              id: answer?.id ?? "",
+              question_id: answer?.question_id ?? "",
+              question_text: answer?.question_text ?? "",
+              question_type: answer?.question_type ?? "text",
+              option_id: answer?.option_id ?? null,
+              option_text: answer?.option_text ?? null,
+              answer_text: answer?.answer_text ?? null,
+              answer_value: answer?.answer_value ?? null,
+              created_at: answer?.created_at ?? new Date(0).toISOString(),
+            }))
+          : [],
+      }))
+    : [];
+
   return {
     candidate: normalizeCandidate(item.candidate ?? {}),
     resumes: Array.isArray(item.resumes) ? item.resumes : [],
@@ -159,6 +191,7 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
           }
         : null,
     pipeline_entries: normalizedEntries,
+    assessments: normalizedAssessments,
   };
 }
 
@@ -169,6 +202,7 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
     email: item.email ?? null,
     phone: item.phone ?? null,
     cpf: item.cpf ?? null,
+    application_source: item.application_source ?? null,
     tags: Array.isArray(item.tags) ? item.tags : [],
     created_at: item.created_at ?? new Date(0).toISOString(),
     archived_at: item.archived_at ?? null,
@@ -197,8 +231,11 @@ export const candidatesService = {
     const urlParams = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     const search = typeof params === "string" ? params : params.search;
     const archived = typeof params === "string" ? undefined : params.archived;
+    const applicationSource =
+      typeof params === "string" ? undefined : params.application_source;
     if (search) urlParams.set("search", search);
     if (archived !== undefined) urlParams.set("archived", String(archived));
+    if (applicationSource) urlParams.set("application_source", applicationSource);
     return httpRequest<Paginated<Candidate>>(`/api/v1/candidates?${urlParams.toString()}`).then((payload) => ({
       data: Array.isArray(payload?.data) ? payload.data.map(normalizeCandidate) : [],
       total: payload?.total ?? 0,
@@ -223,12 +260,14 @@ export const candidatesService = {
     hasResume?: boolean,
     aiStatus?: string[],
     archived?: boolean,
+    applicationSource?: string,
   ): Promise<Paginated<CandidateListSummary>> {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     if (search) params.set("search", search);
     if (hasResume !== undefined) params.set("has_resume", String(hasResume));
     if (aiStatus?.length) aiStatus.forEach((s) => params.append("ai_status", s));
     if (archived !== undefined) params.set("archived", String(archived));
+    if (applicationSource) params.set("application_source", applicationSource);
     return httpRequest<Paginated<CandidateListSummary>>(
       `/api/v1/candidates/summaries?${params.toString()}`,
     ).then((payload) => ({

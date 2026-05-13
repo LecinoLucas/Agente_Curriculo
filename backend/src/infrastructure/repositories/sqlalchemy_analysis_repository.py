@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
@@ -61,16 +62,31 @@ class SQLAlchemyAnalysisRepository:
         )
 
     async def find_preferred_ai_model(self) -> AIModelModel | None:
-        model = await self._session.scalar(
-            sa.select(AIModelModel)
+        result = await self._session.execute(
+            sa.select(
+                AIModelModel.id,
+                AIModelModel.provider,
+                AIModelModel.model_id,
+                AIModelModel.model_name,
+            )
             .where(AIModelModel.is_active.is_(True))
             .order_by(AIModelModel.activated_at.desc())
         )
-        if model is not None:
-            return model
-        return await self._session.scalar(
-            sa.select(AIModelModel).order_by(AIModelModel.created_at.desc())
+        row = result.mappings().first()
+        if row is not None:
+            return SimpleNamespace(**dict(row))
+        fallback = await self._session.execute(
+            sa.select(
+                AIModelModel.id,
+                AIModelModel.provider,
+                AIModelModel.model_id,
+                AIModelModel.model_name,
+            ).order_by(AIModelModel.created_at.desc())
         )
+        fallback_row = fallback.mappings().first()
+        if fallback_row is None:
+            return None
+        return SimpleNamespace(**dict(fallback_row))
 
     async def find_preferred_prompt_template(
         self,
@@ -78,16 +94,22 @@ class SQLAlchemyAnalysisRepository:
     ) -> PromptTemplateModel | None:
         from src.domain.exceptions import ValidationException
 
-        template = await self._session.scalar(
-            sa.select(PromptTemplateModel)
+        result = await self._session.execute(
+            sa.select(
+                PromptTemplateModel.id,
+                PromptTemplateModel.name,
+                PromptTemplateModel.version,
+                PromptTemplateModel.template_type,
+            )
             .where(
                 PromptTemplateModel.template_type == template_type,
                 PromptTemplateModel.is_active.is_(True),
             )
             .order_by(PromptTemplateModel.activated_at.desc())
         )
-        if template is not None:
-            return template
+        row = result.mappings().first()
+        if row is not None:
+            return SimpleNamespace(**dict(row))
         raise ValidationException(
             f"Nenhum template ativo para tipo '{template_type}'"
         )
@@ -95,7 +117,6 @@ class SQLAlchemyAnalysisRepository:
     async def create(self, analysis: AnalysisModel) -> AnalysisModel:
         self._session.add(analysis)
         await self._session.flush()
-        await self._session.refresh(analysis)
         return analysis
 
     async def save(self, analysis: AnalysisModel) -> AnalysisModel:
@@ -208,6 +229,11 @@ class SQLAlchemyAnalysisRepository:
             .order_by(AnalysisModel.completed_at.desc().nullslast(), AnalysisModel.created_at.desc())
         )
 
+    async def find_by_idempotency_key(self, idempotency_key: str) -> AnalysisModel | None:
+        return await self._session.scalar(
+            sa.select(AnalysisModel).where(AnalysisModel.idempotency_key == idempotency_key)
+        )
+
     async def find_for_user(self, analysis_id: UUID, current_user: User) -> AnalysisModel | None:
         query = sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
         if not self._can_manage_all(current_user):
@@ -293,6 +319,9 @@ class SQLAlchemyAnalysisRepository:
                 AnalysisModel.discard_reason,
                 AnalysisModel.discard_reason_note,
                 AnalysisModel.retry_count,
+                AnalysisModel.next_retry_at,
+                AnalysisModel.provider_error_type,
+                AnalysisModel.provider_status_code,
                 AnalysisModel.created_at,
                 AnalysisModel.started_at,
                 AnalysisModel.completed_at,
@@ -595,6 +624,27 @@ class SQLAlchemyAnalysisRepository:
             )
         )
 
+    async def find_candidate_job_score_for_analysis(
+        self,
+        analysis_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobScoreModel | None:
+        active_score_version = (
+            sa.select(ScoreModelVersionModel.id)
+            .where(ScoreModelVersionModel.is_active.is_(True))
+            .limit(1)
+            .scalar_subquery()
+        )
+        return await self._session.scalar(
+            sa.select(CandidateJobScoreModel).where(
+                CandidateJobScoreModel.source_analysis_id == analysis_id,
+                CandidateJobScoreModel.job_id == job_id,
+                CandidateJobScoreModel.version_id == active_score_version,
+                CandidateJobScoreModel.freshness_status == "fresh",
+                CandidateJobScoreModel.final_score.is_not(None),
+            )
+        )
+
     async def find_candidate_job_match_for_candidate_job(
         self,
         *,
@@ -836,17 +886,25 @@ class SQLAlchemyAnalysisRepository:
         profile: JobProfileAnalysisModel,
     ) -> JobProfileAnalysisModel:
         if profile.is_active:
-            await self._session.execute(
-                sa.update(JobProfileAnalysisModel)
-                .where(
-                    JobProfileAnalysisModel.job_id == profile.job_id,
-                    JobProfileAnalysisModel.is_active.is_(True),
+            # Avoid autoflush persisting this profile as active before the UPDATE below.
+            # When reactivating an existing row, that would deactivate itself.
+            with self._session.no_autoflush:
+                deactivate_stmt = (
+                    sa.update(JobProfileAnalysisModel)
+                    .where(
+                        JobProfileAnalysisModel.job_id == profile.job_id,
+                        JobProfileAnalysisModel.is_active.is_(True),
+                    )
+                    .values(
+                        is_active=False,
+                        superseded_at=datetime.now(UTC),
+                    )
                 )
-                .values(
-                    is_active=False,
-                    superseded_at=datetime.now(UTC),
-                )
-            )
+                if profile.id is not None:
+                    deactivate_stmt = deactivate_stmt.where(
+                        JobProfileAnalysisModel.id != profile.id
+                    )
+                await self._session.execute(deactivate_stmt)
         self._session.add(profile)
         await self._session.flush()
         await self._session.refresh(profile)
@@ -900,6 +958,15 @@ class SQLAlchemyAnalysisRepository:
             raise ValueError("candidate_job_match must be persisted with freshness_status='fresh'")
         if not match.job_signature_hash:
             raise ValueError("candidate_job_match requires non-empty job_signature_hash")
+        profile_is_active = await self._session.scalar(
+            sa.select(JobProfileAnalysisModel.is_active).where(
+                JobProfileAnalysisModel.id == match.job_profile_analysis_id
+            )
+        )
+        if profile_is_active is not True:
+            raise ValueError(
+                "candidate_job_match cannot be persisted as fresh with inactive job_profile_analysis"
+            )
 
         if self._is_postgresql():
             from sqlalchemy.dialects.postgresql import insert as pg_insert

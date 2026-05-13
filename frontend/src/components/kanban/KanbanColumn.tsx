@@ -22,14 +22,14 @@ export const KanbanColumn = memo(function KanbanColumn({
   disabled = false,
   showTopMatchHighlight = false,
 }: KanbanColumnProps) {
-  const baseCls = COL_CLS[column.stage] ?? "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/72";
+  const baseCls = COL_CLS[column.stage] ?? "glass border-[hsl(var(--border))]/40 shadow-inner";
   const disabledCls = disabled ? "opacity-60 pointer-events-none" : "";
 
   return (
     <div
       className={[
-        "flex w-[18rem] shrink-0 flex-col rounded-[1.25rem] border p-3.5 transition-colors duration-150",
-        "kanban-column-enter",
+        "flex w-[20rem] shrink-0 flex-col rounded-[2.5rem] border p-4 transition-all duration-300",
+        "kanban-column-enter shadow-xl",
         baseCls,
         disabledCls,
       ]
@@ -37,11 +37,11 @@ export const KanbanColumn = memo(function KanbanColumn({
         .join(" ")}
       style={{ "--enter-delay": `${colIndex * 55}ms` } as CSSProperties}
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[hsl(var(--text-muted))]">
+      <div className="mb-4 flex items-center justify-between px-2">
+        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[hsl(var(--text-muted))]">
           {column.label}
         </span>
-        <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-1 text-[11px] font-semibold tabular-nums text-[hsl(var(--text-muted))] shadow-sm">
+        <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-white/50 px-2 text-[10px] font-black tabular-nums text-[hsl(var(--text-muted))] shadow-sm backdrop-blur-sm border border-[hsl(var(--border))]/30">
           {column.candidates.length}
         </span>
       </div>

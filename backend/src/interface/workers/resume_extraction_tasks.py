@@ -9,12 +9,14 @@ import structlog
 
 from src.application.services.resume_service import ResumeService
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.pdf.candidate_prefill_extractor import extract_candidate_prefill
 from src.infrastructure.pdf.text_extractor import PdfTextExtractionError, extract_pdf_text
 from src.infrastructure.queue.celery_app import celery_app
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.infrastructure.storage.resume_files import resolve_resume_storage_path
+from src.interface.workers.analysis_dispatcher import ANALYSIS_QUEUE, enqueue_analysis
 
 logger = structlog.get_logger(__name__)
 
@@ -191,7 +193,32 @@ async def _process_resume_extraction_async(
             await repository.save_candidate(candidate)
             await repository.save_version(version)
             await repository.save_resume(resume)
+            pending_analysis_ids = list(
+                (
+                    await session.scalars(
+                        sa.select(AnalysisModel.id).where(
+                            AnalysisModel.resume_version_id == parsed_resume_version_id,
+                            AnalysisModel.job_id.is_not(None),
+                            AnalysisModel.status == "pending",
+                            AnalysisModel.task_id.is_(None),
+                        )
+                    )
+                ).all()
+            )
+            for analysis_id in pending_analysis_ids:
+                await session.execute(
+                    sa.update(AnalysisModel)
+                    .where(AnalysisModel.id == analysis_id)
+                    .values(
+                        queue_name=ANALYSIS_QUEUE,
+                        task_id=f"analysis:{analysis_id}",
+                        updated_at=now,
+                    )
+                )
             await session.commit()
+
+            for analysis_id in pending_analysis_ids:
+                enqueue_analysis(analysis_id)
 
             logger.info(
                 "resume_extraction.completed",
@@ -199,6 +226,7 @@ async def _process_resume_extraction_async(
                 worker_name=worker_name,
                 prefilled_fields=prefilled_fields,
                 used_ocr=extracted.used_ocr,
+                enqueued_pending_analyses=len(pending_analysis_ids),
             )
 
             return {

@@ -5,11 +5,28 @@ import type {
   Job,
   MovePipelineCandidatePayload,
   MovePipelineCandidateResponse,
+  PipelineAnalysisDecision,
   PipelineStageTransition,
   TransferCandidateJobPayload,
   TransferCandidateJobResponse,
 } from "../types/domain";
+import type { InterviewFormat, InterviewSchedule } from "../types/agenda";
 import { httpRequest } from "./http";
+
+export type SchedulePipelineInterviewPayload = {
+  scheduled_start: string;
+  scheduled_end: string;
+  timezone: string;
+  interview_format: InterviewFormat;
+  location?: string | null;
+  meeting_url?: string | null;
+  public_notes?: string | null;
+  internal_notes?: string | null;
+  title?: string | null;
+  interview_type?: string;
+  create_google_event?: boolean;
+  create_google_meet?: boolean;
+};
 
 export type PipelineJobSummary = {
   id: string;
@@ -37,6 +54,21 @@ function normalizeTransition(item: any): PipelineStageTransition {
     trigger: item?.trigger ?? "system",
     notes: item?.notes ?? null,
     reason: item?.reason ?? null,
+  };
+}
+
+function normalizeAnalysisDecision(item: any): PipelineAnalysisDecision | null {
+  if (!item) return null;
+  return {
+    analysis_id: item?.analysis_id ?? null,
+    status: item?.status ?? null,
+    created: Boolean(item?.created),
+    blocked: Boolean(item?.blocked),
+    reused: Boolean(item?.reused),
+    stuck: Boolean(item?.stuck),
+    reason: item?.reason ?? "analysis_unknown",
+    stage: item?.stage ?? null,
+    trigger_source: item?.trigger_source === "manual" ? "manual" : "automatic",
   };
 }
 
@@ -104,6 +136,7 @@ export const pipelineService = {
       status: item?.status ?? "active",
       transition_id: item?.transition_id ?? "",
       updated_at: item?.updated_at ?? new Date(0).toISOString(),
+      analysis: normalizeAnalysisDecision(item?.analysis),
     };
   },
 
@@ -127,6 +160,7 @@ export const pipelineService = {
       status: item?.status ?? "active",
       transition_id: item?.transition_id ?? "",
       updated_at: item?.updated_at ?? new Date(0).toISOString(),
+      analysis: normalizeAnalysisDecision(item?.analysis),
     };
   },
 
@@ -154,6 +188,18 @@ export const pipelineService = {
       source_transition_id: item?.source_transition_id ?? "",
       destination_transition_id: item?.destination_transition_id ?? "",
       updated_at: item?.updated_at ?? new Date(0).toISOString(),
+      analysis: normalizeAnalysisDecision(item?.analysis),
     };
+  },
+
+  async schedulePipelineInterview(
+    jobId: string,
+    candidateId: string,
+    payload: SchedulePipelineInterviewPayload,
+  ): Promise<InterviewSchedule> {
+    return httpRequest<InterviewSchedule>(`/api/v1/pipeline/${jobId}/${candidateId}/interviews`, {
+      method: "POST",
+      body: payload,
+    });
   },
 };

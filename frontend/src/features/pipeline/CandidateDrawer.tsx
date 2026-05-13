@@ -15,6 +15,7 @@ import { useCandidateDrawerActions } from "../candidates/drawer/hooks/useCandida
 import { useCandidateData } from "../candidates/drawer/hooks/useCandidateData";
 import { DocumentsTab as DocumentsTabComponent } from "../candidates/drawer/tabs/DocumentsTab";
 import { InterviewTab } from "../candidates/drawer/tabs/InterviewTab";
+import { AgendaInterviewModal } from "../agenda/AgendaInterviewModal";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { analysisService } from "../../services/analysisService";
@@ -29,10 +30,16 @@ import type {
   CandidatePipelineHistory,
   Job,
   PipelineStage,
+  TransferCandidateJobResponse,
 } from "../../types/domain";
 import { type PanelTab, usePipeline } from "./PipelineContext";
 import { EditCandidateModal } from "./EditCandidateModal";
+import { InterviewQuickScheduleModal } from "./InterviewQuickScheduleModal";
 import { LinkCandidateJobModal } from "../candidates/components/LinkCandidateJobModal";
+import {
+  buildAnalysisDecisionToast,
+  shouldTrackAnalysisDecision,
+} from "./analysisDispatchFeedback";
 import {
   buildCandidateAnalysisSummary,
   getLatestAnalysisForActiveJob,
@@ -63,6 +70,18 @@ const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
   final: "hired",
   offer: "hired",
 };
+
+function assessmentStatusLabel(status: string): string {
+  if (status === "completed") return "Concluído";
+  if (status === "in_progress") return "Em andamento";
+  if (status === "expired") return "Expirado";
+  if (status === "cancelled") return "Cancelado";
+  return "Pendente";
+}
+
+function assessmentTypeLabel(type: string): string {
+  return type === "behavioral_test" ? "Teste comportamental" : "Pesquisa comportamental";
+}
 
 function buildStageActionFeedback(
   stage: PipelineStage,
@@ -184,6 +203,8 @@ export function CandidateDrawer({
   const [detailTabsVisible, setDetailTabsVisible] = useState(true);
   const [actionFeedback, setActionFeedback] = useState<CandidateActionFeedback | null>(null);
   const [linkJobModalOpen, setLinkJobModalOpen] = useState(false);
+  const [quickInterviewOpen, setQuickInterviewOpen] = useState(false);
+  const [fullAgendaOpen, setFullAgendaOpen] = useState(false);
   const [analysisStarting, setAnalysisStarting] = useState(false);
   const [scoreTabFocusRequest, setScoreTabFocusRequest] = useState<ScoreTabFocusRequest | null>(null);
   const shouldLoadScoreExplanation = activePanelTab === "score" || activePanelTab === "analysis";
@@ -227,6 +248,7 @@ export function CandidateDrawer({
     hasResume: Boolean(latestResume?.current_version_id),
     latestAnalysis: candidateOverview?.latest_analysis,
     analysisResult,
+    jobFitScore: rankingEntry?.job_fit_score ?? null,
     pollingAnalysisId,
   });
   const activeJobAnalysis = getLatestAnalysisForActiveJob(
@@ -349,10 +371,15 @@ export function CandidateDrawer({
   ]);
 
   const handleStageChange = useCallback(
-    async (newStage: PipelineStage) => {
+    async (newStage: PipelineStage, options?: { bypassInterviewModal?: boolean }) => {
       if (!selectedCandidateId || !currentStage || newStage === currentStage) return;
 
       const targetCandidateId = selectedCandidateId;
+
+      if (newStage === "hr_interview" && !options?.bypassInterviewModal) {
+        setQuickInterviewOpen(true);
+        return;
+      }
 
       if (pendingStageCandidateRef.current === targetCandidateId) return;
 
@@ -367,7 +394,30 @@ export function CandidateDrawer({
       feedback.moveCandidate.processing();
 
       try {
-        await moveCandidateStage(targetCandidateId, newStage);
+        const moveResult = await moveCandidateStage(targetCandidateId, newStage);
+
+        if (shouldTrackAnalysisDecision(moveResult.analysis)) {
+          await syncAnalysisStart({
+            candidateId: targetCandidateId,
+            analysisId: moveResult.analysis!.analysis_id!,
+            status: moveResult.analysis!.status ?? "pending",
+            jobId: moveResult.job_id,
+          });
+          startPolling(
+            moveResult.analysis!.analysis_id!,
+            targetCandidateId,
+            moveResult.analysis!.status ?? "pending",
+            moveResult.job_id,
+          );
+        }
+
+        const analysisToast = buildAnalysisDecisionToast(moveResult.analysis);
+        if (analysisToast) {
+          if (analysisToast.tone === "success") toast.success(analysisToast.message);
+          if (analysisToast.tone === "info") toast.info(analysisToast.message);
+          if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+          if (analysisToast.tone === "error") toast.error(analysisToast.message);
+        }
 
         pushActionFeedbackForCandidate(
           targetCandidateId,
@@ -397,7 +447,52 @@ export function CandidateDrawer({
       currentStage,
       moveCandidateStage,
       pushActionFeedbackForCandidate,
+      startPolling,
+      syncAnalysisStart,
     ],
+  );
+
+  const handleMoveToInterviewWithoutScheduling = useCallback(async () => {
+    await handleStageChange("hr_interview", { bypassInterviewModal: true });
+    setQuickInterviewOpen(false);
+  }, [handleStageChange]);
+
+  const handleScheduleInterview = useCallback(
+    async (payload: {
+      scheduled_start: string;
+      scheduled_end: string;
+      interview_format: "online" | "presencial" | "telefone";
+      location: string | null;
+      meeting_url: string | null;
+      public_notes: string | null;
+      create_google_event?: boolean;
+      create_google_meet?: boolean;
+    }) => {
+      if (!selectedCandidateId || !candidateActiveJobId) return;
+      const targetCandidateId = selectedCandidateId;
+      setStageSavingCandidateId(targetCandidateId);
+      try {
+        await pipelineService.schedulePipelineInterview(candidateActiveJobId, targetCandidateId, {
+          ...payload,
+          timezone: "America/Recife",
+          title: "Entrevista com candidato",
+          interview_type: "hr",
+        });
+        await Promise.all([
+          syncCandidateOverview(targetCandidateId),
+          refreshBoard(),
+        ]);
+        feedback.moveCandidate.success();
+        setQuickInterviewOpen(false);
+      } catch (err) {
+        feedback.moveCandidate.error(err);
+      } finally {
+        setStageSavingCandidateId((current) =>
+          current === targetCandidateId ? null : current,
+        );
+      }
+    },
+    [candidateActiveJobId, refreshBoard, selectedCandidateId, syncCandidateOverview],
   );
 
   const handleLinkToActiveJob = useCallback(async () => {
@@ -418,10 +513,33 @@ export function CandidateDrawer({
     });
 
     try {
-      await pipelineService.addCandidateToJob(targetCandidateId, {
+      const linkResult = await pipelineService.addCandidateToJob(targetCandidateId, {
         job_id: activeBoardJobId,
         initial_stage: "entry",
       });
+
+      if (shouldTrackAnalysisDecision(linkResult.analysis)) {
+        await syncAnalysisStart({
+          candidateId: targetCandidateId,
+          analysisId: linkResult.analysis!.analysis_id!,
+          status: linkResult.analysis!.status ?? "pending",
+          jobId: linkResult.job_id,
+        });
+        startPolling(
+          linkResult.analysis!.analysis_id!,
+          targetCandidateId,
+          linkResult.analysis!.status ?? "pending",
+          linkResult.job_id,
+        );
+      }
+
+      const analysisToast = buildAnalysisDecisionToast(linkResult.analysis);
+      if (analysisToast) {
+        if (analysisToast.tone === "success") toast.success(analysisToast.message);
+        if (analysisToast.tone === "info") toast.info(analysisToast.message);
+        if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+        if (analysisToast.tone === "error") toast.error(analysisToast.message);
+      }
 
       await Promise.all([
         syncCandidateOverview(targetCandidateId),
@@ -429,9 +547,9 @@ export function CandidateDrawer({
       ]);
 
       pushActionFeedbackForCandidate(targetCandidateId, {
-        tone: "success",
+        tone: linkResult.analysis?.blocked ? "warning" : "success",
         title: "Candidato adicionado à vaga ativa",
-        detail: "O pipeline e os badges já foram sincronizados.",
+        detail: analysisToast?.message ?? "O pipeline e os badges já foram sincronizados.",
       });
 
       feedback.moveCandidate.success();
@@ -457,6 +575,8 @@ export function CandidateDrawer({
     activeBoardJobId,
     pushActionFeedbackForCandidate,
     refreshBoard,
+    startPolling,
+    syncAnalysisStart,
     syncCandidateOverview,
   ]);
 
@@ -517,24 +637,29 @@ export function CandidateDrawer({
     feedback.requestAnalysis.processing();
 
     try {
-      const response = await analysisService.request(resume.current_version_id, candidateActiveJobId);
+      const response = await analysisService.request(resume.current_version_id, candidateActiveJobId, { force: true });
+      const analysisStatus = response.status ?? "pending";
 
       await syncAnalysisStart({
         candidateId: candidateOverview.candidate.id,
         analysisId: response.analysis_id,
-        status: "pending",
+        status: analysisStatus,
         jobId: candidateActiveJobId,
         resumeId: resume.resume_id,
         resumeTitle: resume.title,
       });
 
-      startPolling(response.analysis_id, candidateOverview.candidate.id, "pending", candidateActiveJobId);
+      if (analysisStatus === "pending" || analysisStatus === "processing" || analysisStatus === "retry_scheduled") {
+        startPolling(response.analysis_id, candidateOverview.candidate.id, analysisStatus, candidateActiveJobId);
+      }
       handleProfileTabChange("documents");
 
       pushActionFeedback({
         tone: "info",
-        title: "Análise iniciada",
-        detail: "A execução foi iniciada e já está sendo acompanhada nesta tela.",
+        title: response.created ? "Análise iniciada" : "Análise sincronizada",
+        detail: response.created
+          ? "A execução foi iniciada e já está sendo acompanhada nesta tela."
+          : "O status real da análise foi sincronizado nesta tela.",
       });
       feedback.requestAnalysis.success();
     } catch (err: unknown) {
@@ -662,15 +787,71 @@ export function CandidateDrawer({
           onOpenTransferJob={handleOpenTransferJob}
         >
           {profileTabKey === "overview" ? (
-            <OverviewTabWithHistory
-              overview={candidateOverview}
-              activeJobId={candidateActiveJobId}
-              activeJob={activeJob}
-              activePipelineEntry={primaryPipelineEntry}
-              onEdit={() => setEditModalOpen(true)}
-              onLinkJob={handleOpenLinkJob}
-              historyCacheRef={historyCacheRef}
-            />
+            <div className="space-y-4">
+              <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+                <div className="mb-3">
+                  <h3 className="text-sm font-semibold text-[hsl(var(--text))]">Avaliações</h3>
+                  <p className="text-xs text-[hsl(var(--text-muted))]">
+                    Status das avaliações comportamentais vinculadas à vaga ativa.
+                  </p>
+                </div>
+                {(candidateOverview.assessments ?? []).length > 0 ? (
+                  <div className="space-y-2">
+                    {(candidateOverview.assessments ?? []).map((assessment) => (
+                      <div key={assessment.id} className="rounded-xl border border-[hsl(var(--border))] px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-[hsl(var(--text))]">{assessment.title}</p>
+                            <p className="text-xs text-[hsl(var(--text-muted))]">{assessmentTypeLabel(assessment.type)}</p>
+                          </div>
+                          <span className="rounded-full bg-[hsl(var(--accent-soft))] px-2.5 py-1 text-xs font-semibold text-[hsl(var(--primary))]">
+                            {assessmentStatusLabel(assessment.status)}
+                          </span>
+                        </div>
+                        {assessment.completed_at ? (
+                          <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">
+                            Concluída em {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(assessment.completed_at))}
+                          </p>
+                        ) : null}
+                        {assessment.result_summary ? (
+                          <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">{assessment.result_summary}</p>
+                        ) : null}
+                        {(assessment.answers ?? []).length > 0 ? (
+                          <details className="mt-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 p-2">
+                            <summary className="cursor-pointer text-xs font-semibold text-[hsl(var(--text))]">
+                              Ver respostas
+                            </summary>
+                            <div className="mt-2 space-y-2">
+                              {(assessment.answers ?? []).map((answer) => (
+                                <div key={answer.id} className="rounded-md bg-[hsl(var(--surface))] px-2 py-1.5 text-xs">
+                                  <p className="font-medium text-[hsl(var(--text))]">{answer.question_text}</p>
+                                  <p className="mt-1 text-[hsl(var(--text-muted))]">
+                                    {answer.option_text ?? answer.answer_text ?? (answer.answer_value != null ? String(answer.answer_value) : "Sem resposta")}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-[hsl(var(--border))] p-3 text-xs text-[hsl(var(--text-muted))]">
+                    Nenhuma avaliação disponível para a vaga ativa deste candidato.
+                  </p>
+                )}
+              </section>
+              <OverviewTabWithHistory
+                overview={candidateOverview}
+                activeJobId={candidateActiveJobId}
+                activeJob={activeJob}
+                activePipelineEntry={primaryPipelineEntry}
+                onEdit={() => setEditModalOpen(true)}
+                onLinkJob={handleOpenLinkJob}
+                historyCacheRef={historyCacheRef}
+              />
+            </div>
           ) : null}
 
           {profileTabKey === "score" ? (
@@ -767,8 +948,31 @@ export function CandidateDrawer({
         availableJobs={transferAvailableJobs}
         canTransfer={canTransferCurrentJob}
         onClose={() => setTransferJobModalOpen(false)}
-        onSuccess={async () => {
+        onSuccess={async (transferResult: TransferCandidateJobResponse) => {
           if (!candidate?.id) return;
+
+          if (shouldTrackAnalysisDecision(transferResult.analysis)) {
+            await syncAnalysisStart({
+              candidateId: candidate.id,
+              analysisId: transferResult.analysis!.analysis_id!,
+              status: transferResult.analysis!.status ?? "pending",
+              jobId: transferResult.to_job_id,
+            });
+            startPolling(
+              transferResult.analysis!.analysis_id!,
+              candidate.id,
+              transferResult.analysis!.status ?? "pending",
+              transferResult.to_job_id,
+            );
+          }
+
+          const analysisToast = buildAnalysisDecisionToast(transferResult.analysis);
+          if (analysisToast) {
+            if (analysisToast.tone === "success") toast.success(analysisToast.message);
+            if (analysisToast.tone === "info") toast.info(analysisToast.message);
+            if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+            if (analysisToast.tone === "error") toast.error(analysisToast.message);
+          }
 
           await Promise.all([
             syncCandidateOverview(candidate.id),
@@ -796,6 +1000,36 @@ export function CandidateDrawer({
             title: "Vaga vinculada com sucesso",
             detail: "O candidato já pode seguir para análise, score e acompanhamento no funil.",
           });
+        }}
+      />
+
+      {quickInterviewOpen && candidate && candidateActiveJobId ? (
+        <InterviewQuickScheduleModal
+          candidateName={candidate.full_name}
+          jobTitle={activeJobLabel ?? "vaga ativa"}
+          isSaving={stageSaving}
+          onClose={() => setQuickInterviewOpen(false)}
+          onMoveWithoutScheduling={handleMoveToInterviewWithoutScheduling}
+          onSchedule={handleScheduleInterview}
+          onOpenFullAgenda={() => {
+            setQuickInterviewOpen(false);
+            setFullAgendaOpen(true);
+          }}
+        />
+      ) : null}
+
+      <AgendaInterviewModal
+        isOpen={fullAgendaOpen}
+        isEdit={false}
+        initialCandidateId={candidate?.id ?? null}
+        initialJobId={candidateActiveJobId}
+        initialPipelineId={null}
+        onClose={() => setFullAgendaOpen(false)}
+        onSuccess={async () => {
+          if (!candidate?.id) return;
+          await handleStageChange("hr_interview", { bypassInterviewModal: true });
+          await syncCandidateOverview(candidate.id);
+          setFullAgendaOpen(false);
         }}
       />
     </>
@@ -862,7 +1096,7 @@ export function TransferJobModal({
   availableJobs: Job[];
   canTransfer: boolean;
   onClose: () => void;
-  onSuccess: () => Promise<void>;
+  onSuccess: (result: TransferCandidateJobResponse) => Promise<void>;
 }) {
   const [availableJobs, setAvailableJobs] = useState<Job[]>(preloadedJobs);
   const [jobsLoading, setJobsLoading] = useState(false);
@@ -957,14 +1191,14 @@ export function TransferJobModal({
     setError(null);
 
     try {
-      await pipelineService.transferCandidateJob(candidateId, {
+      const transferResult = await pipelineService.transferCandidateJob(candidateId, {
         from_job_id: fromJobId,
         to_job_id: jobId,
         reason: reason.trim(),
       });
 
       toast.success("Candidato transferido para outra vaga");
-      await onSuccess();
+      await onSuccess(transferResult);
     } catch (err: unknown) {
       setError(
         formatContextError(

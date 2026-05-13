@@ -22,6 +22,9 @@ class FakeRedis:
     async def setex(self, key: str, seconds: int, value: str) -> None:
         self._store[key] = value
 
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self._store[key] = value
+
     async def get(self, key: str) -> str | None:
         return self._store.get(key)
 
@@ -82,6 +85,7 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     monkeypatch.setattr("src.application.use_cases.auth.login.get_redis", _get_redis)
     monkeypatch.setattr("src.application.use_cases.auth.refresh_token.get_redis", _get_redis)
     monkeypatch.setattr("src.application.use_cases.auth.logout.get_redis", _get_redis)
+    monkeypatch.setattr("src.application.services.candidate_portal_auth_service.get_redis", _get_redis)
     return redis
 
 
@@ -134,3 +138,76 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
             await asyncio.wait_for(ac.aclose(), timeout=2.0)
         except Exception:
             pass
+
+
+@pytest_asyncio.fixture
+async def published_job(db_session: AsyncSession):
+    """Create a published job for testing."""
+    from uuid import uuid4
+    from src.infrastructure.database.models.job_model import JobModel
+
+    job = JobModel(
+        id=uuid4(),
+        title="Software Engineer",
+        description="Test job description",
+        status="published",
+        created_by=uuid4(),
+        location="São Paulo, SP",
+        job_area="Technology",
+    )
+    db_session.add(job)
+    await db_session.commit()
+    await db_session.refresh(job)
+    return job
+
+
+@pytest_asyncio.fixture
+async def draft_job(db_session: AsyncSession):
+    """Create a draft job for testing."""
+    from uuid import uuid4
+    from src.infrastructure.database.models.job_model import JobModel
+
+    job = JobModel(
+        id=uuid4(),
+        title="Draft Job",
+        description="Test draft job",
+        status="draft",
+        created_by=uuid4(),
+    )
+    db_session.add(job)
+    await db_session.commit()
+    await db_session.refresh(job)
+    return job
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def system_user_for_public_app(db_session: AsyncSession):
+    """Ensure system user exists for public application."""
+    from uuid import UUID
+    from src.infrastructure.database.models.user_model import UserModel
+    from datetime import datetime, timezone
+
+    SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+
+    # Check if user exists
+    user = await db_session.scalar(
+        sa.select(UserModel).where(UserModel.id == SYSTEM_USER_ID)
+    )
+
+    if not user:
+        from src.infrastructure.security.password_service import hash_password
+
+        user = UserModel(
+            id=SYSTEM_USER_ID,
+            email="public-submissions@system.internal",
+            full_name="Sistema - Submissões Públicas",
+            role="viewer",
+            status="inactive",
+            password_hash=hash_password("system"),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        db_session.add(user)
+        await db_session.commit()
+
+    return user

@@ -174,6 +174,47 @@ async def test_list_skills_and_search(client: AsyncClient, db_session: AsyncSess
     assert data["total"] >= 1
     assert data["data"][0]["name"] == "Kubernetes"
 
+async def test_list_skills_filters_by_category_and_catalog_type(client: AsyncClient, db_session: AsyncSession):
+    await _create_active_user(db_session, "admin-skill-filter@test.com", "password123", UserRole.ADMIN)
+    headers = await _auth_headers(client, "admin-skill-filter@test.com", "password123")
+
+    db_session.add_all(
+        [
+            SkillCatalogModel(
+                name="React Testing Library Filter",
+                normalized_name="react testing library filter",
+                category="frontend",
+                catalog_type="tool",
+            ),
+            SkillCatalogModel(
+                name="React Architecture Filter",
+                normalized_name="react architecture filter",
+                category="frontend",
+                catalog_type="skill",
+            ),
+            SkillCatalogModel(
+                name="PostgreSQL Filter",
+                normalized_name="postgresql filter",
+                category="database",
+                catalog_type="tool",
+            ),
+        ],
+    )
+    await db_session.flush()
+
+    response = await client.get(
+        "/api/v1/skills?category=frontend&catalog_type=tool&is_active=true",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    names = {item["name"] for item in data["data"]}
+    assert "React Testing Library Filter" in names
+    assert "React Architecture Filter" not in names
+    assert "PostgreSQL Filter" not in names
+    assert data["data"][0]["catalog_type"] == "tool"
+
 async def test_update_skill_success(client: AsyncClient, db_session: AsyncSession):
     headers = await _get_admin_headers(client, db_session)
     created = await client.post(

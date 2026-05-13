@@ -5,6 +5,7 @@ import { ChevronDown, LogOut, Menu, Moon, PanelTop, Sun, UserRound, X } from "lu
 import { cn } from "@/lib/utils";
 import { ActionMenu } from "../common/ActionMenu";
 import { useAuth } from "../../features/auth/useAuth";
+import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { useTheme } from "../../hooks/useTheme";
 import { UserRole } from "../../types/auth";
 import { VisualThemeSwitcher } from "./VisualThemeSwitcher";
@@ -40,6 +41,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     items: [
       { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer"] },
       { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer"] },
+      { to: "/avaliacoes", label: "Avaliações", caption: "Testes e pesquisas", roles: ["admin", "recruiter"] },
       { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer"] },
       { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer"] },
     ],
@@ -65,7 +67,9 @@ const NAVIGATION_CONFIG: NavGroup[] = [
       { to: "/admin/usuarios", label: "Usuários", caption: "Equipe e acessos", roles: ["admin"] },
       { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ["admin"] },
       { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ["admin"] },
-      { to: "/candidato/espaco", label: "Portal do Candidato", caption: "Preview", roles: ["admin"] },
+      { to: "/admin/bi", label: "BI / Métricas", caption: "Indicadores e gráficos", roles: ["admin"] },
+      { to: "/admin/health", label: "Health", caption: "Status e consumo", roles: ["admin"] },
+      { to: "/candidato/portal", label: "Portal do Candidato", caption: "Preview", roles: ["admin"] },
     ],
   },
   {
@@ -73,7 +77,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     caption: "Sua candidatura",
     roles: ["candidate"],
     isDropdown: false,
-    items: [{ to: "/candidato/espaco", label: "Portal do Candidato", caption: "Sua candidatura", roles: ["candidate"] }],
+    items: [{ to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: ["candidate"] }],
   },
 ];
 
@@ -83,6 +87,177 @@ const ROLE_LABELS: Record<UserRole, string> = {
   candidate: "Candidato",
   viewer:    "Visualizador",
 };
+
+const RECRUITER_NAV_ITEMS: Array<{ to: string; label: string; roles: UserRole[] }> = [
+  { to: "/dashboard", label: "Dashboard", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/pipeline", label: "Pipeline", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/vagas", label: "Vagas", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/avaliacoes", label: "Avaliações", roles: ["admin", "recruiter"] },
+  { to: "/candidatos", label: "Candidatos", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/agenda", label: "Agenda", roles: ["admin", "recruiter", "viewer"] },
+  { to: "/importar", label: "Importação", roles: ["admin", "recruiter"] },
+  { to: "/importar-formulario", label: "Formulários", roles: ["admin", "recruiter"] },
+  { to: "/analises-ia", label: "Análises IA", roles: ["admin", "recruiter"] },
+];
+
+function RecruiterNavigation() {
+  const { user } = useAuth();
+  const { closeCandidate } = usePipeline();
+  const visibleItems = RECRUITER_NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
+  return (
+    <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
+      {visibleItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          onClick={() => {
+            if (item.to === "/pipeline") {
+              closeCandidate();
+            }
+          }}
+          className={({ isActive }) =>
+            cn(
+              "group relative flex flex-col items-center justify-center rounded-xl px-4 py-2 transition-all duration-150",
+              isActive
+                ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-sm"
+                : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--nav-text))]",
+            )
+          }
+        >
+          <span className="text-sm font-semibold tracking-tight">{item.label}</span>
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
+function AdminNavigation() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const { closeCandidate } = usePipeline();
+  const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
+
+  const visibleGroups = useMemo(
+    () => NAVIGATION_CONFIG.filter((group) => user && group.roles.includes(user.role)),
+    [user],
+  );
+
+  useEffect(() => {
+    setOpenDropdownLabel(null);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!openDropdownLabel) return;
+
+    const handlePointerDown = (event: MouseEvent | PointerEvent | TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if ((target as HTMLElement).closest('[data-dropdown]')) return;
+      setOpenDropdownLabel(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [openDropdownLabel]);
+
+  return (
+    <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
+      {visibleGroups.map((group) => {
+        if (!group.isDropdown) {
+          const item = group.items[0];
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/admin"}
+              onClick={() => {
+                if (item.to === "/pipeline") {
+                  closeCandidate();
+                }
+              }}
+              className={({ isActive }) =>
+                cn(
+                  "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
+                  isActive
+                    ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
+                    : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+                )
+              }
+            >
+              <span className="text-sm font-semibold tracking-tight">{item.label}</span>
+              <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                {item.caption}
+              </span>
+            </NavLink>
+          );
+        }
+
+        const isGroupActive = group.items.some((item) => location.pathname.startsWith(item.to));
+        const isOpen = openDropdownLabel === group.label;
+
+        return (
+          <div key={group.label} className="relative" data-dropdown="true">
+            <button
+              type="button"
+              className={cn(
+                "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
+                isGroupActive
+                  ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
+                  : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+              )}
+              onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
+              aria-expanded={isOpen}
+              aria-haspopup="menu"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tracking-tight">{group.label}</span>
+                <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
+              </div>
+              <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                {group.caption}
+              </span>
+            </button>
+
+            <div
+              className={cn(
+                "absolute left-0 top-full mt-2 w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))] shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] transition-all duration-150 z-50",
+                isOpen ? "block" : "hidden",
+              )}
+              role="menu"
+            >
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/admin"}
+                  onClick={() => {
+                    setOpenDropdownLabel(null);
+                    if (item.to === "/pipeline") {
+                      closeCandidate();
+                    }
+                  }}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex flex-col px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl min-w-[160px]",
+                      isActive
+                        ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                        : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--text))]",
+                    )
+                  }
+                >
+                  <span className="text-sm font-semibold tracking-tight">{item.label}</span>
+                  <span className="mt-0.5 text-[11px] leading-tight opacity-70">
+                    {item.caption}
+                  </span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
 
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -166,92 +341,7 @@ export function AppShell() {
           </div>
 
           {/* Desktop nav */}
-          <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
-            {visibleGroups.map((group) => {
-              if (!group.isDropdown) {
-                const item = group.items[0];
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === "/admin"}
-                    className={({ isActive }) =>
-                      cn(
-                        "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
-                        isActive
-                          ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
-                          : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
-                      )
-                    }
-                  >
-                    <span className="text-sm font-semibold tracking-tight">{item.label}</span>
-                    <span className="mt-0.5 text-[11px] leading-tight opacity-70">
-                      {item.caption}
-                    </span>
-                  </NavLink>
-                );
-              }
-
-              const isGroupActive = group.items.some((item) => location.pathname.startsWith(item.to));
-              const isOpen = openDropdownLabel === group.label;
-
-              return (
-                <div key={group.label} className="relative" data-dropdown="true">
-                  <button
-                    type="button"
-                    className={cn(
-                      "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
-                      isGroupActive
-                        ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
-                        : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
-                    )}
-                    onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
-                    aria-expanded={isOpen}
-                    aria-haspopup="menu"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold tracking-tight">{group.label}</span>
-                      <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
-                    </div>
-                    <span className="mt-0.5 text-[11px] leading-tight opacity-70">
-                      {group.caption}
-                    </span>
-                  </button>
-
-                  {/* Dropdown menu */}
-                  <div
-                    className={cn(
-                      "absolute left-0 top-full mt-2 w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))] shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] transition-all duration-150 z-50",
-                      isOpen ? "block" : "hidden",
-                    )}
-                    role="menu"
-                  >
-                    {group.items.map((item) => (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        end={item.to === "/admin"}
-                        onClick={() => setOpenDropdownLabel(null)}
-                        className={({ isActive }) =>
-                          cn(
-                            "flex flex-col px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl min-w-[160px]",
-                            isActive
-                              ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-                              : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--text))]",
-                          )
-                        }
-                      >
-                        <span className="text-sm font-semibold tracking-tight">{item.label}</span>
-                        <span className="mt-0.5 text-[11px] leading-tight opacity-70">
-                          {item.caption}
-                        </span>
-                      </NavLink>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </nav>
+          {user?.role === "admin" ? <AdminNavigation /> : <RecruiterNavigation />}
 
           {/* Right-side controls */}
           <div className="ml-auto flex items-center gap-2">
@@ -352,77 +442,105 @@ export function AppShell() {
               </div>
 
               <nav className="flex flex-col gap-3">
-                {visibleGroups.map((group) => {
-                  if (!group.isDropdown) {
-                    const item = group.items[0];
+                {user?.role === "admin" ? (
+                  visibleGroups.map((group) => {
+                    if (!group.isDropdown) {
+                      const item = group.items[0];
+                      return (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          end={item.to === "/admin"}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={({ isActive }) =>
+                            cn(
+                              "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                              isActive
+                                ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                                : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
+                            )
+                          }
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold tracking-tight">{item.label}</p>
+                            <p className="mt-0.5 text-xs opacity-70">{item.caption}</p>
+                          </div>
+                          <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
+                        </NavLink>
+                      );
+                    }
+
+                    const isOpen = openDropdownLabel === group.label;
+
                     return (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        end={item.to === "/admin"}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={({ isActive }) =>
-                          cn(
-                            "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
-                            isActive
-                              ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-                              : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
-                          )
-                        }
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold tracking-tight">{item.label}</p>
-                          <p className="mt-0.5 text-xs opacity-70">{item.caption}</p>
-                        </div>
-                        <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
-                      </NavLink>
+                      <div key={group.label} className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
+                          className="flex items-center justify-between rounded-2xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
+                        >
+                          <div className="min-w-0 text-left">
+                            <p className="text-sm font-semibold tracking-tight text-[hsl(var(--nav-text))]">{group.label}</p>
+                            <p className="mt-0.5 text-xs opacity-70">{group.caption}</p>
+                          </div>
+                          <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", isOpen && "rotate-180")} />
+                        </button>
+                        {isOpen ? (
+                          <div className="flex flex-col gap-1 rounded-2xl bg-[hsl(var(--nav-active-bg))]/40 p-2">
+                            {group.items.map((item) => (
+                              <NavLink
+                                key={item.to}
+                                to={item.to}
+                                end={item.to === "/admin"}
+                                onClick={() => setMobileMenuOpen(false)}
+                                className={({ isActive }) =>
+                                  cn(
+                                    "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                                    isActive
+                                      ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                                      : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
+                                  )
+                                }
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold tracking-tight">{item.label}</p>
+                                  <p className="mt-0.5 text-xs opacity-70">{item.caption}</p>
+                                </div>
+                                <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
+                              </NavLink>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     );
-                  }
-
-                  const isOpen = openDropdownLabel === group.label;
-
-                  return (
-                    <div key={group.label} className="flex flex-col gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
-                        className="flex items-center justify-between rounded-2xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
-                      >
-                        <div className="min-w-0 text-left">
-                          <p className="text-sm font-semibold tracking-tight text-[hsl(var(--nav-text))]">{group.label}</p>
-                          <p className="mt-0.5 text-xs opacity-70">{group.caption}</p>
-                        </div>
-                        <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", isOpen && "rotate-180")} />
-                      </button>
-                      {isOpen ? (
-                        <div className="flex flex-col gap-1 rounded-2xl bg-[hsl(var(--nav-active-bg))]/40 p-2">
-                          {group.items.map((item) => (
-                            <NavLink
-                              key={item.to}
-                              to={item.to}
-                              end={item.to === "/admin"}
-                              onClick={() => setMobileMenuOpen(false)}
-                              className={({ isActive }) =>
-                                cn(
-                                  "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
-                                  isActive
-                                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-                                    : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
-                                )
-                              }
-                            >
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold tracking-tight">{item.label}</p>
-                                <p className="mt-0.5 text-xs opacity-70">{item.caption}</p>
-                              </div>
-                              <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
-                            </NavLink>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                  })
+                ) : (
+                  RECRUITER_NAV_ITEMS.filter((item) => user && item.roles.includes(user.role)).map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        if (item.to === "/pipeline") {
+                          closeCandidate();
+                        }
+                      }}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                          isActive
+                            ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
+                            : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
+                        )
+                      }
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold tracking-tight">{item.label}</p>
+                      </div>
+                      <PanelTop className="h-4 w-4 shrink-0 opacity-50" />
+                    </NavLink>
+                  ))
+                )}
               </nav>
 
               <div className="flex flex-col gap-2 border-t border-[hsl(var(--nav-border))] pt-3">

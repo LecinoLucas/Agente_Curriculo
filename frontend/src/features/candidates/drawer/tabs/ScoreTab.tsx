@@ -256,10 +256,71 @@ export function ScoreTab({
           scoreBreakdown={rankingEntry?.score_breakdown ?? null}
           scoreExplanation={scoreExplanation}
           rankingSummaryText={rankingEntry?.ranking_summary_text}
+          rank={rankingEntry?.rank}
         />
       ) : null}
 
       <Section title="Resumo da vaga ativa">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
+              Situação do score
+            </p>
+            <p className="mt-1 text-sm text-[hsl(var(--text))]" title={freshnessBadge.description}>
+              {compatibilityGuidance?.description ?? "Aderência calculada para a vaga ativa com base no currículo analisado."}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={freshnessBadge.variant} title={freshnessBadge.description}>
+              {freshnessBadge.label}
+            </Badge>
+            <button
+              type="button"
+              onClick={() => setShowConfidenceDetails(!showConfidenceDetails)}
+              className="flex items-center gap-1 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] transition-colors"
+              title={confidenceMessage}
+            >
+              <Info className="h-3.5 w-3.5" />
+              <span>Confiança</span>
+            </button>
+            {rankingComputedAt ? (
+              <span className="text-xs text-[hsl(var(--text-muted))]">
+                Atualizado {rankingRelativeTime}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {showConfidenceDetails && (
+          <div className="mt-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-[hsl(var(--text))]">Confiança da Análise</span>
+              <span className="text-xs font-semibold text-[hsl(var(--text))]">
+                {fmtPercentValue(scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0)}
+              </span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-[hsl(var(--border))] overflow-hidden">
+              <div 
+                className={`h-2 rounded-full ${
+                  (scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) > 0.7 
+                    ? "bg-emerald-500" 
+                    : (scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) > 0.4 
+                      ? "bg-amber-500" 
+                      : "bg-red-500"
+                }`}
+                style={{ width: `${(scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) * 100}%` }}
+              ></div>
+            </div>
+            <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">
+              {(scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) > 0.7 
+                ? "ℹ️ Currículo rico em detalhes e histórico profissional." 
+                : (scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) > 0.4 
+                  ? "ℹ️ Currículo com detalhes suficientes para análise básica." 
+                  : "ℹ️ Currículo muito resumido ou incompleto. A nota pode não ser precisa."}
+            </p>
+          </div>
+        )}
+
         {loading ? <SkeletonRows /> : null}
         {error ? (
           <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
@@ -269,12 +330,7 @@ export function ScoreTab({
 
         {!loading && !error && rankingEntry ? (
           <div className="flex flex-col gap-4">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <MetaItem label="Posição" value={`#${rankingEntry.rank}`} />
-              <MetaItem label="Aderência" value={fmtScore(rankingEntry.job_fit_score)} />
-              <MetaItem label="Atualização" value={freshnessBadge.label} />
-              <MetaItem label="Recomendação" value={scoreExplanation?.recommendation || "—"} />
-            </div>
+            {/* Removed redundant grid */}
 
             {dealBreakerDetails.length > 0 ? (
               <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3">
@@ -340,10 +396,17 @@ export function ScoreTab({
               <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum critério eliminatório violado.</p>
             ) : null}
 
-            {rankingEntry.ranking_summary_text ? (
-              <p className="text-sm leading-relaxed text-[hsl(var(--text-muted))]">
-                {rankingEntry.ranking_summary_text}
-              </p>
+            {/* Removed redundant summary text */}
+
+            {scoreExplanation && scoreExplanation.overestimation_risks.length > 0 ? (
+              <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
+                <p className="text-sm font-semibold text-[hsl(var(--warning))]">Alerta de confiança</p>
+                <div className="mt-1 flex flex-col gap-1 text-xs leading-relaxed text-[hsl(var(--text))]">
+                  {scoreExplanation.overestimation_risks.map((risk) => (
+                    <p key={risk}>{risk}</p>
+                  ))}
+                </div>
+              </div>
             ) : null}
 
             {!hasRankingDetails ? (
@@ -355,62 +418,7 @@ export function ScoreTab({
         ) : null}
       </Section>
 
-      {scoreExplanation ? (
-        <Section title="Leitura da análise">
-          <div ref={explainabilityRef} />
-          <div className="flex flex-col gap-4">
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                    Leitura operacional
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text))]">
-                    {explainabilityLine || scoreExplanation.ranking_summary_text}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={freshnessBadge.variant}>{freshnessBadge.label}</Badge>
-                  <span className="text-xs text-[hsl(var(--text-muted))]">{freshnessLine}</span>
-                </div>
-              </div>
-              {deltaLine ? (
-                <div className="mt-3 rounded-lg border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-sm text-[hsl(var(--text))]">
-                  {deltaLine}
-                </div>
-              ) : null}
-            </div>
-
-            {explainabilityInsights.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                  Principais sinais
-                </p>
-                <div className="grid gap-2 md:grid-cols-3">
-                  {explainabilityInsights.map((insight) => (
-                    <ExplainabilityCard
-                      key={`${insight.factorType}-${insight.label}`}
-                      label={insight.label}
-                      tone={insight.tone}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {scoreExplanation.overestimation_risks.length > 0 ? (
-              <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
-                <p className="text-sm font-semibold text-[hsl(var(--warning))]">Alerta de confiança</p>
-                <div className="mt-1 flex flex-col gap-1 text-xs leading-relaxed text-[hsl(var(--text))]">
-                  {scoreExplanation.overestimation_risks.map((risk) => (
-                    <p key={risk}>{risk}</p>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </Section>
-      ) : null}
+      {/* Removed redundant Leitura da análise section */}
 
       {!scoreExplanation ? (
         <EmptyTab

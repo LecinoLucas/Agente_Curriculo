@@ -49,3 +49,10 @@ class AddJobSkillRequest(BaseModel):
     minimum_level: Optional[str] = Field(default=None, max_length=50)
     minimum_years: Optional[Decimal] = Field(default=None, ge=0, le=80)
     weight: Decimal = Field(default=Decimal("1.00"), ge=0, le=10)
+
+
+class UpdateJobSkillRequest(BaseModel):
+    priority_level: Optional[Literal["priority", "complementary", "eliminatory"]] = None
+    minimum_level: Optional[str] = Field(default=None, max_length=50)
+    minimum_years: Optional[Decimal] = Field(default=None, ge=0, le=80)
+    weight: Optional[Decimal] = Field(default=None, ge=0, le=10)

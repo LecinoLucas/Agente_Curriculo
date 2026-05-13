@@ -12,6 +12,7 @@ Fluxo completo de requisição de análise:
 """
 
 import structlog
+from sqlalchemy.exc import IntegrityError
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand, RequestAnalysisResult
 from src.domain.exceptions import NotFoundException, ValidationException
@@ -61,13 +62,6 @@ class RequestAnalysisUseCase:
                 "A vaga não está disponível para novas análises. Reative a vaga antes de continuar."
             )
 
-        if str(getattr(version, "extraction_status", "")).lower() != "completed" or not (
-            (version.extracted_text or "").strip()
-        ):
-            raise ValidationException(
-                "Currículo ainda em processamento. Faça upload do PDF e aguarde extração antes de solicitar análise."
-            )
-
         # 2. Busca análise em andamento para este resume_version + job (se houver)
         existing = await self._analysis_repo.find_active_for_version(
             resume_version_id=command.resume_version_id,
@@ -97,6 +91,13 @@ class RequestAnalysisUseCase:
                 status=existing.status,
                 estimated_wait_seconds=estimated_wait,
                 enqueue_required=False,
+                created=False,
+                reused=True,
+                reason=(
+                    "analysis_already_in_progress"
+                    if str(existing.status) in {"pending", "processing", "retry_scheduled"}
+                    else "analysis_reused_existing"
+                ),
             )
 
         if existing and command.force_reanalyze:
@@ -133,7 +134,14 @@ class RequestAnalysisUseCase:
                 status=latest_completed.status,
                 estimated_wait_seconds=0,
                 enqueue_required=False,
+                created=False,
+                reused=True,
+                reason="analysis_existing_completed_reused",
             )
+
+        extraction_ready = str(getattr(version, "extraction_status", "")).lower() == "completed" and bool(
+            (version.extracted_text or "").strip()
+        )
 
         logger.info(
             "analysis.cache_miss",
@@ -171,7 +179,23 @@ class RequestAnalysisUseCase:
             idempotency_key=idempotency_key,
             priority=command.priority,
         )
-        await self._analysis_repo.save(analysis)
+        try:
+            await self._analysis_repo.save(analysis)
+        except IntegrityError:
+            existing_by_key = await self._analysis_repo.find_by_idempotency_key(idempotency_key)
+            if existing_by_key is None:
+                raise
+            queue_length = await self._analysis_repo.count_pending()
+            estimated_wait = max(1, queue_length) * _ESTIMATED_WAIT_SECONDS_PER_POSITION
+            return RequestAnalysisResult(
+                analysis_id=existing_by_key.id,
+                status=existing_by_key.status,
+                estimated_wait_seconds=estimated_wait,
+                enqueue_required=False,
+                created=False,
+                reused=True,
+                reason="analysis_reused_by_idempotency_key",
+            )
 
         queue_length = await self._analysis_repo.count_pending()
         estimated_wait = max(1, queue_length) * _ESTIMATED_WAIT_SECONDS_PER_POSITION
@@ -182,11 +206,30 @@ class RequestAnalysisUseCase:
             resume_version_id=str(command.resume_version_id),
             job_id=str(command.job_id) if command.job_id else None,
             force=command.force_reanalyze,
+            extraction_ready=extraction_ready,
         )
+
+        if not extraction_ready:
+            if not command.allow_pending_resume_extraction:
+                raise ValidationException(
+                    "Currículo ainda em processamento. Faça upload do PDF e aguarde extração antes de solicitar análise."
+                )
+            return RequestAnalysisResult(
+                analysis_id=analysis.id,
+                status=analysis.status,
+                estimated_wait_seconds=estimated_wait,
+                enqueue_required=False,
+                created=True,
+                reused=False,
+                reason="analysis_created_waiting_resume_extraction",
+            )
 
         return RequestAnalysisResult(
             analysis_id=analysis.id,
             status=analysis.status,
             estimated_wait_seconds=estimated_wait,
             enqueue_required=True,
+            created=True,
+            reused=False,
+            reason="analysis_created",
         )

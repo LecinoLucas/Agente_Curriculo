@@ -23,6 +23,9 @@ from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlch
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
+    SQLAlchemyPipelineRepository,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
@@ -46,6 +49,11 @@ router = APIRouter(prefix="/analyses", tags=["analyses"])
 
 logger = structlog.get_logger(__name__)
 _FORCE_FAIL_REASON = "Encerrada manualmente pelo usuário"
+_STUCK_ANALYSIS_REASONS = {
+    "analysis_stuck_pending_timeout",
+    "analysis_stuck_processing_timeout",
+    "analysis_worker_claim_expired",
+}
 
 
 def _analysis_service(db: AsyncSession) -> AnalysisService:
@@ -217,6 +225,22 @@ async def request_analysis(
                 priority=5,
             )
         )
+
+        if result.created:
+            candidate_id = await db.scalar(
+                sa.select(ResumeModel.candidate_id)
+                .join(ResumeVersionModel, ResumeVersionModel.resume_id == ResumeModel.id)
+                .where(ResumeVersionModel.id == resume_version_id)
+            )
+            if candidate_id is not None:
+                await SQLAlchemyPipelineRepository(db).attach_analysis_to_entry(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    resume_version_id=resume_version_id,
+                    analysis_id=result.analysis_id,
+                    updated_at=datetime.now(UTC),
+                )
+
         await db.commit()
         if result.enqueue_required and str(result.status) == "pending":
             from src.infrastructure.database.models.analysis_model import AnalysisModel
@@ -227,7 +251,15 @@ async def request_analysis(
                 logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(result.analysis_id))
             else:
                 enqueue_analysis(result.analysis_id)
-        return AnalysisRequestResponse(analysis_id=result.analysis_id, status=result.status)
+        return AnalysisRequestResponse(
+            analysis_id=result.analysis_id,
+            status=result.status,
+            created=result.created,
+            blocked=result.blocked,
+            reused=result.reused,
+            stuck=result.stuck,
+            reason=result.reason,
+        )
     except Exception as exc:
         await db.rollback()
         _handle_analysis_service_error(exc)
@@ -327,6 +359,8 @@ async def get_analysis_status(
         analysis_id=analysis.id,
         status=analysis.status,
         retry_count=analysis.retry_count,
+        stuck=analysis.failure_reason in _STUCK_ANALYSIS_REASONS,
+        reason=analysis.failure_reason if analysis.failure_reason in _STUCK_ANALYSIS_REASONS else None,
         failure_reason=analysis.failure_reason,
         next_retry_at=analysis.next_retry_at,
         started_at=analysis.started_at,
@@ -585,7 +619,15 @@ async def retry_analysis(
             analysis_id=str(analysis_id),
         )
 
-        return AnalysisRequestResponse(analysis_id=analysis.id, status=analysis.status)
+        return AnalysisRequestResponse(
+            analysis_id=analysis.id,
+            status=analysis.status,
+            created=False,
+            blocked=False,
+            reused=False,
+            stuck=False,
+            reason="analysis_retry_started",
+        )
     except AnalysisNotFoundError as exc:
         _handle_analysis_service_error(exc)
         raise

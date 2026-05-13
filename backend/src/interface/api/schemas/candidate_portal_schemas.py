@@ -1,0 +1,123 @@
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, EmailStr, Field
+from src.interface.api.schemas.assessment_schemas import CandidateAssessmentSummaryResponse
+
+
+class CandidateAuthRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class CandidateAuthLoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class CandidateAuthLoginResponse(BaseModel):
+    message: str
+    redirect_to: str
+    session_expires_at: datetime
+
+
+class CandidatePortalResumeResponse(BaseModel):
+    resume_id: UUID
+    resume_version_id: UUID | None = None
+    file_name: str | None = None
+    extraction_status: str | None = None
+    uploaded_at: datetime
+
+
+class CandidatePortalCandidateSummaryResponse(BaseModel):
+    id: UUID
+    full_name: str
+    cpf_masked: str | None = None
+    email: str | None = None
+    email_masked: str | None = None
+    phone: str | None = None
+    phone_masked: str | None = None
+    city: str | None = None
+    state: str | None = None
+    application_source: str | None = None
+    application_source_label: str
+
+
+class CandidatePortalActiveApplicationResponse(BaseModel):
+    pipeline_id: UUID
+    job_id: UUID
+    job_title: str | None = None
+    pipeline_stage: str
+    status_public: str
+    submitted_at: datetime
+    current_analysis_id: UUID | None = None
+    analysis_status: str | None = None
+    resume_version_id: UUID | None = None
+    resume_filename: str | None = None
+    is_talent_pool: bool = False
+
+
+class CandidatePortalPublicInterviewResponse(BaseModel):
+    status: str
+    scheduled_at: datetime | None = None
+    interview_format: str | None = None
+    location: str | None = None
+    meeting_url: str | None = None
+    public_notes: str | None = None
+
+
+class CandidatePortalTimelineStepResponse(BaseModel):
+    key: str
+    label: str
+    status: str
+    description: str
+    interview: CandidatePortalPublicInterviewResponse | None = None
+
+
+class CandidatePortalTimelineResponse(BaseModel):
+    current_step_key: str
+    current_step_label: str
+    steps: list[CandidatePortalTimelineStepResponse]
+
+
+class CandidatePortalOverviewResponse(BaseModel):
+    candidate: CandidatePortalCandidateSummaryResponse
+    active_application: CandidatePortalActiveApplicationResponse | None = None
+    application_history: list["CandidatePortalApplicationResponse"] = []
+    latest_resume: CandidatePortalResumeResponse | None = None
+    talent_pool: bool
+    status_public: str
+    public_timeline: CandidatePortalTimelineResponse | None = None
+    assessments: list[CandidateAssessmentSummaryResponse] = []
+
+
+class CandidatePortalApplicationResponse(BaseModel):
+    pipeline_id: UUID | None = None
+    job_id: UUID | None = None
+    job_title: str | None = None
+    status: str
+    status_label: str
+    submitted_at: datetime
+    updated_at: datetime
+    resume_file_name: str | None = None
+    analysis_status: str | None = None
+    application_source: str | None = None
+    talent_pool: bool = False
+    talent_pool_profile_status: str | None = None
+
+
+class CandidatePortalUpdateProfileRequest(BaseModel):
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=50)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
+
+
+class CandidatePortalResumeUploadResponse(BaseModel):
+    resume_id: UUID
+    resume_version_id: UUID
+    extraction_status: str
+    message: str
+
+
+CandidatePortalOverviewResponse.model_rebuild()

@@ -19,9 +19,11 @@ import { getLatestAnalysisForActiveJob } from "../../utils/analysisStatus";
 type AnalysisStatus =
   | "pending"
   | "processing"
+  | "retry_scheduled"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "discarded";
 
 const MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024;
 
@@ -29,9 +31,11 @@ function isAnalysisStatus(status: string | null | undefined): status is Analysis
   return (
     status === "pending" ||
     status === "processing" ||
+    status === "retry_scheduled" ||
     status === "completed" ||
     status === "failed" ||
-    status === "cancelled"
+    status === "cancelled" ||
+    status === "discarded"
   );
 }
 
@@ -496,15 +500,16 @@ export function useDocumentHandlers(
       feedback.requestAnalysis.processing();
 
       try {
-        const response = await analysisService.request(versionId, manualJobId);
+        const response = await analysisService.request(versionId, manualJobId, { force: true });
         if (controller.signal.aborted) return;
 
         const resume = resumes.find((item) => item.resume_id === resumeId);
+        const analysisStatus = normalizeAnalysisStatus(response.status);
 
         await syncAnalysisStart({
           candidateId: overview.candidate.id,
           analysisId: response.analysis_id,
-          status: "pending",
+          status: analysisStatus,
           jobId: manualJobId,
           resumeId,
           resumeTitle: resume?.title ?? null,
@@ -512,12 +517,20 @@ export function useDocumentHandlers(
 
         if (controller.signal.aborted) return;
 
-        startPolling(response.analysis_id, overview.candidate.id, "pending", manualJobId);
+        if (
+          analysisStatus === "pending" ||
+          analysisStatus === "processing" ||
+          analysisStatus === "retry_scheduled"
+        ) {
+          startPolling(response.analysis_id, overview.candidate.id, analysisStatus, manualJobId);
+        }
 
         onActionFeedback?.({
           tone: "info",
-          title: "Reanálise iniciada",
-          detail: "A IA entrou em processamento e o candidato já foi atualizado.",
+          title: response.created ? "Reanálise iniciada" : "Análise sincronizada",
+          detail: response.created
+            ? "A IA entrou em processamento e o candidato já foi atualizado."
+            : "O status real da análise foi sincronizado neste workspace.",
         });
 
         feedback.requestAnalysis.success();

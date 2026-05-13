@@ -15,6 +15,12 @@ type JobFormDifferentialsStepProps = {
   availableSkills: SkillCatalog[];
   skillSearch: string;
   onSearchChange: (value: string) => void;
+  skillCategoryFilter: string;
+  onSkillCategoryFilterChange: (value: string) => void;
+  skillCategoryOptions: string[];
+  skillTypeFilter: string;
+  onSkillTypeFilterChange: (value: string) => void;
+  skillTypeOptions: string[];
   onFormChange: (updates: { behavioral_requirements?: string[]; newBehavioralRequirement?: string }) => void;
   savingSkillId: string | null;
   onAddSkill: (
@@ -33,6 +39,12 @@ export function JobFormDifferentialsStep({
   availableSkills,
   skillSearch,
   onSearchChange,
+  skillCategoryFilter,
+  onSkillCategoryFilterChange,
+  skillCategoryOptions,
+  skillTypeFilter,
+  onSkillTypeFilterChange,
+  skillTypeOptions,
   onFormChange,
   savingSkillId,
   onAddSkill,
@@ -51,6 +63,12 @@ export function JobFormDifferentialsStep({
         linkedSkills={optionalSkills}
         search={skillSearch}
         onSearchChange={onSearchChange}
+        categoryFilter={skillCategoryFilter}
+        onCategoryFilterChange={onSkillCategoryFilterChange}
+        categoryOptions={skillCategoryOptions}
+        typeFilter={skillTypeFilter}
+        onTypeFilterChange={onSkillTypeFilterChange}
+        typeOptions={skillTypeOptions}
         addLabel="Diferencial"
         addPriorityLevel="complementary"
         savingSkillId={savingSkillId}
@@ -58,6 +76,10 @@ export function JobFormDifferentialsStep({
         onUpdateSkill={onUpdateSkill}
         onRemoveSkill={onRemoveSkill}
         onSkillCreated={onSkillCreated}
+        secondaryAction={{
+          label: "Tornar essencial",
+          targetPriorityLevel: "priority",
+        }}
       />
 
       <SectionCard

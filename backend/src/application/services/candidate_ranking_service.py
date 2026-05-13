@@ -50,9 +50,14 @@ from src.application.services.strict_payload import (
     optional_dict,
 )
 from src.application.services.skill_requirements_service import validate_skill_requirements
+from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel
+from src.infrastructure.database.models.profile_analysis_model import (
+    CandidateJobMatchModel,
+    JobProfileAnalysisModel,
+)
+from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel, ScoreModelVersionModel
 from src.domain.services.deal_breaker_evaluator import evaluate_deal_breakers
 
 logger = structlog.get_logger(__name__)
@@ -299,7 +304,7 @@ class CandidateRankingService:
         return self._context_loader._json_key_exists_filter(column, key)
 
     # ------------------------------------------------------------------
-    # Read path: return persisted ranking (never recomputes)
+    # Read path: return persisted ranking
     # ------------------------------------------------------------------
 
     async def get_ranking(
@@ -308,12 +313,21 @@ class CandidateRankingService:
     ) -> dict[str, Any]:
         """Return the ranking for this job from persisted candidate_job_scores.
 
+        Applies a lightweight consistency auto-repair before reading:
+        - stale fresh scores not tied to current_analysis_id
+        - stale fresh matches tied to inactive job_profile_analysis
+        - recompute missing current scores for completed analyses
+
         Only scores computed with the currently active version are returned.
         Raises RankingJobNotFoundError / NoActiveScoreVersionError as needed.
         """
         await self._context_loader.assert_job_exists(job_id)
         version = await self._context_loader.load_active_version()
         threshold_high, threshold_low = _resolve_thresholds(version)
+        await self._auto_repair_missing_current_scores(
+            job_id=job_id,
+            version_id=version.id,
+        )
 
         rows = await self._score_store.fetch_persisted_scores(job_id, version.id)
 
@@ -344,6 +358,158 @@ class CandidateRankingService:
             threshold_low=threshold_low,
             version=version,
             data_quality_stats=stats,
+        )
+
+    async def _auto_repair_missing_current_scores(
+        self,
+        *,
+        job_id: UUID,
+        version_id: UUID,
+        limit: int = 25,
+    ) -> None:
+        stale_match_ids = (
+            sa.select(CandidateJobMatchModel.id)
+            .join(
+                JobProfileAnalysisModel,
+                JobProfileAnalysisModel.id == CandidateJobMatchModel.job_profile_analysis_id,
+            )
+            .where(
+                CandidateJobMatchModel.job_id == job_id,
+                CandidateJobMatchModel.freshness_status == "fresh",
+                JobProfileAnalysisModel.is_active.is_(False),
+            )
+        )
+        stale_match_result = await self._session.execute(
+            sa.update(CandidateJobMatchModel)
+            .where(CandidateJobMatchModel.id.in_(stale_match_ids))
+            .values(freshness_status="stale")
+        )
+        stale_matches = int(stale_match_result.rowcount or 0)
+
+        # Mark fresh scores as stale if they are not tied to pipeline.current_analysis_id.
+        stale_score_ids = (
+            sa.select(CandidateJobScoreModel.id)
+            .join(
+                CandidateJobPipelineModel,
+                sa.and_(
+                    CandidateJobPipelineModel.candidate_id == CandidateJobScoreModel.candidate_id,
+                    CandidateJobPipelineModel.job_id == CandidateJobScoreModel.job_id,
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                    CandidateJobPipelineModel.relationship_status == "active",
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
+                ),
+            )
+            .where(
+                CandidateJobScoreModel.job_id == job_id,
+                CandidateJobScoreModel.version_id == version_id,
+                CandidateJobScoreModel.freshness_status == "fresh",
+                CandidateJobScoreModel.final_score.isnot(None),
+                CandidateJobPipelineModel.current_analysis_id.isnot(None),
+                sa.or_(
+                    CandidateJobScoreModel.source_analysis_id.is_(None),
+                    CandidateJobScoreModel.source_analysis_id != CandidateJobPipelineModel.current_analysis_id,
+                ),
+            )
+        )
+        stale_score_result = await self._session.execute(
+            sa.update(CandidateJobScoreModel)
+            .where(CandidateJobScoreModel.id.in_(stale_score_ids))
+            .values(freshness_status="stale")
+        )
+        stale_scores = int(stale_score_result.rowcount or 0)
+
+        missing_score_rows = (
+            await self._session.execute(
+                sa.select(
+                    CandidateJobPipelineModel.candidate_id,
+                    CandidateJobPipelineModel.current_analysis_id,
+                )
+                .join(
+                    AnalysisModel,
+                    AnalysisModel.id == CandidateJobPipelineModel.current_analysis_id,
+                )
+                .outerjoin(
+                    CandidateJobScoreModel,
+                    sa.and_(
+                        CandidateJobScoreModel.candidate_id == CandidateJobPipelineModel.candidate_id,
+                        CandidateJobScoreModel.job_id == CandidateJobPipelineModel.job_id,
+                        CandidateJobScoreModel.version_id == version_id,
+                        CandidateJobScoreModel.source_analysis_id == CandidateJobPipelineModel.current_analysis_id,
+                        CandidateJobScoreModel.freshness_status == "fresh",
+                        CandidateJobScoreModel.final_score.isnot(None),
+                    ),
+                )
+                .where(
+                    CandidateJobPipelineModel.job_id == job_id,
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                    CandidateJobPipelineModel.relationship_status == "active",
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
+                    CandidateJobPipelineModel.current_analysis_id.isnot(None),
+                    AnalysisModel.status == "completed",
+                    CandidateJobScoreModel.id.is_(None),
+                )
+                .limit(limit)
+            )
+        ).mappings().all()
+
+        if not missing_score_rows:
+            if stale_scores > 0 or stale_matches > 0:
+                logger.info(
+                    "ranking.auto_repair.stale_records_marked",
+                    job_id=str(job_id),
+                    stale_matches=stale_matches,
+                    stale_scores=stale_scores,
+                )
+            return
+
+        repaired = 0
+        failed = 0
+        for row in missing_score_rows:
+            candidate_id = row["candidate_id"]
+            current_analysis_id = row["current_analysis_id"]
+            try:
+                ranking_result = await self.compute_single_candidate(
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    recompute_reason="auto_repair_missing_score",
+                )
+                if ranking_result is not None:
+                    repaired += 1
+                    continue
+
+                from src.application.services.analysis_service import AnalysisService
+                from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
+                    SQLAlchemyAnalysisRepository,
+                )
+
+                await AnalysisService(
+                    SQLAlchemyAnalysisRepository(self._session)
+                ).match_completed_analysis_to_job(
+                    analysis_id=current_analysis_id,
+                    job_id=job_id,
+                    force_recompute=False,
+                )
+                repaired += 1
+            except Exception:
+                failed += 1
+                logger.warning(
+                    "ranking.auto_repair.failed",
+                    job_id=str(job_id),
+                    candidate_id=str(candidate_id),
+                    analysis_id=str(current_analysis_id),
+                    exc_info=True,
+                )
+
+        logger.info(
+            "ranking.auto_repair.completed",
+            job_id=str(job_id),
+            stale_matches=stale_matches,
+            stale_scores=stale_scores,
+            candidates_scanned=len(missing_score_rows),
+            repaired=repaired,
+            failed=failed,
         )
 
     # ------------------------------------------------------------------
@@ -889,6 +1055,8 @@ def _resolve_freshness_status(
     job_signature_hash: str | None = None,
     score_computed_at: datetime | None = None,
     job_updated_at: datetime | None = None,
+    score_source_analysis_id: Any | None = None,
+    pipeline_current_analysis_id: Any | None = None,
 ) -> tuple[str, str | None]:
     if persisted_status != "fresh":
         return ("stale", "Registro persistido não está fresh. Recompute necessário.")
@@ -904,6 +1072,12 @@ def _resolve_freshness_status(
         return ("stale", "Score sem computed_at. Recompute necessário.")
     if score_computed_at < job_updated_at:
         return ("stale", "Vaga foi modificada após o score. Recompute necessário.")
+    if pipeline_current_analysis_id is None:
+        return ("stale", "Pipeline sem current_analysis_id. Recompute necessário.")
+    if score_source_analysis_id is None:
+        return ("stale", "Score sem source_analysis_id. Recompute necessário.")
+    if str(score_source_analysis_id) != str(pipeline_current_analysis_id):
+        return ("stale", "Score não corresponde ao current_analysis_id ativo. Recompute necessário.")
     if ranking_updated_at is None or match_updated_at is None:
         return ("stale", "Faltam timestamps do ranking ou match. Recompute necessário.")
     if ranking_updated_at < match_updated_at:

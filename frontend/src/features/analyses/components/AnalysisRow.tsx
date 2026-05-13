@@ -43,9 +43,17 @@ export function AnalysisRow({
 }: AnalysisRowProps) {
   const isFailed = item.status === "failed";
   const isRetryScheduled = item.status === "retry_scheduled";
+  const nextRetryLabel = item.next_retry_at ? fmtDate(item.next_retry_at) : null;
   const isStuck =
     item.status === "pending" || item.status === "processing" || isRetryScheduled;
   const isDiscarded = item.status === "discarded";
+  const now = Date.now();
+  const pendingForMs = now - new Date(item.created_at).getTime();
+  const processingBase = item.started_at ?? item.created_at;
+  const processingForMs = now - new Date(processingBase).getTime();
+  const pendingStuck = item.status === "pending" && pendingForMs > 2 * 60 * 60 * 1000;
+  const processingStuck = item.status === "processing" && processingForMs > 30 * 60 * 1000;
+  const likelyStuck = item.stuck || pendingStuck || processingStuck;
   const hasCandidate = Boolean(item.candidate_id);
   const actionItems = [
     hasCandidate
@@ -125,10 +133,16 @@ export function AnalysisRow({
           <StatusBadge status={item.status} />
           {isRetryScheduled ? (
             <span className="max-w-[240px] text-xs text-[hsl(var(--text-muted))]">
-              Alta demanda no provedor IA. Tentando novamente automaticamente.
+              Limite temporário da IA. Nova tentativa automática
+              {nextRetryLabel ? ` em ${nextRetryLabel}` : " agendada"}.
             </span>
           ) : null}
-          {isFailed && item.failure_reason ? (
+          {likelyStuck ? (
+            <span className="max-w-[260px] text-xs text-[hsl(var(--warning))]">
+              A análise está demorando mais que o esperado. Verifique o worker ou tente reprocessar.
+            </span>
+          ) : null}
+          {isFailed && item.failure_reason && !item.stuck ? (
             <span className="max-w-[200px] truncate text-xs text-[hsl(var(--danger))]" title={item.failure_reason}>
               {item.failure_reason}
             </span>

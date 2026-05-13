@@ -291,8 +291,6 @@ export function PipelinePage() {
     : "grid grid-cols-1 gap-6 xl:items-start xl:grid-cols-[minmax(0,1fr)] xl:transition-[grid-template-columns] xl:duration-200";
 
   // ── Handler ───────────────────────────────────────────────────────────────
-  // Navigate only. The URL change triggers Effect 1 which calls setActiveJob.
-  // This avoids double-calling setActiveJob (once here, once in the effect).
   function handleSelectJob(nextJobId: string) {
     window.sessionStorage.setItem(PIPELINE_LAST_SELECTED_JOB_KEY, nextJobId);
     navigate(`/pipeline/${nextJobId}`, { replace: true });
@@ -306,125 +304,152 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-6 pb-12">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-6 py-8 pb-12">
       {/* ── Page header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="ui-heading text-2xl font-extrabold tracking-tight">Pipeline</h1>
-          <p className="ui-text-muted mt-1 text-sm">
-            Acompanhe e mova candidatos entre etapas do processo de admissão.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={handleOpenSourceCandidates}
-            disabled={!canUse}
-            className={`rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition inline-flex items-center gap-2 ${
-              canUse
-                ? "bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 cursor-pointer"
-                : "bg-[hsl(var(--primary))]/50 cursor-not-allowed"
-            }`}
-          >
-            <UserPlus className="h-4 w-4" />
-            Adicionar candidatos
-          </button>
-          <button
-            type="button"
-            onClick={() => void refreshBoard()}
-            disabled={boardLoading || !activeJobId}
-            className="ui-btn-secondary rounded-xl px-4 py-2 text-sm font-medium shadow-sm disabled:opacity-40"
-          >
-            {boardLoading ? "Atualizando…" : "Atualizar"}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Job selector ── */}
-      <div className="ui-card rounded-3xl p-4 sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="grid gap-4 lg:grid-cols-[minmax(18rem,22rem)_1fr] xl:min-w-0 xl:flex-1">
-            <div className="space-y-2">
-              <label
-                htmlFor="pipeline-job-select"
-                className="ui-text-muted text-xs font-semibold uppercase tracking-wide"
-              >
-                Vaga
-              </label>
-              {pipelineJobsError ? (
-                <p className="ui-badge-danger rounded-xl border border-[hsl(var(--danger))]/20 px-3 py-2 text-sm">
-                  {pipelineJobsError}
-                </p>
-              ) : (
-                <select
-                  id="pipeline-job-select"
-                  value={activeJobId ?? ""}
-                  onChange={(e) => handleSelectJob(e.target.value)}
-                  disabled={pipelineJobsLoading || pipelineJobs.length === 0}
-                  className="ui-input h-11 w-full rounded-xl px-3 text-sm disabled:opacity-50"
-                >
-                  {pipelineJobsLoading ? (
-                    <option value="">Carregando vagas…</option>
-                  ) : (
-                    pipelineJobs.map((job) => (
-                      <option key={job.id} value={job.id}>
-                        {job.title}
-                      </option>
-                    ))
-                  )}
-                </select>
-              )}
-            </div>
-
-            {pipelineJobsLoading ? (
-              <SkeletonRows rows={2} />
-            ) : selectedJob ? (
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                <MetaCell label="Status">
-                  <StatusPill
-                    label={formatJobStatus(selectedJob.status)}
-                    tone={jobStatusTone(selectedJob.status)}
-                  />
-                </MetaCell>
-                <MetaCell label="Senioridade">
-                  {formatSeniority(selectedJob.seniority_level)}
-                </MetaCell>
-                <MetaCell label="Modelo">
-                  {formatWorkModel(selectedJob.work_model)}
-                </MetaCell>
-                <MetaCell label="Local">{selectedJob.location ?? "—"}</MetaCell>
-              </div>
-            ) : null}
+      <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[hsl(var(--brand))] to-[hsl(var(--hero-end))] p-8 text-white shadow-2xl">
+        <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Pipeline do Recrutador</h1>
+            <p className="mt-2 text-lg font-medium text-white/80">
+              Gerencie o fluxo de talentos com inteligência e agilidade.
+            </p>
           </div>
-
-          {selectedJob && !activeJobAcceptsCandidates && !isDraft ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Esta vaga está em status <strong>{formatJobStatus(selectedJob.status)}</strong>. Novos candidatos e vínculos de pipeline só são permitidos para vagas publicadas ou pausadas.
-            </div>
-          ) : null}
-
-          {activeJobId ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => setShowRanking((current) => !current)}
-              className="ui-btn-secondary inline-flex items-center justify-center gap-2 self-start rounded-xl border px-3 py-2 text-sm font-medium shadow-sm xl:self-center"
-              aria-expanded={showRanking}
-              aria-controls="pipeline-ranking-panel"
+              onClick={handleOpenSourceCandidates}
+              disabled={!canUse}
+              className={`hover-lift rounded-2xl px-6 py-3 text-sm font-bold shadow-xl transition inline-flex items-center gap-2 ${
+                canUse
+                  ? "bg-white text-[hsl(var(--brand))] hover:bg-white/95"
+                  : "bg-white/50 text-white/70 cursor-not-allowed"
+              }`}
             >
-              {showRanking ? (
-                <>
-                  <PanelRightClose className="h-4 w-4" />
-                  <span>Ocultar ranking</span>
-                  <ChevronUp className="h-4 w-4 xl:hidden" />
-                </>
-              ) : (
-                <>
-                  <PanelRightOpen className="h-4 w-4" />
-                  <span>Mostrar ranking</span>
-                  <ChevronDown className="h-4 w-4 xl:hidden" />
-                </>
-              )}
+              <UserPlus className="h-5 w-5" />
+              Adicionar Candidatos
             </button>
+            <button
+              type="button"
+              onClick={() => void refreshBoard()}
+              disabled={boardLoading || !activeJobId}
+              className="hover-lift inline-flex items-center gap-2 rounded-2xl bg-black/20 px-6 py-3 text-sm font-bold text-white backdrop-blur-md transition hover:bg-black/30 disabled:opacity-40"
+            >
+              <RefreshCw className={["h-5 w-5", boardLoading ? "animate-spin" : ""].join(" ")} />
+              {boardLoading ? "Sincronizando…" : "Atualizar"}
+            </button>
+          </div>
+        </div>
+        {/* Subtle glow effect background */}
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
+      </div>
+
+      {/* ── Job selector surface ── */}
+      <div className="glass rounded-[2.5rem] border-[hsl(var(--border))/40 shadow-xl overflow-hidden">
+        <div className="p-6 sm:p-8">
+          <div className="flex flex-col gap-8 xl:flex-row xl:items-end">
+            <div className="flex flex-col gap-6 xl:min-w-0 xl:flex-1">
+              <div className="max-w-md space-y-3">
+                <label
+                  htmlFor="pipeline-job-select"
+                  className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-[hsl(var(--text-muted))]"
+                >
+                  <div className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))]" />
+                  Vaga Selecionada
+                </label>
+                {pipelineJobsError ? (
+                  <div className="rounded-2xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm font-medium text-[hsl(var(--danger))]">
+                    {pipelineJobsError}
+                  </div>
+                ) : (
+                  <div className="relative group">
+                    <select
+                      id="pipeline-job-select"
+                      value={activeJobId ?? ""}
+                      onChange={(e) => handleSelectJob(e.target.value)}
+                      disabled={pipelineJobsLoading || pipelineJobs.length === 0}
+                      className="ui-input h-14 w-full appearance-none rounded-2xl border-2 px-4 pr-12 text-base font-bold shadow-sm transition-all focus:ring-4 focus:ring-[hsl(var(--primary))]/10 disabled:opacity-50"
+                    >
+                      {pipelineJobsLoading ? (
+                        <option value="">Carregando vagas…</option>
+                      ) : (
+                        pipelineJobs.map((job) => (
+                          <option key={job.id} value={job.id}>
+                            {job.title}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[hsl(var(--text-muted))]">
+                      <ChevronDown className="h-5 w-5" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {pipelineJobsLoading ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-20 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
+                  ))}
+                </div>
+              ) : selectedJob ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <MetaCell label="Status da Vaga">
+                    <StatusPill
+                      label={formatJobStatus(selectedJob.status)}
+                      tone={jobStatusTone(selectedJob.status)}
+                    />
+                  </MetaCell>
+                  <MetaCell label="Senioridade">
+                    {formatSeniority(selectedJob.seniority_level)}
+                  </MetaCell>
+                  <MetaCell label="Modelo de Trabalho">
+                    {formatWorkModel(selectedJob.work_model)}
+                  </MetaCell>
+                  <MetaCell label="Localização">{selectedJob.location ?? "Remoto"}</MetaCell>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 items-center gap-4">
+              {activeJobId ? (
+                <button
+                  type="button"
+                  onClick={() => setShowRanking((current) => !current)}
+                  className={`hover-lift inline-flex h-14 items-center justify-center gap-3 rounded-2xl border-2 px-6 text-sm font-bold transition-all shadow-sm ${
+                    showRanking 
+                      ? "border-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]" 
+                      : "border-[hsl(var(--border))] bg-white text-[hsl(var(--text-muted))] hover:border-[hsl(var(--primary))]/50 hover:text-[hsl(var(--text))]"
+                  }`}
+                  aria-expanded={showRanking}
+                >
+                  {showRanking ? (
+                    <>
+                      <PanelRightClose className="h-5 w-5" />
+                      <span>Ocultar Ranking</span>
+                    </>
+                  ) : (
+                    <>
+                      <PanelRightOpen className="h-5 w-5" />
+                      <span>Ver Ranking IA</span>
+                    </>
+                  )}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          
+          {selectedJob && !activeJobAcceptsCandidates && !isDraft ? (
+            <div className="mt-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-900 backdrop-blur-sm">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200/50 text-amber-600">
+                ⚠️
+              </div>
+              <p>
+                Esta vaga está em status <span className="font-bold">{formatJobStatus(selectedJob.status)}</span>. 
+                Novos candidatos só são permitidos para vagas <span className="underline">publicadas</span> ou <span className="underline">pausadas</span>.
+              </p>
+            </div>
           ) : null}
         </div>
       </div>
@@ -448,49 +473,43 @@ export function PipelinePage() {
           />
         ) : (
           <div className={boardLayoutClass}>
-            <div className="ui-card min-w-0 overflow-hidden rounded-3xl p-4 sm:p-5">
+            <div className="ui-card min-w-0 overflow-hidden rounded-[2.5rem] p-6 shadow-xl border-[hsl(var(--border))]/30">
           {/* Board header */}
-            <div className="mb-4 flex flex-col gap-3 border-b border-[hsl(var(--border))] pb-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="mb-6 flex flex-col gap-4 border-b border-[hsl(var(--border))]/50 pb-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="ui-text-muted text-[11px] font-semibold uppercase tracking-[0.18em]">
-                    Pipeline da vaga
+                  <p className="ui-text-muted text-[10px] font-black uppercase tracking-[0.2em]">
+                    Controle de Fluxo
                   </p>
                   {board ? (
-                    <span className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
-                      {totalActive} em processo
+                    <span className="inline-flex items-center rounded-full bg-[hsl(var(--primary))]/10 px-3 py-1 text-[11px] font-bold text-[hsl(var(--primary))]">
+                      {totalActive} Candidatos em Processo
                     </span>
                   ) : null}
-                  {totalRejected > 0 ? (
-                    <span className="inline-flex items-center rounded-full border border-[hsl(var(--danger))]/18 bg-[hsl(var(--danger-soft))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--danger))]">
-                      {totalRejected} reprovado{totalRejected !== 1 ? "s" : ""}
-                    </span>
-                  ) : null}
-                  <span className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
-                    Ordenado por aderência
-                  </span>
                 </div>
-                <h2 className="mt-2 truncate text-base font-semibold text-[hsl(var(--text))] sm:text-lg">
+                <h2 className="mt-3 truncate text-2xl font-black text-[hsl(var(--text))]">
                   {selectedJob ? selectedJob.title : "Candidatos"}
                 </h2>
-                <p className="ui-text-muted mt-1 text-xs sm:text-sm">
-                  Abra um card para consultar detalhes do candidato e mover a etapa pelo drawer.
-                </p>
               </div>
-              <div className="flex items-center gap-2 self-start lg:self-end">
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as any)}
-                  className="ui-input h-9 rounded-xl px-2 text-xs font-medium border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))]"
-                >
-                  <option value="score_desc">Maior aderência</option>
-                  <option value="score_asc">Menor aderência</option>
-                  <option value="name_az">Nome A-Z</option>
-                </select>
+              <div className="flex items-center gap-3 self-start lg:self-end">
+                <div className="flex items-center gap-2 rounded-xl bg-[hsl(var(--surface-muted))]/50 p-1">
+                  <button
+                    onClick={() => setSortOrder("score_desc")}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${sortOrder === "score_desc" ? "bg-white text-[hsl(var(--primary))] shadow-sm" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"}`}
+                  >
+                    Top Scores
+                  </button>
+                  <button
+                    onClick={() => setSortOrder("name_az")}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${sortOrder === "name_az" ? "bg-white text-[hsl(var(--primary))] shadow-sm" : "text-[hsl(var(--text-muted))] hover:text(--text)]"}`}
+                  >
+                    A-Z
+                  </button>
+                </div>
                 {isBoardRefreshing ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--primary))]/18 bg-[hsl(var(--accent-soft))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--primary))]">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--accent-soft))] px-3 py-1.5 text-xs font-bold text-[hsl(var(--primary))] animate-pulse">
                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    Atualizando pipeline
+                    Sincronizando
                   </span>
                 ) : null}
               </div>
@@ -515,8 +534,8 @@ export function PipelinePage() {
 
           {/* Kanban columns — data from PipelineContext.board */}
             {board && !boardError ? (
-              <div className="overflow-x-auto pb-2">
-                <div className="flex min-w-max items-stretch gap-4">
+              <div className="overflow-x-auto pb-4">
+                <div className="flex min-w-max items-stretch gap-6">
                   {mainCols.map((col, idx) => (
                     <KanbanColumn
                       key={col.stage}
@@ -530,7 +549,7 @@ export function PipelinePage() {
 
                   {rejectedCol ? (
                     <>
-                      <div className="mx-0.5 w-px self-stretch bg-[hsl(var(--border))]" />
+                      <div className="mx-1 w-px self-stretch bg-[hsl(var(--border))]/30" />
                       <KanbanColumn
                         column={rejectedCol}
                         colIndex={mainCols.length}
@@ -547,32 +566,33 @@ export function PipelinePage() {
           {/* Empty board */}
             {!showInitialBoardLoading && board && !boardError && totalActive === 0 && totalRejected === 0 ? (
               <div className="flex flex-col items-center justify-center gap-4 py-12">
-                <div className="rounded-2xl border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-8 max-w-sm text-center">
-                  <p className="text-base font-semibold text-[hsl(var(--text))]">
-                    Pipeline sem candidatos
+                <div className="rounded-[2.5rem] border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-12 max-w-lg text-center backdrop-blur-sm">
+                  <div className="mb-6 flex justify-center text-6xl">🧭</div>
+                  <h3 className="text-xl font-black text-[hsl(var(--text))]">
+                    Nenhum Candidato no Fluxo
+                  </h3>
+                  <p className="mt-3 text-base text-[hsl(var(--text-muted))] leading-relaxed">
+                    Comece a construir seu time adicionando talentos ou usando a IA para buscar na sua base.
                   </p>
-                  <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
-                    Adicione talentos existentes ou deixe a IA sugerir matches compatíveis.
-                  </p>
-                  <div className="mt-5 flex flex-col gap-2.5">
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
                     <button
                       onClick={handleOpenSourceCandidates}
                       disabled={!canUse}
-                      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+                      className={`hover-lift inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-sm font-black transition shadow-xl ${
                         canUse
                           ? "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90"
                           : "bg-[hsl(var(--primary))]/50 text-white cursor-not-allowed"
                       }`}
                     >
-                      <UserPlus className="h-4 w-4" />
-                      Adicionar candidatos
+                      <UserPlus className="h-5 w-5" />
+                      Adicionar Candidatos
                     </button>
                     <button
                       onClick={() => canUse && setShowNewCandidate(true)}
                       disabled={!canUse}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] px-4 py-2.5 text-sm font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+                      className="hover-lift inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-[hsl(var(--border))] bg-white px-8 py-4 text-sm font-bold text-[hsl(var(--text-muted))] transition hover:border-[hsl(var(--primary))]/30 hover:text-[hsl(var(--text))] disabled:opacity-50"
                     >
-                      Criar manualmente
+                      Criar Manualmente
                     </button>
                   </div>
                 </div>
@@ -651,7 +671,7 @@ export function PipelinePage() {
         />
       )}
 
-      {/* ── Candidate drawer — position: fixed, always rendered, open via context ── */}
+      {/* ── Candidate drawer ── */}
       <CandidateDrawer key={selectedCandidateId ?? "none"} />
     </div>
   );
@@ -683,17 +703,14 @@ function RankingPanel({
   return (
     <aside
       id="pipeline-ranking-panel"
-      className="ui-card min-w-0 rounded-3xl p-4 transition-all duration-200 sm:p-5"
+      className="glass rounded-[2.5rem] p-6 shadow-2xl border-[hsl(var(--border))]/30 flex flex-col h-full sticky top-8"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[hsl(var(--border))] pb-4">
+      <div className="flex items-start justify-between gap-4 border-b border-[hsl(var(--border))]/50 pb-6">
         <div className="min-w-0">
-          <p className="ui-text-muted text-xs font-semibold uppercase tracking-wide">
-            Ranking da vaga
+          <p className="ui-text-muted text-[10px] font-black uppercase tracking-[0.2em]">
+            Ranking IA Marajó
           </p>
-          <h3 className="mt-1 text-sm font-semibold text-[hsl(var(--text))]">{jobTitle}</h3>
-          <p className="ui-text-muted mt-1 text-xs">
-            Apoio a decisao. O ranking nao altera a etapa do pipeline.
-          </p>
+          <h3 className="mt-2 text-lg font-black text-[hsl(var(--text))] truncate">{jobTitle}</h3>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {onRefresh ? (
@@ -701,52 +718,50 @@ function RankingPanel({
               type="button"
               onClick={onRefresh}
               disabled={loading}
-              className="ui-btn-secondary inline-flex items-center justify-center gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-medium disabled:opacity-40"
+              className="ui-btn-secondary h-10 w-10 flex items-center justify-center rounded-xl border border-[hsl(var(--border))] transition hover:border-[hsl(var(--primary))]/30 disabled:opacity-40"
+              title="Atualizar ranking"
             >
-              <RefreshCw className={["h-3.5 w-3.5", loading ? "animate-spin" : ""].join(" ")} />
-              <span>{loading ? "Atualizando…" : "Atualizar"}</span>
+              <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
             </button>
           ) : null}
           <button
             type="button"
             onClick={onToggle}
-            className="ui-btn-secondary inline-flex items-center justify-center gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-medium"
-            aria-expanded={true}
-            aria-controls="pipeline-ranking-content"
+            className="ui-btn-secondary h-10 w-10 flex items-center justify-center rounded-xl border border-[hsl(var(--border))] transition hover:border-[hsl(var(--primary))]/30"
+            title="Fechar"
           >
-            <PanelRightClose className="h-3.5 w-3.5" />
-            <span>Ocultar ranking</span>
+            <PanelRightClose className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div id="pipeline-ranking-content" className="mt-4">
+      <div id="pipeline-ranking-content" className="mt-6 flex-1 overflow-y-auto ui-scrollbar pr-1">
         {showInitialLoading ? <SkeletonRows rows={4} /> : null}
         {isRefreshing ? (
-          <div className="mb-3 rounded-lg border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-[11px] text-[hsl(var(--primary))]">
-            Atualizando o ranking da vaga…
+          <div className="mb-4 rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3 text-xs font-bold text-[hsl(var(--primary))] animate-pulse">
+            Recalculando aderência dos candidatos…
           </div>
         ) : null}
 
         {!showInitialLoading && error ? (
-          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
+          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-4 text-sm font-medium text-[hsl(var(--danger))]">
             {error}
           </div>
         ) : null}
 
         {!showInitialLoading && !error && ranking && ranking.candidates.length === 0 ? (
-          <EmptyState
-            icon="🏁"
-            title="Ainda não há ranking para esta vaga"
-            description="Assim que houver candidatos com análise concluída, o ranking aparecerá aqui."
-          />
+          <div className="py-12 text-center">
+            <div className="text-4xl mb-4">🏁</div>
+            <p className="text-sm font-bold text-[hsl(var(--text))]">Nenhum ranking disponível</p>
+            <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">Conclua a análise dos candidatos para gerar o ranking.</p>
+          </div>
         ) : null}
 
         {!showInitialLoading && !error && ranking && ranking.candidates.length > 0 ? (
-          <div className="flex flex-col gap-3">
-            <div className="rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-3 py-2 text-[11px] text-[hsl(var(--text))]">
-              {ranking.total_candidates} candidato{ranking.total_candidates !== 1 ? "s" : ""} no ranking
-              {ranking.score_version ? ` · versao ${ranking.score_version}` : ""}
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))]/50 px-4 py-2.5 text-[11px] font-bold text-[hsl(var(--text-muted))]">
+              <span>{ranking.total_candidates} Talentos</span>
+              {ranking.score_version && <span>V{ranking.score_version}</span>}
             </div>
 
             {ranking.data_quality_stats && (
@@ -805,67 +820,57 @@ function RankingCard({
       type="button"
       onClick={() => void onOpenCandidate(entry.candidate_id)}
       className={[
-        "w-full rounded-2xl border px-4 py-3 text-left transition hover:border-[hsl(var(--primary))]/35 hover:bg-[hsl(var(--accent-soft))]",
+        "hover-lift w-full rounded-2xl border-2 px-4 py-4 text-left transition-all",
         hasDealBreakerRejection
-          ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))]"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]",
+          ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))] hover:border-[hsl(var(--danger))]/50"
+          : "border-[hsl(var(--border))]/50 bg-white hover:border-[hsl(var(--primary))]/40 shadow-sm hover:shadow-md",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Posicao #{entry.rank}
-          </p>
-          <p className="mt-1 truncate text-sm font-semibold text-[hsl(var(--text))]">{entry.candidate_name}</p>
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10 text-[11px] font-black text-[hsl(var(--primary))]">
+              {entry.rank}
+            </span>
+            <p className="truncate text-sm font-black text-[hsl(var(--text))]">{entry.candidate_name}</p>
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--text-muted))]">
+              {freshnessLabel}
+            </span>
+          </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Aderência à Vaga
+          <p className="text-[10px] font-black uppercase tracking-wider text-[hsl(var(--text-muted))]">
+            Match
           </p>
-          <p className="mt-1 text-lg font-extrabold tabular-nums text-[hsl(var(--text))]">
+          <p className="mt-1 text-xl font-black tabular-nums text-[hsl(var(--primary))]">
             {Math.round(entry.job_fit_score)}%
           </p>
-          {hasDealBreakerRejection ? (
-            <div className="mt-2 flex justify-end">
-              <Badge variant="danger">Critério eliminatório</Badge>
-            </div>
-          ) : null}
         </div>
-      </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]">
-          {freshnessLabel}
-        </span>
       </div>
 
       {hasDealBreakerRejection && dealBreakerDisplay ? (
-        <div className="mt-3 rounded-xl border border-[hsl(var(--danger))]/20 bg-white/75 px-3 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--danger))]">
-            Rejeitado por regra da vaga
+        <div className="mt-4 rounded-xl border-2 border-[hsl(var(--danger))]/20 bg-white/80 p-3 shadow-inner">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[hsl(var(--danger))]">
+            Critério Eliminatório
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--text))]">
+          <p className="mt-2 text-xs font-bold text-[hsl(var(--text))]">
             {dealBreakerDisplay.fieldLabel}: esperado {dealBreakerDisplay.expected}
           </p>
           <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--text-muted))]">
-            Motivo configurado na vaga: {dealBreakerDisplay.reason}.
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--text-muted))]">
-            O score foi zerado porque este critério é eliminatório.
+             {dealBreakerDisplay.reason}.
           </p>
         </div>
       ) : null}
 
       {reasonPreview.length > 0 ? (
-        <div className="mt-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Por que esta aderência?
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-4">
+          <div className="flex flex-wrap gap-1.5">
             {reasonPreview.map((reason) => (
               <span
                 key={reason}
-                className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))]"
+                className="inline-flex items-center rounded-full border border-[hsl(var(--border))]/50 bg-[hsl(var(--surface-muted))]/30 px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--text-muted))]"
               >
                 {reason}
               </span>
@@ -873,14 +878,10 @@ function RankingCard({
           </div>
         </div>
       ) : null}
-
-      {entry.ranking_summary_text ? (
-        <p className="ui-text-muted mt-3 line-clamp-2 text-xs leading-relaxed">
+      
+      {entry.ranking_summary_text && (
+        <p className="mt-4 line-clamp-2 text-[11px] font-medium leading-relaxed text-[hsl(var(--text-muted))]">
           {entry.ranking_summary_text}
-        </p>
-      ) : (
-        <p className="ui-text-muted mt-3 text-xs">
-          A análise ainda não gerou um resumo para este candidato.
         </p>
       )}
     </button>
@@ -888,13 +889,15 @@ function RankingCard({
 }
 
 // ── MetaCell ───────────────────────────────────────────────────────────────────
-// Labeled metadata box inside the job info grid.
 
 function MetaCell({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
-      <div className="ui-text-muted text-xs font-semibold uppercase tracking-wide">{label}</div>
-      <div className="mt-1.5 text-sm font-medium text-[hsl(var(--text))]">{children}</div>
+    <div className="rounded-2xl border-2 border-[hsl(var(--border))]/30 bg-white/50 px-4 py-3 shadow-sm transition-colors hover:border-[hsl(var(--border))]/60">
+      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-[hsl(var(--text-muted))]">
+        <div className="h-1 w-1 rounded-full bg-[hsl(var(--border-strong))]" />
+        {label}
+      </div>
+      <div className="mt-2 text-sm font-black text-[hsl(var(--text))]">{children}</div>
     </div>
   );
 }

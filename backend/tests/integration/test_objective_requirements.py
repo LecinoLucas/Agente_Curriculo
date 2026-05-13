@@ -8,9 +8,11 @@ Validates:
 import pytest
 from decimal import Decimal
 from httpx import AsyncClient
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import User, UserRole
+from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -172,6 +174,167 @@ async def test_update_job_objective_requirements(
     updated_job = update_response.json()
     assert updated_job["minimum_education_level"] == "technical"
     assert float(updated_job["minimum_years_experience"]) == 2.5
+
+
+@pytest.mark.asyncio
+async def test_update_already_published_job_does_not_revalidate_publication_during_edit(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    recruiter = await _create_recruiter(db_session, "recruiter-published-edit@test.com")
+    headers = await _login(client, "recruiter-published-edit@test.com")
+
+    create_response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Published Job In Draft Edit Flow",
+            "description": "Initial description",
+            "status": "draft",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    job_id = create_response.json()["id"]
+
+    job = await db_session.get(JobModel, UUID(job_id))
+    assert job is not None
+    job.status = "published"
+    await db_session.commit()
+
+    update_response = await client.patch(
+        f"/api/v1/jobs/{job_id}",
+        json={
+            "title": "Published Job In Draft Edit Flow Updated",
+            "description": "Updated while the form is still incomplete",
+            "status": "published",
+        },
+        headers=headers,
+    )
+
+    assert update_response.status_code == 200
+    updated_job = update_response.json()
+    assert updated_job["status"] == "published"
+    assert updated_job["title"] == "Published Job In Draft Edit Flow Updated"
+
+
+@pytest.mark.asyncio
+async def test_update_draft_job_to_published_still_validates_publication_requirements(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    recruiter = await _create_recruiter(db_session, "recruiter-draft-publish@test.com")
+    headers = await _login(client, "recruiter-draft-publish@test.com")
+
+    create_response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Incomplete Draft Publish Attempt",
+            "description": "Incomplete description",
+            "status": "draft",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    job_id = create_response.json()["id"]
+
+    update_response = await client.patch(
+        f"/api/v1/jobs/{job_id}",
+        json={
+            "status": "published",
+        },
+        headers=headers,
+    )
+
+    assert update_response.status_code == 422
+    assert update_response.json()["detail"]["error"] == "job_publication_validation_failed"
+
+
+@pytest.mark.asyncio
+async def test_patch_job_skill_updates_existing_link_without_delete_recreate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    recruiter = await _create_recruiter(db_session, "recruiter-skill-patch@test.com")
+    headers = await _login(client, "recruiter-skill-patch@test.com")
+
+    create_response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Skill Patch Job",
+            "description": "Testing skill priority update",
+            "status": "draft",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    job_id = create_response.json()["id"]
+
+    add_response = await client.post(
+        f"/api/v1/jobs/{job_id}/skills",
+        json={
+            "skill_name": "React",
+            "priority_level": "complementary",
+            "weight": 1,
+        },
+        headers=headers,
+    )
+    assert add_response.status_code == 201
+    skill_link = add_response.json()
+
+    patch_response = await client.patch(
+        f"/api/v1/jobs/{job_id}/skills/{skill_link['id']}",
+        json={
+            "priority_level": "priority",
+            "weight": 2,
+        },
+        headers=headers,
+    )
+
+    assert patch_response.status_code == 200
+    updated_link = patch_response.json()
+    assert updated_link["id"] == skill_link["id"]
+    assert updated_link["skill_id"] == skill_link["skill_id"]
+    assert updated_link["priority_level"] == "priority"
+    assert float(updated_link["weight"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_delete_job_skill_accepts_link_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    recruiter = await _create_recruiter(db_session, "recruiter-skill-delete-link@test.com")
+    headers = await _login(client, "recruiter-skill-delete-link@test.com")
+
+    create_response = await client.post(
+        "/api/v1/jobs",
+        json={
+            "title": "Skill Delete Link Job",
+            "description": "Testing delete by link id",
+            "status": "draft",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    job_id = create_response.json()["id"]
+
+    add_response = await client.post(
+        f"/api/v1/jobs/{job_id}/skills",
+        json={
+            "skill_name": "Node.js",
+            "priority_level": "priority",
+        },
+        headers=headers,
+    )
+    assert add_response.status_code == 201
+    skill_link = add_response.json()
+
+    delete_response = await client.delete(
+        f"/api/v1/jobs/{job_id}/skills/{skill_link['id']}",
+        headers=headers,
+    )
+
+    assert delete_response.status_code == 204
 
 
 @pytest.mark.asyncio

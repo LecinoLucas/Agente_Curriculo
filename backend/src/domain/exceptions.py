@@ -31,3 +31,27 @@ class AccountLockedException(DomainException):
 
 class AccountInactiveException(DomainException):
     """Conta desativada ou pendente de verificação."""
+
+
+class GoogleCalendarConfigError(DomainException):
+    """Erro de configuração do Google Calendar."""
+
+
+class GoogleCalendarAuthError(DomainException):
+    """Erro de autenticação no Google Calendar."""
+
+
+class GoogleCalendarApiError(DomainException):
+    """Erro na API do Google Calendar."""
+
+
+class GoogleCalendarRateLimitError(DomainException):
+    """Erro de limite de taxa no Google Calendar."""
+
+
+class GoogleCalendarDuplicateEventError(DomainException):
+    """Tentativa de criar evento duplicado."""
+
+
+class GoogleCalendarSyncNotAllowedError(DomainException):
+    """Sincronização não permitida pela política."""

@@ -141,9 +141,16 @@ async def list_candidates(
     page_size: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None, description="Busca por nome ou e-mail"),
     archived: bool = Query(default=False),
+    application_source: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[CandidateResponse]:
-    candidates, total_items = await _candidate_service(db).list(page, page_size, search, archived)
+    candidates, total_items = await _candidate_service(db).list(
+        page,
+        page_size,
+        search,
+        archived,
+        application_source,
+    )
 
     return PaginatedResponse[CandidateResponse](
         data=[CandidateResponse.model_validate(c) for c in candidates],
@@ -163,10 +170,17 @@ async def list_candidate_summaries(
     has_resume: bool | None = Query(default=None),
     ai_status: list[str] | None = Query(default=None),
     archived: bool = Query(default=False),
+    application_source: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[CandidateListSummaryResponse]:
     items, total = await _candidate_service(db).list_summaries(
-        page, page_size, search, has_resume, ai_status, archived
+        page,
+        page_size,
+        search,
+        has_resume,
+        ai_status,
+        archived,
+        application_source,
     )
     return PaginatedResponse[CandidateListSummaryResponse](
         data=items,

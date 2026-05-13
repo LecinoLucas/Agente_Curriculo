@@ -5,7 +5,12 @@ from uuid import uuid4
 
 import pytest
 
-from src.application.services.candidate_service import CandidateDeleteSummary, CandidateEmailConflictError, CandidateService
+from src.application.services.candidate_service import (
+    APPLICATION_SOURCE_MANUAL,
+    CandidateDeleteSummary,
+    CandidateEmailConflictError,
+    CandidateService,
+)
 from src.application.services.job_service import InvalidJobSalaryRangeError, JobService
 from src.domain.entities.user import User, UserRole, UserStatus
 from src.infrastructure.database.models.candidate_model import CandidateModel
@@ -48,6 +53,9 @@ class FakeCandidateRepository:
         search: str | None = None,
         has_resume: bool | None = None,
         ai_status_filter: list[str] | None = None,
+        archived: bool = False,
+        *,
+        application_source: str | None = None,
     ) -> tuple[list[dict], int]:
         return self.summary_rows, len(self.summary_rows)
 
@@ -105,6 +113,7 @@ async def test_candidate_create_normalizes_email_and_tags():
     assert candidate.full_name == "Ana Silva"
     assert candidate.email == "ana@example.com"
     assert candidate.tags == ["backend", "python"]
+    assert candidate.application_source == APPLICATION_SOURCE_MANUAL
 
 
 @pytest.mark.asyncio

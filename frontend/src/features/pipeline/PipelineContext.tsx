@@ -22,6 +22,7 @@ import {
   Job,
   JobCandidate,
   JobPipelineBoard,
+  MovePipelineCandidateResponse,
   PipelineStage,
 } from "../../types/domain";
 
@@ -90,7 +91,7 @@ export interface PipelineContextValue extends PipelineState {
   ) => void;
 
   // Kanban drag
-  moveCandidateStage: (candidateId: string, toStage: PipelineStage) => Promise<void>;
+  moveCandidateStage: (candidateId: string, toStage: PipelineStage) => Promise<MovePipelineCandidateResponse>;
   setCandidateAiStatus: (candidateId: string, status: AIAnalysisStatus | null) => void;
   syncAnalysisStart: (input: {
     candidateId: string;
@@ -991,9 +992,10 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       });
 
       try {
-        await pipelineService.moveCandidateStage(jobId, candidateId, { stage: toStage });
+        const moveResult = await pipelineService.moveCandidateStage(jobId, candidateId, { stage: toStage });
         invalidateRanking();
         notifyCandidatesChanged();
+        return moveResult;
       } catch (err) {
         if (previousOverview) {
           candidateCacheRef.current.set(candidateId, previousOverview);

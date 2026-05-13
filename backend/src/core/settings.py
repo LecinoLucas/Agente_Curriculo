@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     # Application
     APP_ENV: str = "development"
     APP_SECRET_KEY: str
+    FIELD_ENCRYPTION_KEY: str = ""
     APP_DEBUG: bool = False
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
@@ -46,8 +47,18 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_DEFAULT_MODEL: str = "claude-sonnet-4-6"
     ANTHROPIC_MAX_TOKENS: int = 4096
-    GOOGLE_API_KEY: str = ""
+    GOOGLE_API_KEY_1: str = ""
+    GOOGLE_API_KEY_2: str = ""
+    GOOGLE_API_KEY_3: str = ""
+    GOOGLE_API_KEY_4: str = ""
+    GOOGLE_API_KEY_5: str = ""
     GEMINI_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    PUBLIC_API_BASE_URL: str = ""
+    FRONTEND_BASE_URL: str = ""
+    GOOGLE_REDIRECT_URI: str = ""
+    GOOGLE_CALENDAR_SCOPES: str = "openid email profile https://www.googleapis.com/auth/calendar.events"
     ALLOW_AI_TOKEN_SPEND: bool = True
     # Set to true ONLY in local dev to bypass real AI calls with synthetic scores.
     # Must never be true in staging or production.
@@ -106,6 +117,13 @@ class Settings(BaseSettings):
         if self.ENABLE_DEV_MOCK and self.APP_ENV == "production":
             raise ValueError("ENABLE_DEV_MOCK must not be enabled in production")
 
+        if self.APP_ENV == "production" and not self.FIELD_ENCRYPTION_KEY:
+            raise ValueError("FIELD_ENCRYPTION_KEY must be set in production")
+
+        if not self.FIELD_ENCRYPTION_KEY and self.APP_ENV != "production":
+            # Fallback para dev/test (chave estática válida para Fernet)
+            self.FIELD_ENCRYPTION_KEY = "cuZ9dlSKhIokW-5fid9qSCsFJEoc2swn9iZNupnF06w="
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
@@ -113,6 +131,40 @@ class Settings(BaseSettings):
     @property
     def jwt_refresh_expire_seconds(self) -> int:
         return self.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
+
+    @property
+    def public_api_base_url(self) -> str:
+        if self.PUBLIC_API_BASE_URL:
+            return self.PUBLIC_API_BASE_URL.rstrip("/")
+        return "http://127.0.0.1:8000"
+
+    @property
+    def frontend_base_url(self) -> str:
+        if self.FRONTEND_BASE_URL:
+            return self.FRONTEND_BASE_URL.rstrip("/")
+        if self.CORS_ORIGINS:
+            return self.CORS_ORIGINS[0].rstrip("/")
+        return "http://127.0.0.1:5173"
+
+    @property
+    def google_redirect_uri(self) -> str:
+        if self.GOOGLE_REDIRECT_URI:
+            return self.GOOGLE_REDIRECT_URI
+        return f"{self.public_api_base_url}/api/v1/integrations/google-calendar/callback"
+
+    @property
+    def google_api_keys(self) -> list[str]:
+        return [
+            key.strip()
+            for key in (
+                self.GOOGLE_API_KEY_1,
+                self.GOOGLE_API_KEY_2,
+                self.GOOGLE_API_KEY_3,
+                self.GOOGLE_API_KEY_4,
+                self.GOOGLE_API_KEY_5,
+            )
+            if key.strip()
+        ]
 
 
 @lru_cache

@@ -29,6 +29,7 @@ async def list_skills(
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
     category: Optional[str] = None,
+    catalog_type: Optional[str] = None,
     is_active: Optional[bool] = None,
     archived: bool = False,
     service: SkillCatalogService = Depends(_get_service),
@@ -38,6 +39,7 @@ async def list_skills(
         page_size=page_size,
         search=search,
         category=category,
+        catalog_type=catalog_type,
         is_active=is_active,
         archived=archived,
     )

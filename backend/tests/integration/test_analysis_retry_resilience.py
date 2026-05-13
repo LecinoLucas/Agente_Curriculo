@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
+from src.application.services.analysis_service import AnalysisService
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
 from src.infrastructure.database.models.analysis_model import AIModelModel, AnalysisModel, PromptTemplateModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
@@ -160,3 +161,52 @@ async def test_request_analysis_reuses_retry_scheduled_analysis(db_session: Asyn
     assert result.analysis_id == analysis.id
     assert str(result.status) == "retry_scheduled"
     assert result.enqueue_required is False
+
+
+@pytest.mark.asyncio
+async def test_list_global_marks_stale_pending_analysis_failed(db_session: AsyncSession) -> None:
+    _, _, _, analysis = await _seed_retry_scheduled_analysis(db_session)
+    old = datetime.now(UTC) - timedelta(hours=3)
+    analysis.status = "pending"
+    analysis.retry_count = 0
+    analysis.next_retry_at = None
+    analysis.failure_reason = None
+    analysis.created_at = old
+    analysis.updated_at = old
+    await db_session.commit()
+
+    service = AnalysisService(SQLAlchemyAnalysisRepository(db_session))
+    items, _ = await service.list_global(page=1, page_size=20)
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "failed"
+    assert analysis.failure_reason == "analysis_stuck_pending_timeout"
+    item = next(item for item in items if item.id == analysis.id)
+    assert item.stuck is True
+    assert item.reason == "analysis_stuck_pending_timeout"
+
+
+@pytest.mark.asyncio
+async def test_list_global_marks_expired_processing_claim_failed(db_session: AsyncSession) -> None:
+    _, _, _, analysis = await _seed_retry_scheduled_analysis(db_session)
+    old = datetime.now(UTC) - timedelta(minutes=45)
+    analysis.status = "processing"
+    analysis.next_retry_at = None
+    analysis.failure_reason = None
+    analysis.started_at = old
+    analysis.updated_at = old
+    analysis.worker_claim_id = "task-stale"
+    analysis.claimed_at = old
+    analysis.stale_at = datetime.now(UTC) - timedelta(minutes=1)
+    await db_session.commit()
+
+    service = AnalysisService(SQLAlchemyAnalysisRepository(db_session))
+    items, _ = await service.list_global(page=1, page_size=20)
+
+    await db_session.refresh(analysis)
+    assert analysis.status == "failed"
+    assert analysis.failure_reason == "analysis_worker_claim_expired"
+    assert analysis.worker_claim_id is None
+    item = next(item for item in items if item.id == analysis.id)
+    assert item.stuck is True
+    assert item.reason == "analysis_worker_claim_expired"

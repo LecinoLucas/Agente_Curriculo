@@ -27,25 +27,58 @@ export function useJobSkills(options: UseJobSkillsOptions) {
   const [jobSkills, setJobSkills] = useState<JobSkill[]>([]);
   const [pendingSkills, setPendingSkills] = useState<PendingJobSkill[]>([]);
   const [skillSearch, setSkillSearch] = useState("");
+  const [skillCategoryFilter, setSkillCategoryFilter] = useState("");
+  const [skillTypeFilter, setSkillTypeFilter] = useState("");
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
   const [allSkills, setAllSkills] = useState<SkillCatalog[]>([]);
+  const [skillFilterOptionsSource, setSkillFilterOptionsSource] = useState<SkillCatalog[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    void skillsService
+      .listSkills({
+        page_size: 100,
+        is_active: true,
+      })
+      .then((response) => {
+        if (!cancelled) {
+          setSkillFilterOptionsSource(response.data);
+        }
+      })
+      .catch((error) => {
+        console.error("Erro ao buscar filtros de skills:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     const handler = setTimeout(async () => {
       try {
         const response = await skillsService.listSkills({
           search: skillSearch.trim() || undefined,
+          category: skillCategoryFilter || undefined,
+          catalog_type: skillTypeFilter || undefined,
           page_size: 50,
           is_active: true,
         });
-        setAllSkills(response.data);
+        if (!cancelled) {
+          setAllSkills(response.data);
+        }
       } catch (error) {
         console.error("Erro ao buscar skills:", error);
       }
     }, 300);
 
-    return () => clearTimeout(handler);
-  }, [skillSearch]);
+    return () => {
+      cancelled = true;
+      clearTimeout(handler);
+    };
+  }, [skillSearch, skillCategoryFilter, skillTypeFilter]);
 
   const combinedSkills = useMemo<Array<JobSkill | PendingJobSkill>>(() => {
     if (jobSkills.length === 0) return pendingSkills;
@@ -81,6 +114,24 @@ export function useJobSkills(options: UseJobSkillsOptions) {
       return true;
     });
   }, [allSkills, combinedSkills]);
+
+  const skillCategoryOptions = useMemo(() => {
+    const categories = new Set<string>();
+    for (const skill of [...skillFilterOptionsSource, ...allSkills]) {
+      const category = skill.category?.trim();
+      if (category) categories.add(category);
+    }
+    return Array.from(categories).sort((a, b) => a.localeCompare(b));
+  }, [allSkills, skillFilterOptionsSource]);
+
+  const skillTypeOptions = useMemo(() => {
+    const types = new Set<string>();
+    for (const skill of [...skillFilterOptionsSource, ...allSkills]) {
+      const type = skill.catalog_type?.trim();
+      if (type) types.add(type);
+    }
+    return Array.from(types).sort((a, b) => a.localeCompare(b));
+  }, [allSkills, skillFilterOptionsSource]);
 
   async function handleAddSkill(
     skill: SkillCatalog | string,
@@ -143,6 +194,11 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     if (options.currentJob && "id" in skill) {
       setSavingSkillId(skill.skill_id);
       try {
+        setJobSkills((current) =>
+          current.map((item) =>
+            item.id === skill.id ? { ...item, ...patch } : item,
+          ),
+        );
         await jobSkillsService.updateJobSkill(options.currentJob.id, skill, {
           priority_level: patch.priority_level ?? skill.priority_level,
           minimum_level: patch.minimum_level ?? skill.minimum_level,
@@ -152,6 +208,15 @@ export function useJobSkills(options: UseJobSkillsOptions) {
         const refreshedSkills = await jobSkillsService.listJobSkills(options.currentJob.id);
         setJobSkills(refreshedSkills);
         await options.onRefreshQuality(options.currentJob.id);
+      } catch (error) {
+        try {
+          const refreshedSkills = await jobSkillsService.listJobSkills(options.currentJob.id);
+          setJobSkills(refreshedSkills);
+        } catch {
+          // Keep original error feedback if the follow-up refresh fails.
+        }
+        toast.error(formatErrorForToast(handleApiError(error)));
+        throw error;
       } finally {
         setSavingSkillId(null);
       }
@@ -169,10 +234,19 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     if (options.currentJob && "id" in skill) {
       setSavingSkillId(skill.skill_id);
       try {
-        await jobSkillsService.removeJobSkill(options.currentJob.id, skill.skill_id);
+        await jobSkillsService.removeJobSkill(options.currentJob.id, skill.id);
         const refreshedSkills = await jobSkillsService.listJobSkills(options.currentJob.id);
         setJobSkills(refreshedSkills);
         await options.onRefreshQuality(options.currentJob.id);
+      } catch (error) {
+        try {
+          const refreshedSkills = await jobSkillsService.listJobSkills(options.currentJob.id);
+          setJobSkills(refreshedSkills);
+        } catch {
+          // Keep original error feedback if the follow-up refresh fails.
+        }
+        toast.error(formatErrorForToast(handleApiError(error)));
+        throw error;
       } finally {
         setSavingSkillId(null);
       }
@@ -202,6 +276,7 @@ export function useJobSkills(options: UseJobSkillsOptions) {
 
   const onSkillCreated = (skill: SkillCatalog) => {
     setAllSkills((current) => [skill, ...current]);
+    setSkillFilterOptionsSource((current) => [skill, ...current]);
   };
 
   return {
@@ -211,6 +286,12 @@ export function useJobSkills(options: UseJobSkillsOptions) {
     setPendingSkills,
     skillSearch,
     setSkillSearch,
+    skillCategoryFilter,
+    setSkillCategoryFilter,
+    skillTypeFilter,
+    setSkillTypeFilter,
+    skillCategoryOptions,
+    skillTypeOptions,
     savingSkillId,
     allSkills,
     setAllSkills,

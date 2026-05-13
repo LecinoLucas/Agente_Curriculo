@@ -1,0 +1,430 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
+import sqlalchemy as sa
+import structlog
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.application.services.candidate_portal_auth_service import (
+    CANDIDATE_PORTAL_COOKIE_NAME,
+    PORTAL_SESSION_TTL_HOURS,
+    CandidatePortalAuthService,
+    CandidatePortalInvalidCredentialsError,
+)
+from src.application.services.assessment_service import AssessmentService
+from src.application.services.candidate_portal_service import (
+    CandidatePortalInvalidFileError,
+    CandidatePortalProfileConflictError,
+    CandidatePortalService,
+)
+from src.application.services.public_application_service import (
+    PublicApplicationCpfError,
+    PublicApplicationEmailError,
+    PublicApplicationExistingAccountError,
+    PublicApplicationFileError,
+    PublicApplicationJobUnavailableError,
+    PublicApplicationDuplicateJobError,
+    PublicApplicationService,
+    SYSTEM_USER_ID,
+)
+from src.domain.exceptions import ValidationException
+from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.infrastructure.repositories.sqlalchemy_assessment_repository import SQLAlchemyAssessmentRepository
+from src.interface.api.dependencies import CurrentCandidateSession, get_db
+from src.interface.api.schemas.candidate_portal_schemas import (
+    CandidateAuthLoginRequest,
+    CandidateAuthLoginResponse,
+    CandidatePortalOverviewResponse,
+    CandidatePortalResumeUploadResponse,
+    CandidatePortalUpdateProfileRequest,
+)
+from src.interface.api.schemas.assessment_schemas import (
+    CandidateAssessmentDetailResponse,
+    CandidateAssessmentSubmitRequest,
+    CandidateAssessmentSubmitResponse,
+    CandidateAssessmentSummaryResponse,
+)
+from src.interface.api.schemas.public_schemas import PublicApplyResponse, PublicJobResponse
+
+router = APIRouter(prefix="/public", tags=["public"])
+logger = structlog.get_logger(__name__)
+
+
+@router.get("/jobs", response_model=list[PublicJobResponse])
+async def list_public_jobs(
+    db: AsyncSession = Depends(get_db),
+) -> list[PublicJobResponse]:
+    """
+    Lista vagas publicadas disponíveis para candidatura pública.
+    Retorna apenas vagas com status='published' e não deletadas.
+    """
+    job_repo = SQLAlchemyJobRepository(db)
+    jobs = await job_repo.list_published()
+    return [
+        PublicJobResponse(
+            id=job.id,
+            title=job.title,
+            location=job.location,
+            job_area=job.job_area,
+        )
+        for job in jobs
+    ]
+
+
+@router.post("/candidates/apply", response_model=PublicApplyResponse, status_code=status.HTTP_201_CREATED)
+async def apply(
+    request: Request,
+    response: Response,
+    full_name: str = Form(...),
+    cpf: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    city: str = Form(...),
+    state: str = Form(...),
+    salary_expectation: str = Form(default=""),
+    desired_contract_type: str = Form(...),
+    works_at_marajo_group: bool = Form(...),
+    job_id: UUID | None = Form(default=None),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    lgpd_consent: bool = Form(...),
+    resume_file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> PublicApplyResponse:
+    """
+    Endpoint público de candidatura.
+
+    Aceita multipart/form-data com:
+    - Dados pessoais (nome, CPF, email, telefone, localização)
+    - Preferências (vaga, regime, pretensão salarial, grupo Marajó)
+    - Arquivo PDF do currículo
+
+    Sem autenticação requerida.
+    """
+    try:
+        # Validar nome
+        if not full_name or len(full_name.split()) < 2:
+            raise ValidationException("Nome deve ter pelo menos duas palavras")
+
+        # Validar estado (UF)
+        state_upper = state.strip().upper()
+        if len(state_upper) != 2:
+            raise ValidationException("Estado deve ser uma sigla de 2 caracteres (ex: SP, RJ)")
+
+        # Validar regime
+        valid_contract_types = {"CLT", "PJ", "Indiferente"}
+        if desired_contract_type not in valid_contract_types:
+            raise ValidationException(f"Regime desejado deve ser um de: {', '.join(valid_contract_types)}")
+        if password != confirm_password:
+            raise ValidationException("Confirmação de senha não confere")
+
+        # Ler arquivo
+        file_bytes = await resume_file.read()
+        file_name = resume_file.filename or "resume.pdf"
+        file_content_type = resume_file.content_type
+
+        # Executar aplicação
+        service = PublicApplicationService(db)
+        result = await service.apply(
+            full_name=full_name,
+            cpf=cpf,
+            email=email,
+            phone=phone,
+            city=city,
+            state=state_upper,
+            salary_expectation=salary_expectation,
+            desired_contract_type=desired_contract_type,
+            works_at_marajo_group=works_at_marajo_group,
+            job_id=job_id,
+            password=password,
+            file_bytes=file_bytes,
+            file_name=file_name,
+            file_content_type=file_content_type,
+            lgpd_consent=lgpd_consent,
+        )
+
+        auth_service = CandidatePortalAuthService(db)
+        session_token, _ = await auth_service.create_session(
+            candidate_id=result.candidate_id,
+            ip_address=request.client.host if request and request.client else "unknown",
+            user_agent=request.headers.get("user-agent", "") if request else "",
+        )
+        response.set_cookie(
+            key=CANDIDATE_PORTAL_COOKIE_NAME,
+            value=session_token,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https" if request else False,
+            max_age=PORTAL_SESSION_TTL_HOURS * 3600,
+            path="/",
+        )
+
+        await db.commit()
+        return result
+
+    except PublicApplicationCpfError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
+    except PublicApplicationEmailError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
+    except PublicApplicationExistingAccountError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
+    except PublicApplicationFileError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+    except PublicApplicationJobUnavailableError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except PublicApplicationDuplicateJobError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.message,
+        )
+    except IntegrityError as exc:
+        await db.rollback()
+        message = str(exc.orig)
+        if "uq_candidates_active_email" in message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Este e-mail já está cadastrado",
+            )
+        if "uq_candidates_active_cpf" in message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Já existe um cadastro com este CPF",
+            )
+        logger.exception("integrity_error_apply", exc_info=exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao processar candidatura",
+        )
+
+
+@router.post("/candidate-auth/login", response_model=CandidateAuthLoginResponse)
+async def login_candidate_portal(
+    body: CandidateAuthLoginRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateAuthLoginResponse:
+    try:
+        session_token, session_expires_at = await CandidatePortalAuthService(db).login(
+            email=body.email,
+            password=body.password,
+            ip_address=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        await db.commit()
+        response.set_cookie(
+            key=CANDIDATE_PORTAL_COOKIE_NAME,
+            value=session_token,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            max_age=PORTAL_SESSION_TTL_HOURS * 3600,
+            path="/",
+        )
+        return CandidateAuthLoginResponse(
+            message="Login realizado com sucesso.",
+            redirect_to="/candidato/portal",
+            session_expires_at=session_expires_at,
+        )
+    except CandidatePortalInvalidCredentialsError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="E-mail ou senha inválidos.",
+        )
+    except Exception:
+        await db.rollback()
+        logger.exception("candidate_portal.login_failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível concluir o login.",
+        )
+
+
+@router.post("/candidate-auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_candidate_portal(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
+        await CandidatePortalAuthService(db).logout(token)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception("candidate_portal.logout_failed")
+    response.delete_cookie(CANDIDATE_PORTAL_COOKIE_NAME, path="/")
+    return response
+
+
+@router.get("/candidate-portal/overview", response_model=CandidatePortalOverviewResponse)
+async def get_candidate_portal_overview(
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> CandidatePortalOverviewResponse:
+    service = CandidatePortalService(db)
+    return await service.get_overview(candidate_session.candidate_id)
+
+
+@router.patch("/candidate-portal/profile", response_model=CandidatePortalOverviewResponse)
+async def update_candidate_portal_profile(
+    body: CandidatePortalUpdateProfileRequest,
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> CandidatePortalOverviewResponse:
+    try:
+        service = CandidatePortalService(db)
+        result = await service.update_profile(candidate_session.candidate_id, body)
+        await db.commit()
+        return result
+    except CandidatePortalProfileConflictError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Não foi possível atualizar os dados informados",
+        )
+
+
+@router.post("/candidate-portal/resume", response_model=CandidatePortalResumeUploadResponse)
+async def upload_candidate_portal_resume(
+    candidate_session: CurrentCandidateSession,
+    resume_file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> CandidatePortalResumeUploadResponse:
+    try:
+        file_bytes = await resume_file.read()
+        service = CandidatePortalService(db)
+        result = await service.upload_resume(
+            candidate_id=candidate_session.candidate_id,
+            file_bytes=file_bytes,
+            file_name=resume_file.filename or "resume.pdf",
+            file_content_type=resume_file.content_type,
+            uploaded_by=SYSTEM_USER_ID,
+        )
+        await db.commit()
+        return result
+    except CandidatePortalInvalidFileError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+    except CandidatePortalProfileConflictError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidato não encontrado",
+        )
+    except Exception:
+        await db.rollback()
+        logger.exception(
+            "candidate_portal.resume_upload_failed",
+            candidate_id=str(candidate_session.candidate_id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível enviar o currículo",
+        )
+
+
+@router.get("/candidate-portal/assessments", response_model=list[CandidateAssessmentSummaryResponse])
+async def list_candidate_portal_assessments(
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> list[CandidateAssessmentSummaryResponse]:
+    overview = await CandidatePortalService(db).get_overview(candidate_session.candidate_id)
+    return overview.assessments
+
+
+@router.get("/candidate-portal/assessments/{assignment_id}", response_model=CandidateAssessmentDetailResponse)
+async def get_candidate_portal_assessment(
+    assignment_id: UUID,
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateAssessmentDetailResponse:
+    try:
+        return await AssessmentService(SQLAlchemyAssessmentRepository(db)).get_public_assignment(
+            candidate_id=candidate_session.candidate_id,
+            assignment_id=assignment_id,
+        )
+    except Exception as exc:
+        if hasattr(exc, "message"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise
+
+
+@router.post("/candidate-portal/assessments/{assignment_id}/start", response_model=CandidateAssessmentDetailResponse)
+async def start_candidate_portal_assessment(
+    assignment_id: UUID,
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateAssessmentDetailResponse:
+    try:
+        result = await AssessmentService(SQLAlchemyAssessmentRepository(db)).start_public_assignment(
+            candidate_id=candidate_session.candidate_id,
+            assignment_id=assignment_id,
+        )
+        await db.commit()
+        return result
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
+    except Exception as exc:
+        await db.rollback()
+        if hasattr(exc, "message"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise
+
+
+@router.post("/candidate-portal/assessments/{assignment_id}/submit", response_model=CandidateAssessmentSubmitResponse)
+async def submit_candidate_portal_assessment(
+    assignment_id: UUID,
+    body: CandidateAssessmentSubmitRequest,
+    candidate_session: CurrentCandidateSession,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateAssessmentSubmitResponse:
+    try:
+        result = await AssessmentService(SQLAlchemyAssessmentRepository(db)).submit_public_assignment(
+            candidate_id=candidate_session.candidate_id,
+            assignment_id=assignment_id,
+            answers=body.answers,
+        )
+        await db.commit()
+        return result
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
+    except Exception as exc:
+        await db.rollback()
+        if hasattr(exc, "message"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
+        raise

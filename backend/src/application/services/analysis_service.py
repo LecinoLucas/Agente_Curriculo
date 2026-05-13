@@ -1,7 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -31,6 +31,16 @@ _PRIORITY_STRONG_COVERAGE_CAP_SCORE = Decimal("100")
 _MINIMUM_DOMAIN_FIT_CAP_SCORE = Decimal("49")
 _LOW_PROFILE_COMPLETENESS_THRESHOLD = Decimal("0.60")
 _SCORE_VERSION_EQUIVALENCE = "v4-priority-level"
+_ANALYSIS_PENDING_STUCK_AFTER = timedelta(hours=2)
+_ANALYSIS_PROCESSING_STUCK_AFTER = timedelta(minutes=30)
+_ANALYSIS_STUCK_PENDING_REASON = "analysis_stuck_pending_timeout"
+_ANALYSIS_STUCK_PROCESSING_REASON = "analysis_stuck_processing_timeout"
+_ANALYSIS_WORKER_CLAIM_EXPIRED_REASON = "analysis_worker_claim_expired"
+_ANALYSIS_STUCK_REASONS = {
+    _ANALYSIS_STUCK_PENDING_REASON,
+    _ANALYSIS_STUCK_PROCESSING_REASON,
+    _ANALYSIS_WORKER_CLAIM_EXPIRED_REASON,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +50,10 @@ from src.application.services.audit_service import AuditService
 from src.application.services.analysis_match_store import AnalysisMatchStore
 from src.application.services.analysis_ranking_refresh_service import (
     AnalysisRankingRefreshService,
+)
+from src.application.services.ai_usage_log_service import (
+    AIUsageLogPayload,
+    safe_persist_ai_usage_log,
 )
 from src.application.services.eligibility_engine_service import EligibilityEngineService
 from src.application.services.job_profiler_service import (
@@ -65,6 +79,7 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisResultModel,
     PromptTemplateModel,
 )
+from src.infrastructure.database.connection import AsyncSessionFactory
 from src.infrastructure.database.models.profile_analysis_model import (
     CandidateProfileAnalysisModel,
     JobProfileAnalysisModel,
@@ -1028,6 +1043,83 @@ class AnalysisService:
         self._eligibility_engine_service = EligibilityEngineService()
         return self._eligibility_engine_service
 
+    async def _mark_stale_in_flight_as_failed(self, *, analysis_id: UUID | None = None) -> int:
+        """Fail stale analyses on read paths so polling does not spin forever."""
+        now = datetime.now(UTC)
+        session = self._repository._session
+        marked = 0
+
+        id_filter = [AnalysisModel.id == analysis_id] if analysis_id is not None else []
+
+        pending_result = await session.execute(
+            sa.select(AnalysisModel).where(
+                *id_filter,
+                AnalysisModel.status == "pending",
+                AnalysisModel.created_at < now - _ANALYSIS_PENDING_STUCK_AFTER,
+                AnalysisModel.next_retry_at.is_(None),
+            )
+        )
+        for analysis in pending_result.scalars().all():
+            analysis.status = "failed"
+            analysis.failure_reason = _ANALYSIS_STUCK_PENDING_REASON
+            analysis.failed_at = now
+            analysis.next_retry_at = None
+            analysis.worker_claim_id = None
+            analysis.claimed_at = None
+            analysis.stale_at = None
+            analysis.updated_at = now
+            marked += 1
+            logger.warning(
+                "analysis.stuck.pending_timeout",
+                extra={
+                    "analysis_id": str(analysis.id),
+                    "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+                },
+            )
+
+        processing_result = await session.execute(
+            sa.select(AnalysisModel).where(
+                *id_filter,
+                AnalysisModel.status == "processing",
+                sa.or_(
+                    AnalysisModel.stale_at < now,
+                    AnalysisModel.started_at < now - _ANALYSIS_PROCESSING_STUCK_AFTER,
+                    sa.and_(
+                        AnalysisModel.started_at.is_(None),
+                        AnalysisModel.updated_at < now - _ANALYSIS_PROCESSING_STUCK_AFTER,
+                    ),
+                ),
+            )
+        )
+        for analysis in processing_result.scalars().all():
+            reason = (
+                _ANALYSIS_WORKER_CLAIM_EXPIRED_REASON
+                if analysis.stale_at is not None and analysis.stale_at < now
+                else _ANALYSIS_STUCK_PROCESSING_REASON
+            )
+            analysis.status = "failed"
+            analysis.failure_reason = reason
+            analysis.failed_at = now
+            analysis.next_retry_at = None
+            analysis.worker_claim_id = None
+            analysis.claimed_at = None
+            analysis.stale_at = None
+            analysis.updated_at = now
+            marked += 1
+            logger.warning(
+                "analysis.stuck.processing_timeout",
+                extra={
+                    "analysis_id": str(analysis.id),
+                    "reason": reason,
+                    "started_at": analysis.started_at.isoformat() if analysis.started_at else None,
+                },
+            )
+
+        if marked:
+            await session.commit()
+            logger.warning("analysis.stuck_analyses_marked_failed", extra={"count": marked})
+        return marked
+
     async def list(
         self,
         current_user: User,
@@ -1045,6 +1137,7 @@ class AnalysisService:
         search: str | None = None,
         used_real_ai: bool | None = None,
     ) -> tuple[list[AnalysisGlobalItemResponse], int]:
+        await self._mark_stale_in_flight_as_failed()
         rows, total = await self._repository.list_global(
             page, page_size, status_filter, search, used_real_ai
         )
@@ -1065,6 +1158,11 @@ class AnalysisService:
                 discard_reason_note=row.get("discard_reason_note"),
                 used_real_ai=row["used_real_ai"],
                 retry_count=row["retry_count"],
+                next_retry_at=row.get("next_retry_at"),
+                provider_error_type=row.get("provider_error_type"),
+                provider_status_code=row.get("provider_status_code"),
+                stuck=row["failure_reason"] in _ANALYSIS_STUCK_REASONS,
+                reason=row["failure_reason"] if row["failure_reason"] in _ANALYSIS_STUCK_REASONS else None,
                 created_at=row["created_at"],
                 started_at=row["started_at"],
                 completed_at=row["completed_at"],
@@ -1078,6 +1176,10 @@ class AnalysisService:
         analysis = await self._repository.find_for_user(analysis_id, current_user)
         if analysis is None:
             raise AnalysisNotFoundError
+        if analysis.status in {"pending", "processing"}:
+            marked = await self._mark_stale_in_flight_as_failed(analysis_id=analysis.id)
+            if marked:
+                await self._repository._session.refresh(analysis)
         return analysis
 
     async def discard(
@@ -1138,18 +1240,18 @@ class AnalysisService:
     ) -> AnalysisPipelineResponse:
         analysis = await self.get(analysis_id, current_user)
         target_job_id = analysis.job_id
-        has_persisted_match = False
+        has_current_score = False
         if target_job_id is not None:
-            has_persisted_match = (
-                await self._repository.find_candidate_job_match_for_analysis(
+            has_current_score = (
+                await self._repository.find_candidate_job_score_for_analysis(
                     analysis_id,
                     target_job_id,
                 )
             ) is not None
 
         published_jobs_total = 1 if target_job_id is not None else 0
-        matched_jobs_count = 1 if has_persisted_match else 0
-        pending_jobs_count = 1 if target_job_id is not None and not has_persisted_match else 0
+        matched_jobs_count = 1 if has_current_score else 0
+        pending_jobs_count = 1 if target_job_id is not None and not has_current_score else 0
         recent_matches = await self._repository.list_recent_job_matches_for_analysis(analysis_id)
 
         if analysis.status in {"failed", "cancelled", "discarded"}:
@@ -1158,7 +1260,7 @@ class AnalysisService:
             matching_status = "waiting_analysis"
         elif target_job_id is None:
             matching_status = "idle"
-        elif has_persisted_match:
+        elif has_current_score:
             matching_status = "completed"
         else:
             matching_status = "idle"
@@ -1420,7 +1522,36 @@ class AnalysisService:
             except UnsupportedAIProviderError:
                 ai_service = None
 
-        profile = await JobProfilerService(ai_service=ai_service).generate_profile(
+        async def _log_job_profile_ai_usage(event: dict[str, object | None]) -> None:
+            if active_model is None:
+                return
+            await safe_persist_ai_usage_log(
+                AsyncSessionFactory,
+                AIUsageLogPayload(
+                    provider=active_model.provider,
+                    model=active_model.model_id,
+                    status=str(event.get("status") or "failed"),
+                    operation="job_profile",
+                    job_id=job.id,
+                    input_tokens=int(event.get("input_tokens") or 0),
+                    output_tokens=int(event.get("output_tokens") or 0),
+                    latency_ms=(
+                        int(event["latency_ms"])
+                        if event.get("latency_ms") is not None
+                        else None
+                    ),
+                    error_message=(
+                        str(event["error_message"])
+                        if event.get("error_message") is not None
+                        else None
+                    ),
+                ),
+            )
+
+        profile = await JobProfilerService(
+            ai_service=ai_service,
+            ai_usage_logger=_log_job_profile_ai_usage if active_model is not None else None,
+        ).generate_profile(
             job.description or "",
             title=job.title,
             requirements=job.requirements,

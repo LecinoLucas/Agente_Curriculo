@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import structlog
 
@@ -189,9 +189,11 @@ class JobProfilerService:
         self,
         ai_service: AIService | None,
         cache: InMemoryJobProfileCache | None = None,
+        ai_usage_logger: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
         self._ai = ai_service
         self._cache = cache if cache is not None else InMemoryJobProfileCache()
+        self._ai_usage_logger = ai_usage_logger
 
     async def generate_profile(
         self,
@@ -288,7 +290,33 @@ class JobProfilerService:
             max_tokens=2048,
             temperature=0.1,
         )
-        response = await self._ai.analyze(request)
+        try:
+            response = await self._ai.analyze(request)
+        except Exception as exc:
+            if self._ai_usage_logger is not None:
+                await self._ai_usage_logger(
+                    {
+                        "status": "failed",
+                        "operation": "job_profile",
+                        "input_tokens": int(getattr(exc, "input_tokens", 0) or 0),
+                        "output_tokens": int(getattr(exc, "output_tokens", 0) or 0),
+                        "latency_ms": getattr(exc, "processing_time_ms", None),
+                        "error_message": str(exc),
+                    }
+                )
+            raise
+
+        if self._ai_usage_logger is not None:
+            await self._ai_usage_logger(
+                {
+                    "status": "success",
+                    "operation": "job_profile",
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                    "latency_ms": response.processing_time_ms,
+                    "error_message": None,
+                }
+            )
         raw = extract_json(response.content)
 
         logger.info(

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,10 @@ from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreModel,
+    ScoreModelVersionModel,
+)
 
 from .helpers import _auth_headers, _create_active_user, _seed_scoring_case
 
@@ -72,6 +77,108 @@ async def test_candidate_overview_prefers_active_job_completed_analysis(
     assert payload["latest_analysis"]["status"] == "completed"
     assert payload["latest_analysis_pipeline"] is not None
     assert payload["latest_analysis_pipeline"]["job_id"] == str(active_job_id)
+    assert payload["latest_analysis_pipeline"]["matching_status"] == "idle"
+    assert payload["latest_analysis_pipeline"]["matched_jobs_count"] == 0
+    assert payload["latest_analysis_pipeline"]["pending_jobs_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_candidate_overview_marks_matching_completed_only_with_current_analysis_score(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-overview-score-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+
+    active_job_id, candidate_id, _ = await _seed_scoring_case(
+        db_session,
+        recruiter.id,
+        job_title="Active Pipeline Job With Score",
+    )
+    active_analysis = await db_session.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.job_id == active_job_id)
+    )
+    active_version = await db_session.scalar(
+        sa.select(ScoreModelVersionModel).where(ScoreModelVersionModel.is_active.is_(True))
+    )
+    active_job = await db_session.scalar(sa.select(JobModel).where(JobModel.id == active_job_id))
+    assert active_analysis is not None
+    assert active_version is not None
+    assert active_job is not None
+
+    db_session.add(
+        CandidateJobScoreModel(
+            candidate_id=candidate_id,
+            job_id=active_job_id,
+            version_id=active_version.id,
+            source_analysis_id=active_analysis.id,
+            source_analysis_created_at=active_analysis.created_at,
+            final_score=Decimal("82.50"),
+            decision_suggestion="advance",
+            breakdown={"skill_match": 85},
+            reason_codes=["strong_skill_match"],
+            explanation_text="Score persisted for current analysis.",
+            freshness_status="fresh",
+            recompute_reason="test_current_analysis_score",
+            job_signature_hash=active_job.job_profile_hash,
+            job_updated_at=active_job.updated_at,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert response.status_code == 200, response.text
+
+    payload = response.json()
+    assert payload["latest_analysis"] is not None
+    assert payload["latest_analysis"]["job_id"] == str(active_job_id)
+    assert payload["latest_analysis"]["status"] == "completed"
+    assert payload["latest_analysis_pipeline"] is not None
+    assert payload["latest_analysis_pipeline"]["job_id"] == str(active_job_id)
+    assert payload["latest_analysis_pipeline"]["matching_status"] == "completed"
+    assert payload["latest_analysis_pipeline"]["matched_jobs_count"] == 1
+    assert payload["latest_analysis_pipeline"]["pending_jobs_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_analysis_pipeline_status_requires_current_analysis_score(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-analysis-pipeline-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+
+    active_job_id, _, _ = await _seed_scoring_case(
+        db_session,
+        recruiter.id,
+        job_title="Pipeline Status Job",
+    )
+    active_analysis = await db_session.scalar(
+        sa.select(AnalysisModel).where(AnalysisModel.job_id == active_job_id)
+    )
+    assert active_analysis is not None
+
+    response = await client.get(
+        f"/api/v1/analyses/{active_analysis.id}/pipeline",
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+    payload = response.json()
+    assert payload["analysis_status"] == "completed"
+    assert payload["matching_status"] == "idle"
+    assert payload["matched_jobs_count"] == 0
+    assert payload["pending_jobs_count"] == 1
 
 
 @pytest.mark.asyncio

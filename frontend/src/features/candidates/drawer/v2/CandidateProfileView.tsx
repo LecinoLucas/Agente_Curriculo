@@ -241,6 +241,7 @@ export function CandidateProfileView({
           aiStatus={aiStatus}
           errorMessage={analysisErrorMessage}
           highlights={analysisHighlights}
+          compact={compact}
           onPrimaryAction={
             hasResume && hasActiveJob && activeJobCompatibilityScore !== null
               ? onViewAnalysis
@@ -265,37 +266,40 @@ export function CandidateProfileView({
           scoreExplanation={scoreExplanation}
           onViewAnalysis={onViewAnalysis}
           onEvaluateBetter={onEvaluateBetter}
-          compact={compact}
+          compact={true}
         />
       ) : null}
 
-      {/* Quick actions */}
-      {!isLoading && (
-        <CandidateQuickActions
-          onAdvance={handleAdvance}
-          onTerminate={handleTerminate}
-          onViewAnalysis={onViewAnalysis}
-          currentStage={currentStage}
-          pendingAction={pendingQuickAction}
-          isLoading={isActionLoading || interactionLocked}
-        />
-      )}
+      {/* Sticky footer for compact mode */}
+      <div className={compact ? "sticky bottom-0 bg-[hsl(var(--surface))] z-10 border-t border-[hsl(var(--border))]/10" : ""}>
+        {/* Quick actions */}
+        {!isLoading && (
+          <CandidateQuickActions
+            onAdvance={handleAdvance}
+            onTerminate={handleTerminate}
+            onViewAnalysis={onViewAnalysis}
+            currentStage={currentStage}
+            pendingAction={pendingQuickAction}
+            isLoading={isActionLoading || interactionLocked}
+          />
+        )}
 
-      {/* Job actions — Quick View compact layout */}
-      {!isLoading && compact && onStageChange && onLinkToActiveJob && onOpenTransferJob && (
-        <CandidateQuickJobActions
-          currentStage={currentStage}
-          activeJob={activeJob}
-          activeJobId={activeJobId}
-          canTransferCurrentJob={canTransferCurrentJob}
-          stageSaving={stageSaving}
-          linkSaving={linkSaving}
-          interactionLocked={interactionLocked}
-          onStageChange={onStageChange}
-          onLinkToActiveJob={onLinkToActiveJob}
-          onOpenTransferJob={onOpenTransferJob}
-        />
-      )}
+        {/* Job actions — Quick View compact layout */}
+        {!isLoading && compact && onStageChange && onLinkToActiveJob && onOpenTransferJob && (
+          <CandidateQuickJobActions
+            currentStage={currentStage}
+            activeJob={activeJob}
+            activeJobId={activeJobId}
+            canTransferCurrentJob={canTransferCurrentJob}
+            stageSaving={stageSaving}
+            linkSaving={linkSaving}
+            interactionLocked={interactionLocked}
+            onStageChange={onStageChange}
+            onLinkToActiveJob={onLinkToActiveJob}
+            onOpenTransferJob={onOpenTransferJob}
+          />
+        )}
+      </div>
 
       {/* Additional actions panel — only in Full Workspace mode */}
       {!isLoading && !compact && onStageChange && onLinkToActiveJob && onOpenTransferJob && (

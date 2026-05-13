@@ -28,7 +28,7 @@ describe("AdminPage", () => {
     });
   });
 
-  it("exibe o card de Auditoria para o admin", async () => {
+  it("exibe cards admin e o diagnóstico candidato/vaga", async () => {
     render(
       <MemoryRouter>
         <AdminPage />
@@ -37,5 +37,12 @@ describe("AdminPage", () => {
 
     expect(await screen.findByText("Auditoria")).toBeInTheDocument();
     expect(screen.getByText("Ver auditoria")).toBeInTheDocument();
+    expect(screen.getByText("Health do Sistema")).toBeInTheDocument();
+    expect(screen.getByText("Ver health")).toBeInTheDocument();
+    expect(screen.getByText("BI de Recrutamento")).toBeInTheDocument();
+    expect(screen.getByText("Ver BI")).toBeInTheDocument();
+    expect(screen.getByText("Diagnóstico Candidato/Vaga")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Diagnosticar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reparar" })).toBeInTheDocument();
   });
 });

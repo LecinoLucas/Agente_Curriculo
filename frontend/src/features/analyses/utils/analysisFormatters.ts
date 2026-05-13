@@ -1,7 +1,7 @@
 export const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   pending: { label: "Aguardando", cls: "ui-badge-neutral" },
   processing: { label: "Processando", cls: "ui-badge-info" },
-  retry_scheduled: { label: "Nova tentativa agendada", cls: "ui-badge-info" },
+  retry_scheduled: { label: "Retry por limite IA", cls: "ui-badge-warning" },
   completed: { label: "Concluída", cls: "ui-badge-success" },
   failed: { label: "Falhou", cls: "ui-badge-danger" },
   cancelled: { label: "Cancelado", cls: "ui-badge-warning" },

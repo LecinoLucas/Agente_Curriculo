@@ -51,6 +51,28 @@ Ela não pode decidir:
 
 Histórico antigo não bloqueia retorno do candidato para uma vaga.
 
+## Integração entre fluxo do recrutador e fluxo do candidato
+
+O fluxo do recrutador e o fluxo do candidato devem ser interligados pelo mesmo estado canônico do backend.
+
+O sistema não pode manter dois estados paralelos para o mesmo processo seletivo.
+
+Toda ação feita pelo recrutador que altere o estado real da candidatura deve refletir corretamente no portal do candidato, respeitando privacidade e linguagem amigável.
+
+Toda ação feita pelo candidato que altere dados relevantes deve refletir corretamente no painel do recrutador.
+
+---
+
+### Fonte de verdade compartilhada
+
+A fonte de verdade continua sendo:
+
+```text
+pipeline ativo = vaga atual
+candidate_job_pipeline = vínculo ativo candidato-vaga
+candidate_job_pipeline_events = histórico/auditoria
+analyses.current/status = estado da análise da vaga ativa
+
 ---
 
 ## Conceitos oficiais

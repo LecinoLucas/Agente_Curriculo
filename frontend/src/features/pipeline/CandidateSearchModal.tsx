@@ -6,6 +6,7 @@ import { pipelineService } from "../../services/pipelineService";
 import { toast } from "../../shared/utils/toast";
 import { scoreColorClass } from "../candidates/drawer/hooks/useCandidateDecision";
 import { normalizeScorePercent } from "../candidates/utils/scoreFormatting";
+import { buildAnalysisDecisionToast } from "./analysisDispatchFeedback";
 
 interface CandidateSearchModalProps {
   isOpen: boolean;
@@ -116,10 +117,17 @@ export function CandidateSearchModal({
     setAddingIds((prev) => new Set(prev).add(candidateId));
     setErrors((prev) => ({ ...prev, [candidateId]: "" }));
     try {
-      await pipelineService.addCandidateToJob(candidateId, {
+      const linkResult = await pipelineService.addCandidateToJob(candidateId, {
         job_id: activeJobId,
         initial_stage: "entry",
       });
+      const analysisToast = buildAnalysisDecisionToast(linkResult.analysis);
+      if (analysisToast) {
+        if (analysisToast.tone === "success") toast.success(analysisToast.message);
+        if (analysisToast.tone === "info") toast.info(analysisToast.message);
+        if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+        if (analysisToast.tone === "error") toast.error(analysisToast.message);
+      }
       setAddedIds((prev) => new Set(prev).add(candidateId));
       await onAdded();
     } catch (err: unknown) {

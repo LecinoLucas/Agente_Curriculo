@@ -9,6 +9,7 @@ import { pipelineService } from "../../../services/pipelineService";
 import { toast } from "../../../shared/utils/toast";
 import type { Job } from "../../../types/domain";
 import { formatJobArea } from "../../jobs/jobFormConfig";
+import { buildAnalysisDecisionToast } from "../../pipeline/analysisDispatchFeedback";
 import {
   getJobStatusLabel,
   getLinkableJobs,
@@ -114,12 +115,19 @@ export function LinkCandidateJobModal({
     setError(null);
 
     try {
-      await pipelineService.addCandidateToJob(candidateId, {
+      const linkResult = await pipelineService.addCandidateToJob(candidateId, {
         job_id: jobId,
         initial_stage: "entry",
       });
 
       toast.success("Candidato vinculado à vaga com sucesso");
+      const analysisToast = buildAnalysisDecisionToast(linkResult.analysis);
+      if (analysisToast) {
+        if (analysisToast.tone === "success") toast.success(analysisToast.message);
+        if (analysisToast.tone === "info") toast.info(analysisToast.message);
+        if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+        if (analysisToast.tone === "error") toast.error(analysisToast.message);
+      }
       await onLinked?.(jobId);
       onClose();
     } catch (err: unknown) {

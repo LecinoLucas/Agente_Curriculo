@@ -29,6 +29,7 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAl
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest,
     MoveCandidateRequest,
+    ReconsiderCandidateRequest,
     TransferCandidateJobRequest,
 )
 
@@ -342,6 +343,78 @@ async def test_remove_candidate_marks_terminal_and_inactive(db_session: AsyncSes
     assert row is not None
     assert row.link_status == "removed"
     assert row.pipeline_status == "terminal"
+
+
+@pytest.mark.asyncio
+async def test_reconsider_reactivates_same_job_without_creating_second_active_pipeline(
+    db_session: AsyncSession,
+) -> None:
+    user, candidate, job = await _seed_user_candidate_job(db_session)
+    svc = PipelineService(SQLAlchemyPipelineRepository(db_session), db_session)
+
+    await svc.add_candidate_to_job(
+        candidate_id=candidate.id,
+        body=AddCandidateToJobRequest(job_id=job.id, initial_stage="entry"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    await svc.move_candidate(
+        candidate_id=candidate.id,
+        body=MoveCandidateRequest(job_id=job.id, stage="rejected", reason="sem aderência"),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    result = await svc.reconsider_candidate(
+        candidate_id=candidate.id,
+        body=ReconsiderCandidateRequest(
+            job_id=job.id,
+            initial_stage="entry",
+            reason="Revisão manual do perfil",
+        ),
+        moved_by=user.id,
+    )
+    await db_session.commit()
+
+    assert result.job_id == job.id
+    assert result.stage == "entry"
+    assert result.status == "active"
+
+    rows = (
+        await db_session.execute(
+            sa.select(CandidateJobPipelineModel).where(
+                CandidateJobPipelineModel.candidate_id == candidate.id,
+                CandidateJobPipelineModel.job_id == job.id,
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].relationship_status == "active"
+    assert rows[0].is_terminal is False
+
+    active_count = int(
+        (
+            await db_session.scalar(
+                sa.select(sa.func.count())
+                .select_from(CandidateJobPipelineModel)
+                .where(*_active_pipeline_filters(candidate.id))
+            )
+        )
+        or 0
+    )
+    assert active_count == 1
+
+    event_types = (
+        await db_session.execute(
+            sa.select(CandidateJobPipelineEventModel.event_type).where(
+                CandidateJobPipelineEventModel.candidate_id == candidate.id,
+                CandidateJobPipelineEventModel.job_id == job.id,
+            )
+        )
+    ).scalars().all()
+    assert "stage_moved" in event_types
+    assert "candidate_reconsidered" in event_types
 
 
 @pytest.mark.asyncio

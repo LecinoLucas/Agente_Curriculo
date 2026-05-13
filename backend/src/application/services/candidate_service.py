@@ -1,12 +1,13 @@
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import structlog
 
 from src.application.ports.file_storage import FileStorageService
 from src.application.services.audit_service import AuditService
+from src.application.services.assessment_service import AssessmentService
 from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
@@ -27,8 +28,13 @@ from src.interface.api.schemas.candidate_schemas import (
     CreateCandidateRequest,
     UpdateCandidateRequest,
 )
+from src.interface.api.schemas.assessment_schemas import RecruiterCandidateAssessmentResponse
+from src.infrastructure.repositories.sqlalchemy_assessment_repository import SQLAlchemyAssessmentRepository
 
 logger = structlog.get_logger(__name__)
+
+APPLICATION_SOURCE_MANUAL = "manual"
+APPLICATION_SOURCE_PUBLIC = "public_application"
 
 
 class CandidateNotFoundError(Exception):
@@ -83,7 +89,13 @@ class CandidateService:
         self._audit_service = audit_service
         self._file_storage = file_storage
 
-    async def create(self, body: CreateCandidateRequest, created_by: UUID) -> CandidateModel:
+    async def create(
+        self,
+        body: CreateCandidateRequest,
+        created_by: UUID,
+        *,
+        application_source: str = APPLICATION_SOURCE_MANUAL,
+    ) -> CandidateModel:
         """
         Create a new Candidate.
 
@@ -111,7 +123,10 @@ class CandidateService:
         if cpf is not None and await self._repository.find_active_by_cpf(cpf):
             raise CandidateCpfConflictError
 
+        from uuid import uuid4
+
         candidate = CandidateModel(
+            id=uuid4(),
             full_name=self._clean_required_text(body.full_name),
             email=email,
             phone=body.phone,
@@ -126,6 +141,7 @@ class CandidateService:
             tags=self._clean_tags(body.tags),
             user_id=None,
             created_by=created_by,
+            application_source=application_source,
         )
         return await self._repository.create(candidate)
 
@@ -135,8 +151,15 @@ class CandidateService:
         page_size: int,
         search: str | None = None,
         archived: bool = False,
+        application_source: str | None = None,
     ) -> tuple[list[CandidateModel], int]:
-        return await self._repository.list_active(page, page_size, search, archived)
+        return await self._repository.list_active(
+            page,
+            page_size,
+            search,
+            archived,
+            application_source=application_source,
+        )
 
     async def list_summaries(
         self,
@@ -146,9 +169,16 @@ class CandidateService:
         has_resume: bool | None = None,
         ai_status_filter: list[str] | None = None,
         archived: bool = False,
+        application_source: str | None = None,
     ) -> tuple[list[CandidateListSummaryResponse], int]:
         rows, total = await self._repository.list_summaries(
-            page, page_size, search, has_resume, ai_status_filter, archived
+            page,
+            page_size,
+            search,
+            has_resume,
+            ai_status_filter,
+            archived,
+            application_source=application_source,
         )
         items = [
             CandidateListSummaryResponse(
@@ -161,6 +191,7 @@ class CandidateService:
                 created_at=row["created_at"],
                 archived_at=row.get("archived_at"),
                 archive_reason=row.get("archive_reason"),
+                application_source=row.get("application_source"),
                 resume_count=int(row["resume_count"] or 0),
                 linked_job_count=int(row["linked_job_count"] or 0),
                 latest_job_id=row.get("latest_job_id"),
@@ -213,19 +244,19 @@ class CandidateService:
         latest_analysis_pipeline = None
         if latest_analysis is not None:
             target_job_id = latest_analysis.job_id
-            has_persisted_match = False
+            has_current_score = False
             if target_job_id is not None:
-                has_persisted_match = (
-                    await self._repository.find_candidate_job_match_for_analysis(
+                has_current_score = (
+                    await self._repository.find_candidate_job_score_for_analysis(
                         latest_analysis.analysis_id,
                         target_job_id,
                     )
                 ) is not None
 
             published_jobs_total = 1 if target_job_id is not None else 0
-            matched_jobs_count = 1 if has_persisted_match else 0
+            matched_jobs_count = 1 if has_current_score else 0
             pending_jobs_count = (
-                1 if target_job_id is not None and not has_persisted_match else 0
+                1 if target_job_id is not None and not has_current_score else 0
             )
 
             if latest_analysis.status in {"failed", "cancelled"}:
@@ -234,7 +265,7 @@ class CandidateService:
                 matching_status = "waiting_analysis"
             elif target_job_id is None:
                 matching_status = "idle"
-            elif has_persisted_match:
+            elif has_current_score:
                 matching_status = "completed"
             else:
                 matching_status = "idle"
@@ -247,6 +278,21 @@ class CandidateService:
                 matched_jobs_count=matched_jobs_count,
                 pending_jobs_count=pending_jobs_count,
             )
+        assessment_service = AssessmentService(SQLAlchemyAssessmentRepository(self._repository._session))
+        if active_pipeline_row is not None and active_job_id is not None:
+            pipeline_id = active_pipeline_row.get("pipeline_id") or uuid5(
+                NAMESPACE_URL,
+                f"{candidate_id}:{active_job_id}",
+            )
+            await assessment_service.create_assignments_for_job(
+                candidate_id=candidate_id,
+                job_id=active_job_id,
+                pipeline_id=pipeline_id,
+            )
+        assessment_rows = await assessment_service.list_recruiter_assignments(
+            candidate_id,
+            include_answers=True,
+        )
 
         return CandidateOverviewResponse(
             candidate=CandidateResponse.model_validate(candidate),
@@ -285,6 +331,7 @@ class CandidateService:
                 )
                 for row in pipeline_rows
             ],
+            assessments=[RecruiterCandidateAssessmentResponse.model_validate(item) for item in assessment_rows],
         )
 
     async def update(self, candidate_id: UUID, body: UpdateCandidateRequest) -> CandidateModel:

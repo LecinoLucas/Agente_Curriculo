@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -31,6 +30,7 @@ from src.application.services.analysis_service import (
     AnalysisResultNotFoundError,
     AnalysisService,
 )
+from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
 from src.application.services.job_score_explanation_service import (
     CandidateNotLinkedToJobError,
     CandidateScoreExplanationNotReadyError,
@@ -89,13 +89,17 @@ from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest as PipelineAddCandidateToJobRequest,
     AddCandidateToJobResponse as PipelineAddCandidateToJobResponse,
     JobMatchCandidateResponse,
+    PipelineAnalysisDecisionResponse,
 )
 from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse, SingleCandidateScoringResponse
-from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
+from src.interface.api.schemas.skill_schemas import (
+    AddJobSkillRequest,
+    JobRequiredSkillResponse,
+    UpdateJobSkillRequest,
+)
 from src.infrastructure.database.models.scoring_model import CandidateJobScoreSnapshotModel
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
-_ANALYSIS_QUEUE = "analysis"
 
 
 def _job_service(db: AsyncSession) -> JobService:
@@ -114,91 +118,12 @@ def _pipeline_service(db: AsyncSession) -> PipelineService:
     return PipelineService(SQLAlchemyPipelineRepository(db), db)
 
 
+def _analysis_response(decision) -> PipelineAnalysisDecisionResponse:
+    return PipelineAnalysisDecisionResponse.model_validate(decision.as_dict())
+
+
 def _analysis_service(db: AsyncSession) -> AnalysisService:
     return AnalysisService(SQLAlchemyAnalysisRepository(db), audit_service=AuditService(db))
-
-
-async def _enqueue_latest_pending_analysis_for_candidate_job(
-    db: AsyncSession,
-    *,
-    candidate_id: UUID,
-    job_id: UUID,
-    requested_by: UUID,
-) -> None:
-    from src.application.dtos.analysis_dtos import RequestAnalysisCommand
-    from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
-    from src.infrastructure.database.models.analysis_model import AnalysisModel
-    from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
-    from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
-        SQLAlchemyAnalysisRepository,
-    )
-    from src.infrastructure.repositories.sqlalchemy_resume_repository import (
-        SQLAlchemyResumeRepository,
-    )
-    from src.interface.workers.analysis_dispatcher import enqueue_analysis
-
-    latest_resume_version = await db.scalar(
-        sa.select(ResumeVersionModel.id)
-        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-        .where(
-            ResumeModel.candidate_id == candidate_id,
-            ResumeModel.deleted_at.is_(None),
-        )
-        .order_by(ResumeVersionModel.uploaded_at.desc())
-        .limit(1)
-    )
-    if latest_resume_version is None:
-        return
-
-    try:
-        use_case = RequestAnalysisUseCase(
-            SQLAlchemyAnalysisRepository(db),
-            SQLAlchemyResumeRepository(db),
-        )
-        await use_case.execute(
-            RequestAnalysisCommand(
-                resume_version_id=latest_resume_version,
-                requested_by=requested_by,
-                job_id=job_id,
-                force_reanalyze=False,
-                priority=5,
-            )
-        )
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        return
-
-    query = (
-        sa.select(AnalysisModel)
-        .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
-        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-        .where(
-            ResumeModel.candidate_id == candidate_id,
-            AnalysisModel.job_id == job_id,
-            AnalysisModel.status == "pending",
-            AnalysisModel.task_id.is_(None),
-        )
-        .order_by(AnalysisModel.created_at.desc())
-        .limit(1)
-    )
-    latest_analysis = await db.scalar(query)
-
-    if latest_analysis is not None:
-        task_id = f"analysis:{latest_analysis.id}"
-        latest_analysis.task_id = task_id
-        latest_analysis.queue_name = _ANALYSIS_QUEUE
-        latest_analysis.updated_at = datetime.now(UTC)
-        latest_analysis.failure_reason = None
-        await db.commit()
-
-        refetched = await db.scalar(
-            sa.select(AnalysisModel).where(AnalysisModel.id == latest_analysis.id)
-        )
-        if not refetched:
-            logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(latest_analysis.id))
-        else:
-            enqueue_analysis(refetched.id)
 
 
 async def _resolve_force_recompute_analysis_id(
@@ -478,8 +403,11 @@ async def update_job(
 ) -> JobResponse:
     try:
         service = _job_service(db)
+        previous_job = await service.get(job_id)
+        previous_status = previous_job.status
         job = await service.update(job_id, body)
-        if job.status == "published":
+        is_publish_request = "status" in body.model_fields_set and body.status == "published"
+        if is_publish_request and previous_status != "published":
             await service.ensure_publishable(job.id)
         await db.commit()
         await db.refresh(job)
@@ -635,6 +563,24 @@ async def add_job_skill(
         raise
 
 
+@router.patch("/{job_id}/skills/{skill_link_id}", response_model=JobRequiredSkillResponse)
+async def update_job_skill(
+    job_id: UUID,
+    skill_link_id: UUID,
+    body: UpdateJobSkillRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> JobRequiredSkillResponse:
+    try:
+        response = await _job_service(db).update_required_skill(job_id, skill_link_id, body)
+        await db.commit()
+        return response
+    except Exception as exc:
+        await db.rollback()
+        _handle_job_service_error(exc)
+        raise
+
+
 @router.delete("/{job_id}/skills/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_job_skill(
     job_id: UUID,
@@ -665,17 +611,12 @@ async def link_candidate_to_job(
             moved_by=current_user.id,
         )
         await db.commit()
-        try:
-            await _enqueue_latest_pending_analysis_for_candidate_job(
-                db,
-                candidate_id=body.candidate_id,
-                job_id=job_id,
-                requested_by=current_user.id,
-            )
-        except Exception:
-            pass
-
-        return result
+        analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
+            candidate_id=body.candidate_id,
+            job_id=job_id,
+            requested_by=current_user.id,
+        )
+        return result.model_copy(update={"analysis": _analysis_response(analysis_decision)})
     except Exception as exc:
         await db.rollback()
         _handle_job_service_error(exc)
@@ -856,10 +797,7 @@ async def get_job_ranking(
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> JobRankingResponse:
-    """Return persisted ranking for this job. Never recomputes scores inline.
-
-    Call POST /jobs/{job_id}/scoring first to ensure scores are up-to-date.
-    """
+    """Return persisted ranking for this job with consistency auto-repair."""
     try:
         result = await CandidateRankingService(db).get_ranking(job_id)
         return JobRankingResponse(**result)

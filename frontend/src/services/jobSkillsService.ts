@@ -28,7 +28,9 @@ export const jobSkillsService = {
     skill: JobSkill,
     payload: { priority_level?: "priority" | "complementary" | "eliminatory"; minimum_level?: string | null; minimum_years?: number | null; weight?: number },
   ): Promise<JobSkill> {
-    await this.removeJobSkill(jobId, skill.skill_id);
-    return this.addJobSkill(jobId, { skill_name: skill.skill_name, ...payload });
+    return httpRequest<JobSkill>(`/api/v1/jobs/${jobId}/skills/${skill.id}`, {
+      method: "PATCH",
+      body: payload,
+    });
   },
 };

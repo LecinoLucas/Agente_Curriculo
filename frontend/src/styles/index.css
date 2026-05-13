@@ -1799,6 +1799,51 @@
   }
 
   /* --------------------------------------------------------------------------
+     Glassmorphism
+     -------------------------------------------------------------------------- */
+
+  .glass {
+    background: hsl(var(--surface) / 0.65);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid hsl(var(--border) / 0.4);
+  }
+
+  .glass-dark {
+    background: hsl(var(--bg) / 0.75);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid hsl(var(--border) / 0.2);
+  }
+
+  /* --------------------------------------------------------------------------
+     Glows and Gradients
+     -------------------------------------------------------------------------- */
+
+  .glow-primary {
+    box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.3);
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--brand)), hsl(var(--hero-end)));
+  }
+
+  .gradient-subtle {
+    background: linear-gradient(180deg, hsl(var(--surface)), hsl(var(--surface-muted) / 0.5));
+  }
+
+  /* --------------------------------------------------------------------------
+     Interactive
+     -------------------------------------------------------------------------- */
+  .hover-lift {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -10px hsl(var(--text) / 0.15);
+  }
+
+  /* --------------------------------------------------------------------------
      Dark theme shadow overrides
      -------------------------------------------------------------------------- */
 

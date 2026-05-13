@@ -10,6 +10,11 @@ import httpx
 import sqlalchemy as sa
 import structlog
 
+from src.application.services.ai_usage_log_service import (
+    AIUsageLogPayload,
+    safe_persist_ai_usage_log,
+)
+from src.core.log_sanitizer import sanitize_log_text
 from src.core.settings import settings
 from src.infrastructure.queue.celery_app import celery_app
 
@@ -41,6 +46,9 @@ RETRY_BACKOFF_SCHEDULE_SECONDS = {
 }
 RETRY_JITTER_MAX_SECONDS = 5
 TEMPORARY_RETRY_MESSAGE = "Alta demanda no provedor IA. Tentando novamente automaticamente."
+RATE_LIMIT_RETRY_MESSAGE = (
+    "Limite de uso do provedor IA atingido. Nova tentativa automática agendada."
+)
 
 
 @dataclass(slots=True)
@@ -107,7 +115,8 @@ def _extract_retry_after_from_http_error(error: httpx.HTTPStatusError) -> float 
         except ValueError:
             pass
 
-    match = re.search(r"retry(?:_after_seconds| in)\s*=?\s*([0-9]+(?:\.[0-9]+)?)", str(error), re.IGNORECASE)
+    sanitized_error = sanitize_log_text(str(error)) or ""
+    match = re.search(r"retry(?:_after_seconds| in)\s*=?\s*([0-9]+(?:\.[0-9]+)?)", sanitized_error, re.IGNORECASE)
     if match:
         try:
             return max(0.0, float(match.group(1)))
@@ -143,6 +152,29 @@ def _classify_analysis_exception(exc: Exception) -> AnalysisErrorClassification:
                     status_code=status_code,
                 )
             if status_code == 400:
+                msg = ""
+                try:
+                    payload = current.response.json()
+                    if isinstance(payload, dict):
+                        msg = (payload.get("error") or {}).get("message") or ""
+                except Exception:
+                    pass
+
+                if not msg:
+                    # Fallback: check error message string if JSON parsing fails
+                    msg = str(current) or ""
+
+                invalid_key_markers = (
+                    "api key not valid",
+                    "invalid api key",
+                    "all configured gemini api keys are invalid",
+                )
+                if any(m in msg.lower() for m in invalid_key_markers):
+                    return AnalysisErrorClassification(
+                        provider_error_type="invalid_api_key",
+                        is_temporary=False,
+                        status_code=status_code,
+                    )
                 return AnalysisErrorClassification(
                     provider_error_type="bad_request",
                     is_temporary=False,
@@ -235,14 +267,21 @@ def _build_final_failure_reason(
     classification: AnalysisErrorClassification,
     error: str,
 ) -> str:
+    sanitized_error = sanitize_log_text(error) or "Erro não informado."
     if classification.is_temporary:
         return (
             "Alta demanda no provedor IA após múltiplas tentativas. "
-            f"Detalhe técnico: {error[:700]}"
+            f"Detalhe técnico: {sanitized_error[:700]}"
         )
     if classification.provider_error_type == "payload_invalid":
-        return f"Payload inválido retornado pelo provedor IA. {error[:700]}"
-    return error[:1000]
+        return f"Payload inválido retornado pelo provedor IA. {sanitized_error[:700]}"
+    return sanitized_error[:1000]
+
+
+def _retry_failure_reason(classification: AnalysisErrorClassification) -> str:
+    if classification.provider_error_type == "rate_limited":
+        return RATE_LIMIT_RETRY_MESSAGE
+    return TEMPORARY_RETRY_MESSAGE
 
 
 def _normalize_provider(provider: str) -> str:
@@ -256,7 +295,7 @@ def _provider_api_key_is_configured(provider: str) -> bool:
         return bool(settings.ANTHROPIC_API_KEY)
 
     if normalized in {"google", "gemini"}:
-        return bool(settings.GOOGLE_API_KEY)
+        return bool(settings.google_api_keys)
 
     raise RuntimeError(f"Unsupported AI provider configured for analysis: {provider}")
 
@@ -268,7 +307,7 @@ def _provider_api_key_hint(provider: str) -> str:
         return "ANTHROPIC_API_KEY"
 
     if normalized in {"google", "gemini"}:
-        return "GOOGLE_API_KEY"
+        return "GOOGLE_API_KEYS"
 
     return f"API key for provider '{provider}'"
 
@@ -467,10 +506,11 @@ def _validate_prompt_before_ai(*, prompt: str, resume_chars: int, job_chars: int
 
 
 def _extract_rate_limit_retry_after_seconds(error: str) -> float | None:
-    if "status_code=429" not in error:
+    sanitized_error = sanitize_log_text(error) or ""
+    if "status_code=429" not in sanitized_error:
         return None
 
-    retry_after_match = re.search(r"retry_after_seconds=([0-9]+(?:\.[0-9]+)?)", error)
+    retry_after_match = re.search(r"retry_after_seconds=([0-9]+(?:\.[0-9]+)?)", sanitized_error)
     if retry_after_match:
         try:
             return max(0.0, float(retry_after_match.group(1)))
@@ -562,7 +602,7 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
         return result
 
     except Exception as exc:
-        error_str = str(exc)
+        error_str = sanitize_log_text(str(exc)) or type(exc).__name__
         is_not_found = "not_found" in error_str.lower() or "disappeared" in error_str.lower()
         failure_details = _extract_failure_details(exc)
         classification = _classify_analysis_exception(exc)
@@ -1056,7 +1096,34 @@ async def _run_real_ai_analysis(
             ai_service.analyze(ai_request),
             timeout=settings.AI_PROVIDER_TIMEOUT_SECONDS,
         )
+        await safe_persist_ai_usage_log(
+            sessionmaker,
+            AIUsageLogPayload(
+                provider=provider,
+                model=model_id,
+                status="success",
+                operation="resume_analysis",
+                analysis_id=analysis_id,
+                job_id=job_id,
+                input_tokens=ai_response.input_tokens,
+                output_tokens=ai_response.output_tokens,
+                latency_ms=ai_response.processing_time_ms,
+            ),
+        )
     except asyncio.TimeoutError as exc:
+        await safe_persist_ai_usage_log(
+            sessionmaker,
+            AIUsageLogPayload(
+                provider=provider,
+                model=model_id,
+                status="failed",
+                operation="resume_analysis",
+                analysis_id=analysis_id,
+                job_id=job_id,
+                latency_ms=int(settings.AI_PROVIDER_TIMEOUT_SECONDS * 1000),
+                error_message="AI provider call timed out",
+            ),
+        )
         raise AnalysisExecutionError(
             f"AI provider call timed out after {settings.AI_PROVIDER_TIMEOUT_SECONDS}s "
             f"for analysis {analysis_id}",
@@ -1071,8 +1138,23 @@ async def _run_real_ai_analysis(
             ),
         ) from exc
     except Exception as exc:
+        await safe_persist_ai_usage_log(
+            sessionmaker,
+            AIUsageLogPayload(
+                provider=provider,
+                model=model_id,
+                status="failed",
+                operation="resume_analysis",
+                analysis_id=analysis_id,
+                job_id=job_id,
+                input_tokens=int(getattr(exc, "input_tokens", 0) or 0),
+                output_tokens=int(getattr(exc, "output_tokens", 0) or 0),
+                latency_ms=getattr(exc, "processing_time_ms", None),
+                error_message=sanitize_log_text(str(exc)),
+            ),
+        )
         raise AnalysisExecutionError(
-            str(exc),
+            sanitize_log_text(str(exc)) or type(exc).__name__,
             details=AnalysisFailureDetails(
                 finish_reason=getattr(exc, "finish_reason", None),
                 raw_llm_response=getattr(exc, "raw_response", None),
@@ -1096,7 +1178,7 @@ async def _run_real_ai_analysis(
             "analysis.parse_failed",
             analysis_id=analysis_id,
             response_preview=(ai_response.content or "")[:500],
-            error=str(exc),
+            error=sanitize_log_text(str(exc)),
         )
         raise AnalysisExecutionError(
             "Failed to parse AI response",
@@ -1122,7 +1204,7 @@ async def _run_real_ai_analysis(
         _validate_result_fields(result_fields)
     except Exception as exc:
         raise AnalysisExecutionError(
-            str(exc),
+            sanitize_log_text(str(exc)) or type(exc).__name__,
             details=AnalysisFailureDetails(
                 finish_reason=ai_response.finish_reason,
                 raw_llm_response=ai_response.content,
@@ -1348,7 +1430,7 @@ async def _mark_analysis_retry_scheduled(
             analysis.task_id = str(task_id) if task_id is not None else analysis.task_id
             analysis.retry_count = retry_count
             analysis.attempts = attempts
-            analysis.failure_reason = TEMPORARY_RETRY_MESSAGE
+            analysis.failure_reason = _retry_failure_reason(classification)
             analysis.failed_at = None
             analysis.started_at = None
             analysis.next_retry_at = now + timedelta(seconds=countdown_seconds)
@@ -1464,26 +1546,41 @@ async def mark_stuck_analyses_as_failed(*, sessionmaker) -> int:
     now = datetime.now(UTC)
 
     async with sessionmaker() as session:
-        processing_threshold = now - timedelta(minutes=20)
+        processing_threshold = now - timedelta(minutes=30)
 
         processing_stuck = await session.execute(
             sa.select(AnalysisModel).where(
                 AnalysisModel.status == "processing",
-                AnalysisModel.started_at < processing_threshold,
+                sa.or_(
+                    AnalysisModel.stale_at < now,
+                    AnalysisModel.started_at < processing_threshold,
+                    sa.and_(
+                        AnalysisModel.started_at.is_(None),
+                        AnalysisModel.updated_at < processing_threshold,
+                    ),
+                ),
             )
         )
 
         for analysis in processing_stuck.scalars().all():
             analysis.status = "failed"
-            analysis.failure_reason = "Task timeout: processing > 20 minutes"
+            analysis.failure_reason = (
+                "analysis_worker_claim_expired"
+                if analysis.stale_at is not None and analysis.stale_at < now
+                else "analysis_stuck_processing_timeout"
+            )
             analysis.failed_at = now
             analysis.next_retry_at = None
+            analysis.worker_claim_id = None
+            analysis.claimed_at = None
+            analysis.stale_at = None
             analysis.updated_at = now
             marked_count += 1
 
             logger.warning(
                 "analysis.stuck.processing_timeout",
                 analysis_id=str(analysis.id),
+                reason=analysis.failure_reason,
                 started_at=analysis.started_at.isoformat()
                 if analysis.started_at
                 else None,
@@ -1501,9 +1598,12 @@ async def mark_stuck_analyses_as_failed(*, sessionmaker) -> int:
 
         for analysis in pending_stuck.scalars().all():
             analysis.status = "failed"
-            analysis.failure_reason = "Task timeout: pending > 2 hours"
+            analysis.failure_reason = "analysis_stuck_pending_timeout"
             analysis.failed_at = now
             analysis.next_retry_at = None
+            analysis.worker_claim_id = None
+            analysis.claimed_at = None
+            analysis.stale_at = None
             analysis.updated_at = now
             marked_count += 1
 

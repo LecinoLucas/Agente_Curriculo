@@ -10,6 +10,7 @@ from src.interface.workers.analysis_tasks import (
     AnalysisErrorClassification,
     AnalysisExecutionError,
     AnalysisFailureDetails,
+    _build_final_failure_reason,
     _build_retry_delay_seconds,
     _classify_analysis_exception,
     _extract_rate_limit_retry_after_seconds,
@@ -152,6 +153,39 @@ class TestRetryPersistence:
         assert 40 <= delta.total_seconds() <= 50
 
     @pytest.mark.asyncio
+    async def test_marks_rate_limit_retry_with_clear_sanitized_reason(self) -> None:
+        analysis_id = uuid4()
+        mock_analysis = MagicMock()
+        mock_analysis.status = "processing"
+        mock_analysis.next_retry_at = None
+
+        mock_session = AsyncMock()
+        mock_session.scalar = AsyncMock(return_value=mock_analysis)
+        mock_session.commit = AsyncMock()
+
+        await _mark_analysis_retry_scheduled(
+            analysis_id=str(analysis_id),
+            task_id="task-123",
+            error="POST https://generativelanguage.googleapis.com/v1/models/gemini?key=AIzaSECRET12345678901234567890",
+            retry_count=1,
+            countdown_seconds=48,
+            attempts=1,
+            classification=AnalysisErrorClassification(
+                provider_error_type="rate_limited",
+                is_temporary=True,
+                status_code=429,
+                retry_after_seconds=39,
+            ),
+            sessionmaker=_mock_sessionmaker(mock_session),
+        )
+
+        assert mock_analysis.status == "retry_scheduled"
+        assert mock_analysis.provider_error_type == "rate_limited"
+        assert mock_analysis.provider_status_code == 429
+        assert mock_analysis.failure_reason == "Limite de uso do provedor IA atingido. Nova tentativa automática agendada."
+        assert mock_analysis.next_retry_at is not None
+
+    @pytest.mark.asyncio
     async def test_marks_analysis_failed_after_retry_limit(self) -> None:
         analysis_id = uuid4()
         mock_analysis = MagicMock()
@@ -183,6 +217,19 @@ class TestRetryPersistence:
         assert mock_analysis.provider_status_code == 503
         assert mock_analysis.next_retry_at is None
         assert mock_analysis.failure_reason.startswith("Alta demanda no provedor IA após múltiplas tentativas.")
+
+    def test_final_failure_reason_redacts_provider_api_key(self) -> None:
+        reason = _build_final_failure_reason(
+            classification=AnalysisErrorClassification(
+                provider_error_type="rate_limited",
+                is_temporary=True,
+                status_code=429,
+            ),
+            error="429 at https://generativelanguage.googleapis.com/v1/models/gemini?key=AIzaSECRET12345678901234567890",
+        )
+
+        assert "AIza" not in reason
+        assert "key=[REDACTED]" in reason
 
 
 class TestCeleryRetryBehavior:

@@ -34,6 +34,7 @@ from src.infrastructure.repositories.base_soft_delete_repository import BaseSoft
 
 _ACTIVE_RELATIONSHIP_STATUS = "active"
 _VISIBLE_RELATIONSHIP_STATUSES = ("active", "hired", "rejected")
+_PORTAL_HISTORY_RELATIONSHIP_STATUSES = ("active", "hired", "rejected", "archived", "withdrawn")
 _CRITICAL_PIPELINE_STAGES = ("final", "offer", "hired", "rejected")
 _CRITICAL_RELATIONSHIP_STATUSES = ("hired", "rejected")
 _CRITICAL_ADMISSION_STATUSES = ("in_progress", "approved")
@@ -56,7 +57,9 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
     async def create(self, candidate: CandidateModel) -> CandidateModel:
         self._session.add(candidate)
         await self._session.flush()
-        await self._session.refresh(candidate)
+        # Note: refresh() is not needed since we're providing explicit IDs and no server defaults
+        # are required for testing. In production with PostgreSQL, this would fetch server-generated
+        # timestamps, but with our explicit UUID + manual datetime handling, it's not necessary.
         return candidate
 
     async def find_active_by_id(self, candidate_id: UUID) -> CandidateModel | None:
@@ -78,7 +81,28 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
 
     async def find_active_by_email(self, email: str) -> CandidateModel | None:
         return await self._session.scalar(
-            sa.select(CandidateModel).where(
+            sa.select(CandidateModel)
+            .options(
+                sa.orm.load_only(
+                    CandidateModel.id,
+                    CandidateModel.full_name,
+                    CandidateModel.email,
+                    CandidateModel.phone,
+                    CandidateModel.cpf,
+                    CandidateModel.location_city,
+                    CandidateModel.location_state,
+                    CandidateModel.location_country,
+                    CandidateModel.application_source,
+                    CandidateModel.password_hash,
+                    CandidateModel.password_created_at,
+                    CandidateModel.lgpd_consent_at,
+                    CandidateModel.lgpd_consent_version,
+                    CandidateModel.desired_contract_type,
+                    CandidateModel.salary_expectation,
+                    CandidateModel.works_at_marajo_group,
+                )
+            )
+            .where(
                 CandidateModel.email == email,
                 CandidateModel.deleted_at.is_(None),
                 CandidateModel.archived_at.is_(None),
@@ -87,7 +111,28 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
 
     async def find_active_by_cpf(self, cpf: str) -> CandidateModel | None:
         return await self._session.scalar(
-            sa.select(CandidateModel).where(
+            sa.select(CandidateModel)
+            .options(
+                sa.orm.load_only(
+                    CandidateModel.id,
+                    CandidateModel.full_name,
+                    CandidateModel.email,
+                    CandidateModel.phone,
+                    CandidateModel.cpf,
+                    CandidateModel.location_city,
+                    CandidateModel.location_state,
+                    CandidateModel.location_country,
+                    CandidateModel.application_source,
+                    CandidateModel.password_hash,
+                    CandidateModel.password_created_at,
+                    CandidateModel.lgpd_consent_at,
+                    CandidateModel.lgpd_consent_version,
+                    CandidateModel.desired_contract_type,
+                    CandidateModel.salary_expectation,
+                    CandidateModel.works_at_marajo_group,
+                )
+            )
+            .where(
                 CandidateModel.cpf == cpf,
                 CandidateModel.deleted_at.is_(None),
                 CandidateModel.archived_at.is_(None),
@@ -100,12 +145,16 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         page_size: int,
         search: str | None = None,
         archived: bool = False,
+        *,
+        application_source: str | None = None,
     ) -> tuple[list[CandidateModel], int]:
         filters = [CandidateModel.deleted_at.is_(None)]
         if archived:
             filters.append(CandidateModel.archived_at.is_not(None))
         else:
             filters.append(CandidateModel.archived_at.is_(None))
+        if application_source:
+            filters.append(CandidateModel.application_source == application_source)
         if search:
             term = f"%{search.lower().strip()}%"
             filters.append(
@@ -141,6 +190,8 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         has_resume: bool | None = None,
         ai_status_filter: list[str] | None = None,
         archived: bool = False,
+        *,
+        application_source: str | None = None,
     ) -> tuple[list[dict], int]:
         active_score_version = (
             sa.select(ScoreModelVersionModel.id)
@@ -319,6 +370,8 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             filters.append(CandidateModel.archived_at.is_not(None))
         else:
             filters.append(CandidateModel.archived_at.is_(None))
+        if application_source:
+            filters.append(CandidateModel.application_source == application_source)
         if search:
             term = f"%{search.lower().strip()}%"
             filters.append(
@@ -357,6 +410,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 CandidateModel.created_at,
                 CandidateModel.archived_at,
                 CandidateModel.archive_reason,
+                CandidateModel.application_source,
                 resume_count_sq.label("resume_count"),
                 linked_job_count_sq.label("linked_job_count"),
                 latest_job_id_sq.label("latest_job_id"),
@@ -628,6 +682,27 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             )
         )
 
+    async def find_candidate_job_score_for_analysis(
+        self,
+        analysis_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobScoreModel | None:
+        active_score_version = (
+            sa.select(ScoreModelVersionModel.id)
+            .where(ScoreModelVersionModel.is_active.is_(True))
+            .limit(1)
+            .scalar_subquery()
+        )
+        return await self._session.scalar(
+            sa.select(CandidateJobScoreModel).where(
+                CandidateJobScoreModel.source_analysis_id == analysis_id,
+                CandidateJobScoreModel.job_id == job_id,
+                CandidateJobScoreModel.version_id == active_score_version,
+                CandidateJobScoreModel.freshness_status == "fresh",
+                CandidateJobScoreModel.final_score.is_not(None),
+            )
+        )
+
     async def list_top_job_matches(self, candidate_id: UUID, limit: int = 5) -> list[dict]:
         active_score_version = (
             sa.select(ScoreModelVersionModel.id)
@@ -741,24 +816,139 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             or 0
         )
 
+    async def list_active_pipeline_entries(self, candidate_id: UUID) -> list[dict]:
+        result = await self._session.execute(
+            sa.select(
+                CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                JobModel.title.label("job_title"),
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status,
+                CandidateJobPipelineModel.relationship_status,
+                CandidateJobPipelineModel.pipeline_status,
+                CandidateJobPipelineModel.current_analysis_id,
+                CandidateJobPipelineModel.resume_version_id,
+                CandidateJobPipelineModel.entered_at,
+                CandidateJobPipelineModel.updated_at,
+            )
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+                JobModel.deleted_at.is_(None),
+            )
+            .order_by(CandidateJobPipelineModel.updated_at.desc())
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def find_analysis_summary_by_id_for_candidate(
+        self,
+        *,
+        candidate_id: UUID,
+        analysis_id: UUID,
+    ) -> dict | None:
+        row = await self._session.execute(
+            sa.select(
+                AnalysisModel.id.label("analysis_id"),
+                AnalysisModel.job_id.label("job_id"),
+                AnalysisModel.resume_version_id.label("resume_version_id"),
+                AnalysisModel.status,
+                AnalysisModel.created_at,
+                AnalysisModel.updated_at,
+                AnalysisModel.completed_at,
+                AnalysisModel.failed_at,
+                AnalysisModel.failure_reason,
+                ResumeVersionModel.original_file_name.label("resume_file_name"),
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                AnalysisModel.id == analysis_id,
+                AnalysisModel.status != "discarded",
+                ResumeModel.candidate_id == candidate_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        mapping = row.mappings().first()
+        return dict(mapping) if mapping is not None else None
+
+    async def find_resume_file_name_by_version(
+        self,
+        *,
+        candidate_id: UUID,
+        resume_version_id: UUID,
+    ) -> str | None:
+        return await self._session.scalar(
+            sa.select(ResumeVersionModel.original_file_name)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                ResumeVersionModel.id == resume_version_id,
+                ResumeModel.candidate_id == candidate_id,
+                ResumeModel.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+
     async def list_pipeline_entries(self, candidate_id: UUID) -> list[dict]:
         result = await self._session.execute(
             sa.select(
+                CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
                 CandidateJobPipelineModel.candidate_id,
                 CandidateJobPipelineModel.job_id,
                 JobModel.title.label("job_title"),
                 JobModel.status.label("job_status"),
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status,
+                CandidateJobPipelineModel.pipeline_status,
                 CandidateJobPipelineModel.relationship_status,
+                CandidateJobPipelineModel.current_analysis_id,
+                CandidateJobPipelineModel.resume_version_id,
                 CandidateJobPipelineModel.is_terminal,
                 CandidateJobPipelineModel.terminated_at,
                 CandidateJobPipelineModel.termination_reason,
+                CandidateJobPipelineModel.entered_at,
                 CandidateJobPipelineModel.updated_at,
             )
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
                 CandidateJobPipelineModel.candidate_id == candidate_id,
                 CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
+                JobModel.deleted_at.is_(None),
+            )
+            .order_by(CandidateJobPipelineModel.updated_at.desc())
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def list_pipeline_entries_for_portal(self, candidate_id: UUID) -> list[dict]:
+        result = await self._session.execute(
+            sa.select(
+                CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                JobModel.title.label("job_title"),
+                JobModel.status.label("job_status"),
+                CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                CandidateJobPipelineModel.link_status,
+                CandidateJobPipelineModel.pipeline_status,
+                CandidateJobPipelineModel.relationship_status,
+                CandidateJobPipelineModel.current_analysis_id,
+                CandidateJobPipelineModel.resume_version_id,
+                CandidateJobPipelineModel.is_terminal,
+                CandidateJobPipelineModel.terminated_at,
+                CandidateJobPipelineModel.termination_reason,
+                CandidateJobPipelineModel.entered_at,
+                CandidateJobPipelineModel.updated_at,
+            )
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.relationship_status.in_(_PORTAL_HISTORY_RELATIONSHIP_STATUSES),
                 JobModel.deleted_at.is_(None),
             )
             .order_by(CandidateJobPipelineModel.updated_at.desc())

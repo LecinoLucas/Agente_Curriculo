@@ -209,6 +209,18 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             )
         )
 
+    async def find_required_skill_link_by_id(
+        self,
+        job_id: UUID,
+        link_id: UUID,
+    ) -> JobRequiredSkillModel | None:
+        return await self._session.scalar(
+            sa.select(JobRequiredSkillModel).where(
+                JobRequiredSkillModel.job_id == job_id,
+                JobRequiredSkillModel.id == link_id,
+            )
+        )
+
     async def create_required_skill_link(
         self,
         link: JobRequiredSkillModel,
@@ -265,4 +277,15 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             query = query.limit(limit)
 
         result = await self._session.execute(query)
+        return list(result.scalars().all())
+
+    async def list_published(self) -> list[JobModel]:
+        """Lista todas as vagas com status='published' e não deletadas."""
+        result = await self._session.execute(
+            sa.select(JobModel).where(
+                JobModel.status == "published",
+                JobModel.deleted_at.is_(None),
+            )
+            .order_by(JobModel.title.asc())
+        )
         return list(result.scalars().all())

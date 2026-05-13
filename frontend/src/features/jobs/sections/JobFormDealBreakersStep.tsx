@@ -13,6 +13,12 @@ type JobFormDealBreakersStepProps = {
   availableSkills: SkillCatalog[];
   skillSearch: string;
   onSearchChange: (value: string) => void;
+  skillCategoryFilter: string;
+  onSkillCategoryFilterChange: (value: string) => void;
+  skillCategoryOptions: string[];
+  skillTypeFilter: string;
+  onSkillTypeFilterChange: (value: string) => void;
+  skillTypeOptions: string[];
   savingSkillId: string | null;
   onAddSkill: (
     skill: SkillCatalog | string,
@@ -33,6 +39,12 @@ export function JobFormDealBreakersStep({
   availableSkills,
   skillSearch,
   onSearchChange,
+  skillCategoryFilter,
+  onSkillCategoryFilterChange,
+  skillCategoryOptions,
+  skillTypeFilter,
+  onSkillTypeFilterChange,
+  skillTypeOptions,
   savingSkillId,
   onAddSkill,
   onUpdateSkill,
@@ -53,6 +65,12 @@ export function JobFormDealBreakersStep({
         linkedSkills={eliminatorySkills}
         search={skillSearch}
         onSearchChange={onSearchChange}
+        categoryFilter={skillCategoryFilter}
+        onCategoryFilterChange={onSkillCategoryFilterChange}
+        categoryOptions={skillCategoryOptions}
+        typeFilter={skillTypeFilter}
+        onTypeFilterChange={onSkillTypeFilterChange}
+        typeOptions={skillTypeOptions}
         addLabel="Eliminatória"
         addPriorityLevel="eliminatory"
         savingSkillId={savingSkillId}

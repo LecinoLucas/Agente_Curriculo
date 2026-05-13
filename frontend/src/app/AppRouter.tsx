@@ -49,6 +49,20 @@ const AuditLogsPage = lazy(() =>
   import("../pages/AuditLogsPage").then((m) => ({ default: m.AuditLogsPage }))
 );
 
+const SystemHealthPage = lazy(() =>
+  import("../pages/SystemHealthPage").then((m) => ({ default: m.SystemHealthPage }))
+);
+
+const AdminBiPage = lazy(() =>
+  import("../pages/AdminBiPage").then((m) => ({ default: m.AdminBiPage }))
+);
+
+const AssessmentsAdminPage = lazy(() =>
+  import("../pages/AssessmentsAdminPage").then((m) => ({
+    default: m.AssessmentsAdminPage,
+  }))
+);
+
 const AnalisesIaPage = lazy(() =>
   import("../pages/AnalisesIaPage").then((m) => ({
     default: m.AnalisesIaPage,
@@ -83,11 +97,34 @@ const CandidatePortalPage = lazy(() =>
   }))
 );
 
+const CandidateAssessmentPage = lazy(() =>
+  import("../pages/CandidateAssessmentPage").then((m) => ({
+    default: m.CandidateAssessmentPage,
+  }))
+);
+
+const CandidateLoginPage = lazy(() =>
+  import("../pages/CandidateLoginPage").then((m) => ({
+    default: m.CandidateLoginPage,
+  }))
+);
+
+const CandidateEntryPage = lazy(() =>
+  import("../pages/CandidateEntryPage").then((m) => ({
+    default: m.CandidateEntryPage,
+  }))
+);
+
+const PublicApplicationPage = lazy(() =>
+  import("../pages/PublicApplicationPage").then((m) => ({
+    default: m.PublicApplicationPage,
+  }))
+);
+
 type UserRole = "admin" | "recruiter" | "candidate" | "viewer";
 
 const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer"];
 const ADMIN_ROLES: UserRole[] = ["admin"];
-const CANDIDATE_AREA_ROLES: UserRole[] = ["candidate", "admin"];
 const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer"];
 
 function PageLoader() {
@@ -113,6 +150,11 @@ function protectedPage(element: ReactNode, roles?: UserRole[]) {
 export function AppRouter() {
   return (
     <Routes>
+      <Route path="/candidato" element={withSuspense(<CandidateEntryPage />)} />
+      <Route path="/candidato/cadastro" element={withSuspense(<PublicApplicationPage />)} />
+      <Route path="/candidato/login" element={withSuspense(<CandidateLoginPage />)} />
+      <Route path="/candidato/portal" element={withSuspense(<CandidatePortalPage />)} />
+      <Route path="/candidato/portal/avaliacoes/:assignmentId" element={withSuspense(<CandidateAssessmentPage />)} />
       <Route path="/login" element={withSuspense(<LoginPage />)} />
 
       <Route
@@ -183,6 +225,11 @@ export function AppRouter() {
         />
 
         <Route
+          path="avaliacoes"
+          element={protectedPage(<AssessmentsAdminPage />, ["admin", "recruiter"])}
+        />
+
+        <Route
           path="perfil"
           element={protectedPage(<ProfilePage />, ALL_AUTH_ROLES)}
         />
@@ -190,11 +237,6 @@ export function AppRouter() {
         <Route
           path="trocar-senha"
           element={protectedPage(<ChangePasswordPage />, ALL_AUTH_ROLES)}
-        />
-
-        <Route
-          path="candidato/espaco"
-          element={protectedPage(<CandidatePortalPage />, CANDIDATE_AREA_ROLES)}
         />
 
         <Route
@@ -220,6 +262,16 @@ export function AppRouter() {
         <Route
           path="admin/auditoria"
           element={protectedPage(<AuditLogsPage />, ADMIN_ROLES)}
+        />
+
+        <Route
+          path="admin/health"
+          element={protectedPage(<SystemHealthPage />, ADMIN_ROLES)}
+        />
+
+        <Route
+          path="admin/bi"
+          element={protectedPage(<AdminBiPage />, ADMIN_ROLES)}
         />
       </Route>
 

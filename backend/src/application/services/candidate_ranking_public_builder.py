@@ -59,6 +59,8 @@ class CandidateRankingPublicBuilder:
             job_signature_hash=require_key(row, "job_profile_hash"),
             score_computed_at=computed_at,
             job_updated_at=job_updated_at,
+            score_source_analysis_id=row.get("source_analysis_id"),
+            pipeline_current_analysis_id=row.get("current_analysis_id"),
         )
 
         return {

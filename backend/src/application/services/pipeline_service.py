@@ -33,6 +33,8 @@ from src.interface.api.schemas.pipeline_schemas import (
     StageTransitionResponse,
     TransferCandidateJobRequest,
     TransferCandidateJobResponse,
+    ReconsiderCandidateRequest,
+    ReconsiderCandidateResponse,
     UpdateCandidateStageRequest,
     UpdateCandidateStageResponse,
 )
@@ -243,6 +245,10 @@ class PipelineCandidateAlreadyActiveInAnotherJobError(Exception):
 
 
 class PipelineCandidateWithoutActiveJobError(Exception):
+    pass
+
+
+class PipelineCandidateReconsiderationNotAllowedError(Exception):
     pass
 
 
@@ -645,6 +651,76 @@ class PipelineService:
             source_transition_id=source_transition.id,
             destination_transition_id=destination_transition.id,
             updated_at=destination_row["updated_at"],
+        )
+
+    async def reconsider_candidate(
+        self,
+        candidate_id: UUID,
+        body: ReconsiderCandidateRequest,
+        moved_by: UUID,
+    ) -> ReconsiderCandidateResponse:
+        await self._ensure_available_job(body.job_id)
+        await self._ensure_active_candidate(candidate_id)
+
+        active_entry = await self._repository.find_active_entry_by_candidate(candidate_id)
+        if active_entry is not None:
+            if active_entry.job_id == body.job_id:
+                raise PipelineCandidateAlreadyActiveInSameJobError
+            raise PipelineCandidateAlreadyActiveInAnotherJobError
+
+        existing_entry = await self._repository.find_any_entry(candidate_id, body.job_id)
+        if existing_entry is None:
+            raise PipelineEntryNotFoundError
+        if existing_entry.link_status not in {"rejected", "removed", "transferred"}:
+            raise PipelineCandidateReconsiderationNotAllowedError
+
+        now = datetime.now(UTC)
+        saved_row = await self._repository.reactivate_entry(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            stage=body.initial_stage,
+            status="active",
+            moved_by=moved_by,
+            updated_at=now,
+        )
+        if saved_row is None:
+            raise PipelineConcurrentModificationError(
+                "Não foi possível reabrir a candidatura. Recarregue e tente novamente."
+            )
+
+        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        transition = await self._repository.save_transition(
+            CandidateJobPipelineEventModel(
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                event_type="candidate_reconsidered",
+                from_stage=existing_entry.pipeline_stage,
+                to_stage=body.initial_stage,
+                actor_id=moved_by,
+                idempotency_key=_build_event_idempotency_key(
+                    pipeline_id,
+                    "candidate_reconsidered",
+                    existing_entry.pipeline_stage,
+                    body.initial_stage,
+                    moved_by,
+                ),
+                metadata_payload={
+                    "trigger": "manual",
+                    "reason": body.reason,
+                    "origin": "recruiter_reopened",
+                },
+                created_at=now,
+            )
+        )
+
+        return ReconsiderCandidateResponse(
+            candidate_id=saved_row["candidate_id"],
+            job_id=saved_row["job_id"],
+            stage=saved_row["stage"],  # type: ignore[arg-type]
+            candidate_status=STAGE_TO_CANDIDATE_STATUS[saved_row["stage"]],
+            status=saved_row["status"],  # type: ignore[arg-type]
+            transition_id=transition.id,
+            updated_at=saved_row["updated_at"],
         )
 
     async def remove_candidate_from_job(

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 export type ResumeFilter = "all" | "with" | "without";
 export type AiStatusFilter = "all" | "completed" | "processing_or_pending" | "failed";
+export type ApplicationSourceFilter = "all" | "public_application" | "manual";
 
 interface UseCandidatesFiltersProps {
   setPage: (page: number) => void;
@@ -12,6 +13,8 @@ export function useCandidatesFilters({ setPage }: UseCandidatesFiltersProps) {
   const [search, setSearch] = useState("");
   const [resumeFilter, setResumeFilterState] = useState<ResumeFilter>("all");
   const [aiFilter, setAiFilterState] = useState<AiStatusFilter>("all");
+  const [applicationSourceFilter, setApplicationSourceFilterState] =
+    useState<ApplicationSourceFilter>("all");
 
   // Debounce search input — resets page on new search term
   useEffect(() => {
@@ -32,14 +35,24 @@ export function useCandidatesFilters({ setPage }: UseCandidatesFiltersProps) {
     setPage(1);
   }
 
+  function setApplicationSourceFilter(v: ApplicationSourceFilter) {
+    setApplicationSourceFilterState(v);
+    setPage(1);
+  }
+
   function clearFilters() {
     setSearchInput("");
     setResumeFilterState("all");
     setAiFilterState("all");
+    setApplicationSourceFilterState("all");
     setPage(1);
   }
 
-  const hasActiveFilters = search || resumeFilter !== "all" || aiFilter !== "all";
+  const hasActiveFilters =
+    search ||
+    resumeFilter !== "all" ||
+    aiFilter !== "all" ||
+    applicationSourceFilter !== "all";
 
   return {
     searchInput,
@@ -49,6 +62,8 @@ export function useCandidatesFilters({ setPage }: UseCandidatesFiltersProps) {
     setResumeFilter,
     aiFilter,
     setAiFilter,
+    applicationSourceFilter,
+    setApplicationSourceFilter,
     hasActiveFilters,
     clearFilters,
   };

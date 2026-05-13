@@ -1,12 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { jobSkillsServiceMock, toastMock } = vi.hoisted(() => ({
+const { jobSkillsServiceMock, skillsServiceMock, toastMock } = vi.hoisted(() => ({
   jobSkillsServiceMock: {
     addJobSkill: vi.fn(),
     listJobSkills: vi.fn(),
     removeJobSkill: vi.fn(),
     updateJobSkill: vi.fn(),
+  },
+  skillsServiceMock: {
+    listSkills: vi.fn(),
   },
   toastMock: {
     warning: vi.fn(),
@@ -16,6 +19,10 @@ const { jobSkillsServiceMock, toastMock } = vi.hoisted(() => ({
 
 vi.mock("../../../../services/jobSkillsService", () => ({
   jobSkillsService: jobSkillsServiceMock,
+}));
+
+vi.mock("../../../../services/skillsService", () => ({
+  skillsService: skillsServiceMock,
 }));
 
 vi.mock("../../../../shared/utils/toast", () => ({
@@ -30,6 +37,14 @@ describe("useJobSkills", () => {
     jobSkillsServiceMock.listJobSkills.mockReset();
     jobSkillsServiceMock.removeJobSkill.mockReset();
     jobSkillsServiceMock.updateJobSkill.mockReset();
+    skillsServiceMock.listSkills.mockReset();
+    skillsServiceMock.listSkills.mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      page_size: 50,
+      total_pages: 1,
+    });
     toastMock.warning.mockReset();
     toastMock.error.mockReset();
   });
@@ -77,11 +92,19 @@ describe("useJobSkills", () => {
       await result.current.handleAddSkill(
         {
           id: "skill-2",
-          canonical: "SQL Server",
+          name: "SQL Server",
+          normalized_name: "sql server",
+          category: null,
+          catalog_type: null,
+          description: null,
+          is_active: true,
+          updated_at: "2026-05-13T00:00:00Z",
+          archived_at: null,
+          archived_by: null,
+          archive_reason: null,
+          archive_reason_note: null,
+          created_at: "2026-05-13T00:00:00Z",
           aliases: [],
-          domains: [],
-          type: "skill",
-          strength: "strong",
         },
         "priority",
       );
@@ -126,11 +149,19 @@ describe("useJobSkills", () => {
       await result.current.handleAddSkill(
         {
           id: "skill-2",
-          canonical: "Docker",
+          name: "Docker",
+          normalized_name: "docker",
+          category: null,
+          catalog_type: null,
+          description: null,
+          is_active: true,
+          updated_at: "2026-05-13T00:00:00Z",
+          archived_at: null,
+          archived_by: null,
+          archive_reason: null,
+          archive_reason_note: null,
+          created_at: "2026-05-13T00:00:00Z",
           aliases: [],
-          domains: [],
-          type: "skill",
-          strength: "strong",
         },
         "complementary",
       );
@@ -143,5 +174,88 @@ describe("useJobSkills", () => {
         priority_level: "complementary",
       }),
     );
+  });
+
+  it("atualiza skill persistida usando o vínculo existente", async () => {
+    jobSkillsServiceMock.listJobSkills.mockResolvedValue([
+      {
+        id: "link-1",
+        job_id: "job-1",
+        skill_id: "skill-1",
+        skill_name: "React",
+        priority_level: "priority",
+        minimum_level: null,
+        minimum_years: null,
+        weight: 1,
+      },
+    ]);
+    const onRefreshQuality = vi.fn();
+
+    const { result } = renderHook(() =>
+      useJobSkills({
+        currentJob: { id: "job-1" },
+        onRefreshQuality,
+      }),
+    );
+
+    const skill = {
+      id: "link-1",
+      job_id: "job-1",
+      skill_id: "skill-1",
+      skill_name: "React",
+      priority_level: "complementary" as const,
+      minimum_level: null,
+      minimum_years: null,
+      weight: 1,
+    };
+
+    await act(async () => {
+      await result.current.handleUpdateSkill(skill, { priority_level: "priority" });
+    });
+
+    expect(jobSkillsServiceMock.updateJobSkill).toHaveBeenCalledWith(
+      "job-1",
+      skill,
+      expect.objectContaining({
+        priority_level: "priority",
+      }),
+    );
+    expect(jobSkillsServiceMock.removeJobSkill).not.toHaveBeenCalled();
+    expect(jobSkillsServiceMock.addJobSkill).not.toHaveBeenCalled();
+    expect(onRefreshQuality).toHaveBeenCalledWith("job-1");
+  });
+
+  it("busca skills usando filtros de categoria e tipo", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const { result } = renderHook(() =>
+        useJobSkills({
+          currentJob: null,
+          onRefreshQuality: vi.fn(),
+        }),
+      );
+
+      act(() => {
+        result.current.setSkillSearch("react");
+        result.current.setSkillCategoryFilter("frontend");
+        result.current.setSkillTypeFilter("tool");
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(skillsServiceMock.listSkills).toHaveBeenCalledWith(
+        expect.objectContaining({
+          search: "react",
+          category: "frontend",
+          catalog_type: "tool",
+          is_active: true,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

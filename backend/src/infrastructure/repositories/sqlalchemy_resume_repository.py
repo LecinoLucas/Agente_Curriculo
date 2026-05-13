@@ -1,4 +1,5 @@
 from uuid import UUID
+from types import SimpleNamespace
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,13 +48,13 @@ class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
     async def create_resume(self, resume: ResumeModel) -> ResumeModel:
         self._session.add(resume)
         await self._session.flush()
-        await self._session.refresh(resume)
+        # refresh() omitted: explicit IDs and manual datetimes don't require server defaults
         return resume
 
     async def create_version(self, version: ResumeVersionModel) -> ResumeVersionModel:
         self._session.add(version)
         await self._session.flush()
-        await self._session.refresh(version)
+        # refresh() omitted: explicit IDs and manual datetimes don't require server defaults
         return version
 
     async def find_active_resume_by_id(self, resume_id: UUID) -> ResumeModel | None:
@@ -123,11 +124,18 @@ class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
         )
 
     async def find_version_by_id(self, version_id: UUID) -> ResumeVersionModel | None:
-        return await self._session.scalar(
-            sa.select(ResumeVersionModel).where(
-                ResumeVersionModel.id == version_id,
-            )
+        result = await self._session.execute(
+            sa.select(
+                ResumeVersionModel.id,
+                ResumeVersionModel.resume_id,
+                ResumeVersionModel.extraction_status,
+                ResumeVersionModel.extracted_text,
+            ).where(ResumeVersionModel.id == version_id)
         )
+        row = result.mappings().first()
+        if row is None:
+            return None
+        return SimpleNamespace(**dict(row))
 
     async def save_resume(self, resume: ResumeModel) -> ResumeModel:
         await self._session.flush()

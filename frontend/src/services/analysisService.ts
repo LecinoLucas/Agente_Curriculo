@@ -21,6 +21,20 @@ export type AnalysisLifecyclePayload = {
   note?: string;
 };
 
+export type AnalysisRequestResult = {
+  analysis_id: string;
+  status: AnalysisStatus["status"];
+  created: boolean;
+  blocked: boolean;
+  reused: boolean;
+  stuck: boolean;
+  reason: string;
+};
+
+export type AnalysisRequestOptions = {
+  force?: boolean;
+};
+
 function formatRetryAfter(seconds: number): string {
   const rounded = Math.max(1, Math.ceil(seconds));
   if (rounded < 60) return `${rounded}s`;
@@ -79,12 +93,43 @@ function normalizeAnalysisStatus(item: Partial<AnalysisStatus>): AnalysisStatus 
     analysis_id: item.analysis_id ?? "",
     status: item.status ?? "pending",
     retry_count: item.retry_count ?? 0,
+    stuck: Boolean(item.stuck),
+    reason: item.reason ?? null,
     failure_reason: item.failure_reason ?? null,
     next_retry_at: item.next_retry_at ?? null,
     started_at: item.started_at ?? null,
     completed_at: item.completed_at ?? null,
     failed_at: item.failed_at ?? null,
     updated_at: item.updated_at ?? new Date(0).toISOString(),
+  };
+}
+
+function normalizeAnalysisGlobalItem(item: Partial<AnalysisGlobalItem>): AnalysisGlobalItem {
+  return {
+    id: item.id ?? "",
+    job_id: item.job_id ?? null,
+    candidate_id: item.candidate_id ?? null,
+    candidate_name: item.candidate_name ?? null,
+    candidate_email: item.candidate_email ?? null,
+    resume_file_name: item.resume_file_name ?? null,
+    resume_version_id: item.resume_version_id ?? "",
+    status: item.status ?? "pending",
+    failure_reason: item.failure_reason ?? null,
+    discarded_at: item.discarded_at ?? null,
+    discarded_by: item.discarded_by ?? null,
+    discard_reason: item.discard_reason ?? null,
+    discard_reason_note: item.discard_reason_note ?? null,
+    used_real_ai: item.used_real_ai ?? null,
+    retry_count: item.retry_count ?? 0,
+    next_retry_at: item.next_retry_at ?? null,
+    provider_error_type: item.provider_error_type ?? null,
+    provider_status_code: item.provider_status_code ?? null,
+    stuck: Boolean(item.stuck),
+    reason: item.reason ?? null,
+    created_at: item.created_at ?? new Date(0).toISOString(),
+    started_at: item.started_at ?? null,
+    completed_at: item.completed_at ?? null,
+    failed_at: item.failed_at ?? null,
   };
 }
 
@@ -133,7 +178,7 @@ function normalizeAnalysisResult(item: Partial<AnalysisResult>): AnalysisResult 
 }
 
 export const analysisService = {
-  request: (resumeVersionId: string, jobId: string) => {
+  request: (resumeVersionId: string, jobId: string, options: AnalysisRequestOptions = {}) => {
     if (!jobId?.trim()) {
       throw new Error("job_id é obrigatório para solicitar análise manual");
     }
@@ -141,7 +186,10 @@ export const analysisService = {
       resume_version_id: resumeVersionId,
       job_id: jobId,
     });
-    return httpRequest<{ analysis_id: string }>(`/api/v1/analyses?${params.toString()}`, {
+    if (options.force) {
+      params.set("force", "true");
+    }
+    return httpRequest<AnalysisRequestResult>(`/api/v1/analyses?${params.toString()}`, {
       method: "POST",
     }).catch((error) => rethrowAnalysisRateLimit(error));
   },
@@ -219,7 +267,7 @@ export const analysisService = {
     return httpRequest<PaginatedResponse<AnalysisGlobalItem>>(
       `/api/v1/analyses/global?${params.toString()}`,
     ).then((payload) => ({
-      data: Array.isArray(payload?.data) ? payload.data : [],
+      data: Array.isArray(payload?.data) ? payload.data.map(normalizeAnalysisGlobalItem) : [],
       total: payload?.total ?? 0,
       page: payload?.page ?? page,
       page_size: payload?.page_size ?? pageSize,

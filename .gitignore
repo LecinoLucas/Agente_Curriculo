@@ -21,3 +21,47 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .coverage
+
+# Sistema
+.DS_Store
+
+# Ambientes e segredos
+.env
+.env.*
+!.env.example
+!.env.test.example
+!.env.homolog.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+node_modules 2/
+frontend/node_modules/
+frontend/node_modules 2/
+
+# Builds
+dist/
+frontend/dist/
+build/
+
+# Testes / Playwright
+test-results/
+frontend/test-results/
+playwright-report/
+
+# Logs e outputs locais
+*.log
+backend/output.txt
+
+# Arquivos temporários
+*.tmp
+*.swp
+frontend/src/pages/.!*.tsx

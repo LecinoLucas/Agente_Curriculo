@@ -13,6 +13,7 @@ interface ScoreSummaryProps {
   scoreBreakdown: JobRankingEntry["score_breakdown"] | null;
   scoreExplanation: ScoreExplanationResponse | null;
   rankingSummaryText?: string | null;
+  rank?: number | null;
 }
 
 function getQualitativeLabel(score: number | null): { label: string; color: string } {
@@ -45,14 +46,24 @@ function ScoreBar({
   if (percentage >= 75) barColor = "bg-[hsl(var(--success))]";
   else if (percentage >= 40) barColor = "bg-[hsl(var(--warning))]";
 
-  let confidenceMessage = "ℹ️ Currículo rico em detalhes e histórico profissional.";
-  if (percentage <= 40) confidenceMessage = "ℹ️ Currículo muito resumido ou incompleto. A nota pode não ser precisa.";
-  else if (percentage <= 70) confidenceMessage = "ℹ️ Currículo com detalhes suficientes para análise básica.";
+  let confidenceMessage = "Currículo com boa confiança";
+  if (percentage < 40) confidenceMessage = "Currículo com baixa confiança";
+  else if (percentage < 75) confidenceMessage = "Currículo com pouca confiança";
 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-[hsl(var(--text))]">{label}</span>
+        <span className="text-xs font-medium text-[hsl(var(--text))] flex items-center gap-1 relative group">
+          {label}
+          {label === "Confiança" && (
+            <>
+              <Info className="h-3 w-3 text-[hsl(var(--text-muted))] cursor-help" />
+              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block bg-[hsl(var(--surface))] border border-[hsl(var(--border))] rounded px-2 py-1 text-[10px] text-[hsl(var(--text))] whitespace-nowrap shadow-lg z-50">
+                {confidenceMessage}
+              </div>
+            </>
+          )}
+        </span>
         <span className="text-xs font-semibold text-[hsl(var(--text))]">{Math.round(percentage)}%</span>
       </div>
       <div className="h-1.5 w-full rounded-full bg-[hsl(var(--surface-muted))]">
@@ -61,11 +72,6 @@ function ScoreBar({
           style={{ width: `${Math.round(percentage)}%` }}
         />
       </div>
-      {label === "Confiança" && (
-        <p className="text-[10px] text-[hsl(var(--text-muted))] mt-0.5 leading-tight">
-          {confidenceMessage}
-        </p>
-      )}
     </div>
   );
 }
@@ -75,6 +81,7 @@ export function ScoreSummary({
   scoreBreakdown,
   scoreExplanation,
   rankingSummaryText,
+  rank = null,
 }: ScoreSummaryProps) {
   const qualitativeLabel = getQualitativeLabel(compatibilityScore);
   const scorePercentage = normalizeScorePercent(compatibilityScore);
@@ -102,9 +109,16 @@ export function ScoreSummary({
     <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 shadow-sm">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
-            Aderência à Vaga
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+              Aderência à Vaga
+            </p>
+            {rank ? (
+              <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2.5 py-0.5 text-xs font-semibold text-[hsl(var(--text-muted))]">
+                Posição: #{rank}
+              </span>
+            ) : null}
+          </div>
           <div className="mt-2 flex items-end gap-2">
             <span
               className={[

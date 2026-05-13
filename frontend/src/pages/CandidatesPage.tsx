@@ -57,6 +57,8 @@ export function CandidatesPage() {
     setResumeFilter,
     aiFilter,
     setAiFilter,
+    applicationSourceFilter,
+    setApplicationSourceFilter,
     hasActiveFilters,
     clearFilters,
   } = useCandidatesFilters({ setPage });
@@ -73,10 +75,20 @@ export function CandidatesPage() {
       aiFilter === "all" ? undefined :
       aiFilter === "processing_or_pending" ? ["processing", "pending", "retry_scheduled"] :
       [aiFilter];
+    const applicationSource =
+      applicationSourceFilter === "all" ? undefined : applicationSourceFilter;
 
     void run(() =>
       candidatesService
-        .listSummaries(page, PAGE_SIZE, search || undefined, hasResume, aiStatus)
+        .listSummaries(
+          page,
+          PAGE_SIZE,
+          search || undefined,
+          hasResume,
+          aiStatus,
+          undefined,
+          applicationSource,
+        )
         .catch((err: unknown) => {
           throw new Error(
             formatContextError(
@@ -87,7 +99,7 @@ export function CandidatesPage() {
           );
         }),
     );
-  }, [page, search, resumeFilter, aiFilter, run, hasActiveFilters]);
+  }, [page, search, resumeFilter, aiFilter, applicationSourceFilter, run, hasActiveFilters]);
 
   const isWorkspaceOpen = selectedCandidateId !== null;
 
@@ -236,6 +248,8 @@ export function CandidatesPage() {
               onResumeFilterChange={setResumeFilter}
               aiFilter={aiFilter}
               onAiFilterChange={setAiFilter}
+              applicationSourceFilter={applicationSourceFilter}
+              onApplicationSourceFilterChange={setApplicationSourceFilter}
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearFilters}
             />

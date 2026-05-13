@@ -1,7 +1,55 @@
 import { tokenStorage } from "../utils/storage";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function isPrivateIpv4Host(hostname: string): boolean {
+  return (
+    /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+  );
+}
+
+function isLocalDevHost(hostname: string): boolean {
+  return isLoopbackHost(hostname) || isPrivateIpv4Host(hostname);
+}
+
+export function resolveApiBaseUrl(
+  configuredBaseUrl: string,
+  currentHostname?: string,
+  isDev = import.meta.env.DEV,
+): string {
+  if (!isDev || !currentHostname) {
+    return configuredBaseUrl;
+  }
+
+  let parsedBaseUrl: URL;
+  try {
+    parsedBaseUrl = new URL(configuredBaseUrl);
+  } catch {
+    return configuredBaseUrl;
+  }
+
+  if (
+    parsedBaseUrl.hostname === currentHostname ||
+    !isLocalDevHost(parsedBaseUrl.hostname) ||
+    !isLocalDevHost(currentHostname)
+  ) {
+    return configuredBaseUrl;
+  }
+
+  parsedBaseUrl.hostname = currentHostname;
+  return parsedBaseUrl.toString().replace(/\/$/, "");
+}
+
+export const API_BASE_URL = resolveApiBaseUrl(
+  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000",
+  typeof window !== "undefined" ? window.location.hostname : undefined,
+);
 
 let refreshInFlight: Promise<void> | null = null;
 

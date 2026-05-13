@@ -12,6 +12,7 @@ import type { Job } from "../../types/domain";
 import { formatJobStatus, formatSeniority, jobStatusTone } from "../../utils/jobFormatters";
 import { isPipelineOperationalJob } from "../../utils/jobStatusRules";
 import { toast } from "../../shared/utils/toast";
+import { buildAnalysisDecisionToast } from "./analysisDispatchFeedback";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -218,10 +219,17 @@ export function NewCandidateModal({
       // Vínculo com vaga (apenas se solicitado explicitamente)
       if (addToJob && selectedJob && selectedJobCanReceiveCandidates) {
         try {
-          await pipelineService.addCandidateToJob(candidate.id, {
+          const linkResult = await pipelineService.addCandidateToJob(candidate.id, {
             job_id: selectedJob.id,
             initial_stage: "entry",
           });
+          const analysisToast = buildAnalysisDecisionToast(linkResult.analysis);
+          if (analysisToast) {
+            if (analysisToast.tone === "success") toast.success(analysisToast.message);
+            if (analysisToast.tone === "info") toast.info(analysisToast.message);
+            if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+            if (analysisToast.tone === "error") toast.error(analysisToast.message);
+          }
           await invalidateBoard(selectedJob.id, true);
           linkedToJob = true;
         } catch (err: unknown) {

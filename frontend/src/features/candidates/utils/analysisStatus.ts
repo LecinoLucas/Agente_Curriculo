@@ -13,6 +13,7 @@ export type CandidateAnalysisUiStateValue =
   | "waiting_job"
   | "ready"
   | "processing"
+  | "retry_scheduled"
   | "completed"
   | "failed";
 
@@ -38,12 +39,14 @@ export function buildCandidateAnalysisSummary({
   hasResume,
   latestAnalysis,
   analysisResult,
+  jobFitScore,
   pollingAnalysisId,
 }: {
   activeJobId: string | null;
   hasResume: boolean;
   latestAnalysis: CandidateLatestAnalysisOverview | null | undefined;
   analysisResult: AnalysisResult | null;
+  jobFitScore?: number | null;
   pollingAnalysisId: string | null;
 }): CandidateAnalysisSummary {
   const activeJobAnalysis = getLatestAnalysisForActiveJob(latestAnalysis, activeJobId);
@@ -51,7 +54,7 @@ export function buildCandidateAnalysisSummary({
     hasResume,
     activeJobId,
     analysisStatus: activeJobAnalysis?.status ?? null,
-    jobFitScore: analysisResult?.job_fit_score ?? null,
+    jobFitScore: jobFitScore ?? null,
     aiStatus: activeJobAnalysis?.status ?? null,
     errorMessage: activeJobAnalysis?.failure_reason ?? null,
     pollingAnalysisId,
@@ -130,19 +133,26 @@ export function getCandidateAnalysisUiState({
     };
   }
 
+  if (normalizedStatus === "retry_scheduled") {
+    return {
+      state: "retry_scheduled",
+      title: "Limite temporário da IA",
+      description: "O provedor IA limitou a requisição. Nova tentativa automática já foi agendada.",
+      primaryAction: "Acompanhar análise",
+      severity: "warning",
+      inProgress: true,
+    };
+  }
+
   if (
     pollingAnalysisId ||
     normalizedStatus === "pending" ||
-    normalizedStatus === "processing" ||
-    normalizedStatus === "retry_scheduled"
+    normalizedStatus === "processing"
   ) {
     return {
       state: "processing",
       title: "Analisando com IA",
-      description:
-        normalizedStatus === "retry_scheduled"
-          ? "Alta demanda no provedor IA. Tentando novamente automaticamente."
-          : "Analisando currículo com IA...",
+      description: "Analisando currículo com IA...",
       primaryAction: "Acompanhar análise",
       severity: "info",
       inProgress: true,

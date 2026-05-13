@@ -33,6 +33,7 @@ interface CandidateAnalysisStatusCardProps {
   pollingAnalysisId?: string | null;
   highlights?: string[];
   onPrimaryAction?: () => void;
+  compact?: boolean;
 }
 
 export function CandidateAnalysisStatusCard({
@@ -46,6 +47,7 @@ export function CandidateAnalysisStatusCard({
   pollingAnalysisId = null,
   highlights = [],
   onPrimaryAction,
+  compact = false,
 }: CandidateAnalysisStatusCardProps) {
   const uiState = getCandidateAnalysisUiState({
     hasResume,
@@ -59,6 +61,38 @@ export function CandidateAnalysisStatusCard({
   const Icon = getStatusIcon(uiState.state);
   const hasScore = jobFitScore !== null && jobFitScore !== undefined;
   const displayHighlights = highlights.filter(Boolean).slice(0, 3);
+
+  if (compact && uiState.state === "completed") {
+    return (
+      <section className="px-5 pt-4">
+        <div className={`rounded-xl border px-3 py-2.5 shadow-sm ${SEVERITY_CLASS[uiState.severity]}`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-current/10 bg-white/70">
+                <Icon className="h-3.5 w-3.5" />
+              </span>
+              <div>
+                <p className="text-xs font-semibold text-current">{uiState.title}</p>
+                <p className="text-[10px] text-current/70">Análise e score disponíveis abaixo</p>
+              </div>
+            </div>
+            {displayHighlights.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {displayHighlights.map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-current/10 bg-white/75 px-2.5 py-0.5 text-xs font-medium text-current"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="px-5 pt-4">

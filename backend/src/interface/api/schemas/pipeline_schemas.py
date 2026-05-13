@@ -102,6 +102,7 @@ class MoveCandidateResponse(BaseModel):
     status: CandidateOutcomeStatus
     transition_id: UUID
     updated_at: datetime
+    analysis: PipelineAnalysisDecisionResponse | None = None
 
 
 # Body for the unambiguous path-based move endpoint: PATCH /pipeline/{job_id}/{candidate_id}/stage
@@ -109,6 +110,31 @@ class MoveCandidateByJobBody(BaseModel):
     stage: PipelineStage
     notes: str | None = Field(default=None, max_length=2000)
     reason: str | None = Field(default=None, max_length=500)
+
+
+class SchedulePipelineInterviewRequest(BaseModel):
+    scheduled_start: datetime
+    scheduled_end: datetime
+    timezone: str = "America/Recife"
+    interview_format: Literal["online", "presencial", "telefone"] = "online"
+    location: str | None = Field(default=None, max_length=255)
+    meeting_url: str | None = Field(default=None, max_length=2000)
+    public_notes: str | None = Field(default=None, max_length=2000)
+    internal_notes: str | None = Field(default=None, max_length=4000)
+    title: str | None = Field(default=None, max_length=255)
+    interview_type: str = Field(default="hr", max_length=50)
+
+
+class PipelineAnalysisDecisionResponse(BaseModel):
+    analysis_id: UUID | None = None
+    status: str | None = None
+    created: bool = False
+    blocked: bool = False
+    reused: bool = False
+    stuck: bool = False
+    reason: str
+    stage: PipelineStage | None = None
+    trigger_source: Literal["automatic", "manual"] = "automatic"
 
 
 class AddCandidateToJobRequest(BaseModel):
@@ -124,6 +150,7 @@ class AddCandidateToJobResponse(BaseModel):
     status: CandidateOutcomeStatus
     transition_id: UUID
     updated_at: datetime
+    analysis: PipelineAnalysisDecisionResponse | None = None
 
 
 class TransferCandidateJobRequest(BaseModel):
@@ -143,6 +170,24 @@ class TransferCandidateJobResponse(BaseModel):
     source_transition_id: UUID
     destination_transition_id: UUID
     updated_at: datetime
+    analysis: PipelineAnalysisDecisionResponse | None = None
+
+
+class ReconsiderCandidateRequest(BaseModel):
+    job_id: UUID
+    initial_stage: PipelineStage = "entry"
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ReconsiderCandidateResponse(BaseModel):
+    candidate_id: UUID
+    job_id: UUID
+    stage: PipelineStage
+    candidate_status: str
+    status: CandidateOutcomeStatus
+    transition_id: UUID
+    updated_at: datetime
+    analysis: PipelineAnalysisDecisionResponse | None = None
 
 
 # ---------------------------------------------------------------------------

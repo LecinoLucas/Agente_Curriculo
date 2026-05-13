@@ -119,9 +119,9 @@ describe("buildCandidateAnalysisSummary", () => {
       pollingAnalysisId: null,
     });
 
-    expect(summary.label).toBe("Analisando com IA");
+    expect(summary.label).toBe("Limite temporário da IA");
     expect(summary.inProgress).toBe(true);
-    expect(summary.detail).toBe("Alta demanda no provedor IA. Tentando novamente automaticamente.");
+    expect(summary.detail).toContain("Nova tentativa automática");
   });
 
   it("não marca em andamento quando a análise pendente é de outra vaga", () => {

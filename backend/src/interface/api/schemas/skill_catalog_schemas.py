@@ -30,6 +30,7 @@ class SkillCatalogResponse(BaseModel):
     name: str
     normalized_name: str
     category: Optional[str] = None
+    catalog_type: Optional[str] = None
     description: Optional[str] = None
     is_active: bool
     updated_at: datetime

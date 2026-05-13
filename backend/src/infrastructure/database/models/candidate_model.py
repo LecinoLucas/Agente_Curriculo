@@ -71,6 +71,45 @@ class CandidateModel(Base):
         sa.TIMESTAMP(timezone=True),
         comment="When data quality status was last determined"
     )
+    # Public application tracking
+    lgpd_consent_at: Mapped[Optional[datetime]] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        comment="When candidate gave LGPD consent (public application)"
+    )
+    lgpd_consent_version: Mapped[Optional[str]] = mapped_column(
+        sa.String(50),
+        comment="Version of LGPD terms accepted (v1.0, etc)"
+    )
+    application_source: Mapped[Optional[str]] = mapped_column(
+        sa.String(50),
+        nullable=False,
+        server_default="manual",
+        comment="Source of application: manual, google_oauth, api, import, etc"
+    )
+    desired_contract_type: Mapped[Optional[str]] = mapped_column(
+        sa.String(20),
+        comment="Desired contract type from public application: CLT, PJ, Indiferente"
+    )
+    salary_expectation: Mapped[Optional[str]] = mapped_column(
+        sa.String(100),
+        comment="Salary expectation from public application (free text)"
+    )
+    works_at_marajo_group: Mapped[Optional[bool]] = mapped_column(
+        sa.Boolean(),
+        comment="From public application: does candidate work at Marajó Group?"
+    )
+    password_hash: Mapped[Optional[str]] = mapped_column(
+        sa.String(255),
+        comment="Password hash for candidate portal login"
+    )
+    password_created_at: Mapped[Optional[datetime]] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        comment="When candidate password was created"
+    )
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        comment="When candidate last logged in to candidate portal"
+    )
 
     __table_args__ = (
         sa.Index("idx_candidates_user_id", "user_id"),

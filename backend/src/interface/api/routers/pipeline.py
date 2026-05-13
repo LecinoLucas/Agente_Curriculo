@@ -1,16 +1,15 @@
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-import sqlalchemy as sa
-import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.analysis_dispatch_service import CandidateJobAnalysisDispatcher
 from src.application.services.pipeline_service import (
     PipelineCandidateAlreadyActiveInAnotherJobError,
     PipelineCandidateAlreadyActiveInSameJobError,
     PipelineCandidateAlreadyHiredError,
+    PipelineCandidateReconsiderationNotAllowedError,
     PipelineDestinationJobUnavailableError,
     PipelineCandidateNotFoundError,
     PipelineCandidateWithoutActiveJobError,
@@ -25,8 +24,21 @@ from src.application.services.pipeline_service import (
     PipelineTransferBlockedAdvancedStageError,
     PipelineTransferNotAllowedError,
 )
+from src.application.services.assessment_service import AssessmentService
+from src.application.services.interview_schedule_service import (
+    InterviewScheduleConflictError,
+    InterviewScheduleService,
+    InterviewScheduleValidationError,
+)
+from src.infrastructure.repositories.sqlalchemy_assessment_repository import (
+    SQLAlchemyAssessmentRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_interview_schedule_repository import (
+    SQLAlchemyInterviewScheduleRepository,
+)
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
+    _candidate_job_pipeline_key,
 )
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.pipeline_schemas import (
@@ -36,156 +48,26 @@ from src.interface.api.schemas.pipeline_schemas import (
     MoveCandidateByJobBody,
     MoveCandidateRequest,
     MoveCandidateResponse,
+    PipelineAnalysisDecisionResponse,
     PipelineBoardResponse,
     PipelineJobSummaryResponse,
+    ReconsiderCandidateRequest,
+    ReconsiderCandidateResponse,
+    SchedulePipelineInterviewRequest,
     TransferCandidateJobRequest,
     TransferCandidateJobResponse,
 )
+from src.interface.api.schemas.interview_schedule_schemas import InterviewScheduleResponse
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
-logger = structlog.get_logger(__name__)
-
-_ANALYSIS_QUEUE = "analysis"
 
 
 def _service(db: AsyncSession) -> PipelineService:
     return PipelineService(SQLAlchemyPipelineRepository(db), db)
 
 
-async def _enqueue_latest_pending_analysis_for_candidate_job(
-    db: AsyncSession,
-    *,
-    candidate_id: UUID,
-    job_id: UUID,
-    requested_by: UUID,
-) -> None:
-    from src.application.dtos.analysis_dtos import RequestAnalysisCommand
-    from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
-    from src.infrastructure.database.models.analysis_model import AnalysisModel
-    from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
-    from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
-        SQLAlchemyAnalysisRepository,
-    )
-    from src.infrastructure.repositories.sqlalchemy_resume_repository import (
-        SQLAlchemyResumeRepository,
-    )
-    from src.interface.workers.analysis_dispatcher import enqueue_analysis
-
-    latest_resume_version = await db.scalar(
-        sa.select(ResumeVersionModel.id)
-        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-        .where(
-            ResumeModel.candidate_id == candidate_id,
-            ResumeModel.deleted_at.is_(None),
-        )
-        .order_by(ResumeVersionModel.uploaded_at.desc())
-        .limit(1)
-    )
-    if latest_resume_version is None:
-        return
-
-    try:
-        use_case = RequestAnalysisUseCase(
-            SQLAlchemyAnalysisRepository(db),
-            SQLAlchemyResumeRepository(db),
-        )
-        await use_case.execute(
-            RequestAnalysisCommand(
-                resume_version_id=latest_resume_version,
-                requested_by=requested_by,
-                job_id=job_id,
-                force_reanalyze=False,
-                priority=5,
-            )
-        )
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        return
-
-    query = (
-        sa.select(AnalysisModel)
-        .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
-        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-        .where(
-            ResumeModel.candidate_id == candidate_id,
-            AnalysisModel.job_id == job_id,
-            AnalysisModel.status == "pending",
-            AnalysisModel.task_id.is_(None),
-        )
-        .order_by(AnalysisModel.created_at.desc())
-        .limit(1)
-    )
-    latest_analysis = await db.scalar(query)
-
-    if latest_analysis is None:
-        return
-
-    analysis_id = latest_analysis.id
-    queue_name = _ANALYSIS_QUEUE
-    task_id = f"analysis:{analysis_id}"
-
-    logger.info(
-        "analysis_pending_created",
-        analysis_id=str(analysis_id),
-        candidate_id=str(candidate_id),
-        job_id=str(job_id),
-        queue_name=latest_analysis.queue_name,
-        status=latest_analysis.status,
-    )
-
-    try:
-        latest_analysis.task_id = task_id
-        latest_analysis.queue_name = queue_name
-        latest_analysis.updated_at = datetime.now(UTC)
-        latest_analysis.failure_reason = None
-        await db.commit()
-
-        logger.info(
-            "analysis_enqueue_requested",
-            analysis_id=str(analysis_id),
-            candidate_id=str(candidate_id),
-            job_id=str(job_id),
-            queue_name=queue_name,
-            task_id=task_id,
-        )
-
-        refetched = await db.scalar(
-            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
-        )
-        if not refetched:
-            logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(analysis_id))
-        else:
-            enqueue_analysis(analysis_id)
-            logger.info(
-                "analysis_enqueue_succeeded",
-                analysis_id=str(analysis_id),
-                candidate_id=str(candidate_id),
-                job_id=str(job_id),
-                queue_name=queue_name,
-                task_id=task_id,
-            )
-    except Exception as exc:
-        try:
-            await db.execute(
-                sa.update(AnalysisModel)
-                .where(AnalysisModel.id == analysis_id)
-                .values(
-                    failure_reason=f"enqueue_failed: {exc}",
-                    updated_at=datetime.now(UTC),
-                )
-            )
-            await db.commit()
-        except Exception:
-            await db.rollback()
-        logger.error(
-            "analysis_enqueue_failed",
-            analysis_id=str(analysis_id),
-            candidate_id=str(candidate_id),
-            job_id=str(job_id),
-            queue_name=queue_name,
-            error=str(exc),
-        )
+def _analysis_response(decision) -> PipelineAnalysisDecisionResponse:
+    return PipelineAnalysisDecisionResponse.model_validate(decision.as_dict())
 
 
 def _handle(exc: Exception) -> None:
@@ -238,6 +120,11 @@ def _handle(exc: Exception) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Candidato não possui vaga ativa. Use adicionar a uma vaga.",
+        )
+    if isinstance(exc, PipelineCandidateReconsiderationNotAllowedError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Só é possível reconsiderar candidaturas encerradas para esta vaga.",
         )
     if isinstance(exc, PipelineSameStageError):
         raise HTTPException(
@@ -352,7 +239,78 @@ async def move_candidate_stage_v2(
             moved_by=current_user.id,
         )
         await db.commit()
-        return result
+        analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            requested_by=current_user.id,
+        )
+        return result.model_copy(update={"analysis": _analysis_response(analysis_decision)})
+    except Exception as exc:
+        await db.rollback()
+        _handle(exc)
+        raise
+
+
+@router.post(
+    "/{job_id}/{candidate_id}/interviews",
+    response_model=InterviewScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def schedule_pipeline_interview(
+    job_id: UUID,
+    candidate_id: UUID,
+    body: SchedulePipelineInterviewRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> InterviewScheduleResponse:
+    try:
+        pipeline_repository = SQLAlchemyPipelineRepository(db)
+        entry = await pipeline_repository.find_active_entry(candidate_id, job_id)
+        if entry is None:
+            raise PipelineEntryNotFoundError
+
+        if entry.pipeline_stage not in {"hr_interview", "technical_interview", "final", "offer"}:
+            await PipelineService(pipeline_repository, db).move_candidate(
+                candidate_id=candidate_id,
+                body=MoveCandidateRequest(
+                    job_id=job_id,
+                    stage="hr_interview",
+                    notes="Entrevista agendada pela agenda.",
+                    reason=None,
+                ),
+                moved_by=current_user.id,
+            )
+
+        interview_service = InterviewScheduleService(SQLAlchemyInterviewScheduleRepository(db))
+        title = body.title or "Entrevista com candidato"
+        schedule = await interview_service.create_interview(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=entry.candidate_job_pipeline_id,
+            title=title,
+            description=body.internal_notes,
+            public_notes=body.public_notes,
+            internal_notes=body.internal_notes,
+            scheduled_start=body.scheduled_start,
+            scheduled_end=body.scheduled_end,
+            timezone=body.timezone,
+            interview_type=body.interview_type,
+            interview_format=body.interview_format,
+            status="scheduled",
+            location=body.location,
+            meeting_url=body.meeting_url,
+            interviewer_name=None,
+            interviewer_email=None,
+        )
+        details = await interview_service.get_interview_details(schedule.id)
+        await db.commit()
+        return InterviewScheduleResponse(**details)
+    except (InterviewScheduleConflictError, PipelineSameStageError) as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except InterviewScheduleValidationError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except Exception as exc:
         await db.rollback()
         _handle(exc)
@@ -376,14 +334,18 @@ async def add_candidate_to_job(
             moved_by=current_user.id,
         )
         await db.commit()
-        await _enqueue_latest_pending_analysis_for_candidate_job(
-            db,
+        await AssessmentService(SQLAlchemyAssessmentRepository(db)).create_assignments_for_job(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            pipeline_id=_candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id),
+        )
+        await db.commit()
+        analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
             candidate_id=candidate_id,
             job_id=body.job_id,
             requested_by=current_user.id,
         )
-
-        return result
+        return result.model_copy(update={"analysis": _analysis_response(analysis_decision)})
     except Exception as exc:
         await db.rollback()
         _handle(exc)
@@ -407,13 +369,53 @@ async def transfer_candidate_job(
             moved_by=current_user.id,
         )
         await db.commit()
-        await _enqueue_latest_pending_analysis_for_candidate_job(
-            db,
+        await AssessmentService(SQLAlchemyAssessmentRepository(db)).create_assignments_for_job(
+            candidate_id=candidate_id,
+            job_id=body.to_job_id,
+            pipeline_id=_candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.to_job_id),
+        )
+        await db.commit()
+        analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
             candidate_id=candidate_id,
             job_id=body.to_job_id,
             requested_by=current_user.id,
         )
-        return result
+        return result.model_copy(update={"analysis": _analysis_response(analysis_decision)})
+    except Exception as exc:
+        await db.rollback()
+        _handle(exc)
+        raise
+
+
+@router.post(
+    "/{candidate_id}/reconsider-job",
+    response_model=ReconsiderCandidateResponse,
+)
+async def reconsider_candidate_job(
+    candidate_id: UUID,
+    body: ReconsiderCandidateRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ReconsiderCandidateResponse:
+    try:
+        result = await _service(db).reconsider_candidate(
+            candidate_id=candidate_id,
+            body=body,
+            moved_by=current_user.id,
+        )
+        await db.commit()
+        await AssessmentService(SQLAlchemyAssessmentRepository(db)).create_assignments_for_job(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            pipeline_id=_candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id),
+        )
+        await db.commit()
+        analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            requested_by=current_user.id,
+        )
+        return result.model_copy(update={"analysis": _analysis_response(analysis_decision)})
     except Exception as exc:
         await db.rollback()
         _handle(exc)

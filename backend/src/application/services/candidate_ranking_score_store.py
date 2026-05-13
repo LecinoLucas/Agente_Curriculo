@@ -157,6 +157,7 @@ class CandidateRankingScoreStore:
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
                 CandidateJobPipelineModel.pipeline_status,
                 CandidateJobPipelineModel.entered_at,
+                CandidateJobPipelineModel.current_analysis_id.label("current_analysis_id"),
                 JobModel.job_profile_hash,
                 latest_match.c.match_updated_at,
                 latest_match.c.match_freshness_status,
@@ -186,6 +187,7 @@ class CandidateRankingScoreStore:
             .where(
                 CandidateJobScoreModel.job_id == job_id,
                 CandidateJobScoreModel.version_id == version_id,
+                CandidateJobScoreModel.source_analysis_id == CandidateJobPipelineModel.current_analysis_id,
                 CandidateJobScoreModel.final_score.isnot(None),
                 self._json_shape_filter(CandidateJobScoreModel.breakdown, "object"),
                 self._json_shape_filter(CandidateJobScoreModel.reason_codes, "array"),

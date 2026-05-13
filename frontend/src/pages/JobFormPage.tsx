@@ -13,6 +13,7 @@ import { JobFormRequirementsStep } from "../features/jobs/sections/JobFormRequir
 import { JobFormMandatorySkillsStep } from "../features/jobs/sections/JobFormMandatorySkillsStep";
 import { JobFormDifferentialsStep } from "../features/jobs/sections/JobFormDifferentialsStep";
 import { JobFormDealBreakersStep } from "../features/jobs/sections/JobFormDealBreakersStep";
+import { JobAssessmentsSection } from "../features/jobs/sections/JobAssessmentsSection";
 import { JobFormReviewStep } from "../features/jobs/sections/JobFormReviewStep";
 import {
   buildCreateJobPayload,
@@ -46,6 +47,7 @@ type StepId =
   | "mandatory-skills"
   | "differentials"
   | "deal-breakers"
+  | "assessments"
   | "review";
 
 const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
@@ -54,6 +56,7 @@ const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
   { id: "mandatory-skills", label: "Essenciais", hint: "Use para as 3–5 competências centrais da vaga" },
   { id: "differentials", label: "Diferenciais", hint: "Bônus controlado para ferramentas e extras" },
   { id: "deal-breakers", label: "Critérios eliminatórios", hint: "Regras de bloqueio explícitas" },
+  { id: "assessments", label: "Avaliações do processo", hint: "Defina testes e pesquisas exigidas" },
   { id: "review", label: "Revisão e publicação", hint: "Checklist final e mensagens do backend" },
 ];
 
@@ -96,6 +99,12 @@ export function JobFormPage() {
     setPendingSkills,
     skillSearch,
     setSkillSearch,
+    skillCategoryFilter,
+    setSkillCategoryFilter,
+    skillTypeFilter,
+    setSkillTypeFilter,
+    skillCategoryOptions,
+    skillTypeOptions,
     savingSkillId,
     allSkills,
     setAllSkills,
@@ -285,6 +294,25 @@ export function JobFormPage() {
   }
 
   async function handleTabClick(stepId: StepId) {
+    if (stepId === "assessments" && !currentJob?.id && !jobId) {
+      setSavingDraft(true);
+      setFormErrors([]);
+      setBackendPublishErrors([]);
+      try {
+        await persistJob({
+          requestedStatus: "draft",
+          silent: true,
+        });
+        setActiveStep(stepId);
+      } catch (error: unknown) {
+        setFormErrors(formatErrorDetails(handleApiError(error)));
+        toast.error("Salve os dados básicos da vaga antes de vincular avaliações.");
+      } finally {
+        setSavingDraft(false);
+      }
+      return;
+    }
+
     if (isEditing && jobId) {
       try {
         await persistJob({ silent: true });
@@ -328,6 +356,12 @@ export function JobFormPage() {
             availableSkills={availableSkills}
             skillSearch={skillSearch}
             onSearchChange={setSkillSearch}
+            skillCategoryFilter={skillCategoryFilter}
+            onSkillCategoryFilterChange={setSkillCategoryFilter}
+            skillCategoryOptions={skillCategoryOptions}
+            skillTypeFilter={skillTypeFilter}
+            onSkillTypeFilterChange={setSkillTypeFilter}
+            skillTypeOptions={skillTypeOptions}
             savingSkillId={savingSkillId}
             onAddSkill={handleAddSkill}
             onUpdateSkill={handleUpdateSkill}
@@ -347,6 +381,12 @@ export function JobFormPage() {
             availableSkills={availableSkills}
             skillSearch={skillSearch}
             onSearchChange={setSkillSearch}
+            skillCategoryFilter={skillCategoryFilter}
+            onSkillCategoryFilterChange={setSkillCategoryFilter}
+            skillCategoryOptions={skillCategoryOptions}
+            skillTypeFilter={skillTypeFilter}
+            onSkillTypeFilterChange={setSkillTypeFilter}
+            skillTypeOptions={skillTypeOptions}
             onFormChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
             savingSkillId={savingSkillId}
             onAddSkill={handleAddSkill}
@@ -365,6 +405,12 @@ export function JobFormPage() {
             availableSkills={availableSkills}
             skillSearch={skillSearch}
             onSearchChange={setSkillSearch}
+            skillCategoryFilter={skillCategoryFilter}
+            onSkillCategoryFilterChange={setSkillCategoryFilter}
+            skillCategoryOptions={skillCategoryOptions}
+            skillTypeFilter={skillTypeFilter}
+            onSkillTypeFilterChange={setSkillTypeFilter}
+            skillTypeOptions={skillTypeOptions}
             savingSkillId={savingSkillId}
             onAddSkill={handleAddSkill}
             onUpdateSkill={handleUpdateSkill}
@@ -390,6 +436,9 @@ export function JobFormPage() {
             backendPublishErrors={backendPublishErrors}
           />
         );
+
+      case "assessments":
+        return <JobAssessmentsSection jobId={currentJob?.id ?? jobId ?? null} />;
     }
   }
 

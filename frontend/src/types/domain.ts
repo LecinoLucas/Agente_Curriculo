@@ -4,6 +4,7 @@ export type Candidate = {
   email: string | null;
   phone: string | null;
   cpf: string | null;
+  application_source?: string | null;
   location_city: string | null;
   location_state: string | null;
   location_country: string;
@@ -31,6 +32,7 @@ export type CandidateListSummary = {
   email: string | null;
   phone: string | null;
   cpf: string | null;
+  application_source: string | null;
   tags: string[];
   created_at: string;
   archived_at?: string | null;
@@ -115,6 +117,92 @@ export type CandidateOverview = {
   active_job_id: string | null;
   active_job: CandidateActiveJobOverview | null;
   pipeline_entries: CandidatePipelineEntryOverview[];
+  assessments: RecruiterCandidateAssessment[];
+};
+
+export type CandidateAssessmentSummary = {
+  id: string;
+  type: "behavioral_test" | "behavioral_survey";
+  title: string;
+  description: string | null;
+  status: "pending" | "in_progress" | "completed" | "expired" | "cancelled";
+  required: boolean;
+  due_at: string | null;
+  assigned_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  result_summary: string | null;
+};
+
+export type RecruiterAssessmentAnswer = {
+  id: string;
+  question_id: string;
+  question_text: string;
+  question_type: "single_choice" | "multiple_choice" | "scale" | "text";
+  option_id: string | null;
+  option_text: string | null;
+  answer_text: string | null;
+  answer_value: unknown;
+  created_at: string;
+};
+
+export type RecruiterCandidateAssessment = CandidateAssessmentSummary & {
+  answers: RecruiterAssessmentAnswer[];
+};
+
+export type AssessmentTemplateStatus = "draft" | "active" | "archived";
+export type AssessmentType = "behavioral_test" | "behavioral_survey";
+export type AssessmentQuestionType = "single_choice" | "multiple_choice" | "scale" | "text";
+
+export type AssessmentOption = {
+  id: string;
+  option_text: string;
+  score_value: number | null;
+  metadata: Record<string, unknown> | null;
+  order_index: number;
+};
+
+export type AssessmentQuestion = {
+  id: string;
+  question_text: string;
+  question_type: AssessmentQuestionType;
+  required: boolean;
+  order_index: number;
+  metadata: Record<string, unknown> | null;
+  options: AssessmentOption[];
+};
+
+export type AssessmentTemplate = {
+  id: string;
+  title: string;
+  description: string | null;
+  type: AssessmentType;
+  status: AssessmentTemplateStatus;
+  version: number;
+  question_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssessmentTemplateDetail = AssessmentTemplate & {
+  questions: AssessmentQuestion[];
+  job_link_count?: number;
+  assignment_count?: number;
+  is_used?: boolean;
+};
+
+export type JobAssessment = {
+  id: string;
+  job_id: string;
+  template_id: string;
+  title: string;
+  type: AssessmentType;
+  template_status: AssessmentTemplateStatus;
+  template_version: number;
+  required: boolean;
+  trigger_stage: string;
+  order_index: number;
+  created_at: string;
 };
 
 export type CandidatePipelineEntryOverview = {
@@ -482,11 +570,32 @@ export type MovePipelineCandidateResponse = {
   status: "active" | "hired" | "rejected" | "transferred";
   transition_id: string;
   updated_at: string;
+  analysis?: PipelineAnalysisDecision | null;
 };
 
 export type AddCandidateToJobPayload = {
   job_id: string;
   initial_stage?: PipelineStage;
+};
+
+export type PipelineAnalysisDecision = {
+  analysis_id: string | null;
+  status:
+    | "pending"
+    | "processing"
+    | "retry_scheduled"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "discarded"
+    | null;
+  created: boolean;
+  blocked: boolean;
+  reused: boolean;
+  stuck: boolean;
+  reason: string;
+  stage: PipelineStage | null;
+  trigger_source: "automatic" | "manual";
 };
 
 export type AddCandidateToJobResponse = {
@@ -497,6 +606,7 @@ export type AddCandidateToJobResponse = {
   status: "active" | "hired" | "rejected" | "transferred";
   transition_id: string;
   updated_at: string;
+  analysis?: PipelineAnalysisDecision | null;
 };
 
 export type TransferCandidateJobPayload = {
@@ -516,12 +626,15 @@ export type TransferCandidateJobResponse = {
   source_transition_id: string;
   destination_transition_id: string;
   updated_at: string;
+  analysis?: PipelineAnalysisDecision | null;
 };
 
 export type AnalysisStatus = {
   analysis_id: string;
   status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
   retry_count: number;
+  stuck: boolean;
+  reason: string | null;
   failure_reason: string | null;
   next_retry_at: string | null;
   started_at: string | null;
@@ -615,6 +728,11 @@ export type AnalysisGlobalItem = {
   discard_reason_note?: string | null;
   used_real_ai: boolean | null;
   retry_count: number;
+  next_retry_at: string | null;
+  provider_error_type: string | null;
+  provider_status_code: number | null;
+  stuck: boolean;
+  reason: string | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;

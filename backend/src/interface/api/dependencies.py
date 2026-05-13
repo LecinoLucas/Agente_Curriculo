@@ -10,6 +10,12 @@ from src.domain.exceptions import ForbiddenException, UnauthorizedException
 from src.infrastructure.database.connection import get_db_session
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.jwt_service import decode_access_token
+from src.application.services.candidate_portal_auth_service import (
+    CANDIDATE_PORTAL_COOKIE_NAME,
+    CandidatePortalSession,
+    CandidatePortalAuthService,
+    CandidatePortalSessionError,
+)
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -62,3 +68,24 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 AdminOnly = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
 RecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.ADMIN))]
 InternalUser = Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.VIEWER))]
+
+
+async def get_current_candidate_session(
+    request: Request,
+    candidate_portal_token: str | None = Cookie(default=None, alias=CANDIDATE_PORTAL_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+):
+    service = CandidatePortalAuthService(db)
+    try:
+        session = await service.authenticate(candidate_portal_token)
+    except CandidatePortalSessionError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão do candidato inválida ou expirada",
+        )
+
+    request.state.candidate_id = session.candidate_id
+    return session
+
+
+CurrentCandidateSession = Annotated[CandidatePortalSession, Depends(get_current_candidate_session)]

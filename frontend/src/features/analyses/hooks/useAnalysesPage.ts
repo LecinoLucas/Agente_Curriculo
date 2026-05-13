@@ -149,6 +149,30 @@ export function useAnalysesPage() {
   }
 
   const items = data?.data ?? [];
+  const hasInFlightAnalyses = items.some(
+    (item) =>
+      item.status === "pending" ||
+      item.status === "processing" ||
+      item.status === "retry_scheduled",
+  );
+
+  useEffect(() => {
+    if (!hasInFlightAnalyses) return;
+
+    const intervalId = window.setInterval(() => {
+      fetchData();
+    }, 4000);
+
+    return () => window.clearInterval(intervalId);
+  }, [fetchData, hasInFlightAnalyses]);
+
+  useEffect(() => {
+    if (!hasInFlightAnalyses) return;
+    const onFocus = () => fetchData();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchData, hasInFlightAnalyses]);
+
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
   const isRefreshing = loading && items.length > 0;

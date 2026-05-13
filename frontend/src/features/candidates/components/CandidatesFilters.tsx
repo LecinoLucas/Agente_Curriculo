@@ -1,5 +1,6 @@
 type ResumeFilter = "all" | "with" | "without";
 type AiStatusFilter = "all" | "completed" | "processing_or_pending" | "failed";
+type ApplicationSourceFilter = "all" | "public_application" | "manual";
 
 interface CandidatesFiltersProps {
   searchInput: string;
@@ -8,6 +9,8 @@ interface CandidatesFiltersProps {
   onResumeFilterChange: (value: ResumeFilter) => void;
   aiFilter: AiStatusFilter;
   onAiFilterChange: (value: AiStatusFilter) => void;
+  applicationSourceFilter: ApplicationSourceFilter;
+  onApplicationSourceFilterChange: (value: ApplicationSourceFilter) => void;
   hasActiveFilters: boolean;
   onClearFilters: () => void;
 }
@@ -19,6 +22,8 @@ export function CandidatesFilters({
   onResumeFilterChange,
   aiFilter,
   onAiFilterChange,
+  applicationSourceFilter,
+  onApplicationSourceFilterChange,
   hasActiveFilters,
   onClearFilters,
 }: CandidatesFiltersProps) {
@@ -63,6 +68,18 @@ export function CandidatesFilters({
         <option value="completed">IA Concluída</option>
         <option value="processing_or_pending">IA Pendente / Processando</option>
         <option value="failed">IA Falhou</option>
+      </select>
+
+      <select
+        value={applicationSourceFilter}
+        onChange={(e) =>
+          onApplicationSourceFilterChange(e.target.value as ApplicationSourceFilter)
+        }
+        className="ui-input h-9 rounded-lg px-3 text-sm"
+      >
+        <option value="all">Todas as origens</option>
+        <option value="public_application">Candidatura pública</option>
+        <option value="manual">Cadastro manual</option>
       </select>
 
       {hasActiveFilters ? (

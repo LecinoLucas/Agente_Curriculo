@@ -8,7 +8,11 @@ from src.application.services.skill_text_normalizer import normalize_skill_text
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
-from src.interface.api.schemas.skill_schemas import AddJobSkillRequest, JobRequiredSkillResponse
+from src.interface.api.schemas.skill_schemas import (
+    AddJobSkillRequest,
+    JobRequiredSkillResponse,
+    UpdateJobSkillRequest,
+)
 from src.application.services.audit_service import AuditService
 from src.domain.entities.user import User
 from src.domain.exceptions import ValidationException
@@ -457,6 +461,8 @@ class JobService:
         await self.get(job_id)
         link = await self._repository.find_required_skill_link(job_id, skill_id)
         if link is None:
+            link = await self._repository.find_required_skill_link_by_id(job_id, skill_id)
+        if link is None:
             raise JobSkillLinkNotFoundError
         await self._repository.delete_required_skill_link(link)
         job = await self.sync_skill_requirements_snapshot(job_id)
@@ -464,6 +470,38 @@ class JobService:
         await self._maybe_generate_job_profile(job)
         await self._recompute_active_pipeline_matches(job_id)
         await self._maybe_refresh_quality(job.id)
+
+    async def update_required_skill(
+        self,
+        job_id: UUID,
+        link_id: UUID,
+        body: UpdateJobSkillRequest,
+    ) -> JobRequiredSkillResponse:
+        await self.get(job_id)
+        link = await self._repository.find_required_skill_link_by_id(job_id, link_id)
+        if link is None:
+            link = await self._repository.find_required_skill_link(job_id, link_id)
+        if link is None:
+            raise JobSkillLinkNotFoundError
+
+        provided_fields = body.model_fields_set
+        if "priority_level" in provided_fields and body.priority_level is not None:
+            link.priority_level = normalize_job_skill_priority_level(body.priority_level)
+        if "minimum_level" in provided_fields:
+            link.minimum_level = body.minimum_level
+        if "minimum_years" in provided_fields:
+            link.minimum_years = body.minimum_years
+        if "weight" in provided_fields and body.weight is not None:
+            link.weight = body.weight
+
+        saved = await self._repository.create_required_skill_link(link)
+        skill = await self._repository.find_active_skill_by_id(saved.skill_id)
+        job = await self.sync_skill_requirements_snapshot(job_id)
+        await self._invalidate_job_scores_and_matches(job_id)
+        await self._maybe_generate_job_profile(job)
+        await self._recompute_active_pipeline_matches(job_id)
+        await self._maybe_refresh_quality(job.id)
+        return self._required_skill_response(saved, skill.name if skill is not None else "")
 
     async def sync_skill_requirements_snapshot(self, job_id: UUID) -> JobModel:
         job = await self.get(job_id)

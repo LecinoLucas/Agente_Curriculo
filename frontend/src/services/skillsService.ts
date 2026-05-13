@@ -12,6 +12,7 @@ export type SkillCatalog = {
   name: string;
   normalized_name: string;
   category: string | null;
+  catalog_type: string | null;
   description: string | null;
   is_active: boolean;
   updated_at: string;
@@ -26,6 +27,7 @@ export type SkillCatalog = {
 export type ListSkillsParams = {
   search?: string;
   category?: string;
+  catalog_type?: string;
   page?: number;
   page_size?: number;
   is_active?: boolean;
@@ -56,6 +58,7 @@ export const skillsService = {
     const urlParams = new URLSearchParams();
     if (params.search) urlParams.set("search", params.search);
     if (params.category) urlParams.set("category", params.category);
+    if (params.catalog_type) urlParams.set("catalog_type", params.catalog_type);
     if (params.page) urlParams.set("page", params.page.toString());
     if (params.page_size) urlParams.set("page_size", params.page_size.toString());
     if (params.is_active !== undefined) urlParams.set("is_active", params.is_active.toString());
