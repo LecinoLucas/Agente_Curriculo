@@ -47,6 +47,12 @@ class ErpIntegrationAttemptModel(Base):
     provider: Mapped[str] = mapped_column(sa.String(40), nullable=False, server_default="protheus")
     mode: Mapped[str] = mapped_column(sa.String(20), nullable=False, server_default="dry_run")
     status: Mapped[str] = mapped_column(sa.String(40), nullable=False, server_default="draft")
+    idempotency_key: Mapped[Optional[str]] = mapped_column(sa.String(255))
+    external_reference: Mapped[Optional[str]] = mapped_column(sa.String(255))
+    http_status: Mapped[Optional[int]] = mapped_column(sa.Integer)
+    request_headers_json: Mapped[Optional[dict]] = mapped_column(JSONB_COMPAT)
+    response_headers_json: Mapped[Optional[dict]] = mapped_column(JSONB_COMPAT)
+    attempt_number: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="1")
     request_payload_json: Mapped[dict] = mapped_column(JSONB_COMPAT, nullable=False)
     response_payload_json: Mapped[Optional[dict]] = mapped_column(JSONB_COMPAT)
     validation_errors_json: Mapped[Optional[list]] = mapped_column(JSONB_COMPAT)
@@ -72,11 +78,20 @@ class ErpIntegrationAttemptModel(Base):
 
     __table_args__ = (
         sa.CheckConstraint("provider IN ('protheus')", name="ck_erp_attempt_provider"),
-        sa.CheckConstraint("mode IN ('dry_run', 'real')", name="ck_erp_attempt_mode"),
+        sa.CheckConstraint("mode IN ('dry_run', 'mock', 'real')", name="ck_erp_attempt_mode"),
         sa.CheckConstraint(
             "status IN ('draft', 'validation_failed', 'ready', 'simulated', 'failed', 'sent')",
             name="ck_erp_attempt_status",
         ),
         sa.Index("idx_erp_attempt_package_created", "package_id", "created_at"),
         sa.Index("idx_erp_attempt_case_created", "case_id", "created_at"),
+        sa.Index("idx_erp_attempt_idempotency_key", "idempotency_key"),
+        sa.UniqueConstraint(
+            "provider",
+            "mode",
+            "package_id",
+            "idempotency_key",
+            "attempt_number",
+            name="uq_erp_attempt_provider_mode_package_idempotency_attempt",
+        ),
     )

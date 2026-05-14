@@ -20,6 +20,8 @@ from src.interface.api.schemas.admission_package_schemas import (
     AdmissionPackageCreateRequest,
     ErpIntegrationAttemptListResponse,
     ErpIntegrationAttemptResponse,
+    ProtheusMockSendRequest,
+    ErpRetryRequest,
 )
 
 router = APIRouter(tags=["admission-packages"])
@@ -66,6 +68,12 @@ def _to_attempt_response(attempt) -> ErpIntegrationAttemptResponse:
             "provider": attempt.provider,
             "mode": attempt.mode,
             "status": attempt.status,
+            "idempotency_key": attempt.idempotency_key,
+            "external_reference": attempt.external_reference,
+            "http_status": attempt.http_status,
+            "request_headers_json": attempt.request_headers_json,
+            "response_headers_json": attempt.response_headers_json,
+            "attempt_number": attempt.attempt_number,
             "request_payload_json": attempt.request_payload_json,
             "response_payload_json": attempt.response_payload_json,
             "validation_errors_json": attempt.validation_errors_json,
@@ -255,6 +263,30 @@ async def create_protheus_dry_run_attempt(
         raise
 
 
+@router.post(
+    "/admission-packages/{package_id}/erp/protheus/mock-send",
+    response_model=ErpIntegrationAttemptResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_protheus_mock_send_attempt(
+    package_id: UUID,
+    payload: ProtheusMockSendRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ErpIntegrationAttemptResponse:
+    try:
+        attempt = await _erp_service(db).create_protheus_mock_attempt(
+            package_id=package_id,
+            user_id=current_user.id,
+            simulate_failure=payload.simulate_failure,
+        )
+        await db.commit()
+        return _to_attempt_response(attempt)
+    except Exception:
+        await db.rollback()
+        raise
+
+
 @router.get(
     "/admission-packages/{package_id}/erp/attempts",
     response_model=ErpIntegrationAttemptListResponse,
@@ -300,6 +332,26 @@ async def simulate_erp_integration_attempt(
     except Exception:
         await db.rollback()
         raise
+
+
+@router.post(
+    "/erp-integration-attempts/{attempt_id}/retry",
+    response_model=ErpIntegrationAttemptResponse,
+)
+async def retry_erp_integration_attempt(
+    attempt_id: UUID,
+    payload: ErpRetryRequest,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ErpIntegrationAttemptResponse:
+    try:
+        attempt = await _erp_service(db).retry_attempt(
+            attempt_id=attempt_id,
+            user_id=current_user.id,
+            simulate_failure=payload.simulate_failure,
+        )
+        await db.commit()
+        return _to_attempt_response(attempt)
     except Exception:
         await db.rollback()
         raise

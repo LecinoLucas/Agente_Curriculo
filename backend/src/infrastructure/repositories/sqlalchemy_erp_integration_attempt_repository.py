@@ -27,6 +27,12 @@ class SQLAlchemyErpIntegrationAttemptRepository:
         provider: str,
         mode: str,
         status: str,
+        idempotency_key: str | None,
+        external_reference: str | None,
+        http_status: int | None,
+        request_headers_json: dict | None,
+        response_headers_json: dict | None,
+        attempt_number: int,
         request_payload_json: dict,
         validation_errors_json: list[dict] | None,
         attempted_by: UUID | None,
@@ -39,6 +45,12 @@ class SQLAlchemyErpIntegrationAttemptRepository:
             provider=provider,
             mode=mode,
             status=status,
+            idempotency_key=idempotency_key,
+            external_reference=external_reference,
+            http_status=http_status,
+            request_headers_json=request_headers_json,
+            response_headers_json=response_headers_json,
+            attempt_number=attempt_number,
             request_payload_json=request_payload_json,
             validation_errors_json=validation_errors_json,
             attempted_by=attempted_by,
@@ -46,6 +58,30 @@ class SQLAlchemyErpIntegrationAttemptRepository:
         self.session.add(attempt)
         await self.session.flush()
         return attempt
+
+    async def get_latest_by_idempotency_key(
+        self,
+        *,
+        package_id: UUID,
+        provider: str,
+        mode: str,
+        idempotency_key: str,
+    ) -> ErpIntegrationAttemptModel | None:
+        stmt = (
+            sa.select(ErpIntegrationAttemptModel)
+            .where(ErpIntegrationAttemptModel.package_id == package_id)
+            .where(ErpIntegrationAttemptModel.provider == provider)
+            .where(ErpIntegrationAttemptModel.mode == mode)
+            .where(ErpIntegrationAttemptModel.idempotency_key == idempotency_key)
+            .order_by(
+                ErpIntegrationAttemptModel.attempt_number.desc(),
+                ErpIntegrationAttemptModel.created_at.desc(),
+                ErpIntegrationAttemptModel.id.desc(),
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_by_id(self, attempt_id: UUID) -> ErpIntegrationAttemptModel | None:
         return await self.session.get(ErpIntegrationAttemptModel, attempt_id)
@@ -73,7 +109,66 @@ class SQLAlchemyErpIntegrationAttemptRepository:
         now = datetime.now(UTC)
         attempt.status = "simulated"
         attempt.response_payload_json = response_payload_json
+        attempt.external_reference = response_payload_json.get("external_reference")
+        attempt.http_status = 200
         attempt.error_message = None
+        attempt.attempted_by = attempted_by
+        attempt.updated_at = now
+        attempt.completed_at = now
+        await self.session.flush()
+        return attempt
+
+    async def mark_failed(
+        self,
+        *,
+        attempt_id: UUID,
+        response_payload_json: dict | None,
+        error_message: str,
+        http_status: int | None,
+        request_headers_json: dict | None,
+        response_headers_json: dict | None,
+        attempted_by: UUID | None,
+    ) -> ErpIntegrationAttemptModel:
+        attempt = await self.get_by_id(attempt_id)
+        if attempt is None:
+            raise ValueError(f"ERP integration attempt {attempt_id} not found")
+
+        now = datetime.now(UTC)
+        attempt.status = "failed"
+        attempt.response_payload_json = response_payload_json
+        attempt.error_message = error_message
+        attempt.http_status = http_status
+        attempt.request_headers_json = request_headers_json
+        attempt.response_headers_json = response_headers_json
+        attempt.attempted_by = attempted_by
+        attempt.updated_at = now
+        attempt.completed_at = now
+        await self.session.flush()
+        return attempt
+
+    async def mark_sent(
+        self,
+        *,
+        attempt_id: UUID,
+        response_payload_json: dict | None,
+        external_reference: str | None,
+        http_status: int | None,
+        request_headers_json: dict | None,
+        response_headers_json: dict | None,
+        attempted_by: UUID | None,
+    ) -> ErpIntegrationAttemptModel:
+        attempt = await self.get_by_id(attempt_id)
+        if attempt is None:
+            raise ValueError(f"ERP integration attempt {attempt_id} not found")
+
+        now = datetime.now(UTC)
+        attempt.status = "sent"
+        attempt.response_payload_json = response_payload_json
+        attempt.external_reference = external_reference
+        attempt.error_message = None
+        attempt.http_status = http_status
+        attempt.request_headers_json = request_headers_json
+        attempt.response_headers_json = response_headers_json
         attempt.attempted_by = attempted_by
         attempt.updated_at = now
         attempt.completed_at = now

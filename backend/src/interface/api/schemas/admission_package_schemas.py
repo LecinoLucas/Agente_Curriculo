@@ -124,6 +124,7 @@ class ErpIntegrationAttemptValidationError(BaseModel):
 class ErpDryRunPreviewPayload(BaseModel):
     provider: str
     mode: str
+    schema_version: str | None = None
     candidate: dict
     job: dict
     admission: dict
@@ -140,6 +141,12 @@ class ErpIntegrationAttemptResponse(BaseModel):
     provider: str
     mode: str
     status: str
+    idempotency_key: str | None = None
+    external_reference: str | None = None
+    http_status: int | None = None
+    request_headers_json: dict | None = None
+    response_headers_json: dict | None = None
+    attempt_number: int = 1
     request_payload_json: ErpDryRunPreviewPayload
     response_payload_json: dict | None = None
     validation_errors_json: list[ErpIntegrationAttemptValidationError] | None = None
@@ -152,3 +159,11 @@ class ErpIntegrationAttemptResponse(BaseModel):
 
 class ErpIntegrationAttemptListResponse(BaseModel):
     attempts: list[ErpIntegrationAttemptResponse]
+
+
+class ProtheusMockSendRequest(BaseModel):
+    simulate_failure: bool = False
+
+
+class ErpRetryRequest(BaseModel):
+    simulate_failure: bool = False
