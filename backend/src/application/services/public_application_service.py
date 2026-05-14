@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.candidate_service import CandidateService
 from src.application.services.candidate_service import APPLICATION_SOURCE_PUBLIC
+from src.application.services.communication_service import CommunicationService
 from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
@@ -418,6 +419,24 @@ class PublicApplicationService:
                     resume_version_id=str(version.id),
                     error=str(exc),
                 )
+
+        # Notification for candidate application
+        if job_model:
+            try:
+                await CommunicationService(self.db).notify_event(
+                    event_type="candidate_applied",
+                    candidate_id=candidate.id,
+                    job_id=job_model.id,
+                    related_entity_type="resume",
+                    related_entity_id=version.id,
+                    context={
+                        "candidate_name": candidate.full_name,
+                        "job_title": job_model.title,
+                    },
+                    actor_id=SYSTEM_USER_ID,
+                )
+            except Exception as e:
+                logger.warning(f"notification_failed event=candidate_applied: {e}")
 
         return PublicApplyResponse(
             candidate_id=candidate.id,

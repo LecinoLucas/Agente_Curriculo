@@ -44,6 +44,7 @@ import { formatPhone } from "../features/public-application/utils/phone";
 import { toast } from "../shared/utils/toast";
 import { BehavioralAssessmentCard } from "../features/candidate-portal/components/BehavioralAssessmentCard";
 import { BehavioralAssessmentForm } from "../features/candidate-portal/components/BehavioralAssessmentForm";
+import { CandidateMessagesCard } from "../features/candidate-portal/components/CandidateMessagesCard";
 import { CandidatePortalPreAdmissionCard } from "../features/candidate-portal/components/CandidatePortalPreAdmissionCard";
 
 type ContactFormState = {
@@ -721,6 +722,8 @@ export function CandidatePortalPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <CandidateMessagesCard />
 
             {/* Profile Update Card */}
             <Card className="border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-right-4 delay-75 duration-500">

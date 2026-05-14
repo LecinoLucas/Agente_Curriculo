@@ -8,9 +8,11 @@ import type {
 export async function getInterviewScorecard(
   jobId: string,
   candidateId: string,
+  interviewId?: string | null,
 ): Promise<InterviewScorecardEnvelope> {
+  const query = interviewId ? `?interview_id=${encodeURIComponent(interviewId)}` : "";
   return httpRequest<InterviewScorecardEnvelope>(
-    `/api/v1/jobs/${jobId}/candidates/${candidateId}/interview-scorecard`,
+    `/api/v1/jobs/${jobId}/candidates/${candidateId}/interview-scorecard${query}`,
   );
 }
 

@@ -6,6 +6,7 @@ import { CandidateEntryPage } from "../CandidateEntryPage";
 import { CandidateLoginPage } from "../CandidateLoginPage";
 import { CandidatePortalPage } from "../CandidatePortalPage";
 import { candidatePortalService } from "../../services/candidatePortalService";
+import { communicationService } from "../../services/communicationService";
 
 vi.mock("../../services/candidatePortalService", () => ({
   candidatePortalService: {
@@ -24,6 +25,13 @@ vi.mock("../../services/candidatePortalService", () => ({
   },
 }));
 
+vi.mock("../../services/communicationService", () => ({
+  communicationService: {
+    getCandidateCommunications: vi.fn(),
+    markCommunicationRead: vi.fn(),
+  },
+}));
+
 vi.mock("../../shared/utils/toast", () => ({
   toast: {
     success: vi.fn(),
@@ -36,6 +44,12 @@ describe("Candidate portal flow", () => {
     vi.clearAllMocks();
     (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([]);
     (candidatePortalService.getPreAdmission as any).mockResolvedValue({ case: null });
+    (communicationService.getCandidateCommunications as any).mockResolvedValue({
+      communications: [],
+    });
+    (communicationService.markCommunicationRead as any).mockResolvedValue({
+      message: "Communication marked as read",
+    });
   });
 
   it("renderiza entrada única do candidato com acesso para login e cadastro", () => {
@@ -193,6 +207,8 @@ describe("Candidate portal flow", () => {
     );
 
     expect(await screen.findByRole("heading", { name: /olá,\s*maria!/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mensagens" })).toBeInTheDocument();
+    expect(await screen.findByText("Nenhuma mensagem no momento.")).toBeInTheDocument();
     expect(screen.getAllByText("Currículo em análise").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Candidatura pública").length).toBeGreaterThan(0);
     expect(screen.queryByText(/score de ia/i)).not.toBeInTheDocument();

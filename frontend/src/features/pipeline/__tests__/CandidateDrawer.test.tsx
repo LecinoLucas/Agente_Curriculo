@@ -25,7 +25,15 @@ vi.mock("../../auth/useAuth", () => ({
 }));
 
 vi.mock("../../candidates/drawer/v2", () => ({
-  CandidateProfileView: () => <div>mock-profile</div>,
+  CandidateProfileView: ({ children, onTabChange }: any) => (
+    <div>
+      <div>mock-profile</div>
+      <button type="button" onClick={() => onTabChange("communications")}>
+        Comunicações
+      </button>
+      {children}
+    </div>
+  ),
   OverviewTabWithHistory: () => null,
   ScoreTabWithAnalysis: () => null,
 }));
@@ -79,6 +87,10 @@ vi.mock("../../candidates/drawer/tabs/DocumentsTab", () => ({
 
 vi.mock("../../candidates/drawer/tabs/InterviewTab", () => ({
   InterviewTab: () => null,
+}));
+
+vi.mock("../../candidates/drawer/components/CandidateCommunicationsPanel", () => ({
+  CandidateCommunicationsPanel: () => <div>mock-communications</div>,
 }));
 
 vi.mock("../EditCandidateModal", () => ({
@@ -182,6 +194,16 @@ describe("CandidateDrawer", () => {
 
     expect(loadJobsMock).not.toHaveBeenCalled();
     expect(listJobsMock).not.toHaveBeenCalled();
+  });
+
+  it("exibe aba Comunicações no drawer", async () => {
+    render(
+      <MemoryRouter>
+        <CandidateDrawer />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Comunicações" })).toBeInTheDocument();
   });
 
   it("carrega vagas sob demanda ao abrir o modal de transferência sem cache prévio", async () => {

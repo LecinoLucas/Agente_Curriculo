@@ -138,6 +138,18 @@ export async function simulateErpAttempt(
   );
 }
 
+export async function createProtheusHomologAttempt(
+  packageId: string,
+): Promise<ErpIntegrationAttempt> {
+  return httpRequest<ErpIntegrationAttempt>(
+    `/api/v1/admission-packages/${packageId}/erp/protheus/homolog-send`,
+    {
+      method: "POST",
+      body: {},
+    },
+  );
+}
+
 // Re-export for convenience
 export const admissionPackageService = {
   createPackage,
@@ -147,6 +159,7 @@ export const admissionPackageService = {
   downloadJson,
   downloadCsv,
   createProtheusDryRunAttempt,
+  createProtheusHomologAttempt,
   listErpAttempts,
   getErpAttempt,
   simulateErpAttempt,

@@ -10,6 +10,7 @@ from src.infrastructure.repositories.sqlalchemy_decision_summary_repository impo
 from src.infrastructure.repositories.sqlalchemy_hiring_decision_repository import SQLAlchemyHiringDecisionRepository
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
+from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.routers.pipeline import _handle as _handle_pipeline_error
 from src.interface.api.schemas.hiring_decision_schemas import (
     HiringDecisionCreateRequest,
@@ -76,6 +77,16 @@ async def create_hiring_decision(
             body=body,
         )
         await db.commit()
+        if result.decision_status == "submitted":
+            await notify_candidate_event_safely(
+                db,
+                event_type="hiring_decision_submitted",
+                candidate_id=result.candidate_id,
+                job_id=result.job_id,
+                related_entity_type="hiring_decision",
+                related_entity_id=result.id,
+                actor_id=current_user.id,
+            )
         return result
     except Exception as exc:
         await db.rollback()
@@ -90,9 +101,19 @@ async def create_hiring_decision(
 async def patch_hiring_decision(
     decision_id: UUID,
     body: HiringDecisionPatchRequest,
-    _current_user: RecruiterOrAdmin,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> HiringDecisionResponse:
     result = await _service(db).patch(decision_id=decision_id, body=body)
     await db.commit()
+    if body.submit and result.decision_status == "submitted":
+        await notify_candidate_event_safely(
+            db,
+            event_type="hiring_decision_submitted",
+            candidate_id=result.candidate_id,
+            job_id=result.job_id,
+            related_entity_type="hiring_decision",
+            related_entity_id=result.id,
+            actor_id=current_user.id,
+        )
     return result

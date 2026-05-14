@@ -3,7 +3,8 @@ export type InterviewStatus =
   | "completed"
   | "cancelled"
   | "rescheduled"
-  | "no_show";
+  | "no_show"
+  | "awaiting_feedback";
 
 export type InterviewType =
   | "screening"
@@ -112,4 +113,24 @@ export type InterviewScheduleUpdatePayload = {
 export type InterviewScheduleCancelPayload = {
   cancel_reason: string;
   sync_google_event?: boolean;
+};
+
+export type InterviewScheduleReschedulePayload = {
+  scheduled_start: string;
+  scheduled_end: string;
+  timezone?: string | null;
+  location?: string | null;
+  meeting_url?: string | null;
+  interviewer_name?: string | null;
+  interviewer_email?: string | null;
+  sync_google_event?: boolean;
+  create_google_meet?: boolean;
+};
+
+export type InterviewScheduleCompletePayload = {
+  internal_notes?: string | null;
+};
+
+export type InterviewScheduleNoShowPayload = {
+  reason?: string | null;
 };

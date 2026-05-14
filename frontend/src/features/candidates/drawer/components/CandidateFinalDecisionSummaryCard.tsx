@@ -53,6 +53,11 @@ function statusText(status: string | null | undefined): string {
   const labels: Record<string, string> = {
     submitted: "Concluído",
     completed: "Concluída",
+    scheduled: "Agendada",
+    rescheduled: "Remarcada",
+    awaiting_feedback: "Aguardando feedback",
+    no_show: "No-show",
+    cancelled: "Cancelada",
     processing: "Em andamento",
     pending: "Pendente",
     draft: "Rascunho",
@@ -136,6 +141,7 @@ export function CandidateFinalDecisionSummaryCard({
 
   const readiness = summary.decision_readiness.status;
   const scorecard = summary.interview_scorecard;
+  const interview = summary.interview;
   const behavioral = summary.behavioral_assessment;
   const recommendation = scorecard.final_recommendation
     ? recommendationLabels[scorecard.final_recommendation]
@@ -174,9 +180,9 @@ export function CandidateFinalDecisionSummaryCard({
         </div>
         <div className="rounded-md border border-current/15 bg-white/70 p-3">
           <div className="text-[11px] font-semibold uppercase text-current/65">Entrevista</div>
-          <div className="mt-1 text-sm font-medium">{statusText(scorecard.status)}</div>
+          <div className="mt-1 text-sm font-medium">{statusText(interview?.status ?? scorecard.status)}</div>
           <div className="mt-1 text-xs text-current/70">
-            {scorecard.average_rating != null ? `Média ${scorecard.average_rating}` : "Sem média"}
+            {scorecard.average_rating != null ? `Média ${scorecard.average_rating}` : statusText(scorecard.status)}
           </div>
         </div>
       </div>

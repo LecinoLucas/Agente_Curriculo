@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -16,6 +17,7 @@ from src.infrastructure.repositories.sqlalchemy_interview_schedule_repository im
     SQLAlchemyInterviewScheduleRepository,
 )
 from src.interface.api.dependencies import InternalUser, get_db
+from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.interview_schedule_schemas import (
     AgendaKpiResponse,
@@ -28,6 +30,8 @@ from src.interface.api.schemas.interview_schedule_schemas import (
     InterviewScheduleRescheduleRequest,
     InterviewScheduleResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agenda", tags=["agenda"])
 
@@ -275,6 +279,7 @@ async def create_candidate_job_interview(
     candidate_id: UUID,
     body: CandidateJobInterviewCreate,
     current_user: InternalUser,
+    db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
     try:
@@ -301,6 +306,17 @@ async def create_candidate_job_interview(
             requested_by_user_id=current_user.id,
         )
         details = await service.get_interview_details(schedule.id)
+        await db.commit()
+        await notify_candidate_event_safely(
+            db,
+            event_type="interview_scheduled",
+            candidate_id=candidate_id,
+            job_id=job_id,
+            related_entity_type="interview_schedule",
+            related_entity_id=schedule.id,
+            context={"scheduled_start": str(details.get("scheduled_start") or "")},
+            actor_id=current_user.id,
+        )
         return InterviewScheduleResponse(**details)
     except InterviewScheduleConflictError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
@@ -316,6 +332,7 @@ async def reschedule_interview(
     interview_id: UUID,
     body: InterviewScheduleRescheduleRequest,
     current_user: InternalUser,
+    db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
     try:
@@ -333,6 +350,17 @@ async def reschedule_interview(
             requested_by_user_id=current_user.id,
         )
         details = await service.get_interview_details(schedule.id)
+        await db.commit()
+        await notify_candidate_event_safely(
+            db,
+            event_type="interview_rescheduled",
+            candidate_id=schedule.candidate_id,
+            job_id=schedule.job_id,
+            related_entity_type="interview_schedule",
+            related_entity_id=schedule.id,
+            context={"scheduled_start": str(details.get("scheduled_start") or "")},
+            actor_id=current_user.id,
+        )
         return InterviewScheduleResponse(**details)
     except InterviewScheduleNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -350,6 +378,7 @@ async def cancel_interview_operational(
     interview_id: UUID,
     body: InterviewScheduleCancelRequest,
     current_user: InternalUser,
+    db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
     try:
@@ -360,6 +389,16 @@ async def cancel_interview_operational(
             requested_by_user_id=current_user.id,
         )
         details = await service.get_interview_details(schedule.id)
+        await db.commit()
+        await notify_candidate_event_safely(
+            db,
+            event_type="interview_cancelled",
+            candidate_id=schedule.candidate_id,
+            job_id=schedule.job_id,
+            related_entity_type="interview_schedule",
+            related_entity_id=schedule.id,
+            actor_id=current_user.id,
+        )
         return InterviewScheduleResponse(**details)
     except InterviewScheduleNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -375,6 +414,7 @@ async def complete_interview(
     interview_id: UUID,
     current_user: InternalUser,
     body: InterviewScheduleCompleteRequest | None = None,
+    db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
     try:
@@ -383,6 +423,17 @@ async def complete_interview(
             internal_notes=body.internal_notes if body is not None else None,
         )
         details = await service.get_interview_details(schedule.id)
+        await db.commit()
+        if details.get("status") == "awaiting_feedback":
+            await notify_candidate_event_safely(
+                db,
+                event_type="interview_awaiting_feedback",
+                candidate_id=schedule.candidate_id,
+                job_id=schedule.job_id,
+                related_entity_type="interview_schedule",
+                related_entity_id=schedule.id,
+                actor_id=current_user.id,
+            )
         return InterviewScheduleResponse(**details)
     except InterviewScheduleNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -398,6 +449,7 @@ async def mark_interview_no_show(
     interview_id: UUID,
     current_user: InternalUser,
     body: InterviewScheduleNoShowRequest | None = None,
+    db: AsyncSession = Depends(get_db),
     service: InterviewScheduleService = Depends(_get_service),
 ) -> InterviewScheduleResponse:
     try:
@@ -406,6 +458,16 @@ async def mark_interview_no_show(
             reason=body.reason if body is not None else None,
         )
         details = await service.get_interview_details(schedule.id)
+        await db.commit()
+        await notify_candidate_event_safely(
+            db,
+            event_type="interview_no_show",
+            candidate_id=schedule.candidate_id,
+            job_id=schedule.job_id,
+            related_entity_type="interview_schedule",
+            related_entity_id=schedule.id,
+            actor_id=current_user.id,
+        )
         return InterviewScheduleResponse(**details)
     except InterviewScheduleNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

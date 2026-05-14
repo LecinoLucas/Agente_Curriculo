@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import FileResponse
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.pre_admission_service import (
@@ -11,7 +12,9 @@ from src.application.services.pre_admission_service import (
     PreAdmissionService,
 )
 from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
+from src.infrastructure.database.models.pre_admission_model import PreAdmissionChecklistItemModel
 from src.interface.api.dependencies import CurrentCandidateSession, RecruiterOrAdmin, get_db
+from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionEnvelopeResponse,
     PreAdmissionCaseResponse,
@@ -67,6 +70,15 @@ async def create_pre_admission(
             body=body,
         )
         await db.commit()
+        await notify_candidate_event_safely(
+            db,
+            event_type="pre_admission_created",
+            candidate_id=result.candidate_id,
+            job_id=result.job_id,
+            related_entity_type="pre_admission_case",
+            related_entity_id=result.id,
+            actor_id=current_user.id,
+        )
         return result
     except Exception:
         await db.rollback()
@@ -196,6 +208,20 @@ async def reject_pre_admission_document(
             review_notes=body.review_notes,
         )
         await db.commit()
+        document_title = await db.scalar(
+            sa.select(PreAdmissionChecklistItemModel.title).where(
+                PreAdmissionChecklistItemModel.id == result.checklist_item_id
+            )
+        )
+        await notify_candidate_event_safely(
+            db,
+            event_type="document_rejected",
+            candidate_id=result.candidate_id,
+            related_entity_type="pre_admission_document",
+            related_entity_id=result.id,
+            context={"document_type": document_title or "enviado"},
+            actor_id=current_user.id,
+        )
         return result
     except Exception:
         await db.rollback()

@@ -34,6 +34,7 @@ from src.interface.api.routers import (
     behavioral_templates,
     candidate_behavioral_assessments,
     candidates,
+    communications,
     decision_summary,
     document_ai,
     hiring_decisions,
@@ -96,6 +97,7 @@ app.include_router(admin_diagnostics.router, prefix=_PREFIX)
 app.include_router(admin_audit_logs.router, prefix=_PREFIX)
 app.include_router(admin_system_health.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
+app.include_router(communications.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
 app.include_router(analyses.router, prefix=_PREFIX)
 app.include_router(behavioral_templates.router, prefix=_PREFIX)

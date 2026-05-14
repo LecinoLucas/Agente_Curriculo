@@ -13,6 +13,7 @@ from src.application.services.admission_package_service import AdmissionPackageS
 from src.application.services.erp_integration_service import ErpIntegrationService
 from src.domain.exceptions import ValidationException
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
+from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.admission_package_schemas import (
     AdmissionPackageApproveRequest,
     AdmissionPackageCancelRequest,
@@ -135,6 +136,15 @@ async def approve_admission_package(
     try:
         package = await _service(db).approve_package(package_id, user_id=current_user.id)
         await db.commit()
+        await notify_candidate_event_safely(
+            db,
+            event_type="admission_package_approved",
+            candidate_id=package.candidate_id,
+            job_id=package.job_id,
+            related_entity_type="admission_package",
+            related_entity_id=package.id,
+            actor_id=current_user.id,
+        )
         return _to_response(package)
     except Exception:
         await db.rollback()

@@ -17,9 +17,10 @@ import { InterviewScorecardForm } from "./InterviewScorecardForm";
 interface InterviewScorecardPanelProps {
   jobId: string | null;
   candidateId: string | null;
+  interviewId?: string | null;
 }
 
-export function InterviewScorecardPanel({ jobId, candidateId }: InterviewScorecardPanelProps) {
+export function InterviewScorecardPanel({ jobId, candidateId, interviewId = null }: InterviewScorecardPanelProps) {
   const [envelope, setEnvelope] = useState<InterviewScorecardEnvelope | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,7 +42,7 @@ export function InterviewScorecardPanel({ jobId, candidateId }: InterviewScoreca
       }
 
       try {
-        const payload = await getInterviewScorecard(jobId, candidateId);
+        const payload = await getInterviewScorecard(jobId, candidateId, interviewId);
         if (!cancelled) setEnvelope(payload);
       } catch {
         if (!cancelled) setError("Erro ao carregar scorecard de entrevista.");
@@ -55,7 +56,7 @@ export function InterviewScorecardPanel({ jobId, candidateId }: InterviewScoreca
     return () => {
       cancelled = true;
     };
-  }, [jobId, candidateId]);
+  }, [jobId, candidateId, interviewId]);
 
   const handleSave = async (payload: InterviewScorecardPayload): Promise<InterviewScorecard> => {
     if (!jobId || !candidateId) {
@@ -66,8 +67,8 @@ export function InterviewScorecardPanel({ jobId, candidateId }: InterviewScoreca
     setError(null);
     try {
       const saved = envelope?.scorecard
-        ? await updateInterviewScorecard(envelope.scorecard.id, payload)
-        : await createInterviewScorecard(jobId, candidateId, payload);
+        ? await updateInterviewScorecard(envelope.scorecard.id, { ...payload, interview_id: interviewId })
+        : await createInterviewScorecard(jobId, candidateId, { ...payload, interview_id: interviewId });
       setEnvelope((current) => ({
         scorecard: saved,
         suggested_behavioral_questions: current?.suggested_behavioral_questions ?? [],

@@ -80,6 +80,11 @@ from src.infrastructure.database.models.admission_package_model import (
 from src.infrastructure.database.models.erp_integration_attempt_model import (
     ErpIntegrationAttemptModel,
 )
+from src.infrastructure.database.models.communication_model import (
+    CommunicationTemplateModel,
+    CandidateCommunicationModel,
+    CommunicationDeliveryAttemptModel,
+)
 
 __all__ = [
     "UserModel",
@@ -133,4 +138,7 @@ __all__ = [
     "BehavioralAssessmentAIEvaluationModel",
     "AdmissionExportPackageModel",
     "ErpIntegrationAttemptModel",
+    "CommunicationTemplateModel",
+    "CandidateCommunicationModel",
+    "CommunicationDeliveryAttemptModel",
 ]

@@ -16,6 +16,7 @@ import { useCandidateData } from "../candidates/drawer/hooks/useCandidateData";
 import { DocumentsTab as DocumentsTabComponent } from "../candidates/drawer/tabs/DocumentsTab";
 import { InterviewTab } from "../candidates/drawer/tabs/InterviewTab";
 import { CandidateBehavioralAssessmentPanel } from "../candidates/drawer/components/CandidateBehavioralAssessmentPanel";
+import { CandidateCommunicationsPanel } from "../candidates/drawer/components/CandidateCommunicationsPanel";
 import { CandidatePreAdmissionPanel } from "../candidates/drawer/components/CandidatePreAdmissionPanel";
 import { AgendaInterviewModal } from "../agenda/AgendaInterviewModal";
 import { formatContextError } from "../../services/errorMessages";
@@ -589,6 +590,7 @@ export function CandidateDrawer({
         documents: "documents",
         interview: "actions",
         assessment: "actions",
+        communications: "actions",
         pre_admission: "actions",
       };
 
@@ -694,7 +696,12 @@ export function CandidateDrawer({
 
     const nextTab =
       activePanelTab === "actions" &&
-      (profileTabKey === "interview" || profileTabKey === "assessment" || profileTabKey === "pre_admission")
+      (
+        profileTabKey === "interview" ||
+        profileTabKey === "assessment" ||
+        profileTabKey === "communications" ||
+        profileTabKey === "pre_admission"
+      )
         ? profileTabKey
         : panelToProfileTab[activePanelTab];
     setProfileTabKey(nextTab);
@@ -835,6 +842,13 @@ export function CandidateDrawer({
 
           {profileTabKey === "assessment" ? (
             <CandidateBehavioralAssessmentPanel
+              jobId={candidateActiveJobId}
+              candidateId={candidate?.id ?? null}
+            />
+          ) : null}
+
+          {profileTabKey === "communications" ? (
+            <CandidateCommunicationsPanel
               jobId={candidateActiveJobId}
               candidateId={candidate?.id ?? null}
             />

@@ -50,6 +50,54 @@ export type CandidateListSummary = {
   ai_status: string | null;
 };
 
+export type CommunicationStatus =
+  | "draft"
+  | "queued"
+  | "sent"
+  | "failed"
+  | "read"
+  | "cancelled";
+
+export type CandidateCommunication = {
+  id: string;
+  candidate_id: string;
+  job_id: string | null;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  template_key: string | null;
+  channel: "internal" | "email" | string;
+  audience: "candidate" | "recruiter" | "manager" | "hr" | string;
+  subject: string | null;
+  body: string;
+  status: CommunicationStatus;
+  created_by: string | null;
+  created_at: string;
+  queued_at: string | null;
+  sent_at: string | null;
+  read_at: string | null;
+  error_message: string | null;
+};
+
+export type CommunicationTemplate = {
+  id: string;
+  key: string;
+  channel: "internal" | "email" | string;
+  audience: "candidate" | "recruiter" | "manager" | "hr" | string;
+  subject_template: string | null;
+  body_template: string;
+  status: "active" | "inactive" | string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CommunicationListResponse = {
+  communications: CandidateCommunication[];
+};
+
+export type CommunicationTemplateListResponse = {
+  templates: CommunicationTemplate[];
+};
+
 export type CandidateResumeOverview = {
   resume_id: string;
   title: string;
@@ -899,6 +947,13 @@ export type CandidateFinalDecisionSummary = {
     final_recommendation: InterviewFinalRecommendation | null;
     average_rating: number | null;
     submitted_at: string | null;
+  };
+  interview?: {
+    id: string | null;
+    status: string | null;
+    interview_type: string | null;
+    scheduled_start: string | null;
+    scheduled_end: string | null;
   };
   decision_readiness: {
     status: CandidateFinalDecisionReadinessStatus;

@@ -7,6 +7,9 @@ import {
   InterviewScheduleCreatePayload,
   InterviewScheduleUpdatePayload,
   InterviewScheduleCancelPayload,
+  InterviewScheduleCompletePayload,
+  InterviewScheduleNoShowPayload,
+  InterviewScheduleReschedulePayload,
 } from "../types/agenda";
 
 export const agendaService = {
@@ -71,6 +74,34 @@ export const agendaService = {
     });
   },
 
+  async listCandidateJobInterviews(
+    jobId: string,
+    candidateId: string,
+    params?: Pick<AgendaListParams, "page" | "page_size">
+  ): Promise<Paginated<InterviewSchedule>> {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.append("page", String(params.page));
+    if (params?.page_size) qs.append("page_size", String(params.page_size));
+    const query = qs.toString();
+    return httpRequest<Paginated<InterviewSchedule>>(
+      `/api/v1/jobs/${jobId}/candidates/${candidateId}/interviews${query ? "?" + query : ""}`
+    );
+  },
+
+  async createCandidateJobInterview(
+    jobId: string,
+    candidateId: string,
+    payload: Omit<InterviewScheduleCreatePayload, "candidate_id" | "job_id">
+  ): Promise<InterviewSchedule> {
+    return httpRequest<InterviewSchedule>(
+      `/api/v1/jobs/${jobId}/candidates/${candidateId}/interviews`,
+      {
+        method: "POST",
+        body: payload,
+      }
+    );
+  },
+
   async updateInterview(
     scheduleId: string,
     payload: InterviewScheduleUpdatePayload
@@ -92,6 +123,58 @@ export const agendaService = {
       `/api/v1/agenda/interviews/${scheduleId}/cancel`,
       {
         method: "PATCH",
+        body: payload,
+      }
+    );
+  },
+
+  async cancelInterviewOperational(
+    scheduleId: string,
+    payload: InterviewScheduleCancelPayload
+  ): Promise<InterviewSchedule> {
+    return httpRequest<InterviewSchedule>(
+      `/api/v1/interviews/${scheduleId}/cancel`,
+      {
+        method: "POST",
+        body: payload,
+      }
+    );
+  },
+
+  async rescheduleInterview(
+    scheduleId: string,
+    payload: InterviewScheduleReschedulePayload
+  ): Promise<InterviewSchedule> {
+    return httpRequest<InterviewSchedule>(
+      `/api/v1/interviews/${scheduleId}/reschedule`,
+      {
+        method: "PATCH",
+        body: payload,
+      }
+    );
+  },
+
+  async completeInterview(
+    scheduleId: string,
+    payload: InterviewScheduleCompletePayload = {}
+  ): Promise<InterviewSchedule> {
+    return httpRequest<InterviewSchedule>(
+      `/api/v1/interviews/${scheduleId}/complete`,
+      {
+        method: "POST",
+        body: payload,
+      }
+    );
+  },
+
+  async markNoShow(
+    scheduleId: string,
+    payload: InterviewScheduleNoShowPayload = {}
+  ): Promise<InterviewSchedule> {
+    return httpRequest<InterviewSchedule>(
+      `/api/v1/interviews/${scheduleId}/no-show`,
+      {
+        method: "POST",
         body: payload,
       }
     );
