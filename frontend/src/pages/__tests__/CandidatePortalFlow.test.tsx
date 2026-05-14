@@ -1,9 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CandidateEntryPage } from "../CandidateEntryPage";
-import { CandidateAssessmentPage } from "../CandidateAssessmentPage";
 import { CandidateLoginPage } from "../CandidateLoginPage";
 import { CandidatePortalPage } from "../CandidatePortalPage";
 import { candidatePortalService } from "../../services/candidatePortalService";
@@ -12,11 +11,16 @@ vi.mock("../../services/candidatePortalService", () => ({
   candidatePortalService: {
     login: vi.fn(),
     getOverview: vi.fn(),
+    listBehavioralAssessments: vi.fn(),
+    getBehavioralAssessment: vi.fn(),
+    startBehavioralAssessment: vi.fn(),
+    saveBehavioralAnswers: vi.fn(),
+    submitBehavioralAssessment: vi.fn(),
+    getPreAdmission: vi.fn(),
+    uploadPreAdmissionDocument: vi.fn(),
     updateProfile: vi.fn(),
     uploadResume: vi.fn(),
     logout: vi.fn(),
-    startAssessment: vi.fn(),
-    submitAssessment: vi.fn(),
   },
 }));
 
@@ -30,6 +34,8 @@ vi.mock("../../shared/utils/toast", () => ({
 describe("Candidate portal flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([]);
+    (candidatePortalService.getPreAdmission as any).mockResolvedValue({ case: null });
   });
 
   it("renderiza entrada única do candidato com acesso para login e cadastro", () => {
@@ -56,13 +62,13 @@ describe("Candidate portal flow", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Acessar minha conta" }));
     expect(await screen.findByText("E-mail é obrigatório.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("E-mail"), {
       target: { value: "maria.portal@example.com" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Acessar minha conta" }));
     expect(await screen.findByText("Senha é obrigatória.")).toBeInTheDocument();
   });
 
@@ -88,7 +94,7 @@ describe("Candidate portal flow", () => {
     fireEvent.change(screen.getByLabelText("Senha"), {
       target: { value: "SenhaSegura123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Acessar minha conta" }));
 
     expect(await screen.findByText("Portal destino")).toBeInTheDocument();
   });
@@ -132,8 +138,8 @@ describe("Candidate portal flow", () => {
       talent_pool: false,
       status_public: "Currículo em análise",
       public_timeline: {
-        current_step_key: "behavioral_test",
-        current_step_label: "Teste comportamental",
+        current_step_key: "resume_analysis",
+        current_step_label: "Currículo em análise",
         steps: [
           {
             key: "application_received",
@@ -144,20 +150,8 @@ describe("Candidate portal flow", () => {
           {
             key: "resume_analysis",
             label: "Currículo em análise",
-            status: "completed",
-            description: "Seu currículo foi recebido e avaliado.",
-          },
-          {
-            key: "behavioral_test",
-            label: "Teste comportamental",
             status: "current",
-            description: "Complete o teste para continuar no processo.",
-          },
-          {
-            key: "behavioral_survey",
-            label: "Pesquisa comportamental",
-            status: "upcoming",
-            description: "Responda a pesquisa para complementar sua candidatura.",
+            description: "Seu currículo foi recebido e avaliado.",
           },
           {
             key: "screening",
@@ -187,21 +181,6 @@ describe("Candidate portal flow", () => {
           },
         ],
       },
-      assessments: [
-        {
-          id: "assignment-test",
-          type: "behavioral_test",
-          title: "Teste comportamental",
-          description: "Avaliação de perfil comportamental.",
-          status: "pending",
-          required: true,
-          due_at: null,
-          assigned_at: "2026-05-12T09:00:00Z",
-          started_at: null,
-          completed_at: null,
-          result_summary: null,
-        },
-      ],
     });
 
     render(
@@ -213,103 +192,174 @@ describe("Candidate portal flow", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Maria Portal")).toBeInTheDocument();
-    expect(screen.getByText("123.***.***-09")).toBeInTheDocument();
-    expect(screen.getByText("Andamento da candidatura")).toBeInTheDocument();
-    expect(screen.getByText("Avaliações pendentes")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /iniciar teste/i })).toHaveAttribute(
-      "href",
-      "/candidato/portal/avaliacoes/assignment-test"
-    );
-    expect(screen.getAllByText("Teste comportamental").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Entrevista agendada para 20\/05\/2026.*14:00/i)).toBeInTheDocument();
-    expect(screen.getByText("Formato: Online.")).toBeInTheDocument();
-    expect(screen.getByText("Entraremos em contato pelo telefone cadastrado.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /olá,\s*maria!/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Currículo em análise").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Candidatura pública").length).toBeGreaterThan(0);
     expect(screen.queryByText(/score de ia/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/internal_notes/i)).not.toBeInTheDocument();
   });
 
-  it("candidato responde avaliação comportamental e volta ao portal", async () => {
-    (candidatePortalService.startAssessment as any).mockResolvedValue({
-      id: "assignment-test",
-      type: "behavioral_test",
-      title: "Teste comportamental",
-      description: "Avaliação de perfil.",
+  it("portal mostra card e permite responder avaliação comportamental", async () => {
+    const overview = {
+      candidate: {
+        id: "candidate-1",
+        full_name: "Maria Portal",
+        email: "maria.portal@example.com",
+        email_masked: "ma***@example.com",
+        phone: "11987654321",
+        phone_masked: "*******4321",
+        cpf_masked: "123.***.***-09",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "public_application",
+        application_source_label: "Candidatura pública",
+      },
+      active_application: {
+        pipeline_id: "pipeline-active",
+        job_id: "job-active",
+        job_title: "Analista de Dados",
+        pipeline_stage: "entry",
+        status_public: "Currículo em análise",
+        submitted_at: "2026-05-12T09:00:00Z",
+        current_analysis_id: null,
+        analysis_status: null,
+        resume_version_id: "resume-version-1",
+        resume_filename: "maria-cv.pdf",
+        is_talent_pool: false,
+      },
+      application_history: [],
+      latest_resume: null,
+      talent_pool: false,
+      status_public: "Currículo em análise",
+      public_timeline: null,
+    };
+    const pendingSummary = {
+      id: "assignment-1",
+      candidate_id: "candidate-1",
+      job_id: "job-active",
+      job_title: "Analista de Dados",
+      template_id: "template-1",
+      template_name: "Perfil Comportamental",
+      status: "pending",
+      assigned_at: "2026-05-12T09:10:00Z",
+      started_at: null,
+      submitted_at: null,
+      expires_at: null,
+      answered_count: 0,
+      question_count: 3,
+    };
+    const detail = {
+      ...pendingSummary,
       status: "in_progress",
-      required: true,
-      due_at: null,
-      privacy_notice: "Suas respostas serão usadas exclusivamente para fins de recrutamento e seleção.",
-      questions: [
+      started_at: "2026-05-12T09:11:00Z",
+      competencies: [
         {
-          id: "question-single",
-          question_text: "Como você prefere trabalhar?",
-          question_type: "single_choice",
-          required: true,
-          order_index: 1,
-          metadata: null,
-          options: [{ id: "option-team", option_text: "Em equipe", order_index: 1 }],
-        },
-        {
-          id: "question-multiple",
-          question_text: "Quais ambientes combinam com você?",
-          question_type: "multiple_choice",
-          required: true,
-          order_index: 2,
-          metadata: null,
-          options: [{ id: "option-dynamic", option_text: "Dinâmico", order_index: 1 }],
-        },
-        {
-          id: "question-scale",
-          question_text: "Como lida com pressão?",
-          question_type: "scale",
-          required: true,
-          order_index: 3,
-          metadata: { min: 1, max: 5 },
-          options: [],
-        },
-        {
-          id: "question-text",
-          question_text: "Conte sua motivação.",
-          question_type: "text",
-          required: true,
-          order_index: 4,
-          metadata: null,
-          options: [],
+          id: "competency-1",
+          name: "Comunicação",
+          description: null,
+          display_order: 1,
+          questions: [
+            {
+              id: "question-text",
+              question_text: "Descreva uma situação de feedback.",
+              answer_type: "text",
+              is_required: true,
+              display_order: 1,
+              options_json: null,
+              answer: null,
+            },
+            {
+              id: "question-scale",
+              question_text: "De 1 a 5, como você avalia sua comunicação?",
+              answer_type: "scale",
+              is_required: true,
+              display_order: 2,
+              options_json: null,
+              answer: null,
+            },
+            {
+              id: "question-choice",
+              question_text: "Qual estilo combina mais com você?",
+              answer_type: "multiple_choice",
+              is_required: true,
+              display_order: 3,
+              options_json: ["Direto", "Colaborativo"],
+              answer: null,
+            },
+          ],
         },
       ],
-    });
-    (candidatePortalService.submitAssessment as any).mockResolvedValue({
-      id: "assignment-test",
-      status: "completed",
-      message: "Respostas enviadas com sucesso.",
+    };
+    const detailWithAnswers = {
+      ...detail,
+      answered_count: 3,
+      competencies: [
+        {
+          ...detail.competencies[0],
+          questions: [
+            {
+              ...detail.competencies[0].questions[0],
+              answer: { question_id: "question-text", answer_text: "Eu conduzi um feedback claro.", answer_value: null, selected_options_json: null },
+            },
+            {
+              ...detail.competencies[0].questions[1],
+              answer: { question_id: "question-scale", answer_text: null, answer_value: 4, selected_options_json: null },
+            },
+            {
+              ...detail.competencies[0].questions[2],
+              answer: { question_id: "question-choice", answer_text: null, answer_value: null, selected_options_json: ["Colaborativo"] },
+            },
+          ],
+        },
+      ],
+    };
+
+    (candidatePortalService.getOverview as any).mockResolvedValue(overview);
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([pendingSummary]);
+    (candidatePortalService.startBehavioralAssessment as any).mockResolvedValue(detail);
+    (candidatePortalService.saveBehavioralAnswers as any).mockResolvedValue(detailWithAnswers);
+    (candidatePortalService.submitBehavioralAssessment as any).mockResolvedValue({
+      ...detailWithAnswers,
+      status: "submitted",
+      submitted_at: "2026-05-12T09:20:00Z",
     });
 
     render(
-      <MemoryRouter initialEntries={["/candidato/portal/avaliacoes/assignment-test"]}>
+      <MemoryRouter initialEntries={["/candidato/portal"]}>
         <Routes>
-          <Route path="/candidato/portal/avaliacoes/:assignmentId" element={<CandidateAssessmentPage />} />
-          <Route path="/candidato/portal" element={<div>Portal atualizado</div>} />
+          <Route path="/candidato/portal" element={<CandidatePortalPage />} />
           <Route path="/candidato/login" element={<div>Login candidato</div>} />
         </Routes>
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("heading", { name: "Teste comportamental" })).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("Em equipe"));
-    fireEvent.click(screen.getByLabelText("Dinâmico"));
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "4" } });
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Quero crescer com o time." } });
-    fireEvent.click(screen.getByRole("button", { name: /enviar respostas/i }));
+    expect(await screen.findByText("Avaliação comportamental pendente")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Responder" }));
 
-    expect(await screen.findByText("Portal atualizado")).toBeInTheDocument();
-    expect(candidatePortalService.submitAssessment).toHaveBeenCalledWith(
-      "assignment-test",
-      expect.arrayContaining([
-        expect.objectContaining({ question_id: "question-single", option_id: "option-team" }),
-        expect.objectContaining({ question_id: "question-multiple", option_ids: ["option-dynamic"] }),
-        expect.objectContaining({ question_id: "question-scale", answer_value: 4 }),
-        expect.objectContaining({ question_id: "question-text", answer_text: "Quero crescer com o time." }),
-      ])
+    expect(await screen.findByText("Comunicação")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar avaliação" }));
+    expect(await screen.findByText("Responda todas as perguntas obrigatórias antes de enviar.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getAllByRole("textbox")[0], {
+      target: { value: "Eu conduzi um feedback claro." },
+    });
+    fireEvent.click(screen.getByLabelText("4"));
+    fireEvent.click(screen.getByLabelText("Colaborativo"));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+
+    await waitFor(() =>
+      expect(candidatePortalService.saveBehavioralAnswers).toHaveBeenCalledWith(
+        "assignment-1",
+        expect.arrayContaining([
+          expect.objectContaining({ question_id: "question-text", answer_text: "Eu conduzi um feedback claro." }),
+          expect.objectContaining({ question_id: "question-scale", answer_value: 4 }),
+          expect.objectContaining({ question_id: "question-choice", selected_options_json: ["Colaborativo"] }),
+        ])
+      )
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Enviar avaliação" }));
+    expect(await screen.findByText("Avaliação enviada")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Salvar rascunho" })).not.toBeInTheDocument();
   });
 });

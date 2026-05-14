@@ -10,6 +10,7 @@ export type JobFormValues = {
   experience_context?: string;
   behavioral_requirements: string[];
   newBehavioralRequirement: string;
+  behavioral_template_id?: string | null;
   status: string;
   job_area?: string;
   priority: "low" | "normal" | "high" | "urgent";
@@ -40,6 +41,7 @@ export const EMPTY_FORM: JobFormValues = {
   experience_context: "",
   behavioral_requirements: [],
   newBehavioralRequirement: "",
+  behavioral_template_id: null,
   status: "draft",
   job_area: "",
   priority: "normal",
@@ -158,6 +160,7 @@ export function buildCreateJobPayload(form: JobFormValues): CreateJobRequestPayl
   if (form.salary_min !== undefined) payload.salary_min = String(form.salary_min);
   if (form.salary_max !== undefined) payload.salary_max = String(form.salary_max);
   if (behavioralRequirements.length > 0) payload.behavioral_requirements = behavioralRequirements;
+  if (form.behavioral_template_id) payload.behavioral_template_id = form.behavioral_template_id;
 
   return payload;
 }
@@ -181,5 +184,6 @@ export function buildUpdateJobPayload(form: JobFormValues): UpdateJobRequestPayl
     location: trimToNull(form.location),
     salary_min: form.salary_min !== undefined ? String(form.salary_min) : null,
     salary_max: form.salary_max !== undefined ? String(form.salary_max) : null,
+    behavioral_template_id: form.behavioral_template_id || null,
   };
 }

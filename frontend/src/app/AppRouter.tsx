@@ -57,9 +57,9 @@ const AdminBiPage = lazy(() =>
   import("../pages/AdminBiPage").then((m) => ({ default: m.AdminBiPage }))
 );
 
-const AssessmentsAdminPage = lazy(() =>
-  import("../pages/AssessmentsAdminPage").then((m) => ({
-    default: m.AssessmentsAdminPage,
+const BehavioralTemplatesPage = lazy(() =>
+  import("../pages/BehavioralTemplatesPage").then((m) => ({
+    default: m.BehavioralTemplatesPage,
   }))
 );
 
@@ -94,12 +94,6 @@ const ChangePasswordPage = lazy(() =>
 const CandidatePortalPage = lazy(() =>
   import("../pages/CandidatePortalPage").then((m) => ({
     default: m.CandidatePortalPage,
-  }))
-);
-
-const CandidateAssessmentPage = lazy(() =>
-  import("../pages/CandidateAssessmentPage").then((m) => ({
-    default: m.CandidateAssessmentPage,
   }))
 );
 
@@ -154,7 +148,6 @@ export function AppRouter() {
       <Route path="/candidato/cadastro" element={withSuspense(<PublicApplicationPage />)} />
       <Route path="/candidato/login" element={withSuspense(<CandidateLoginPage />)} />
       <Route path="/candidato/portal" element={withSuspense(<CandidatePortalPage />)} />
-      <Route path="/candidato/portal/avaliacoes/:assignmentId" element={withSuspense(<CandidateAssessmentPage />)} />
       <Route path="/login" element={withSuspense(<LoginPage />)} />
 
       <Route
@@ -225,11 +218,6 @@ export function AppRouter() {
         />
 
         <Route
-          path="avaliacoes"
-          element={protectedPage(<AssessmentsAdminPage />, ["admin", "recruiter"])}
-        />
-
-        <Route
           path="perfil"
           element={protectedPage(<ProfilePage />, ALL_AUTH_ROLES)}
         />
@@ -272,6 +260,11 @@ export function AppRouter() {
         <Route
           path="admin/bi"
           element={protectedPage(<AdminBiPage />, ADMIN_ROLES)}
+        />
+
+        <Route
+          path="admin/behavioral-templates"
+          element={protectedPage(<BehavioralTemplatesPage />, ADMIN_ROLES)}
         />
       </Route>
 

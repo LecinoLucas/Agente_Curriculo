@@ -1,13 +1,15 @@
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 import structlog
 
 from src.application.ports.file_storage import FileStorageService
 from src.application.services.audit_service import AuditService
-from src.application.services.assessment_service import AssessmentService
+from src.application.services.candidate_score_status_deriver import (
+    derive_candidate_score_status,
+)
 from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
@@ -15,6 +17,7 @@ from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
 )
 from src.interface.api.schemas.candidate_schemas import (
+    CandidateActiveJobDecisionResponse,
     CandidateActiveJobResponse,
     CandidateCheckResponse,
     CandidateJobMatchSummaryResponse,
@@ -28,8 +31,6 @@ from src.interface.api.schemas.candidate_schemas import (
     CreateCandidateRequest,
     UpdateCandidateRequest,
 )
-from src.interface.api.schemas.assessment_schemas import RecruiterCandidateAssessmentResponse
-from src.infrastructure.repositories.sqlalchemy_assessment_repository import SQLAlchemyAssessmentRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -278,20 +279,47 @@ class CandidateService:
                 matched_jobs_count=matched_jobs_count,
                 pending_jobs_count=pending_jobs_count,
             )
-        assessment_service = AssessmentService(SQLAlchemyAssessmentRepository(self._repository._session))
-        if active_pipeline_row is not None and active_job_id is not None:
-            pipeline_id = active_pipeline_row.get("pipeline_id") or uuid5(
-                NAMESPACE_URL,
-                f"{candidate_id}:{active_job_id}",
+
+        pipeline_current_analysis_id = (
+            active_pipeline_row.get("current_analysis_id")
+            if active_pipeline_row is not None
+            else None
+        )
+        current_match_score = None
+        if active_job_id is not None:
+            top_match_for_active_job = next(
+                (m for m in match_rows if str(m.get("job_id")) == str(active_job_id)),
+                None,
             )
-            await assessment_service.create_assignments_for_job(
-                candidate_id=candidate_id,
-                job_id=active_job_id,
-                pipeline_id=pipeline_id,
-            )
-        assessment_rows = await assessment_service.list_recruiter_assignments(
-            candidate_id,
-            include_answers=True,
+            if (
+                top_match_for_active_job
+                and top_match_for_active_job.get("job_fit_score") is not None
+            ):
+                current_match_score = float(top_match_for_active_job["job_fit_score"])
+
+        has_fresh_score_for_active = (
+            has_current_score
+            if latest_analysis is not None
+            and latest_analysis.job_id == active_job_id
+            else False
+        )
+
+        status_result = derive_candidate_score_status(
+            active_job_id=active_job_id,
+            pipeline_current_analysis_id=pipeline_current_analysis_id,
+            latest_analysis_id=latest_analysis.analysis_id if latest_analysis else None,
+            latest_analysis_status=latest_analysis.status if latest_analysis else None,
+            latest_analysis_job_id=latest_analysis.job_id if latest_analysis else None,
+            has_fresh_score=has_fresh_score_for_active,
+            match_score=current_match_score,
+        )
+        active_job_decision = CandidateActiveJobDecisionResponse(
+            score_status=status_result.score_status,
+            analysis_status=status_result.analysis_status,
+            current_analysis_id=status_result.current_analysis_id,
+            match_score=status_result.match_score,
+            warnings=status_result.warnings,
+            next_action=status_result.next_action,
         )
 
         return CandidateOverviewResponse(
@@ -331,7 +359,7 @@ class CandidateService:
                 )
                 for row in pipeline_rows
             ],
-            assessments=[RecruiterCandidateAssessmentResponse.model_validate(item) for item in assessment_rows],
+            active_job_decision=active_job_decision,
         )
 
     async def update(self, candidate_id: UUID, body: UpdateCandidateRequest) -> CandidateModel:

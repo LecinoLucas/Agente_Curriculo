@@ -41,7 +41,6 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     items: [
       { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer"] },
       { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer"] },
-      { to: "/avaliacoes", label: "Avaliações", caption: "Testes e pesquisas", roles: ["admin", "recruiter"] },
       { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer"] },
       { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer"] },
     ],
@@ -92,7 +91,6 @@ const RECRUITER_NAV_ITEMS: Array<{ to: string; label: string; roles: UserRole[] 
   { to: "/dashboard", label: "Dashboard", roles: ["admin", "recruiter", "viewer"] },
   { to: "/pipeline", label: "Pipeline", roles: ["admin", "recruiter", "viewer"] },
   { to: "/vagas", label: "Vagas", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/avaliacoes", label: "Avaliações", roles: ["admin", "recruiter"] },
   { to: "/candidatos", label: "Candidatos", roles: ["admin", "recruiter", "viewer"] },
   { to: "/agenda", label: "Agenda", roles: ["admin", "recruiter", "viewer"] },
   { to: "/importar", label: "Importação", roles: ["admin", "recruiter"] },

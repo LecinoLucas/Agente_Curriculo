@@ -13,7 +13,7 @@ import { JobFormRequirementsStep } from "../features/jobs/sections/JobFormRequir
 import { JobFormMandatorySkillsStep } from "../features/jobs/sections/JobFormMandatorySkillsStep";
 import { JobFormDifferentialsStep } from "../features/jobs/sections/JobFormDifferentialsStep";
 import { JobFormDealBreakersStep } from "../features/jobs/sections/JobFormDealBreakersStep";
-import { JobAssessmentsSection } from "../features/jobs/sections/JobAssessmentsSection";
+import { BehavioralTemplateSelector } from "../features/jobs/components/BehavioralTemplateSelector";
 import { JobFormReviewStep } from "../features/jobs/sections/JobFormReviewStep";
 import {
   buildCreateJobPayload,
@@ -47,7 +47,7 @@ type StepId =
   | "mandatory-skills"
   | "differentials"
   | "deal-breakers"
-  | "assessments"
+  | "behavioral"
   | "review";
 
 const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
@@ -56,7 +56,7 @@ const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
   { id: "mandatory-skills", label: "Essenciais", hint: "Use para as 3–5 competências centrais da vaga" },
   { id: "differentials", label: "Diferenciais", hint: "Bônus controlado para ferramentas e extras" },
   { id: "deal-breakers", label: "Critérios eliminatórios", hint: "Regras de bloqueio explícitas" },
-  { id: "assessments", label: "Avaliações do processo", hint: "Defina testes e pesquisas exigidas" },
+  { id: "behavioral", label: "Avaliação comportamental", hint: "Selecione o template comportamental oficial" },
   { id: "review", label: "Revisão e publicação", hint: "Checklist final e mensagens do backend" },
 ];
 
@@ -294,25 +294,6 @@ export function JobFormPage() {
   }
 
   async function handleTabClick(stepId: StepId) {
-    if (stepId === "assessments" && !currentJob?.id && !jobId) {
-      setSavingDraft(true);
-      setFormErrors([]);
-      setBackendPublishErrors([]);
-      try {
-        await persistJob({
-          requestedStatus: "draft",
-          silent: true,
-        });
-        setActiveStep(stepId);
-      } catch (error: unknown) {
-        setFormErrors(formatErrorDetails(handleApiError(error)));
-        toast.error("Salve os dados básicos da vaga antes de vincular avaliações.");
-      } finally {
-        setSavingDraft(false);
-      }
-      return;
-    }
-
     if (isEditing && jobId) {
       try {
         await persistJob({ silent: true });
@@ -437,8 +418,13 @@ export function JobFormPage() {
           />
         );
 
-      case "assessments":
-        return <JobAssessmentsSection jobId={currentJob?.id ?? jobId ?? null} />;
+      case "behavioral":
+        return (
+          <BehavioralTemplateSelector
+            value={form.behavioral_template_id}
+            onChange={(id) => setForm((current) => ({ ...current, behavioral_template_id: id }))}
+          />
+        );
     }
   }
 

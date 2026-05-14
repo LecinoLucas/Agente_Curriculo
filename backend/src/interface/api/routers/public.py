@@ -12,7 +12,6 @@ from src.application.services.candidate_portal_auth_service import (
     CandidatePortalAuthService,
     CandidatePortalInvalidCredentialsError,
 )
-from src.application.services.assessment_service import AssessmentService
 from src.application.services.candidate_portal_service import (
     CandidatePortalInvalidFileError,
     CandidatePortalProfileConflictError,
@@ -30,7 +29,6 @@ from src.application.services.public_application_service import (
 )
 from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
-from src.infrastructure.repositories.sqlalchemy_assessment_repository import SQLAlchemyAssessmentRepository
 from src.interface.api.dependencies import CurrentCandidateSession, get_db
 from src.interface.api.schemas.candidate_portal_schemas import (
     CandidateAuthLoginRequest,
@@ -38,12 +36,6 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePortalOverviewResponse,
     CandidatePortalResumeUploadResponse,
     CandidatePortalUpdateProfileRequest,
-)
-from src.interface.api.schemas.assessment_schemas import (
-    CandidateAssessmentDetailResponse,
-    CandidateAssessmentSubmitRequest,
-    CandidateAssessmentSubmitResponse,
-    CandidateAssessmentSummaryResponse,
 )
 from src.interface.api.schemas.public_schemas import PublicApplyResponse, PublicJobResponse
 
@@ -355,76 +347,3 @@ async def upload_candidate_portal_resume(
             detail="Não foi possível enviar o currículo",
         )
 
-
-@router.get("/candidate-portal/assessments", response_model=list[CandidateAssessmentSummaryResponse])
-async def list_candidate_portal_assessments(
-    candidate_session: CurrentCandidateSession,
-    db: AsyncSession = Depends(get_db),
-) -> list[CandidateAssessmentSummaryResponse]:
-    overview = await CandidatePortalService(db).get_overview(candidate_session.candidate_id)
-    return overview.assessments
-
-
-@router.get("/candidate-portal/assessments/{assignment_id}", response_model=CandidateAssessmentDetailResponse)
-async def get_candidate_portal_assessment(
-    assignment_id: UUID,
-    candidate_session: CurrentCandidateSession,
-    db: AsyncSession = Depends(get_db),
-) -> CandidateAssessmentDetailResponse:
-    try:
-        return await AssessmentService(SQLAlchemyAssessmentRepository(db)).get_public_assignment(
-            candidate_id=candidate_session.candidate_id,
-            assignment_id=assignment_id,
-        )
-    except Exception as exc:
-        if hasattr(exc, "message"):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
-        raise
-
-
-@router.post("/candidate-portal/assessments/{assignment_id}/start", response_model=CandidateAssessmentDetailResponse)
-async def start_candidate_portal_assessment(
-    assignment_id: UUID,
-    candidate_session: CurrentCandidateSession,
-    db: AsyncSession = Depends(get_db),
-) -> CandidateAssessmentDetailResponse:
-    try:
-        result = await AssessmentService(SQLAlchemyAssessmentRepository(db)).start_public_assignment(
-            candidate_id=candidate_session.candidate_id,
-            assignment_id=assignment_id,
-        )
-        await db.commit()
-        return result
-    except ValidationException as exc:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
-    except Exception as exc:
-        await db.rollback()
-        if hasattr(exc, "message"):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
-        raise
-
-
-@router.post("/candidate-portal/assessments/{assignment_id}/submit", response_model=CandidateAssessmentSubmitResponse)
-async def submit_candidate_portal_assessment(
-    assignment_id: UUID,
-    body: CandidateAssessmentSubmitRequest,
-    candidate_session: CurrentCandidateSession,
-    db: AsyncSession = Depends(get_db),
-) -> CandidateAssessmentSubmitResponse:
-    try:
-        result = await AssessmentService(SQLAlchemyAssessmentRepository(db)).submit_public_assignment(
-            candidate_id=candidate_session.candidate_id,
-            assignment_id=assignment_id,
-            answers=body.answers,
-        )
-        await db.commit()
-        return result
-    except ValidationException as exc:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message)
-    except Exception as exc:
-        await db.rollback()
-        if hasattr(exc, "message"):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message)
-        raise

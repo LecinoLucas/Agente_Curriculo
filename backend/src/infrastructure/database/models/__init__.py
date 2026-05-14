@@ -53,13 +53,32 @@ from src.infrastructure.database.models.user_model import (
     UserSessionModel,
 )
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
-from src.infrastructure.database.models.assessment_model import (
-    AssessmentOptionModel,
-    AssessmentQuestionModel,
-    AssessmentTemplateModel,
-    CandidateAssessmentAnswerModel,
-    CandidateAssessmentAssignmentModel,
-    JobAssessmentModel,
+from src.infrastructure.database.models.interview_scorecard_model import (
+    InterviewScorecardItemModel,
+    InterviewScorecardModel,
+)
+from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
+from src.infrastructure.database.models.pre_admission_model import (
+    PreAdmissionCaseModel,
+    PreAdmissionChecklistItemModel,
+    PreAdmissionDocumentModel,
+    PreAdmissionEventModel,
+)
+from src.infrastructure.database.models.behavioral_template_model import (
+    BehavioralAssessmentTemplateModel,
+    BehavioralTemplateCompetencyModel,
+    BehavioralTemplateQuestionModel,
+)
+from src.infrastructure.database.models.behavioral_assignment_model import (
+    BehavioralAssessmentAnswerModel,
+    BehavioralAssessmentAssignmentModel,
+    BehavioralAssessmentAIEvaluationModel,
+)
+from src.infrastructure.database.models.admission_package_model import (
+    AdmissionExportPackageModel,
+)
+from src.infrastructure.database.models.erp_integration_attempt_model import (
+    ErpIntegrationAttemptModel,
 )
 
 __all__ = [
@@ -99,10 +118,19 @@ __all__ = [
     "JobProfileAnalysisModel",
     "CandidateJobMatchModel",
     "InterviewScheduleModel",
-    "AssessmentTemplateModel",
-    "AssessmentQuestionModel",
-    "AssessmentOptionModel",
-    "JobAssessmentModel",
-    "CandidateAssessmentAssignmentModel",
-    "CandidateAssessmentAnswerModel",
+    "InterviewScorecardModel",
+    "InterviewScorecardItemModel",
+    "CandidateJobHiringDecisionModel",
+    "PreAdmissionCaseModel",
+    "PreAdmissionChecklistItemModel",
+    "PreAdmissionDocumentModel",
+    "PreAdmissionEventModel",
+    "BehavioralAssessmentTemplateModel",
+    "BehavioralTemplateCompetencyModel",
+    "BehavioralTemplateQuestionModel",
+    "BehavioralAssessmentAssignmentModel",
+    "BehavioralAssessmentAnswerModel",
+    "BehavioralAssessmentAIEvaluationModel",
+    "AdmissionExportPackageModel",
+    "ErpIntegrationAttemptModel",
 ]

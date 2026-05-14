@@ -102,6 +102,7 @@ class JobResponse(ORMAPISchemaModel):
     quality_score: int | None = None
     quality_status: Literal["weak", "acceptable", "good"] | None = None
     skill_requirements: dict[str, list[str]] | None = None
+    behavioral_template_id: UUID | None = None
     created_by: UUID
     archived_at: datetime | None = None
     archived_by: UUID | None = None

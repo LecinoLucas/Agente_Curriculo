@@ -4,6 +4,7 @@ import {
   buildCandidateAnalysisSummary,
   getCandidateAnalysisUiState,
   getLatestAnalysisForActiveJob,
+  mapScoreStatusToUiState,
 } from "../analysisStatus";
 
 describe("buildCandidateAnalysisSummary", () => {
@@ -206,5 +207,143 @@ describe("getCandidateAnalysisUiState", () => {
 
     expect(state.state).toBe("failed");
     expect(state.description).toContain("Timeout no provedor");
+  });
+});
+
+describe("mapScoreStatusToUiState", () => {
+  it("mapeia score_ready para estado completed com success", () => {
+    const state = mapScoreStatusToUiState("score_ready");
+
+    expect(state.state).toBe("completed");
+    expect(state.title).toBe("Aderência calculada");
+    expect(state.severity).toBe("success");
+    expect(state.inProgress).toBe(false);
+  });
+
+  it("mapeia score_stale para estado completed com warning", () => {
+    const state = mapScoreStatusToUiState("score_stale");
+
+    expect(state.state).toBe("completed");
+    expect(state.title).toBe("Aderência desatualizada");
+    expect(state.severity).toBe("warning");
+    expect(state.inProgress).toBe(false);
+  });
+
+  it("mapeia waiting_analysis para estado ready", () => {
+    const state = mapScoreStatusToUiState("waiting_analysis");
+
+    expect(state.state).toBe("ready");
+    expect(state.title).toBe("Aguardando análise");
+    expect(state.severity).toBe("info");
+  });
+
+  it("mapeia analysis_processing para estado processing com in_progress", () => {
+    const state = mapScoreStatusToUiState("analysis_processing");
+
+    expect(state.state).toBe("processing");
+    expect(state.title).toBe("Análise em andamento");
+    expect(state.inProgress).toBe(true);
+  });
+
+  it("mapeia analysis_failed para estado failed", () => {
+    const state = mapScoreStatusToUiState("analysis_failed");
+
+    expect(state.state).toBe("failed");
+    expect(state.title).toBe("Falha na análise");
+    expect(state.severity).toBe("danger");
+  });
+
+  it("mapeia needs_repair para estado failed com severity danger", () => {
+    const state = mapScoreStatusToUiState("needs_repair");
+
+    expect(state.state).toBe("failed");
+    expect(state.title).toBe("Inconsistência detectada");
+    expect(state.severity).toBe("danger");
+  });
+
+  it("mapeia no_active_job para estado waiting_job", () => {
+    const state = mapScoreStatusToUiState("no_active_job");
+
+    expect(state.state).toBe("waiting_job");
+    expect(state.title).toBe("Nenhuma vaga ativa");
+  });
+});
+
+describe("buildCandidateAnalysisSummary com scoreStatus", () => {
+  it("usa scoreStatus quando disponível ao invés de heurística", () => {
+    const summary = buildCandidateAnalysisSummary({
+      activeJobId: "job-1",
+      hasResume: true,
+      latestAnalysis: null,
+      analysisResult: null,
+      pollingAnalysisId: null,
+      scoreStatus: "score_ready",
+    });
+
+    expect(summary.label).toBe("Aderência calculada");
+    expect(summary.tone).toBe("success");
+  });
+
+  it("retorna para heurística quando scoreStatus é null", () => {
+    const summary = buildCandidateAnalysisSummary({
+      activeJobId: "job-1",
+      hasResume: true,
+      latestAnalysis: {
+        analysis_id: "analysis-1",
+        job_id: "job-1",
+        resume_id: "resume-1",
+        resume_title: "Currículo principal",
+        status: "completed",
+        started_at: null,
+        completed_at: null,
+        failed_at: null,
+        failure_reason: null,
+        used_real_ai: true,
+        task_id: null,
+        worker_id: null,
+        seniority_level: null,
+        total_experience_years: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      analysisResult: null,
+      jobFitScore: 0.85,
+      pollingAnalysisId: null,
+      scoreStatus: null,
+    });
+
+    expect(summary.label).toBe("Aderência pronta");
+  });
+
+  it("prioriza scoreStatus score_stale sobre heurística com score disponível", () => {
+    const summary = buildCandidateAnalysisSummary({
+      activeJobId: "job-1",
+      hasResume: true,
+      latestAnalysis: {
+        analysis_id: "analysis-1",
+        job_id: "job-1",
+        resume_id: "resume-1",
+        resume_title: "Currículo principal",
+        status: "completed",
+        started_at: null,
+        completed_at: null,
+        failed_at: null,
+        failure_reason: null,
+        used_real_ai: true,
+        task_id: null,
+        worker_id: null,
+        seniority_level: null,
+        total_experience_years: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      analysisResult: null,
+      jobFitScore: 0.85,
+      pollingAnalysisId: null,
+      scoreStatus: "score_stale",
+    });
+
+    expect(summary.label).toBe("Aderência desatualizada");
+    expect(summary.tone).toBe("warning");
   });
 });

@@ -2,7 +2,6 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
-from src.interface.api.schemas.assessment_schemas import RecruiterCandidateAssessmentResponse
 
 ApplicationSource = str
 
@@ -79,6 +78,15 @@ class CandidateLatestAnalysisPipelineResponse(BaseModel):
     pending_jobs_count: int
 
 
+class CandidateActiveJobDecisionResponse(BaseModel):
+    score_status: str
+    analysis_status: str | None = None
+    current_analysis_id: UUID | None = None
+    match_score: float | None = None
+    warnings: list[str] = Field(default_factory=list)
+    next_action: str
+
+
 class CandidateJobMatchSummaryResponse(BaseModel):
     analysis_id: UUID
     job_id: UUID
@@ -120,7 +128,7 @@ class CandidateOverviewResponse(BaseModel):
     active_job_id: UUID | None = None
     active_job: CandidateActiveJobResponse | None = None
     pipeline_entries: list[CandidatePipelineEntryResponse] = Field(default_factory=list)
-    assessments: list[RecruiterCandidateAssessmentResponse] = Field(default_factory=list)
+    active_job_decision: CandidateActiveJobDecisionResponse | None = None
 
 
 class CandidateListSummaryResponse(BaseModel):

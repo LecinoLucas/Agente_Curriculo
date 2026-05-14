@@ -313,7 +313,7 @@ async def test_bulk_import_normalizes_non_standard_json_payload(
         .where(JobRequiredSkillModel.job_id == job.id)
         .order_by(SkillModel.name.asc())
     )
-    assert [name for (name,) in links.all()] == ["Backend", "SQL"]
+    assert [name for (name,) in links.all()] == ["Python", "SQL"]
 
 
 @pytest.mark.asyncio

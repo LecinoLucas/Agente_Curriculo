@@ -1,4 +1,3 @@
-import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -6,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import sqlalchemy as sa
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Penalidade de sobre-qualificação em senioridade só é aplicada quando
@@ -42,7 +42,7 @@ _ANALYSIS_STUCK_REASONS = {
     _ANALYSIS_WORKER_CLAIM_EXPIRED_REASON,
 }
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 from src.domain.entities.user import User
 from src.domain.entities.user import UserRole

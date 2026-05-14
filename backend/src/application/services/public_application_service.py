@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.candidate_service import CandidateService
 from src.application.services.candidate_service import APPLICATION_SOURCE_PUBLIC
-from src.application.services.assessment_service import AssessmentService
+from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
 from src.domain.exceptions import ValidationException
@@ -18,6 +18,9 @@ from src.infrastructure.database.models.resume_model import ResumeModel, ResumeV
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+    SQLAlchemyBehavioralAssignmentRepository,
+)
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
 )
@@ -25,7 +28,6 @@ from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemy
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
-from src.infrastructure.repositories.sqlalchemy_assessment_repository import SQLAlchemyAssessmentRepository
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.infrastructure.storage.resume_files import write_resume_file
 from src.infrastructure.security.password_service import hash_password, verify_password
@@ -76,7 +78,6 @@ class PublicApplicationService:
         self._resume_repo = SQLAlchemyResumeRepository(db)
         self._job_repo = SQLAlchemyJobRepository(db)
         self._pipeline_repo = SQLAlchemyPipelineRepository(db)
-        self._assessment_service = AssessmentService(SQLAlchemyAssessmentRepository(db))
         self._candidate_service = CandidateService(self._candidate_repo)
 
     @staticmethod
@@ -370,6 +371,13 @@ class PublicApplicationService:
                     pipeline_id=str(pipeline_id) if pipeline_id else None,
                 )
             status = "entered_pipeline"
+            await BehavioralAssignmentService(
+                SQLAlchemyBehavioralAssignmentRepository(self.db)
+            ).ensure_assignment_for_application(
+                candidate_id=candidate.id,
+                job_id=job_id,
+                template_id=job_model.behavioral_template_id,
+            )
 
             try:
                 analysis_result = await RequestAnalysisUseCase(
@@ -410,12 +418,6 @@ class PublicApplicationService:
                     resume_version_id=str(version.id),
                     error=str(exc),
                 )
-
-            await self._assessment_service.create_assignments_for_job(
-                candidate_id=candidate.id,
-                job_id=job_id,
-                pipeline_id=pipeline_id,
-            )
 
         return PublicApplyResponse(
             candidate_id=candidate.id,

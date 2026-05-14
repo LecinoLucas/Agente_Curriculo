@@ -15,6 +15,8 @@ import { useCandidateDrawerActions } from "../candidates/drawer/hooks/useCandida
 import { useCandidateData } from "../candidates/drawer/hooks/useCandidateData";
 import { DocumentsTab as DocumentsTabComponent } from "../candidates/drawer/tabs/DocumentsTab";
 import { InterviewTab } from "../candidates/drawer/tabs/InterviewTab";
+import { CandidateBehavioralAssessmentPanel } from "../candidates/drawer/components/CandidateBehavioralAssessmentPanel";
+import { CandidatePreAdmissionPanel } from "../candidates/drawer/components/CandidatePreAdmissionPanel";
 import { AgendaInterviewModal } from "../agenda/AgendaInterviewModal";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
@@ -70,18 +72,6 @@ const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
   final: "hired",
   offer: "hired",
 };
-
-function assessmentStatusLabel(status: string): string {
-  if (status === "completed") return "Concluído";
-  if (status === "in_progress") return "Em andamento";
-  if (status === "expired") return "Expirado";
-  if (status === "cancelled") return "Cancelado";
-  return "Pendente";
-}
-
-function assessmentTypeLabel(type: string): string {
-  return type === "behavioral_test" ? "Teste comportamental" : "Pesquisa comportamental";
-}
 
 function buildStageActionFeedback(
   stage: PipelineStage,
@@ -598,6 +588,8 @@ export function CandidateDrawer({
         score: "score",
         documents: "documents",
         interview: "actions",
+        assessment: "actions",
+        pre_admission: "actions",
       };
 
       switchPanelTab(panelTabMap[tabKey]);
@@ -700,11 +692,15 @@ export function CandidateDrawer({
       actions: "interview",
     };
 
-    const nextTab = panelToProfileTab[activePanelTab];
+    const nextTab =
+      activePanelTab === "actions" &&
+      (profileTabKey === "interview" || profileTabKey === "assessment" || profileTabKey === "pre_admission")
+        ? profileTabKey
+        : panelToProfileTab[activePanelTab];
     setProfileTabKey(nextTab);
     setDetailTabsVisible(true);
     setActionFeedback(null);
-  }, [selectedCandidateId, activePanelTab]);
+  }, [selectedCandidateId, activePanelTab, profileTabKey]);
 
   const handleHeroAdvance = useCallback(async () => {
     if (!selectedCandidateId || !currentStage) return;
@@ -787,71 +783,15 @@ export function CandidateDrawer({
           onOpenTransferJob={handleOpenTransferJob}
         >
           {profileTabKey === "overview" ? (
-            <div className="space-y-4">
-              <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-[hsl(var(--text))]">Avaliações</h3>
-                  <p className="text-xs text-[hsl(var(--text-muted))]">
-                    Status das avaliações comportamentais vinculadas à vaga ativa.
-                  </p>
-                </div>
-                {(candidateOverview.assessments ?? []).length > 0 ? (
-                  <div className="space-y-2">
-                    {(candidateOverview.assessments ?? []).map((assessment) => (
-                      <div key={assessment.id} className="rounded-xl border border-[hsl(var(--border))] px-3 py-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-[hsl(var(--text))]">{assessment.title}</p>
-                            <p className="text-xs text-[hsl(var(--text-muted))]">{assessmentTypeLabel(assessment.type)}</p>
-                          </div>
-                          <span className="rounded-full bg-[hsl(var(--accent-soft))] px-2.5 py-1 text-xs font-semibold text-[hsl(var(--primary))]">
-                            {assessmentStatusLabel(assessment.status)}
-                          </span>
-                        </div>
-                        {assessment.completed_at ? (
-                          <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">
-                            Concluída em {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(assessment.completed_at))}
-                          </p>
-                        ) : null}
-                        {assessment.result_summary ? (
-                          <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">{assessment.result_summary}</p>
-                        ) : null}
-                        {(assessment.answers ?? []).length > 0 ? (
-                          <details className="mt-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 p-2">
-                            <summary className="cursor-pointer text-xs font-semibold text-[hsl(var(--text))]">
-                              Ver respostas
-                            </summary>
-                            <div className="mt-2 space-y-2">
-                              {(assessment.answers ?? []).map((answer) => (
-                                <div key={answer.id} className="rounded-md bg-[hsl(var(--surface))] px-2 py-1.5 text-xs">
-                                  <p className="font-medium text-[hsl(var(--text))]">{answer.question_text}</p>
-                                  <p className="mt-1 text-[hsl(var(--text-muted))]">
-                                    {answer.option_text ?? answer.answer_text ?? (answer.answer_value != null ? String(answer.answer_value) : "Sem resposta")}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-xl border border-dashed border-[hsl(var(--border))] p-3 text-xs text-[hsl(var(--text-muted))]">
-                    Nenhuma avaliação disponível para a vaga ativa deste candidato.
-                  </p>
-                )}
-              </section>
-              <OverviewTabWithHistory
-                overview={candidateOverview}
-                activeJobId={candidateActiveJobId}
-                activeJob={activeJob}
-                activePipelineEntry={primaryPipelineEntry}
-                onEdit={() => setEditModalOpen(true)}
-                onLinkJob={handleOpenLinkJob}
-                historyCacheRef={historyCacheRef}
-              />
-            </div>
+            <OverviewTabWithHistory
+              overview={candidateOverview}
+              activeJobId={candidateActiveJobId}
+              activeJob={activeJob}
+              activePipelineEntry={primaryPipelineEntry}
+              onEdit={() => setEditModalOpen(true)}
+              onLinkJob={handleOpenLinkJob}
+              historyCacheRef={historyCacheRef}
+            />
           ) : null}
 
           {profileTabKey === "score" ? (
@@ -887,7 +827,24 @@ export function CandidateDrawer({
           ) : null}
 
           {profileTabKey === "interview" ? (
-            <InterviewTab />
+            <InterviewTab
+              jobId={candidateActiveJobId}
+              candidateId={candidate?.id ?? null}
+            />
+          ) : null}
+
+          {profileTabKey === "assessment" ? (
+            <CandidateBehavioralAssessmentPanel
+              jobId={candidateActiveJobId}
+              candidateId={candidate?.id ?? null}
+            />
+          ) : null}
+
+          {profileTabKey === "pre_admission" ? (
+            <CandidatePreAdmissionPanel
+              jobId={candidateActiveJobId}
+              candidateId={candidate?.id ?? null}
+            />
           ) : null}
         </CandidateProfileView>
       ) : null}

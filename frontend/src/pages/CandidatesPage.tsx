@@ -192,199 +192,224 @@ export function CandidatesPage() {
   );
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-5">
-        <PageHeader
-          title="Candidatos"
-          subtitle={
-            loading ? "Carregando…" :
-            total === 0
-              ? hasActiveFilters
-                ? "Nenhum candidato corresponde aos filtros atuais"
-                : "Ainda não há candidatos cadastrados"
-              :
-            `${total} candidato${total !== 1 ? "s" : ""} no total`
-          }
-          actions={
-            <>
-              <button
-                type="button"
-                onClick={fetchCandidates}
-                disabled={loading}
-                className="ui-btn-secondary flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                {loading ? "Atualizando…" : "Atualizar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowNewCandidate(true)}
-                className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90"
-              >
-                + Novo candidato
-              </button>
-            </>
-          }
-        />
-        <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
-          Candidatos são perfis externos gerenciados pelo sistema. Eles não possuem acesso ao sistema interno.
-        </p>
-        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-          Aguardando vaga = candidato ainda não associado a nenhum processo seletivo.
-        </p>
-        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-          A lista prioriza o match da vaga ativa. O score geral IA aparece apenas como contexto quando necessário.
-        </p>
+    <div className="flex h-full flex-col bg-[hsl(var(--bg))]">
+      {/* Premium Header */}
+      <div className="relative overflow-hidden border-b border-[hsl(var(--border)/0.6)] bg-gradient-to-br from-[hsl(var(--surface))] to-[hsl(var(--surface-muted)/0.5)] px-6 py-6 lg:px-8">
+        {/* Abstract Background Element */}
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[hsl(var(--primary)/0.03)] blur-3xl" />
+        
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <PageHeader
+            title="Gestão de Candidatos"
+            subtitle={
+              loading ? "Sincronizando base de dados…" :
+              total === 0
+                ? hasActiveFilters
+                  ? "Nenhum perfil corresponde aos filtros aplicados"
+                  : "Sua base de talentos está vazia"
+                :
+              `${total} perfil${total !== 1 ? "is" : ""} registrado${total !== 1 ? "s" : ""}`
+            }
+            actions={
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={fetchCandidates}
+                  disabled={loading}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 text-sm font-semibold text-[hsl(var(--text))] transition-all hover:bg-[hsl(var(--accent-soft))] disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                  {loading ? "Sincronizando…" : "Atualizar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNewCandidate(true)}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-6 text-sm font-bold text-white shadow-lg shadow-[hsl(var(--primary)/0.2)] transition-all hover:bg-[hsl(var(--primary)/0.9)] hover:shadow-[hsl(var(--primary)/0.3)] active:scale-95"
+                >
+                  <span className="text-lg">+</span>
+                  Novo candidato
+                </button>
+              </div>
+            }
+          />
+        </div>
+
+        {/* Quick Insights Row */}
+        <div className="mt-6 flex flex-wrap gap-4 border-t border-[hsl(var(--border)/0.4)] pt-6">
+          <div className="flex items-center gap-2 text-xs font-medium text-[hsl(var(--text-muted))]">
+            <span className="flex h-2 w-2 rounded-full bg-[hsl(var(--success))]" />
+            Aderência à Vaga Ativa
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-[hsl(var(--text-muted))]">
+            <span className="flex h-2 w-2 rounded-full bg-[hsl(var(--border-strong))]" />
+            Aguardando Processamento
+          </div>
+          <div className="ml-auto hidden items-center gap-2 text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))] sm:flex">
+            Regra Marajó: 1 Candidato = 1 Pipeline Ativo
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         {showCandidatesList ? (
           <div className="flex flex-1 flex-col overflow-hidden">
-            <CandidatesFilters
-              searchInput={searchInput}
-              onSearchInputChange={setSearchInput}
-              resumeFilter={resumeFilter}
-              onResumeFilterChange={setResumeFilter}
-              aiFilter={aiFilter}
-              onAiFilterChange={setAiFilter}
-              applicationSourceFilter={applicationSourceFilter}
-              onApplicationSourceFilterChange={setApplicationSourceFilter}
-              hasActiveFilters={hasActiveFilters}
-              onClearFilters={clearFilters}
-            />
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto">
-        {showInitialLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent" />
-              <p className="ui-text-muted text-sm">Carregando candidatos…</p>
+            <div className="bg-[hsl(var(--surface)/0.3)] px-6 py-4 lg:px-8">
+              <CandidatesFilters
+                searchInput={searchInput}
+                onSearchInputChange={setSearchInput}
+                resumeFilter={resumeFilter}
+                onResumeFilterChange={setResumeFilter}
+                aiFilter={aiFilter}
+                onAiFilterChange={setAiFilter}
+                applicationSourceFilter={applicationSourceFilter}
+                onApplicationSourceFilterChange={setApplicationSourceFilter}
+                hasActiveFilters={hasActiveFilters}
+                onClearFilters={clearFilters}
+              />
             </div>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <p className="text-sm text-[hsl(var(--danger))]">{error}</p>
-            <button
-              type="button"
-              onClick={fetchCandidates}
-              className="text-sm text-[hsl(var(--primary))] hover:underline"
-            >
-              Tentar novamente
-            </button>
-          </div>
-        ) : candidates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <p className="text-lg font-medium text-[hsl(var(--text-muted))]">
-              {hasActiveFilters
-                ? "Nenhum candidato corresponde aos filtros atuais"
-                : "Ainda não há candidatos cadastrados"}
-            </p>
-            <p className="ui-text-muted text-sm">
-              {hasActiveFilters
-                ? "Ajuste ou limpe os filtros para ver outros perfis."
-                : "Crie um candidato para começar a montar sua base."}
-            </p>
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-1 text-sm text-[hsl(var(--primary))] hover:underline"
-              >
-                Limpar filtros
-              </button>
-            ) : null}
-          </div>
-        ) : (
-          <>
-            {isRefreshing ? (
-              <div className="border-b border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-6 py-2 text-xs text-[hsl(var(--primary))]">
-                Atualizando a lista de candidatos…
-              </div>
-            ) : null}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]">
-                    <th className="ui-text-muted w-[280px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
-                      Nome
-                    </th>
-                    <th className="ui-text-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
-                      E-mail
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Telefone
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Currículo
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Vínculo
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Vagas
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Status da IA
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Match da vaga ativa
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Criado em
-                    </th>
-                    {showActionsColumn ? (
-                      <th className="sticky right-0 bg-[hsl(var(--surface-muted))] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Ações
-                      </th>
+
+            {/* Content Area with refined scrollbar and spacing */}
+            <div className="flex-1 overflow-y-auto px-6 pb-10 lg:px-8">
+              <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface))] shadow-sm">
+                {showInitialLoading ? (
+                  <div className="flex items-center justify-center py-32">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="relative flex h-12 w-12 items-center justify-center">
+                        <div className="absolute h-full w-full animate-ping rounded-full bg-[hsl(var(--primary)/0.2)]" />
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent shadow-lg" />
+                      </div>
+                      <p className="text-sm font-semibold text-[hsl(var(--text-muted))]">Preparando lista de candidatos…</p>
+                    </div>
+                  </div>
+                ) : error ? (
+                  <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+                    <div className="h-12 w-12 rounded-full bg-[hsl(var(--danger-soft))] p-3 text-[hsl(var(--danger))]">
+                      <RefreshCw className="h-full w-full" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-base font-bold text-[hsl(var(--text))]">Erro na sincronização</p>
+                      <p className="text-sm text-[hsl(var(--text-muted))]">{error}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchCandidates}
+                      className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[hsl(var(--primary)/0.9)]"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                ) : candidates.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-32 gap-6 text-center">
+                    <div className="h-20 w-20 rounded-full bg-[hsl(var(--surface-muted))] p-6 text-[hsl(var(--text-muted)/0.4)]">
+                      <Users className="h-full w-full" />
+                    </div>
+                    <div className="max-w-xs space-y-2">
+                      <p className="text-xl font-bold text-[hsl(var(--text))]">
+                        {hasActiveFilters
+                          ? "Nenhum resultado"
+                          : "Lista vazia"}
+                      </p>
+                      <p className="text-sm text-[hsl(var(--text-muted))]">
+                        {hasActiveFilters
+                          ? "Experimente remover alguns filtros para encontrar o que procura."
+                          : "Comece cadastrando novos candidatos para gerenciar suas vagas."}
+                      </p>
+                    </div>
+                    {hasActiveFilters ? (
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="font-bold text-[hsl(var(--primary))] hover:underline"
+                      >
+                        Limpar todos os filtros
+                      </button>
                     ) : null}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
-                  {candidates.map((c) => (
-                    <CandidateRow
-                      key={c.id}
-                      candidate={c}
-                      isActive={selectedCandidateId === c.id}
-                      onOpen={() => {
-                        setWorkspaceFocused(true);
-                        void openCandidate(c.id);
-                      }}
-                      canArchive={canArchiveCandidates}
-                      canDelete={canDeleteCandidates}
-                      onArchive={() => setArchiveTarget(c)}
-                      onDelete={() => setDeleteTarget(c)}
-                      onLinkJob={c.linked_job_count === 0 ? () => setLinkTarget(c) : undefined}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </div>
+                ) : (
+                  <>
+                    {isRefreshing ? (
+                      <div className="flex items-center justify-center gap-2 border-b border-[hsl(var(--primary)/0.1)] bg-[hsl(var(--accent-soft)/0.5)] py-2 text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--primary))]">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Atualizando dados em tempo real…
+                      </div>
+                    ) : null}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface-muted)/0.3)]">
+                            <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                              Identificação e Tags
+                            </th>
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                              Contato
+                            </th>
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                              Docs
+                            </th>
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                              Situação Atual
+                            </th>
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                              Vaga Ativa
+                            </th>
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                              Status IA
+                            </th>
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                              Ranking & Match
+                            </th>
+                            {showActionsColumn ? (
+                              <th className="sticky right-0 bg-[hsl(var(--surface))] px-6 py-4 text-right text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))] shadow-[-12px_0_12px_-4px_rgba(0,0,0,0.02)]">
+                                Ações
+                              </th>
+                            ) : null}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface))]">
+                          {candidates.map((c) => (
+                            <CandidateRow
+                              key={c.id}
+                              candidate={c}
+                              isActive={selectedCandidateId === c.id}
+                              onOpen={() => {
+                                setWorkspaceFocused(true);
+                                void openCandidate(c.id);
+                              }}
+                              canArchive={canArchiveCandidates}
+                              canDelete={canDeleteCandidates}
+                              onArchive={() => setArchiveTarget(c)}
+                              onDelete={() => setDeleteTarget(c)}
+                              onLinkJob={c.linked_job_count === 0 ? () => setLinkTarget(c) : undefined}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
-            {totalPages > 1 ? (
-              <div className="border-t border-[hsl(var(--border))] px-6 py-4">
-                <Pagination
-                  page={page}
-                  totalPages={totalPages}
-                  onPageChange={setPage}
-                  total={total}
-                  pageSize={PAGE_SIZE}
-                />
+                    {totalPages > 1 ? (
+                      <div className="border-t border-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface-muted)/0.1)] px-6 py-6">
+                        <Pagination
+                          page={page}
+                          totalPages={totalPages}
+                          onPageChange={setPage}
+                          total={total}
+                          pageSize={PAGE_SIZE}
+                        />
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
-            ) : null}
-          </>
-        )}
             </div>
           </div>
         ) : null}
 
         {showWorkspace ? (
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white shadow-2xl animate-in slide-in-from-right-4 duration-300">
             <CandidateDrawer
               mode="workspace"
               onBackToList={() => setWorkspaceFocused(false)}
-              backToListLabel="Candidatos"
+              backToListLabel="Voltar para a lista"
             />
           </div>
         ) : null}
@@ -440,7 +465,6 @@ export function CandidatesPage() {
 }
 
 // ── CandidateRow ───────────────────────────────────────────────────────────────
-// Extracted to prevent inline arrow functions from causing full-list re-renders.
 
 export function CandidateRow({
   candidate: c,
@@ -471,28 +495,31 @@ export function CandidateRow({
           : c.latest_relationship_status === "rejected"
             ? "Reprovado"
         : c.active_job_id
-          ? "Vinculado"
-          : "Aguardando vaga";
+          ? "Em processo"
+          : "Disponível";
+          
   const statusClass =
     c.active_job_stage === "hired"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
       : c.active_job_stage === "rejected"
-        ? "border-rose-200 bg-rose-50 text-rose-900"
+        ? "border-rose-200 bg-rose-50 text-rose-700"
         : c.latest_relationship_status === "hired"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : c.latest_relationship_status === "rejected"
-            ? "border-rose-200 bg-rose-50 text-rose-900"
+            ? "border-rose-200 bg-rose-50 text-rose-700"
         : c.active_job_id
-          ? "border-[hsl(var(--success))]/20 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
           : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]";
+
   const vacancyLabel =
     c.active_job_stage === "hired" || c.active_job_stage === "rejected"
-      ? c.active_job_title ?? c.latest_job_title ?? "1 vaga"
+      ? c.active_job_title ?? c.latest_job_title ?? "Vaga encerrada"
       : c.latest_relationship_status === "hired" || c.latest_relationship_status === "rejected"
-        ? c.latest_job_title ?? "1 vaga"
+        ? c.latest_job_title ?? "Vaga encerrada"
       : c.active_job_id
-        ? `${c.linked_job_count} vaga${c.linked_job_count !== 1 ? "s" : ""}`
-        : "—";
+        ? c.active_job_title ?? "Processo ativo"
+        : "Nenhuma";
+
   const actionItems = [];
   if (canArchive) {
     actionItems.push({
@@ -512,85 +539,88 @@ export function CandidateRow({
     <tr
       onClick={onOpen}
       className={[
-        "group cursor-pointer transition-colors hover:bg-[hsl(var(--accent-soft))]",
-        isActive ? "bg-[hsl(var(--accent-soft))]/70" : "",
+        "group cursor-pointer transition-all duration-200",
+        isActive ? "bg-[hsl(var(--accent-soft))] ring-1 ring-inset ring-[hsl(var(--primary)/0.2)]" : "hover:bg-[hsl(var(--accent-soft)/0.4)]",
       ].join(" ")}
     >
-      <td className="px-6 py-4">
-        <div className="font-medium leading-tight text-[hsl(var(--text))]">{c.full_name}</div>
-        {c.tags.length > 0 ? (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {c.tags.slice(0, 3).map((t) => (
-              <span
-                key={t}
-                className="rounded bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-xs text-[hsl(var(--text-muted))]"
-              >
-                {t}
-              </span>
-            ))}
-            {c.tags.length > 3 ? (
-              <span className="ui-text-muted text-xs">+{c.tags.length - 3}</span>
-            ) : null}
+      <td className="px-6 py-5">
+        <div className="flex flex-col gap-1.5">
+          <div className="font-bold tracking-tight text-[hsl(var(--text))] transition-colors group-hover:text-[hsl(var(--primary))]">{c.full_name}</div>
+          {c.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {c.tags.slice(0, 2).map((t) => (
+                <span
+                  key={t}
+                  className="rounded-md bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]"
+                >
+                  {t}
+                </span>
+              ))}
+              {c.tags.length > 2 ? (
+                <span className="text-[10px] font-bold text-[hsl(var(--text-muted)/0.5)]">+{c.tags.length - 2}</span>
+              ) : null}
+            </div>
+          ) : (
+            <div className="text-[10px] italic text-[hsl(var(--text-muted)/0.5)]">Sem tags</div>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-5">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+            <Mail className="h-3 w-3 opacity-60" />
+            <span className="truncate max-w-[140px]">{c.email ?? "—"}</span>
           </div>
-        ) : null}
+          <div className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+            <Phone className="h-3 w-3 opacity-60" />
+            <span>{c.phone ?? "—"}</span>
+          </div>
+        </div>
       </td>
-      <td className="px-4 py-4 text-[hsl(var(--text-muted))]">
-        {c.email ?? <span className="ui-text-muted">—</span>}
-      </td>
-      <td className="px-4 py-4 text-[hsl(var(--text-muted))]">
-        {c.phone ?? <span className="ui-text-muted">—</span>}
-      </td>
-      <td className="px-4 py-4">
+      <td className="px-4 py-5">
         <CandidateResumeBadge count={c.resume_count} />
       </td>
-      <td className="px-4 py-4">
-        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusClass}`}>
+      <td className="px-4 py-5">
+        <span className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-bold ${statusClass}`}>
           {statusLabel}
         </span>
       </td>
-      <td className="px-4 py-4 text-[hsl(var(--text-muted))]">
-        {c.linked_job_count > 0 ? (
-          vacancyLabel
-        ) : (
-          <div className="flex flex-col items-start gap-2">
-            <span className="inline-flex items-center rounded-full border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-2.5 py-0.5 text-xs font-medium text-[hsl(var(--warning))]">
-              Aguardando vaga
-            </span>
-            {onLinkJob ? (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onLinkJob();
-                }}
-                className="rounded-lg border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/5 px-3 py-1.5 text-xs font-medium text-[hsl(var(--primary))] transition hover:bg-[hsl(var(--primary))]/10"
-              >
-                Vincular vaga
-              </button>
-            ) : null}
+      <td className="px-4 py-5">
+        <div className="flex flex-col gap-1">
+          <div className="max-w-[150px] truncate font-medium text-[hsl(var(--text))]">
+            {vacancyLabel}
           </div>
-        )}
+          {!c.active_job_id && onLinkJob && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onLinkJob();
+              }}
+              className="w-fit rounded-md bg-[hsl(var(--primary)/0.05)] px-2 py-1 text-[10px] font-bold text-[hsl(var(--primary))] transition-all hover:bg-[hsl(var(--primary)/0.1)] active:scale-95"
+            >
+              Vincular à vaga
+            </button>
+          )}
+        </div>
       </td>
-      <td className="px-4 py-4">
+      <td className="px-4 py-5">
         <CandidateAiStatusBadge status={c.ai_status} />
       </td>
-      <td className="px-4 py-4">
+      <td className="px-4 py-5">
         <CandidateScoreCell candidate={c} />
-      </td>
-      <td className="ui-text-muted px-4 py-4 text-xs">
-        {formatCandidateDate(c.created_at)}
       </td>
       {actionItems.length > 0 ? (
         <td 
           className={[
-            "px-4 py-4 text-right sticky right-0",
-            isActive ? "bg-[hsl(var(--accent-soft))]/70" : "bg-[hsl(var(--surface))]",
-            "group-hover:bg-[hsl(var(--accent-soft))]"
+            "px-6 py-5 text-right sticky right-0 transition-colors",
+            isActive ? "bg-[hsl(var(--accent-soft))]" : "bg-[hsl(var(--surface))] group-hover:bg-[hsl(var(--accent-soft)/0.4)]",
+            "shadow-[-12px_0_12px_-4px_rgba(0,0,0,0.02)]"
           ].join(" ")} 
           onClick={(event) => event.stopPropagation()}
         >
           <ActionMenu
-            buttonLabel={`Ações do candidato ${c.full_name}`}
+            buttonLabel={`Ações para ${c.full_name}`}
             items={actionItems}
           />
         </td>

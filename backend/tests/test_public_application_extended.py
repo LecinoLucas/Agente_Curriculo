@@ -2,8 +2,6 @@
 
 import io
 from unittest.mock import patch
-from uuid import UUID
-
 import pytest
 from fastapi import status
 from httpx import AsyncClient
@@ -128,7 +126,7 @@ async def test_apply_validates_email_case_insensitive(
     client: AsyncClient,
     valid_pdf_bytes: bytes,
 ) -> None:
-    """POST /api/v1/public/candidates/apply valida email case-insensitive."""
+    """POST /api/v1/public/candidates/apply reaproveita email case-insensitive autenticado."""
     # Primeira candidatura com email minúsculo
     response1 = await client.post(
         "/api/v1/public/candidates/apply",
@@ -150,7 +148,9 @@ async def test_apply_validates_email_case_insensitive(
     )
     assert response1.status_code == status.HTTP_201_CREATED
 
-    # Segunda candidatura com email maiúsculo deve ser rejeitada (duplicado)
+    first_candidate_id = response1.json()["candidate_id"]
+
+    # Segunda candidatura com email maiúsculo reaproveita o mesmo cadastro autenticado
     response2 = await client.post(
         "/api/v1/public/candidates/apply",
         data={
@@ -169,7 +169,8 @@ async def test_apply_validates_email_case_insensitive(
         },
         files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
     )
-    assert response2.status_code == status.HTTP_409_CONFLICT
+    assert response2.status_code == status.HTTP_201_CREATED
+    assert response2.json()["candidate_id"] == first_candidate_id
 
 
 @pytest.mark.asyncio

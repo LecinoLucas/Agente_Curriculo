@@ -48,6 +48,10 @@ class JobModel(Base):
     skill_requirements: Mapped[Optional[dict]] = mapped_column(JSONB_COMPAT)
     job_profile_json: Mapped[Optional[dict]] = mapped_column(JSONB_COMPAT)
     job_profile_hash: Mapped[Optional[str]] = mapped_column(sa.String(16))
+    behavioral_template_id: Mapped[Optional[UUID]] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("behavioral_assessment_templates.id", ondelete="SET NULL"),
+    )
     created_by: Mapped[UUID] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False)
     published_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
     closed_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))

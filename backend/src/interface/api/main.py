@@ -27,17 +27,23 @@ from src.interface.api.routers import (
     admin_bi,
     admin_audit_logs,
     admin_system_health,
+    admission_packages,
     ai_models,
     analyses,
-    assessments,
     auth,
+    behavioral_templates,
+    candidate_behavioral_assessments,
     candidates,
+    decision_summary,
     document_ai,
+    hiring_decisions,
     internal_users,
     interview_schedules,
+    interview_scorecards,
     jobs,
     observability,
     pipeline,
+    pre_admission,
     public,
     resumes,
     skill_equivalences,
@@ -92,13 +98,19 @@ app.include_router(admin_system_health.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
 app.include_router(analyses.router, prefix=_PREFIX)
-app.include_router(assessments.router, prefix=_PREFIX)
+app.include_router(behavioral_templates.router, prefix=_PREFIX)
+app.include_router(candidate_behavioral_assessments.router, prefix=_PREFIX)
+app.include_router(decision_summary.router, prefix=_PREFIX)
+app.include_router(hiring_decisions.router, prefix=_PREFIX)
 app.include_router(jobs.router, prefix=_PREFIX)
 app.include_router(pipeline.router, prefix=_PREFIX)
 app.include_router(skill_equivalences.router, prefix=_PREFIX)
 app.include_router(skills.router, prefix=_PREFIX)
 app.include_router(job_areas.router, prefix=_PREFIX)
 app.include_router(interview_schedules.router, prefix=_PREFIX)
+app.include_router(interview_scorecards.router, prefix=_PREFIX)
+app.include_router(pre_admission.router, prefix=_PREFIX)
+app.include_router(admission_packages.router, prefix=_PREFIX)
 app.include_router(google_calendar.router, prefix=_PREFIX)
 app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)

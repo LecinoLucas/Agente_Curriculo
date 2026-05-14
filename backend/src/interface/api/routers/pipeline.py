@@ -24,21 +24,16 @@ from src.application.services.pipeline_service import (
     PipelineTransferBlockedAdvancedStageError,
     PipelineTransferNotAllowedError,
 )
-from src.application.services.assessment_service import AssessmentService
 from src.application.services.interview_schedule_service import (
     InterviewScheduleConflictError,
     InterviewScheduleService,
     InterviewScheduleValidationError,
-)
-from src.infrastructure.repositories.sqlalchemy_assessment_repository import (
-    SQLAlchemyAssessmentRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_interview_schedule_repository import (
     SQLAlchemyInterviewScheduleRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
-    _candidate_job_pipeline_key,
 )
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.pipeline_schemas import (
@@ -334,12 +329,6 @@ async def add_candidate_to_job(
             moved_by=current_user.id,
         )
         await db.commit()
-        await AssessmentService(SQLAlchemyAssessmentRepository(db)).create_assignments_for_job(
-            candidate_id=candidate_id,
-            job_id=body.job_id,
-            pipeline_id=_candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id),
-        )
-        await db.commit()
         analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
             candidate_id=candidate_id,
             job_id=body.job_id,
@@ -369,12 +358,6 @@ async def transfer_candidate_job(
             moved_by=current_user.id,
         )
         await db.commit()
-        await AssessmentService(SQLAlchemyAssessmentRepository(db)).create_assignments_for_job(
-            candidate_id=candidate_id,
-            job_id=body.to_job_id,
-            pipeline_id=_candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.to_job_id),
-        )
-        await db.commit()
         analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
             candidate_id=candidate_id,
             job_id=body.to_job_id,
@@ -402,12 +385,6 @@ async def reconsider_candidate_job(
             candidate_id=candidate_id,
             body=body,
             moved_by=current_user.id,
-        )
-        await db.commit()
-        await AssessmentService(SQLAlchemyAssessmentRepository(db)).create_assignments_for_job(
-            candidate_id=candidate_id,
-            job_id=body.job_id,
-            pipeline_id=_candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id),
         )
         await db.commit()
         analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(

@@ -19,6 +19,7 @@ export type CreateJobRequestPayload = {
   responsibilities?: string;
   experience_context?: string;
   behavioral_requirements?: string[];
+  behavioral_template_id?: string;
   priority?: "low" | "normal" | "high" | "urgent";
 };
 
@@ -39,6 +40,7 @@ export type UpdateJobRequestPayload = {
   responsibilities?: string | null;
   experience_context?: string | null;
   behavioral_requirements?: string[];
+  behavioral_template_id?: string | null;
   priority?: "low" | "normal" | "high" | "urgent" | null;
 };
 

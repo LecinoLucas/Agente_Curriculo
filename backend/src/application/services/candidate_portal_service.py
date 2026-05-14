@@ -3,21 +3,17 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 from hashlib import sha256
-from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.assessment_service import AssessmentService
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
-)
-from src.infrastructure.repositories.sqlalchemy_assessment_repository import (
-    SQLAlchemyAssessmentRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import (
     SQLAlchemyResumeRepository,
@@ -35,7 +31,6 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePortalResumeUploadResponse,
     CandidatePortalUpdateProfileRequest,
 )
-from src.interface.api.schemas.assessment_schemas import CandidateAssessmentSummaryResponse
 from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
 
 logger = structlog.get_logger(__name__)
@@ -72,21 +67,15 @@ class CandidatePortalService:
 
         active_application: CandidatePortalActiveApplicationResponse | None = None
         public_timeline: CandidatePortalTimelineResponse | None = None
-        assessments: list[CandidateAssessmentSummaryResponse] = []
         if active_pipeline_row is not None:
             active_application = await self._build_active_application(
                 candidate_id=candidate_id,
                 active_pipeline_row=active_pipeline_row,
                 latest_resume=latest_resume,
             )
-            assessments = await self._build_public_assessments(
-                candidate_id=candidate_id,
-                active_pipeline_row=active_pipeline_row,
-            )
             public_timeline = await self._build_public_timeline(
                 active_pipeline_row=active_pipeline_row,
                 analysis_status=active_application.analysis_status,
-                assessments=assessments,
             )
 
         history = await self._build_history_applications(
@@ -118,7 +107,6 @@ class CandidatePortalService:
             talent_pool=active_application is None,
             status_public=active_application.status_public if active_application else "Banco de Talentos",
             public_timeline=public_timeline,
-            assessments=assessments,
         )
 
     async def update_profile(
@@ -336,13 +324,11 @@ class CandidatePortalService:
         *,
         active_pipeline_row: dict,
         analysis_status: str | None,
-        assessments: list[CandidateAssessmentSummaryResponse],
     ) -> CandidatePortalTimelineResponse:
         current_key = self._current_timeline_key(
             stage=active_pipeline_row["stage"],
             relationship_status=active_pipeline_row["relationship_status"],
             analysis_status=analysis_status,
-            assessments=assessments,
         )
         interview = await self._find_public_interview(active_pipeline_row)
 
@@ -358,22 +344,6 @@ class CandidatePortalService:
                 "Seu currículo está sendo avaliado.",
             ),
         ]
-        if any(item.type == "behavioral_test" for item in assessments):
-            definitions.append(
-                (
-                    "behavioral_test",
-                    "Teste comportamental",
-                    self._assessment_description(assessments, "behavioral_test"),
-                )
-            )
-        if any(item.type == "behavioral_survey" for item in assessments):
-            definitions.append(
-                (
-                    "behavioral_survey",
-                    "Pesquisa comportamental",
-                    self._assessment_description(assessments, "behavioral_survey"),
-                )
-            )
         definitions.extend(
             [
                 (
@@ -419,42 +389,6 @@ class CandidatePortalService:
             current_step_label=next(label for key, label, _ in definitions if key == current_key),
             steps=steps,
         )
-
-    async def _build_public_assessments(
-        self,
-        *,
-        candidate_id: UUID,
-        active_pipeline_row: dict,
-    ) -> list[CandidateAssessmentSummaryResponse]:
-        job_id = active_pipeline_row.get("job_id")
-        pipeline_id = active_pipeline_row.get("pipeline_id")
-        if job_id is not None:
-            pipeline_id = pipeline_id or uuid5(NAMESPACE_URL, f"{candidate_id}:{job_id}")
-            await AssessmentService(SQLAlchemyAssessmentRepository(self._db)).create_assignments_for_job(
-                candidate_id=candidate_id,
-                job_id=job_id,
-                pipeline_id=pipeline_id,
-            )
-        rows = await SQLAlchemyAssessmentRepository(self._db).list_candidate_assignments(
-            candidate_id,
-            pipeline_id=pipeline_id,
-        )
-        return [
-            CandidateAssessmentSummaryResponse(
-                id=row["id"],
-                type=row["type"],
-                title=row["title"],
-                description=row["description"],
-                status=row["status"],
-                required=bool((row.get("metadata_payload") or {}).get("required", True)),
-                due_at=row["due_at"],
-                assigned_at=row["assigned_at"],
-                started_at=row["started_at"],
-                completed_at=row["completed_at"],
-                result_summary=None if row["status"] != "completed" else "Concluído",
-            )
-            for row in rows
-        ]
 
     async def _find_public_interview(self, active_pipeline_row: dict) -> CandidatePortalPublicInterviewResponse | None:
         pipeline_id = active_pipeline_row.get("pipeline_id")
@@ -516,7 +450,6 @@ class CandidatePortalService:
         stage: str,
         relationship_status: str,
         analysis_status: str | None,
-        assessments: list[CandidateAssessmentSummaryResponse],
     ) -> str:
         if relationship_status in {"rejected", "hired", "withdrawn", "archived"} or stage in {"hired", "rejected"}:
             return "result"
@@ -524,35 +457,9 @@ class CandidatePortalService:
             return "interview"
         if stage == "screening":
             return "screening"
-        pending_test = next(
-            (item for item in assessments if item.type == "behavioral_test" and item.status in {"pending", "in_progress"}),
-            None,
-        )
-        if pending_test is not None:
-            return "behavioral_test"
-        pending_survey = next(
-            (item for item in assessments if item.type == "behavioral_survey" and item.status in {"pending", "in_progress"}),
-            None,
-        )
-        if pending_survey is not None:
-            return "behavioral_survey"
         if (analysis_status or "").lower() in {"pending", "processing", "retry_scheduled"}:
             return "resume_analysis"
         return "application_received"
-
-    @staticmethod
-    def _assessment_description(
-        assessments: list[CandidateAssessmentSummaryResponse],
-        assessment_type: str,
-    ) -> str:
-        item = next((assessment for assessment in assessments if assessment.type == assessment_type), None)
-        if item is None:
-            return ""
-        if item.status == "completed":
-            return "Avaliação concluída. Nossa equipe seguirá com a análise."
-        if assessment_type == "behavioral_test":
-            return "Complete o teste para continuar no processo."
-        return "Responda a pesquisa para complementar sua candidatura."
 
     @staticmethod
     def _interview_description(

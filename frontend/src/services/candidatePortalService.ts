@@ -1,4 +1,9 @@
 import { httpRequest } from "./http";
+import type {
+  PreAdmissionChecklistItem,
+  PreAdmissionDocument,
+  PreAdmissionStatus,
+} from "../types/domain";
 
 const API_BASE = "/api/v1/public";
 
@@ -61,54 +66,56 @@ export interface CandidatePortalTimeline {
   steps: CandidatePortalTimelineStep[];
 }
 
-export interface CandidateAssessmentSummary {
-  id: string;
-  type: "behavioral_test" | "behavioral_survey";
-  title: string;
-  description: string | null;
-  status: "pending" | "in_progress" | "completed" | "expired" | "cancelled";
-  required: boolean;
-  due_at: string | null;
-  assigned_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  result_summary: string | null;
+export interface BehavioralAssignmentAnswer {
+  question_id: string;
+  answer_text: string | null;
+  answer_value: number | null;
+  selected_options_json: string[] | null;
 }
 
-export interface CandidateAssessmentOption {
-  id: string;
-  option_text: string;
-  order_index: number;
-}
-
-export interface CandidateAssessmentQuestion {
+export interface BehavioralAssignmentQuestion {
   id: string;
   question_text: string;
-  question_type: "single_choice" | "multiple_choice" | "scale" | "text";
-  required: boolean;
-  order_index: number;
-  metadata: Record<string, unknown> | null;
-  options: CandidateAssessmentOption[];
+  answer_type: "text" | "scale" | "multiple_choice" | string;
+  is_required: boolean;
+  display_order: number;
+  options_json: string[] | Record<string, unknown> | null;
+  answer: BehavioralAssignmentAnswer | null;
 }
 
-export interface CandidateAssessmentDetail {
+export interface BehavioralAssignmentCompetency {
   id: string;
-  type: "behavioral_test" | "behavioral_survey";
-  title: string;
+  name: string;
   description: string | null;
-  status: CandidateAssessmentSummary["status"];
-  required: boolean;
-  due_at: string | null;
-  questions: CandidateAssessmentQuestion[];
-  privacy_notice: string;
+  display_order: number;
+  questions: BehavioralAssignmentQuestion[];
 }
 
-export interface CandidateAssessmentAnswerPayload {
+export interface BehavioralAssignmentSummary {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  job_title: string | null;
+  template_id: string;
+  template_name: string;
+  status: "pending" | "in_progress" | "submitted" | "expired" | "cancelled" | string;
+  assigned_at: string;
+  started_at: string | null;
+  submitted_at: string | null;
+  expires_at: string | null;
+  answered_count: number;
+  question_count: number;
+}
+
+export interface BehavioralAssignmentDetail extends BehavioralAssignmentSummary {
+  competencies: BehavioralAssignmentCompetency[];
+}
+
+export interface BehavioralAssignmentAnswerPayload {
   question_id: string;
-  option_id?: string | null;
-  option_ids?: string[] | null;
   answer_text?: string | null;
-  answer_value?: unknown;
+  answer_value?: number | null;
+  selected_options_json?: string[] | null;
 }
 
 export interface CandidatePortalApplication {
@@ -134,7 +141,19 @@ export interface CandidatePortalOverview {
   talent_pool: boolean;
   status_public: string;
   public_timeline: CandidatePortalTimeline | null;
-  assessments: CandidateAssessmentSummary[];
+}
+
+export interface CandidatePortalPreAdmissionCase {
+  id: string;
+  status: PreAdmissionStatus;
+  salary_offer: string | number | null;
+  start_date: string | null;
+  work_model: string | null;
+  checklist_items: Array<PreAdmissionChecklistItem & { documents: PreAdmissionDocument[] }>;
+}
+
+export interface CandidatePortalPreAdmissionEnvelope {
+  case: CandidatePortalPreAdmissionCase | null;
 }
 
 export interface CandidatePortalLoginPayload {
@@ -207,9 +226,9 @@ export const candidatePortalService = {
     );
   },
 
-  listAssessments() {
-    return httpRequest<CandidateAssessmentSummary[]>(
-      `${API_BASE}/candidate-portal/assessments`,
+  listBehavioralAssessments() {
+    return httpRequest<BehavioralAssignmentSummary[]>(
+      "/api/v1/candidate-portal/behavioral-assessments",
       {
         method: "GET",
         withAuth: false,
@@ -217,9 +236,9 @@ export const candidatePortalService = {
     );
   },
 
-  getAssessment(assignmentId: string) {
-    return httpRequest<CandidateAssessmentDetail>(
-      `${API_BASE}/candidate-portal/assessments/${assignmentId}`,
+  getBehavioralAssessment(assignmentId: string) {
+    return httpRequest<BehavioralAssignmentDetail>(
+      `/api/v1/candidate-portal/behavioral-assessments/${assignmentId}`,
       {
         method: "GET",
         withAuth: false,
@@ -227,9 +246,9 @@ export const candidatePortalService = {
     );
   },
 
-  startAssessment(assignmentId: string) {
-    return httpRequest<CandidateAssessmentDetail>(
-      `${API_BASE}/candidate-portal/assessments/${assignmentId}/start`,
+  startBehavioralAssessment(assignmentId: string) {
+    return httpRequest<BehavioralAssignmentDetail>(
+      `/api/v1/candidate-portal/behavioral-assessments/${assignmentId}/start`,
       {
         method: "POST",
         withAuth: false,
@@ -237,13 +256,45 @@ export const candidatePortalService = {
     );
   },
 
-  submitAssessment(assignmentId: string, answers: CandidateAssessmentAnswerPayload[]) {
-    return httpRequest<{ id: string; status: string; message: string }>(
-      `${API_BASE}/candidate-portal/assessments/${assignmentId}/submit`,
+  saveBehavioralAnswers(assignmentId: string, answers: BehavioralAssignmentAnswerPayload[]) {
+    return httpRequest<BehavioralAssignmentDetail>(
+      `/api/v1/candidate-portal/behavioral-assessments/${assignmentId}/answers`,
+      {
+        method: "PUT",
+        withAuth: false,
+        body: { answers },
+      }
+    );
+  },
+
+  submitBehavioralAssessment(assignmentId: string, answers: BehavioralAssignmentAnswerPayload[]) {
+    return httpRequest<BehavioralAssignmentDetail>(
+      `/api/v1/candidate-portal/behavioral-assessments/${assignmentId}/submit`,
       {
         method: "POST",
         withAuth: false,
         body: { answers },
+      }
+    );
+  },
+
+  getPreAdmission() {
+    return httpRequest<CandidatePortalPreAdmissionEnvelope>(
+      "/api/v1/candidate-portal/pre-admission",
+      {
+        method: "GET",
+        withAuth: false,
+      }
+    );
+  },
+
+  uploadPreAdmissionDocument(caseId: string, itemId: string, formData: FormData) {
+    return httpRequest<PreAdmissionDocument>(
+      `/api/v1/candidate-portal/pre-admission/${caseId}/checklist-items/${itemId}/documents`,
+      {
+        method: "POST",
+        withAuth: false,
+        body: formData,
       }
     );
   },

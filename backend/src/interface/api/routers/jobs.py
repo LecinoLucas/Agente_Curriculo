@@ -25,6 +25,7 @@ from src.application.services.job_bulk_payload_normalizer import (
     JobBulkPayloadNormalizer,
 )
 from src.application.services.job_bulk_update_service import JobBulkUpdateService
+from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
 from src.application.services.analysis_service import (
     AnalysisNotCompletedError,
     AnalysisResultNotFoundError,
@@ -54,6 +55,9 @@ from src.application.services.pipeline_service import (
 from src.domain.entities.user import UserRole
 from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
+from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+    SQLAlchemyBehavioralAssignmentRepository,
+)
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
@@ -84,6 +88,10 @@ from src.interface.api.schemas.job_schemas import (
     MatchingFeedbackResponse,
     UpdateJobRequest,
 )
+from src.interface.api.schemas.behavioral_assignment_schemas import (
+    RecruiterBehavioralAssessmentStatusResponse,
+    BehavioralAssignmentDetailResponse,
+)
 from src.interface.api.schemas.analysis_schemas import ForceRecomputeResponse
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest as PipelineAddCandidateToJobRequest,
@@ -112,6 +120,10 @@ def _job_bulk_import_service(db: AsyncSession) -> JobBulkImportService:
 
 def _job_bulk_update_service(db: AsyncSession) -> JobBulkUpdateService:
     return JobBulkUpdateService(db)
+
+
+def _behavioral_assignment_service(db: AsyncSession) -> BehavioralAssignmentService:
+    return BehavioralAssignmentService(SQLAlchemyBehavioralAssignmentRepository(db))
 
 
 def _pipeline_service(db: AsyncSession) -> PipelineService:
@@ -291,8 +303,11 @@ async def bulk_import_jobs(
     db: AsyncSession = Depends(get_db),
 ) -> BulkImportJobsResponse:
     try:
-        import json
-        print(f"RAW BULK IMPORT BODY: {json.dumps(body if isinstance(body, dict) else str(body), indent=2)}")
+        logger.info(
+            "job.bulk_import_request",
+            body_type=type(body).__name__,
+            body_keys=list(body.keys()) if isinstance(body, dict) else None,
+        )
         normalized_body = JobBulkPayloadNormalizer.normalize_import_request(body)
         result = await _job_bulk_import_service(db).import_jobs(normalized_body, current_user.id)
         if normalized_body.options.dry_run:
@@ -641,6 +656,169 @@ async def remove_candidate_from_job(
         await db.rollback()
         _handle_job_service_error(exc)
         raise
+
+
+@router.get(
+    "/{job_id}/candidates/{candidate_id}/behavioral-assessment",
+    response_model=BehavioralAssignmentDetailResponse | RecruiterBehavioralAssessmentStatusResponse,
+)
+async def get_candidate_behavioral_assessment_status(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> BehavioralAssignmentDetailResponse | RecruiterBehavioralAssessmentStatusResponse:
+    return await _behavioral_assignment_service(db).get_recruiter_status(
+        job_id=job_id,
+        candidate_id=candidate_id,
+    )
+
+
+@router.post(
+    "/{job_id}/candidates/{candidate_id}/behavioral-assessment/evaluate",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def trigger_behavioral_assessment_evaluation(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Trigger IA-assisted evaluation of submitted behavioral assessment.
+
+    Only evaluates SUBMITTED assignments. Returns 400 if pending/in_progress.
+    Reuses completed evaluations by default.
+    IA analysis is assistive only, never affects decisions or scoring.
+    """
+    from src.application.services.behavioral_ai_evaluation_service import (
+        BehavioralAIEvaluationService,
+    )
+    from src.infrastructure.ai.factory import AIServiceFactory
+    from src.core.settings import settings
+
+    try:
+        from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+            SQLAlchemyBehavioralAssignmentRepository,
+        )
+
+        # Create Gemini service via factory
+        ai_svc = AIServiceFactory.create(settings.AI_PROVIDER, settings.AI_MODEL_ID)
+        service = BehavioralAIEvaluationService(db, ai_svc)
+
+        # First, get the assignment to find its ID
+        repo = SQLAlchemyBehavioralAssignmentRepository(db)
+        assignment = await repo.get_assignment_by_job_candidate(
+            job_id=job_id, candidate_id=candidate_id
+        )
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Behavioral assessment not found",
+            )
+
+        evaluation = await service.evaluate_assignment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            assignment_id=assignment.id,
+        )
+
+        await db.commit()
+        return {
+            "id": str(evaluation.id),
+            "status": evaluation.status,
+            "message": "Evaluation triggered successfully" if evaluation.status == "processing"
+            else f"Evaluation completed with confidence: {evaluation.confidence}",
+        }
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        await db.rollback()
+        logger.error(f"Error triggering behavioral evaluation: {exc}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Evaluation failed")
+
+
+@router.get(
+    "/{job_id}/candidates/{candidate_id}/behavioral-assessment/evaluation",
+)
+async def get_behavioral_assessment_evaluation(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Retrieve IA-assisted evaluation if exists.
+
+    Returns evaluation details if completed, status if pending/processing.
+    Returns 404 if no evaluation exists.
+    """
+    from src.application.services.behavioral_ai_evaluation_service import (
+        BehavioralAIEvaluationService,
+    )
+    from src.infrastructure.ai.factory import AIServiceFactory
+    from src.core.settings import settings
+
+    try:
+        from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+            SQLAlchemyBehavioralAssignmentRepository,
+        )
+
+        # Create Gemini service via factory
+        ai_svc = AIServiceFactory.create(settings.AI_PROVIDER, settings.AI_MODEL_ID)
+        service = BehavioralAIEvaluationService(db, ai_svc)
+
+        # Get assignment to find its ID
+        repo = SQLAlchemyBehavioralAssignmentRepository(db)
+        assignment = await repo.get_assignment_by_job_candidate(
+            job_id=job_id, candidate_id=candidate_id
+        )
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Behavioral assessment not found",
+            )
+
+        evaluation = await service.get_evaluation(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            assignment_id=assignment.id,
+        )
+
+        if not evaluation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No evaluation exists for this assessment",
+            )
+
+        # Build response
+        result = {
+            "id": str(evaluation.id),
+            "assignment_id": str(evaluation.assignment_id),
+            "status": evaluation.status,
+            "created_at": evaluation.created_at,
+            "updated_at": evaluation.updated_at,
+        }
+
+        if evaluation.status == "completed":
+            result.update({
+                "confidence": evaluation.confidence,
+                "summary": evaluation.summary,
+                "strengths": evaluation.strengths_json or [],
+                "concerns": evaluation.concerns_json or [],
+                "competency_signals": evaluation.competency_signals_json or [],
+                "suggested_interview_questions": evaluation.suggested_interview_questions_json or [],
+                "risk_flags": evaluation.risk_flags_json or [],
+                "completed_at": evaluation.completed_at,
+            })
+        elif evaluation.status == "failed":
+            result["error_message"] = evaluation.error_message
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error retrieving behavioral evaluation: {exc}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve evaluation")
 
 
 @router.post(

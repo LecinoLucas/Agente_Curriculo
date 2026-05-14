@@ -2,7 +2,6 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
-from src.interface.api.schemas.assessment_schemas import CandidateAssessmentSummaryResponse
 
 
 class CandidateAuthRegisterRequest(BaseModel):
@@ -88,7 +87,6 @@ class CandidatePortalOverviewResponse(BaseModel):
     talent_pool: bool
     status_public: str
     public_timeline: CandidatePortalTimelineResponse | None = None
-    assessments: list[CandidateAssessmentSummaryResponse] = []
 
 
 class CandidatePortalApplicationResponse(BaseModel):

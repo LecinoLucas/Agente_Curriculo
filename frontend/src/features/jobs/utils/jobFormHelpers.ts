@@ -11,6 +11,7 @@ export function toForm(job: Job): JobFormValues {
     experience_context: job.experience_context ?? "",
     behavioral_requirements: [...(job.behavioral_requirements ?? [])],
     newBehavioralRequirement: "",
+    behavioral_template_id: job.behavioral_template_id ?? null,
     status: job.status,
     job_area: job.job_area ?? "",
     priority: job.priority ?? "normal",

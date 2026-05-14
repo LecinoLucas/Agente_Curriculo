@@ -3,7 +3,6 @@ import {
   CandidateLatestAnalysisOverview,
   CandidateListSummary,
   CandidateOverview,
-  RecruiterCandidateAssessment,
   PipelineStage,
 } from "../types/domain";
 import { Paginated } from "../types/api";
@@ -143,35 +142,6 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
       }))
     : [];
 
-  const normalizedAssessments: RecruiterCandidateAssessment[] = Array.isArray(item.assessments)
-    ? item.assessments.map((assessment) => ({
-        id: assessment?.id ?? "",
-        type: (assessment?.type ?? "behavioral_test") as RecruiterCandidateAssessment["type"],
-        title: assessment?.title ?? "",
-        description: assessment?.description ?? null,
-        status: (assessment?.status ?? "pending") as RecruiterCandidateAssessment["status"],
-        required: Boolean(assessment?.required),
-        due_at: assessment?.due_at ?? null,
-        assigned_at: assessment?.assigned_at ?? new Date(0).toISOString(),
-        started_at: assessment?.started_at ?? null,
-        completed_at: assessment?.completed_at ?? null,
-        result_summary: assessment?.result_summary ?? null,
-        answers: Array.isArray((assessment as any)?.answers)
-          ? (assessment as any).answers.map((answer: any) => ({
-              id: answer?.id ?? "",
-              question_id: answer?.question_id ?? "",
-              question_text: answer?.question_text ?? "",
-              question_type: answer?.question_type ?? "text",
-              option_id: answer?.option_id ?? null,
-              option_text: answer?.option_text ?? null,
-              answer_text: answer?.answer_text ?? null,
-              answer_value: answer?.answer_value ?? null,
-              created_at: answer?.created_at ?? new Date(0).toISOString(),
-            }))
-          : [],
-      }))
-    : [];
-
   return {
     candidate: normalizeCandidate(item.candidate ?? {}),
     resumes: Array.isArray(item.resumes) ? item.resumes : [],
@@ -191,7 +161,6 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
           }
         : null,
     pipeline_entries: normalizedEntries,
-    assessments: normalizedAssessments,
   };
 }
 

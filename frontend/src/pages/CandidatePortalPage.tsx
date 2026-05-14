@@ -1,6 +1,7 @@
 import {
   Briefcase,
   CheckCircle2,
+  ClipboardCheck,
   Circle,
   Clock3,
   FileText,
@@ -33,11 +34,17 @@ import {
   type CandidatePortalPublicInterview,
   type CandidatePortalTimeline,
   type CandidatePortalTimelineStep,
-  type CandidateAssessmentSummary,
+  type BehavioralAssignmentAnswerPayload,
+  type BehavioralAssignmentDetail,
+  type BehavioralAssignmentSummary,
+  type CandidatePortalPreAdmissionEnvelope,
 } from "../services/candidatePortalService";
 import { HttpError } from "../services/http";
 import { formatPhone } from "../features/public-application/utils/phone";
 import { toast } from "../shared/utils/toast";
+import { BehavioralAssessmentCard } from "../features/candidate-portal/components/BehavioralAssessmentCard";
+import { BehavioralAssessmentForm } from "../features/candidate-portal/components/BehavioralAssessmentForm";
+import { CandidatePortalPreAdmissionCard } from "../features/candidate-portal/components/CandidatePortalPreAdmissionCard";
 
 type ContactFormState = {
   email: string;
@@ -90,50 +97,51 @@ function ApplicationCard({
   application: CandidatePortalApplication;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">
+    <div className="group rounded-2xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] p-5 shadow-sm transition-all hover:border-[hsl(var(--primary)/0.3)] hover:shadow-md">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1.5">
+          <p className="font-heading text-base font-bold tracking-tight text-[hsl(var(--text))] group-hover:text-[hsl(var(--primary))] transition-colors">
             {application.talent_pool
-              ? "Banco de Talentos"
+              ? "Banco de Talentos Marajó"
               : application.job_title || "Vaga vinculada"}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">
+            <Clock3 className="h-3 w-3" />
             Enviada em {formatDate(application.submitted_at)}
           </p>
         </div>
-        <span className="inline-flex w-fit rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+        <span className="inline-flex w-fit items-center rounded-full bg-[hsl(var(--primary)/0.08)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--primary))] ring-1 ring-inset ring-[hsl(var(--primary)/0.1)]">
           {application.status_label}
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-[hsl(var(--border)/0.3)] pt-5 sm:grid-cols-4">
         <div>
-          <p className="text-xs text-muted-foreground">Origem</p>
-          <p className="text-sm font-medium text-foreground">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">Origem</p>
+          <p className="mt-1 text-xs font-semibold text-[hsl(var(--text))]">
             {sourceLabel(application.application_source)}
           </p>
         </div>
 
-        <div>
-          <p className="text-xs text-muted-foreground">Currículo</p>
-          <p className="text-sm font-medium text-foreground">
-            {application.resume_file_name || "Sem arquivo identificado"}
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">Currículo</p>
+          <p className="mt-1 truncate text-xs font-semibold text-[hsl(var(--text))]">
+            {application.resume_file_name || "Sem arquivo"}
           </p>
         </div>
 
         <div>
-          <p className="text-xs text-muted-foreground">Atualizada em</p>
-          <p className="text-sm font-medium text-foreground">
-            {formatDate(application.updated_at)}
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">Última Att</p>
+          <p className="mt-1 text-xs font-semibold text-[hsl(var(--text))]">
+            {formatDate(application.updated_at).split(',')[0]}
           </p>
         </div>
 
         <div>
-          <p className="text-xs text-muted-foreground">
-            {application.talent_pool ? "Perfil" : "Situação"}
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+            {application.talent_pool ? "Status Perfil" : "Situação"}
           </p>
-          <p className="text-sm font-medium text-foreground">
+          <p className="mt-1 text-xs font-bold text-[hsl(var(--primary))]">
             {application.talent_pool
               ? extractionLabel(application.talent_pool_profile_status)
               : application.status_label}
@@ -209,106 +217,69 @@ function stepIcon(step: CandidatePortalTimelineStep) {
 
 function CandidateVerticalTimeline({ timeline }: { timeline: CandidatePortalTimeline }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Andamento da candidatura</CardTitle>
-        <CardDescription>{timeline.current_step_label}</CardDescription>
+    <Card className="overflow-hidden border-[hsl(var(--border)/0.5)] shadow-xl">
+      <CardHeader className="border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface-muted)/0.3)]">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <CardTitle className="text-xl font-bold">Andamento da Candidatura</CardTitle>
+            <CardDescription className="font-bold text-[hsl(var(--primary))] uppercase tracking-widest text-[10px]">
+              Etapa atual: {timeline.current_step_label}
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-8">
         <ol className="space-y-0">
           {timeline.steps.map((step, index) => {
             const isCurrent = step.status === "current";
             const isCompleted = step.status === "completed";
             const isClosed = step.status === "closed";
+            
             return (
-              <li key={step.key} className="relative flex gap-4 pb-6 last:pb-0">
+              <li key={step.key} className="relative flex gap-6 pb-10 last:pb-2">
                 {index < timeline.steps.length - 1 ? (
-                  <span className="absolute left-[15px] top-8 h-[calc(100%-2rem)] w-px bg-border" />
+                  <span className={`absolute left-[17px] top-10 h-[calc(100%-2.5rem)] w-0.5 rounded-full ${isCompleted ? 'bg-emerald-200' : 'bg-[hsl(var(--border)/0.4)]'}`} />
                 ) : null}
-                <span
+                
+                <div
                   className={[
-                    "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-card",
-                    isCurrent ? "border-primary text-primary" : "",
-                    isCompleted ? "border-emerald-500 text-emerald-600" : "",
-                    isClosed ? "border-slate-400 text-slate-600" : "",
-                    !isCurrent && !isCompleted && !isClosed ? "border-border text-muted-foreground" : "",
+                    "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300",
+                    isCurrent ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.05)] text-[hsl(var(--primary))] shadow-[0_0_12px_hsl(var(--primary)/0.2)]" : "",
+                    isCompleted ? "border-emerald-500 bg-emerald-50 text-emerald-600" : "",
+                    isClosed ? "border-slate-400 bg-slate-50 text-slate-600" : "",
+                    !isCurrent && !isCompleted && !isClosed ? "border-[hsl(var(--border)/0.6)] bg-white text-[hsl(var(--text-muted)/0.5)]" : "",
                   ].join(" ")}
                 >
-                  {stepIcon(step)}
-                </span>
-                <div className="min-w-0 flex-1 pt-1">
-                  <p className="text-sm font-semibold text-foreground">{step.label}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{step.description}</p>
-                  {step.interview ? <CandidateInterviewInfo interview={step.interview} /> : null}
+                  {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : stepIcon(step)}
+                </div>
+
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`text-sm font-extrabold tracking-tight ${isCurrent ? 'text-[hsl(var(--text))] scale-105 origin-left' : isCompleted ? 'text-emerald-700' : 'text-[hsl(var(--text-muted))]'}`}>
+                      {step.label}
+                    </p>
+                    {isCurrent && (
+                      <span className="rounded-full bg-[hsl(var(--primary)/0.1)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[hsl(var(--primary))]">
+                        Foco
+                      </span>
+                    )}
+                  </div>
+                  <p className={`mt-1 text-xs font-medium leading-relaxed ${isCurrent ? 'text-[hsl(var(--text-muted))]' : 'text-[hsl(var(--text-muted)/0.7)]'}`}>
+                    {step.description}
+                  </p>
+                  {step.interview ? (
+                    <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500">
+                      <CandidateInterviewInfo interview={step.interview} />
+                    </div>
+                  ) : null}
                 </div>
               </li>
             );
           })}
         </ol>
-      </CardContent>
-    </Card>
-  );
-}
-
-function assessmentTypeLabel(type: CandidateAssessmentSummary["type"]): string {
-  return type === "behavioral_test" ? "Teste comportamental" : "Pesquisa comportamental";
-}
-
-function assessmentActionLabel(type: CandidateAssessmentSummary["type"]): string {
-  return type === "behavioral_test" ? "Iniciar teste" : "Responder pesquisa";
-}
-
-function assessmentStatusLabel(status: CandidateAssessmentSummary["status"]): string {
-  if (status === "completed") return "Concluído";
-  if (status === "in_progress") return "Em andamento";
-  if (status === "expired") return "Expirado";
-  if (status === "cancelled") return "Cancelado";
-  return "Pendente";
-}
-
-function CandidateAssessmentsCard({ assessments }: { assessments: CandidateAssessmentSummary[] }) {
-  if (assessments.length === 0) return null;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Avaliações pendentes</CardTitle>
-        <CardDescription>
-          Suas respostas serão usadas exclusivamente para fins de recrutamento e seleção.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {assessments.map((assessment) => {
-          const isCompleted = assessment.status === "completed";
-          return (
-            <div key={assessment.id} className="rounded-xl border border-border/70 bg-background/80 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-foreground">
-                    {assessment.title || assessmentTypeLabel(assessment.type)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {assessmentTypeLabel(assessment.type)} · {assessmentStatusLabel(assessment.status)}
-                  </p>
-                </div>
-                {isCompleted ? (
-                  <span className="inline-flex w-fit rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                    Concluído
-                  </span>
-                ) : (
-                  <Button asChild size="sm">
-                    <Link to={`/candidato/portal/avaliacoes/${assessment.id}`}>
-                      {assessmentActionLabel(assessment.type)}
-                    </Link>
-                  </Button>
-                )}
-              </div>
-              {assessment.description ? (
-                <p className="mt-3 text-sm text-muted-foreground">{assessment.description}</p>
-              ) : null}
-            </div>
-          );
-        })}
       </CardContent>
     </Card>
   );
@@ -326,10 +297,16 @@ export function CandidatePortalPage() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedAssessment, setSelectedAssessment] = useState<BehavioralAssignmentDetail | null>(null);
+  const [behavioralAssessmentSummaries, setBehavioralAssessmentSummaries] = useState<BehavioralAssignmentSummary[]>([]);
+  const [preAdmission, setPreAdmission] = useState<CandidatePortalPreAdmissionEnvelope | null>(null);
+  const [assessmentLoadingId, setAssessmentLoadingId] = useState<string | null>(null);
+  const [assessmentSaving, setAssessmentSaving] = useState(false);
 
   const activeApplication: CandidatePortalActiveApplication | null =
     overview?.active_application ?? null;
   const applicationHistory: CandidatePortalApplication[] = overview?.application_history ?? [];
+  const behavioralAssessments: BehavioralAssignmentSummary[] = behavioralAssessmentSummaries;
 
   async function loadPortalData(refresh = false) {
     if (refresh) {
@@ -340,8 +317,14 @@ export function CandidatePortalPage() {
     setLoadError(null);
 
     try {
-      const overviewResponse = await candidatePortalService.getOverview();
+      const [overviewResponse, assessmentsResponse, preAdmissionResponse] = await Promise.all([
+        candidatePortalService.getOverview(),
+        candidatePortalService.listBehavioralAssessments(),
+        candidatePortalService.getPreAdmission(),
+      ]);
       setOverview(overviewResponse);
+      setBehavioralAssessmentSummaries(assessmentsResponse);
+      setPreAdmission(preAdmissionResponse);
       setContactForm(buildContactForm(overviewResponse));
     } catch (error) {
       if (error instanceof HttpError && error.status === 401) {
@@ -422,12 +405,74 @@ export function CandidatePortalPage() {
     }
   };
 
+  const handleOpenAssessment = async (assignment: BehavioralAssignmentSummary) => {
+    setAssessmentLoadingId(assignment.id);
+    try {
+      const detail =
+        assignment.status === "pending"
+          ? await candidatePortalService.startBehavioralAssessment(assignment.id)
+          : await candidatePortalService.getBehavioralAssessment(assignment.id);
+      setSelectedAssessment(detail);
+      await loadPortalData(true);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Não foi possível abrir a avaliação.";
+      toast.error(message);
+    } finally {
+      setAssessmentLoadingId(null);
+    }
+  };
+
+  const handleSaveAssessment = async (answers: BehavioralAssignmentAnswerPayload[]) => {
+    if (!selectedAssessment) return;
+    setAssessmentSaving(true);
+    try {
+      const detail = await candidatePortalService.saveBehavioralAnswers(selectedAssessment.id, answers);
+      setSelectedAssessment(detail);
+      await loadPortalData(true);
+      toast.success("Rascunho salvo.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Não foi possível salvar suas respostas.";
+      toast.error(message);
+    } finally {
+      setAssessmentSaving(false);
+    }
+  };
+
+  const handleSubmitAssessment = async (answers: BehavioralAssignmentAnswerPayload[]) => {
+    if (!selectedAssessment) return;
+    setAssessmentSaving(true);
+    try {
+      const detail = await candidatePortalService.submitBehavioralAssessment(selectedAssessment.id, answers);
+      setSelectedAssessment(detail);
+      await loadPortalData(true);
+      toast.success("Avaliação enviada.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Não foi possível enviar a avaliação.";
+      toast.error(message);
+    } finally {
+      setAssessmentSaving(false);
+    }
+  };
+
+  const reloadPreAdmission = async () => {
+    const payload = await candidatePortalService.getPreAdmission();
+    setPreAdmission(payload);
+  };
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando seu portal...
+      <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--bg))] px-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative h-16 w-16">
+            <div className="absolute inset-0 animate-ping rounded-full bg-[hsl(var(--primary)/0.2)]" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent animate-spin" />
+          </div>
+          <p className="text-sm font-bold text-[hsl(var(--text-muted))] uppercase tracking-widest">
+            Autenticando seu portal…
+          </p>
         </div>
       </div>
     );
@@ -435,21 +480,29 @@ export function CandidatePortalPage() {
 
   if (loadError || !overview) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <Card className="w-full max-w-lg">
-          <CardHeader>
-            <CardTitle>Portal do candidato</CardTitle>
+      <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--bg))] px-4">
+        <Card className="w-full max-w-lg shadow-2xl border-[hsl(var(--border)/0.5)]">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <CardTitle className="text-2xl font-bold">Portal Indisponível</CardTitle>
             <CardDescription>
-              Não foi possível carregar suas informações agora.
+              Não conseguimos sincronizar seus dados agora.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {loadError ?? "Sua sessão pode ter expirado."}
+          <CardContent className="space-y-6 text-center">
+            <p className="text-sm text-[hsl(var(--text-muted))]">
+              {loadError ?? "Sua sessão pode ter expirado por inatividade."}
             </p>
-            <div className="flex gap-3">
-              <Button onClick={() => void loadPortalData()}>Tentar novamente</Button>
-              <Button variant="outline" asChild>
+            <div className="flex flex-col gap-3">
+              <Button 
+                onClick={() => void loadPortalData()} 
+                className="h-11 bg-[hsl(var(--primary))] font-bold hover:bg-[hsl(var(--primary)/0.9)]"
+              >
+                Tentar reconectar
+              </Button>
+              <Button variant="ghost" asChild className="text-[hsl(var(--text-muted))]">
                 <Link to="/candidato/login">Voltar ao login</Link>
               </Button>
             </div>
@@ -460,64 +513,144 @@ export function CandidatePortalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <div className="rounded-3xl border border-border/70 bg-gradient-to-r from-primary to-sky-700 px-6 py-6 text-primary-foreground shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">
-                Portal do candidato
-              </p>
-              <h1 className="text-3xl font-semibold tracking-tight">{overview.candidate.full_name}</h1>
-              <div className="flex flex-wrap items-center gap-3 text-sm text-primary-foreground/85">
-                <span>{overview.status_public}</span>
-                <span>{overview.candidate.cpf_masked}</span>
-                <span>{overview.candidate.application_source_label}</span>
+    <div className="min-h-screen bg-[hsl(var(--bg))] pb-20">
+      {/* Premium Hero Section */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] pt-12 pb-24 text-white shadow-lg">
+        {/* Abstract shapes for depth */}
+        <div className="absolute -left-24 top-0 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
+        
+        <div className="relative mx-auto max-w-6xl px-6 lg:px-8">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] backdrop-blur-md">
+                <ShieldCheck className="h-3 w-3" />
+                Ambiente Protegido
+              </div>
+              <h1 className="font-heading text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+                Olá, {overview.candidate.full_name.split(' ')[0]}!
+              </h1>
+              <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-white/80">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  {overview.status_public}
+                </div>
+                <div>{overview.candidate.application_source_label}</div>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <Button
-                variant="secondary"
+                variant="outline"
                 onClick={() => void loadPortalData(true)}
                 disabled={isRefreshing}
+                className="h-11 border-white/30 bg-white/10 font-bold text-white backdrop-blur-md hover:bg-white/20"
               >
                 {isRefreshing ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Atualizar
+                Sincronizar
               </Button>
-              <Button variant="outline" onClick={handleLogout} className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+              <Button 
+                variant="outline" 
+                onClick={handleLogout} 
+                className="h-11 border-white/20 bg-white/5 font-bold text-white backdrop-blur-md hover:bg-[hsl(var(--danger))] hover:border-[hsl(var(--danger))]"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
-                Sair
+                Sair do portal
               </Button>
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6 order-2 lg:order-1">
+      <div className="mx-auto -mt-12 max-w-6xl px-6 lg:px-8">
+        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          {/* Main Content Column */}
+          <div className="order-2 space-y-8 lg:order-1">
+            {/* Timeline Section */}
             {overview.public_timeline ? (
-              <CandidateVerticalTimeline timeline={overview.public_timeline} />
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <CandidateVerticalTimeline timeline={overview.public_timeline} />
+              </div>
             ) : null}
 
-            <CandidateAssessmentsCard assessments={overview.assessments ?? []} />
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Minhas candidaturas</CardTitle>
-                <CardDescription>
-                  Acompanhe seus envios sem expor score, ranking ou comentários internos.
-                </CardDescription>
+            {/* Behavioral Assessments Card */}
+            <Card className="overflow-hidden border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-bottom-4 delay-75 duration-500">
+              <CardHeader className="border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface-muted)/0.3)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]">
+                    <ClipboardCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold">Avaliação Comportamental</CardTitle>
+                    <CardDescription>Responda para completar seu perfil de match.</CardDescription>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6">
+                {behavioralAssessments.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-[hsl(var(--border)/0.4)]">
+                    <div className="h-12 w-12 text-[hsl(var(--text-muted)/0.3)]">
+                      <CheckCircle2 className="h-full w-full" />
+                    </div>
+                    <p className="text-sm font-semibold text-[hsl(var(--text-muted))]">Nenhuma avaliação pendente no momento.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {behavioralAssessments.map((assignment) => (
+                      <BehavioralAssessmentCard
+                        key={assignment.id}
+                        assignment={assignment}
+                        onOpen={(item) => void handleOpenAssessment(item)}
+                        disabled={assessmentLoadingId === assignment.id}
+                      />
+                    ))}
+                  </div>
+                )}
+                
+                {selectedAssessment ? (
+                  <div className="mt-8 animate-in zoom-in-95 duration-300">
+                    <BehavioralAssessmentForm
+                      key={`${selectedAssessment.id}-${selectedAssessment.status}`}
+                      assignment={selectedAssessment}
+                      saving={assessmentSaving}
+                      onSave={handleSaveAssessment}
+                      onSubmit={handleSubmitAssessment}
+                      onClose={() => setSelectedAssessment(null)}
+                    />
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <CandidatePortalPreAdmissionCard
+              preAdmission={preAdmission}
+              onUploaded={reloadPreAdmission}
+            />
+
+            {/* Application History Card */}
+            <Card className="overflow-hidden border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-bottom-4 delay-150 duration-500">
+              <CardHeader className="border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface-muted)/0.3)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+                    <Briefcase className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold">Minhas Candidaturas</CardTitle>
+                    <CardDescription>Histórico e situação de todos os seus envios.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
                 {activeApplication ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Candidatura ativa
-                    </p>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--primary))]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))] animate-pulse" />
+                      Candidatura em Destaque
+                    </div>
                     <ApplicationCard
                       application={{
                         pipeline_id: activeApplication.pipeline_id,
@@ -535,247 +668,173 @@ export function CandidatePortalPage() {
                       }}
                     />
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-border/70 bg-background/80 p-4 text-sm text-muted-foreground">
-                    Banco de Talentos
-                  </div>
-                )}
-                {applicationHistory.length > 0 ? (
-                  <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Histórico
-                  </p>
                 ) : null}
-                {applicationHistory.map((application) => (
-                  <ApplicationCard
-                    key={application.pipeline_id ?? `talent-pool-${application.submitted_at}`}
-                    application={application}
-                  />
-                ))}
+
+                {applicationHistory.length > 0 ? (
+                  <div className="space-y-4 border-t border-[hsl(var(--border)/0.4)] pt-6">
+                    <p className="text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                      Outros Registros
+                    </p>
+                    <div className="grid gap-4">
+                      {applicationHistory.map((application) => (
+                        <ApplicationCard
+                          key={application.pipeline_id ?? `tp-${application.submitted_at}`}
+                          application={application}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : !activeApplication ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-[hsl(var(--border)/0.4)]">
+                    <p className="text-sm font-semibold text-[hsl(var(--text-muted))]">Você está no nosso Banco de Talentos.</p>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </div>
 
-          <div className="space-y-6 order-1 lg:order-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Minha candidatura</CardTitle>
-                <CardDescription>
-                  Resumo da situação mais recente.
-                </CardDescription>
+          {/* Sidebar Column */}
+          <div className="order-1 space-y-8 lg:order-2">
+            {/* Quick Status Card */}
+            <Card className="overflow-hidden border-none bg-gradient-to-br from-[hsl(var(--surface))] to-[hsl(var(--surface-muted))] shadow-2xl ring-1 ring-[hsl(var(--border)/0.5)] animate-in fade-in slide-in-from-right-4 duration-500">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg font-bold">Resumo da Situação</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <Briefcase className="h-4 w-4" />
-                      Vaga
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-foreground">
-                      {activeApplication?.is_talent_pool
-                        ? "Banco de Talentos"
-                        : activeApplication?.job_title || "Sem vaga vinculada"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <ShieldCheck className="h-4 w-4" />
-                      Status
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-foreground">
-                      {overview.status_public}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      Localização
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-foreground">
-                      {overview.candidate.city && overview.candidate.state
-                        ? `${overview.candidate.city}/${overview.candidate.state}`
-                        : "Não informada"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      Currículo
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-foreground">
-                      {overview.latest_resume?.file_name || "Nenhum currículo identificado"}
-                    </p>
-                    {overview.latest_resume ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {extractionLabel(overview.latest_resume.extraction_status)}
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: "Vaga Ativa", val: activeApplication?.job_title || "Disponível", icon: <Briefcase className="h-4 w-4" /> },
+                    { label: "Status", val: overview.status_public, icon: <ShieldCheck className="h-4 w-4" />, highlight: true },
+                    { label: "Localização", val: overview.candidate.city ? `${overview.candidate.city}/${overview.candidate.state}` : "Pendente", icon: <MapPin className="h-4 w-4" /> },
+                    { label: "Currículo", val: overview.latest_resume?.file_name ? "Enviado" : "Não ident.", icon: <FileText className="h-4 w-4" /> },
+                  ].map((item, i) => (
+                    <div key={i} className="rounded-2xl border border-[hsl(var(--border)/0.3)] bg-white/40 p-4 backdrop-blur-sm">
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                        {item.icon}
+                        {item.label}
+                      </div>
+                      <p className={`mt-2 text-sm font-extrabold truncate ${item.highlight ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--text))]'}`}>
+                        {item.val}
                       </p>
-                    ) : null}
-                  </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Dados de contato</CardTitle>
-                <CardDescription>
-                  Atualize telefone, e-mail e localização.
-                </CardDescription>
+            {/* Profile Update Card */}
+            <Card className="border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-right-4 delay-75 duration-500">
+              <CardHeader className="flex flex-row items-center justify-between border-b border-[hsl(var(--border)/0.3)] py-4">
+                <CardTitle className="text-base font-bold">Dados de Contato</CardTitle>
+                {!isEditing && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setIsEditing(true)}
+                    className="h-8 text-[hsl(var(--primary))] font-bold hover:bg-[hsl(var(--primary)/0.05)]"
+                  >
+                    Editar
+                  </Button>
+                )}
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <label htmlFor="candidate-email" className="text-sm font-medium text-foreground">
-                      E-mail
-                    </label>
-                    <Input
-                      id="candidate-email"
-                      type="email"
-                      value={contactForm.email}
-                      disabled={!isEditing || isSaving}
-                      onChange={(event) => handleContactChange("email", event.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label htmlFor="candidate-phone" className="text-sm font-medium text-foreground">
-                      Telefone
-                    </label>
-                    <Input
-                      id="candidate-phone"
-                      value={contactForm.phone}
-                      disabled={!isEditing || isSaving}
-                      onChange={(event) => handleContactChange("phone", event.target.value)}
-                    />
-                    {!isEditing && contactForm.phone ? (
-                      <p className="text-xs text-muted-foreground">
-                        {formatPhone(contactForm.phone)}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label htmlFor="candidate-city" className="text-sm font-medium text-foreground">
-                      Cidade
-                    </label>
-                    <Input
-                      id="candidate-city"
-                      value={contactForm.city}
-                      disabled={!isEditing || isSaving}
-                      onChange={(event) => handleContactChange("city", event.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label htmlFor="candidate-state" className="text-sm font-medium text-foreground">
-                      UF
-                    </label>
-                    <Input
-                      id="candidate-state"
-                      maxLength={2}
-                      value={contactForm.state}
-                      disabled={!isEditing || isSaving}
-                      onChange={(event) => handleContactChange("state", event.target.value.toUpperCase())}
-                    />
-                  </div>
+              <CardContent className="pt-6 space-y-6">
+                <div className="grid gap-5">
+                  {[
+                    { id: "email", label: "E-mail Profissional", type: "email", val: contactForm.email },
+                    { id: "phone", label: "Telefone / WhatsApp", type: "text", val: contactForm.phone },
+                    { id: "city", label: "Cidade", type: "text", val: contactForm.city },
+                    { id: "state", label: "Estado (UF)", type: "text", val: contactForm.state, max: 2 },
+                  ].map((field) => (
+                    <div key={field.id} className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">
+                        {field.label}
+                      </label>
+                      <Input
+                        id={`candidate-${field.id}`}
+                        type={field.type}
+                        maxLength={field.max}
+                        value={field.val}
+                        disabled={!isEditing || isSaving}
+                        className="h-11 border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface-muted)/0.2)] font-medium focus:ring-[hsl(var(--primary))]"
+                        onChange={(e) => handleContactChange(field.id as any, e.target.value)}
+                      />
+                    </div>
+                  ))}
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  {isEditing ? (
-                    <>
-                      <Button onClick={() => void handleSaveProfile()} disabled={isSaving}>
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                        Salvar dados
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setContactForm(buildContactForm(overview));
-                          setIsEditing(false);
-                        }}
-                        disabled={isSaving}
-                      >
-                        Cancelar
-                      </Button>
-                    </>
-                  ) : (
-                    <Button onClick={() => setIsEditing(true)}>Atualizar telefone/e-mail</Button>
-                  )}
-                </div>
+                {isEditing && (
+                  <div className="flex gap-3 pt-2">
+                    <Button 
+                      onClick={() => void handleSaveProfile()} 
+                      disabled={isSaving}
+                      className="flex-1 bg-[hsl(var(--primary))] font-bold"
+                    >
+                      {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Salvar Alterações
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setContactForm(buildContactForm(overview));
+                        setIsEditing(false);
+                      }}
+                      disabled={isSaving}
+                      className="font-bold"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Currículo</CardTitle>
-                <CardDescription>
-                  Envie uma versão nova do seu currículo em PDF.
-                </CardDescription>
+            {/* Resume Upload Card */}
+            <Card className="border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-right-4 delay-150 duration-500">
+              <CardHeader className="py-4">
+                <CardTitle className="text-base font-bold text-[hsl(var(--text))]">Atualizar Currículo</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-xl border border-dashed border-border bg-background/70 p-4">
-                  <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-5 w-5 text-primary" />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {overview.latest_resume?.file_name || "Nenhum currículo enviado"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {overview.latest_resume
-                          ? `Último envio em ${formatDate(overview.latest_resume.uploaded_at)}`
-                          : "Ao enviar um currículo novo, a extração começa automaticamente."}
-                      </p>
-                    </div>
+              <CardContent className="space-y-5">
+                <div className="flex items-center gap-4 rounded-2xl border border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface-muted)/0.1)] p-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm text-[hsl(var(--primary))]">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-[hsl(var(--text))]">
+                      {overview.latest_resume?.file_name || "Nenhum arquivo"}
+                    </p>
+                    <p className="text-[10px] font-medium text-[hsl(var(--text-muted))]">
+                      {overview.latest_resume ? `Enviado em ${formatDate(overview.latest_resume.uploaded_at)}` : "Formatos aceitos: PDF"}
+                    </p>
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <Input
+                <div className="relative">
+                  <input
                     type="file"
+                    id="resume-upload"
+                    className="hidden"
                     accept=".pdf,application/pdf"
                     onChange={handleResumeFileChange}
                   />
-                  {resumeFile ? (
-                    <p className="text-xs text-muted-foreground">{resumeFile.name}</p>
-                  ) : null}
+                  <label 
+                    htmlFor="resume-upload" 
+                    className="flex h-24 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[hsl(var(--border)/0.6)] bg-[hsl(var(--bg))] transition-all hover:bg-[hsl(var(--surface-muted)/0.1)] hover:border-[hsl(var(--primary)/0.5)]"
+                  >
+                    <Upload className="mb-2 h-6 w-6 text-[hsl(var(--text-muted))]" />
+                    <span className="text-xs font-bold text-[hsl(var(--text-muted))]">
+                      {resumeFile ? resumeFile.name : "Clique para selecionar novo PDF"}
+                    </span>
+                  </label>
                 </div>
 
-                <Button onClick={() => void handleUploadResume()} disabled={isUploading}>
-                  {isUploading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="mr-2 h-4 w-4" />
-                  )}
-                  Enviar novo currículo
+                <Button 
+                  onClick={() => void handleUploadResume()} 
+                  disabled={isUploading || !resumeFile}
+                  className="w-full bg-[hsl(var(--primary))] font-bold disabled:opacity-50"
+                >
+                  {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                  Fazer Upload Agora
                 </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Resumo do cadastro</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
-                <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-background/70 p-4">
-                  <Mail className="mt-0.5 h-4 w-4 text-primary" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">E-mail atual</p>
-                    <p className="text-sm font-medium text-foreground">
-                      {overview.candidate.email || "Não informado"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-background/70 p-4">
-                  <Phone className="mt-0.5 h-4 w-4 text-primary" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Telefone atual</p>
-                    <p className="text-sm font-medium text-foreground">
-                      {overview.candidate.phone ? formatPhone(overview.candidate.phone) : "Não informado"}
-                    </p>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>

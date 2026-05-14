@@ -276,7 +276,7 @@ async def test_bulk_update_normalizes_flattened_non_standard_payload(
     headers = await _auth_headers(client, "bulk-update-normalized@test.com", "password123")
     power_bi = await _create_skill(db_session, "Power BI", "power bi")
     etl = await _create_skill(db_session, "ETL", "etl")
-    job = await _create_job(db_session, recruiter.id, title="Analista BI Flexível", job_area="data", location="Campinas Z")
+    job = await _create_job(db_session, recruiter.id, title="Analista BI Flexível", job_area="dados", location="Campinas Z")
 
     response = await client.patch(
         "/api/v1/jobs/bulk-update",

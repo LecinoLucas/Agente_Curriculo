@@ -75,4 +75,54 @@ describe("jobFormConfig", () => {
       expect(payload.job_area).toBeNull();
     });
   });
+
+  describe("behavioral_template_id", () => {
+    it("should include behavioral_template_id in create payload if set", () => {
+      const form: JobFormValues = {
+        ...EMPTY_FORM,
+        title: "Test",
+        description: "Test",
+        behavioral_template_id: "template-123",
+      };
+
+      const payload = buildCreateJobPayload(form);
+      expect(payload.behavioral_template_id).toBe("template-123");
+    });
+
+    it("should not include behavioral_template_id in create payload if null", () => {
+      const form: JobFormValues = {
+        ...EMPTY_FORM,
+        title: "Test",
+        description: "Test",
+        behavioral_template_id: null,
+      };
+
+      const payload = buildCreateJobPayload(form);
+      expect(payload.behavioral_template_id).toBeUndefined();
+    });
+
+    it("should include behavioral_template_id in update payload if set", () => {
+      const form: JobFormValues = {
+        ...EMPTY_FORM,
+        title: "Test",
+        description: "Test",
+        behavioral_template_id: "template-456",
+      };
+
+      const payload = buildUpdateJobPayload(form);
+      expect(payload.behavioral_template_id).toBe("template-456");
+    });
+
+    it("should set behavioral_template_id to null in update payload if not set", () => {
+      const form: JobFormValues = {
+        ...EMPTY_FORM,
+        title: "Test",
+        description: "Test",
+        behavioral_template_id: null,
+      };
+
+      const payload = buildUpdateJobPayload(form);
+      expect(payload.behavioral_template_id).toBeNull();
+    });
+  });
 });

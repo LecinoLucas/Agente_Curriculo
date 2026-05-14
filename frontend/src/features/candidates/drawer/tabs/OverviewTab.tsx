@@ -1,5 +1,8 @@
 import type { CandidateOverview, Job } from "../../../../types/domain";
 import { Section, StatusCard } from "../components/DrawerSectionHelpers";
+import { CandidateDecisionSummaryCard } from "../components/CandidateDecisionSummaryCard";
+import { CandidateFinalDecisionSummaryCard } from "../components/CandidateFinalDecisionSummaryCard";
+import { CandidateHiringDecisionPanel } from "../components/CandidateHiringDecisionPanel";
 
 interface OverviewTabProps {
   overview: CandidateOverview;
@@ -35,19 +38,48 @@ export function OverviewTab({
       ? activePipelineEntry?.candidate_status ?? "Não vinculado"
       : latestLinkedEntry?.candidate_status ?? "Não vinculado";
   const relationshipStatusDescription = hasActiveRelationship ? "Estado no pipeline" : "Candidatura encerrada";
+
+  const activeJobDecision = overview.active_job_decision;
   const latestAnalysisLabel =
-    overview.latest_analysis?.status === "completed"
-      ? "Análise concluída"
-      : overview.latest_analysis?.status === "failed"
-        ? "Falha na análise"
-        : overview.latest_analysis?.status === "processing" ||
-            overview.latest_analysis?.status === "pending" ||
-            overview.latest_analysis?.status === "retry_scheduled"
-          ? "Analisando com IA"
-          : "Aguardando análise";
+    activeJobDecision?.score_status === "no_active_job"
+      ? "Nenhuma vaga ativa"
+      : activeJobDecision?.score_status === "waiting_analysis"
+        ? "Aguardando análise"
+        : activeJobDecision?.score_status === "analysis_processing"
+          ? "Análise em andamento"
+          : activeJobDecision?.score_status === "score_ready"
+            ? "Aderência pronta"
+            : activeJobDecision?.score_status === "score_stale"
+              ? "Aderência desatualizada"
+              : activeJobDecision?.score_status === "analysis_failed"
+                ? "Falha na análise"
+                : activeJobDecision?.score_status === "needs_repair"
+                  ? "Inconsistência detectada"
+                  : "Aguardando análise";
 
   return (
     <div className="flex flex-col gap-5 p-5">
+      {hasLinkedJobs && activeJobId ? (
+        <>
+          <CandidateFinalDecisionSummaryCard
+            jobId={activeJobId}
+            candidateId={overview.candidate.id}
+          />
+          <CandidateHiringDecisionPanel
+            jobId={activeJobId}
+            candidateId={overview.candidate.id}
+          />
+        </>
+      ) : null}
+
+      {hasLinkedJobs && (
+        <CandidateDecisionSummaryCard
+          activeJobDecision={overview.active_job_decision}
+          activeJobTitle={activeJob?.title ?? null}
+          candidateName={overview.candidate.full_name}
+        />
+      )}
+
       {!hasLinkedJobs ? (
         <section className="rounded-2xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

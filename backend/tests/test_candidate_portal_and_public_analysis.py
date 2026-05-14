@@ -23,14 +23,6 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.database.models.candidate_auth_token_model import (
     CandidateAuthTokenModel,
 )
-from src.infrastructure.database.models.assessment_model import (
-    AssessmentOptionModel,
-    AssessmentQuestionModel,
-    AssessmentTemplateModel,
-    CandidateAssessmentAnswerModel,
-    CandidateAssessmentAssignmentModel,
-    JobAssessmentModel,
-)
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
@@ -147,48 +139,6 @@ async def _create_published_job(db_session: AsyncSession, *, title: str) -> JobM
     return job
 
 
-async def _attach_behavioral_assessment(
-    db_session: AsyncSession,
-    *,
-    job_id: UUID,
-    assessment_type: str,
-    title: str,
-) -> tuple[AssessmentTemplateModel, AssessmentQuestionModel, AssessmentOptionModel]:
-    template = AssessmentTemplateModel(
-        id=uuid4(),
-        title=title,
-        description="Avaliação comportamental",
-        type=assessment_type,
-        status="active",
-        version=1,
-    )
-    question = AssessmentQuestionModel(
-        id=uuid4(),
-        template_id=template.id,
-        question_text="Como você prefere trabalhar?",
-        question_type="single_choice",
-        required=True,
-        order_index=1,
-    )
-    option = AssessmentOptionModel(
-        id=uuid4(),
-        question_id=question.id,
-        option_text="Em equipe",
-        order_index=1,
-    )
-    link = JobAssessmentModel(
-        id=uuid4(),
-        job_id=job_id,
-        template_id=template.id,
-        required=True,
-        trigger_stage="entry",
-        order_index=1 if assessment_type == "behavioral_test" else 2,
-    )
-    db_session.add_all([template, question, option, link])
-    await db_session.commit()
-    return template, question, option
-
-
 @pytest.mark.asyncio
 async def test_login_rejects_invalid_credentials_with_generic_message(
     client: AsyncClient,
@@ -214,61 +164,6 @@ async def test_login_rejects_invalid_credentials_with_generic_message(
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert response.json()["detail"] == "E-mail ou senha inválidos."
-
-
-@pytest.mark.asyncio
-async def test_recruiter_creates_behavioral_templates_and_attaches_to_job(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    published_job,
-) -> None:
-    await _create_active_user(db_session, "assessment-admin@example.com", "password123", UserRole.ADMIN)
-    headers = await _auth_headers(client, "assessment-admin@example.com", "password123")
-
-    template_response = await client.post(
-        "/api/v1/admin/assessments/templates",
-        headers=headers,
-        json={
-            "title": "Teste comportamental",
-            "description": "Avaliação estruturada",
-            "type": "behavioral_test",
-            "status": "active",
-            "questions": [
-                {
-                    "question_text": "Como você decide sob pressão?",
-                    "question_type": "single_choice",
-                    "required": True,
-                    "order_index": 1,
-                    "options": [
-                        {"option_text": "Analiso dados antes de agir", "order_index": 1},
-                        {"option_text": "Decido rápido com base na experiência", "order_index": 2},
-                    ],
-                }
-            ],
-        },
-    )
-    assert template_response.status_code == status.HTTP_201_CREATED
-    assert template_response.json()["type"] == "behavioral_test"
-
-    survey_response = await client.post(
-        "/api/v1/admin/assessments/templates",
-        headers=headers,
-        json={
-            "title": "Pesquisa comportamental",
-            "type": "behavioral_survey",
-            "status": "draft",
-        },
-    )
-    assert survey_response.status_code == status.HTTP_201_CREATED
-    assert survey_response.json()["type"] == "behavioral_survey"
-
-    attach_response = await client.post(
-        f"/api/v1/jobs/{published_job.id}/assessments",
-        headers=headers,
-        json={"template_id": template_response.json()["id"], "required": True},
-    )
-    assert attach_response.status_code == status.HTTP_201_CREATED
-    assert attach_response.json()["job_id"] == str(published_job.id)
 
 
 @pytest.mark.asyncio
@@ -413,158 +308,6 @@ async def test_public_application_with_job_creates_pending_analysis_and_pipeline
     assert analysis is not None
     assert analysis["status"] == "pending"
     assert analysis["job_id"] == published_job.id
-
-
-@pytest.mark.asyncio
-async def test_public_application_with_job_creates_behavioral_assignment_and_timeline(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    published_job,
-    valid_pdf_bytes: bytes,
-) -> None:
-    await _create_ai_config(db_session)
-    await _attach_behavioral_assessment(
-        db_session,
-        job_id=published_job.id,
-        assessment_type="behavioral_test",
-        title="Teste comportamental",
-    )
-
-    response = await client.post(
-        "/api/v1/public/candidates/apply",
-        data={
-            "full_name": "Bianca Avaliacao",
-            "cpf": "52998224725",
-            "email": "bianca.avaliacao@example.com",
-            "phone": "11987654321",
-            "city": "São Paulo",
-            "state": "SP",
-            "salary_expectation": "8000",
-            "desired_contract_type": "CLT",
-            "works_at_marajo_group": False,
-            "job_id": str(published_job.id),
-            "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
-        },
-        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
-    )
-
-    assert response.status_code == status.HTTP_201_CREATED
-    overview_response = await client.get("/api/v1/public/candidate-portal/overview")
-    assert overview_response.status_code == status.HTTP_200_OK
-    overview = overview_response.json()
-    assert overview["assessments"][0]["type"] == "behavioral_test"
-    assert overview["assessments"][0]["status"] == "pending"
-    timeline_keys = [step["key"] for step in overview["public_timeline"]["steps"]]
-    assert "behavioral_test" in timeline_keys
-    behavioral_step = next(step for step in overview["public_timeline"]["steps"] if step["key"] == "behavioral_test")
-    assert behavioral_step["status"] == "current"
-    assert "score" not in overview["assessments"][0]
-
-
-@pytest.mark.asyncio
-async def test_public_application_talent_pool_does_not_create_job_assessments(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    published_job,
-    valid_pdf_bytes: bytes,
-) -> None:
-    await _attach_behavioral_assessment(
-        db_session,
-        job_id=published_job.id,
-        assessment_type="behavioral_survey",
-        title="Pesquisa comportamental",
-    )
-
-    response = await client.post(
-        "/api/v1/public/candidates/apply",
-        data={
-            "full_name": "Talento Sem Vaga",
-            "cpf": "39053344705",
-            "email": "talento.semvaga@example.com",
-            "phone": "11987654321",
-            "city": "São Paulo",
-            "state": "SP",
-            "salary_expectation": "8000",
-            "desired_contract_type": "CLT",
-            "works_at_marajo_group": False,
-            "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
-        },
-        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
-    )
-
-    assert response.status_code == status.HTTP_201_CREATED
-    assignment_count = await db_session.scalar(sa.select(sa.func.count()).select_from(CandidateAssessmentAssignmentModel))
-    assert assignment_count == 0
-
-
-@pytest.mark.asyncio
-async def test_candidate_can_submit_own_assessment_once_and_cannot_access_other_candidate(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    published_job,
-    valid_pdf_bytes: bytes,
-) -> None:
-    _, question, option = await _attach_behavioral_assessment(
-        db_session,
-        job_id=published_job.id,
-        assessment_type="behavioral_survey",
-        title="Pesquisa comportamental",
-    )
-
-    response = await client.post(
-        "/api/v1/public/candidates/apply",
-        data={
-            "full_name": "Carla Pesquisa",
-            "cpf": "96826830418",
-            "email": "carla.pesquisa@example.com",
-            "phone": "11987654321",
-            "city": "São Paulo",
-            "state": "SP",
-            "salary_expectation": "8000",
-            "desired_contract_type": "CLT",
-            "works_at_marajo_group": False,
-            "job_id": str(published_job.id),
-            "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
-        },
-        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
-    )
-    assert response.status_code == status.HTTP_201_CREATED
-    assignment_id = (await client.get("/api/v1/public/candidate-portal/overview")).json()["assessments"][0]["id"]
-
-    detail_response = await client.post(f"/api/v1/public/candidate-portal/assessments/{assignment_id}/start")
-    assert detail_response.status_code == status.HTTP_200_OK
-    assert detail_response.json()["questions"][0]["id"] == str(question.id)
-
-    submit_response = await client.post(
-        f"/api/v1/public/candidate-portal/assessments/{assignment_id}/submit",
-        json={"answers": [{"question_id": str(question.id), "option_id": str(option.id)}]},
-    )
-    assert submit_response.status_code == status.HTTP_200_OK
-    assert submit_response.json()["status"] == "completed"
-    assert await db_session.scalar(sa.select(sa.func.count()).select_from(CandidateAssessmentAnswerModel)) == 1
-
-    duplicate_response = await client.post(
-        f"/api/v1/public/candidate-portal/assessments/{assignment_id}/submit",
-        json={"answers": [{"question_id": str(question.id), "option_id": str(option.id)}]},
-    )
-    assert duplicate_response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-    other_candidate = await _create_candidate(
-        db_session,
-        full_name="Outro Candidato",
-        email="outro.assessment@example.com",
-        cpf="97985377344",
-    )
-    await _create_portal_session(db_session, other_candidate.id, "other-token")
-    client.cookies.set("candidate_portal_token", "other-token")
-    cross_response = await client.get(f"/api/v1/public/candidate-portal/assessments/{assignment_id}")
-    assert cross_response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.asyncio
@@ -1060,19 +803,13 @@ async def test_portal_overview_shows_transferred_active_job_only(
 
 
 @pytest.mark.asyncio
-async def test_transfer_endpoint_updates_overview_analysis_and_assessments_for_new_active_job(
+async def test_transfer_endpoint_updates_overview_analysis_for_new_active_job(
     client: AsyncClient,
     db_session: AsyncSession,
     published_job: JobModel,
     valid_pdf_bytes: bytes,
 ) -> None:
     await _create_ai_config(db_session)
-    await _attach_behavioral_assessment(
-        db_session,
-        job_id=published_job.id,
-        assessment_type="behavioral_test",
-        title="Teste da vaga original",
-    )
     response = await client.post(
         "/api/v1/public/candidates/apply",
         data={
@@ -1096,12 +833,6 @@ async def test_transfer_endpoint_updates_overview_analysis_and_assessments_for_n
     candidate_id = response.json()["candidate_id"]
 
     destination_job = await _create_published_job(db_session, title="Vaga Destino Oficial")
-    await _attach_behavioral_assessment(
-        db_session,
-        job_id=destination_job.id,
-        assessment_type="behavioral_survey",
-        title="Pesquisa da vaga destino",
-    )
 
     await _create_active_user(db_session, "transfer-admin@example.com", "password123", UserRole.ADMIN)
     headers = await _auth_headers(client, "transfer-admin@example.com", "password123")
@@ -1128,10 +859,6 @@ async def test_transfer_endpoint_updates_overview_analysis_and_assessments_for_n
     assert overview_payload["active_application"]["job_id"] == str(destination_job.id)
     assert overview_payload["active_application"]["job_title"] == "Vaga Destino Oficial"
     assert overview_payload["active_application"]["current_analysis_id"] is not None
-
-    assessment_titles = [item["title"] for item in overview_payload["assessments"]]
-    assert assessment_titles == ["Pesquisa da vaga destino"]
-    assert "Teste da vaga original" not in assessment_titles
 
     history_jobs = {item["job_id"] for item in overview_payload["application_history"]}
     assert str(published_job.id) in history_jobs

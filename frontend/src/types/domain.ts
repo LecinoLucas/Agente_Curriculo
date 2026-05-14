@@ -108,6 +108,22 @@ export type CandidateActiveJobOverview = {
   status: string;
 };
 
+export type CandidateActiveJobDecision = {
+  score_status:
+    | "no_active_job"
+    | "waiting_analysis"
+    | "analysis_processing"
+    | "score_ready"
+    | "score_stale"
+    | "analysis_failed"
+    | "needs_repair";
+  analysis_status: string | null;
+  current_analysis_id: string | null;
+  match_score: number | null;
+  warnings: string[];
+  next_action: "none" | "wait_analysis" | "review_candidate" | "request_analysis" | "run_repair";
+};
+
 export type CandidateOverview = {
   candidate: Candidate;
   resumes: CandidateResumeOverview[];
@@ -117,92 +133,7 @@ export type CandidateOverview = {
   active_job_id: string | null;
   active_job: CandidateActiveJobOverview | null;
   pipeline_entries: CandidatePipelineEntryOverview[];
-  assessments: RecruiterCandidateAssessment[];
-};
-
-export type CandidateAssessmentSummary = {
-  id: string;
-  type: "behavioral_test" | "behavioral_survey";
-  title: string;
-  description: string | null;
-  status: "pending" | "in_progress" | "completed" | "expired" | "cancelled";
-  required: boolean;
-  due_at: string | null;
-  assigned_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  result_summary: string | null;
-};
-
-export type RecruiterAssessmentAnswer = {
-  id: string;
-  question_id: string;
-  question_text: string;
-  question_type: "single_choice" | "multiple_choice" | "scale" | "text";
-  option_id: string | null;
-  option_text: string | null;
-  answer_text: string | null;
-  answer_value: unknown;
-  created_at: string;
-};
-
-export type RecruiterCandidateAssessment = CandidateAssessmentSummary & {
-  answers: RecruiterAssessmentAnswer[];
-};
-
-export type AssessmentTemplateStatus = "draft" | "active" | "archived";
-export type AssessmentType = "behavioral_test" | "behavioral_survey";
-export type AssessmentQuestionType = "single_choice" | "multiple_choice" | "scale" | "text";
-
-export type AssessmentOption = {
-  id: string;
-  option_text: string;
-  score_value: number | null;
-  metadata: Record<string, unknown> | null;
-  order_index: number;
-};
-
-export type AssessmentQuestion = {
-  id: string;
-  question_text: string;
-  question_type: AssessmentQuestionType;
-  required: boolean;
-  order_index: number;
-  metadata: Record<string, unknown> | null;
-  options: AssessmentOption[];
-};
-
-export type AssessmentTemplate = {
-  id: string;
-  title: string;
-  description: string | null;
-  type: AssessmentType;
-  status: AssessmentTemplateStatus;
-  version: number;
-  question_count: number;
-  created_at: string;
-  updated_at: string;
-};
-
-export type AssessmentTemplateDetail = AssessmentTemplate & {
-  questions: AssessmentQuestion[];
-  job_link_count?: number;
-  assignment_count?: number;
-  is_used?: boolean;
-};
-
-export type JobAssessment = {
-  id: string;
-  job_id: string;
-  template_id: string;
-  title: string;
-  type: AssessmentType;
-  template_status: AssessmentTemplateStatus;
-  template_version: number;
-  required: boolean;
-  trigger_stage: string;
-  order_index: number;
-  created_at: string;
+  active_job_decision: CandidateActiveJobDecision | null;
 };
 
 export type CandidatePipelineEntryOverview = {
@@ -383,6 +314,7 @@ export type Job = {
   priority: "low" | "normal" | "high" | "urgent";
   quality_score: number | null;
   quality_status: "weak" | "acceptable" | "good" | null;
+  behavioral_template_id: string | null;
   created_by: string;
   archived_at?: string | null;
   archived_by?: string | null;
@@ -762,10 +694,567 @@ export type AnalysisSummary = {
   updated_at: string;
 };
 
+export type BehavioralTemplateQuestion = {
+  id: string;
+  competency_id: string;
+  question_text: string;
+  answer_type: "text" | "scale" | "multiple_choice";
+  is_required: boolean;
+  weight: number;
+  display_order: number;
+  options_json: string[] | null;
+};
+
+export type BehavioralTemplateCompetency = {
+  id: string;
+  template_id: string;
+  name: string;
+  description: string | null;
+  weight: number;
+  display_order: number;
+  question_count: number;
+  questions?: BehavioralTemplateQuestion[];
+};
+
+export type BehavioralAssessmentTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  status: "draft" | "active" | "archived";
+  version: number;
+  competency_count: number;
+  question_count: number;
+  created_at: string;
+  updated_at: string;
+  competencies?: BehavioralTemplateCompetency[];
+};
+
 export type PaginatedResponse<T> = {
   data: T[];
   page: number;
   page_size: number;
   total: number;
   total_pages: number;
+};
+
+export type BehavioralAssignmentAnswer = {
+  answer_text: string | null;
+  answer_value: number | null;
+  selected_options_json: string[] | null;
+  updated_at?: string;
+};
+
+export type BehavioralAssignmentQuestion = {
+  id: string;
+  question_text: string;
+  answer_type: "text" | "scale" | "multiple_choice";
+  is_required: boolean;
+  display_order: number;
+  options_json: string[] | null;
+  answer: BehavioralAssignmentAnswer | null;
+};
+
+export type BehavioralAssignmentCompetency = {
+  id: string;
+  name: string;
+  description: string | null;
+  display_order: number;
+  questions: BehavioralAssignmentQuestion[];
+};
+
+export type BehavioralAssignmentDetailResponse = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  template_id: string;
+  template_name: string;
+  job_title?: string | null;
+  status: "pending" | "in_progress" | "submitted" | "expired" | "cancelled";
+  assigned_at: string;
+  started_at: string | null;
+  submitted_at: string | null;
+  expires_at?: string | null;
+  answered_count: number;
+  question_count: number;
+  competencies: BehavioralAssignmentCompetency[];
+};
+
+export type BehavioralCompetencySignal = {
+  competency: string;
+  signal: "weak" | "moderate" | "strong";
+  evidence: string;
+  concerns: string[];
+};
+
+export type BehavioralRiskFlag = {
+  code: string;
+  message: string;
+};
+
+export type BehavioralAIEvaluationResponse = {
+  id: string;
+  assignment_id: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  confidence?: "low" | "medium" | "high" | null;
+  summary?: string | null;
+  strengths?: string[] | null;
+  concerns?: string[] | null;
+  competency_signals?: BehavioralCompetencySignal[] | null;
+  suggested_interview_questions?: string[] | null;
+  risk_flags?: BehavioralRiskFlag[] | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+};
+
+export type InterviewFinalRecommendation =
+  | "strong_yes"
+  | "yes"
+  | "neutral"
+  | "no"
+  | "strong_no";
+
+export type InterviewScorecardStatus = "draft" | "submitted";
+
+export type InterviewScorecardItem = {
+  id: string;
+  scorecard_id: string;
+  competency_name: string;
+  question_text: string | null;
+  rating: number | null;
+  evidence: string | null;
+  weight: number | string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InterviewScorecard = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  interview_id: string | null;
+  evaluator_id: string | null;
+  status: InterviewScorecardStatus;
+  final_recommendation: InterviewFinalRecommendation | null;
+  overall_notes: string | null;
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  items: InterviewScorecardItem[];
+};
+
+export type InterviewScorecardItemInput = {
+  id?: string | null;
+  competency_name: string;
+  question_text?: string | null;
+  rating?: number | null;
+  evidence?: string | null;
+  weight?: number;
+  display_order?: number;
+};
+
+export type InterviewScorecardPayload = {
+  interview_id?: string | null;
+  final_recommendation?: InterviewFinalRecommendation | null;
+  overall_notes?: string | null;
+  items?: InterviewScorecardItemInput[];
+};
+
+export type InterviewScorecardEnvelope = {
+  scorecard: InterviewScorecard | null;
+  suggested_behavioral_questions: string[];
+};
+
+export type CandidateFinalDecisionReadinessStatus =
+  | "missing_job_match"
+  | "waiting_behavioral_assessment"
+  | "waiting_behavioral_ai"
+  | "waiting_interview_scorecard"
+  | "ready_for_human_decision"
+  | "needs_attention";
+
+export type CandidateFinalDecisionSummary = {
+  candidate_id: string;
+  job_id: string;
+  active_job_decision: {
+    score_status: string;
+    match_score: number | null;
+    freshness_status: "current" | "stale" | "missing";
+    warnings: string[];
+  };
+  behavioral_assessment: {
+    template_required: boolean;
+    assignment_status: string | null;
+    answered_count: number;
+    question_count: number;
+    submitted_at: string | null;
+    ai_evaluation_status: string | null;
+    ai_confidence: string | null;
+    ai_summary: string | null;
+  };
+  interview_scorecard: {
+    status: InterviewScorecardStatus | null;
+    final_recommendation: InterviewFinalRecommendation | null;
+    average_rating: number | null;
+    submitted_at: string | null;
+  };
+  decision_readiness: {
+    status: CandidateFinalDecisionReadinessStatus;
+    missing_items: string[];
+    warnings: string[];
+    next_action: string;
+  };
+};
+
+export type HiringDecisionStatus = "draft" | "submitted" | "superseded";
+
+export type HiringDecisionOutcome =
+  | "advance"
+  | "hold"
+  | "reject"
+  | "hire"
+  | "request_another_interview"
+  | "keep_under_review";
+
+export type HiringDecisionReasonCode =
+  | "strong_fit"
+  | "partial_fit"
+  | "missing_required_skill"
+  | "salary_mismatch"
+  | "availability_mismatch"
+  | "behavioral_concern"
+  | "interview_concern"
+  | "better_candidates"
+  | "candidate_withdrew"
+  | "other";
+
+export type HiringDecisionPipelineStage =
+  | "entry"
+  | "screening"
+  | "hr_interview"
+  | "technical_interview"
+  | "final"
+  | "offer"
+  | "hired"
+  | "rejected";
+
+export type HiringDecisionPipelineActionPayload = {
+  enabled: boolean;
+  target_stage?: HiringDecisionPipelineStage | null;
+  reason?: string | null;
+};
+
+export type HiringDecisionPayload = {
+  decision_outcome: HiringDecisionOutcome;
+  reason_code: HiringDecisionReasonCode;
+  notes?: string | null;
+  submit?: boolean;
+  pipeline_action?: HiringDecisionPipelineActionPayload | null;
+};
+
+export type HiringDecision = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  pipeline_id: string | null;
+  decided_by: string | null;
+  decision_status: HiringDecisionStatus;
+  decision_outcome: HiringDecisionOutcome;
+  reason_code: HiringDecisionReasonCode;
+  notes: string | null;
+  based_on_decision_summary_snapshot: Record<string, unknown> | null;
+  based_on_scorecard_id: string | null;
+  based_on_behavioral_assignment_id: string | null;
+  based_on_behavioral_ai_evaluation_id: string | null;
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+  pipeline_transition_id?: string | null;
+};
+
+export type HiringDecisionEnvelope = {
+  decision: HiringDecision | null;
+};
+
+export type HiringDecisionHistory = {
+  decisions: HiringDecision[];
+};
+
+export type PreAdmissionStatus =
+  | "draft"
+  | "offer_preparing"
+  | "offer_sent"
+  | "offer_accepted"
+  | "offer_declined"
+  | "documents_pending"
+  | "documents_received"
+  | "ready_for_admission"
+  | "admitted"
+  | "cancelled";
+
+export type PreAdmissionChecklistItemType =
+  | "cpf"
+  | "rg"
+  | "comprovante_endereco"
+  | "carteira_trabalho"
+  | "pis"
+  | "titulo_eleitor"
+  | "certificado_reservista"
+  | "exame_admissional"
+  | "dados_bancarios"
+  | "other";
+
+export type PreAdmissionChecklistItemStatus =
+  | "pending"
+  | "received"
+  | "approved"
+  | "rejected"
+  | "waived";
+
+export type PreAdmissionDocumentStatus =
+  | "uploaded"
+  | "approved"
+  | "rejected"
+  | "replaced";
+
+export type PreAdmissionDocument = {
+  id: string;
+  case_id: string;
+  checklist_item_id: string;
+  candidate_id: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  status: PreAdmissionDocumentStatus;
+  uploaded_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  review_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PreAdmissionChecklistItem = {
+  id: string;
+  case_id: string;
+  item_type: PreAdmissionChecklistItemType;
+  title: string;
+  status: PreAdmissionChecklistItemStatus;
+  required: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  documents?: PreAdmissionDocument[];
+};
+
+export type PreAdmissionCase = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  hiring_decision_id: string;
+  status: PreAdmissionStatus;
+  salary_offer: string | number | null;
+  start_date: string | null;
+  work_model: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  checklist_items: PreAdmissionChecklistItem[];
+};
+
+export type PreAdmissionEvent = {
+  id: string;
+  case_id: string;
+  event_type: string;
+  actor_id: string | null;
+  payload_json: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type PreAdmissionEnvelope = {
+  case: PreAdmissionCase | null;
+  hiring_decision_outcome: HiringDecisionOutcome | string | null;
+  can_create: boolean;
+};
+
+export type PreAdmissionPayload = {
+  salary_offer?: string | number | null;
+  start_date?: string | null;
+  work_model?: string | null;
+  notes?: string | null;
+};
+
+export type PreAdmissionUpdatePayload = PreAdmissionPayload & {
+  status?: PreAdmissionStatus | null;
+};
+
+export type PreAdmissionChecklistItemPayload = {
+  item_type: PreAdmissionChecklistItemType;
+  title: string;
+  status?: PreAdmissionChecklistItemStatus;
+  required?: boolean;
+  notes?: string | null;
+};
+
+export type PreAdmissionChecklistItemUpdatePayload = Partial<PreAdmissionChecklistItemPayload>;
+
+export type PreAdmissionEventsResponse = {
+  events: PreAdmissionEvent[];
+};
+
+export type PreAdmissionDocumentsResponse = {
+  documents: PreAdmissionDocument[];
+};
+
+// Admission Packages
+export type AdmissionPackageStatus =
+  | "draft"
+  | "ready_for_review"
+  | "approved_for_export"
+  | "exported"
+  | "cancelled";
+
+export type AdmissionPackageValidationError = {
+  field: string;
+  message: string;
+};
+
+export type AdmissionPackageCandidateData = {
+  id: string | null;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  cpf: string | null;
+};
+
+export type AdmissionPackageJobData = {
+  id: string | null;
+  title: string | null;
+  company: string | null;
+  department?: string | null;
+  location?: string | null;
+};
+
+export type AdmissionPackagePreAdmissionData = {
+  case_id: string;
+  status: string;
+  start_date: string | null;
+  salary_offer: number | null;
+  work_model: string | null;
+};
+
+export type AdmissionPackageDocumentData = {
+  checklist_item_id: string;
+  title: string;
+  status: PreAdmissionChecklistItemStatus;
+  document_id: string;
+  mime_type: string;
+  size_bytes: number;
+};
+
+export type AdmissionPackageDecisionData = {
+  hiring_decision_id: string | null;
+  decision_outcome: HiringDecisionOutcome | string | null;
+  reason_code: string | null;
+  submitted_at: string | null;
+};
+
+export type AdmissionPackagePayload = {
+  candidate: AdmissionPackageCandidateData;
+  job: AdmissionPackageJobData;
+  pre_admission: AdmissionPackagePreAdmissionData;
+  documents: AdmissionPackageDocumentData[];
+  decision: AdmissionPackageDecisionData;
+};
+
+export type AdmissionPackage = {
+  id: string;
+  case_id: string;
+  candidate_id: string;
+  job_id: string;
+  status: AdmissionPackageStatus;
+  payload: AdmissionPackagePayload;
+  validation_errors: AdmissionPackageValidationError[] | null;
+  created_by: string | null;
+  approved_by: string | null;
+  exported_by: string | null;
+  created_at: string;
+  updated_at: string;
+  approved_at: string | null;
+  exported_at: string | null;
+  cancelled_at: string | null;
+};
+
+export type ErpIntegrationAttemptMode = "dry_run" | "real";
+
+export type ErpIntegrationAttemptStatus =
+  | "draft"
+  | "validation_failed"
+  | "ready"
+  | "simulated"
+  | "failed"
+  | "sent";
+
+export type ErpDryRunPayloadPreview = {
+  provider: string;
+  mode: ErpIntegrationAttemptMode;
+  candidate: {
+    name: string | null;
+    email: string | null;
+    cpf: string | null;
+  };
+  job: {
+    title: string | null;
+    department: string | null;
+  };
+  admission: {
+    start_date: string | null;
+    salary_offer: number | null;
+    work_model: string | null;
+  };
+  decision: {
+    hiring_decision_id: string | null;
+  };
+  documents: Array<{
+    title: string | null;
+    status: string | null;
+    document_id: string | null;
+  }>;
+};
+
+export type ErpIntegrationAttemptValidationError = {
+  field: string;
+  message: string;
+};
+
+export type ErpIntegrationAttempt = {
+  id: string;
+  package_id: string;
+  case_id: string;
+  candidate_id: string;
+  job_id: string;
+  provider: string;
+  mode: ErpIntegrationAttemptMode;
+  status: ErpIntegrationAttemptStatus;
+  request_payload_json: ErpDryRunPayloadPreview;
+  response_payload_json: {
+    success?: boolean;
+    external_reference?: string;
+    message?: string;
+    [key: string]: unknown;
+  } | null;
+  validation_errors_json: ErpIntegrationAttemptValidationError[] | null;
+  error_message: string | null;
+  attempted_by: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type ErpIntegrationAttemptListResponse = {
+  attempts: ErpIntegrationAttempt[];
 };
