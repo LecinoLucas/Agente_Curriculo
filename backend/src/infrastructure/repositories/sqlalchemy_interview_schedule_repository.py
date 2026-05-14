@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
+from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.job_model import JobModel
 
 AGENDA_TIMEZONE = "America/Recife"
@@ -115,6 +116,13 @@ class SQLAlchemyInterviewScheduleRepository:
                 InterviewScheduleModel.created_at,
                 InterviewScheduleModel.updated_at,
                 InterviewScheduleModel.cancelled_at,
+                InterviewScheduleModel.calendar_provider,
+                InterviewScheduleModel.calendar_sync_status,
+                InterviewScheduleModel.calendar_sync_error,
+                InterviewScheduleModel.calendar_synced_at,
+                InterviewScheduleModel.meeting_provider,
+                InterviewScheduleModel.external_calendar_html_link,
+                InterviewScheduleModel.external_calendar_event_id,
             )
             .join(CandidateModel, InterviewScheduleModel.candidate_id == CandidateModel.id)
             .outerjoin(JobModel, InterviewScheduleModel.job_id == JobModel.id)
@@ -289,6 +297,18 @@ class SQLAlchemyInterviewScheduleRepository:
         )
         row = result.mappings().first()
         return dict(row) if row is not None else None
+
+    async def has_submitted_scorecard(self, schedule_id: UUID) -> bool:
+        return bool(
+            await self._session.scalar(
+                sa.select(sa.literal(True))
+                .where(
+                    InterviewScorecardModel.interview_id == schedule_id,
+                    InterviewScorecardModel.status == "submitted",
+                )
+                .limit(1)
+            )
+        )
 
     async def find_conflicting_schedule(
         self,

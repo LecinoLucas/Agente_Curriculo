@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     SKILL_CATALOG_SOURCE: str = "database"
     SKILL_CATALOG_COMPARE_ON_MATCH: bool = False
     ERP_INTEGRATION_MODE: str = "dry_run"
+    PRE_ADMISSION_DOCUMENT_MAX_BYTES: int = 10 * 1024 * 1024
+
+    # Protheus ERP (real adapter for homologation)
+    PROTHEUS_BASE_URL: str = ""
+    PROTHEUS_AUTH_MODE: str = "basic"  # "basic" or "token"
+    PROTHEUS_USERNAME: str = ""
+    PROTHEUS_PASSWORD: str = ""
+    PROTHEUS_TOKEN: str = ""
+    PROTHEUS_TIMEOUT_SECONDS: float = 30.0
+    ERP_ALLOW_REAL_SEND: bool = False  # CRITICAL: only true in homologation
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"

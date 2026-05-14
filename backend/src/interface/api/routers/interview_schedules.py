@@ -19,9 +19,13 @@ from src.interface.api.dependencies import InternalUser, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.interview_schedule_schemas import (
     AgendaKpiResponse,
+    CandidateJobInterviewCreate,
     InterviewScheduleCreate,
     InterviewScheduleUpdate,
     InterviewScheduleCancelRequest,
+    InterviewScheduleCompleteRequest,
+    InterviewScheduleNoShowRequest,
+    InterviewScheduleRescheduleRequest,
     InterviewScheduleResponse,
 )
 
@@ -229,3 +233,181 @@ async def get_kpis(
     )
 
     return kpis
+
+
+operational_router = APIRouter(tags=["interviews"])
+
+
+@operational_router.get(
+    "/jobs/{job_id}/candidates/{candidate_id}/interviews",
+    response_model=PaginatedResponse[InterviewScheduleResponse],
+)
+async def list_candidate_job_interviews(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: InternalUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    service: InterviewScheduleService = Depends(_get_service),
+) -> PaginatedResponse[InterviewScheduleResponse]:
+    items, total = await service.list_interviews(
+        page=page,
+        page_size=page_size,
+        candidate_id=candidate_id,
+        job_id=job_id,
+    )
+    return PaginatedResponse(
+        data=[InterviewScheduleResponse(**item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size if total > 0 else 1,
+    )
+
+
+@operational_router.post(
+    "/jobs/{job_id}/candidates/{candidate_id}/interviews",
+    response_model=InterviewScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_candidate_job_interview(
+    job_id: UUID,
+    candidate_id: UUID,
+    body: CandidateJobInterviewCreate,
+    current_user: InternalUser,
+    service: InterviewScheduleService = Depends(_get_service),
+) -> InterviewScheduleResponse:
+    try:
+        schedule = await service.create_interview(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=body.pipeline_id,
+            title=body.title,
+            description=body.description,
+            public_notes=body.public_notes,
+            internal_notes=body.internal_notes,
+            scheduled_start=body.scheduled_start,
+            scheduled_end=body.scheduled_end,
+            timezone=body.timezone,
+            interview_type=body.interview_type,
+            interview_format=body.interview_format,
+            status=body.status,
+            location=body.location,
+            meeting_url=body.meeting_url,
+            interviewer_name=body.interviewer_name,
+            interviewer_email=body.interviewer_email,
+            create_google_event=body.create_google_event,
+            create_google_meet=body.create_google_meet,
+            requested_by_user_id=current_user.id,
+        )
+        details = await service.get_interview_details(schedule.id)
+        return InterviewScheduleResponse(**details)
+    except InterviewScheduleConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except InterviewScheduleValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+
+@operational_router.patch(
+    "/interviews/{interview_id}/reschedule",
+    response_model=InterviewScheduleResponse,
+)
+async def reschedule_interview(
+    interview_id: UUID,
+    body: InterviewScheduleRescheduleRequest,
+    current_user: InternalUser,
+    service: InterviewScheduleService = Depends(_get_service),
+) -> InterviewScheduleResponse:
+    try:
+        schedule = await service.reschedule_interview(
+            interview_id,
+            scheduled_start=body.scheduled_start,
+            scheduled_end=body.scheduled_end,
+            timezone=body.timezone,
+            location=body.location,
+            meeting_url=body.meeting_url,
+            interviewer_name=body.interviewer_name,
+            interviewer_email=body.interviewer_email,
+            sync_google_event=body.sync_google_event,
+            create_google_meet=body.create_google_meet,
+            requested_by_user_id=current_user.id,
+        )
+        details = await service.get_interview_details(schedule.id)
+        return InterviewScheduleResponse(**details)
+    except InterviewScheduleNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InterviewScheduleConflictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except InterviewScheduleValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+
+@operational_router.post(
+    "/interviews/{interview_id}/cancel",
+    response_model=InterviewScheduleResponse,
+)
+async def cancel_interview_operational(
+    interview_id: UUID,
+    body: InterviewScheduleCancelRequest,
+    current_user: InternalUser,
+    service: InterviewScheduleService = Depends(_get_service),
+) -> InterviewScheduleResponse:
+    try:
+        schedule = await service.cancel_interview(
+            interview_id,
+            body.cancel_reason,
+            sync_google_event=body.sync_google_event,
+            requested_by_user_id=current_user.id,
+        )
+        details = await service.get_interview_details(schedule.id)
+        return InterviewScheduleResponse(**details)
+    except InterviewScheduleNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InterviewScheduleAlreadyCancelledError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+
+@operational_router.post(
+    "/interviews/{interview_id}/complete",
+    response_model=InterviewScheduleResponse,
+)
+async def complete_interview(
+    interview_id: UUID,
+    current_user: InternalUser,
+    body: InterviewScheduleCompleteRequest | None = None,
+    service: InterviewScheduleService = Depends(_get_service),
+) -> InterviewScheduleResponse:
+    try:
+        schedule = await service.complete_interview(
+            interview_id,
+            internal_notes=body.internal_notes if body is not None else None,
+        )
+        details = await service.get_interview_details(schedule.id)
+        return InterviewScheduleResponse(**details)
+    except InterviewScheduleNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InterviewScheduleValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+
+@operational_router.post(
+    "/interviews/{interview_id}/no-show",
+    response_model=InterviewScheduleResponse,
+)
+async def mark_interview_no_show(
+    interview_id: UUID,
+    current_user: InternalUser,
+    body: InterviewScheduleNoShowRequest | None = None,
+    service: InterviewScheduleService = Depends(_get_service),
+) -> InterviewScheduleResponse:
+    try:
+        schedule = await service.mark_no_show(
+            interview_id,
+            reason=body.reason if body is not None else None,
+        )
+        details = await service.get_interview_details(schedule.id)
+        return InterviewScheduleResponse(**details)
+    except InterviewScheduleNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InterviewScheduleValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))

@@ -287,6 +287,36 @@ async def create_protheus_mock_send_attempt(
         raise
 
 
+@router.post(
+    "/admission-packages/{package_id}/erp/protheus/homolog-send",
+    response_model=ErpIntegrationAttemptResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_protheus_homolog_send_attempt(
+    package_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ErpIntegrationAttemptResponse:
+    """Send to real Protheus in homologation environment.
+
+    Security gates enforced:
+    - Only in development/staging (APP_ENV != production)
+    - Requires ERP_ALLOW_REAL_SEND=true
+    - All requests idempotent via idempotency_key
+    - Audit logged with masked secrets
+    """
+    try:
+        attempt = await _erp_service(db).create_protheus_homolog_attempt(
+            package_id=package_id,
+            user_id=current_user.id,
+        )
+        await db.commit()
+        return _to_attempt_response(attempt)
+    except Exception:
+        await db.rollback()
+        raise
+
+
 @router.get(
     "/admission-packages/{package_id}/erp/attempts",
     response_model=ErpIntegrationAttemptListResponse,

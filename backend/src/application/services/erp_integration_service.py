@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.protheus_adapter import ProtheusMockAdapter
+from src.application.services.protheus_real_adapter import ProtheusRealAdapter
 from src.application.services.protheus_payload_builder import (
     SCHEMA_VERSION,
     ProtheusPayloadBuilder,
@@ -224,6 +225,159 @@ class ErpIntegrationService:
         )
         return attempt
 
+    async def create_protheus_homolog_attempt(
+        self,
+        *,
+        package_id: UUID,
+        user_id: UUID | None,
+    ):
+        """Send to real Protheus homologation environment with security gates."""
+        # Security gates
+        if settings.APP_ENV == "production":
+            raise ValidationException(
+                "Envio real para Protheus é proibido em produção. "
+                "Configure APP_ENV != production."
+            )
+
+        if not settings.ERP_ALLOW_REAL_SEND:
+            raise ValidationException(
+                "Envio real para Protheus está desabilitado. "
+                "Configure ERP_ALLOW_REAL_SEND=true apenas em homologação."
+            )
+
+        if not settings.PROTHEUS_BASE_URL:
+            raise ValidationException(
+                "Protheus não configurado. Configure PROTHEUS_BASE_URL."
+            )
+        package = await self._required_package(package_id)
+        self._ensure_package_allowed(package)
+
+        request_payload = self.payload_builder.build_from_snapshot(
+            snapshot_payload=package.payload_json,
+            mode=MODE_REAL,
+        )
+        validation_errors = self.payload_validator.validate(request_payload)
+
+        payload_hash = hashlib.sha256(
+            json.dumps(request_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        idempotency_key = (
+            f"{PROVIDER_PROTHEUS}:{MODE_REAL}:{package.id}:{SCHEMA_VERSION}:{payload_hash}"
+        )
+
+        # Check for existing attempt with same idempotency key
+        existing = await self.attempt_repository.get_latest_by_idempotency_key(
+            package_id=package.id,
+            provider=PROVIDER_PROTHEUS,
+            mode=MODE_REAL,
+            idempotency_key=idempotency_key,
+        )
+        if existing and existing.status == "sent":
+            return existing
+
+        attempt_number = (existing.attempt_number + 1) if existing else 1
+        attempt_status = "validation_failed" if validation_errors else "ready"
+
+        attempt = await self.attempt_repository.create(
+            package_id=package.id,
+            case_id=package.case_id,
+            candidate_id=package.candidate_id,
+            job_id=package.job_id,
+            provider=PROVIDER_PROTHEUS,
+            mode=MODE_REAL,
+            status=attempt_status,
+            idempotency_key=idempotency_key,
+            external_reference=None,
+            http_status=None,
+            request_headers_json=None,
+            response_headers_json=None,
+            attempt_number=attempt_number,
+            request_payload_json=request_payload,
+            validation_errors_json=validation_errors if validation_errors else None,
+            attempted_by=user_id,
+        )
+
+        if validation_errors:
+            await self._register_event(
+                case_id=attempt.case_id,
+                event_type="erp_homolog_attempt_created",
+                actor_id=user_id,
+                payload={
+                    "attempt_id": str(attempt.id),
+                    "package_id": str(package.id),
+                    "mode": MODE_REAL,
+                    "status": attempt.status,
+                    "idempotency_key": idempotency_key,
+                    "validation_error_count": len(validation_errors),
+                },
+            )
+            return attempt
+
+        # Create real adapter
+        adapter = ProtheusRealAdapter(
+            base_url=settings.PROTHEUS_BASE_URL,
+            auth_mode=settings.PROTHEUS_AUTH_MODE,
+            username=settings.PROTHEUS_USERNAME if settings.PROTHEUS_AUTH_MODE == "basic" else None,
+            password=settings.PROTHEUS_PASSWORD if settings.PROTHEUS_AUTH_MODE == "basic" else None,
+            token=settings.PROTHEUS_TOKEN if settings.PROTHEUS_AUTH_MODE == "token" else None,
+            timeout_seconds=settings.PROTHEUS_TIMEOUT_SECONDS,
+            app_env=settings.APP_ENV,
+            allow_real_send=settings.ERP_ALLOW_REAL_SEND,
+        )
+
+        # Send to Protheus
+        adapter_result = await adapter.send(
+            payload=request_payload,
+            idempotency_key=idempotency_key,
+        )
+
+        if adapter_result.success:
+            attempt = await self.attempt_repository.mark_sent(
+                attempt_id=attempt.id,
+                response_payload_json={
+                    "success": True,
+                    "external_reference": adapter_result.external_reference,
+                    "message": adapter_result.message,
+                },
+                external_reference=adapter_result.external_reference,
+                http_status=adapter_result.http_status,
+                request_headers_json=adapter_result.request_headers,
+                response_headers_json=adapter_result.response_headers,
+                attempted_by=user_id,
+            )
+            event_type = "erp_homolog_sent"
+        else:
+            attempt = await self.attempt_repository.mark_failed(
+                attempt_id=attempt.id,
+                response_payload_json={
+                    "success": False,
+                    "error_code": adapter_result.error_code,
+                    "message": adapter_result.message,
+                    "error_details": adapter_result.error_details,
+                },
+                error_message=adapter_result.message,
+                http_status=adapter_result.http_status,
+                request_headers_json=adapter_result.request_headers,
+                response_headers_json=adapter_result.response_headers,
+                attempted_by=user_id,
+            )
+            event_type = "erp_homolog_failed"
+
+        await self._register_event(
+            case_id=attempt.case_id,
+            event_type=event_type,
+            actor_id=user_id,
+            payload={
+                "attempt_id": str(attempt.id),
+                "package_id": str(package.id),
+                "mode": MODE_REAL,
+                "status": attempt.status,
+                "idempotency_key": idempotency_key,
+                "external_reference": attempt.external_reference,
+            },
+        )
+        return attempt
+
     async def retry_attempt(
         self,
         *,
@@ -243,6 +397,12 @@ class ErpIntegrationService:
                 package_id=attempt.package_id,
                 user_id=user_id,
                 simulate_failure=simulate_failure,
+            )
+
+        if attempt.mode == MODE_REAL:
+            return await self.create_protheus_homolog_attempt(
+                package_id=attempt.package_id,
+                user_id=user_id,
             )
 
         if attempt.mode == MODE_DRY_RUN:

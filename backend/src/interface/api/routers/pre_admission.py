@@ -205,15 +205,24 @@ async def reject_pre_admission_document(
 @router.get("/pre-admission/documents/{document_id}/download")
 async def download_pre_admission_document(
     document_id: UUID,
-    _current_user: RecruiterOrAdmin,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    document, path = await _service(db).document_download(document_id=document_id)
-    return FileResponse(
-        path,
-        media_type=document.mime_type,
-        filename=document.original_filename,
-    )
+    try:
+        document, path = await _service(db).document_download(
+            document_id=document_id,
+            actor_type="staff",
+            actor_id=current_user.id,
+        )
+        await db.commit()
+        return FileResponse(
+            path,
+            media_type=document.mime_type,
+            filename=document.original_filename,
+        )
+    except Exception:
+        await db.rollback()
+        raise
 
 
 @router.get(
@@ -277,12 +286,18 @@ async def download_candidate_portal_pre_admission_document(
     candidate_session: CurrentCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    document, path = await _service(db).document_download(
-        document_id=document_id,
-        candidate_id=candidate_session.candidate_id,
-    )
-    return FileResponse(
-        path,
-        media_type=document.mime_type,
-        filename=document.original_filename,
-    )
+    try:
+        document, path = await _service(db).document_download(
+            document_id=document_id,
+            actor_type="candidate",
+            candidate_id=candidate_session.candidate_id,
+        )
+        await db.commit()
+        return FileResponse(
+            path,
+            media_type=document.mime_type,
+            filename=document.original_filename,
+        )
+    except Exception:
+        await db.rollback()
+        raise

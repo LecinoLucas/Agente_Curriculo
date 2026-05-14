@@ -41,6 +41,14 @@ class DecisionSummaryInterviewScorecardResponse(BaseModel):
     submitted_at: datetime | None = None
 
 
+class DecisionSummaryInterviewResponse(BaseModel):
+    id: UUID | None = None
+    status: str | None = None
+    interview_type: str | None = None
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None
+
+
 class DecisionReadinessResponse(BaseModel):
     status: DecisionReadinessStatus
     missing_items: list[str] = Field(default_factory=list)
@@ -53,5 +61,6 @@ class CandidateDecisionSummaryResponse(BaseModel):
     job_id: UUID
     active_job_decision: DecisionSummaryActiveJobDecisionResponse
     behavioral_assessment: DecisionSummaryBehavioralAssessmentResponse
+    interview: DecisionSummaryInterviewResponse
     interview_scorecard: DecisionSummaryInterviewScorecardResponse
     decision_readiness: DecisionReadinessResponse

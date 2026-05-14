@@ -155,7 +155,7 @@ class InterviewScheduleModel(Base):
             name="ck_interview_end_after_start",
         ),
         sa.CheckConstraint(
-            "status IN ('scheduled', 'completed', 'cancelled', 'rescheduled', 'no_show')",
+            "status IN ('scheduled', 'completed', 'cancelled', 'rescheduled', 'no_show', 'awaiting_feedback')",
             name="ck_interview_status",
         ),
         sa.CheckConstraint(

@@ -17,6 +17,7 @@ from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralTemplateQuestionModel,
 )
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -179,6 +180,27 @@ class SQLAlchemyDecisionSummaryRepository:
                 status_rank,
                 InterviewScorecardModel.submitted_at.desc().nullslast(),
                 InterviewScorecardModel.created_at.desc(),
+            )
+            .limit(1)
+        )
+
+    async def get_latest_interview(self, *, candidate_id: UUID, job_id: UUID) -> InterviewScheduleModel | None:
+        status_rank = sa.case(
+            (InterviewScheduleModel.status == "awaiting_feedback", 0),
+            (InterviewScheduleModel.status.in_(("scheduled", "rescheduled")), 1),
+            (InterviewScheduleModel.status == "completed", 2),
+            else_=3,
+        )
+        return await self._session.scalar(
+            sa.select(InterviewScheduleModel)
+            .where(
+                InterviewScheduleModel.candidate_id == candidate_id,
+                InterviewScheduleModel.job_id == job_id,
+            )
+            .order_by(
+                status_rank,
+                InterviewScheduleModel.scheduled_start.desc(),
+                InterviewScheduleModel.created_at.desc(),
             )
             .limit(1)
         )

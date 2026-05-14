@@ -89,6 +89,8 @@ class InterviewCalendarSyncService:
         if decision != "allowed":
             sync_event.status = "skipped"
             sync_event.error_message = f"Sincronização não permitida: {decision}"
+            interview.calendar_sync_status = decision
+            interview.calendar_sync_error = sync_event.error_message
             await self._db.commit()
             return decision
             
@@ -168,6 +170,8 @@ class InterviewCalendarSyncService:
         if decision != "allowed":
             sync_event.status = "skipped"
             sync_event.error_message = f"Sincronização não permitida: {decision}"
+            interview.calendar_sync_status = decision
+            interview.calendar_sync_error = sync_event.error_message
             await self._db.commit()
             return decision
             
@@ -240,6 +244,8 @@ class InterviewCalendarSyncService:
         if decision != "allowed":
             sync_event.status = "skipped"
             sync_event.error_message = f"Sincronização não permitida: {decision}"
+            interview.calendar_sync_status = decision
+            interview.calendar_sync_error = sync_event.error_message
             await self._db.commit()
             return decision
             

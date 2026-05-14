@@ -29,6 +29,28 @@ class InterviewScheduleCreate(APISchemaModel):
     create_google_meet: bool = False
 
 
+class CandidateJobInterviewCreate(APISchemaModel):
+    """Schema para criar entrevista no contexto canônico candidato-vaga."""
+
+    pipeline_id: Optional[UUID] = None
+    title: str
+    description: Optional[str] = None
+    public_notes: Optional[str] = None
+    internal_notes: Optional[str] = None
+    scheduled_start: datetime
+    scheduled_end: datetime
+    timezone: str = "America/Recife"
+    interview_type: str
+    interview_format: str = "online"
+    status: str = "scheduled"
+    location: Optional[str] = None
+    meeting_url: Optional[str] = None
+    interviewer_name: Optional[str] = None
+    interviewer_email: Optional[str] = None
+    create_google_event: bool = False
+    create_google_meet: bool = False
+
+
 class InterviewScheduleUpdate(APISchemaModel):
     """Schema para atualizar entrevista existente."""
 
@@ -55,6 +77,32 @@ class InterviewScheduleCancelRequest(APISchemaModel):
 
     cancel_reason: str
     sync_google_event: bool = True
+
+
+class InterviewScheduleRescheduleRequest(APISchemaModel):
+    """Schema operacional para remarcar entrevista."""
+
+    scheduled_start: datetime
+    scheduled_end: datetime
+    timezone: Optional[str] = None
+    location: Optional[str] = None
+    meeting_url: Optional[str] = None
+    interviewer_name: Optional[str] = None
+    interviewer_email: Optional[str] = None
+    sync_google_event: bool = True
+    create_google_meet: bool = False
+
+
+class InterviewScheduleCompleteRequest(APISchemaModel):
+    """Schema operacional para concluir entrevista."""
+
+    internal_notes: Optional[str] = None
+
+
+class InterviewScheduleNoShowRequest(APISchemaModel):
+    """Schema operacional para marcar no-show."""
+
+    reason: Optional[str] = None
 
 
 class InterviewScheduleResponse(ORMAPISchemaModel):

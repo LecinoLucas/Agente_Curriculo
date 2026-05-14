@@ -31,7 +31,7 @@ class InterviewScheduleConflictError(ValidationException):
     pass
 
 
-VALID_STATUSES = ("scheduled", "completed", "cancelled", "rescheduled", "no_show")
+VALID_STATUSES = ("scheduled", "completed", "cancelled", "rescheduled", "no_show", "awaiting_feedback")
 VALID_TYPES = ("screening", "technical", "manager", "hr", "final", "other")
 VALID_FORMATS = ("online", "presencial", "telefone")
 
@@ -252,6 +252,78 @@ class InterviewScheduleService:
                 pass
                 
         return schedule
+
+    async def reschedule_interview(
+        self,
+        schedule_id: UUID,
+        *,
+        scheduled_start: datetime,
+        scheduled_end: datetime,
+        timezone: Optional[str] = None,
+        location: Optional[str] = None,
+        meeting_url: Optional[str] = None,
+        interviewer_name: Optional[str] = None,
+        interviewer_email: Optional[str] = None,
+        sync_google_event: bool = True,
+        create_google_meet: bool = False,
+        requested_by_user_id: Optional[UUID] = None,
+    ) -> InterviewScheduleModel:
+        schedule = await self.get_interview(schedule_id)
+        if schedule.status in {"cancelled", "completed", "no_show"}:
+            raise InterviewScheduleValidationError(
+                "Não é possível remarcar entrevista cancelada, concluída ou no-show"
+            )
+
+        return await self.update_interview(
+            schedule_id,
+            scheduled_start=scheduled_start,
+            scheduled_end=scheduled_end,
+            timezone=timezone,
+            status="rescheduled",
+            location=location,
+            meeting_url=meeting_url,
+            interviewer_name=interviewer_name,
+            interviewer_email=interviewer_email,
+            sync_google_event=sync_google_event,
+            create_google_meet=create_google_meet,
+            requested_by_user_id=requested_by_user_id,
+        )
+
+    async def complete_interview(
+        self,
+        schedule_id: UUID,
+        *,
+        internal_notes: Optional[str] = None,
+    ) -> InterviewScheduleModel:
+        schedule = await self.get_interview(schedule_id)
+        if schedule.status in {"cancelled", "no_show"}:
+            raise InterviewScheduleValidationError(
+                "Não é possível concluir entrevista cancelada ou no-show"
+            )
+
+        if internal_notes is not None:
+            schedule.internal_notes = self._normalize_optional_text(internal_notes)
+
+        has_submitted_scorecard = await self._repository.has_submitted_scorecard(schedule_id)
+        schedule.status = "completed" if has_submitted_scorecard else "awaiting_feedback"
+        return await self._repository.update(schedule)
+
+    async def mark_no_show(
+        self,
+        schedule_id: UUID,
+        *,
+        reason: Optional[str] = None,
+    ) -> InterviewScheduleModel:
+        schedule = await self.get_interview(schedule_id)
+        if schedule.status == "cancelled":
+            raise InterviewScheduleValidationError("Não é possível marcar no-show em entrevista cancelada")
+        if schedule.status == "completed":
+            raise InterviewScheduleValidationError("Não é possível marcar no-show em entrevista concluída")
+
+        schedule.status = "no_show"
+        if reason is not None:
+            schedule.cancel_reason = self._normalize_optional_text(reason)
+        return await self._repository.update(schedule)
 
     async def update_interview(
         self,

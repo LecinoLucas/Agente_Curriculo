@@ -14,6 +14,7 @@ from src.interface.api.schemas.decision_summary_schemas import (
     DecisionReadinessResponse,
     DecisionSummaryActiveJobDecisionResponse,
     DecisionSummaryBehavioralAssessmentResponse,
+    DecisionSummaryInterviewResponse,
     DecisionSummaryInterviewScorecardResponse,
 )
 
@@ -66,6 +67,7 @@ class DecisionSummaryService:
             job_id,
         )
         scorecard_model = await self._repository.get_latest_scorecard(candidate_id=candidate_id, job_id=job_id)
+        interview_model = await self._repository.get_latest_interview(candidate_id=candidate_id, job_id=job_id)
         scorecard = self._scorecard_response(scorecard_model)
         readiness = self._readiness(active_job_decision, behavioral, scorecard)
 
@@ -74,6 +76,17 @@ class DecisionSummaryService:
             job_id=job_id,
             active_job_decision=active_job_decision,
             behavioral_assessment=behavioral,
+            interview=(
+                DecisionSummaryInterviewResponse(
+                    id=interview_model.id,
+                    status=interview_model.status,
+                    interview_type=interview_model.interview_type,
+                    scheduled_start=interview_model.scheduled_start,
+                    scheduled_end=interview_model.scheduled_end,
+                )
+                if interview_model is not None
+                else DecisionSummaryInterviewResponse()
+            ),
             interview_scorecard=scorecard,
             decision_readiness=readiness,
         )

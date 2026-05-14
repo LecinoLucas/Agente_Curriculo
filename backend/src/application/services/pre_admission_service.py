@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+from src.core.settings import settings
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
@@ -15,6 +18,7 @@ from src.infrastructure.database.models.pre_admission_model import (
 )
 from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
 from src.infrastructure.storage.pre_admission_documents import (
+    build_pre_admission_storage_key,
     resolve_pre_admission_document_path,
     write_pre_admission_document,
 )
@@ -38,12 +42,16 @@ from src.interface.api.schemas.pre_admission_schemas import (
 
 TERMINAL_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
 DOCUMENT_UPLOAD_BLOCKED_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
-MAX_PRE_ADMISSION_DOCUMENT_BYTES = 10 * 1024 * 1024
+MAX_PRE_ADMISSION_DOCUMENT_BYTES = settings.PRE_ADMISSION_DOCUMENT_MAX_BYTES
 ALLOWED_DOCUMENT_MIME_TYPES = {
     "application/pdf": ".pdf",
     "image/jpeg": ".jpg",
-    "image/jpg": ".jpg",
     "image/png": ".png",
+}
+ALLOWED_DOCUMENT_EXTENSIONS = {
+    "application/pdf": {".pdf"},
+    "image/jpeg": {".jpg", ".jpeg"},
+    "image/png": {".png"},
 }
 
 
@@ -278,14 +286,19 @@ class PreAdmissionService:
             previous_document.updated_at = now
 
         document_id = uuid4()
-        stored_filename = f"{document_id}{extension}"
-        storage_key = f"{candidate_id}/{case_id}/{item_id}/{stored_filename}"
+        storage_key, stored_filename = build_pre_admission_storage_key(
+            candidate_id=candidate_id,
+            case_id=case_id,
+            item_id=item_id,
+            document_id=document_id,
+            extension=extension,
+        )
         document = PreAdmissionDocumentModel(
             id=document_id,
             case_id=case_id,
             checklist_item_id=item_id,
             candidate_id=candidate_id,
-            original_filename=Path(file_name).name or f"documento{extension}",
+            original_filename=self._sanitize_original_filename(file_name, extension),
             stored_filename=stored_filename,
             storage_key=storage_key,
             mime_type=mime_type,
@@ -383,16 +396,40 @@ class PreAdmissionService:
         )
         return self._document_response(document)
 
-    async def document_download(self, *, document_id: UUID, candidate_id: UUID | None = None) -> tuple[PreAdmissionDocumentModel, Path]:
+    async def document_download(
+        self,
+        *,
+        document_id: UUID,
+        actor_type: str,
+        actor_id: UUID | None = None,
+        candidate_id: UUID | None = None,
+    ) -> tuple[PreAdmissionDocumentModel, Path]:
+        if actor_type not in {"candidate", "staff"}:
+            raise ValidationException("Tipo de ator inválido.")
         if candidate_id is None:
             document = await self._required_document(document_id)
         else:
             document = await self._repository.get_candidate_document(candidate_id=candidate_id, document_id=document_id)
             if document is None:
                 raise NotFoundException("Documento não encontrado.")
+            case = await self._repository.get_case(document.case_id)
+            if case is None or case.status in TERMINAL_CASE_STATUSES:
+                raise NotFoundException("Documento não encontrado.")
         path = resolve_pre_admission_document_path(document.storage_key)
         if not path.exists():
             raise NotFoundException("Arquivo não encontrado.")
+        await self._event(
+            case_id=document.case_id,
+            event_type="document_downloaded",
+            actor_id=actor_id,
+            payload={
+                "document_id": str(document.id),
+                "checklist_item_id": str(document.checklist_item_id),
+                "actor_type": actor_type,
+                "mime_type": document.mime_type,
+                "size_bytes": document.size_bytes,
+            },
+        )
         return document, path
 
     async def _required_case(self, case_id: UUID) -> PreAdmissionCaseModel:
@@ -438,35 +475,41 @@ class PreAdmissionService:
         if not content:
             raise ValidationException("Arquivo vazio.")
         if len(content) > MAX_PRE_ADMISSION_DOCUMENT_BYTES:
-            raise ValidationException("Arquivo muito grande (máx 10MB).")
+            limit_mb = MAX_PRE_ADMISSION_DOCUMENT_BYTES // (1024 * 1024)
+            raise ValidationException(f"Arquivo muito grande (máx {limit_mb}MB).")
 
         normalized_content_type = (content_type or "").split(";")[0].strip().lower()
-        lower_name = file_name.lower()
-        if lower_name.endswith(".pdf") and normalized_content_type in {"", "application/octet-stream"}:
-            normalized_content_type = "application/pdf"
-        if lower_name.endswith((".jpg", ".jpeg")) and normalized_content_type in {"", "application/octet-stream"}:
-            normalized_content_type = "image/jpeg"
-        if lower_name.endswith(".png") and normalized_content_type in {"", "application/octet-stream"}:
-            normalized_content_type = "image/png"
-
         extension = ALLOWED_DOCUMENT_MIME_TYPES.get(normalized_content_type)
         if extension is None:
             raise ValidationException("Tipo de arquivo não permitido. Envie PDF, JPG ou PNG.")
-        if extension == ".pdf" and not lower_name.endswith(".pdf"):
-            raise ValidationException("Nome do arquivo PDF deve terminar com .pdf.")
-        if extension == ".jpg" and not lower_name.endswith((".jpg", ".jpeg")):
-            raise ValidationException("Nome do arquivo JPG deve terminar com .jpg ou .jpeg.")
-        if extension == ".png" and not lower_name.endswith(".png"):
-            raise ValidationException("Nome do arquivo PNG deve terminar com .png.")
+        submitted_extension = PreAdmissionService._submitted_extension(file_name)
+        if submitted_extension not in ALLOWED_DOCUMENT_EXTENSIONS[normalized_content_type]:
+            raise ValidationException("Extensão de arquivo não permitida para o tipo informado.")
 
         if normalized_content_type == "application/pdf" and not content.startswith(b"%PDF"):
             raise ValidationException("Conteúdo enviado não parece ser um PDF válido.")
         if normalized_content_type == "image/png" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
             raise ValidationException("Conteúdo enviado não parece ser um PNG válido.")
-        if normalized_content_type == "image/jpeg" and not content.startswith(b"\xff\xd8\xff"):
+        if normalized_content_type == "image/jpeg" and not content.startswith(b"\xff\xd8"):
             raise ValidationException("Conteúdo enviado não parece ser um JPG válido.")
 
         return normalized_content_type, extension
+
+    @staticmethod
+    def _submitted_extension(file_name: str) -> str:
+        safe_name = file_name.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+        return Path(safe_name).suffix.lower()
+
+    @staticmethod
+    def _sanitize_original_filename(file_name: str, extension: str) -> str:
+        base_name = file_name.replace("\\", "/").rsplit("/", maxsplit=1)[-1].strip()
+        base_name = unicodedata.normalize("NFKC", base_name)
+        base_name = re.sub(r"[\x00-\x1f\x7f]+", "", base_name)
+        base_name = re.sub(r"[^A-Za-z0-9._ -]+", "_", base_name)
+        base_name = re.sub(r"\s+", " ", base_name).strip(" .")
+        if not base_name:
+            return f"documento{extension}"
+        return base_name[:255]
 
     @classmethod
     def _case_response(cls, case: PreAdmissionCaseModel) -> PreAdmissionCaseResponse:

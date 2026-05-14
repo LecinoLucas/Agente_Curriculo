@@ -38,6 +38,14 @@ class SQLAlchemyInterviewScorecardRepository:
     async def get_interview(self, interview_id: UUID) -> InterviewScheduleModel | None:
         return await self._session.get(InterviewScheduleModel, interview_id)
 
+    async def mark_interview_completed_if_waiting_feedback(self, interview_id: UUID) -> None:
+        interview = await self._session.get(InterviewScheduleModel, interview_id)
+        if interview is None:
+            return
+        if interview.status == "awaiting_feedback":
+            interview.status = "completed"
+            self._session.add(interview)
+
     async def find_for_candidate_job(
         self,
         *,

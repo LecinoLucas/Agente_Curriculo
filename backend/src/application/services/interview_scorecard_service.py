@@ -30,9 +30,15 @@ class InterviewScorecardService:
         *,
         candidate_id: UUID,
         job_id: UUID,
+        interview_id: UUID | None = None,
     ) -> InterviewScorecardEnvelopeResponse:
         await self._assert_active_pipeline(candidate_id=candidate_id, job_id=job_id)
-        scorecard = await self._repository.find_for_candidate_job(candidate_id=candidate_id, job_id=job_id)
+        await self._validate_interview(candidate_id=candidate_id, job_id=job_id, interview_id=interview_id)
+        scorecard = await self._repository.find_for_candidate_job(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            interview_id=interview_id,
+        )
         return InterviewScorecardEnvelopeResponse(
             scorecard=self._response(scorecard) if scorecard else None,
             suggested_behavioral_questions=await self._repository.list_suggested_behavioral_questions(
@@ -112,6 +118,8 @@ class InterviewScorecardService:
         scorecard.status = "submitted"
         scorecard.submitted_at = now
         scorecard.updated_at = now
+        if scorecard.interview_id is not None:
+            await self._repository.mark_interview_completed_if_waiting_feedback(scorecard.interview_id)
         await self._repository.flush()
         return self._response(scorecard)
 

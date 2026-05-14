@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.interview_scorecard_service import InterviewScorecardService
@@ -32,9 +32,14 @@ async def get_interview_scorecard(
     job_id: UUID,
     candidate_id: UUID,
     _current_user: RecruiterOrAdmin,
+    interview_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> InterviewScorecardEnvelopeResponse:
-    return await _service(db).get_for_candidate_job(candidate_id=candidate_id, job_id=job_id)
+    return await _service(db).get_for_candidate_job(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_id=interview_id,
+    )
 
 
 @router.post(

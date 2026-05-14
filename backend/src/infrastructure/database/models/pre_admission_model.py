@@ -204,6 +204,10 @@ class PreAdmissionDocumentModel(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     reviewed_by: Mapped[UUID | None] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"))
     review_notes: Mapped[str | None] = mapped_column(sa.Text)
+    retention_until: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    deleted_by: Mapped[UUID | None] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"))
+    deletion_reason: Mapped[str | None] = mapped_column(sa.Text)
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,

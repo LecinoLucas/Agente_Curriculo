@@ -534,6 +534,41 @@ class TestCreateInterview:
             schedule.id, requested_by_user_id, create_meet=False
         )
 
+    @pytest.mark.asyncio
+    async def test_create_interview_swallow_google_sync_failure(self, mock_repository):
+        candidate_id = uuid4()
+        job_id = uuid4()
+        start = datetime.now(timezone.utc) + timedelta(hours=2)
+        end = start + timedelta(hours=1)
+        schedule = build_schedule(candidate_id=candidate_id, start=start, end=end)
+        schedule.job_id = job_id
+        mock_repository.create.return_value = schedule
+
+        mock_sync_service = AsyncMock()
+        mock_sync_service.sync_create_event.side_effect = RuntimeError("google down")
+        service_with_sync = InterviewScheduleService(mock_repository, sync_service=mock_sync_service)
+
+        result = await service_with_sync.create_interview(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=None,
+            title="Tech Interview",
+            description=None,
+            scheduled_start=start,
+            scheduled_end=end,
+            timezone="America/Recife",
+            interview_type="technical",
+            status="scheduled",
+            location=None,
+            meeting_url=None,
+            interviewer_name=None,
+            interviewer_email=None,
+            create_google_event=True,
+            requested_by_user_id=uuid4(),
+        )
+
+        assert result.id == schedule.id
+
 
 class TestGetInterview:
     @pytest.mark.asyncio
@@ -687,6 +722,31 @@ class TestUpdateInterview:
         with pytest.raises(InterviewScheduleValidationError):
             await service.update_interview(schedule_id, title="New Title")
 
+    @pytest.mark.asyncio
+    async def test_update_interview_calls_google_update_when_synced(self, mock_repository):
+        schedule_id = uuid4()
+        start = datetime.now(timezone.utc) + timedelta(days=1)
+        schedule = build_schedule(schedule_id=schedule_id, start=start)
+        schedule.external_calendar_event_id = "google-event-1"
+        schedule.calendar_provider = "google"
+        mock_repository.get_by_id.return_value = schedule
+        mock_repository.update.return_value = schedule
+        mock_sync_service = AsyncMock()
+        service_with_sync = InterviewScheduleService(mock_repository, sync_service=mock_sync_service)
+        user_id = uuid4()
+
+        await service_with_sync.update_interview(
+            schedule_id,
+            title="Atualizada",
+            requested_by_user_id=user_id,
+        )
+
+        mock_sync_service.sync_update_event.assert_awaited_once_with(
+            schedule_id,
+            user_id,
+            create_meet=False,
+        )
+
 
 class TestCancelInterview:
     @pytest.mark.asyncio
@@ -739,3 +799,26 @@ class TestCancelInterview:
 
         with pytest.raises(InterviewScheduleAlreadyCancelledError):
             await service.cancel_interview(schedule_id, "Nova razão")
+
+    @pytest.mark.asyncio
+    async def test_cancel_interview_calls_google_cancel_when_synced(self, mock_repository):
+        schedule_id = uuid4()
+        schedule = build_schedule(schedule_id=schedule_id)
+        schedule.external_calendar_event_id = "google-event-1"
+        schedule.calendar_provider = "google"
+        cancelled_schedule = build_schedule(schedule_id=schedule_id, status="cancelled")
+        cancelled_schedule.external_calendar_event_id = "google-event-1"
+        cancelled_schedule.calendar_provider = "google"
+        mock_repository.get_by_id.return_value = schedule
+        mock_repository.cancel.return_value = cancelled_schedule
+        mock_sync_service = AsyncMock()
+        service_with_sync = InterviewScheduleService(mock_repository, sync_service=mock_sync_service)
+        user_id = uuid4()
+
+        await service_with_sync.cancel_interview(
+            schedule_id,
+            "Cancelada",
+            requested_by_user_id=user_id,
+        )
+
+        mock_sync_service.sync_cancel_event.assert_awaited_once_with(schedule_id, user_id)
