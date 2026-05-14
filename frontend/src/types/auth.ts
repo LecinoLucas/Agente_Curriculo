@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "recruiter" | "candidate" | "viewer";
+export type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr";
 export type UserStatus = "pending_verification" | "active" | "suspended" | "inactive";
 
 export type AuthUser = {

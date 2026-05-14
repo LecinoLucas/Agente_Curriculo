@@ -13,7 +13,7 @@ from src.application.services.pre_admission_service import (
 )
 from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
 from src.infrastructure.database.models.pre_admission_model import PreAdmissionChecklistItemModel
-from src.interface.api.dependencies import CurrentCandidateSession, RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import CurrentCandidateSession, RecruiterHrOrAdmin, get_db
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionEnvelopeResponse,
@@ -44,7 +44,7 @@ def _service(db: AsyncSession) -> PreAdmissionService:
 async def get_pre_admission(
     job_id: UUID,
     candidate_id: UUID,
-    _current_user: RecruiterOrAdmin,
+    _current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionEnvelopeResponse:
     return await _service(db).get(candidate_id=candidate_id, job_id=job_id)
@@ -59,7 +59,7 @@ async def create_pre_admission(
     job_id: UUID,
     candidate_id: UUID,
     body: PreAdmissionCreateRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionCaseResponse:
     try:
@@ -92,7 +92,7 @@ async def create_pre_admission(
 async def update_pre_admission(
     case_id: UUID,
     body: PreAdmissionUpdateRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionCaseResponse:
     try:
@@ -112,7 +112,7 @@ async def update_pre_admission(
 async def create_pre_admission_checklist_item(
     case_id: UUID,
     body: PreAdmissionChecklistItemCreateRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionChecklistItemResponse:
     try:
@@ -132,7 +132,7 @@ async def update_pre_admission_checklist_item(
     case_id: UUID,
     item_id: UUID,
     body: PreAdmissionChecklistItemUpdateRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionChecklistItemResponse:
     try:
@@ -155,7 +155,7 @@ async def update_pre_admission_checklist_item(
 )
 async def get_pre_admission_events(
     case_id: UUID,
-    _current_user: RecruiterOrAdmin,
+    _current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionEventsResponse:
     return await _service(db).events(case_id=case_id)
@@ -167,7 +167,7 @@ async def get_pre_admission_events(
 )
 async def list_pre_admission_documents(
     case_id: UUID,
-    _current_user: RecruiterOrAdmin,
+    _current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionDocumentsResponse:
     return await _service(db).list_documents(case_id=case_id)
@@ -179,7 +179,7 @@ async def list_pre_admission_documents(
 )
 async def approve_pre_admission_document(
     document_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionDocumentResponse:
     try:
@@ -198,7 +198,7 @@ async def approve_pre_admission_document(
 async def reject_pre_admission_document(
     document_id: UUID,
     body: PreAdmissionDocumentRejectRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionDocumentResponse:
     try:
@@ -231,7 +231,7 @@ async def reject_pre_admission_document(
 @router.get("/pre-admission/documents/{document_id}/download")
 async def download_pre_admission_document(
     document_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: RecruiterHrOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
     try:

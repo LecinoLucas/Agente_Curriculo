@@ -17,6 +17,7 @@ import { DocumentsTab as DocumentsTabComponent } from "../candidates/drawer/tabs
 import { InterviewTab } from "../candidates/drawer/tabs/InterviewTab";
 import { CandidateBehavioralAssessmentPanel } from "../candidates/drawer/components/CandidateBehavioralAssessmentPanel";
 import { CandidateCommunicationsPanel } from "../candidates/drawer/components/CandidateCommunicationsPanel";
+import { CollaborationTab } from "../candidates/drawer/components/CollaborationTab";
 import { CandidatePreAdmissionPanel } from "../candidates/drawer/components/CandidatePreAdmissionPanel";
 import { AgendaInterviewModal } from "../agenda/AgendaInterviewModal";
 import { formatContextError } from "../../services/errorMessages";
@@ -591,6 +592,7 @@ export function CandidateDrawer({
         interview: "actions",
         assessment: "actions",
         communications: "actions",
+        collaboration: "actions",
         pre_admission: "actions",
       };
 
@@ -700,6 +702,7 @@ export function CandidateDrawer({
         profileTabKey === "interview" ||
         profileTabKey === "assessment" ||
         profileTabKey === "communications" ||
+        profileTabKey === "collaboration" ||
         profileTabKey === "pre_admission"
       )
         ? profileTabKey
@@ -852,6 +855,15 @@ export function CandidateDrawer({
               jobId={candidateActiveJobId}
               candidateId={candidate?.id ?? null}
             />
+          ) : null}
+
+          {profileTabKey === "collaboration" ? (
+            candidateActiveJobId && candidate?.id ? (
+              <CollaborationTab
+                jobId={candidateActiveJobId}
+                candidateId={candidate.id}
+              />
+            ) : null
           ) : null}
 
           {profileTabKey === "pre_admission" ? (

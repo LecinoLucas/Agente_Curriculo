@@ -18,7 +18,7 @@ class UserModel(Base):
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
     password_hash: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     role: Mapped[str] = mapped_column(
-        sa.Enum("admin", "recruiter", "candidate", "viewer", name="user_role"),
+        sa.Enum("admin", "recruiter", "candidate", "viewer", "hr", "manager", name="user_role"),
         nullable=False,
         server_default="candidate",
     )

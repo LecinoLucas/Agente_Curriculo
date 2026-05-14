@@ -1313,3 +1313,67 @@ export type ErpIntegrationAttempt = {
 export type ErpIntegrationAttemptListResponse = {
   attempts: ErpIntegrationAttempt[];
 };
+
+// Manager View Types
+export type ManagerJobResponse = {
+  id: string;
+  title: string;
+  candidate_count: number;
+  assigned_count: number;
+};
+
+export type ManagerCandidateSummary = {
+  id: string;
+  name: string;
+  email: string;
+  pipeline_stage: string | null;
+  scorecard_status: string | null;
+};
+
+export type ManagerScorecardSummary = {
+  status: string;
+  recommendation: string | null;
+  submitted_at: string | null;
+};
+
+export type ManagerCandidateDetailResponse = {
+  id: string;
+  name: string;
+  email: string;
+  pipeline_stage: string | null;
+  scorecard: ManagerScorecardSummary | null;
+};
+
+export type ManagerJobListResponse = {
+  jobs: ManagerJobResponse[];
+};
+
+export type ManagerJobCandidatesResponse = {
+  job_id: string;
+  candidates: ManagerCandidateSummary[];
+};
+
+export type CollaborationComment = {
+  id: string;
+  author_id: string | null;
+  author_role: string;
+  comment_type: string;
+  recommendation: string | null;
+  message: string;
+  created_at: string;
+};
+
+export type CollaborationListResponse = {
+  comments: CollaborationComment[];
+};
+
+export type CreateCommentRequest = {
+  message: string;
+  comment_type?: string;
+  recommendation?: string;
+};
+
+export type ManagerFeedbackRequest = {
+  message: string;
+  recommendation: "advance" | "hold" | "reject" | "request_interview";
+};

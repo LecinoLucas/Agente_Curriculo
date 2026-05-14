@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -16,6 +17,8 @@ from src.application.services.candidate_portal_auth_service import (
     CandidatePortalAuthService,
     CandidatePortalSessionError,
 )
+
+logger = logging.getLogger(__name__)
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -54,6 +57,14 @@ def require_roles(*roles: UserRole):
 
     async def _check(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in roles:
+            logger.warning(
+                "access_denied_insufficient_role",
+                extra={
+                    "user_id": str(current_user.id),
+                    "user_role": current_user.role.value,
+                    "required_roles": [r.value for r in roles],
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Permissão insuficiente para este recurso",
@@ -64,10 +75,24 @@ def require_roles(*roles: UserRole):
 
 
 # Aliases para uso nos routers
+
+# Single role
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AdminOnly = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
+HrOnly = Annotated[User, Depends(require_roles(UserRole.HR))]
+ManagerOnly = Annotated[User, Depends(require_roles(UserRole.MANAGER))]
+
+# Multi-role combinations
 RecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.ADMIN))]
-InternalUser = Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.VIEWER))]
+HrOrAdmin = Annotated[User, Depends(require_roles(UserRole.HR, UserRole.ADMIN))]
+ManagerOrAdmin = Annotated[User, Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN))]
+
+# Compatibility: Temporary dual access (RECRUITER still has pre_admission/admission access)
+RecruiterHrOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.HR, UserRole.ADMIN))]
+ManagerRecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.MANAGER, UserRole.RECRUITER, UserRole.ADMIN))]
+
+# Internal users: all internal roles
+InternalUser = Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.VIEWER, UserRole.HR, UserRole.MANAGER))]
 
 
 async def get_current_candidate_session(

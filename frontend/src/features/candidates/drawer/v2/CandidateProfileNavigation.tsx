@@ -1,6 +1,6 @@
-import { BarChart3, FileText, UserRound, Calendar, CheckSquare, ClipboardList, Mail } from "lucide-react";
+import { BarChart3, FileText, UserRound, Calendar, CheckSquare, ClipboardList, Mail, MessageCircle } from "lucide-react";
 
-type TabKey = "overview" | "score" | "documents" | "interview" | "assessment" | "pre_admission" | "communications";
+type TabKey = "overview" | "score" | "documents" | "interview" | "assessment" | "pre_admission" | "communications" | "collaboration";
 
 interface CandidateProfileNavigationProps {
   activeTab: TabKey;
@@ -14,6 +14,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof UserRound }> = [
   { key: "interview", label: "Entrevista", icon: Calendar },
   { key: "assessment", label: "Avaliação", icon: CheckSquare },
   { key: "communications", label: "Comunicações", icon: Mail },
+  { key: "collaboration", label: "Colaboração", icon: MessageCircle },
   { key: "pre_admission", label: "Pré-admissão", icon: ClipboardList },
 ];
 

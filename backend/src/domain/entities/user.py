@@ -11,13 +11,19 @@ class UserRole(str, Enum):
 
     IMPORTANT - Semantic Meaning:
     ────────────────────────────
-    - ADMIN, RECRUITER, VIEWER: Internal system users (can manage jobs, candidates, etc)
-    - CANDIDATE: external candidate account with limited access.
+    - ADMIN: Full system access, no restrictions.
+    - RECRUITER: Hiring operations (jobs, candidates, pipeline, interviews, scorecards, hiring decisions).
+    - HR: Pre-admission, documents, admission packages, ERP integration, HR communications.
+    - MANAGER: Simplified view of candidates in assigned jobs, interviews as participant, scorecards as evaluator.
+    - VIEWER: Read-only, limited to aggregated data, no sensitive/internal data.
+    - CANDIDATE: External candidate account with portal access only.
     """
     ADMIN = "admin"
     RECRUITER = "recruiter"
-    CANDIDATE = "candidate"
+    HR = "hr"
+    MANAGER = "manager"
     VIEWER = "viewer"
+    CANDIDATE = "candidate"
 
 
 class UserStatus(str, Enum):

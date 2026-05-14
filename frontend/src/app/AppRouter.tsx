@@ -115,11 +115,18 @@ const PublicApplicationPage = lazy(() =>
   }))
 );
 
-type UserRole = "admin" | "recruiter" | "candidate" | "viewer";
+const ManagerReviewPage = lazy(() =>
+  import("../pages/ManagerReviewPage").then((m) => ({
+    default: m.ManagerReviewPage,
+  }))
+);
 
-const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer"];
+type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr";
+
+const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
 const ADMIN_ROLES: UserRole[] = ["admin"];
-const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer"];
+const MANAGER_ROLES: UserRole[] = ["admin", "manager"];
+const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer", "manager", "hr"];
 
 function PageLoader() {
   return (
@@ -215,6 +222,11 @@ export function AppRouter() {
         <Route
           path="analises-ia"
           element={protectedPage(<AnalisesIaPage />, ["admin", "recruiter"])}
+        />
+
+        <Route
+          path="manager"
+          element={protectedPage(<ManagerReviewPage />, MANAGER_ROLES)}
         />
 
         <Route

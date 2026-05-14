@@ -34,6 +34,7 @@ from src.interface.api.routers import (
     behavioral_templates,
     candidate_behavioral_assessments,
     candidates,
+    collaboration,
     communications,
     decision_summary,
     document_ai,
@@ -42,6 +43,7 @@ from src.interface.api.routers import (
     interview_schedules,
     interview_scorecards,
     jobs,
+    manager,
     observability,
     pipeline,
     pre_admission,
@@ -114,6 +116,8 @@ app.include_router(interview_schedules.operational_router, prefix=_PREFIX)
 app.include_router(interview_scorecards.router, prefix=_PREFIX)
 app.include_router(pre_admission.router, prefix=_PREFIX)
 app.include_router(admission_packages.router, prefix=_PREFIX)
+app.include_router(manager.router, prefix=_PREFIX)
+app.include_router(collaboration.router, prefix=_PREFIX)
 app.include_router(google_calendar.router, prefix=_PREFIX)
 app.include_router(ai_models.router, prefix=_PREFIX)
 app.include_router(document_ai.router, prefix=_PREFIX)

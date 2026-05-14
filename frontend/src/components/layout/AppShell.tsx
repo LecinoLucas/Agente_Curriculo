@@ -57,6 +57,13 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     ],
   },
   {
+    label: "Revisão",
+    caption: "Candidatos atribuídos",
+    roles: ["admin", "manager"],
+    isDropdown: false,
+    items: [{ to: "/manager", label: "Revisão", caption: "Candidatos atribuídos", roles: ["admin", "manager"] }],
+  },
+  {
     label: "Admin",
     caption: "Gerenciamento",
     roles: ["admin"],

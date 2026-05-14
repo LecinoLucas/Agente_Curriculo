@@ -85,6 +85,9 @@ from src.infrastructure.database.models.communication_model import (
     CandidateCommunicationModel,
     CommunicationDeliveryAttemptModel,
 )
+from src.infrastructure.database.models.collaboration_comments_model import (
+    CollaborationCommentModel,
+)
 
 __all__ = [
     "UserModel",
@@ -141,4 +144,5 @@ __all__ = [
     "CommunicationTemplateModel",
     "CandidateCommunicationModel",
     "CommunicationDeliveryAttemptModel",
+    "CollaborationCommentModel",
 ]
