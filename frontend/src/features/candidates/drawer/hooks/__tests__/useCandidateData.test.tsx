@@ -1,11 +1,12 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { analysisServiceMock, getJobRankingMock } = vi.hoisted(() => ({
+const { analysisServiceMock, getJobRankingMock, getCandidateRankingEntryMock } = vi.hoisted(() => ({
   analysisServiceMock: {
     result: vi.fn(),
   },
   getJobRankingMock: vi.fn(),
+  getCandidateRankingEntryMock: vi.fn(),
 }));
 
 vi.mock("../../../../../services/analysisService", () => ({
@@ -14,6 +15,7 @@ vi.mock("../../../../../services/analysisService", () => ({
 
 vi.mock("../../../../../services/jobsService", () => ({
   getJobRanking: getJobRankingMock,
+  getCandidateRankingEntry: getCandidateRankingEntryMock,
 }));
 
 import { useCandidateData } from "../useCandidateData";
@@ -31,6 +33,7 @@ describe("useCandidateData", () => {
   beforeEach(() => {
     analysisServiceMock.result.mockReset();
     getJobRankingMock.mockReset();
+    getCandidateRankingEntryMock.mockReset();
   });
 
   it("não busca ranking nem resultado completo fora das abas de score/análise", () => {
@@ -53,6 +56,10 @@ describe("useCandidateData", () => {
       job_id: "job-1",
       candidates: [{ candidate_id: "candidate-1", job_fit_score: 82 }],
     });
+    getCandidateRankingEntryMock.mockResolvedValue({
+      candidate_id: "candidate-1",
+      job_fit_score: 82,
+    });
 
     renderHook(() =>
       useCandidateData({
@@ -65,7 +72,7 @@ describe("useCandidateData", () => {
 
     await waitFor(() => {
       expect(analysisServiceMock.result).toHaveBeenCalledWith("analysis-1");
-      expect(getJobRankingMock).toHaveBeenCalledWith("job-1");
+      expect(getCandidateRankingEntryMock).toHaveBeenCalledWith("job-1", "candidate-1");
     });
   });
 });

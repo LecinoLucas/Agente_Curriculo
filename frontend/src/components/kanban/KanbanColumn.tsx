@@ -53,16 +53,13 @@ export const KanbanColumn = memo(function KanbanColumn({
             cardIndex === 0 &&
             c.job_fit_score !== null &&
             c.job_fit_score !== undefined;
-            
-          const rank = showTopMatchHighlight ? cardIndex + 1 : undefined;
-            
+
           return (
             <KanbanCard
               key={c.candidate_id}
               candidate={c}
               isSaving={false}
               isTopMatch={isTopMatch}
-              rank={rank}
               enterDelay={colIndex * 65 + cardIndex * 30}
               onCardClick={onCardClick}
             />

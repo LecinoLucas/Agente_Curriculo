@@ -54,6 +54,11 @@ export const KanbanCard = memo(function KanbanCard({
                 {rank}
               </span>
             )}
+            {isTopMatch && !rank && (
+              <span className="rounded-lg bg-[hsl(var(--primary))]/10 px-2 py-1 text-[9px] font-bold text-[hsl(var(--primary))] uppercase tracking-wider">
+                Mais aderente
+              </span>
+            )}
             <span className="truncate text-sm font-bold tracking-tight text-[hsl(var(--text))]">
               {candidate.candidate_name}
             </span>

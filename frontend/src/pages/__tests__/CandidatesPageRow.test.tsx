@@ -47,10 +47,11 @@ describe("CandidateRow", () => {
       </table>,
     );
 
-    expect(screen.getAllByText("Aguardando vaga").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Vincular vaga" })).toBeInTheDocument();
+    expect(screen.getByText("Disponível")).toBeInTheDocument();
+    expect(screen.getByText("Nenhuma")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vincular à vaga" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Vincular vaga" }));
+    await user.click(screen.getByRole("button", { name: "Vincular à vaga" }));
 
     expect(onLinkJob).toHaveBeenCalledTimes(1);
     expect(onOpen).not.toHaveBeenCalled();
@@ -74,7 +75,7 @@ describe("CandidateRow", () => {
       </table>,
     );
 
-    await user.click(screen.getByRole("button", { name: /Ações do candidato Pessoa Teste/i }));
+    await user.click(screen.getByRole("button", { name: /Ações para Pessoa Teste/i }));
     await user.click(screen.getByRole("button", { name: "Arquivar candidato" }));
 
     expect(onArchive).toHaveBeenCalledTimes(1);
