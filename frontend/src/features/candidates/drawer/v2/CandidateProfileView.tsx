@@ -12,6 +12,8 @@ import { CandidateProfileNavigation, type TabKey } from "./CandidateProfileNavig
 import { CandidateProfileContent } from "./CandidateProfileContent";
 import { getLinkCandidateCtaLabel } from "../../utils/jobLinking";
 import { CandidateAnalysisStatusCard } from "../components/CandidateAnalysisStatusCard";
+import { MoreActionsMenu } from "../components/MoreActionsMenu";
+import type { UserRole } from "../utils/getVisibleCandidateTabs";
 
 export type CandidateActionFeedback = {
   id: number;
@@ -36,6 +38,7 @@ interface CandidateProfileViewProps {
   scoreExplanation: ScoreExplanationResponse | null;
   analysisHighlights?: string[];
   analysisErrorMessage?: string | null;
+  extractionStatus?: string | null | undefined;
   isLoading: boolean;
   isLoadingContent?: boolean;
   activeTab?: TabKey;
@@ -68,6 +71,17 @@ interface CandidateProfileViewProps {
   onStageChange?: (stage: PipelineStage) => Promise<void>;
   onLinkToActiveJob?: () => Promise<void>;
   onOpenTransferJob?: () => void;
+  // Context for tab visibility
+  pipelineStatus?: string | null;
+  activeJobDecision?: string | null;
+  hasBehavioralAssessment?: boolean;
+  hasInterviews?: boolean;
+  hasScorecard?: boolean;
+  hasHiringDecision?: boolean;
+  hasPreAdmission?: boolean;
+  hasAdmissionPackage?: boolean;
+  hasCollaboration?: boolean;
+  userRole?: UserRole;
   children?: ReactNode;
 }
 
@@ -86,6 +100,7 @@ export function CandidateProfileView({
   scoreExplanation,
   analysisHighlights = [],
   analysisErrorMessage = null,
+  extractionStatus = null,
   isLoading,
   isLoadingContent = false,
   activeTab = "overview",
@@ -117,6 +132,16 @@ export function CandidateProfileView({
   onStageChange,
   onLinkToActiveJob,
   onOpenTransferJob,
+  pipelineStatus = null,
+  activeJobDecision = null,
+  hasBehavioralAssessment = false,
+  hasInterviews = false,
+  hasScorecard = false,
+  hasHiringDecision = false,
+  hasPreAdmission = false,
+  hasAdmissionPackage = false,
+  hasCollaboration = false,
+  userRole = "user",
   children,
 }: CandidateProfileViewProps) {
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -179,35 +204,8 @@ export function CandidateProfileView({
         onBackToList={onBackToList}
         backToListLabel={backToListLabel}
         actions={
-          <>
-            {onEditCandidate ? (
-              <button
-                type="button"
-                onClick={onEditCandidate}
-                className="rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
-              >
-                Editar candidato
-              </button>
-            ) : null}
-            {onOpenDocuments ? (
-              <button
-                type="button"
-                onClick={onOpenDocuments}
-                className="rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
-              >
-                Currículos
-              </button>
-            ) : null}
-            {onLinkJob ? (
-              <button
-                type="button"
-                onClick={onLinkJob}
-                className="rounded-xl bg-[hsl(var(--primary))] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90"
-              >
-                {linkJobLabel}
-              </button>
-            ) : null}
-            {onStartAnalysis ? (
+          <div className="flex items-center gap-2">
+            {hasActiveJob && onStartAnalysis ? (
               <button
                 type="button"
                 onClick={onStartAnalysis}
@@ -216,8 +214,27 @@ export function CandidateProfileView({
               >
                 {analysisActionLabel}
               </button>
+            ) : onLinkJob && !hasActiveJob ? (
+              <button
+                type="button"
+                onClick={onLinkJob}
+                className="rounded-xl bg-[hsl(var(--primary))] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90"
+              >
+                {linkJobLabel}
+              </button>
             ) : null}
-          </>
+            <MoreActionsMenu
+              currentStage={currentStage}
+              hasActiveJob={hasActiveJob}
+              canTransferCurrentJob={canTransferCurrentJob}
+              onEditCandidate={onEditCandidate}
+              onOpenDocuments={onOpenDocuments}
+              onLinkJob={onLinkJob}
+              onStartAnalysis={onStartAnalysis}
+              onOpenTransferJob={onOpenTransferJob}
+              onNavigateToFull={onNavigateToFull}
+            />
+          </div>
         }
       />
 
@@ -240,6 +257,7 @@ export function CandidateProfileView({
           }
           aiStatus={aiStatus}
           errorMessage={analysisErrorMessage}
+          extractionStatus={extractionStatus}
           highlights={analysisHighlights}
           compact={compact}
           onPrimaryAction={
@@ -325,6 +343,18 @@ export function CandidateProfileView({
           <CandidateProfileNavigation
             activeTab={activeTab}
             onChange={onTabChange}
+            pipelineStage={currentStage}
+            pipelineStatus={pipelineStatus}
+            activeJobDecision={activeJobDecision}
+            hasActiveJob={hasActiveJob}
+            hasBehavioralAssessment={hasBehavioralAssessment}
+            hasInterviews={hasInterviews}
+            hasScorecard={hasScorecard}
+            hasHiringDecision={hasHiringDecision}
+            hasPreAdmission={hasPreAdmission}
+            hasAdmissionPackage={hasAdmissionPackage}
+            hasCollaboration={hasCollaboration}
+            userRole={userRole}
           />
           <CandidateProfileContent isLoading={isLoadingContent}>
             {children}

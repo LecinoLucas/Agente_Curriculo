@@ -30,7 +30,7 @@ class CandidateModel(Base):
     full_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(sa.String(255))
     phone: Mapped[Optional[str]] = mapped_column(sa.String(50))
-    cpf: Mapped[Optional[str]] = mapped_column(sa.String(14))
+    cpf: Mapped[Optional[str]] = mapped_column(sa.Text())
     location_city: Mapped[Optional[str]] = mapped_column(sa.String(100))
     location_state: Mapped[Optional[str]] = mapped_column(sa.String(100))
     location_country: Mapped[str] = mapped_column(sa.String(10), nullable=False, server_default="BR")

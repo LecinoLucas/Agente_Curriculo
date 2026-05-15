@@ -9,6 +9,9 @@ from src.domain.entities.user import UserRole
 
 pytestmark = pytest.mark.asyncio
 
+# Valid PDF for testing
+PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
+
 
 async def test_full_ats_flow_21_steps(client: AsyncClient, db_session):
     """
@@ -536,51 +539,94 @@ async def test_admission_package_validation_blocks_with_pending_docs(
     admin = await _create_active_user(db_session, "admin@test.com", "password", UserRole.ADMIN)
     admin_headers = await _auth_headers(client, "admin@test.com", "password")
 
-    # Criar vaga
+    # Criar vaga em draft
     resp = await client.post(
         "/api/v1/jobs",
         json={
             "title": "Dev for Validation Test",
-            "status": "published",
-            "created_by": str(admin.id),
+            "description": "A test job for admission package validation with pending documents. This is a comprehensive test to ensure the job publication validation works correctly and all required fields are validated before publishing a job posting to candidates.",
+            "status": "draft",
+            "job_area": "technology",
+            "seniority_level": "senior",
+            "minimum_years_experience": 5,
+            "responsibilities": "Build and maintain backend systems using Python and FastAPI",
         },
         headers=admin_headers,
     )
+    assert resp.status_code == 201, f"Expected 201 for draft job, got {resp.status_code}: {resp.text}"
     job_id = resp.json()["id"]
 
-    # Criar candidato
-    resume_content = b"PDF"
-    files = {"resume_file": ("resume.pdf", io.BytesIO(resume_content), "application/pdf")}
-    data = {
-        "full_name": "Test Candidate",
-        "email": "test@example.com",
-        "phone": "+55 11 99999-9999",
-        "cpf": "123.456.789-00",
-    }
-    resp = await client.post("/api/v1/public/candidates/apply", files=files, data=data)
-    candidate_id = resp.json()["id"]
+    # Adicionar skills à vaga (necessário para publicação)
+    for skill_name, priority_level in [("Python", "priority"), ("FastAPI", "priority"), ("PostgreSQL", "complementary")]:
+        await client.post(
+            "/api/v1/skills",
+            json={"name": skill_name, "category": "technology"},
+            headers=admin_headers,
+        )
+        await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={
+                "skill_name": skill_name,
+                "priority_level": priority_level,
+                "weight": 1.0,
+            },
+            headers=admin_headers,
+        )
 
-    # Criar decisão hire
-    await client.post(
-        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
-        json={"decision_outcome": "hire", "reason_code": "test", "submit": True},
+    # Publicar vaga
+    resp = await client.patch(
+        f"/api/v1/jobs/{job_id}/publish",
+        json={},
         headers=admin_headers,
     )
+    assert resp.status_code == 200, f"Expected 200 for publish, got {resp.status_code}: {resp.text}"
+
+    # Criar candidato diretamente via API
+    resp = await client.post(
+        "/api/v1/candidates",
+        json={
+            "full_name": "Test Candidate Name",
+            "email": "testcand@example.com",
+            "phone": "(11) 98765-4321",
+            "cpf": "111.444.777-35",
+        },
+        headers=admin_headers,
+    )
+    assert resp.status_code == 201, f"Failed to create candidate: {resp.status_code} {resp.text}"
+    candidate_id = resp.json()["id"]
+
+    # Adicionar candidato à vaga (criar pipeline ativo)
+    resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        json={"job_id": job_id},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, f"Failed to add candidate to job: {resp.status_code} {resp.text}"
+
+    # Criar decisão hire
+    resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
+        json={"decision_outcome": "hire", "reason_code": "other", "notes": "Candidate approved for onboarding", "submit": True},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 201, f"Failed to create hiring decision: {resp.status_code} {resp.text}"
 
     # Criar pré-admissão
     resp = await client.post(
-        "/api/v1/pre-admission",
-        json={"job_id": job_id, "candidate_id": candidate_id},
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
+        json={},
         headers=admin_headers,
     )
+    assert resp.status_code == 201, f"Failed to create pre-admission: {resp.status_code} {resp.text}"
     case_id = resp.json()["id"]
 
     # Criar item obrigatório
     resp = await client.post(
         f"/api/v1/pre-admission/{case_id}/checklist-items",
-        json={"item_type": "document", "title": "ID", "required": True},
+        json={"item_type": "cpf", "title": "CPF Document", "required": True},
         headers=admin_headers,
     )
+    assert resp.status_code == 201, f"Failed to create checklist item: {resp.status_code} {resp.text}"
     item_id = resp.json()["id"]
 
     # Marcar como ready sem aprovar documento → tentativa de gerar pacote falha
@@ -594,5 +640,9 @@ async def test_admission_package_validation_blocks_with_pending_docs(
         f"/api/v1/pre-admission/{case_id}/admission-package",
         headers=admin_headers,
     )
-    # Deve falhar porque item obrigatório não está aprovado
-    assert resp.status_code == 422, f"Expected 422 for pending required document: {resp.text}"
+    # Pacote criado com validation_errors porque item obrigatório não está aprovado
+    assert resp.status_code == 201, f"Failed to create admission package: {resp.status_code} {resp.text}"
+    package = resp.json()
+    assert len(package["validation_errors"]) > 0, "Expected validation errors for pending required document"
+    assert any("pending" in err["message"].lower() for err in package["validation_errors"]), \
+        f"Expected 'pending' in validation error messages, got: {package['validation_errors']}"

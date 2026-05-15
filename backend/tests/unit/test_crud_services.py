@@ -7,6 +7,7 @@ import pytest
 
 from src.application.services.candidate_service import (
     APPLICATION_SOURCE_MANUAL,
+    APPLICATION_SOURCE_PUBLIC,
     CandidateDeleteSummary,
     CandidateEmailConflictError,
     CandidateService,
@@ -16,6 +17,7 @@ from src.domain.entities.user import User, UserRole, UserStatus
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.interface.api.schemas.candidate_schemas import CreateCandidateRequest
+from src.interface.api.schemas.candidate_schemas import UpdateCandidateRequest
 from src.interface.api.schemas.job_schemas import CreateJobRequest, UpdateJobRequest
 
 
@@ -31,11 +33,15 @@ class MockAsyncSession:
 class FakeCandidateRepository:
     def __init__(self) -> None:
         self.by_email: dict[str, CandidateModel] = {}
+        self.by_cpf: dict[str, CandidateModel] = {}
         self.saved: CandidateModel | None = None
         self.summary_rows: list[dict] = []
 
     async def find_active_by_email(self, email: str) -> CandidateModel | None:
         return self.by_email.get(email)
+
+    async def find_active_by_cpf(self, cpf: str) -> CandidateModel | None:
+        return self.by_cpf.get(cpf)
 
     async def create(self, candidate: CandidateModel) -> CandidateModel:
         candidate.id = uuid4()
@@ -44,6 +50,17 @@ class FakeCandidateRepository:
         self.saved = candidate
         if candidate.email:
             self.by_email[candidate.email] = candidate
+        if candidate.cpf:
+            self.by_cpf[candidate.cpf] = candidate
+        return candidate
+
+    async def save(self, candidate: CandidateModel) -> CandidateModel:
+        candidate.updated_at = datetime.now(timezone.utc)
+        self.saved = candidate
+        if candidate.email:
+            self.by_email[candidate.email] = candidate
+        if candidate.cpf:
+            self.by_cpf[candidate.cpf] = candidate
         return candidate
 
     async def list_summaries(
@@ -133,6 +150,103 @@ async def test_candidate_create_rejects_duplicate_email():
             CreateCandidateRequest(full_name="Ana Silva", email="ANA@EXAMPLE.COM"),
             created_by=uuid4(),
         )
+
+
+@pytest.mark.asyncio
+async def test_candidate_create_allows_any_cpf_for_manual_entry():
+    repo = FakeCandidateRepository()
+    service = CandidateService(repo)  # type: ignore[arg-type]
+
+    candidate = await service.create(
+        CreateCandidateRequest(
+            full_name="Ana Silva",
+            email="ana@example.com",
+            cpf="CPF-LIVRE-123",
+        ),
+        created_by=uuid4(),
+    )
+
+    assert candidate.cpf == "CPF-LIVRE-123"
+
+
+@pytest.mark.asyncio
+async def test_candidate_create_allows_any_cpf_for_public_application():
+    repo = FakeCandidateRepository()
+    service = CandidateService(repo)  # type: ignore[arg-type]
+
+    candidate = await service.create(
+        CreateCandidateRequest(
+            full_name="Ana",
+            email="ana.public@example.com",
+            cpf="CPF PUBLICO LIVRE",
+        ),
+        created_by=uuid4(),
+        application_source=APPLICATION_SOURCE_PUBLIC,
+    )
+
+    assert candidate.cpf == "CPF PUBLICO LIVRE"
+    assert candidate.application_source == APPLICATION_SOURCE_PUBLIC
+
+
+@pytest.mark.asyncio
+async def test_candidate_create_allows_single_word_name_for_manual_entry():
+    repo = FakeCandidateRepository()
+    service = CandidateService(repo)  # type: ignore[arg-type]
+
+    candidate = await service.create(
+        CreateCandidateRequest(
+            full_name="Madonna",
+            email="madonna@example.com",
+            cpf="CPF-LIVRE-123",
+        ),
+        created_by=uuid4(),
+    )
+
+    assert candidate.full_name == "Madonna"
+
+
+@pytest.mark.asyncio
+async def test_candidate_update_allows_any_cpf_for_manual_entry():
+    repo = FakeCandidateRepository()
+    candidate = CandidateModel(
+        id=uuid4(),
+        full_name="Ana Silva",
+        email="ana@example.com",
+        cpf="CPF-LIVRE-123",
+        tags=[],
+        created_by=uuid4(),
+    )
+    repo.saved = candidate
+    repo.by_email[candidate.email] = candidate
+    repo.by_cpf[candidate.cpf] = candidate
+    service = CandidateService(repo)  # type: ignore[arg-type]
+
+    updated = await service.update(
+        candidate.id,
+        UpdateCandidateRequest(cpf="CPF-LIVRE-9876543210"),
+    )
+
+    assert updated.cpf == "CPF-LIVRE-9876543210"
+
+
+@pytest.mark.asyncio
+async def test_candidate_duplicate_check_accepts_arbitrary_cpf():
+    repo = FakeCandidateRepository()
+    candidate = CandidateModel(
+        id=uuid4(),
+        full_name="Ana Silva",
+        email="ana@example.com",
+        cpf="CPF-LIVRE-123",
+        tags=[],
+        created_by=uuid4(),
+    )
+    repo.by_cpf[candidate.cpf] = candidate
+    service = CandidateService(repo)  # type: ignore[arg-type]
+
+    result = await service.check_duplicate(None, "CPF-LIVRE-123")
+
+    assert result.exists is True
+    assert result.candidate_id == candidate.id
 
 
 @pytest.mark.asyncio

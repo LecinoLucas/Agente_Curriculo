@@ -16,6 +16,9 @@ from src.interface.api.schemas.document_ai_schemas import (
 )
 from src.interface.workers.document_ai_dispatcher import enqueue_document_ai
 from src.observability.context import get_correlation_id
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/document-ai", tags=["document-ai"])
 
@@ -121,3 +124,31 @@ async def retry_document_ai_analysis(
         new_analysis_id=new_analysis.id,
         status="pending",
     )
+
+
+@router.post("/cleanup-stale", response_model=dict)
+async def cleanup_stale_processing_analyses(
+    current_user: RecruiterOrAdmin,
+    timeout_seconds: int = 120,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    cutoff_time = datetime.now(UTC) - sa.func.make_interval(secs=timeout_seconds)
+
+    stale_analyses = await db.execute(
+        sa.select(DocumentAIAnalysisModel).where(
+            DocumentAIAnalysisModel.status == "processing",
+            DocumentAIAnalysisModel.created_at < cutoff_time,
+        )
+    )
+
+    count = 0
+    for analysis in stale_analyses.scalars().all():
+        analysis.status = "pending"
+        analysis.error_message = "reset_from_stale_processing"
+        count += 1
+
+    if count > 0:
+        await db.commit()
+        logger.info("document_ai.cleanup_stale_analyses", count=count, timeout_seconds=timeout_seconds)
+
+    return {"cleaned": count, "timeout_seconds": timeout_seconds}

@@ -239,8 +239,15 @@ export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
   };
 }
 
-export async function getJobRanking(jobId: string): Promise<JobRanking> {
-  const response = await httpRequest<any>(`/api/v1/jobs/${jobId}/ranking`);
+export async function getJobRanking(
+  jobId: string,
+  params?: { page?: number; pageSize?: number },
+): Promise<JobRanking> {
+  const url = new URL(`/api/v1/jobs/${jobId}/ranking`, window.location.origin);
+  if (params?.page != null) url.searchParams.set("page", String(params.page));
+  if (params?.pageSize != null) url.searchParams.set("page_size", String(params.pageSize));
+
+  const response = await httpRequest<any>(url.pathname + url.search);
   const candidatesRaw = Array.isArray(response?.candidates) ? response.candidates : [];
 
   return {
@@ -302,6 +309,92 @@ export async function getJobRanking(jobId: string): Promise<JobRanking> {
       version: item?.version ?? "",
       ranking_version: item?.ranking_version ?? item?.version ?? "",
     })),
+    page: response?.page,
+    page_size: response?.page_size,
+    total_pages: response?.total_pages,
+  };
+}
+
+export async function getCandidateRankingEntry(
+  jobId: string,
+  candidateId: string,
+): Promise<JobRankingEntry> {
+  const response = await httpRequest<any>(
+    `/api/v1/jobs/${jobId}/ranking/${candidateId}`,
+  );
+
+  return {
+    rank: requireNumber(response?.rank, "rank"),
+    candidate_id: response?.candidate_id ?? "",
+    candidate_name: response?.candidate_name ?? "Candidato sem nome",
+    stage: response?.stage ?? "",
+    pipeline_status: response?.pipeline_status ?? "",
+    score_breakdown: {
+      skill_match_score: requireNumber(
+        response?.score_breakdown?.skill_match_score,
+        "score_breakdown.skill_match_score",
+      ),
+      experience_match_score: requireNumber(
+        response?.score_breakdown?.experience_match_score,
+        "score_breakdown.experience_match_score",
+      ),
+      seniority_match_score: requireNumber(
+        response?.score_breakdown?.seniority_match_score,
+        "score_breakdown.seniority_match_score",
+      ),
+      education_score: requireNumber(
+        response?.score_breakdown?.education_score,
+        "score_breakdown.education_score",
+      ),
+      confidence_score: requireNumber(
+        response?.score_breakdown?.confidence_score,
+        "score_breakdown.confidence_score",
+      ),
+      penalty_score: requireNumber(
+        response?.score_breakdown?.penalty_score,
+        "score_breakdown.penalty_score",
+      ),
+      job_fit_score: requireNumber(
+        response?.score_breakdown?.job_fit_score,
+        "score_breakdown.job_fit_score",
+      ),
+    },
+    job_fit_score: requireNumber(response?.job_fit_score, "job_fit_score"),
+    decision_suggestion: response?.decision_suggestion ?? "review",
+    reason_tags: Array.isArray(response?.reason_tags)
+      ? response.reason_tags.map((reason: any) => ({
+          type: reason?.type ?? "",
+          field: reason?.field ?? "",
+          impact: reason?.impact != null ? Number(reason.impact) : 0,
+          description: reason?.description ?? "",
+          expected: reason?.expected ?? null,
+          actual: reason?.actual ?? null,
+          reason: reason?.reason ?? null,
+        }))
+      : [],
+    score_factors: parseScoreFactors(response?.score_factors),
+    data_confidence_score:
+      response?.data_confidence_score != null
+        ? requireNumber(response?.data_confidence_score, "data_confidence_score")
+        : undefined,
+    ranking_summary_text: response?.ranking_summary_text ?? "",
+    entered_at: response?.entered_at ?? null,
+    computed_at: response?.computed_at ?? new Date(0).toISOString(),
+    ranking_freshness_status: requireFreshnessStatus(
+      response?.ranking_freshness_status,
+    ),
+    match_freshness_status:
+      response?.match_freshness_status != null
+        ? requireFreshnessStatus(response?.match_freshness_status)
+        : undefined,
+    score_computed_at: response?.score_computed_at ?? response?.computed_at ?? null,
+    source_analysis_id: response?.source_analysis_id ?? null,
+    source_analysis_created_at: response?.source_analysis_created_at ?? null,
+    score_model_version: response?.score_model_version ?? null,
+    match_updated_at: response?.match_updated_at ?? null,
+    ranking_updated_at: response?.ranking_updated_at ?? null,
+    version: response?.version ?? "",
+    ranking_version: response?.ranking_version ?? response?.version ?? "",
   };
 }
 

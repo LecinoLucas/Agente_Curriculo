@@ -1,8 +1,8 @@
-import re
 from datetime import UTC, datetime, timezone
 from hashlib import sha256
 from uuid import UUID, uuid4
 
+import re
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,7 +34,6 @@ from src.infrastructure.storage.resume_files import write_resume_file
 from src.infrastructure.security.password_service import hash_password, verify_password
 from src.interface.api.schemas.candidate_schemas import CreateCandidateRequest
 from src.interface.api.schemas.public_schemas import PublicApplyResponse
-from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineEventModel
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import _candidate_job_pipeline_key
 
@@ -45,10 +44,6 @@ MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 class PublicApplicationError(Exception):
-    pass
-
-
-class PublicApplicationCpfError(PublicApplicationError):
     pass
 
 
@@ -82,22 +77,8 @@ class PublicApplicationService:
         self._candidate_service = CandidateService(self._candidate_repo)
 
     @staticmethod
-    def _validate_cpf(cpf: str) -> str:
-        """Valida CPF com algoritmo mod-11. Retorna apenas dígitos."""
-        digits = re.sub(r"\D", "", cpf)
-        if len(digits) != 11:
-            raise PublicApplicationCpfError("CPF deve conter 11 dígitos")
-
-        if len(set(digits)) == 1:
-            raise PublicApplicationCpfError("CPF inválido")
-
-        for i in range(9, 11):
-            s = sum(int(digits[j]) * (i + 1 - j) for j in range(i))
-            d = (s * 10 % 11) % 10
-            if d != int(digits[i]):
-                raise PublicApplicationCpfError("CPF inválido")
-
-        return digits
+    def _clean_cpf(cpf: str) -> str:
+        return cpf.strip()
 
     @staticmethod
     def _validate_phone(phone: str) -> str:
@@ -151,7 +132,7 @@ class PublicApplicationService:
         """
         Processo completo de candidatura pública:
         1. Valida LGPD consent (obrigatório)
-        2. Valida CPF (mod-11)
+        2. Normaliza campos de entrada
         3. Verifica duplicidade CPF → 409
         4. Verifica duplicidade email → 409
         5. Cria candidato
@@ -164,8 +145,8 @@ class PublicApplicationService:
         if not lgpd_consent:
             raise ValidationException("É necessário aceitar os termos de LGPD para continuar")
 
-        # 2. Validar CPF
-        cpf_clean = self._validate_cpf(cpf)
+        # 2. Normalizar CPF sem validação semântica
+        cpf_clean = self._clean_cpf(cpf)
         self._validate_password(password)
 
         existing_by_cpf = await self._candidate_repo.find_active_by_cpf(cpf_clean)
@@ -294,9 +275,6 @@ class PublicApplicationService:
 
         # Escrever arquivo no storage
         write_resume_file(version.s3_key, file_bytes)
-
-        # Enfileirar extração
-        enqueue_resume_extraction(version.id)
 
         logger.info(
             "resume_uploaded",

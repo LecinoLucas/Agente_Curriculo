@@ -116,6 +116,9 @@ class JobRankingResponse(BaseModel):
     score_version: str
     candidates: list[CandidateRankingEntry]
     data_quality_stats: DataQualityStats | None = None
+    page: int | None = None
+    page_size: int | None = None
+    total_pages: int | None = None
 
 
 class ScoreDeltaEntry(BaseModel):

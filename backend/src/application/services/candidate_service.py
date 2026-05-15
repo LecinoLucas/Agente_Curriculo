@@ -120,7 +120,11 @@ class CandidateService:
         if await self._repository.find_active_by_email(email):
             raise CandidateEmailConflictError
 
-        cpf = self._clean_cpf(body.cpf)
+        cpf = (
+            self._clean_cpf(body.cpf)
+            if application_source not in {APPLICATION_SOURCE_MANUAL, APPLICATION_SOURCE_PUBLIC}
+            else self._clean_manual_cpf(body.cpf)
+        )
         if cpf is not None and await self._repository.find_active_by_cpf(cpf):
             raise CandidateCpfConflictError
 
@@ -378,13 +382,9 @@ class CandidateService:
             candidate.email = email
 
         if body.cpf is not None:
-            cpf = self._clean_cpf(body.cpf)
+            cpf = self._clean_manual_cpf(body.cpf)
             if cpf != candidate.cpf:
-                conflict = (
-                    await self._repository.find_active_by_cpf(cpf)
-                    if cpf is not None
-                    else None
-                )
+                conflict = await self._find_existing_candidate_by_cpf(cpf)
                 if conflict is not None and conflict.id != candidate_id:
                     raise CandidateCpfConflictError
             candidate.cpf = cpf
@@ -534,15 +534,13 @@ class CandidateService:
                         full_name=candidate.full_name,
                     )
         if cpf:
-            clean_cpf = self._clean_cpf(cpf)
-            if clean_cpf:
-                candidate = await self._repository.find_active_by_cpf(clean_cpf)
-                if candidate:
-                    return CandidateCheckResponse(
-                        exists=True,
-                        candidate_id=candidate.id,
-                        full_name=candidate.full_name,
-                    )
+            candidate = await self._find_existing_candidate_by_cpf(cpf)
+            if candidate:
+                return CandidateCheckResponse(
+                    exists=True,
+                    candidate_id=candidate.id,
+                    full_name=candidate.full_name,
+                )
         return CandidateCheckResponse(exists=False)
 
     async def _get_any(self, candidate_id: UUID) -> CandidateModel:
@@ -563,6 +561,27 @@ class CandidateService:
         if len(digits) != 11:
             raise InvalidCandidateCpfError
         return digits
+
+    @staticmethod
+    def _clean_manual_cpf(cpf: str | None) -> str | None:
+        if cpf is None:
+            return None
+        cleaned = cpf.strip()
+        return cleaned or None
+
+    async def _find_existing_candidate_by_cpf(self, cpf: str | None) -> CandidateModel | None:
+        if cpf is None:
+            return None
+
+        candidate = await self._repository.find_active_by_cpf(cpf)
+        if candidate is not None:
+            return candidate
+
+        digits = re.sub(r"\D", "", cpf)
+        if digits and digits != cpf:
+            return await self._repository.find_active_by_cpf(digits)
+
+        return None
 
     @staticmethod
     def _clean_required_text(value: str) -> str:

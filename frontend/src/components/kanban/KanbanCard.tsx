@@ -46,7 +46,7 @@ export const KanbanCard = memo(function KanbanCard({
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-2">
             {rank && rank <= 3 && (
-              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-black shadow-sm ${
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold shadow-sm ${
                 rank === 1 ? "bg-yellow-400 text-white" :
                 rank === 2 ? "bg-slate-300 text-slate-700" :
                 rank === 3 ? "bg-amber-500 text-white" : ""
@@ -54,7 +54,7 @@ export const KanbanCard = memo(function KanbanCard({
                 {rank}
               </span>
             )}
-            <span className="truncate text-sm font-black tracking-tight text-[hsl(var(--text))]">
+            <span className="truncate text-sm font-bold tracking-tight text-[hsl(var(--text))]">
               {candidate.candidate_name}
             </span>
           </div>
@@ -86,28 +86,28 @@ export const KanbanCard = memo(function KanbanCard({
       {/* Footer: official job fit score */}
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-[hsl(var(--border))]/40 pt-4">
         {isSaving ? (
-          <span className="text-[10px] font-black uppercase tracking-widest text-[hsl(var(--text-muted))] animate-pulse">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))] animate-pulse">
             Sincronizando…
           </span>
         ) : (
           <>
-            <span className="text-[9px] font-black uppercase tracking-[0.15em] text-[hsl(var(--text-muted))]">
+            <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-[hsl(var(--text-muted))]">
               Match IA
             </span>
             {jobFitScore !== null && jobFitScore !== undefined ? (
               <div className="flex items-center gap-1.5">
                 <div className="h-1.5 w-12 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
                    <div 
-                     className="h-full bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--hero-end))] transition-all duration-500" 
+                     className="h-full bg-[hsl(var(--primary))] transition-all duration-500" 
                      style={{ width: `${Math.round(jobFitScore)}%` }}
                    />
                 </div>
-                <span className="text-xs font-black tabular-nums text-[hsl(var(--primary))]">
+                <span className="text-xs font-bold tabular-nums text-[hsl(var(--primary))]">
                   {Math.round(jobFitScore)}%
                 </span>
               </div>
             ) : (
-              <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[9px] font-black text-[hsl(var(--text-muted))]">
+              <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[9px] font-bold text-[hsl(var(--text-muted))]">
                 Pendente
               </span>
             )}

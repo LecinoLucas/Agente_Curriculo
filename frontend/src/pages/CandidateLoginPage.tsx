@@ -1,4 +1,4 @@
-import { Loader2, LogIn, ShieldCheck, ArrowRight } from "lucide-react";
+import { Loader2, LogIn, ShieldCheck, ArrowRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -54,60 +54,60 @@ export function CandidateLoginPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[hsl(var(--bg))] px-4 py-10 sm:px-6 lg:px-8">
-      {/* Background Orbs for Premium Look */}
-      <div className="pointer-events-none absolute -left-20 -top-20 h-96 w-96 rounded-full bg-[hsl(var(--primary)/0.15)] blur-[120px]" />
-      <div className="pointer-events-none absolute -right-20 bottom-0 h-96 w-96 rounded-full bg-[hsl(var(--brand-glow)/0.1)] blur-[120px]" />
+      {/* Background Orbs */}
+      <div className="pointer-events-none absolute left-[-10%] top-[-10%] h-[40rem] w-[40rem] rounded-full bg-[hsl(var(--primary)/0.08)] blur-[120px] animate-pulse" />
+      <div className="pointer-events-none absolute right-[-5%] bottom-[-10%] h-[35rem] w-[35rem] rounded-full bg-[hsl(var(--brand-glow)/0.12)] blur-[100px]" />
 
-      <div className="relative mx-auto flex w-full max-w-5xl flex-col items-center justify-center gap-8 lg:min-h-[80vh] lg:flex-row lg:gap-12">
+      <div className="relative mx-auto flex w-full max-w-5xl flex-col items-center justify-center gap-8 lg:min-h-[85vh] lg:flex-row lg:gap-16">
         {/* Left Side: Brand & Info */}
-        <div className="flex w-full flex-col gap-6 lg:w-1/2">
-          <div className="space-y-4 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--primary)/0.1)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-[hsl(var(--primary))]">
-              <ShieldCheck className="h-4 w-4" />
-              Ambiente Seguro
+        <div className="flex w-full flex-col gap-8 lg:w-1/2 animate-in fade-in slide-in-from-left-8 duration-700">
+          <div className="space-y-6 text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--primary))]">
+              <Sparkles className="h-3.5 w-3.5" />
+              Ambiente Restrito
             </div>
-            <h1 className="font-heading text-4xl font-extrabold tracking-tight text-[hsl(var(--text))] sm:text-5xl lg:text-6xl">
-              Acompanhe sua <span className="bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] bg-clip-text text-transparent">candidatura</span>
+            <h1 className="font-heading text-5xl font-extrabold tracking-tight text-[hsl(var(--text))] sm:text-6xl">
+              Gerencie sua <span className="bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] bg-clip-text text-transparent">carreira</span>
             </h1>
-            <p className="text-lg text-[hsl(var(--text-muted))] sm:text-xl">
-              Entre para gerenciar seu currículo, acompanhar o status dos processos e realizar testes comportamentais.
+            <p className="max-w-lg text-lg leading-relaxed text-[hsl(var(--text-muted))] sm:text-xl">
+              Acesse seu portal para acompanhar processos seletivos, realizar testes e manter seu perfil sempre atualizado.
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             {[
-              { title: "Status em tempo real", desc: "Veja onde você está no processo." },
-              { title: "Gestão de Currículo", desc: "Mantenha seus dados sempre atualizados." },
+              { title: "Status Real-time", desc: "Acompanhe cada etapa da sua jornada." },
+              { title: "Testes Online", desc: "Realize avaliações técnicas e comportamentais." },
             ].map((item, i) => (
-              <div key={i} className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface)/0.5)] p-5 backdrop-blur-sm transition-all hover:border-[hsl(var(--primary)/0.3)]">
-                <p className="font-bold text-[hsl(var(--text))]">{item.title}</p>
-                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{item.desc}</p>
+              <div key={i} className="group rounded-[1.5rem] border border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface)/0.5)] p-6 backdrop-blur-md transition-all hover:border-[hsl(var(--primary)/0.3)] hover:bg-[hsl(var(--surface)/0.8)]">
+                <p className="font-bold tracking-tight text-[hsl(var(--text))] group-hover:text-[hsl(var(--primary))] transition-colors">{item.title}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[hsl(var(--text-muted))]">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="w-full max-w-md lg:w-1/2">
-          <Card className="relative overflow-hidden border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface)/0.8)] shadow-2xl backdrop-blur-md">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))]" />
+        <div className="w-full max-w-md lg:w-1/2 animate-in fade-in slide-in-from-right-8 duration-700 delay-200">
+          <Card className="relative overflow-hidden rounded-[2.5rem] border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface)/0.8)] shadow-2xl backdrop-blur-xl">
+            <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))]" />
             
-            <CardHeader className="space-y-1 pt-8">
-              <CardTitle className="text-2xl font-bold tracking-tight">Entrar no Portal</CardTitle>
-              <CardDescription>Use seu e-mail e senha cadastrados.</CardDescription>
+            <CardHeader className="space-y-2 pt-10">
+              <CardTitle className="text-3xl font-bold tracking-tight">Entrar no Portal</CardTitle>
+              <CardDescription className="text-base">Bem-vindo de volta! Entre com seus dados.</CardDescription>
             </CardHeader>
             
-            <CardContent className="pb-8">
-              <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+            <CardContent className="pb-10">
+              <form className="space-y-6" onSubmit={handleSubmit} noValidate>
                 <div className="space-y-2">
-                  <label htmlFor="candidate-login-email" className="text-sm font-semibold text-[hsl(var(--text))]">
+                  <label htmlFor="candidate-login-email" className="text-sm font-bold tracking-tight text-[hsl(var(--text))]">
                     E-mail
                   </label>
                   <Input
                     id="candidate-login-email"
                     type="email"
-                    placeholder="exemplo@email.com"
-                    className="h-12 border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] focus-visible:ring-[hsl(var(--primary))]"
+                    placeholder="seu@email.com"
+                    className="h-12 rounded-xl border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] px-4 focus-visible:ring-[hsl(var(--primary))]"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     disabled={isSubmitting}
@@ -116,10 +116,10 @@ export function CandidateLoginPage() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label htmlFor="candidate-login-password" className="text-sm font-semibold text-[hsl(var(--text))]">
+                    <label htmlFor="candidate-login-password" className="text-sm font-bold tracking-tight text-[hsl(var(--text))]">
                       Senha
                     </label>
-                    <Link to="#" className="text-xs font-medium text-[hsl(var(--primary))] hover:underline">
+                    <Link to="#" className="text-xs font-bold text-[hsl(var(--primary))] transition-opacity hover:opacity-80">
                       Esqueceu a senha?
                     </Link>
                   </div>
@@ -127,7 +127,7 @@ export function CandidateLoginPage() {
                     id="candidate-login-password"
                     type="password"
                     placeholder="••••••••"
-                    className="h-12 border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] focus-visible:ring-[hsl(var(--primary))]"
+                    className="h-12 rounded-xl border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] px-4 focus-visible:ring-[hsl(var(--primary))]"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     disabled={isSubmitting}
@@ -135,7 +135,7 @@ export function CandidateLoginPage() {
                 </div>
 
                 {errorMessage ? (
-                  <div className="animate-in fade-in slide-in-from-top-1 rounded-xl border border-[hsl(var(--danger)/0.2)] bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm font-medium text-[hsl(var(--danger))]">
+                  <div className="animate-in fade-in slide-in-from-top-1 rounded-xl border border-[hsl(var(--danger)/0.2)] bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm font-bold text-[hsl(var(--danger))]">
                     {errorMessage}
                   </div>
                 ) : null}
@@ -143,7 +143,7 @@ export function CandidateLoginPage() {
                 <Button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="h-12 w-full bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="h-14 w-full rounded-2xl bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] text-lg font-bold text-white shadow-xl shadow-[hsl(var(--primary)/0.2)] transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   {isSubmitting ? (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -153,34 +153,38 @@ export function CandidateLoginPage() {
                   Acessar minha conta
                 </Button>
 
-                <div className="relative my-6">
+                <div className="relative my-8">
                   <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-[hsl(var(--border)/0.5)]"></span>
+                    <span className="w-full border-t border-[hsl(var(--border)/0.4)]"></span>
                   </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-[hsl(var(--surface))] px-2 text-[hsl(var(--text-muted))]">Novo por aqui?</span>
+                  <div className="relative flex justify-center text-[10px] font-bold uppercase tracking-widest">
+                    <span className="bg-[hsl(var(--surface))] px-4 text-[hsl(var(--text-muted))]">Novo por aqui?</span>
                   </div>
                 </div>
 
                 <Button 
                   variant="outline" 
                   asChild
-                  className="h-12 w-full border-[hsl(var(--border))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--primary))]"
+                  className="h-14 w-full rounded-2xl border-2 border-[hsl(var(--primary))] bg-transparent text-lg font-bold text-[hsl(var(--primary))] transition-all hover:bg-[hsl(var(--primary))] hover:text-white active:scale-[0.98]"
                 >
                   <Link to="/candidato/cadastro">
                     Criar meu cadastro
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
                 </Button>
               </form>
             </CardContent>
           </Card>
           
-          <p className="mt-8 text-center text-xs text-[hsl(var(--text-muted))]">
-            Protegido por criptografia de ponta a ponta. 
-            <br />
-            © 2026 Marajó RH. Todos os direitos reservados.
-          </p>
+          <div className="mt-10 flex flex-col items-center gap-4">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+              <ShieldCheck className="h-3.5 w-3.5 text-[hsl(var(--success))]" />
+              Proteção de dados LGPD
+            </div>
+            <p className="text-center text-xs font-medium text-[hsl(var(--text-muted))]">
+              © {new Date().getFullYear()} Marajó RH. Todos os direitos reservados.
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -208,6 +208,125 @@ describe("getCandidateAnalysisUiState", () => {
     expect(state.state).toBe("failed");
     expect(state.description).toContain("Timeout no provedor");
   });
+
+  // Extraction status tests (new)
+  it("mostra estado de extração quando extraction_status está pending", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: null,
+      jobFitScore: null,
+      aiStatus: null,
+      extractionStatus: "pending",
+    });
+
+    expect(state.state).toBe("processing");
+    expect(state.title).toBe("Extraindo currículo");
+    expect(state.description).toContain("Extraindo dados do currículo");
+  });
+
+  it("mostra estado de extração quando extraction_status está processing", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: null,
+      jobFitScore: null,
+      aiStatus: null,
+      extractionStatus: "processing",
+    });
+
+    expect(state.state).toBe("processing");
+    expect(state.title).toBe("Extraindo currículo");
+    expect(state.inProgress).toBe(true);
+  });
+
+  it("mostra falha na extração quando extraction_status é failed", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: null,
+      jobFitScore: null,
+      aiStatus: null,
+      extractionStatus: "failed",
+    });
+
+    expect(state.state).toBe("failed");
+    expect(state.title).toBe("Falha na extração do currículo");
+    expect(state.description).toContain("Tente enviar novamente");
+  });
+
+  it("mostra análise IA pendente quando extraction está completed mas aiStatus é pending", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: "pending",
+      jobFitScore: null,
+      aiStatus: "pending",
+      extractionStatus: "completed",
+    });
+
+    expect(state.state).toBe("processing");
+    expect(state.title).toBe("Analisando com IA");
+  });
+
+  it("mostra análise em processamento quando extraction completed e aiStatus processing", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: "processing",
+      jobFitScore: null,
+      aiStatus: "processing",
+      extractionStatus: "completed",
+    });
+
+    expect(state.state).toBe("processing");
+    expect(state.title).toBe("Analisando com IA");
+    expect(state.inProgress).toBe(true);
+  });
+
+  it("mostra falha na análise quando extraction completed mas aiStatus failed", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: "failed",
+      jobFitScore: null,
+      aiStatus: "failed",
+      errorMessage: "Erro ao processar análise",
+      extractionStatus: "completed",
+    });
+
+    expect(state.state).toBe("failed");
+    expect(state.title).toBe("Falha na análise");
+    expect(state.description).toContain("Erro ao processar análise");
+  });
+
+  it("mostra aderência quando extraction completed, aiStatus completed e score existe", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: "completed",
+      jobFitScore: 85,
+      aiStatus: "completed",
+      extractionStatus: "completed",
+    });
+
+    expect(state.state).toBe("completed");
+    expect(state.title).toBe("Aderência pronta");
+  });
+
+  it("prioriza extraction_status failed sobre aiStatus completed", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: "completed",
+      jobFitScore: 85,
+      aiStatus: "completed",
+      extractionStatus: "failed",
+    });
+
+    expect(state.state).toBe("failed");
+    expect(state.title).toBe("Falha na extração do currículo");
+  });
 });
 
 describe("mapScoreStatusToUiState", () => {

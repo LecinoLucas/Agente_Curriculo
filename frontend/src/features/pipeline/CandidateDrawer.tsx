@@ -199,6 +199,7 @@ export function CandidateDrawer({
   const [fullAgendaOpen, setFullAgendaOpen] = useState(false);
   const [analysisStarting, setAnalysisStarting] = useState(false);
   const [scoreTabFocusRequest, setScoreTabFocusRequest] = useState<ScoreTabFocusRequest | null>(null);
+  const [visitedTabs, setVisitedTabs] = useState<Set<ProfileTabKey>>(new Set(["overview", "score"]));
   const shouldLoadScoreExplanation = activePanelTab === "score" || activePanelTab === "analysis";
 
   const stageSaving =
@@ -262,6 +263,37 @@ export function CandidateDrawer({
       document.body.style.overflow = previousOverflow;
     };
   }, [isOpen, mode]);
+
+  // Reset visited tabs when candidate changes
+  useEffect(() => {
+    setVisitedTabs(new Set(["overview", "score"]));
+  }, [selectedCandidateId]);
+
+  // Dev-mode timing: track when drawer is open
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development' || !isOpen) return;
+    const start = performance.now();
+    if (selectedCandidateId) {
+      console.debug(`[CandidateDrawer] candidate ${selectedCandidateId} opened`);
+    }
+    return () => {
+      const elapsed = performance.now() - start;
+      if (selectedCandidateId) {
+        console.debug(`[CandidateDrawer] candidate ${selectedCandidateId} closed after ${elapsed.toFixed(0)}ms`);
+      }
+    };
+  }, [selectedCandidateId, isOpen]);
+
+  // Dev-mode timing: track tab switches
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const start = performance.now();
+    console.debug(`[CandidateDrawer] tab switched to "${profileTabKey}"`);
+    return () => {
+      const elapsed = performance.now() - start;
+      console.debug(`[CandidateDrawer] tab "${profileTabKey}" active for ${elapsed.toFixed(0)}ms`);
+    };
+  }, [profileTabKey]);
 
   const pushActionFeedback = useCallback((feedbackPayload: Omit<CandidateActionFeedback, "id">) => {
     setActionFeedback({
@@ -584,6 +616,8 @@ export function CandidateDrawer({
     (tabKey: ProfileTabKey) => {
       setDetailTabsVisible(true);
       setProfileTabKey(tabKey);
+      // Track tab visit for keep-alive pattern
+      setVisitedTabs((prev) => new Set([...prev, tabKey]));
 
       const panelTabMap: Record<ProfileTabKey, PanelTab> = {
         overview: "summary",
@@ -760,6 +794,7 @@ export function CandidateDrawer({
           scoreExplanation={scoreExplanation}
           analysisHighlights={analysisHighlights}
           analysisErrorMessage={activeJobAnalysis?.failure_reason ?? null}
+          extractionStatus={latestResume?.extraction_status}
           isLoading={candidateLoading}
           isLoadingContent={profileTabKey === "score" && rankingEntryLoading}
           activeTab={profileTabKey}
@@ -791,6 +826,9 @@ export function CandidateDrawer({
           onStageChange={handleStageChange}
           onLinkToActiveJob={handleLinkToActiveJob}
           onOpenTransferJob={handleOpenTransferJob}
+          pipelineStatus={primaryPipelineEntry?.relationship_status ?? null}
+          activeJobDecision={candidateOverview.active_job_decision?.decision ?? null}
+          userRole={user?.role ?? "candidate"}
         >
           {profileTabKey === "overview" ? (
             <OverviewTabWithHistory
@@ -836,42 +874,55 @@ export function CandidateDrawer({
             />
           ) : null}
 
-          {profileTabKey === "interview" ? (
-            <InterviewTab
-              jobId={candidateActiveJobId}
-              candidateId={candidate?.id ?? null}
-            />
-          ) : null}
+          {/* Keep-alive: interview tab stays mounted after first visit */}
+          <div className={profileTabKey !== "interview" ? "hidden" : undefined}>
+            {visitedTabs.has("interview") ? (
+              <InterviewTab
+                jobId={candidateActiveJobId}
+                candidateId={candidate?.id ?? null}
+              />
+            ) : null}
+          </div>
 
-          {profileTabKey === "assessment" ? (
-            <CandidateBehavioralAssessmentPanel
-              jobId={candidateActiveJobId}
-              candidateId={candidate?.id ?? null}
-            />
-          ) : null}
+          {/* Keep-alive: assessment tab stays mounted after first visit */}
+          <div className={profileTabKey !== "assessment" ? "hidden" : undefined}>
+            {visitedTabs.has("assessment") ? (
+              <CandidateBehavioralAssessmentPanel
+                jobId={candidateActiveJobId}
+                candidateId={candidate?.id ?? null}
+              />
+            ) : null}
+          </div>
 
-          {profileTabKey === "communications" ? (
-            <CandidateCommunicationsPanel
-              jobId={candidateActiveJobId}
-              candidateId={candidate?.id ?? null}
-            />
-          ) : null}
+          {/* Keep-alive: communications tab stays mounted after first visit */}
+          <div className={profileTabKey !== "communications" ? "hidden" : undefined}>
+            {visitedTabs.has("communications") ? (
+              <CandidateCommunicationsPanel
+                jobId={candidateActiveJobId}
+                candidateId={candidate?.id ?? null}
+              />
+            ) : null}
+          </div>
 
-          {profileTabKey === "collaboration" ? (
-            candidateActiveJobId && candidate?.id ? (
+          {/* Keep-alive: collaboration tab stays mounted after first visit */}
+          <div className={profileTabKey !== "collaboration" ? "hidden" : undefined}>
+            {visitedTabs.has("collaboration") && candidateActiveJobId && candidate?.id ? (
               <CollaborationTab
                 jobId={candidateActiveJobId}
                 candidateId={candidate.id}
               />
-            ) : null
-          ) : null}
+            ) : null}
+          </div>
 
-          {profileTabKey === "pre_admission" ? (
-            <CandidatePreAdmissionPanel
-              jobId={candidateActiveJobId}
-              candidateId={candidate?.id ?? null}
-            />
-          ) : null}
+          {/* Keep-alive: pre_admission tab stays mounted after first visit */}
+          <div className={profileTabKey !== "pre_admission" ? "hidden" : undefined}>
+            {visitedTabs.has("pre_admission") ? (
+              <CandidatePreAdmissionPanel
+                jobId={candidateActiveJobId}
+                candidateId={candidate?.id ?? null}
+              />
+            ) : null}
+          </div>
         </CandidateProfileView>
       ) : null}
 

@@ -99,7 +99,7 @@ from src.interface.api.schemas.pipeline_schemas import (
     JobMatchCandidateResponse,
     PipelineAnalysisDecisionResponse,
 )
-from src.interface.api.schemas.ranking_schemas import JobRankingResponse, ScoringComputeResponse, SingleCandidateScoringResponse
+from src.interface.api.schemas.ranking_schemas import CandidateRankingEntry, JobRankingResponse, ScoringComputeResponse, SingleCandidateScoringResponse
 from src.interface.api.schemas.skill_schemas import (
     AddJobSkillRequest,
     JobRequiredSkillResponse,
@@ -973,12 +973,43 @@ async def force_recompute_job_candidate(
 async def get_job_ranking(
     job_id: UUID,
     current_user: RecruiterOrAdmin,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ) -> JobRankingResponse:
-    """Return persisted ranking for this job with consistency auto-repair."""
+    """Return paginated ranking for this job with consistency auto-repair.
+
+    Default page_size=20, max=100.
+    """
     try:
-        result = await CandidateRankingService(db).get_ranking(job_id)
+        result = await CandidateRankingService(db).get_ranking(
+            job_id=job_id,
+            page=page,
+            page_size=page_size,
+        )
         return JobRankingResponse(**result)
+    except Exception as exc:
+        _handle_job_service_error(exc)
+        raise
+
+
+@router.get("/{job_id}/ranking/{candidate_id}", response_model=CandidateRankingEntry)
+async def get_candidate_ranking_entry(
+    job_id: UUID,
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateRankingEntry:
+    """Return ranking entry for a specific candidate, avoiding full list fetch.
+
+    Returns candidate's position and score in the full ranking.
+    """
+    try:
+        result = await CandidateRankingService(db).get_ranking_entry(
+            job_id=job_id,
+            candidate_id=candidate_id,
+        )
+        return CandidateRankingEntry(**result)
     except Exception as exc:
         _handle_job_service_error(exc)
         raise

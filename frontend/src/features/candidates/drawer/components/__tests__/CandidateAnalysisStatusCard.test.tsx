@@ -102,4 +102,69 @@ describe("CandidateAnalysisStatusCard", () => {
     await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
     expect(onPrimaryAction).toHaveBeenCalledTimes(1);
   });
+
+  // Extraction status tests
+  it("mostra estado de extração quando extraction_status está pending", () => {
+    render(
+      <CandidateAnalysisStatusCard
+        hasResume={true}
+        activeJobId="job-1"
+        analysisStatus={null}
+        jobFitScore={null}
+        aiStatus={null}
+        extractionStatus="pending"
+      />,
+    );
+
+    expect(screen.getByText("Extraindo currículo")).toBeInTheDocument();
+    expect(screen.getByText("Extraindo dados do currículo...")).toBeInTheDocument();
+  });
+
+  it("mostra erro de extração quando extraction_status é failed", () => {
+    render(
+      <CandidateAnalysisStatusCard
+        hasResume={true}
+        activeJobId="job-1"
+        analysisStatus={null}
+        jobFitScore={null}
+        aiStatus={null}
+        extractionStatus="failed"
+      />,
+    );
+
+    expect(screen.getByText("Falha na extração do currículo")).toBeInTheDocument();
+    expect(screen.getByText(/Não foi possível extrair o texto/)).toBeInTheDocument();
+  });
+
+  it("não mostra mensagem de extração quando extraction_status é completed", () => {
+    render(
+      <CandidateAnalysisStatusCard
+        hasResume={true}
+        activeJobId="job-1"
+        analysisStatus="pending"
+        jobFitScore={null}
+        aiStatus="pending"
+        extractionStatus="completed"
+      />,
+    );
+
+    expect(screen.getByText("Analisando com IA")).toBeInTheDocument();
+    expect(screen.queryByText("Extraindo currículo")).not.toBeInTheDocument();
+  });
+
+  it("prioriza extraction_status failed sobre analysis completed", () => {
+    render(
+      <CandidateAnalysisStatusCard
+        hasResume={true}
+        activeJobId="job-1"
+        analysisStatus="completed"
+        jobFitScore={72}
+        aiStatus="completed"
+        extractionStatus="failed"
+      />,
+    );
+
+    expect(screen.getByText("Falha na extração do currículo")).toBeInTheDocument();
+    expect(screen.queryByText("Aderência pronta")).not.toBeInTheDocument();
+  });
 });

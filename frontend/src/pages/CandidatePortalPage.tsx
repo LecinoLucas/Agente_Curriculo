@@ -13,6 +13,10 @@ import {
   RefreshCw,
   ShieldCheck,
   Upload,
+  Home,
+  User,
+  Menu,
+  X,
 } from "lucide-react";
 import { ChangeEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -303,6 +307,8 @@ export function CandidatePortalPage() {
   const [preAdmission, setPreAdmission] = useState<CandidatePortalPreAdmissionEnvelope | null>(null);
   const [assessmentLoadingId, setAssessmentLoadingId] = useState<string | null>(null);
   const [assessmentSaving, setAssessmentSaving] = useState(false);
+  const [currentTab, setCurrentTab] = useState("inicio");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const activeApplication: CandidatePortalActiveApplication | null =
     overview?.active_application ?? null;
@@ -514,72 +520,203 @@ export function CandidatePortalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--bg))] pb-20">
-      {/* Premium Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] pt-12 pb-24 text-white shadow-lg">
-        {/* Abstract shapes for depth */}
-        <div className="absolute -left-24 top-0 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -right-24 bottom-0 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
-        
-        <div className="relative mx-auto max-w-6xl px-6 lg:px-8">
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] backdrop-blur-md">
-                <ShieldCheck className="h-3 w-3" />
-                Ambiente Protegido
-              </div>
-              <h1 className="font-heading text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
-                Olá, {overview.candidate.full_name.split(' ')[0]}!
-              </h1>
-              <div className="flex flex-wrap items-center gap-6 text-sm font-medium text-white/80">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                  {overview.status_public}
-                </div>
-                <div>{overview.candidate.application_source_label}</div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="outline"
-                onClick={() => void loadPortalData(true)}
-                disabled={isRefreshing}
-                className="h-11 border-white/30 bg-white/10 font-bold text-white backdrop-blur-md hover:bg-white/20"
-              >
-                {isRefreshing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Sincronizar
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={handleLogout} 
-                className="h-11 border-white/20 bg-white/5 font-bold text-white backdrop-blur-md hover:bg-[hsl(var(--danger))] hover:border-[hsl(var(--danger))]"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Sair do portal
-              </Button>
-            </div>
-          </div>
+    <div className="flex min-h-screen bg-[hsl(var(--bg))]">
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#5c061a] text-white transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:relative md:flex md:flex-col`}>
+        <div className="flex items-center justify-between h-16 px-6 border-b border-white/10">
+          <span className="font-heading text-lg font-bold">Portal do Candidato</span>
+          <button className="md:hidden" onClick={() => setIsSidebarOpen(false)}>
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+        <nav className="flex-1 px-4 py-6 space-y-2">
+          {[
+            { id: "inicio", label: "Início", icon: <Home className="h-5 w-5" /> },
+            { id: "vagas", label: "Minhas Candidaturas", icon: <Briefcase className="h-5 w-5" /> },
+            { id: "avaliacoes", label: "Avaliações", icon: <ClipboardCheck className="h-5 w-5" /> },
+            { id: "perfil", label: "Meu Perfil", icon: <User className="h-5 w-5" /> },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setCurrentTab(tab.id);
+                setIsSidebarOpen(false);
+              }}
+              className={`flex items-center gap-3 w-full px-4 py-3 font-bold text-sm rounded-xl transition-colors ${
+                currentTab === tab.id
+                  ? "bg-white/20 text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+        <div className="p-4 border-t border-white/10">
+          <Button 
+            variant="outline" 
+            onClick={handleLogout} 
+            className="w-full h-10 border-white/20 bg-white/5 text-sm font-bold text-white backdrop-blur-md hover:bg-[hsl(var(--danger))] hover:border-[hsl(var(--danger))]"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sair
+          </Button>
         </div>
       </div>
 
-      <div className="mx-auto -mt-12 max-w-6xl px-6 lg:px-8">
-        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          {/* Main Content Column */}
-          <div className="order-2 space-y-8 lg:order-1">
-            {/* Timeline Section */}
-            {overview.public_timeline ? (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <CandidateVerticalTimeline timeline={overview.public_timeline} />
-              </div>
-            ) : null}
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="flex items-center justify-between h-16 px-6 bg-[hsl(var(--surface))] border-b border-[hsl(var(--border)/0.5)] shadow-sm">
+          <div className="flex items-center gap-4">
+            <button className="md:hidden" onClick={() => setIsSidebarOpen(true)}>
+              <Menu className="h-6 w-6 text-[hsl(var(--text))]" />
+            </button>
+            <h1 className="font-heading text-xl font-bold text-[hsl(var(--text))]">
+              Olá, {overview.candidate.full_name.split(' ')[0]}!
+            </h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-2 text-sm font-medium text-[hsl(var(--text-muted))]">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              {overview.status_public}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void loadPortalData(true)}
+              disabled={isRefreshing}
+              className="h-9 border-[hsl(var(--border)/0.6)] text-xs font-bold text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted)/0.1)]"
+            >
+              {isRefreshing ? (
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-3 w-3" />
+              )}
+              Sincronizar
+            </Button>
+          </div>
+        </header>
 
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+
+        {/* Tab Content */}
+        {currentTab === "inicio" && (
+          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+            {/* Main Content Column */}
+            <div className="space-y-8">
+              {/* Timeline Section */}
+              {overview.public_timeline ? (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <CandidateVerticalTimeline timeline={overview.public_timeline} />
+                </div>
+              ) : null}
+            </div>
+
+            {/* Sidebar Column */}
+            <div className="space-y-8">
+              {/* Quick Status Card */}
+              <Card className="overflow-hidden border-none bg-gradient-to-br from-[hsl(var(--surface))] to-[hsl(var(--surface-muted))] shadow-2xl ring-1 ring-[hsl(var(--border)/0.5)] animate-in fade-in slide-in-from-right-4 duration-500">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg font-bold">Resumo da Situação</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { label: "Vaga Ativa", val: activeApplication?.job_title || "Disponível", icon: <Briefcase className="h-4 w-4" /> },
+                      { label: "Status", val: overview.status_public, icon: <ShieldCheck className="h-4 w-4" />, highlight: true },
+                      { label: "Localização", val: overview.candidate.city ? `${overview.candidate.city}/${overview.candidate.state}` : "Pendente", icon: <MapPin className="h-4 w-4" /> },
+                      { label: "Currículo", val: overview.latest_resume?.file_name ? "Enviado" : "Não ident.", icon: <FileText className="h-4 w-4" /> },
+                    ].map((item, i) => (
+                      <div key={i} className="rounded-2xl border border-[hsl(var(--border)/0.3)] bg-white/40 p-4 backdrop-blur-sm">
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                          {item.icon}
+                          {item.label}
+                        </div>
+                        <p className={`mt-2 text-sm font-extrabold truncate ${item.highlight ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--text))]'}`}>
+                          {item.val}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <CandidateMessagesCard />
+            </div>
+          </div>
+        )}
+
+        {currentTab === "vagas" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Application History Card */}
+            <Card className="overflow-hidden border-[hsl(var(--border)/0.5)] shadow-xl">
+              <CardHeader className="border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface-muted)/0.3)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+                    <Briefcase className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold">Minhas Candidaturas</CardTitle>
+                    <CardDescription>Histórico e situação de todos os seus envios.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                {activeApplication ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--primary))]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))] animate-pulse" />
+                      Candidatura em Destaque
+                    </div>
+                    <ApplicationCard
+                      application={{
+                        pipeline_id: activeApplication.pipeline_id,
+                        job_id: activeApplication.job_id,
+                        job_title: activeApplication.job_title,
+                        status: activeApplication.pipeline_stage,
+                        status_label: activeApplication.status_public,
+                        submitted_at: activeApplication.submitted_at,
+                        updated_at: activeApplication.submitted_at,
+                        resume_file_name: activeApplication.resume_filename,
+                        analysis_status: activeApplication.analysis_status,
+                        application_source: overview.candidate.application_source,
+                        talent_pool: false,
+                        talent_pool_profile_status: null,
+                      }}
+                    />
+                  </div>
+                ) : null}
+
+                {applicationHistory.length > 0 ? (
+                  <div className="space-y-4 border-t border-[hsl(var(--border)/0.4)] pt-6">
+                    <p className="text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                      Outros Registros
+                    </p>
+                    <div className="grid gap-4">
+                      {applicationHistory.map((application) => (
+                        <ApplicationCard
+                           key={application.pipeline_id ?? `tp-${application.submitted_at}`}
+                          application={application}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : !activeApplication ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-[hsl(var(--border)/0.4)]">
+                    <p className="text-sm font-semibold text-[hsl(var(--text-muted))]">Você está no nosso Banco de Talentos.</p>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {currentTab === "avaliacoes" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Behavioral Assessments Card */}
-            <Card className="overflow-hidden border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-bottom-4 delay-75 duration-500">
+            <Card className="overflow-hidden border-[hsl(var(--border)/0.5)] shadow-xl">
               <CardHeader className="border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface-muted)/0.3)]">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]">
@@ -626,221 +763,137 @@ export function CandidatePortalPage() {
                 ) : null}
               </CardContent>
             </Card>
-
-            <CandidatePortalPreAdmissionCard
-              preAdmission={preAdmission}
-              onUploaded={reloadPreAdmission}
-            />
-
-            {/* Application History Card */}
-            <Card className="overflow-hidden border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-bottom-4 delay-150 duration-500">
-              <CardHeader className="border-b border-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface-muted)/0.3)]">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-                    <Briefcase className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl font-bold">Minhas Candidaturas</CardTitle>
-                    <CardDescription>Histórico e situação de todos os seus envios.</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                {activeApplication ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--primary))]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))] animate-pulse" />
-                      Candidatura em Destaque
-                    </div>
-                    <ApplicationCard
-                      application={{
-                        pipeline_id: activeApplication.pipeline_id,
-                        job_id: activeApplication.job_id,
-                        job_title: activeApplication.job_title,
-                        status: activeApplication.pipeline_stage,
-                        status_label: activeApplication.status_public,
-                        submitted_at: activeApplication.submitted_at,
-                        updated_at: activeApplication.submitted_at,
-                        resume_file_name: activeApplication.resume_filename,
-                        analysis_status: activeApplication.analysis_status,
-                        application_source: overview.candidate.application_source,
-                        talent_pool: false,
-                        talent_pool_profile_status: null,
-                      }}
-                    />
-                  </div>
-                ) : null}
-
-                {applicationHistory.length > 0 ? (
-                  <div className="space-y-4 border-t border-[hsl(var(--border)/0.4)] pt-6">
-                    <p className="text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--text-muted))]">
-                      Outros Registros
-                    </p>
-                    <div className="grid gap-4">
-                      {applicationHistory.map((application) => (
-                        <ApplicationCard
-                          key={application.pipeline_id ?? `tp-${application.submitted_at}`}
-                          application={application}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : !activeApplication ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-[hsl(var(--border)/0.4)]">
-                    <p className="text-sm font-semibold text-[hsl(var(--text-muted))]">Você está no nosso Banco de Talentos.</p>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
           </div>
+        )}
 
-          {/* Sidebar Column */}
-          <div className="order-1 space-y-8 lg:order-2">
-            {/* Quick Status Card */}
-            <Card className="overflow-hidden border-none bg-gradient-to-br from-[hsl(var(--surface))] to-[hsl(var(--surface-muted))] shadow-2xl ring-1 ring-[hsl(var(--border)/0.5)] animate-in fade-in slide-in-from-right-4 duration-500">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-bold">Resumo da Situação</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: "Vaga Ativa", val: activeApplication?.job_title || "Disponível", icon: <Briefcase className="h-4 w-4" /> },
-                    { label: "Status", val: overview.status_public, icon: <ShieldCheck className="h-4 w-4" />, highlight: true },
-                    { label: "Localização", val: overview.candidate.city ? `${overview.candidate.city}/${overview.candidate.state}` : "Pendente", icon: <MapPin className="h-4 w-4" /> },
-                    { label: "Currículo", val: overview.latest_resume?.file_name ? "Enviado" : "Não ident.", icon: <FileText className="h-4 w-4" /> },
-                  ].map((item, i) => (
-                    <div key={i} className="rounded-2xl border border-[hsl(var(--border)/0.3)] bg-white/40 p-4 backdrop-blur-sm">
-                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
-                        {item.icon}
-                        {item.label}
+        {currentTab === "perfil" && (
+          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Left Column: Profile Update */}
+            <div className="space-y-8">
+              <Card className="border-[hsl(var(--border)/0.5)] shadow-xl">
+                <CardHeader className="flex flex-row items-center justify-between border-b border-[hsl(var(--border)/0.3)] py-4">
+                  <CardTitle className="text-base font-bold">Dados de Contato</CardTitle>
+                  {!isEditing && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setIsEditing(true)}
+                      className="h-8 text-[hsl(var(--primary))] font-bold hover:bg-[hsl(var(--primary)/0.05)]"
+                    >
+                      Editar
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  <div className="grid gap-5">
+                    {[
+                      { id: "email", label: "E-mail Profissional", type: "email", val: contactForm.email },
+                      { id: "phone", label: "Telefone / WhatsApp", type: "text", val: contactForm.phone },
+                      { id: "city", label: "Cidade", type: "text", val: contactForm.city },
+                      { id: "state", label: "Estado (UF)", type: "text", val: contactForm.state, max: 2 },
+                    ].map((field) => (
+                      <div key={field.id} className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">
+                          {field.label}
+                        </label>
+                        <Input
+                          id={`candidate-${field.id}`}
+                          type={field.type}
+                          maxLength={field.max}
+                          value={field.val}
+                          disabled={!isEditing || isSaving}
+                          className="h-11 border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface-muted)/0.2)] font-medium focus:ring-[hsl(var(--primary))]"
+                          onChange={(e) => handleContactChange(field.id as any, e.target.value)}
+                        />
                       </div>
-                      <p className={`mt-2 text-sm font-extrabold truncate ${item.highlight ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--text))]'}`}>
-                        {item.val}
+                    ))}
+                  </div>
+
+                  {isEditing && (
+                    <div className="flex gap-3 pt-2">
+                      <Button 
+                        onClick={() => void handleSaveProfile()} 
+                        disabled={isSaving}
+                        className="flex-1 bg-[hsl(var(--primary))] font-bold"
+                      >
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Salvar Alterações
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setContactForm(buildContactForm(overview));
+                          setIsEditing(false);
+                        }}
+                        disabled={isSaving}
+                        className="font-bold"
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <CandidatePortalPreAdmissionCard
+                preAdmission={preAdmission}
+                onUploaded={reloadPreAdmission}
+              />
+            </div>
+
+            {/* Right Column: Resume Upload */}
+            <div className="space-y-8">
+              <Card className="border-[hsl(var(--border)/0.5)] shadow-xl">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-base font-bold text-[hsl(var(--text))]">Atualizar Currículo</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="flex items-center gap-4 rounded-2xl border border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface-muted)/0.1)] p-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm text-[hsl(var(--primary))]">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-[hsl(var(--text))]">
+                        {overview.latest_resume?.file_name || "Nenhum arquivo"}
+                      </p>
+                      <p className="text-[10px] font-medium text-[hsl(var(--text-muted))]">
+                        {overview.latest_resume ? `Enviado em ${formatDate(overview.latest_resume.uploaded_at)}` : "Formatos aceitos: PDF"}
                       </p>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
 
-            <CandidateMessagesCard />
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="resume-upload"
+                      className="hidden"
+                      accept=".pdf,application/pdf"
+                      onChange={handleResumeFileChange}
+                    />
+                    <label 
+                      htmlFor="resume-upload" 
+                      className="flex h-24 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[hsl(var(--border)/0.6)] bg-[hsl(var(--bg))] transition-all hover:bg-[hsl(var(--surface-muted)/0.1)] hover:border-[hsl(var(--primary)/0.5)]"
+                    >
+                      <Upload className="mb-2 h-6 w-6 text-[hsl(var(--text-muted))]" />
+                      <span className="text-xs font-bold text-[hsl(var(--text-muted))]">
+                        {resumeFile ? resumeFile.name : "Clique para selecionar novo PDF"}
+                      </span>
+                    </label>
+                  </div>
 
-            {/* Profile Update Card */}
-            <Card className="border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-right-4 delay-75 duration-500">
-              <CardHeader className="flex flex-row items-center justify-between border-b border-[hsl(var(--border)/0.3)] py-4">
-                <CardTitle className="text-base font-bold">Dados de Contato</CardTitle>
-                {!isEditing && (
                   <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setIsEditing(true)}
-                    className="h-8 text-[hsl(var(--primary))] font-bold hover:bg-[hsl(var(--primary)/0.05)]"
+                    onClick={() => void handleUploadResume()} 
+                    disabled={isUploading || !resumeFile}
+                    className="w-full bg-[hsl(var(--primary))] font-bold disabled:opacity-50"
                   >
-                    Editar
+                    {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    Fazer Upload Agora
                   </Button>
-                )}
-              </CardHeader>
-              <CardContent className="pt-6 space-y-6">
-                <div className="grid gap-5">
-                  {[
-                    { id: "email", label: "E-mail Profissional", type: "email", val: contactForm.email },
-                    { id: "phone", label: "Telefone / WhatsApp", type: "text", val: contactForm.phone },
-                    { id: "city", label: "Cidade", type: "text", val: contactForm.city },
-                    { id: "state", label: "Estado (UF)", type: "text", val: contactForm.state, max: 2 },
-                  ].map((field) => (
-                    <div key={field.id} className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">
-                        {field.label}
-                      </label>
-                      <Input
-                        id={`candidate-${field.id}`}
-                        type={field.type}
-                        maxLength={field.max}
-                        value={field.val}
-                        disabled={!isEditing || isSaving}
-                        className="h-11 border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface-muted)/0.2)] font-medium focus:ring-[hsl(var(--primary))]"
-                        onChange={(e) => handleContactChange(field.id as any, e.target.value)}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                {isEditing && (
-                  <div className="flex gap-3 pt-2">
-                    <Button 
-                      onClick={() => void handleSaveProfile()} 
-                      disabled={isSaving}
-                      className="flex-1 bg-[hsl(var(--primary))] font-bold"
-                    >
-                      {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      Salvar Alterações
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setContactForm(buildContactForm(overview));
-                        setIsEditing(false);
-                      }}
-                      disabled={isSaving}
-                      className="font-bold"
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Resume Upload Card */}
-            <Card className="border-[hsl(var(--border)/0.5)] shadow-xl animate-in fade-in slide-in-from-right-4 delay-150 duration-500">
-              <CardHeader className="py-4">
-                <CardTitle className="text-base font-bold text-[hsl(var(--text))]">Atualizar Currículo</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="flex items-center gap-4 rounded-2xl border border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface-muted)/0.1)] p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm text-[hsl(var(--primary))]">
-                    <FileText className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-[hsl(var(--text))]">
-                      {overview.latest_resume?.file_name || "Nenhum arquivo"}
-                    </p>
-                    <p className="text-[10px] font-medium text-[hsl(var(--text-muted))]">
-                      {overview.latest_resume ? `Enviado em ${formatDate(overview.latest_resume.uploaded_at)}` : "Formatos aceitos: PDF"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="file"
-                    id="resume-upload"
-                    className="hidden"
-                    accept=".pdf,application/pdf"
-                    onChange={handleResumeFileChange}
-                  />
-                  <label 
-                    htmlFor="resume-upload" 
-                    className="flex h-24 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[hsl(var(--border)/0.6)] bg-[hsl(var(--bg))] transition-all hover:bg-[hsl(var(--surface-muted)/0.1)] hover:border-[hsl(var(--primary)/0.5)]"
-                  >
-                    <Upload className="mb-2 h-6 w-6 text-[hsl(var(--text-muted))]" />
-                    <span className="text-xs font-bold text-[hsl(var(--text-muted))]">
-                      {resumeFile ? resumeFile.name : "Clique para selecionar novo PDF"}
-                    </span>
-                  </label>
-                </div>
-
-                <Button 
-                  onClick={() => void handleUploadResume()} 
-                  disabled={isUploading || !resumeFile}
-                  className="w-full bg-[hsl(var(--primary))] font-bold disabled:opacity-50"
-                >
-                  {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                  Fazer Upload Agora
-                </Button>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
+        )}
         </div>
       </div>
     </div>

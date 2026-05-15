@@ -418,7 +418,7 @@ async def test_resume_extraction_enqueues_pending_analysis_only_once(
 ) -> None:
     await _create_ai_config(db_session)
     monkeypatch.setattr(
-        "src.application.services.public_application_service.enqueue_resume_extraction",
+        "src.interface.api.routers.public.enqueue_resume_extraction",
         lambda resume_version_id: None,
     )
 

@@ -156,10 +156,10 @@ class CandidateListSummaryResponse(BaseModel):
 
 
 class CreateCandidateRequest(BaseModel):
-    full_name: str = Field(min_length=2, max_length=255)
+    full_name: str = Field(max_length=255)
     email: EmailStr
     phone: str | None = Field(default=None, max_length=50)
-    cpf: str | None = Field(default=None, max_length=14)
+    cpf: str | None = None
     location_city: str | None = Field(default=None, max_length=100)
     location_state: str | None = Field(default=None, max_length=100)
     location_country: str = Field(default="BR", max_length=10)
@@ -172,10 +172,10 @@ class CreateCandidateRequest(BaseModel):
 
 
 class UpdateCandidateRequest(BaseModel):
-    full_name: str | None = Field(default=None, min_length=2, max_length=255)
+    full_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=50)
-    cpf: str | None = Field(default=None, max_length=14)
+    cpf: str | None = None
     location_city: str | None = Field(default=None, max_length=100)
     location_state: str | None = Field(default=None, max_length=100)
     location_country: str | None = Field(default=None, max_length=10)

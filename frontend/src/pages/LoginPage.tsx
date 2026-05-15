@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react";
+import { useLocation, useNavigate, Link } from "react-router-dom";
+import { AlertCircle, CheckCircle, Eye, EyeOff, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "../features/auth/useAuth";
@@ -83,7 +83,21 @@ export function LoginPage() {
           <p className="text-xs text-slate-300">© {new Date().getFullYear()} Marajo RH IA · Todos os direitos reservados</p>
         </section>
 
-        <section className="flex flex-col justify-center px-6 py-12 sm:px-8 lg:px-12">
+        <section className="relative flex flex-col justify-center px-6 py-12 sm:px-8 lg:px-12">
+          <div className="absolute right-6 top-6 sm:right-8 sm:top-8 lg:right-12 lg:top-8">
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <Link to="/candidato">
+                <User className="h-3.5 w-3.5" />
+                Portal do Candidato
+              </Link>
+            </Button>
+          </div>
+
           <div className="mx-auto flex w-full max-w-md flex-col gap-6 rounded-2xl border border-gray-200 bg-white p-8 shadow-lg shadow-blue-950/5">
             <div className="flex flex-col gap-1">
               <h2 className="text-2xl font-extrabold font-display tracking-tight text-gray-900">Acessar plataforma</h2>

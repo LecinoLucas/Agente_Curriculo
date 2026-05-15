@@ -1,4 +1,3 @@
-import { formatCpf } from "../utils/cpf";
 import { formatPhone } from "../utils/phone";
 import type { FormData, ApplicationErrors } from "../types";
 
@@ -39,10 +38,9 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
         <label className="block text-sm font-medium text-gray-700">CPF *</label>
         <input
           type="text"
-          value={formatCpf(form.cpf)}
-          onChange={(e) => onChange("cpf", e.target.value.replace(/\D/g, ""))}
-          placeholder="000.000.000-00"
-          maxLength="14"
+          value={form.cpf}
+          onChange={(e) => onChange("cpf", e.target.value)}
+          placeholder="Digite seu CPF"
           className={`mt-1 w-full rounded border px-3 py-2 ${
             errors.cpf ? "border-red-500" : "border-gray-300"
           } focus:outline-none focus:ring-2 focus:ring-blue-500`}
