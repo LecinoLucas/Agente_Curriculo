@@ -13,6 +13,8 @@ from src.interface.api.schemas.manager_schemas import (
     ManagerJobCandidatesResponse,
     ManagerCandidateSummary,
     ManagerCandidateDetailResponse,
+    ReviewRequestListResponse,
+    ReviewRequestItem,
 )
 
 router = APIRouter(tags=["manager"])
@@ -20,6 +22,29 @@ router = APIRouter(tags=["manager"])
 
 def _service(db: AsyncSession, user) -> ManagerViewService:
     return ManagerViewService(db, user)
+
+
+@router.get(
+    "/manager/review-requests",
+    response_model=ReviewRequestListResponse,
+)
+async def list_review_requests(
+    current_user: ManagerOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ReviewRequestListResponse:
+    """
+    List review requests directed to this manager (or all for ADMIN).
+
+    MANAGER sees:
+      - Requests explicitly directed to them (target_manager_id == user.id)
+      - Generic requests (target_manager_id IS NULL) for jobs they are evaluator for
+    ADMIN sees all review requests.
+    Status 'answered' when any manager_feedback comment exists for that candidate+job.
+    """
+    items = await _service(db, current_user).list_review_requests(current_user.id)
+    return ReviewRequestListResponse(
+        requests=[ReviewRequestItem(**item) for item in items]
+    )
 
 
 @router.get(

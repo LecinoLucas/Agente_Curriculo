@@ -1,234 +1,536 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, Send, Users } from "lucide-react";
 
-import { managerService, ManagerJobResponse, ManagerCandidateSummary, ManagerCandidateDetailResponse } from "../../services/managerService";
+import { collaborationService } from "../../services/collaborationService";
+import { managerService, type ManagerCandidateDetailResponse } from "../../services/managerService";
+import type { ReviewRequestItem } from "../../types/domain";
+
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "Baixa",
+  medium: "Média",
+  high: "Alta",
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+  low: "bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]",
+  medium: "bg-amber-100 text-amber-800",
+  high: "bg-rose-100 text-rose-800",
+};
+
+const RECOMMENDATION_LABELS: Record<string, string> = {
+  advance: "Avançar no processo",
+  hold: "Aguardar",
+  reject: "Não recomendo",
+  request_interview: "Solicitar entrevista adicional",
+};
+
+type ActiveTab = "requests" | "candidates";
 
 export function ManagerReviewPage() {
-  const [jobs, setJobs] = useState<ManagerJobResponse[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [candidates, setCandidates] = useState<ManagerCandidateSummary[]>([]);
-  const [selectedCandidate, setSelectedCandidate] = useState<ManagerCandidateDetailResponse | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("requests");
 
-  const [loadingJobs, setLoadingJobs] = useState(true);
-  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  // Review requests state
+  const [requests, setRequests] = useState<ReviewRequestItem[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState<ReviewRequestItem | null>(null);
+  const [candidateSummary, setCandidateSummary] = useState<ManagerCandidateDetailResponse | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
+
+  // Feedback form state
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [recommendation, setRecommendation] = useState<"advance" | "hold" | "reject" | "request_interview">("advance");
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
+  // Candidate browse state (tab 2)
+  const [jobs, setJobs] = useState<{ id: string; title: string; candidate_count: number; assigned_count: number }[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<{ id: string; name: string; email: string; pipeline_stage: string | null; scorecard_status: string | null }[]>([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [browseSummary, setBrowseSummary] = useState<ManagerCandidateDetailResponse | null>(null);
+  const [loadingBrowseSummary, setLoadingBrowseSummary] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadJobs();
+    loadReviewRequests();
   }, []);
 
-  async function loadJobs() {
+  useEffect(() => {
+    if (activeTab === "candidates" && jobs.length === 0) {
+      loadJobs();
+    }
+  }, [activeTab]);
+
+  async function loadReviewRequests() {
     try {
-      setLoadingJobs(true);
+      setLoadingRequests(true);
       setError(null);
-      const response = await managerService.listJobs();
-      setJobs(response.jobs);
-      if (response.jobs.length > 0) {
-        setSelectedJobId(response.jobs[0].id);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar vagas");
+      const resp = await collaborationService.listReviewRequests();
+      setRequests(resp.requests);
+    } catch {
+      setError("Não foi possível carregar as solicitações de revisão.");
     } finally {
-      setLoadingJobs(false);
+      setLoadingRequests(false);
     }
   }
 
-  async function loadCandidates(jobId: string) {
+  async function handleSelectRequest(req: ReviewRequestItem) {
+    setSelectedRequest(req);
+    setFeedbackMessage("");
+    setFeedbackSent(false);
+    setCandidateSummary(null);
+    setLoadingSummary(true);
     try {
-      setLoadingCandidates(true);
-      setError(null);
-      setCandidates([]);
-      setSelectedCandidate(null);
-      const response = await managerService.listCandidates(jobId);
-      setCandidates(response.candidates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar candidatos");
-    } finally {
-      setLoadingCandidates(false);
-    }
-  }
-
-  async function loadCandidateSummary(jobId: string, candidateId: string) {
-    try {
-      setLoadingSummary(true);
-      setError(null);
-      const response = await managerService.getCandidateSummary(jobId, candidateId);
-      setSelectedCandidate(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar resumo do candidato");
+      const summary = await managerService.getCandidateSummary(req.job_id, req.candidate_id);
+      setCandidateSummary(summary);
+    } catch {
+      // summary unavailable (not evaluator) — still allow viewing request details
     } finally {
       setLoadingSummary(false);
     }
   }
 
-  const handleJobSelect = (jobId: string) => {
-    setSelectedJobId(jobId);
-    loadCandidates(jobId);
-  };
-
-  const handleCandidateSelect = (candidateId: string) => {
-    if (selectedJobId) {
-      loadCandidateSummary(selectedJobId, candidateId);
+  async function handleSendFeedback() {
+    if (!selectedRequest || !feedbackMessage.trim()) return;
+    setSubmittingFeedback(true);
+    try {
+      await collaborationService.submitManagerFeedback(
+        selectedRequest.job_id,
+        selectedRequest.candidate_id,
+        { message: feedbackMessage.trim(), recommendation },
+      );
+      setFeedbackSent(true);
+      setFeedbackMessage("");
+      await loadReviewRequests();
+    } catch {
+      setError("Não foi possível enviar o feedback.");
+    } finally {
+      setSubmittingFeedback(false);
     }
-  };
+  }
+
+  async function loadJobs() {
+    try {
+      setLoadingJobs(true);
+      const resp = await managerService.listJobs();
+      setJobs(resp.jobs);
+    } catch {
+      setError("Não foi possível carregar as vagas.");
+    } finally {
+      setLoadingJobs(false);
+    }
+  }
+
+  async function handleJobSelect(jobId: string) {
+    setSelectedJobId(jobId);
+    setBrowseSummary(null);
+    setLoadingCandidates(true);
+    try {
+      const resp = await managerService.listCandidates(jobId);
+      setCandidates(resp.candidates);
+    } catch {
+      setError("Não foi possível carregar os candidatos.");
+    } finally {
+      setLoadingCandidates(false);
+    }
+  }
+
+  async function handleBrowseCandidateSelect(candidateId: string) {
+    if (!selectedJobId) return;
+    setBrowseSummary(null);
+    setLoadingBrowseSummary(true);
+    try {
+      const summary = await managerService.getCandidateSummary(selectedJobId, candidateId);
+      setBrowseSummary(summary);
+    } catch {
+      setError("Não foi possível carregar o resumo.");
+    } finally {
+      setLoadingBrowseSummary(false);
+    }
+  }
+
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">Revisão de Candidatos</h1>
-        <p className="text-sm text-gray-600">Acompanhe os candidatos atribuídos a você</p>
+    <div className="space-y-0 p-6">
+      {/* Header */}
+      <div className="mb-6 space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-[hsl(var(--text))]">Revisão de Candidatos</h1>
+        <p className="text-sm text-[hsl(var(--text-muted))]">
+          Avalie candidatos e envie sua recomendação ao recrutador.
+        </p>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex gap-3 text-sm text-red-800">
+        <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-4 flex gap-3 text-sm text-rose-800">
           <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          <div>{error}</div>
+          <span>{error}</span>
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Lista de vagas */}
-        <div className="space-y-3">
-          <h2 className="font-semibold text-sm">Minhas Vagas</h2>
-          {loadingJobs ? (
-            <div className="flex items-center justify-center h-40 text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </div>
-          ) : jobs.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-gray-600">
-              Nenhuma vaga atribuída no momento
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {jobs.map((job) => (
-                <button
-                  key={job.id}
-                  onClick={() => handleJobSelect(job.id)}
-                  className={`w-full text-left rounded-lg border p-3 transition-all text-sm ${
-                    selectedJobId === job.id
-                      ? "border-blue-500 bg-blue-50 text-blue-900"
-                      : "border-gray-200 hover:border-gray-300 bg-white text-gray-900"
-                  }`}
-                >
-                  <p className="font-medium">{job.title}</p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    {job.assigned_count} / {job.candidate_count} candidatos
-                  </p>
-                </button>
-              ))}
-            </div>
+      {/* Tabs */}
+      <div className="mb-6 flex gap-1 border-b border-[hsl(var(--border))]">
+        <button
+          type="button"
+          onClick={() => setActiveTab("requests")}
+          className={[
+            "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors",
+            activeTab === "requests"
+              ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
+              : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+          ].join(" ")}
+        >
+          <Clock className="h-4 w-4" />
+          Solicitações
+          {pendingCount > 0 && (
+            <span className="rounded-full bg-[hsl(var(--primary))] px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {pendingCount}
+            </span>
           )}
-        </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("candidates")}
+          className={[
+            "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors",
+            activeTab === "candidates"
+              ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
+              : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+          ].join(" ")}
+        >
+          <Users className="h-4 w-4" />
+          Candidatos
+        </button>
+      </div>
 
-        {/* Lista de candidatos */}
-        <div className="space-y-3">
-          <h2 className="font-semibold text-sm">Candidatos</h2>
-          {loadingCandidates ? (
-            <div className="flex items-center justify-center h-40 text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
+      {/* ── Tab: Solicitações ─────────────────────────────────────────── */}
+      {activeTab === "requests" && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* List */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-[hsl(var(--text))]">Pendentes de revisão</p>
+              <button
+                type="button"
+                onClick={loadReviewRequests}
+                className="text-xs text-[hsl(var(--primary))] hover:underline"
+              >
+                Atualizar
+              </button>
             </div>
-          ) : candidates.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-gray-600">
-              {selectedJobId ? "Nenhum candidato atribuído" : "Selecione uma vaga"}
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {candidates.map((candidate) => (
-                <button
-                  key={candidate.id}
-                  onClick={() => handleCandidateSelect(candidate.id)}
-                  className={`w-full text-left rounded-lg border p-3 transition-all text-sm ${
-                    selectedCandidate?.id === candidate.id
-                      ? "border-blue-500 bg-blue-50 text-blue-900"
-                      : "border-gray-200 hover:border-gray-300 bg-white text-gray-900"
-                  }`}
-                >
-                  <p className="font-medium truncate">{candidate.name}</p>
-                  <p className="text-xs text-gray-600 truncate">{candidate.email}</p>
-                  {candidate.scorecard_status && (
-                    <p className="text-xs text-gray-600 mt-1">
-                      Scorecard: <span className="capitalize">{candidate.scorecard_status}</span>
+
+            {loadingRequests ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
+              </div>
+            ) : requests.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-8 text-center">
+                <CheckCircle2 className="mx-auto h-8 w-8 text-[hsl(var(--text-muted))] mb-2" />
+                <p className="text-sm font-medium text-[hsl(var(--text-muted))]">Nenhuma solicitação pendente</p>
+                <p className="text-xs text-[hsl(var(--text-muted))] mt-1">
+                  Quando um recrutador solicitar sua revisão, ela aparecerá aqui.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
+                {requests.map((req) => (
+                  <button
+                    key={req.request_id}
+                    type="button"
+                    onClick={() => handleSelectRequest(req)}
+                    className={[
+                      "w-full text-left rounded-xl border p-3.5 transition-all",
+                      selectedRequest?.request_id === req.request_id
+                        ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.06)]"
+                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--surface))]",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-sm font-semibold text-[hsl(var(--text))] truncate">{req.candidate_name}</p>
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        {req.is_directed_to_me && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">
+                            Direcionada a você
+                          </span>
+                        )}
+                        {req.priority && (
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${PRIORITY_COLORS[req.priority] ?? ""}`}>
+                            {PRIORITY_LABELS[req.priority]}
+                          </span>
+                        )}
+                        <span className={[
+                          "px-1.5 py-0.5 rounded text-[10px] font-bold",
+                          req.status === "answered"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800",
+                        ].join(" ")}>
+                          {req.status === "answered" ? "Respondido" : "Pendente"}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-[hsl(var(--text-muted))] mb-1.5 truncate">{req.job_title}</p>
+                    <p className="text-xs text-[hsl(var(--text))] line-clamp-2">{req.latest_message}</p>
+                    <p className="mt-1.5 text-[10px] text-[hsl(var(--text-muted))]">
+                      {new Date(req.requested_at).toLocaleDateString("pt-BR", { dateStyle: "short" })}
+                      {req.pipeline_stage && ` · Etapa: ${req.pipeline_stage}`}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Detail + Feedback */}
+          <div>
+            {!selectedRequest ? (
+              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-8 text-center h-full flex flex-col items-center justify-center">
+                <p className="text-sm text-[hsl(var(--text-muted))]">Selecione uma solicitação para ver detalhes</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 space-y-4">
+                {/* Request header */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))] mb-2">Solicitação do recrutador</p>
+                  <p className="text-sm text-[hsl(var(--text))]">{selectedRequest.latest_message}</p>
+                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                    {new Date(selectedRequest.requested_at).toLocaleDateString("pt-BR", { dateStyle: "long" })}
+                  </p>
+                  {selectedRequest.is_directed_to_me && (
+                    <p className="mt-2 inline-flex rounded-full bg-sky-100 px-2 py-1 text-[11px] font-semibold text-sky-800">
+                      Direcionada a você
                     </p>
                   )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Resumo do candidato */}
-        <div className="space-y-3">
-          <h2 className="font-semibold text-sm">Resumo</h2>
-          {loadingSummary ? (
-            <div className="flex items-center justify-center h-40 text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </div>
-          ) : !selectedCandidate ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-gray-600">
-              Selecione um candidato
-            </div>
-          ) : (
-            <div className="rounded-lg border border-gray-200 p-4 space-y-4">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Nome</p>
-                <p className="text-sm font-semibold">{selectedCandidate.name}</p>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-gray-600">Email</p>
-                <p className="text-sm">{selectedCandidate.email}</p>
-              </div>
-
-              {selectedCandidate.pipeline_stage && (
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Etapa</p>
-                  <p className="text-sm capitalize">{selectedCandidate.pipeline_stage}</p>
                 </div>
-              )}
 
-              {selectedCandidate.scorecard && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-600">Scorecard</p>
-                  <div className="rounded bg-gray-50 p-3 space-y-2">
-                    <div>
-                      <p className="text-xs text-gray-600">Status</p>
-                      <p className="text-sm capitalize font-medium">{selectedCandidate.scorecard.status}</p>
-                    </div>
-
-                    {selectedCandidate.scorecard.recommendation && (
-                      <div>
-                        <p className="text-xs text-gray-600">Recomendação</p>
-                        <p className="text-sm capitalize font-medium">
-                          {selectedCandidate.scorecard.recommendation.replace(/_/g, " ")}
-                        </p>
-                      </div>
-                    )}
-
-                    {selectedCandidate.scorecard.submitted_at && (
-                      <div>
-                        <p className="text-xs text-gray-600">Enviado em</p>
-                        <p className="text-sm">
-                          {new Date(selectedCandidate.scorecard.submitted_at).toLocaleDateString("pt-BR")}
-                        </p>
-                      </div>
-                    )}
+                {/* Candidate summary */}
+                {loadingSummary ? (
+                  <div className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando resumo...
                   </div>
-                </div>
-              )}
+                ) : candidateSummary ? (
+                  <div className="rounded-lg border border-[hsl(var(--border))]/60 bg-[hsl(var(--bg))] p-4 space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">Resumo seguro</p>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-[hsl(var(--text-muted))]">Candidato</p>
+                        <p className="font-medium text-[hsl(var(--text))]">{candidateSummary.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[hsl(var(--text-muted))]">Vaga</p>
+                        <p className="font-medium text-[hsl(var(--text))] truncate">{selectedRequest.job_title}</p>
+                      </div>
+                      {candidateSummary.pipeline_stage && (
+                        <div>
+                          <p className="text-xs text-[hsl(var(--text-muted))]">Etapa</p>
+                          <p className="font-medium text-[hsl(var(--text))] capitalize">{candidateSummary.pipeline_stage}</p>
+                        </div>
+                      )}
+                      {selectedRequest.interview_status && (
+                        <div>
+                          <p className="text-xs text-[hsl(var(--text-muted))]">Entrevista</p>
+                          <p className="font-medium text-[hsl(var(--text))] capitalize">{selectedRequest.interview_status}</p>
+                        </div>
+                      )}
+                      {candidateSummary.scorecard && (
+                        <div className="col-span-2">
+                          <p className="text-xs text-[hsl(var(--text-muted))]">Scorecard</p>
+                          <p className="font-medium text-[hsl(var(--text))] capitalize">
+                            {candidateSummary.scorecard.status}
+                            {candidateSummary.scorecard.recommendation && ` · ${candidateSummary.scorecard.recommendation.replace(/_/g, " ")}`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      Documentos, ERP e logs técnicos não são exibidos ao gestor.
+                    </p>
+                  </div>
+                ) : null}
 
-              <div className="rounded bg-yellow-50 border border-yellow-200 p-3 text-xs text-yellow-800">
-                <p className="font-medium mb-1">Dados sensíveis omitidos:</p>
-                <ul className="space-y-1 text-yellow-700">
-                  <li>• Documentos e arquivos</li>
-                  <li>• Payload de ERP</li>
-                  <li>• Detalhes técnicos de IA</li>
-                </ul>
+                {/* Feedback form */}
+                {feedbackSent ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3 text-sm text-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold">Feedback registrado.</p>
+                      <p className="text-xs mt-0.5">O recrutador poderá considerar na decisão final.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">Seu feedback</p>
+                    <div>
+                      <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Recomendação</label>
+                      <select
+                        value={recommendation}
+                        onChange={(e) => setRecommendation(e.target.value as typeof recommendation)}
+                        className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+                        disabled={submittingFeedback}
+                      >
+                        {Object.entries(RECOMMENDATION_LABELS).map(([val, label]) => (
+                          <option key={val} value={val}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Mensagem</label>
+                      <textarea
+                        value={feedbackMessage}
+                        onChange={(e) => setFeedbackMessage(e.target.value)}
+                        placeholder="Descreva sua avaliação do candidato..."
+                        rows={3}
+                        disabled={submittingFeedback}
+                        className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] resize-none"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[hsl(var(--text-muted))]">
+                      Sua recomendação não move o candidato automaticamente. O recrutador é responsável pela decisão final.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleSendFeedback}
+                      disabled={submittingFeedback || !feedbackMessage.trim()}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submittingFeedback ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      Enviar feedback
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Tab: Candidatos ────────────────────────────────────────────── */}
+      {activeTab === "candidates" && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Jobs */}
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Minhas Vagas</p>
+            {loadingJobs ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
+              </div>
+            ) : jobs.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-center text-sm text-[hsl(var(--text-muted))]">
+                Nenhuma vaga atribuída
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {jobs.map((job) => (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => handleJobSelect(job.id)}
+                    className={[
+                      "w-full text-left rounded-xl border p-3 transition-all text-sm",
+                      selectedJobId === job.id
+                        ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.06)] text-[hsl(var(--primary))]"
+                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--surface))] text-[hsl(var(--text))]",
+                    ].join(" ")}
+                  >
+                    <p className="font-medium truncate">{job.title}</p>
+                    <p className="text-xs text-[hsl(var(--text-muted))] mt-0.5">
+                      {job.assigned_count} / {job.candidate_count} candidatos
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Candidates */}
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Candidatos</p>
+            {loadingCandidates ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
+              </div>
+            ) : candidates.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-center text-sm text-[hsl(var(--text-muted))]">
+                {selectedJobId ? "Nenhum candidato atribuído" : "Selecione uma vaga"}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {candidates.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => handleBrowseCandidateSelect(c.id)}
+                    className={[
+                      "w-full text-left rounded-xl border p-3 transition-all text-sm",
+                      browseSummary?.id === c.id
+                        ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.06)]"
+                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--surface))]",
+                    ].join(" ")}
+                  >
+                    <p className="font-medium truncate text-[hsl(var(--text))]">{c.name}</p>
+                    <p className="text-xs text-[hsl(var(--text-muted))] truncate">{c.email}</p>
+                    {c.scorecard_status && (
+                      <p className="text-xs text-[hsl(var(--text-muted))] mt-0.5 capitalize">
+                        Scorecard: {c.scorecard_status}
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Summary */}
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-[hsl(var(--text))]">Resumo seguro</p>
+            {loadingBrowseSummary ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
+              </div>
+            ) : !browseSummary ? (
+              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-center text-sm text-[hsl(var(--text-muted))]">
+                Selecione um candidato
+              </div>
+            ) : (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 space-y-3">
+                <div>
+                  <p className="text-xs text-[hsl(var(--text-muted))]">Nome</p>
+                  <p className="text-sm font-semibold text-[hsl(var(--text))]">{browseSummary.name}</p>
+                </div>
+                {browseSummary.pipeline_stage && (
+                  <div>
+                    <p className="text-xs text-[hsl(var(--text-muted))]">Etapa</p>
+                    <p className="text-sm capitalize text-[hsl(var(--text))]">{browseSummary.pipeline_stage}</p>
+                  </div>
+                )}
+                {browseSummary.scorecard && (
+                  <div>
+                    <p className="text-xs text-[hsl(var(--text-muted))]">Scorecard</p>
+                    <div className="rounded bg-[hsl(var(--bg))] border border-[hsl(var(--border))]/40 p-3 space-y-1.5 mt-1">
+                      <p className="text-xs text-[hsl(var(--text-muted))]">Status: <span className="font-medium text-[hsl(var(--text))] capitalize">{browseSummary.scorecard.status}</span></p>
+                      {browseSummary.scorecard.recommendation && (
+                        <p className="text-xs text-[hsl(var(--text-muted))]">Recomendação: <span className="font-medium text-[hsl(var(--text))]">{browseSummary.scorecard.recommendation.replace(/_/g, " ")}</span></p>
+                      )}
+                      {browseSummary.scorecard.submitted_at && (
+                        <p className="text-xs text-[hsl(var(--text-muted))]">Enviado: {new Date(browseSummary.scorecard.submitted_at).toLocaleDateString("pt-BR")}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  Documentos, ERP e logs técnicos não são exibidos ao gestor.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

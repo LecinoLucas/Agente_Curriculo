@@ -32,10 +32,10 @@ export const KanbanCard = memo(function KanbanCard({
     <div
       onClick={onCardClick ? () => onCardClick(candidate.candidate_id) : undefined}
       className={[
-        "hover-lift relative overflow-hidden select-none rounded-[1.75rem] border-2 bg-white p-4 shadow-sm transition-all duration-300",
-        isTopMatch ? "border-[hsl(var(--primary))]/30 shadow-[hsl(var(--primary))/0.08_0px_10px_30px_-5px]" : "border-[hsl(var(--border))]/40",
+        "relative overflow-hidden select-none rounded-2xl border bg-[hsl(var(--surface))] p-4 shadow-sm transition-all duration-200",
+        isTopMatch ? "border-[hsl(var(--primary))]/26 bg-[hsl(var(--primary))]/5" : "border-[hsl(var(--border))]",
         isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
-        onCardClick ? "hover:border-[hsl(var(--primary))]/50" : "",
+        onCardClick ? "hover:border-[hsl(var(--border-strong))] hover:shadow-[0_12px_24px_-22px_hsl(var(--text)/0.22)]" : "",
         "kanban-card-enter",
       ]
         .filter(Boolean)
@@ -46,16 +46,16 @@ export const KanbanCard = memo(function KanbanCard({
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-2">
             {rank && rank <= 3 && (
-              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold shadow-sm ${
-                rank === 1 ? "bg-yellow-400 text-white" :
-                rank === 2 ? "bg-slate-300 text-slate-700" :
-                rank === 3 ? "bg-amber-500 text-white" : ""
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[10px] font-bold ${
+                rank === 1 ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]" :
+                rank === 2 ? "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))]" :
+                rank === 3 ? "border-[hsl(var(--border-strong))]/40 bg-[hsl(var(--accent-soft))] text-[hsl(var(--text))]" : ""
               }`}>
                 {rank}
               </span>
             )}
             {isTopMatch && !rank && (
-              <span className="rounded-lg bg-[hsl(var(--primary))]/10 px-2 py-1 text-[9px] font-bold text-[hsl(var(--primary))] uppercase tracking-wider">
+              <span className="rounded-lg border border-[hsl(var(--primary))]/18 bg-[hsl(var(--primary))]/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-[hsl(var(--primary))]">
                 Mais aderente
               </span>
             )}
@@ -69,9 +69,6 @@ export const KanbanCard = memo(function KanbanCard({
             </p>
           ) : null}
         </div>
-        {isTopMatch && (
-          <div className="absolute -right-12 -top-12 flex h-24 w-24 items-end justify-center bg-[hsl(var(--primary))]/5 blur-2xl" />
-        )}
       </div>
 
       {/* Top skills */}
@@ -80,7 +77,7 @@ export const KanbanCard = memo(function KanbanCard({
           {skills.map((skill) => (
             <span
               key={skill}
-              className="rounded-full border border-[hsl(var(--border))]/50 bg-[hsl(var(--surface-muted))]/30 px-2.5 py-1 text-[10px] font-bold text-[hsl(var(--text-muted))]"
+              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[10px] font-semibold text-[hsl(var(--text-muted))]"
             >
               {skill}
             </span>
@@ -101,7 +98,7 @@ export const KanbanCard = memo(function KanbanCard({
             </span>
             {jobFitScore !== null && jobFitScore !== undefined ? (
               <div className="flex items-center gap-1.5">
-                <div className="h-1.5 w-12 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
+                <div className="h-1.5 w-12 overflow-hidden rounded-lg bg-[hsl(var(--surface-muted))]">
                    <div 
                      className="h-full bg-[hsl(var(--primary))] transition-all duration-500" 
                      style={{ width: `${Math.round(jobFitScore)}%` }}
@@ -112,7 +109,7 @@ export const KanbanCard = memo(function KanbanCard({
                 </span>
               </div>
             ) : (
-              <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[9px] font-bold text-[hsl(var(--text-muted))]">
+              <span className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[9px] font-semibold text-[hsl(var(--text-muted))]">
                 Pendente
               </span>
             )}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
 import { Activity, Database, Gauge, HeartPulse, RefreshCw, Server, TriangleAlert } from "lucide-react";
 
+import { SimpleBarChart } from "../components/charts/SimpleBarChart";
+import { SimpleDonutChart } from "../components/charts/SimpleDonutChart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -238,9 +239,23 @@ export function SystemHealthPage() {
     if (activeTab === "errors" && !errorsData && !errorsLoading) void loadErrors();
   }, [activeTab, aiUsageData, aiUsageLoading, databaseData, databaseLoading, errorsData, errorsLoading, loadAIUsage, loadDatabase, loadErrors, loadQueues, queuesData, queuesLoading]);
 
-  const maxDailyTokens = useMemo(() => {
-    return Math.max(...(aiUsageData?.daily_usage.map((item) => item.total_tokens) ?? [0]));
-  }, [aiUsageData]);
+  const aiDailyUsageChartData = useMemo(
+    () => (aiUsageData?.daily_usage ?? []).map((item, index) => ({
+      label: item.date ?? "—",
+      value: item.total_tokens,
+      note: `${formatNumber(item.total_calls)} chamadas`,
+      color: COLORS[index % COLORS.length],
+    })),
+    [aiUsageData],
+  );
+  const databaseStatusChartData = useMemo(
+    () => (databaseData?.analyses_by_status ?? []).map((item, index) => ({
+      label: item.status,
+      value: item.count,
+      color: COLORS[index % COLORS.length],
+    })),
+    [databaseData],
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
@@ -491,25 +506,11 @@ export function SystemHealthPage() {
                     {aiUsageData.daily_usage.length === 0 ? (
                       <EmptyState icon="📈" title="Sem histórico diário" description="Quando houver chamadas registradas, o consumo diário aparecerá aqui." />
                     ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={aiUsageData.daily_usage} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="date" stroke="hsl(var(--text-muted))" fontSize={12} tickLine={false} axisLine={false} />
-                          <YAxis stroke="hsl(var(--text-muted))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value / 1000}k`} />
-                          <RechartsTooltip 
-                            contentStyle={{ 
-                              backgroundColor: "hsl(var(--surface))", 
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "0.75rem",
-                              boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)"
-                            }} 
-                            labelStyle={{ color: "hsl(var(--text))", fontWeight: "600", marginBottom: "0.25rem" }}
-                            itemStyle={{ color: "hsl(var(--text))" }}
-                            cursor={{ fill: "hsl(var(--surface-muted))", opacity: 0.5 }}
-                          />
-                          <Bar dataKey="total_tokens" name="Tokens" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                      <SimpleBarChart
+                        ariaLabel="Uso diário de tokens de IA"
+                        data={aiDailyUsageChartData}
+                        valueFormatter={formatNumber}
+                      />
                     )}
                   </CardContent>
                 </Card>
@@ -608,31 +609,11 @@ export function SystemHealthPage() {
                     {databaseData.analyses_by_status.length === 0 ? (
                       <EmptyState icon="📊" title="Sem dados" description="Nenhuma análise encontrada." />
                     ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={databaseData.analyses_by_status}
-                            dataKey="count"
-                            nameKey="status"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={80}
-                            label={(entry) => `${entry.status}: ${entry.count}`}
-                          >
-                            {databaseData.analyses_by_status.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <RechartsTooltip 
-                            contentStyle={{ 
-                              backgroundColor: "hsl(var(--surface))", 
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "0.5rem"
-                            }} 
-                            labelStyle={{ color: "hsl(var(--text))" }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      <SimpleDonutChart
+                        ariaLabel="Distribuição de análises por status"
+                        data={databaseStatusChartData}
+                        valueFormatter={formatNumber}
+                      />
                     )}
                   </CardContent>
                 </Card>

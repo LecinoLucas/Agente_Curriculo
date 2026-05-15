@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,14 +20,18 @@ from src.application.services.user_profile_service import (
 from src.application.services.user_security_service import PasswordReuseError, UserSecurityService
 from src.application.use_cases.users.create_user import CreateUserUseCase
 from src.core.settings import settings
+from src.domain.entities.user import UserRole, UserStatus
 from src.domain.exceptions import ConflictException, UnauthorizedException
+from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.sqlalchemy_user_admin_repository import SQLAlchemyUserAdminRepository
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from src.interface.api.dependencies import AdminOnly, CurrentUser, get_db
+from src.interface.api.dependencies import AdminOnly, CurrentUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.user_schemas import (
     ChangeMyPasswordRequest,
     CreateUserRequest,
+    ManagerListItemResponse,
+    ManagerListResponse,
     PatchMyProfileRequest,
     PatchUserRequest,
     UserResponse,
@@ -262,6 +267,39 @@ async def get_user_stats(
 ) -> UserStatsResponse:
     stats = await _user_admin_service(db).get_stats()
     return UserStatsResponse(**stats)
+
+
+@router.get("/managers", response_model=ManagerListResponse)
+async def list_managers(
+    current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ManagerListResponse:
+    result = await db.execute(
+        sa.select(
+            UserModel.id,
+            UserModel.full_name,
+            UserModel.email,
+            UserModel.role,
+        )
+        .where(
+            UserModel.role == UserRole.MANAGER.value,
+            UserModel.status == UserStatus.ACTIVE.value,
+            UserModel.deleted_at.is_(None),
+        )
+        .order_by(UserModel.full_name.asc(), UserModel.email.asc())
+    )
+    rows = result.fetchall()
+    return ManagerListResponse(
+        managers=[
+            ManagerListItemResponse(
+                id=row.id,
+                name=row.full_name,
+                email=row.email,
+                role=UserRole(row.role),
+            )
+            for row in rows
+        ]
+    )
 
 
 @router.get("/{user_id}", response_model=UserResponse)

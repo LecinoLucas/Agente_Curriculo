@@ -238,55 +238,55 @@ export function CandidateProfileView({
         }
       />
 
-      {!isLoading && actionFeedback ? (
-        <div className="px-5 pt-4">
+      <div className="space-y-4 px-5 py-4">
+        {!isLoading && actionFeedback ? (
           <ActionFeedbackBanner feedback={actionFeedback} isFresh={isFeedbackFresh} />
-        </div>
-      ) : null}
+        ) : null}
 
-      {!isLoading ? (
-        <CandidateAnalysisStatusCard
-          hasResume={hasResume}
-          activeJobId={activeJobId}
-          analysisStatus={aiStatus}
-          jobFitScore={activeJobCompatibilityScore}
-          scoreLabel={
-            hasPersistedCompatibilityScore
-              ? "Aderência à vaga"
-              : "Última aderência calculada"
-          }
-          aiStatus={aiStatus}
-          errorMessage={analysisErrorMessage}
-          extractionStatus={extractionStatus}
-          highlights={analysisHighlights}
-          compact={compact}
-          onPrimaryAction={
-            hasResume && hasActiveJob && activeJobCompatibilityScore !== null
-              ? onViewAnalysis
-              : !hasResume
-                ? onOpenDocuments
-                : !hasActiveJob
-                  ? onLinkJob
-                  : onStartAnalysis
-          }
-        />
-      ) : null}
+        {!isLoading ? (
+          <CandidateAnalysisStatusCard
+            hasResume={hasResume}
+            activeJobId={activeJobId}
+            analysisStatus={aiStatus}
+            jobFitScore={activeJobCompatibilityScore}
+            scoreLabel={
+              hasPersistedCompatibilityScore
+                ? "Aderência à vaga"
+                : "Última aderência calculada"
+            }
+            aiStatus={aiStatus}
+            errorMessage={analysisErrorMessage}
+            extractionStatus={extractionStatus}
+            highlights={analysisHighlights}
+            compact={compact}
+            onPrimaryAction={
+              hasResume && hasActiveJob && activeJobCompatibilityScore !== null
+                ? onViewAnalysis
+                : !hasResume
+                  ? onOpenDocuments
+                  : !hasActiveJob
+                    ? onLinkJob
+                    : onStartAnalysis
+            }
+          />
+        ) : null}
 
-      {!isLoading && (activeJobCompatibilityScore !== null || currentStage === "hired" || currentStage === "rejected") ? (
-        <CandidateDecisionPanel
-          currentStage={currentStage}
-          analysisResult={analysisResult}
-          rankingEntry={rankingEntry}
-          compatibilityScore={activeJobCompatibilityScore}
-          hasActiveJob={hasActiveJob}
-          aiScore={aiScore}
-          aiStatus={aiStatus}
-          scoreExplanation={scoreExplanation}
-          onViewAnalysis={onViewAnalysis}
-          onEvaluateBetter={onEvaluateBetter}
-          compact={true}
-        />
-      ) : null}
+        {!isLoading && (activeJobCompatibilityScore !== null || currentStage === "hired" || currentStage === "rejected") ? (
+          <CandidateDecisionPanel
+            currentStage={currentStage}
+            analysisResult={analysisResult}
+            rankingEntry={rankingEntry}
+            compatibilityScore={activeJobCompatibilityScore}
+            hasActiveJob={hasActiveJob}
+            aiScore={aiScore}
+            aiStatus={aiStatus}
+            scoreExplanation={scoreExplanation}
+            onViewAnalysis={onViewAnalysis}
+            onEvaluateBetter={onEvaluateBetter}
+            compact={true}
+          />
+        ) : null}
+      </div>
 
       {/* Sticky footer for compact mode */}
       <div className={compact ? "sticky bottom-0 bg-[hsl(var(--surface))] z-10 border-t border-[hsl(var(--border))]/10" : ""}>

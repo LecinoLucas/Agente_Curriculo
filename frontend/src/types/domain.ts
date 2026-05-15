@@ -1369,6 +1369,8 @@ export type CollaborationComment = {
   comment_type: string;
   recommendation: string | null;
   message: string;
+  target_manager_id?: string | null;
+  priority?: "low" | "medium" | "high" | null;
   created_at: string;
 };
 
@@ -1385,4 +1387,38 @@ export type CreateCommentRequest = {
 export type ManagerFeedbackRequest = {
   message: string;
   recommendation: "advance" | "hold" | "reject" | "request_interview";
+};
+
+export type ReviewRequestItem = {
+  request_id: string;
+  candidate_id: string;
+  candidate_name: string;
+  job_id: string;
+  job_title: string;
+  requested_by: string | null;
+  requested_at: string;
+  latest_message: string;
+  status: "pending" | "answered";
+  priority: "low" | "medium" | "high" | null;
+  target_manager_id: string | null;
+  target_manager_name: string | null;
+  is_directed_to_me: boolean;
+  pipeline_stage: string | null;
+  interview_status: string | null;
+  scorecard_status: string | null;
+};
+
+export type ManagerListItem = {
+  id: string;
+  name: string;
+  email: string;
+  role: "manager";
+};
+
+export type ManagerListResponse = {
+  managers: ManagerListItem[];
+};
+
+export type ReviewRequestListResponse = {
+  requests: ReviewRequestItem[];
 };

@@ -4,7 +4,14 @@ import type {
   CollaborationListResponse,
   CreateCommentRequest,
   ManagerFeedbackRequest,
+  ReviewRequestListResponse,
 } from "../types/domain";
+
+export type RequestManagerReviewPayload = {
+  message: string;
+  target_manager_id?: string;
+  priority?: "low" | "medium" | "high";
+};
 
 export const collaborationService = {
   // Recruiter endpoints
@@ -24,9 +31,9 @@ export const collaborationService = {
     );
   },
 
-  requestManagerReview(jobId: string, candidateId: string, payload: { message?: string }) {
+  requestManagerReview(jobId: string, candidateId: string, payload: RequestManagerReviewPayload) {
     return httpRequest<CollaborationComment>(
-      `/api/v1/jobs/${jobId}/candidates/${candidateId}/collaboration/request-review`,
+      `/api/v1/jobs/${jobId}/candidates/${candidateId}/collaboration/request-manager-review`,
       {
         method: "POST",
         body: payload,
@@ -49,5 +56,9 @@ export const collaborationService = {
         body: payload,
       },
     );
+  },
+
+  listReviewRequests() {
+    return httpRequest<ReviewRequestListResponse>("/api/v1/manager/review-requests");
   },
 };

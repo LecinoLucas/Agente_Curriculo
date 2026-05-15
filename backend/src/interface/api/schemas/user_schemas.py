@@ -65,3 +65,14 @@ class UserStatsResponse(BaseModel):
     recruiters: int
     viewers: int
     candidates: int
+
+
+class ManagerListItemResponse(BaseModel):
+    id: UUID
+    name: str
+    email: str
+    role: UserRole
+
+
+class ManagerListResponse(BaseModel):
+    managers: list[ManagerListItemResponse]

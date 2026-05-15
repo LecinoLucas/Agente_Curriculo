@@ -9,24 +9,9 @@ import {
   TriangleAlert,
   Users,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
+import { SimpleBarChart } from "../components/charts/SimpleBarChart";
+import { SimpleDonutChart } from "../components/charts/SimpleDonutChart";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/common/PageHeader";
 import { ChartCard } from "../features/admin/components/ChartCard";
@@ -312,6 +297,56 @@ export function AdminBiPage() {
     () => data?.ai_usage_daily ?? [],
     [data?.ai_usage_daily],
   );
+  const analysesDailyChartData = useMemo(
+    () => (data?.analyses_daily ?? []).map((item, index) => ({
+      label: item.date,
+      value: item.total,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+    })),
+    [data?.analyses_daily],
+  );
+  const jobsDonutData = useMemo(
+    () => jobsChartData.map((item, index) => ({
+      label: item.label,
+      value: item.total,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+    })),
+    [jobsChartData],
+  );
+  const analysesBarData = useMemo(
+    () => analysesChartData.map((item, index) => ({
+      label: item.label,
+      value: item.total,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+    })),
+    [analysesChartData],
+  );
+  const pipelineBarData = useMemo(
+    () => pipelineChartData.map((item, index) => ({
+      label: item.label,
+      value: item.total,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+    })),
+    [pipelineChartData],
+  );
+  const aiUsageDailyBarData = useMemo(
+    () => aiUsageChartData.map((item, index) => ({
+      label: item.date,
+      value: item.tokens,
+      note: `${formatNumber(item.calls)} chamadas`,
+      color: CHART_COLORS[index % CHART_COLORS.length],
+    })),
+    [aiUsageChartData],
+  );
+  const topJobsBarData = useMemo(
+    () => (data?.top_jobs_by_candidates ?? []).map((item, index) => ({
+      label: item.title,
+      value: item.total_candidates,
+      note: getJobStatusLabel(item.status),
+      color: CHART_COLORS[index % CHART_COLORS.length],
+    })),
+    [data?.top_jobs_by_candidates],
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
@@ -418,17 +453,11 @@ export function AdminBiPage() {
           empty={!loading && jobsChartData.length === 0}
         >
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={jobsChartData} dataKey="total" nameKey="label" innerRadius={55} outerRadius={95}>
-                  {jobsChartData.map((entry, index) => (
-                    <Cell key={entry.status} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            <SimpleDonutChart
+              ariaLabel="Distribuição de vagas por status"
+              data={jobsDonutData}
+              valueFormatter={formatNumber}
+            />
           </div>
         </ChartCard>
 
@@ -439,15 +468,11 @@ export function AdminBiPage() {
           empty={!loading && analysesChartData.length === 0}
         >
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analysesChartData}>
-                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                <XAxis dataKey="label" tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <YAxis tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[10, 10, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <SimpleBarChart
+              ariaLabel="Volume de análises por status"
+              data={analysesBarData}
+              valueFormatter={formatNumber}
+            />
           </div>
         </ChartCard>
 
@@ -458,15 +483,12 @@ export function AdminBiPage() {
           empty={!loading && pipelineChartData.length === 0}
         >
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={pipelineChartData} layout="vertical" margin={{ left: 18 }}>
-                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                <XAxis type="number" tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <YAxis type="category" dataKey="label" tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} width={130} />
-                <Tooltip />
-                <Bar dataKey="total" fill="hsl(var(--success))" radius={[0, 10, 10, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <SimpleBarChart
+              ariaLabel="Distribuição do pipeline por etapa"
+              data={pipelineBarData}
+              orientation="horizontal"
+              valueFormatter={formatNumber}
+            />
           </div>
         </ChartCard>
 
@@ -477,15 +499,11 @@ export function AdminBiPage() {
           empty={!loading && (data?.analyses_daily.length ?? 0) === 0}
         >
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data?.analyses_daily ?? []}>
-                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <YAxis tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <SimpleBarChart
+              ariaLabel="Cadência diária de análises"
+              data={analysesDailyChartData}
+              valueFormatter={formatNumber}
+            />
           </div>
         </ChartCard>
 
@@ -500,17 +518,11 @@ export function AdminBiPage() {
             O consumo exibido é calculado a partir das chamadas registradas pelo sistema. Para billing oficial, consulte Google AI Studio ou Google Cloud Billing.
           </div>
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={aiUsageChartData}>
-                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <YAxis tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <Tooltip />
-                <Legend />
-                <Area type="monotone" dataKey="tokens" stroke="hsl(var(--primary))" fill="hsl(var(--accent))" fillOpacity={0.8} />
-                <Line type="monotone" dataKey="calls" stroke="hsl(var(--warning))" strokeWidth={2} dot={{ r: 2 }} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <SimpleBarChart
+              ariaLabel="Uso diário de tokens de IA"
+              data={aiUsageDailyBarData}
+              valueFormatter={formatNumber}
+            />
           </div>
         </ChartCard>
 
@@ -521,15 +533,11 @@ export function AdminBiPage() {
           empty={!loading && (data?.top_jobs_by_candidates.length ?? 0) === 0}
         >
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.top_jobs_by_candidates ?? []}>
-                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                <XAxis dataKey="title" tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} interval={0} angle={-12} height={60} textAnchor="end" />
-                <YAxis tick={{ fill: "hsl(var(--text-muted))", fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="total_candidates" fill="hsl(var(--warning))" radius={[10, 10, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <SimpleBarChart
+              ariaLabel="Top vagas por candidatos"
+              data={topJobsBarData}
+              valueFormatter={formatNumber}
+            />
           </div>
         </ChartCard>
       </div>

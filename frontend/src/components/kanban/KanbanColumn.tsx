@@ -3,8 +3,8 @@ import type { PipelineColumn, PipelineStage } from "../../types/domain";
 import { KanbanCard } from "./KanbanCard";
 
 const COL_CLS: Partial<Record<PipelineStage, string>> = {
-  hired: "border-[hsl(var(--success))]/18 bg-[hsl(var(--success-soft))]/70",
-  rejected: "border-[hsl(var(--danger))]/18 bg-[hsl(var(--danger-soft))]/80",
+  hired: "border-[hsl(var(--success))]/18 bg-[hsl(var(--success-soft))]/45",
+  rejected: "border-[hsl(var(--danger))]/18 bg-[hsl(var(--danger-soft))]/55",
 };
 
 interface KanbanColumnProps {
@@ -22,14 +22,14 @@ export const KanbanColumn = memo(function KanbanColumn({
   disabled = false,
   showTopMatchHighlight = false,
 }: KanbanColumnProps) {
-  const baseCls = COL_CLS[column.stage] ?? "glass border-[hsl(var(--border))]/40 shadow-inner";
+  const baseCls = COL_CLS[column.stage] ?? "glass border-[hsl(var(--border))]";
   const disabledCls = disabled ? "opacity-60 pointer-events-none" : "";
 
   return (
     <div
       className={[
-        "flex w-[20rem] shrink-0 flex-col rounded-[2.5rem] border p-4 transition-all duration-300",
-        "kanban-column-enter shadow-xl",
+        "flex w-[20rem] shrink-0 flex-col rounded-2xl border p-4 transition-all duration-300",
+        "kanban-column-enter shadow-sm",
         baseCls,
         disabledCls,
       ]
@@ -41,7 +41,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[hsl(var(--text-muted))]">
           {column.label}
         </span>
-        <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-white/50 px-2 text-[10px] font-black tabular-nums text-[hsl(var(--text-muted))] shadow-sm backdrop-blur-sm border border-[hsl(var(--border))]/30">
+        <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 text-[10px] font-black tabular-nums text-[hsl(var(--text-muted))] shadow-sm">
           {column.candidates.length}
         </span>
       </div>
@@ -69,8 +69,8 @@ export const KanbanColumn = memo(function KanbanColumn({
         {column.candidates.length === 0 ? (
           <div
             className={[
-              "flex h-16 items-center justify-center rounded-2xl border border-dashed text-xs transition-colors duration-150",
-              "border-[hsl(var(--border))] bg-[hsl(var(--surface))]/55 text-[hsl(var(--text-muted))]",
+              "flex h-16 items-center justify-center rounded-xl border border-dashed text-xs transition-colors duration-150",
+              "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]",
             ].join(" ")}
           >
             Vazio

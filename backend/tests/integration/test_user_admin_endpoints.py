@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.entities.user import User, UserRole
+from src.domain.entities.user import User, UserRole, UserStatus
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -117,6 +117,99 @@ async def test_recruiter_cannot_create_user(client: AsyncClient, db_session: Asy
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_recruiter_can_list_active_managers(client: AsyncClient, db_session: AsyncSession):
+    recruiter = await _create_active_user(
+        db_session,
+        "manager-list-recruiter@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    active_manager = await _create_active_user(
+        db_session,
+        "manager-list-active@test.com",
+        "password123",
+        UserRole.MANAGER,
+    )
+    inactive_manager = await _create_active_user(
+        db_session,
+        "manager-list-inactive@test.com",
+        "password123",
+        UserRole.MANAGER,
+    )
+    repo = SQLAlchemyUserRepository(db_session)
+    inactive_manager.status = UserStatus.INACTIVE
+    await repo.save(inactive_manager)
+    await db_session.commit()
+    await _create_active_user(
+        db_session,
+        "manager-list-viewer@test.com",
+        "password123",
+        UserRole.VIEWER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+
+    response = await client.get("/api/v1/users/managers", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "managers" in payload
+    assert payload["managers"] == [
+        {
+            "id": str(active_manager.id),
+            "name": active_manager.full_name,
+            "email": active_manager.email,
+            "role": "manager",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_admin_can_list_active_managers(client: AsyncClient, db_session: AsyncSession):
+    admin = await _create_active_user(
+        db_session,
+        "manager-list-admin@test.com",
+        "password123",
+        UserRole.ADMIN,
+    )
+    manager = await _create_active_user(
+        db_session,
+        "manager-list-admin-target@test.com",
+        "password123",
+        UserRole.MANAGER,
+    )
+    headers = await _auth_headers(client, admin.email, "password123")
+
+    response = await client.get("/api/v1/users/managers", headers=headers)
+
+    assert response.status_code == 200
+    assert any(item["id"] == str(manager.id) for item in response.json()["managers"])
+
+
+@pytest.mark.asyncio
+async def test_candidate_and_viewer_cannot_list_managers(client: AsyncClient, db_session: AsyncSession):
+    viewer = await _create_active_user(
+        db_session,
+        "manager-list-viewer-only@test.com",
+        "password123",
+        UserRole.VIEWER,
+    )
+    candidate = await _create_active_user(
+        db_session,
+        "manager-list-candidate@test.com",
+        "password123",
+        UserRole.CANDIDATE,
+    )
+    viewer_headers = await _auth_headers(client, viewer.email, "password123")
+    candidate_headers = await _auth_headers(client, candidate.email, "password123")
+
+    viewer_response = await client.get("/api/v1/users/managers", headers=viewer_headers)
+    candidate_response = await client.get("/api/v1/users/managers", headers=candidate_headers)
+
+    assert viewer_response.status_code == 403
+    assert candidate_response.status_code == 403
 
 
 @pytest.mark.asyncio

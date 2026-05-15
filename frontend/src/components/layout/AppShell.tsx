@@ -92,6 +92,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
   recruiter: "Recrutador",
   candidate: "Candidato",
   viewer:    "Visualizador",
+  manager:   "Gestor",
+  hr:        "RH",
 };
 
 const RECRUITER_NAV_ITEMS: Array<{ to: string; label: string; roles: UserRole[] }> = [
@@ -110,7 +112,7 @@ function RecruiterNavigation() {
   const { closeCandidate } = usePipeline();
   const visibleItems = RECRUITER_NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
   return (
-    <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
+    <nav className="ml-2 hidden flex-1 items-center gap-2 lg:flex">
       {visibleItems.map((item) => (
         <NavLink
           key={item.to}
@@ -122,10 +124,10 @@ function RecruiterNavigation() {
           }}
           className={({ isActive }) =>
             cn(
-              "group relative flex flex-col items-center justify-center rounded-xl px-4 py-2 transition-all duration-150",
+              "group relative flex flex-col items-center justify-center rounded-xl border px-4 py-2 transition-all duration-150",
               isActive
-                ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-sm"
-                : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--nav-text))]",
+                ? "border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.65)]"
+                : "border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]",
             )
           }
         >
@@ -166,7 +168,7 @@ function AdminNavigation() {
   }, [openDropdownLabel]);
 
   return (
-    <nav className="ml-2 hidden flex-1 items-center gap-1.5 lg:flex">
+    <nav className="ml-2 hidden flex-1 items-center gap-2 lg:flex">
       {visibleGroups.map((group) => {
         if (!group.isDropdown) {
           const item = group.items[0];
@@ -182,10 +184,10 @@ function AdminNavigation() {
               }}
               className={({ isActive }) =>
                 cn(
-                  "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
+                  "group relative flex min-w-[118px] flex-col rounded-xl px-3.5 py-2.5 transition-all duration-150",
                   isActive
-                    ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
-                    : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+                    ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.65)]"
+                    : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]",
                 )
               }
             >
@@ -205,10 +207,10 @@ function AdminNavigation() {
             <button
               type="button"
               className={cn(
-                "group relative flex min-w-[118px] flex-col rounded-2xl px-3.5 py-2.5 transition-all duration-150",
+                "group relative flex min-w-[118px] flex-col rounded-xl px-3.5 py-2.5 transition-all duration-150",
                 isGroupActive
-                  ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_14px_30px_-24px_hsl(var(--text)/0.35)]"
-                  : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/70 hover:text-[hsl(var(--nav-text))]",
+                  ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.65)]"
+                  : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]",
               )}
               onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
               aria-expanded={isOpen}
@@ -225,7 +227,7 @@ function AdminNavigation() {
 
             <div
               className={cn(
-                "absolute left-0 top-full mt-2 w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))] shadow-[0_22px_44px_-28px_hsl(var(--text)/0.28)] transition-all duration-150 z-50",
+                "absolute left-0 top-full z-50 mt-2 w-max rounded-2xl border border-[hsl(var(--border))]/90 bg-[hsl(var(--surface))] shadow-[0_18px_34px_-26px_hsl(var(--text)/0.24)] transition-all duration-150",
                 isOpen ? "block" : "hidden",
               )}
               role="menu"
@@ -243,10 +245,10 @@ function AdminNavigation() {
                   }}
                   className={({ isActive }) =>
                     cn(
-                      "flex flex-col px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl min-w-[160px]",
+                      "flex min-w-[160px] flex-col px-4 py-3 transition-colors first:rounded-t-2xl last:rounded-b-2xl",
                       isActive
                         ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
-                        : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--nav-active-bg))]/50 hover:text-[hsl(var(--text))]",
+                        : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))]",
                     )
                   }
                 >
@@ -321,7 +323,7 @@ export function AppShell() {
     <div className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))]">
 
       {/* ── Top navigation bar (dark in light mode, darker-dark in dark mode) ── */}
-      <header className="sticky top-0 z-40 border-b border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] shadow-[0_18px_40px_-34px_hsl(var(--text)/0.18)]">
+      <header className="navbar sticky top-0 z-40 border-b border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] shadow-[0_14px_28px_-24px_rgba(15,23,42,0.48)]">
         <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-3.5 sm:px-6">
 
           {/* Brand */}
@@ -329,9 +331,9 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => navigate("/pipeline")}
-              className="flex items-center gap-3 rounded-2xl border border-transparent px-2 py-1.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]/68"
+              className="flex items-center gap-3 rounded-xl border border-transparent px-2 py-1.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))]"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] via-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-xs font-extrabold text-white shadow-[0_16px_30px_-20px_hsl(var(--primary)/0.65)]">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-xs font-extrabold text-white shadow-[0_12px_24px_-20px_hsl(var(--primary)/0.55)]">
                 RA
               </div>
               <div className="hidden sm:block">
@@ -346,7 +348,7 @@ export function AppShell() {
           </div>
 
           {/* Desktop nav */}
-          {user?.role === "admin" ? <AdminNavigation /> : <RecruiterNavigation />}
+          {user?.role === "admin" || user?.role === "manager" ? <AdminNavigation /> : <RecruiterNavigation />}
 
           {/* Right-side controls */}
           <div className="ml-auto flex items-center gap-2">
@@ -356,7 +358,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-transparent text-[hsl(var(--nav-muted))] transition-colors hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-[hsl(var(--nav-muted))] transition-colors hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
               aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
               title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
             >
@@ -367,7 +369,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => navigate("/perfil")}
-              className="hidden items-center gap-3 rounded-2xl border border-transparent px-3.5 py-2.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] lg:flex"
+              className="hidden items-center gap-3 rounded-xl border border-transparent px-3.5 py-2.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] lg:flex"
             >
               <div className="text-right">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--nav-muted))]">
@@ -384,10 +386,10 @@ export function AppShell() {
                 <img
                   src={user.avatar_url}
                   alt={user.full_name}
-                  className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-[0_16px_30px_-22px_hsl(var(--primary)/0.68)]"
+                  className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-[0_10px_22px_-18px_rgba(15,23,42,0.45)]"
                 />
               ) : (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white shadow-[0_16px_30px_-22px_hsl(var(--primary)/0.68)]">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary))] text-sm font-semibold text-white shadow-[0_10px_22px_-18px_rgba(15,23,42,0.45)]">
                   {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
                 </div>
               )}
@@ -397,7 +399,7 @@ export function AppShell() {
             <div className="hidden lg:block">
               <ActionMenu
                 buttonLabel="Abrir ações de perfil"
-                buttonClassName="!h-10 !w-10 !rounded-2xl !border !border-transparent !bg-transparent !text-[hsl(var(--nav-muted))] hover:!border-[hsl(var(--nav-border))]/70 hover:!bg-[hsl(var(--nav-active-bg))] hover:!text-[hsl(var(--nav-text))]"
+                buttonClassName="!h-10 !w-10 !rounded-xl !border !border-transparent !bg-transparent !text-[hsl(var(--nav-muted))] hover:!border-[hsl(var(--nav-border))]/70 hover:!bg-[hsl(var(--nav-active-bg))] hover:!text-[hsl(var(--nav-text))]"
                 items={[
                   { label: "Meu perfil", onClick: () => navigate("/perfil") },
                   { label: "Sair", onClick: () => void logout(), tone: "danger" },
@@ -409,7 +411,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-transparent text-[hsl(var(--nav-muted))] transition-colors hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))] lg:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-[hsl(var(--nav-muted))] transition-colors hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))] lg:hidden"
               aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
               aria-expanded={mobileMenuOpen}
             >
@@ -420,19 +422,19 @@ export function AppShell() {
 
         {/* ── Mobile drawer ──────────────────────────────────────────────── */}
         {mobileMenuOpen ? (
-          <div className="border-t border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-bg))]/98 px-4 py-4 shadow-[0_24px_46px_-30px_hsl(var(--text)/0.26)] lg:hidden">
+          <div className="border-t border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-bg))]/98 px-4 py-4 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.5)] lg:hidden">
             <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
 
               {/* Profile summary */}
-              <div className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--nav-border))]/70 bg-[hsl(var(--nav-active-bg))] px-4 py-3">
+              <div className="flex items-center gap-3 rounded-xl border border-[hsl(var(--nav-border))]/70 bg-[hsl(var(--nav-active-bg))] px-4 py-3">
                 {user?.avatar_url ? (
                   <img
                     src={user.avatar_url}
                     alt={user.full_name}
-                    className="h-10 w-10 shrink-0 rounded-2xl object-cover"
+                    className="h-10 w-10 shrink-0 rounded-xl object-cover"
                   />
                 ) : (
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(214_44%_34%)] text-sm font-semibold text-white">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary))] text-sm font-semibold text-white">
                     {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
                   </div>
                 )}
@@ -447,7 +449,7 @@ export function AppShell() {
               </div>
 
               <nav className="flex flex-col gap-3">
-                {user?.role === "admin" ? (
+                {user?.role === "admin" || user?.role === "manager" ? (
                   visibleGroups.map((group) => {
                     if (!group.isDropdown) {
                       const item = group.items[0];
@@ -459,7 +461,7 @@ export function AppShell() {
                           onClick={() => setMobileMenuOpen(false)}
                           className={({ isActive }) =>
                             cn(
-                              "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                              "flex items-center justify-between rounded-xl px-4 py-3 transition-colors",
                               isActive
                                 ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
                                 : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
@@ -482,7 +484,7 @@ export function AppShell() {
                         <button
                           type="button"
                           onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
-                          className="flex items-center justify-between rounded-2xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
+                          className="flex items-center justify-between rounded-xl px-4 py-3 transition-colors hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]"
                         >
                           <div className="min-w-0 text-left">
                             <p className="text-sm font-semibold tracking-tight text-[hsl(var(--nav-text))]">{group.label}</p>
@@ -491,7 +493,7 @@ export function AppShell() {
                           <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", isOpen && "rotate-180")} />
                         </button>
                         {isOpen ? (
-                          <div className="flex flex-col gap-1 rounded-2xl bg-[hsl(var(--nav-active-bg))]/40 p-2">
+                          <div className="flex flex-col gap-1 rounded-xl bg-[hsl(var(--nav-active-bg))]/40 p-2">
                             {group.items.map((item) => (
                               <NavLink
                                 key={item.to}
@@ -500,7 +502,7 @@ export function AppShell() {
                                 onClick={() => setMobileMenuOpen(false)}
                                 className={({ isActive }) =>
                                   cn(
-                                    "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                                    "flex items-center justify-between rounded-xl px-4 py-3 transition-colors",
                                     isActive
                                       ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
                                       : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",
@@ -531,8 +533,8 @@ export function AppShell() {
                         }
                       }}
                       className={({ isActive }) =>
-                        cn(
-                          "flex items-center justify-between rounded-2xl px-4 py-3 transition-colors",
+                            cn(
+                          "flex items-center justify-between rounded-xl px-4 py-3 transition-colors",
                           isActive
                             ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))]"
                             : "text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))]/60 hover:text-[hsl(var(--nav-text))]",

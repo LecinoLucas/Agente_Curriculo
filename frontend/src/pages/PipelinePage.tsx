@@ -304,14 +304,17 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-6 py-8 pb-12">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-8 pb-12">
       {/* ── Page header ── */}
-      <div className="relative overflow-hidden rounded-[2rem] bg-[hsl(var(--nav-bg))] p-4 text-white shadow-2xl">
-        <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="relative overflow-hidden rounded-[1.25rem] border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6 text-[hsl(var(--text))] shadow-[0_18px_34px_-30px_hsl(var(--text)/0.18)]">
+        <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Pipeline do Recrutador</h1>
-            <p className="mt-2 text-lg font-medium text-white/80">
-              Gerencie o fluxo de talentos com inteligência e agilidade.
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--text-muted))]">
+              Operação de recrutamento
+            </p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Pipeline do Recrutador</h1>
+            <p className="mt-2 max-w-2xl text-sm font-medium text-[hsl(var(--text-muted))] sm:text-base">
+              Acompanhe etapas, aderência e movimentações da vaga selecionada em uma visão única.
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-3">
@@ -319,10 +322,10 @@ export function PipelinePage() {
               type="button"
               onClick={handleOpenSourceCandidates}
               disabled={!canUse}
-              className={`hover-lift rounded-2xl px-6 py-3 text-sm font-bold shadow-xl transition inline-flex items-center gap-2 ${
+              className={`inline-flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition ${
                 canUse
-                  ? "bg-white text-[hsl(var(--brand))] hover:bg-white/95"
-                  : "bg-white/50 text-white/70 cursor-not-allowed"
+                  ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-white shadow-[0_10px_22px_-18px_hsl(var(--primary)/0.42)] hover:bg-[hsl(var(--brand-dark))]"
+                  : "cursor-not-allowed border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]"
               }`}
             >
               <UserPlus className="h-5 w-5" />
@@ -332,20 +335,17 @@ export function PipelinePage() {
               type="button"
               onClick={() => void refreshBoard()}
               disabled={boardLoading || !activeJobId}
-              className="hover-lift inline-flex items-center gap-2 rounded-2xl bg-black/20 px-6 py-3 text-sm font-bold text-white backdrop-blur-md transition hover:bg-black/30 disabled:opacity-40"
+              className="ui-btn-secondary inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition disabled:opacity-40"
             >
               <RefreshCw className={["h-5 w-5", boardLoading ? "animate-spin" : ""].join(" ")} />
               {boardLoading ? "Sincronizando…" : "Atualizar"}
             </button>
           </div>
         </div>
-        {/* Subtle glow effect background */}
-        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
       </div>
 
       {/* ── Job selector surface ── */}
-      <div className="glass rounded-[2.5rem] border-[hsl(var(--border))/40 shadow-xl overflow-hidden">
+      <div className="glass overflow-hidden rounded-2xl border-[hsl(var(--border))/40]">
         <div className="p-6 sm:p-8">
           <div className="flex flex-col gap-8 xl:flex-row xl:items-end">
             <div className="flex flex-col gap-6 xl:min-w-0 xl:flex-1">
@@ -358,7 +358,7 @@ export function PipelinePage() {
                   Vaga Selecionada
                 </label>
                 {pipelineJobsError ? (
-                  <div className="rounded-2xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm font-medium text-[hsl(var(--danger))]">
+                  <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm font-medium text-[hsl(var(--danger))]">
                     {pipelineJobsError}
                   </div>
                 ) : (
@@ -368,7 +368,7 @@ export function PipelinePage() {
                       value={activeJobId ?? ""}
                       onChange={(e) => handleSelectJob(e.target.value)}
                       disabled={pipelineJobsLoading || pipelineJobs.length === 0}
-                      className="ui-input h-14 w-full appearance-none rounded-2xl border-2 px-4 pr-12 text-base font-bold shadow-sm transition-all focus:ring-4 focus:ring-[hsl(var(--primary))]/10 disabled:opacity-50"
+                      className="ui-input h-14 w-full appearance-none rounded-xl border px-4 pr-12 text-base font-semibold shadow-sm transition-all focus:ring-4 focus:ring-[hsl(var(--primary))]/10 disabled:opacity-50"
                     >
                       {pipelineJobsLoading ? (
                         <option value="">Carregando vagas…</option>
@@ -417,10 +417,10 @@ export function PipelinePage() {
                 <button
                   type="button"
                   onClick={() => setShowRanking((current) => !current)}
-                  className={`hover-lift inline-flex h-14 items-center justify-center gap-3 rounded-2xl border-2 px-6 text-sm font-bold transition-all shadow-sm ${
+                  className={`inline-flex h-14 items-center justify-center gap-3 rounded-xl border px-6 text-sm font-semibold transition-all ${
                     showRanking 
                       ? "border-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]" 
-                      : "border-[hsl(var(--border))] bg-white text-[hsl(var(--text-muted))] hover:border-[hsl(var(--primary))]/50 hover:text-[hsl(var(--text))]"
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] hover:border-[hsl(var(--border-strong))] hover:text-[hsl(var(--text))]"
                   }`}
                   aria-expanded={showRanking}
                 >
@@ -441,8 +441,8 @@ export function PipelinePage() {
           </div>
           
           {selectedJob && !activeJobAcceptsCandidates && !isDraft ? (
-            <div className="mt-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-900 backdrop-blur-sm">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200/50 text-amber-600">
+            <div className="mt-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
                 ⚠️
               </div>
               <p>
@@ -473,7 +473,7 @@ export function PipelinePage() {
           />
         ) : (
           <div className={boardLayoutClass}>
-            <div className="ui-card min-w-0 overflow-hidden rounded-[2.5rem] p-6 shadow-xl border-[hsl(var(--border))]/30">
+            <div className="ui-card min-w-0 overflow-hidden rounded-2xl border-[hsl(var(--border))]/30 p-6">
           {/* Board header */}
             <div className="mb-6 flex flex-col gap-4 border-b border-[hsl(var(--border))]/50 pb-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
@@ -482,7 +482,7 @@ export function PipelinePage() {
                     Controle de Fluxo
                   </p>
                   {board ? (
-                    <span className="inline-flex items-center rounded-full bg-[hsl(var(--primary))]/10 px-3 py-1 text-[11px] font-bold text-[hsl(var(--primary))]">
+                    <span className="inline-flex items-center rounded-lg border border-[hsl(var(--primary))]/14 bg-[hsl(var(--primary))]/10 px-3 py-1 text-[11px] font-semibold text-[hsl(var(--primary))]">
                       {totalActive} Candidatos em Processo
                     </span>
                   ) : null}
@@ -492,22 +492,22 @@ export function PipelinePage() {
                 </h2>
               </div>
               <div className="flex items-center gap-3 self-start lg:self-end">
-                <div className="flex items-center gap-2 rounded-xl bg-[hsl(var(--surface-muted))]/50 p-1">
+                <div className="flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-1">
                   <button
                     onClick={() => setSortOrder("score_desc")}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${sortOrder === "score_desc" ? "bg-white text-[hsl(var(--primary))] shadow-sm" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"}`}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${sortOrder === "score_desc" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-sm" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"}`}
                   >
                     Top Scores
                   </button>
                   <button
                     onClick={() => setSortOrder("name_az")}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${sortOrder === "name_az" ? "bg-white text-[hsl(var(--primary))] shadow-sm" : "text-[hsl(var(--text-muted))] hover:text(--text)]"}`}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${sortOrder === "name_az" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-sm" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"}`}
                   >
                     A-Z
                   </button>
                 </div>
                 {isBoardRefreshing ? (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--accent-soft))] px-3 py-1.5 text-xs font-bold text-[hsl(var(--primary))] animate-pulse">
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--accent-soft))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--primary))] animate-pulse">
                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                     Sincronizando
                   </span>
@@ -566,7 +566,7 @@ export function PipelinePage() {
           {/* Empty board */}
             {!showInitialBoardLoading && board && !boardError && totalActive === 0 && totalRejected === 0 ? (
               <div className="flex flex-col items-center justify-center gap-4 py-12">
-                <div className="rounded-[2.5rem] border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-12 max-w-lg text-center backdrop-blur-sm">
+                <div className="max-w-lg rounded-[1.25rem] border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface-muted))] p-12 text-center">
                   <div className="mb-6 flex justify-center text-6xl">🧭</div>
                   <h3 className="text-xl font-bold text-[hsl(var(--text))]">
                     Nenhum Candidato no Fluxo
@@ -578,10 +578,10 @@ export function PipelinePage() {
                     <button
                       onClick={handleOpenSourceCandidates}
                       disabled={!canUse}
-                      className={`hover-lift inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold transition shadow-xl ${
+                      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-8 py-4 text-sm font-semibold transition ${
                         canUse
-                          ? "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90"
-                          : "bg-[hsl(var(--primary))]/50 text-white cursor-not-allowed"
+                          ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--brand-dark))]"
+                          : "cursor-not-allowed border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]"
                       }`}
                     >
                       <UserPlus className="h-5 w-5" />
@@ -590,7 +590,7 @@ export function PipelinePage() {
                     <button
                       onClick={() => canUse && setShowNewCandidate(true)}
                       disabled={!canUse}
-                      className="hover-lift inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-[hsl(var(--border))] bg-white px-8 py-4 text-sm font-bold text-[hsl(var(--text-muted))] transition hover:border-[hsl(var(--primary))]/30 hover:text-[hsl(var(--text))] disabled:opacity-50"
+                      className="ui-btn-secondary inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-sm font-semibold transition hover:text-[hsl(var(--text))] disabled:opacity-50"
                     >
                       Criar Manualmente
                     </button>
@@ -703,7 +703,7 @@ function RankingPanel({
   return (
     <aside
       id="pipeline-ranking-panel"
-      className="glass rounded-[2.5rem] p-6 shadow-2xl border-[hsl(var(--border))]/30 flex flex-col h-full sticky top-8"
+      className="glass sticky top-8 flex h-full flex-col rounded-2xl border-[hsl(var(--border))]/30 p-6"
     >
       <div className="flex items-start justify-between gap-4 border-b border-[hsl(var(--border))]/50 pb-6">
         <div className="min-w-0">
@@ -718,7 +718,7 @@ function RankingPanel({
               type="button"
               onClick={onRefresh}
               disabled={loading}
-              className="ui-btn-secondary h-10 w-10 flex items-center justify-center rounded-xl border border-[hsl(var(--border))] transition hover:border-[hsl(var(--primary))]/30 disabled:opacity-40"
+              className="ui-btn-secondary flex h-10 w-10 items-center justify-center rounded-xl border border-[hsl(var(--border))] transition disabled:opacity-40"
               title="Atualizar ranking"
             >
               <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
@@ -727,7 +727,7 @@ function RankingPanel({
           <button
             type="button"
             onClick={onToggle}
-            className="ui-btn-secondary h-10 w-10 flex items-center justify-center rounded-xl border border-[hsl(var(--border))] transition hover:border-[hsl(var(--primary))]/30"
+            className="ui-btn-secondary flex h-10 w-10 items-center justify-center rounded-xl border border-[hsl(var(--border))] transition"
             title="Fechar"
           >
             <PanelRightClose className="h-4 w-4" />
@@ -738,7 +738,7 @@ function RankingPanel({
       <div id="pipeline-ranking-content" className="mt-6 flex-1 overflow-y-auto ui-scrollbar pr-1">
         {showInitialLoading ? <SkeletonRows rows={4} /> : null}
         {isRefreshing ? (
-          <div className="mb-4 rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3 text-xs font-bold text-[hsl(var(--primary))] animate-pulse">
+          <div className="mb-4 rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3 text-xs font-semibold text-[hsl(var(--primary))] animate-pulse">
             Recalculando aderência dos candidatos…
           </div>
         ) : null}
@@ -759,7 +759,7 @@ function RankingPanel({
 
         {!showInitialLoading && !error && ranking && ranking.candidates.length > 0 ? (
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between rounded-xl bg-[hsl(var(--surface-muted))]/50 px-4 py-2.5 text-[11px] font-bold text-[hsl(var(--text-muted))]">
+            <div className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-2.5 text-[11px] font-semibold text-[hsl(var(--text-muted))]">
               <span>{ranking.total_candidates} Talentos</span>
               {ranking.score_version && <span>V{ranking.score_version}</span>}
             </div>
@@ -820,10 +820,10 @@ function RankingCard({
       type="button"
       onClick={() => void onOpenCandidate(entry.candidate_id)}
       className={[
-        "hover-lift w-full rounded-2xl border-2 px-4 py-4 text-left transition-all",
+        "w-full rounded-2xl border px-4 py-4 text-left transition-all",
         hasDealBreakerRejection
           ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))] hover:border-[hsl(var(--danger))]/50"
-          : "border-[hsl(var(--border))]/50 bg-white hover:border-[hsl(var(--primary))]/40 shadow-sm hover:shadow-md",
+          : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-sm hover:border-[hsl(var(--border-strong))] hover:shadow-[0_12px_24px_-22px_hsl(var(--text)/0.22)]",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-3">
@@ -835,7 +835,7 @@ function RankingCard({
             <p className="truncate text-sm font-bold text-[hsl(var(--text))]">{entry.candidate_name}</p>
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--text-muted))]">
+            <span className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--text-muted))]">
               {freshnessLabel}
             </span>
           </div>
@@ -851,7 +851,7 @@ function RankingCard({
       </div>
 
       {hasDealBreakerRejection && dealBreakerDisplay ? (
-        <div className="mt-4 rounded-xl border-2 border-[hsl(var(--danger))]/20 bg-white/80 p-3 shadow-inner">
+        <div className="mt-4 rounded-xl border border-[hsl(var(--danger))]/20 bg-white p-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--danger))]">
             Critério Eliminatório
           </p>
@@ -870,7 +870,7 @@ function RankingCard({
             {reasonPreview.map((reason) => (
               <span
                 key={reason}
-                className="inline-flex items-center rounded-full border border-[hsl(var(--border))]/50 bg-[hsl(var(--surface-muted))]/30 px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--text-muted))]"
+                className="inline-flex items-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--text-muted))]"
               >
                 {reason}
               </span>
@@ -892,7 +892,7 @@ function RankingCard({
 
 function MetaCell({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border-2 border-[hsl(var(--border))]/30 bg-white/50 px-4 py-3 shadow-sm transition-colors hover:border-[hsl(var(--border))]/60">
+    <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 shadow-[0_10px_18px_-20px_hsl(var(--text)/0.2)] transition-colors hover:border-[hsl(var(--border-strong))]">
       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[hsl(var(--text-muted))]">
         <div className="h-1 w-1 rounded-full bg-[hsl(var(--border-strong))]" />
         {label}

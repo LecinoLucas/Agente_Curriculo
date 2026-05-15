@@ -1,0 +1,3135 @@
+{
+  "generated_at": "2026-05-14T20:33:59.417576+00:00",
+  "profile": "small",
+  "volume": {
+    "candidates": 100,
+    "jobs": 10,
+    "pipelines": 500,
+    "communications": 500,
+    "interviews": 100,
+    "pre_admissions": 50
+  },
+  "repeat": 2,
+  "endpoints": [
+    {
+      "name": "candidates_summaries",
+      "method": "GET",
+      "path": "/api/v1/candidates/summaries?page=1&page_size=100",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 17.69,
+        "p95": 22.72,
+        "p99": 22.72,
+        "max": 22.72
+      },
+      "response_bytes": {
+        "median": 66813,
+        "max": 66813
+      },
+      "queries": {
+        "median": 3,
+        "max": 3
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT candidates.id, candidates.full_name, candidates.email, candidates.phone, candidates.cpf, candidates.tags, candidates.created_at, candidates.archived_at, candidates.archive_reason, candidates.application_source, (SELECT count(DISTINCT resumes.id) AS count_1 FROM resumes WHERE resumes.candidate_id = candidates.id AND resumes.deleted_at IS NULL) AS resume_count, (SELECT count(DISTINCT candidate_job_pipeline.job_id) AS count_2 FROM candidate_job_pipeline JOIN jobs ON jobs.id = candidate_job_p",
+          "duration_ms": 4.098,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidates.id, candidates.full_name, candidates.email, candidates.phone, candidates.cpf, candidates.tags, candidates.created_at, candidates.archived_at, candidates.archive_reason, candidates.application_source, (SELECT count(DISTINCT resumes.id) AS count_1 FROM resumes WHERE resumes.candidate_id = candidates.id AND resumes.deleted_at IS NULL) AS resume_count, (SELECT count(DISTINCT candidate_job_pipeline.job_id) AS count_2 FROM candidate_job_pipeline JOIN jobs ON jobs.id = candidate_job_p",
+          "duration_ms": 4.08,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.408,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT count(*) AS count_1 FROM candidates WHERE candidates.deleted_at IS NULL AND candidates.archived_at IS NULL",
+          "duration_ms": 0.285,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.206,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "pipeline_board",
+      "method": "GET",
+      "path": "/api/v1/pipeline/10711997-2970-4d75-982a-4f60866997e0",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 10.43,
+        "p95": 13.25,
+        "p99": 13.25,
+        "max": 13.25
+      },
+      "response_bytes": {
+        "median": 39834,
+        "max": 39834
+      },
+      "queries": {
+        "median": 3,
+        "max": 3
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT candidate_job_pipeline.candidate_id, candidates.full_name AS candidate_name, candidate_job_pipeline.job_id, candidate_job_pipeline.pipeline_stage AS stage, candidate_job_pipeline.link_status AS status, candidate_job_pipeline.entered_at, candidate_job_pipeline.updated_at, anon_1.top_skills, analyses.status AS ai_status, candidate_job_scores.final_score AS job_fit_score FROM candidate_job_pipeline JOIN candidates ON candidates.id = candidate_job_pipeline.candidate_id LEFT OUTER JOIN (SELECT",
+          "duration_ms": 1.919,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_pipeline.candidate_id, candidates.full_name AS candidate_name, candidate_job_pipeline.job_id, candidate_job_pipeline.pipeline_stage AS stage, candidate_job_pipeline.link_status AS status, candidate_job_pipeline.entered_at, candidate_job_pipeline.updated_at, anon_1.top_skills, analyses.status AS ai_status, candidate_job_scores.final_score AS job_fit_score FROM candidate_job_pipeline JOIN candidates ON candidates.id = candidate_job_pipeline.candidate_id LEFT OUTER JOIN (SELECT",
+          "duration_ms": 1.474,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.843,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT jobs.id, jobs.title, jobs.description, jobs.requirements, jobs.status, jobs.seniority_level, jobs.minimum_education_level, jobs.minimum_years_experience, jobs.deal_breakers, jobs.work_model, jobs.location, jobs.salary_min, jobs.salary_max, jobs.salary_currency, jobs.job_area, jobs.responsibilities, jobs.experience_context, jobs.behavioral_requirements, jobs.priority, jobs.quality_score, jobs.quality_status, jobs.skill_requirements, jobs.job_profile_json, jobs.job_profile_hash, jobs.behavi",
+          "duration_ms": 0.363,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.199,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "job_ranking",
+      "method": "GET",
+      "path": "/api/v1/jobs/10711997-2970-4d75-982a-4f60866997e0/ranking",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 17.33,
+        "p95": 20.61,
+        "p99": 20.61,
+        "max": 20.61
+      },
+      "response_bytes": {
+        "median": 191312,
+        "max": 191312
+      },
+      "queries": {
+        "median": 8,
+        "max": 8
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT candidate_job_scores.candidate_id, candidate_job_scores.final_score, candidate_job_scores.decision_suggestion, candidate_job_scores.breakdown, candidate_job_scores.reason_codes, candidate_job_scores.explanation_text, candidate_job_scores.factor_summary_json, candidate_job_scores.computed_at, candidate_job_scores.updated_at AS ranking_updated_at, candidate_job_scores.source_analysis_id, candidate_job_scores.source_analysis_created_at, candidate_job_scores.score_model_version, candidate_job",
+          "duration_ms": 1.709,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_scores.candidate_id, candidate_job_scores.final_score, candidate_job_scores.decision_suggestion, candidate_job_scores.breakdown, candidate_job_scores.reason_codes, candidate_job_scores.explanation_text, candidate_job_scores.factor_summary_json, candidate_job_scores.computed_at, candidate_job_scores.updated_at AS ranking_updated_at, candidate_job_scores.source_analysis_id, candidate_job_scores.source_analysis_created_at, candidate_job_scores.score_model_version, candidate_job",
+          "duration_ms": 1.681,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidates.data_quality_status, count(candidate_job_scores.candidate_id) AS count FROM candidate_job_scores JOIN candidates ON candidates.id = candidate_job_scores.candidate_id WHERE candidate_job_scores.job_id = ? AND candidates.deleted_at IS NULL GROUP BY candidates.data_quality_status",
+          "duration_ms": 0.437,
+          "executemany": false
+        },
+        {
+          "sql": "UPDATE candidate_job_scores SET freshness_status=? WHERE candidate_job_scores.id IN (SELECT candidate_job_scores.id FROM candidate_job_scores JOIN candidate_job_pipeline ON candidate_job_pipeline.candidate_id = candidate_job_scores.candidate_id AND candidate_job_pipeline.job_id = candidate_job_scores.job_id AND candidate_job_pipeline.pipeline_status = ? AND candidate_job_pipeline.relationship_status = ? AND candidate_job_pipeline.is_terminal IS 0 AND candidate_job_pipeline.terminated_at IS NULL ",
+          "duration_ms": 0.361,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_pipeline.candidate_id, candidate_job_pipeline.current_analysis_id FROM candidate_job_pipeline JOIN analyses ON analyses.id = candidate_job_pipeline.current_analysis_id LEFT OUTER JOIN candidate_job_scores ON candidate_job_scores.candidate_id = candidate_job_pipeline.candidate_id AND candidate_job_scores.job_id = candidate_job_pipeline.job_id AND candidate_job_scores.version_id = ? AND candidate_job_scores.source_analysis_id = candidate_job_pipeline.current_analysis_id AND ca",
+          "duration_ms": 0.332,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "candidate_overview",
+      "method": "GET",
+      "path": "/api/v1/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/overview",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 12.88,
+        "p95": 16.44,
+        "p99": 16.44,
+        "max": 16.44
+      },
+      "response_bytes": {
+        "median": 4311,
+        "max": 4311
+      },
+      "queries": {
+        "median": 7,
+        "max": 7
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT candidate_job_scores.id, candidate_job_scores.candidate_id, candidate_job_scores.job_id, candidate_job_scores.version_id, candidate_job_scores.source_analysis_id, candidate_job_scores.source_analysis_created_at, candidate_job_scores.input_hash, candidate_job_scores.score_model_version, candidate_job_scores.explainability_version, candidate_job_scores.final_score, candidate_job_scores.decision_suggestion, candidate_job_scores.breakdown, candidate_job_scores.reason_codes, candidate_job_scor",
+          "duration_ms": 0.615,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT analyses.id AS analysis_id, analyses.job_id AS job_id, resumes.id AS resume_id, resumes.title AS resume_title, analyses.status, analyses.started_at, analyses.completed_at, analyses.failed_at, analyses.failure_reason, analyses.task_id, analyses.worker_id, CASE WHEN (analysis_results.id IS NULL) THEN NULL WHEN (coalesce(analysis_results.input_tokens, ?) + coalesce(analysis_results.output_tokens, ?) + coalesce(analysis_results.cache_read_tokens, ?) + coalesce(analysis_results.cache_write_tok",
+          "duration_ms": 0.568,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_pipeline.current_analysis_id AS analysis_id, candidate_job_match.job_id, jobs.title AS job_title, jobs.status AS job_status, candidate_job_scores.final_score AS job_fit_score, candidate_job_match.recommendation, candidate_profile_analysis.seniority_level, candidate_profile_analysis.experience_years AS total_experience_years, candidate_job_match.created_at FROM candidate_job_match JOIN jobs ON jobs.id = candidate_job_match.job_id JOIN job_profile_analysis ON job_profile_analy",
+          "duration_ms": 0.547,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_pipeline.current_analysis_id AS analysis_id, candidate_job_match.job_id, jobs.title AS job_title, jobs.status AS job_status, candidate_job_scores.final_score AS job_fit_score, candidate_job_match.recommendation, candidate_profile_analysis.seniority_level, candidate_profile_analysis.experience_years AS total_experience_years, candidate_job_match.created_at FROM candidate_job_match JOIN jobs ON jobs.id = candidate_job_match.job_id JOIN job_profile_analysis ON job_profile_analy",
+          "duration_ms": 0.448,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT analyses.id AS analysis_id, analyses.job_id AS job_id, resumes.id AS resume_id, resumes.title AS resume_title, analyses.status, analyses.started_at, analyses.completed_at, analyses.failed_at, analyses.failure_reason, analyses.task_id, analyses.worker_id, CASE WHEN (analysis_results.id IS NULL) THEN NULL WHEN (coalesce(analysis_results.input_tokens, ?) + coalesce(analysis_results.output_tokens, ?) + coalesce(analysis_results.cache_read_tokens, ?) + coalesce(analysis_results.cache_write_tok",
+          "duration_ms": 0.413,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "decision_summary",
+      "method": "GET",
+      "path": "/api/v1/jobs/10711997-2970-4d75-982a-4f60866997e0/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/decision-summary",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 11.57,
+        "p95": 15.36,
+        "p99": 15.36,
+        "max": 15.36
+      },
+      "response_bytes": {
+        "median": 986,
+        "max": 986
+      },
+      "queries": {
+        "median": 12,
+        "max": 12
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT analyses.id, analyses.resume_version_id, analyses.job_id, analyses.ai_model_id, analyses.prompt_template_id, analyses.status, analyses.priority, analyses.idempotency_key, analyses.requested_by, analyses.started_at, analyses.completed_at, analyses.failed_at, analyses.failure_reason, analyses.retry_count, analyses.max_retries, analyses.attempts, analyses.next_retry_at, analyses.provider_error_type, analyses.provider_status_code, analyses.worker_claim_id, analyses.claimed_at, analyses.stale_",
+          "duration_ms": 0.564,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT interview_schedules.id, interview_schedules.candidate_id, interview_schedules.job_id, interview_schedules.pipeline_id, interview_schedules.title, interview_schedules.description, interview_schedules.public_notes, interview_schedules.internal_notes, interview_schedules.interview_format, interview_schedules.scheduled_start, interview_schedules.scheduled_end, interview_schedules.timezone, interview_schedules.interview_type, interview_schedules.status, interview_schedules.location, interview_",
+          "duration_ms": 0.363,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT interview_scorecard_items.scorecard_id AS interview_scorecard_items_scorecard_id, interview_scorecard_items.id AS interview_scorecard_items_id, interview_scorecard_items.competency_name AS interview_scorecard_items_competency_name, interview_scorecard_items.question_text AS interview_scorecard_items_question_text, interview_scorecard_items.rating AS interview_scorecard_items_rating, interview_scorecard_items.evidence AS interview_scorecard_items_evidence, interview_scorecard_items.weight ",
+          "duration_ms": 0.334,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT analyses.id, analyses.resume_version_id, analyses.job_id, analyses.ai_model_id, analyses.prompt_template_id, analyses.status, analyses.priority, analyses.idempotency_key, analyses.requested_by, analyses.started_at, analyses.completed_at, analyses.failed_at, analyses.failure_reason, analyses.retry_count, analyses.max_retries, analyses.attempts, analyses.next_retry_at, analyses.provider_error_type, analyses.provider_status_code, analyses.worker_claim_id, analyses.claimed_at, analyses.stale_",
+          "duration_ms": 0.301,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT behavioral_assessment_assignments.id, behavioral_assessment_assignments.candidate_id, behavioral_assessment_assignments.job_id, behavioral_assessment_assignments.template_id, behavioral_assessment_assignments.status, behavioral_assessment_assignments.assigned_at, behavioral_assessment_assignments.started_at, behavioral_assessment_assignments.submitted_at, behavioral_assessment_assignments.expires_at, behavioral_assessment_assignments.created_at, behavioral_assessment_assignments.updated_a",
+          "duration_ms": 0.288,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "agenda_interviews",
+      "method": "GET",
+      "path": "/api/v1/agenda/interviews?page=1&page_size=100",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 6.48,
+        "p95": 7.36,
+        "p99": 7.36,
+        "max": 7.36
+      },
+      "response_bytes": {
+        "median": 96963,
+        "max": 96963
+      },
+      "queries": {
+        "median": 3,
+        "max": 3
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT interview_schedules.id, interview_schedules.candidate_id, candidates.full_name AS candidate_name, interview_schedules.job_id, jobs.title AS job_title, interview_schedules.title, interview_schedules.description, interview_schedules.public_notes, interview_schedules.internal_notes, interview_schedules.scheduled_start, interview_schedules.scheduled_end, interview_schedules.timezone, interview_schedules.interview_type, interview_schedules.interview_format, interview_schedules.status, intervie",
+          "duration_ms": 0.696,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT interview_schedules.id, interview_schedules.candidate_id, candidates.full_name AS candidate_name, interview_schedules.job_id, jobs.title AS job_title, interview_schedules.title, interview_schedules.description, interview_schedules.public_notes, interview_schedules.internal_notes, interview_schedules.scheduled_start, interview_schedules.scheduled_end, interview_schedules.timezone, interview_schedules.interview_type, interview_schedules.interview_format, interview_schedules.status, intervie",
+          "duration_ms": 0.584,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.218,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT count(*) AS count_1 FROM interview_schedules",
+          "duration_ms": 0.203,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.184,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "candidate_interviews",
+      "method": "GET",
+      "path": "/api/v1/jobs/10711997-2970-4d75-982a-4f60866997e0/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/interviews?page=1&page_size=100",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 4.51,
+        "p95": 5.43,
+        "p99": 5.43,
+        "max": 5.43
+      },
+      "response_bytes": {
+        "median": 1034,
+        "max": 1034
+      },
+      "queries": {
+        "median": 3,
+        "max": 3
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT interview_schedules.id, interview_schedules.candidate_id, candidates.full_name AS candidate_name, interview_schedules.job_id, jobs.title AS job_title, interview_schedules.title, interview_schedules.description, interview_schedules.public_notes, interview_schedules.internal_notes, interview_schedules.scheduled_start, interview_schedules.scheduled_end, interview_schedules.timezone, interview_schedules.interview_type, interview_schedules.interview_format, interview_schedules.status, intervie",
+          "duration_ms": 0.325,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.315,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT interview_schedules.id, interview_schedules.candidate_id, candidates.full_name AS candidate_name, interview_schedules.job_id, jobs.title AS job_title, interview_schedules.title, interview_schedules.description, interview_schedules.public_notes, interview_schedules.internal_notes, interview_schedules.scheduled_start, interview_schedules.scheduled_end, interview_schedules.timezone, interview_schedules.interview_type, interview_schedules.interview_format, interview_schedules.status, intervie",
+          "duration_ms": 0.274,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT count(*) AS count_1 FROM interview_schedules WHERE interview_schedules.candidate_id = ? AND interview_schedules.job_id = ?",
+          "duration_ms": 0.214,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.174,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "behavioral_assessment",
+      "method": "GET",
+      "path": "/api/v1/jobs/10711997-2970-4d75-982a-4f60866997e0/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/behavioral-assessment",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 9.09,
+        "p95": 11.75,
+        "p99": 11.75,
+        "max": 11.75
+      },
+      "response_bytes": {
+        "median": 948,
+        "max": 948
+      },
+      "queries": {
+        "median": 7,
+        "max": 7
+      },
+      "repeated_queries": [
+        {
+          "count": 4,
+          "sql": "SELECT behavioral_assessment_assignments.id, behavioral_assessment_assignments.candidate_id, behavioral_assessment_assignments.job_id, jobs.title AS job_title, behavioral_assessment_assignments.template_id, behavioral_assessment_templates.name AS template_name, behavioral_assessment_assignments.status, behavioral_assessment_assignments.assigned_at, behavioral_assessment_assignments.started_at, behavioral_assessment_assignments.submitted_at, behavioral_assessment_assignments.expires_at, coalesce("
+        }
+      ],
+      "slow_queries": [
+        {
+          "sql": "SELECT behavioral_assessment_assignments.id, behavioral_assessment_assignments.candidate_id, behavioral_assessment_assignments.job_id, jobs.title AS job_title, behavioral_assessment_assignments.template_id, behavioral_assessment_templates.name AS template_name, behavioral_assessment_assignments.status, behavioral_assessment_assignments.assigned_at, behavioral_assessment_assignments.started_at, behavioral_assessment_assignments.submitted_at, behavioral_assessment_assignments.expires_at, coalesce(",
+          "duration_ms": 0.517,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT behavioral_assessment_assignments.id, behavioral_assessment_assignments.candidate_id, behavioral_assessment_assignments.job_id, jobs.title AS job_title, behavioral_assessment_assignments.template_id, behavioral_assessment_templates.name AS template_name, behavioral_assessment_assignments.status, behavioral_assessment_assignments.assigned_at, behavioral_assessment_assignments.started_at, behavioral_assessment_assignments.submitted_at, behavioral_assessment_assignments.expires_at, coalesce(",
+          "duration_ms": 0.387,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT behavioral_template_competencies.id, behavioral_template_competencies.template_id, behavioral_template_competencies.name, behavioral_template_competencies.description, behavioral_template_competencies.weight, behavioral_template_competencies.display_order, behavioral_template_competencies.created_at, behavioral_template_competencies.updated_at FROM behavioral_template_competencies WHERE behavioral_template_competencies.template_id = ? ORDER BY behavioral_template_competencies.display_orde",
+          "duration_ms": 0.36,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT behavioral_assessment_assignments.id, behavioral_assessment_assignments.candidate_id, behavioral_assessment_assignments.job_id, jobs.title AS job_title, behavioral_assessment_assignments.template_id, behavioral_assessment_templates.name AS template_name, behavioral_assessment_assignments.status, behavioral_assessment_assignments.assigned_at, behavioral_assessment_assignments.started_at, behavioral_assessment_assignments.submitted_at, behavioral_assessment_assignments.expires_at, coalesce(",
+          "duration_ms": 0.341,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.239,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "interview_scorecard",
+      "method": "GET",
+      "path": "/api/v1/jobs/10711997-2970-4d75-982a-4f60866997e0/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/interview-scorecard?interview_id=5a5840ca-4895-454b-a956-928e4c44fe26",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 5.96,
+        "p95": 6.56,
+        "p99": 6.56,
+        "max": 6.56
+      },
+      "response_bytes": {
+        "median": 862,
+        "max": 862
+      },
+      "queries": {
+        "median": 6,
+        "max": 6
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT interview_schedules.id AS interview_schedules_id, interview_schedules.candidate_id AS interview_schedules_candidate_id, interview_schedules.job_id AS interview_schedules_job_id, interview_schedules.pipeline_id AS interview_schedules_pipeline_id, interview_schedules.title AS interview_schedules_title, interview_schedules.description AS interview_schedules_description, interview_schedules.public_notes AS interview_schedules_public_notes, interview_schedules.internal_notes AS interview_sched",
+          "duration_ms": 0.275,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.267,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT interview_scorecards.id, interview_scorecards.candidate_id, interview_scorecards.job_id, interview_scorecards.interview_id, interview_scorecards.evaluator_id, interview_scorecards.status, interview_scorecards.final_recommendation, interview_scorecards.overall_notes, interview_scorecards.submitted_at, interview_scorecards.created_at, interview_scorecards.updated_at FROM interview_scorecards WHERE interview_scorecards.candidate_id = ? AND interview_scorecards.job_id = ? AND interview_scorec",
+          "duration_ms": 0.24,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.237,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT ? AS anon_1 FROM candidate_job_pipeline WHERE candidate_job_pipeline.candidate_id = ? AND candidate_job_pipeline.job_id = ? AND candidate_job_pipeline.pipeline_status = ? AND candidate_job_pipeline.relationship_status = ? AND candidate_job_pipeline.is_terminal IS 0",
+          "duration_ms": 0.196,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "pre_admission",
+      "method": "GET",
+      "path": "/api/v1/jobs/10711997-2970-4d75-982a-4f60866997e0/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/pre-admission",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 5.41,
+        "p95": 6.66,
+        "p99": 6.66,
+        "max": 6.66
+      },
+      "response_bytes": {
+        "median": 819,
+        "max": 819
+      },
+      "queries": {
+        "median": 5,
+        "max": 5
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT pre_admission_cases.id, pre_admission_cases.candidate_id, pre_admission_cases.job_id, pre_admission_cases.hiring_decision_id, pre_admission_cases.status, pre_admission_cases.salary_offer, pre_admission_cases.start_date, pre_admission_cases.work_model, pre_admission_cases.notes, pre_admission_cases.created_by, pre_admission_cases.created_at, pre_admission_cases.updated_at, pre_admission_cases.closed_at FROM pre_admission_cases WHERE pre_admission_cases.candidate_id = ? AND pre_admission_ca",
+          "duration_ms": 0.287,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_hiring_decisions.id, candidate_job_hiring_decisions.candidate_id, candidate_job_hiring_decisions.job_id, candidate_job_hiring_decisions.pipeline_id, candidate_job_hiring_decisions.decided_by, candidate_job_hiring_decisions.decision_status, candidate_job_hiring_decisions.decision_outcome, candidate_job_hiring_decisions.reason_code, candidate_job_hiring_decisions.notes, candidate_job_hiring_decisions.based_on_decision_summary_snapshot, candidate_job_hiring_decisions.based_on_s",
+          "duration_ms": 0.211,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_hiring_decisions.id, candidate_job_hiring_decisions.candidate_id, candidate_job_hiring_decisions.job_id, candidate_job_hiring_decisions.pipeline_id, candidate_job_hiring_decisions.decided_by, candidate_job_hiring_decisions.decision_status, candidate_job_hiring_decisions.decision_outcome, candidate_job_hiring_decisions.reason_code, candidate_job_hiring_decisions.notes, candidate_job_hiring_decisions.based_on_decision_summary_snapshot, candidate_job_hiring_decisions.based_on_s",
+          "duration_ms": 0.204,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.196,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT pre_admission_cases.id, pre_admission_cases.candidate_id, pre_admission_cases.job_id, pre_admission_cases.hiring_decision_id, pre_admission_cases.status, pre_admission_cases.salary_offer, pre_admission_cases.start_date, pre_admission_cases.work_model, pre_admission_cases.notes, pre_admission_cases.created_by, pre_admission_cases.created_at, pre_admission_cases.updated_at, pre_admission_cases.closed_at FROM pre_admission_cases WHERE pre_admission_cases.candidate_id = ? AND pre_admission_ca",
+          "duration_ms": 0.194,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "pre_admission_documents",
+      "method": "GET",
+      "path": "/api/v1/pre-admission/e49090d7-a9a3-4421-aaa0-71beb8c7ad9b/documents",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 4.81,
+        "p95": 5.69,
+        "p99": 5.69,
+        "max": 5.69
+      },
+      "response_bytes": {
+        "median": 567,
+        "max": 567
+      },
+      "queries": {
+        "median": 5,
+        "max": 5
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.34,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT pre_admission_cases.id, pre_admission_cases.candidate_id, pre_admission_cases.job_id, pre_admission_cases.hiring_decision_id, pre_admission_cases.status, pre_admission_cases.salary_offer, pre_admission_cases.start_date, pre_admission_cases.work_model, pre_admission_cases.notes, pre_admission_cases.created_by, pre_admission_cases.created_at, pre_admission_cases.updated_at, pre_admission_cases.closed_at FROM pre_admission_cases WHERE pre_admission_cases.id = ?",
+          "duration_ms": 0.197,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.194,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT pre_admission_documents.id, pre_admission_documents.case_id, pre_admission_documents.checklist_item_id, pre_admission_documents.candidate_id, pre_admission_documents.original_filename, pre_admission_documents.stored_filename, pre_admission_documents.storage_key, pre_admission_documents.mime_type, pre_admission_documents.size_bytes, pre_admission_documents.status, pre_admission_documents.uploaded_at, pre_admission_documents.reviewed_at, pre_admission_documents.reviewed_by, pre_admission_do",
+          "duration_ms": 0.184,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT pre_admission_checklist_items.case_id AS pre_admission_checklist_items_case_id, pre_admission_checklist_items.id AS pre_admission_checklist_items_id, pre_admission_checklist_items.item_type AS pre_admission_checklist_items_item_type, pre_admission_checklist_items.title AS pre_admission_checklist_items_title, pre_admission_checklist_items.status AS pre_admission_checklist_items_status, pre_admission_checklist_items.required AS pre_admission_checklist_items_required, pre_admission_checklist",
+          "duration_ms": 0.172,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "manager_candidate_summary",
+      "method": "GET",
+      "path": "/api/v1/manager/jobs/10711997-2970-4d75-982a-4f60866997e0/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/summary",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 5.01,
+        "p95": 5.4,
+        "p99": 5.4,
+        "max": 5.4
+      },
+      "response_bytes": {
+        "median": 243,
+        "max": 243
+      },
+      "queries": {
+        "median": 6,
+        "max": 6
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT interview_scorecard_items.scorecard_id AS interview_scorecard_items_scorecard_id, interview_scorecard_items.id AS interview_scorecard_items_id, interview_scorecard_items.competency_name AS interview_scorecard_items_competency_name, interview_scorecard_items.question_text AS interview_scorecard_items_question_text, interview_scorecard_items.rating AS interview_scorecard_items_rating, interview_scorecard_items.evidence AS interview_scorecard_items_evidence, interview_scorecard_items.weight ",
+          "duration_ms": 0.235,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT interview_scorecards.id, interview_scorecards.candidate_id, interview_scorecards.job_id, interview_scorecards.interview_id, interview_scorecards.evaluator_id, interview_scorecards.status, interview_scorecards.final_recommendation, interview_scorecards.overall_notes, interview_scorecards.submitted_at, interview_scorecards.created_at, interview_scorecards.updated_at FROM interview_scorecards WHERE interview_scorecards.candidate_id = ? AND interview_scorecards.job_id = ? AND interview_scorec",
+          "duration_ms": 0.228,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT count(interview_scorecards.id) AS count_1 FROM interview_scorecards WHERE interview_scorecards.job_id = ? AND interview_scorecards.candidate_id = ? AND interview_scorecards.evaluator_id = ?",
+          "duration_ms": 0.214,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidates.id, candidates.user_id, candidates.full_name, candidates.email, candidates.phone, candidates.cpf, candidates.location_city, candidates.location_state, candidates.location_country, candidates.linkedin_url, candidates.github_url, candidates.portfolio_url, candidates.internal_notes, candidates.tags, candidates.created_by, candidates.created_at, candidates.updated_at, candidates.archived_at, candidates.archived_by, candidates.archive_reason, candidates.archive_reason_note, candidat",
+          "duration_ms": 0.211,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_job_pipeline.candidate_job_pipeline_id, candidate_job_pipeline.candidate_id, candidate_job_pipeline.job_id, candidate_job_pipeline.resume_version_id, candidate_job_pipeline.link_status, candidate_job_pipeline.relationship_status, candidate_job_pipeline.is_terminal, candidate_job_pipeline.terminated_at, candidate_job_pipeline.termination_reason, candidate_job_pipeline.pipeline_stage, candidate_job_pipeline.pipeline_status, candidate_job_pipeline.source, candidate_job_pipeline.cur",
+          "duration_ms": 0.189,
+          "executemany": false
+        }
+      ]
+    },
+    {
+      "name": "communications_recruiter",
+      "method": "GET",
+      "path": "/api/v1/jobs/10711997-2970-4d75-982a-4f60866997e0/candidates/b6374983-3714-4fa8-9afa-917d0a0eb6ae/communications",
+      "status_codes": [
+        200
+      ],
+      "requests": 2,
+      "latency_ms": {
+        "p50": 13.14,
+        "p95": 13.94,
+        "p99": 13.94,
+        "max": 13.94
+      },
+      "response_bytes": {
+        "median": 295910,
+        "max": 295910
+      },
+      "queries": {
+        "median": 2,
+        "max": 2
+      },
+      "repeated_queries": [],
+      "slow_queries": [
+        {
+          "sql": "SELECT candidate_communications.id, candidate_communications.candidate_id, candidate_communications.job_id, candidate_communications.related_entity_type, candidate_communications.related_entity_id, candidate_communications.template_key, candidate_communications.channel, candidate_communications.audience, candidate_communications.subject, candidate_communications.body, candidate_communications.status, candidate_communications.created_by, candidate_communications.created_at, candidate_communicatio",
+          "duration_ms": 1.455,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT candidate_communications.id, candidate_communications.candidate_id, candidate_communications.job_id, candidate_communications.related_entity_type, candidate_communications.related_entity_id, candidate_communications.template_key, candidate_communications.channel, candidate_communications.audience, candidate_communications.subject, candidate_communications.body, candidate_communications.status, candidate_communications.created_by, candidate_communications.created_at, candidate_communicatio",
+          "duration_ms": 1.399,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.36,
+          "executemany": false
+        },
+        {
+          "sql": "SELECT users.id, users.email, users.email_verified_at, users.password_hash, users.role, users.status, users.full_name, users.avatar_url, users.must_change_password, users.last_login_at, users.login_count, users.failed_login_count, users.locked_until, users.created_at, users.updated_at, users.deleted_at FROM users WHERE users.id = ? AND users.deleted_at IS NULL",
+          "duration_ms": 0.217,
+          "executemany": false
+        }
+      ]
+    }
+  ],
+  "indexes": {
+    "tables": [
+      {
+        "table": "ai_models",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "model_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "behavioral_assessment_templates",
+        "indexes": [],
+        "unique_constraints": []
+      },
+      {
+        "table": "communication_templates",
+        "indexes": [
+          {
+            "name": "idx_comm_template_status",
+            "columns": [
+              "status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_comm_template_key",
+            "columns": [
+              "key"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "key"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "document_requirements",
+        "indexes": [],
+        "unique_constraints": []
+      },
+      {
+        "table": "pipeline_events",
+        "indexes": [
+          {
+            "name": "idx_pipeline_events_entity_created",
+            "columns": [
+              "entity_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_pipeline_events_created_at",
+            "columns": [
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_pipeline_events_event_type_created",
+            "columns": [
+              "event_type",
+              "created_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "score_model_versions",
+        "indexes": [
+          {
+            "name": "idx_score_model_versions_active",
+            "columns": [
+              "is_active"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "version"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "skills",
+        "indexes": [
+          {
+            "name": "uq_skills_normalized_name_active",
+            "columns": [
+              "normalized_name"
+            ],
+            "unique": true
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "users",
+        "indexes": [],
+        "unique_constraints": []
+      },
+      {
+        "table": "behavioral_template_competencies",
+        "indexes": [
+          {
+            "name": "idx_behavioral_template_competencies_template_order",
+            "columns": [
+              "template_id",
+              "display_order"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidates",
+        "indexes": [
+          {
+            "name": "idx_candidates_cpf",
+            "columns": [
+              "cpf"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_candidates_user_id_not_null",
+            "columns": [
+              "user_id"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_candidates_data_quality_status",
+            "columns": [
+              "data_quality_status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "ix_candidates_archived_at",
+            "columns": [
+              "archived_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidates_user_id",
+            "columns": [
+              "user_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidates_email",
+            "columns": [
+              "email"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "google_calendar_connections",
+        "indexes": [
+          {
+            "name": "idx_google_connection_user_active",
+            "columns": [
+              "user_id"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_google_connection_user_id",
+            "columns": [
+              "user_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "job_areas",
+        "indexes": [
+          {
+            "name": "ix_job_areas_normalized_name",
+            "columns": [
+              "normalized_name"
+            ],
+            "unique": true
+          },
+          {
+            "name": "ix_job_areas_is_active",
+            "columns": [
+              "is_active"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "jobs",
+        "indexes": [],
+        "unique_constraints": []
+      },
+      {
+        "table": "password_reset_tokens",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "prompt_templates",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": "uq_prompt_template_version",
+            "columns": [
+              "name",
+              "version"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "skill_catalog",
+        "indexes": [
+          {
+            "name": "ix_skill_catalog_category",
+            "columns": [
+              "category"
+            ],
+            "unique": false
+          },
+          {
+            "name": "ix_skill_catalog_is_active",
+            "columns": [
+              "is_active"
+            ],
+            "unique": false
+          },
+          {
+            "name": "ix_skill_catalog_normalized_name",
+            "columns": [
+              "normalized_name"
+            ],
+            "unique": true
+          },
+          {
+            "name": "ix_skill_catalog_archived_at",
+            "columns": [
+              "archived_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "user_sessions",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "admissions",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": "uq_admissions_candidate_job",
+            "columns": [
+              "candidate_id",
+              "job_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "audit_logs",
+        "indexes": [],
+        "unique_constraints": []
+      },
+      {
+        "table": "behavioral_assessment_assignments",
+        "indexes": [
+          {
+            "name": "idx_behavioral_assignments_candidate_status",
+            "columns": [
+              "candidate_id",
+              "status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_behavioral_assignments_job_candidate",
+            "columns": [
+              "job_id",
+              "candidate_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_behavioral_assignment_candidate_job_template",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "template_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "behavioral_template_questions",
+        "indexes": [
+          {
+            "name": "idx_behavioral_template_questions_competency_order",
+            "columns": [
+              "competency_id",
+              "display_order"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_auth_tokens",
+        "indexes": [
+          {
+            "name": "idx_candidate_auth_tokens_token_hash",
+            "columns": [
+              "token_hash"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_candidate_auth_tokens_candidate_purpose_created",
+            "columns": [
+              "candidate_id",
+              "purpose",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_auth_tokens_expires_at",
+            "columns": [
+              "expires_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_communications",
+        "indexes": [
+          {
+            "name": "idx_comm_candidate_created",
+            "columns": [
+              "candidate_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_comm_candidate_job",
+            "columns": [
+              "candidate_id",
+              "job_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_comm_dedup",
+            "columns": [
+              "candidate_id",
+              "related_entity_type",
+              "related_entity_id",
+              "template_key"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_job_collaboration_comments",
+        "indexes": [],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_job_pipeline_events",
+        "indexes": [
+          {
+            "name": "idx_candidate_job_pipeline_events_actor",
+            "columns": [
+              "actor_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_pipeline_events_type_time",
+            "columns": [
+              "event_type",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_pipeline_events_job_time",
+            "columns": [
+              "job_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_pipeline_events_entry_time",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "created_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "idempotency_key"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "interview_schedules",
+        "indexes": [
+          {
+            "name": "idx_interview_schedules_scheduled_start",
+            "columns": [
+              "scheduled_start"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_interview_schedules_calendar_sync_status",
+            "columns": [
+              "calendar_sync_status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_interview_schedules_job_id",
+            "columns": [
+              "job_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_interview_schedules_pipeline_id",
+            "columns": [
+              "pipeline_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_interview_schedules_calendar_provider_sync",
+            "columns": [
+              "calendar_provider",
+              "calendar_sync_status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_interview_schedules_candidate_id",
+            "columns": [
+              "candidate_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_interview_schedules_status",
+            "columns": [
+              "status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_interview_schedules_external_calendar_event_id",
+            "columns": [
+              "external_calendar_event_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "job_profile_analysis",
+        "indexes": [
+          {
+            "name": "idx_job_profile_analysis_signature",
+            "columns": [
+              "job_signature_hash"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_job_profile_analysis_one_active_per_job",
+            "columns": [
+              "job_id"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_job_profile_analysis_is_active",
+            "columns": [
+              "job_id",
+              "is_active"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_job_profile_analysis_job",
+            "columns": [
+              "job_id",
+              "created_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_job_profile_analysis_version_model_prompt",
+            "columns": [
+              "job_id",
+              "job_signature_hash",
+              "provider",
+              "model_id",
+              "prompt_version"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "job_required_skills",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": "uq_job_skill",
+            "columns": [
+              "job_id",
+              "skill_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "resumes",
+        "indexes": [
+          {
+            "name": "idx_resumes_candidate_id",
+            "columns": [
+              "candidate_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "skill_aliases",
+        "indexes": [
+          {
+            "name": "ix_skill_aliases_normalized_alias",
+            "columns": [
+              "normalized_alias"
+            ],
+            "unique": true
+          },
+          {
+            "name": "ix_skill_aliases_skill_id",
+            "columns": [
+              "skill_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "skill_relations",
+        "indexes": [
+          {
+            "name": "ix_skill_relations_source_skill_id",
+            "columns": [
+              "source_skill_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "ix_skill_relations_normalized_target_name",
+            "columns": [
+              "normalized_target_name"
+            ],
+            "unique": false
+          },
+          {
+            "name": "ix_skill_relations_normalized_source_name",
+            "columns": [
+              "normalized_source_name"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_skill_relations_source_target_type",
+            "columns": [
+              "normalized_source_name",
+              "normalized_target_name",
+              "relation_type"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "behavioral_assessment_ai_evaluations",
+        "indexes": [
+          {
+            "name": "idx_behavioral_ai_eval_job_candidate",
+            "columns": [
+              "job_id",
+              "candidate_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_behavioral_ai_eval_candidate_status",
+            "columns": [
+              "candidate_id",
+              "status"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_behavioral_ai_evaluation_assignment",
+            "columns": [
+              "assignment_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "behavioral_assessment_answers",
+        "indexes": [
+          {
+            "name": "idx_behavioral_answers_assignment",
+            "columns": [
+              "assignment_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_behavioral_answer_assignment_question",
+            "columns": [
+              "assignment_id",
+              "question_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "calendar_sync_events",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": "uq_calendar_sync_events_idempotency_key",
+            "columns": [
+              "idempotency_key"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "candidate_documents",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": "uq_candidate_documents_admission_requirement",
+            "columns": [
+              "admission_id",
+              "document_requirement_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "communication_delivery_attempts",
+        "indexes": [
+          {
+            "name": "idx_delivery_attempt_comm",
+            "columns": [
+              "communication_id",
+              "created_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "interview_scorecards",
+        "indexes": [
+          {
+            "name": "idx_interview_scorecards_status",
+            "columns": [
+              "status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_interview_scorecard_candidate_job_with_interview",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "interview_id"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_interview_scorecards_job_candidate",
+            "columns": [
+              "job_id",
+              "candidate_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_interview_scorecard_candidate_job_no_interview",
+            "columns": [
+              "candidate_id",
+              "job_id"
+            ],
+            "unique": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_interview_scorecard_candidate_job_interview",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "interview_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "resume_versions",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": "uq_resume_version",
+            "columns": [
+              "resume_id",
+              "version_number"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "analyses",
+        "indexes": [
+          {
+            "name": "idx_analyses_created_at",
+            "columns": [
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_analyses_claim_state",
+            "columns": [
+              "status",
+              "claimed_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_analyses_status_created_at",
+            "columns": [
+              "status",
+              "created_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "idempotency_key"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "candidate_profile_analysis",
+        "indexes": [
+          {
+            "name": "idx_candidate_profile_analysis_candidate",
+            "columns": [
+              "candidate_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_profile_analysis_resume",
+            "columns": [
+              "resume_version_id",
+              "created_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_candidate_profile_analysis_version_model_prompt",
+            "columns": [
+              "resume_version_id",
+              "provider",
+              "model_id",
+              "prompt_version"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "document_ai_analyses",
+        "indexes": [
+          {
+            "name": "idx_document_ai_analyses_status",
+            "columns": [
+              "status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_document_ai_analyses_document_created",
+            "columns": [
+              "document_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_document_ai_analyses_document_processing",
+            "columns": [
+              "document_id"
+            ],
+            "unique": true
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "interview_scorecard_items",
+        "indexes": [
+          {
+            "name": "idx_interview_scorecard_items_scorecard",
+            "columns": [
+              "scorecard_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "ai_usage_logs",
+        "indexes": [
+          {
+            "name": "idx_ai_usage_logs_status",
+            "columns": [
+              "status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_ai_usage_logs_provider",
+            "columns": [
+              "provider"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_ai_usage_logs_model",
+            "columns": [
+              "model"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_ai_usage_logs_created_at",
+            "columns": [
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_ai_usage_logs_analysis_id",
+            "columns": [
+              "analysis_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "analysis_results",
+        "indexes": [],
+        "unique_constraints": [
+          {
+            "name": null,
+            "columns": [
+              "analysis_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "candidate_job_pipeline",
+        "indexes": [
+          {
+            "name": "idx_candidate_job_pipeline_job_active",
+            "columns": [
+              "job_id",
+              "pipeline_status",
+              "link_status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_pipeline_analysis",
+            "columns": [
+              "current_analysis_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_pipeline_job_relationship_active",
+            "columns": [
+              "job_id",
+              "relationship_status",
+              "is_terminal"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_candidate_job_pipeline_row_id",
+            "columns": [
+              "candidate_job_pipeline_id"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_candidate_job_pipeline_job_stage",
+            "columns": [
+              "job_id",
+              "pipeline_stage"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_candidate_job_pipeline_one_active_per_candidate",
+            "columns": [
+              "candidate_id"
+            ],
+            "unique": true
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_job_score_snapshots",
+        "indexes": [
+          {
+            "name": "idx_candidate_job_score_snapshots_job",
+            "columns": [
+              "job_id",
+              "computed_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_score_snapshots_input_hash",
+            "columns": [
+              "job_id",
+              "input_hash"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_score_snapshots_candidate_job",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "computed_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_job_scores",
+        "indexes": [
+          {
+            "name": "idx_candidate_job_scores_candidate_job",
+            "columns": [
+              "candidate_id",
+              "job_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_scores_input_hash",
+            "columns": [
+              "job_id",
+              "input_hash"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_scores_job_signature",
+            "columns": [
+              "job_id",
+              "job_signature_hash"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_scores_job_id",
+            "columns": [
+              "job_id",
+              "final_score"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_scores_recompute_reason",
+            "columns": [
+              "job_id",
+              "recompute_reason"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_scores_job_updated",
+            "columns": [
+              "job_id",
+              "job_updated_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_scores_freshness",
+            "columns": [
+              "job_id",
+              "freshness_status"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_candidate_job_score_version",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "version_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "matching_observations",
+        "indexes": [
+          {
+            "name": "idx_matching_observations_source",
+            "columns": [
+              "source",
+              "observed_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_matching_observations_job_candidate",
+            "columns": [
+              "job_id",
+              "candidate_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_matching_observations_observed_at",
+            "columns": [
+              "observed_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "indexes": [
+          {
+            "name": "idx_candidate_job_hiring_decisions_status",
+            "columns": [
+              "decision_status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "uq_candidate_job_hiring_decision_current",
+            "columns": [
+              "candidate_id",
+              "job_id"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_candidate_job_hiring_decisions_job_candidate",
+            "columns": [
+              "job_id",
+              "candidate_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "candidate_job_match",
+        "indexes": [
+          {
+            "name": "idx_candidate_job_match_candidate_job",
+            "columns": [
+              "candidate_id",
+              "job_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_match_job_created",
+            "columns": [
+              "job_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_match_pipeline",
+            "columns": [
+              "candidate_job_pipeline_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_match_eligibility_status",
+            "columns": [
+              "eligibility_status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_match_freshness",
+            "columns": [
+              "job_id",
+              "freshness_status"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_match_job_signature",
+            "columns": [
+              "job_id",
+              "job_signature_hash"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_candidate_job_match_possible_false_negative",
+            "columns": [
+              "possible_false_negative"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_candidate_job_match_profile_pair",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "resume_version_id",
+              "candidate_profile_analysis_id",
+              "job_profile_analysis_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "candidate_job_score_factors",
+        "indexes": [
+          {
+            "name": "idx_candidate_job_score_factors_snapshot",
+            "columns": [
+              "snapshot_id",
+              "display_order"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "pre_admission_cases",
+        "indexes": [
+          {
+            "name": "uq_pre_admission_active_candidate_job",
+            "columns": [
+              "candidate_id",
+              "job_id"
+            ],
+            "unique": true
+          },
+          {
+            "name": "idx_pre_admission_cases_job_candidate",
+            "columns": [
+              "job_id",
+              "candidate_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_pre_admission_cases_status",
+            "columns": [
+              "status"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_pre_admission_case_decision",
+            "columns": [
+              "candidate_id",
+              "job_id",
+              "hiring_decision_id"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "admission_export_packages",
+        "indexes": [
+          {
+            "name": "idx_admission_package_candidate_created",
+            "columns": [
+              "candidate_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_admission_package_case_status",
+            "columns": [
+              "case_id",
+              "status"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "pre_admission_checklist_items",
+        "indexes": [
+          {
+            "name": "idx_pre_admission_items_case",
+            "columns": [
+              "case_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "pre_admission_events",
+        "indexes": [
+          {
+            "name": "idx_pre_admission_events_case_created",
+            "columns": [
+              "case_id",
+              "created_at"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      },
+      {
+        "table": "erp_integration_attempts",
+        "indexes": [
+          {
+            "name": "idx_erp_attempt_case_created",
+            "columns": [
+              "case_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_erp_attempt_package_created",
+            "columns": [
+              "package_id",
+              "created_at"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_erp_attempt_idempotency_key",
+            "columns": [
+              "idempotency_key"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_erp_attempt_provider_mode_package_idempotency_attempt",
+            "columns": [
+              "provider",
+              "mode",
+              "package_id",
+              "idempotency_key",
+              "attempt_number"
+            ]
+          }
+        ]
+      },
+      {
+        "table": "pre_admission_documents",
+        "indexes": [
+          {
+            "name": "idx_pre_admission_documents_item",
+            "columns": [
+              "checklist_item_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_pre_admission_documents_candidate",
+            "columns": [
+              "candidate_id"
+            ],
+            "unique": false
+          },
+          {
+            "name": "idx_pre_admission_documents_case",
+            "columns": [
+              "case_id"
+            ],
+            "unique": false
+          }
+        ],
+        "unique_constraints": []
+      }
+    ],
+    "missing_fk_indexes": [
+      {
+        "table": "candidates",
+        "column": "created_by",
+        "suggested_index": "idx_candidates_created_by"
+      },
+      {
+        "table": "candidates",
+        "column": "archived_by",
+        "suggested_index": "idx_candidates_archived_by"
+      },
+      {
+        "table": "job_areas",
+        "column": "created_by",
+        "suggested_index": "idx_job_areas_created_by"
+      },
+      {
+        "table": "job_areas",
+        "column": "updated_by",
+        "suggested_index": "idx_job_areas_updated_by"
+      },
+      {
+        "table": "jobs",
+        "column": "behavioral_template_id",
+        "suggested_index": "idx_jobs_behavioral_template_id"
+      },
+      {
+        "table": "jobs",
+        "column": "created_by",
+        "suggested_index": "idx_jobs_created_by"
+      },
+      {
+        "table": "jobs",
+        "column": "archived_by",
+        "suggested_index": "idx_jobs_archived_by"
+      },
+      {
+        "table": "password_reset_tokens",
+        "column": "user_id",
+        "suggested_index": "idx_password_reset_tokens_user_id"
+      },
+      {
+        "table": "prompt_templates",
+        "column": "created_by",
+        "suggested_index": "idx_prompt_templates_created_by"
+      },
+      {
+        "table": "skill_catalog",
+        "column": "created_by",
+        "suggested_index": "idx_skill_catalog_created_by"
+      },
+      {
+        "table": "skill_catalog",
+        "column": "updated_by",
+        "suggested_index": "idx_skill_catalog_updated_by"
+      },
+      {
+        "table": "skill_catalog",
+        "column": "archived_by",
+        "suggested_index": "idx_skill_catalog_archived_by"
+      },
+      {
+        "table": "user_sessions",
+        "column": "user_id",
+        "suggested_index": "idx_user_sessions_user_id"
+      },
+      {
+        "table": "admissions",
+        "column": "candidate_id",
+        "suggested_index": "idx_admissions_candidate_id"
+      },
+      {
+        "table": "admissions",
+        "column": "job_id",
+        "suggested_index": "idx_admissions_job_id"
+      },
+      {
+        "table": "audit_logs",
+        "column": "user_id",
+        "suggested_index": "idx_audit_logs_user_id"
+      },
+      {
+        "table": "audit_logs",
+        "column": "session_id",
+        "suggested_index": "idx_audit_logs_session_id"
+      },
+      {
+        "table": "behavioral_assessment_assignments",
+        "column": "template_id",
+        "suggested_index": "idx_behavioral_assessment_assignments_template_id"
+      },
+      {
+        "table": "candidate_communications",
+        "column": "job_id",
+        "suggested_index": "idx_candidate_communications_job_id"
+      },
+      {
+        "table": "candidate_communications",
+        "column": "created_by",
+        "suggested_index": "idx_candidate_communications_created_by"
+      },
+      {
+        "table": "candidate_job_collaboration_comments",
+        "column": "candidate_id",
+        "suggested_index": "idx_candidate_job_collaboration_comments_candidate_id"
+      },
+      {
+        "table": "candidate_job_collaboration_comments",
+        "column": "job_id",
+        "suggested_index": "idx_candidate_job_collaboration_comments_job_id"
+      },
+      {
+        "table": "candidate_job_collaboration_comments",
+        "column": "author_id",
+        "suggested_index": "idx_candidate_job_collaboration_comments_author_id"
+      },
+      {
+        "table": "job_required_skills",
+        "column": "job_id",
+        "suggested_index": "idx_job_required_skills_job_id"
+      },
+      {
+        "table": "job_required_skills",
+        "column": "skill_id",
+        "suggested_index": "idx_job_required_skills_skill_id"
+      },
+      {
+        "table": "resumes",
+        "column": "created_by",
+        "suggested_index": "idx_resumes_created_by"
+      },
+      {
+        "table": "skill_relations",
+        "column": "target_skill_id",
+        "suggested_index": "idx_skill_relations_target_skill_id"
+      },
+      {
+        "table": "behavioral_assessment_ai_evaluations",
+        "column": "assignment_id",
+        "suggested_index": "idx_behavioral_assessment_ai_evaluations_assignment_id"
+      },
+      {
+        "table": "behavioral_assessment_ai_evaluations",
+        "column": "template_id",
+        "suggested_index": "idx_behavioral_assessment_ai_evaluations_template_id"
+      },
+      {
+        "table": "behavioral_assessment_answers",
+        "column": "question_id",
+        "suggested_index": "idx_behavioral_assessment_answers_question_id"
+      },
+      {
+        "table": "calendar_sync_events",
+        "column": "interview_schedule_id",
+        "suggested_index": "idx_calendar_sync_events_interview_schedule_id"
+      },
+      {
+        "table": "calendar_sync_events",
+        "column": "user_id",
+        "suggested_index": "idx_calendar_sync_events_user_id"
+      },
+      {
+        "table": "candidate_documents",
+        "column": "admission_id",
+        "suggested_index": "idx_candidate_documents_admission_id"
+      },
+      {
+        "table": "candidate_documents",
+        "column": "document_requirement_id",
+        "suggested_index": "idx_candidate_documents_document_requirement_id"
+      },
+      {
+        "table": "interview_scorecards",
+        "column": "interview_id",
+        "suggested_index": "idx_interview_scorecards_interview_id"
+      },
+      {
+        "table": "interview_scorecards",
+        "column": "evaluator_id",
+        "suggested_index": "idx_interview_scorecards_evaluator_id"
+      },
+      {
+        "table": "resume_versions",
+        "column": "resume_id",
+        "suggested_index": "idx_resume_versions_resume_id"
+      },
+      {
+        "table": "resume_versions",
+        "column": "uploaded_by",
+        "suggested_index": "idx_resume_versions_uploaded_by"
+      },
+      {
+        "table": "analyses",
+        "column": "resume_version_id",
+        "suggested_index": "idx_analyses_resume_version_id"
+      },
+      {
+        "table": "analyses",
+        "column": "job_id",
+        "suggested_index": "idx_analyses_job_id"
+      },
+      {
+        "table": "analyses",
+        "column": "ai_model_id",
+        "suggested_index": "idx_analyses_ai_model_id"
+      },
+      {
+        "table": "analyses",
+        "column": "prompt_template_id",
+        "suggested_index": "idx_analyses_prompt_template_id"
+      },
+      {
+        "table": "analyses",
+        "column": "requested_by",
+        "suggested_index": "idx_analyses_requested_by"
+      },
+      {
+        "table": "analyses",
+        "column": "discarded_by",
+        "suggested_index": "idx_analyses_discarded_by"
+      },
+      {
+        "table": "ai_usage_logs",
+        "column": "candidate_id",
+        "suggested_index": "idx_ai_usage_logs_candidate_id"
+      },
+      {
+        "table": "ai_usage_logs",
+        "column": "job_id",
+        "suggested_index": "idx_ai_usage_logs_job_id"
+      },
+      {
+        "table": "analysis_results",
+        "column": "analysis_id",
+        "suggested_index": "idx_analysis_results_analysis_id"
+      },
+      {
+        "table": "candidate_job_pipeline",
+        "column": "resume_version_id",
+        "suggested_index": "idx_candidate_job_pipeline_resume_version_id"
+      },
+      {
+        "table": "candidate_job_pipeline",
+        "column": "last_moved_by",
+        "suggested_index": "idx_candidate_job_pipeline_last_moved_by"
+      },
+      {
+        "table": "candidate_job_score_snapshots",
+        "column": "version_id",
+        "suggested_index": "idx_candidate_job_score_snapshots_version_id"
+      },
+      {
+        "table": "candidate_job_score_snapshots",
+        "column": "source_analysis_id",
+        "suggested_index": "idx_candidate_job_score_snapshots_source_analysis_id"
+      },
+      {
+        "table": "candidate_job_scores",
+        "column": "version_id",
+        "suggested_index": "idx_candidate_job_scores_version_id"
+      },
+      {
+        "table": "candidate_job_scores",
+        "column": "source_analysis_id",
+        "suggested_index": "idx_candidate_job_scores_source_analysis_id"
+      },
+      {
+        "table": "matching_observations",
+        "column": "candidate_id",
+        "suggested_index": "idx_matching_observations_candidate_id"
+      },
+      {
+        "table": "matching_observations",
+        "column": "analysis_id",
+        "suggested_index": "idx_matching_observations_analysis_id"
+      },
+      {
+        "table": "matching_observations",
+        "column": "feedback_by",
+        "suggested_index": "idx_matching_observations_feedback_by"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "pipeline_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_pipeline_id"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "decided_by",
+        "suggested_index": "idx_candidate_job_hiring_decisions_decided_by"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "based_on_scorecard_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_based_on_scorecard_id"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "based_on_behavioral_assignment_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_based_on_behavioral_assignment_id"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "based_on_behavioral_ai_evaluation_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_based_on_behavioral_ai_evaluation_id"
+      },
+      {
+        "table": "candidate_job_match",
+        "column": "resume_version_id",
+        "suggested_index": "idx_candidate_job_match_resume_version_id"
+      },
+      {
+        "table": "candidate_job_match",
+        "column": "candidate_profile_analysis_id",
+        "suggested_index": "idx_candidate_job_match_candidate_profile_analysis_id"
+      },
+      {
+        "table": "candidate_job_match",
+        "column": "job_profile_analysis_id",
+        "suggested_index": "idx_candidate_job_match_job_profile_analysis_id"
+      },
+      {
+        "table": "pre_admission_cases",
+        "column": "hiring_decision_id",
+        "suggested_index": "idx_pre_admission_cases_hiring_decision_id"
+      },
+      {
+        "table": "pre_admission_cases",
+        "column": "created_by",
+        "suggested_index": "idx_pre_admission_cases_created_by"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "job_id",
+        "suggested_index": "idx_admission_export_packages_job_id"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "created_by",
+        "suggested_index": "idx_admission_export_packages_created_by"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "approved_by",
+        "suggested_index": "idx_admission_export_packages_approved_by"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "exported_by",
+        "suggested_index": "idx_admission_export_packages_exported_by"
+      },
+      {
+        "table": "pre_admission_events",
+        "column": "actor_id",
+        "suggested_index": "idx_pre_admission_events_actor_id"
+      },
+      {
+        "table": "erp_integration_attempts",
+        "column": "candidate_id",
+        "suggested_index": "idx_erp_integration_attempts_candidate_id"
+      },
+      {
+        "table": "erp_integration_attempts",
+        "column": "job_id",
+        "suggested_index": "idx_erp_integration_attempts_job_id"
+      },
+      {
+        "table": "erp_integration_attempts",
+        "column": "attempted_by",
+        "suggested_index": "idx_erp_integration_attempts_attempted_by"
+      },
+      {
+        "table": "pre_admission_documents",
+        "column": "reviewed_by",
+        "suggested_index": "idx_pre_admission_documents_reviewed_by"
+      },
+      {
+        "table": "pre_admission_documents",
+        "column": "deleted_by",
+        "suggested_index": "idx_pre_admission_documents_deleted_by"
+      }
+    ]
+  },
+  "findings": {
+    "slowest_endpoints": [
+      {
+        "name": "candidates_summaries",
+        "p95_ms": 22.72,
+        "queries_max": 3,
+        "response_bytes_max": 66813,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "job_ranking",
+        "p95_ms": 20.61,
+        "queries_max": 8,
+        "response_bytes_max": 191312,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "candidate_overview",
+        "p95_ms": 16.44,
+        "queries_max": 7,
+        "response_bytes_max": 4311,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "decision_summary",
+        "p95_ms": 15.36,
+        "queries_max": 12,
+        "response_bytes_max": 986,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "communications_recruiter",
+        "p95_ms": 13.94,
+        "queries_max": 2,
+        "response_bytes_max": 295910,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "pipeline_board",
+        "p95_ms": 13.25,
+        "queries_max": 3,
+        "response_bytes_max": 39834,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "behavioral_assessment",
+        "p95_ms": 11.75,
+        "queries_max": 7,
+        "response_bytes_max": 948,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "agenda_interviews",
+        "p95_ms": 7.36,
+        "queries_max": 3,
+        "response_bytes_max": 96963,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "pre_admission",
+        "p95_ms": 6.66,
+        "queries_max": 5,
+        "response_bytes_max": 819,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "interview_scorecard",
+        "p95_ms": 6.56,
+        "queries_max": 6,
+        "response_bytes_max": 862,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "pre_admission_documents",
+        "p95_ms": 5.69,
+        "queries_max": 5,
+        "response_bytes_max": 567,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "candidate_interviews",
+        "p95_ms": 5.43,
+        "queries_max": 3,
+        "response_bytes_max": 1034,
+        "status_codes": [
+          200
+        ]
+      },
+      {
+        "name": "manager_candidate_summary",
+        "p95_ms": 5.4,
+        "queries_max": 6,
+        "response_bytes_max": 243,
+        "status_codes": [
+          200
+        ]
+      }
+    ],
+    "query_heavy_endpoints": [
+      {
+        "name": "decision_summary",
+        "queries_max": 12,
+        "p95_ms": 15.36
+      },
+      {
+        "name": "job_ranking",
+        "queries_max": 8,
+        "p95_ms": 20.61
+      },
+      {
+        "name": "candidate_overview",
+        "queries_max": 7,
+        "p95_ms": 16.44
+      },
+      {
+        "name": "behavioral_assessment",
+        "queries_max": 7,
+        "p95_ms": 11.75
+      },
+      {
+        "name": "interview_scorecard",
+        "queries_max": 6,
+        "p95_ms": 6.56
+      },
+      {
+        "name": "manager_candidate_summary",
+        "queries_max": 6,
+        "p95_ms": 5.4
+      },
+      {
+        "name": "pre_admission",
+        "queries_max": 5,
+        "p95_ms": 6.66
+      },
+      {
+        "name": "pre_admission_documents",
+        "queries_max": 5,
+        "p95_ms": 5.69
+      },
+      {
+        "name": "candidates_summaries",
+        "queries_max": 3,
+        "p95_ms": 22.72
+      },
+      {
+        "name": "pipeline_board",
+        "queries_max": 3,
+        "p95_ms": 13.25
+      },
+      {
+        "name": "agenda_interviews",
+        "queries_max": 3,
+        "p95_ms": 7.36
+      },
+      {
+        "name": "candidate_interviews",
+        "queries_max": 3,
+        "p95_ms": 5.43
+      },
+      {
+        "name": "communications_recruiter",
+        "queries_max": 2,
+        "p95_ms": 13.94
+      }
+    ],
+    "possible_n_plus_one": [
+      {
+        "endpoint": "decision_summary",
+        "queries_max": 12,
+        "repeated_queries": []
+      },
+      {
+        "endpoint": "behavioral_assessment",
+        "queries_max": 7,
+        "repeated_queries": [
+          {
+            "count": 4,
+            "sql": "SELECT behavioral_assessment_assignments.id, behavioral_assessment_assignments.candidate_id, behavioral_assessment_assignments.job_id, jobs.title AS job_title, behavioral_assessment_assignments.template_id, behavioral_assessment_templates.name AS template_name, behavioral_assessment_assignments.status, behavioral_assessment_assignments.assigned_at, behavioral_assessment_assignments.started_at, behavioral_assessment_assignments.submitted_at, behavioral_assessment_assignments.expires_at, coalesce("
+          }
+        ]
+      }
+    ],
+    "suspicious_queries": [
+      {
+        "endpoint": "candidates_summaries",
+        "duration_ms": 4.098,
+        "sql": "SELECT candidates.id, candidates.full_name, candidates.email, candidates.phone, candidates.cpf, candidates.tags, candidates.created_at, candidates.archived_at, candidates.archive_reason, candidates.application_source, (SELECT count(DISTINCT resumes.id) AS count_1 FROM resumes WHERE resumes.candidate_id = candidates.id AND resumes.deleted_at IS NULL) AS resume_count, (SELECT count(DISTINCT candidate_job_pipeline.job_id) AS count_2 FROM candidate_job_pipeline JOIN jobs ON jobs.id = candidate_job_p"
+      },
+      {
+        "endpoint": "candidates_summaries",
+        "duration_ms": 4.08,
+        "sql": "SELECT candidates.id, candidates.full_name, candidates.email, candidates.phone, candidates.cpf, candidates.tags, candidates.created_at, candidates.archived_at, candidates.archive_reason, candidates.application_source, (SELECT count(DISTINCT resumes.id) AS count_1 FROM resumes WHERE resumes.candidate_id = candidates.id AND resumes.deleted_at IS NULL) AS resume_count, (SELECT count(DISTINCT candidate_job_pipeline.job_id) AS count_2 FROM candidate_job_pipeline JOIN jobs ON jobs.id = candidate_job_p"
+      },
+      {
+        "endpoint": "pipeline_board",
+        "duration_ms": 1.919,
+        "sql": "SELECT candidate_job_pipeline.candidate_id, candidates.full_name AS candidate_name, candidate_job_pipeline.job_id, candidate_job_pipeline.pipeline_stage AS stage, candidate_job_pipeline.link_status AS status, candidate_job_pipeline.entered_at, candidate_job_pipeline.updated_at, anon_1.top_skills, analyses.status AS ai_status, candidate_job_scores.final_score AS job_fit_score FROM candidate_job_pipeline JOIN candidates ON candidates.id = candidate_job_pipeline.candidate_id LEFT OUTER JOIN (SELECT"
+      },
+      {
+        "endpoint": "job_ranking",
+        "duration_ms": 1.709,
+        "sql": "SELECT candidate_job_scores.candidate_id, candidate_job_scores.final_score, candidate_job_scores.decision_suggestion, candidate_job_scores.breakdown, candidate_job_scores.reason_codes, candidate_job_scores.explanation_text, candidate_job_scores.factor_summary_json, candidate_job_scores.computed_at, candidate_job_scores.updated_at AS ranking_updated_at, candidate_job_scores.source_analysis_id, candidate_job_scores.source_analysis_created_at, candidate_job_scores.score_model_version, candidate_job"
+      },
+      {
+        "endpoint": "job_ranking",
+        "duration_ms": 1.681,
+        "sql": "SELECT candidate_job_scores.candidate_id, candidate_job_scores.final_score, candidate_job_scores.decision_suggestion, candidate_job_scores.breakdown, candidate_job_scores.reason_codes, candidate_job_scores.explanation_text, candidate_job_scores.factor_summary_json, candidate_job_scores.computed_at, candidate_job_scores.updated_at AS ranking_updated_at, candidate_job_scores.source_analysis_id, candidate_job_scores.source_analysis_created_at, candidate_job_scores.score_model_version, candidate_job"
+      },
+      {
+        "endpoint": "pipeline_board",
+        "duration_ms": 1.474,
+        "sql": "SELECT candidate_job_pipeline.candidate_id, candidates.full_name AS candidate_name, candidate_job_pipeline.job_id, candidate_job_pipeline.pipeline_stage AS stage, candidate_job_pipeline.link_status AS status, candidate_job_pipeline.entered_at, candidate_job_pipeline.updated_at, anon_1.top_skills, analyses.status AS ai_status, candidate_job_scores.final_score AS job_fit_score FROM candidate_job_pipeline JOIN candidates ON candidates.id = candidate_job_pipeline.candidate_id LEFT OUTER JOIN (SELECT"
+      },
+      {
+        "endpoint": "communications_recruiter",
+        "duration_ms": 1.455,
+        "sql": "SELECT candidate_communications.id, candidate_communications.candidate_id, candidate_communications.job_id, candidate_communications.related_entity_type, candidate_communications.related_entity_id, candidate_communications.template_key, candidate_communications.channel, candidate_communications.audience, candidate_communications.subject, candidate_communications.body, candidate_communications.status, candidate_communications.created_by, candidate_communications.created_at, candidate_communicatio"
+      },
+      {
+        "endpoint": "communications_recruiter",
+        "duration_ms": 1.399,
+        "sql": "SELECT candidate_communications.id, candidate_communications.candidate_id, candidate_communications.job_id, candidate_communications.related_entity_type, candidate_communications.related_entity_id, candidate_communications.template_key, candidate_communications.channel, candidate_communications.audience, candidate_communications.subject, candidate_communications.body, candidate_communications.status, candidate_communications.created_by, candidate_communications.created_at, candidate_communicatio"
+      },
+      {
+        "endpoint": "agenda_interviews",
+        "duration_ms": 0.696,
+        "sql": "SELECT interview_schedules.id, interview_schedules.candidate_id, candidates.full_name AS candidate_name, interview_schedules.job_id, jobs.title AS job_title, interview_schedules.title, interview_schedules.description, interview_schedules.public_notes, interview_schedules.internal_notes, interview_schedules.scheduled_start, interview_schedules.scheduled_end, interview_schedules.timezone, interview_schedules.interview_type, interview_schedules.interview_format, interview_schedules.status, intervie"
+      },
+      {
+        "endpoint": "candidate_overview",
+        "duration_ms": 0.615,
+        "sql": "SELECT candidate_job_scores.id, candidate_job_scores.candidate_id, candidate_job_scores.job_id, candidate_job_scores.version_id, candidate_job_scores.source_analysis_id, candidate_job_scores.source_analysis_created_at, candidate_job_scores.input_hash, candidate_job_scores.score_model_version, candidate_job_scores.explainability_version, candidate_job_scores.final_score, candidate_job_scores.decision_suggestion, candidate_job_scores.breakdown, candidate_job_scores.reason_codes, candidate_job_scor"
+      },
+      {
+        "endpoint": "agenda_interviews",
+        "duration_ms": 0.584,
+        "sql": "SELECT interview_schedules.id, interview_schedules.candidate_id, candidates.full_name AS candidate_name, interview_schedules.job_id, jobs.title AS job_title, interview_schedules.title, interview_schedules.description, interview_schedules.public_notes, interview_schedules.internal_notes, interview_schedules.scheduled_start, interview_schedules.scheduled_end, interview_schedules.timezone, interview_schedules.interview_type, interview_schedules.interview_format, interview_schedules.status, intervie"
+      },
+      {
+        "endpoint": "candidate_overview",
+        "duration_ms": 0.568,
+        "sql": "SELECT analyses.id AS analysis_id, analyses.job_id AS job_id, resumes.id AS resume_id, resumes.title AS resume_title, analyses.status, analyses.started_at, analyses.completed_at, analyses.failed_at, analyses.failure_reason, analyses.task_id, analyses.worker_id, CASE WHEN (analysis_results.id IS NULL) THEN NULL WHEN (coalesce(analysis_results.input_tokens, ?) + coalesce(analysis_results.output_tokens, ?) + coalesce(analysis_results.cache_read_tokens, ?) + coalesce(analysis_results.cache_write_tok"
+      }
+    ],
+    "missing_fk_indexes": [
+      {
+        "table": "candidates",
+        "column": "created_by",
+        "suggested_index": "idx_candidates_created_by"
+      },
+      {
+        "table": "candidates",
+        "column": "archived_by",
+        "suggested_index": "idx_candidates_archived_by"
+      },
+      {
+        "table": "job_areas",
+        "column": "created_by",
+        "suggested_index": "idx_job_areas_created_by"
+      },
+      {
+        "table": "job_areas",
+        "column": "updated_by",
+        "suggested_index": "idx_job_areas_updated_by"
+      },
+      {
+        "table": "jobs",
+        "column": "behavioral_template_id",
+        "suggested_index": "idx_jobs_behavioral_template_id"
+      },
+      {
+        "table": "jobs",
+        "column": "created_by",
+        "suggested_index": "idx_jobs_created_by"
+      },
+      {
+        "table": "jobs",
+        "column": "archived_by",
+        "suggested_index": "idx_jobs_archived_by"
+      },
+      {
+        "table": "password_reset_tokens",
+        "column": "user_id",
+        "suggested_index": "idx_password_reset_tokens_user_id"
+      },
+      {
+        "table": "prompt_templates",
+        "column": "created_by",
+        "suggested_index": "idx_prompt_templates_created_by"
+      },
+      {
+        "table": "skill_catalog",
+        "column": "created_by",
+        "suggested_index": "idx_skill_catalog_created_by"
+      },
+      {
+        "table": "skill_catalog",
+        "column": "updated_by",
+        "suggested_index": "idx_skill_catalog_updated_by"
+      },
+      {
+        "table": "skill_catalog",
+        "column": "archived_by",
+        "suggested_index": "idx_skill_catalog_archived_by"
+      },
+      {
+        "table": "user_sessions",
+        "column": "user_id",
+        "suggested_index": "idx_user_sessions_user_id"
+      },
+      {
+        "table": "admissions",
+        "column": "candidate_id",
+        "suggested_index": "idx_admissions_candidate_id"
+      },
+      {
+        "table": "admissions",
+        "column": "job_id",
+        "suggested_index": "idx_admissions_job_id"
+      },
+      {
+        "table": "audit_logs",
+        "column": "user_id",
+        "suggested_index": "idx_audit_logs_user_id"
+      },
+      {
+        "table": "audit_logs",
+        "column": "session_id",
+        "suggested_index": "idx_audit_logs_session_id"
+      },
+      {
+        "table": "behavioral_assessment_assignments",
+        "column": "template_id",
+        "suggested_index": "idx_behavioral_assessment_assignments_template_id"
+      },
+      {
+        "table": "candidate_communications",
+        "column": "job_id",
+        "suggested_index": "idx_candidate_communications_job_id"
+      },
+      {
+        "table": "candidate_communications",
+        "column": "created_by",
+        "suggested_index": "idx_candidate_communications_created_by"
+      },
+      {
+        "table": "candidate_job_collaboration_comments",
+        "column": "candidate_id",
+        "suggested_index": "idx_candidate_job_collaboration_comments_candidate_id"
+      },
+      {
+        "table": "candidate_job_collaboration_comments",
+        "column": "job_id",
+        "suggested_index": "idx_candidate_job_collaboration_comments_job_id"
+      },
+      {
+        "table": "candidate_job_collaboration_comments",
+        "column": "author_id",
+        "suggested_index": "idx_candidate_job_collaboration_comments_author_id"
+      },
+      {
+        "table": "job_required_skills",
+        "column": "job_id",
+        "suggested_index": "idx_job_required_skills_job_id"
+      },
+      {
+        "table": "job_required_skills",
+        "column": "skill_id",
+        "suggested_index": "idx_job_required_skills_skill_id"
+      },
+      {
+        "table": "resumes",
+        "column": "created_by",
+        "suggested_index": "idx_resumes_created_by"
+      },
+      {
+        "table": "skill_relations",
+        "column": "target_skill_id",
+        "suggested_index": "idx_skill_relations_target_skill_id"
+      },
+      {
+        "table": "behavioral_assessment_ai_evaluations",
+        "column": "assignment_id",
+        "suggested_index": "idx_behavioral_assessment_ai_evaluations_assignment_id"
+      },
+      {
+        "table": "behavioral_assessment_ai_evaluations",
+        "column": "template_id",
+        "suggested_index": "idx_behavioral_assessment_ai_evaluations_template_id"
+      },
+      {
+        "table": "behavioral_assessment_answers",
+        "column": "question_id",
+        "suggested_index": "idx_behavioral_assessment_answers_question_id"
+      },
+      {
+        "table": "calendar_sync_events",
+        "column": "interview_schedule_id",
+        "suggested_index": "idx_calendar_sync_events_interview_schedule_id"
+      },
+      {
+        "table": "calendar_sync_events",
+        "column": "user_id",
+        "suggested_index": "idx_calendar_sync_events_user_id"
+      },
+      {
+        "table": "candidate_documents",
+        "column": "admission_id",
+        "suggested_index": "idx_candidate_documents_admission_id"
+      },
+      {
+        "table": "candidate_documents",
+        "column": "document_requirement_id",
+        "suggested_index": "idx_candidate_documents_document_requirement_id"
+      },
+      {
+        "table": "interview_scorecards",
+        "column": "interview_id",
+        "suggested_index": "idx_interview_scorecards_interview_id"
+      },
+      {
+        "table": "interview_scorecards",
+        "column": "evaluator_id",
+        "suggested_index": "idx_interview_scorecards_evaluator_id"
+      },
+      {
+        "table": "resume_versions",
+        "column": "resume_id",
+        "suggested_index": "idx_resume_versions_resume_id"
+      },
+      {
+        "table": "resume_versions",
+        "column": "uploaded_by",
+        "suggested_index": "idx_resume_versions_uploaded_by"
+      },
+      {
+        "table": "analyses",
+        "column": "resume_version_id",
+        "suggested_index": "idx_analyses_resume_version_id"
+      },
+      {
+        "table": "analyses",
+        "column": "job_id",
+        "suggested_index": "idx_analyses_job_id"
+      },
+      {
+        "table": "analyses",
+        "column": "ai_model_id",
+        "suggested_index": "idx_analyses_ai_model_id"
+      },
+      {
+        "table": "analyses",
+        "column": "prompt_template_id",
+        "suggested_index": "idx_analyses_prompt_template_id"
+      },
+      {
+        "table": "analyses",
+        "column": "requested_by",
+        "suggested_index": "idx_analyses_requested_by"
+      },
+      {
+        "table": "analyses",
+        "column": "discarded_by",
+        "suggested_index": "idx_analyses_discarded_by"
+      },
+      {
+        "table": "ai_usage_logs",
+        "column": "candidate_id",
+        "suggested_index": "idx_ai_usage_logs_candidate_id"
+      },
+      {
+        "table": "ai_usage_logs",
+        "column": "job_id",
+        "suggested_index": "idx_ai_usage_logs_job_id"
+      },
+      {
+        "table": "analysis_results",
+        "column": "analysis_id",
+        "suggested_index": "idx_analysis_results_analysis_id"
+      },
+      {
+        "table": "candidate_job_pipeline",
+        "column": "resume_version_id",
+        "suggested_index": "idx_candidate_job_pipeline_resume_version_id"
+      },
+      {
+        "table": "candidate_job_pipeline",
+        "column": "last_moved_by",
+        "suggested_index": "idx_candidate_job_pipeline_last_moved_by"
+      },
+      {
+        "table": "candidate_job_score_snapshots",
+        "column": "version_id",
+        "suggested_index": "idx_candidate_job_score_snapshots_version_id"
+      },
+      {
+        "table": "candidate_job_score_snapshots",
+        "column": "source_analysis_id",
+        "suggested_index": "idx_candidate_job_score_snapshots_source_analysis_id"
+      },
+      {
+        "table": "candidate_job_scores",
+        "column": "version_id",
+        "suggested_index": "idx_candidate_job_scores_version_id"
+      },
+      {
+        "table": "candidate_job_scores",
+        "column": "source_analysis_id",
+        "suggested_index": "idx_candidate_job_scores_source_analysis_id"
+      },
+      {
+        "table": "matching_observations",
+        "column": "candidate_id",
+        "suggested_index": "idx_matching_observations_candidate_id"
+      },
+      {
+        "table": "matching_observations",
+        "column": "analysis_id",
+        "suggested_index": "idx_matching_observations_analysis_id"
+      },
+      {
+        "table": "matching_observations",
+        "column": "feedback_by",
+        "suggested_index": "idx_matching_observations_feedback_by"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "pipeline_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_pipeline_id"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "decided_by",
+        "suggested_index": "idx_candidate_job_hiring_decisions_decided_by"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "based_on_scorecard_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_based_on_scorecard_id"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "based_on_behavioral_assignment_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_based_on_behavioral_assignment_id"
+      },
+      {
+        "table": "candidate_job_hiring_decisions",
+        "column": "based_on_behavioral_ai_evaluation_id",
+        "suggested_index": "idx_candidate_job_hiring_decisions_based_on_behavioral_ai_evaluation_id"
+      },
+      {
+        "table": "candidate_job_match",
+        "column": "resume_version_id",
+        "suggested_index": "idx_candidate_job_match_resume_version_id"
+      },
+      {
+        "table": "candidate_job_match",
+        "column": "candidate_profile_analysis_id",
+        "suggested_index": "idx_candidate_job_match_candidate_profile_analysis_id"
+      },
+      {
+        "table": "candidate_job_match",
+        "column": "job_profile_analysis_id",
+        "suggested_index": "idx_candidate_job_match_job_profile_analysis_id"
+      },
+      {
+        "table": "pre_admission_cases",
+        "column": "hiring_decision_id",
+        "suggested_index": "idx_pre_admission_cases_hiring_decision_id"
+      },
+      {
+        "table": "pre_admission_cases",
+        "column": "created_by",
+        "suggested_index": "idx_pre_admission_cases_created_by"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "job_id",
+        "suggested_index": "idx_admission_export_packages_job_id"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "created_by",
+        "suggested_index": "idx_admission_export_packages_created_by"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "approved_by",
+        "suggested_index": "idx_admission_export_packages_approved_by"
+      },
+      {
+        "table": "admission_export_packages",
+        "column": "exported_by",
+        "suggested_index": "idx_admission_export_packages_exported_by"
+      },
+      {
+        "table": "pre_admission_events",
+        "column": "actor_id",
+        "suggested_index": "idx_pre_admission_events_actor_id"
+      },
+      {
+        "table": "erp_integration_attempts",
+        "column": "candidate_id",
+        "suggested_index": "idx_erp_integration_attempts_candidate_id"
+      },
+      {
+        "table": "erp_integration_attempts",
+        "column": "job_id",
+        "suggested_index": "idx_erp_integration_attempts_job_id"
+      },
+      {
+        "table": "erp_integration_attempts",
+        "column": "attempted_by",
+        "suggested_index": "idx_erp_integration_attempts_attempted_by"
+      },
+      {
+        "table": "pre_admission_documents",
+        "column": "reviewed_by",
+        "suggested_index": "idx_pre_admission_documents_reviewed_by"
+      },
+      {
+        "table": "pre_admission_documents",
+        "column": "deleted_by",
+        "suggested_index": "idx_pre_admission_documents_deleted_by"
+      }
+    ]
+  }
+}

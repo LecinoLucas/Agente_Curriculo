@@ -1,39 +1,62 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ManagerReviewPage } from "../ManagerReviewPage";
-import * as managerService from "../../../services/managerService";
 
-vi.mock("../../../services/managerService");
+const {
+  mockListReviewRequests,
+  mockSubmitManagerFeedback,
+  mockListJobs,
+  mockListCandidates,
+  mockGetCandidateSummary,
+} = vi.hoisted(() => ({
+  mockListReviewRequests: vi.fn(),
+  mockSubmitManagerFeedback: vi.fn(),
+  mockListJobs: vi.fn(),
+  mockListCandidates: vi.fn(),
+  mockGetCandidateSummary: vi.fn(),
+}));
 
-const mockJobs = [
-  { id: "job-1", title: "Senior Developer", candidate_count: 5, assigned_count: 2 },
-  { id: "job-2", title: "Product Manager", candidate_count: 3, assigned_count: 1 },
-];
-
-const mockCandidates = [
-  {
-    id: "cand-1",
-    name: "João Silva",
-    email: "joao@example.com",
-    pipeline_stage: "screening",
-    scorecard_status: "draft",
+vi.mock("../../../services/collaborationService", () => ({
+  collaborationService: {
+    listReviewRequests: mockListReviewRequests,
+    submitManagerFeedback: mockSubmitManagerFeedback,
   },
-  {
-    id: "cand-2",
-    name: "Maria Santos",
-    email: "maria@example.com",
-    pipeline_stage: "interview",
-    scorecard_status: "submitted",
+}));
+
+vi.mock("../../../services/managerService", () => ({
+  managerService: {
+    listJobs: mockListJobs,
+    listCandidates: mockListCandidates,
+    getCandidateSummary: mockGetCandidateSummary,
   },
-];
+}));
+
+const mockRequest = {
+  request_id: "req-1",
+  candidate_id: "cand-1",
+  candidate_name: "João Silva",
+  job_id: "job-1",
+  job_title: "Senior Developer",
+  requested_by: "recruiter-1",
+  requested_at: "2026-05-15T12:00:00Z",
+  latest_message: "Preciso da sua revisão final.",
+  status: "pending" as const,
+  priority: "high" as const,
+  target_manager_id: "manager-1",
+  target_manager_name: "Marina Gestora",
+  is_directed_to_me: true,
+  pipeline_stage: "interview",
+  interview_status: "awaiting_feedback",
+  scorecard_status: "draft",
+};
 
 const mockSummary = {
   id: "cand-1",
   name: "João Silva",
   email: "joao@example.com",
-  pipeline_stage: "screening",
+  pipeline_stage: "interview",
   scorecard: {
     status: "draft",
     recommendation: "strong_yes",
@@ -44,127 +67,98 @@ const mockSummary = {
 describe("ManagerReviewPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(managerService.managerService.listJobs).mockResolvedValue({
-      jobs: mockJobs,
+    mockListReviewRequests.mockResolvedValue({ requests: [mockRequest] });
+    mockSubmitManagerFeedback.mockResolvedValue({
+      id: "feedback-1",
+      author_id: "manager-1",
+      author_role: "manager",
+      comment_type: "manager_feedback",
+      recommendation: "advance",
+      message: "Pode avançar",
+      created_at: "2026-05-15T13:00:00Z",
     });
-    vi.mocked(managerService.managerService.listCandidates).mockResolvedValue({
+    mockListJobs.mockResolvedValue({
+      jobs: [{ id: "job-1", title: "Senior Developer", candidate_count: 1, assigned_count: 1 }],
+    });
+    mockListCandidates.mockResolvedValue({
       job_id: "job-1",
-      candidates: mockCandidates,
+      candidates: [
+        {
+          id: "cand-1",
+          name: "João Silva",
+          email: "joao@example.com",
+          pipeline_stage: "interview",
+          scorecard_status: "draft",
+        },
+      ],
     });
-    vi.mocked(managerService.managerService.getCandidateSummary).mockResolvedValue(
-      mockSummary,
-    );
+    mockGetCandidateSummary.mockResolvedValue(mockSummary);
   });
 
-  it("renderiza empty state sem vagas", async () => {
-    vi.mocked(managerService.managerService.listJobs).mockResolvedValue({
-      jobs: [],
-    });
-
+  it("renderiza solicitações de revisão ao abrir a página", async () => {
     render(<ManagerReviewPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Nenhuma vaga atribuída no momento")).toBeInTheDocument();
-    });
+    expect(await screen.findByText("João Silva")).toBeInTheDocument();
+    expect(screen.getByText("Preciso da sua revisão final.")).toBeInTheDocument();
   });
 
-  it("renderiza lista de vagas", async () => {
+  it("indica quando a solicitação foi direcionada ao gestor logado", async () => {
     render(<ManagerReviewPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Senior Developer")).toBeInTheDocument();
-      expect(screen.getByText("Product Manager")).toBeInTheDocument();
-    });
+    const badges = await screen.findAllByText("Direcionada a você");
+    expect(badges.length).toBeGreaterThan(0);
   });
 
-  it("ao clicar em vaga, lista candidatos", async () => {
-    const mockListCandidates = vi.mocked(managerService.managerService.listCandidates);
-    mockListCandidates.mockResolvedValueOnce({
-      job_id: "job-1",
-      candidates: mockCandidates,
-    });
-
-    render(<ManagerReviewPage />);
+  it("carrega o resumo seguro ao selecionar uma solicitação", async () => {
     const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Senior Developer")).toBeInTheDocument();
+      expect(mockGetCandidateSummary).toHaveBeenCalledWith("job-1", "cand-1");
     });
-
-    const jobButtons = screen.getAllByRole("button");
-    const jobButton = jobButtons.find(btn => btn.textContent.includes("Senior Developer"));
-
-    if (jobButton) {
-      await user.click(jobButton);
-    }
-
-    await waitFor(() => {
-      expect(mockListCandidates).toHaveBeenCalledWith("job-1");
-      expect(screen.queryByText("João Silva")).toBeInTheDocument();
-    });
+    expect(await screen.findByText("Resumo seguro")).toBeInTheDocument();
   });
 
-  it("ao clicar em candidato, mostra resumo seguro", async () => {
-    const mockGetSummary = vi.mocked(managerService.managerService.getCandidateSummary);
-    mockGetSummary.mockResolvedValueOnce(mockSummary);
-
-    render(<ManagerReviewPage />);
+  it("envia feedback do gestor sem mover o restante do fluxo", async () => {
     const user = userEvent.setup();
+    render(<ManagerReviewPage />);
 
-    // Wait for initial jobs to load
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+    await screen.findByText("Resumo seguro");
+    await user.type(screen.getByPlaceholderText("Descreva sua avaliação do candidato..."), "Pode avançar");
+    await user.click(screen.getByRole("button", { name: /Enviar feedback/i }));
+
     await waitFor(() => {
-      expect(screen.getByText("Senior Developer")).toBeInTheDocument();
-    });
-
-    // Click on first job
-    const jobButtons = screen.getAllByRole("button");
-    const jobButton = jobButtons.find(btn => btn.textContent.includes("Senior Developer"));
-    if (jobButton) {
-      await user.click(jobButton);
-    }
-
-    // Wait for candidates to load
-    await waitFor(() => {
-      expect(screen.queryByText("João Silva")).toBeInTheDocument();
-    }, { timeout: 3000 });
-
-    // Click on candidate
-    const candidateButtons = screen.getAllByRole("button");
-    const candidateButton = candidateButtons.find(btn => btn.textContent.includes("João Silva"));
-    if (candidateButton) {
-      await user.click(candidateButton);
-    }
-
-    // Wait for summary to load
-    await waitFor(() => {
-      expect(mockGetSummary).toHaveBeenCalledWith("job-1", "cand-1");
+      expect(mockSubmitManagerFeedback).toHaveBeenCalledWith("job-1", "cand-1", {
+        message: "Pode avançar",
+        recommendation: "advance",
+      });
     });
   });
 
-  it("não renderiza documentos", () => {
+  it("carrega vagas apenas ao entrar na aba de candidatos", async () => {
+    const user = userEvent.setup();
     render(<ManagerReviewPage />);
-    expect(screen.queryByText(/download|pdf|arquivo/i)).not.toBeInTheDocument();
-  });
 
-  it("não renderiza payload ERP", () => {
-    render(<ManagerReviewPage />);
-    expect(screen.queryByText(/erp|payload|api/i)).not.toBeInTheDocument();
-  });
+    expect(mockListJobs).not.toHaveBeenCalled();
 
-  it("não renderiza detalhes técnicos de IA/scoring", () => {
-    render(<ManagerReviewPage />);
-    expect(screen.queryByText(/prompt|token|embedding|score breakdown/i)).not.toBeInTheDocument();
-  });
-
-  it("mostra loading/error states", async () => {
-    vi.mocked(managerService.managerService.listJobs).mockRejectedValueOnce(
-      new Error("Erro ao conectar"),
-    );
-
-    render(<ManagerReviewPage />);
+    await user.click(screen.getByRole("button", { name: /^Candidatos$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Erro ao conectar")).toBeInTheDocument();
+      expect(mockListJobs).toHaveBeenCalledTimes(1);
     });
+    expect(await screen.findByText("Senior Developer")).toBeInTheDocument();
+  });
+
+  it("mostra erro se não conseguir carregar solicitações", async () => {
+    mockListReviewRequests.mockRejectedValueOnce(new Error("Falha ao carregar"));
+
+    render(<ManagerReviewPage />);
+
+    expect(
+      await screen.findByText("Não foi possível carregar as solicitações de revisão."),
+    ).toBeInTheDocument();
   });
 });

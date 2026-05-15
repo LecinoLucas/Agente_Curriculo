@@ -21,6 +21,8 @@ class CollaborationCommentModel(Base):
     author_role: Mapped[str] = mapped_column(String(50), nullable=False)
     comment_type: Mapped[str] = mapped_column(String(50), nullable=False)
     visibility: Mapped[str] = mapped_column(String(50), nullable=False, default="internal")
+    target_manager_id: Mapped[UUID | None] = mapped_column(UUIDType(as_uuid=True), nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(20), nullable=True)
     recommendation: Mapped[str | None] = mapped_column(String(50), nullable=True)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now())

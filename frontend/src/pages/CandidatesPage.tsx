@@ -333,7 +333,7 @@ export function CandidatesPage() {
                         Atualizando dados em tempo real…
                       </div>
                     ) : null}
-                    <div className="overflow-x-auto">
+                    <div className={`overflow-x-auto ${candidates.length <= 2 ? "pb-32" : ""}`}>
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface-muted)/0.3)]">
@@ -475,6 +475,7 @@ export function CandidateRow({
   onArchive,
   onDelete,
   onLinkJob,
+  direction = "down",
 }: {
   candidate: CandidateListSummary;
   isActive?: boolean;
@@ -484,6 +485,7 @@ export function CandidateRow({
   onArchive?: () => void;
   onDelete?: () => void;
   onLinkJob?: () => void;
+  direction?: "up" | "down";
 }) {
   const statusLabel =
     c.active_job_stage === "hired"
@@ -622,6 +624,7 @@ export function CandidateRow({
           <ActionMenu
             buttonLabel={`Ações para ${c.full_name}`}
             items={actionItems}
+            direction={direction}
           />
         </td>
       ) : null}

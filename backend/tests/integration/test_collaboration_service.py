@@ -14,7 +14,10 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import Cand
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.collaboration_comments_model import CollaborationCommentModel
 from src.infrastructure.security.password_service import hash_password
-from src.application.services.collaboration_service import CollaborationService
+from src.application.services.collaboration_service import (
+    CollaborationService,
+    CollaborationValidationError,
+)
 
 
 async def _create_user(
@@ -165,6 +168,69 @@ async def test_recruiter_requests_manager_review(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_recruiter_requests_manager_review_with_valid_target(db_session: AsyncSession):
+    """Recruiter can direct review request to a valid manager."""
+    recruiter = await _create_user(db_session, "recruiter-valid-target@test.com", UserRole.RECRUITER)
+    manager = await _create_user(db_session, "manager-valid-target@test.com", UserRole.MANAGER)
+    job_id = await _create_job(db_session)
+    candidate_id = await _create_candidate(db_session)
+    await _create_pipeline(db_session, candidate_id, job_id)
+
+    service = CollaborationService(db_session, recruiter)
+    comment = await service.create_comment(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        comment_type="review_request",
+        message="Please review for final round",
+        target_manager_id=manager.id,
+    )
+
+    assert comment is not None
+    assert comment["target_manager_id"] == str(manager.id)
+
+
+@pytest.mark.asyncio
+async def test_review_request_requires_target_when_manager_exists(db_session: AsyncSession):
+    """If there is any active manager, target_manager_id becomes required."""
+    recruiter = await _create_user(db_session, "recruiter-target-required@test.com", UserRole.RECRUITER)
+    await _create_user(db_session, "manager-target-required@test.com", UserRole.MANAGER)
+    job_id = await _create_job(db_session)
+    candidate_id = await _create_candidate(db_session)
+    await _create_pipeline(db_session, candidate_id, job_id)
+
+    service = CollaborationService(db_session, recruiter)
+
+    with pytest.raises(CollaborationValidationError, match="Selecione o gestor responsável pela revisão."):
+        await service.create_comment(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            comment_type="review_request",
+            message="Please review for final round",
+        )
+
+
+@pytest.mark.asyncio
+async def test_review_request_rejects_non_manager_target(db_session: AsyncSession):
+    """Review requests reject recruiter/admin/viewer as target_manager_id."""
+    recruiter = await _create_user(db_session, "recruiter-invalid-target@test.com", UserRole.RECRUITER)
+    viewer = await _create_user(db_session, "viewer-invalid-target@test.com", UserRole.VIEWER)
+    job_id = await _create_job(db_session)
+    candidate_id = await _create_candidate(db_session)
+    await _create_pipeline(db_session, candidate_id, job_id)
+
+    service = CollaborationService(db_session, recruiter)
+
+    with pytest.raises(CollaborationValidationError, match="não é um gestor"):
+        await service.create_comment(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            comment_type="review_request",
+            message="Please review for final round",
+            target_manager_id=viewer.id,
+        )
+
+
+@pytest.mark.asyncio
 async def test_manager_sees_assigned_collaboration(db_session: AsyncSession):
     """Manager sees collaboration for candidate they evaluate."""
     manager = await _create_user(db_session, "manager@test.com", UserRole.MANAGER)
@@ -190,6 +256,34 @@ async def test_manager_sees_assigned_collaboration(db_session: AsyncSession):
     assert len(comments) == 1
     assert comments[0]["message"] == "Test comment"
     assert comments[0]["author_role"] == "recruiter"
+
+
+@pytest.mark.asyncio
+async def test_manager_does_not_see_review_request_directed_to_other_manager(
+    db_session: AsyncSession,
+):
+    """Manager scope excludes review requests directed to a different manager."""
+    manager_1 = await _create_user(db_session, "manager-one@test.com", UserRole.MANAGER)
+    manager_2 = await _create_user(db_session, "manager-two@test.com", UserRole.MANAGER)
+    recruiter = await _create_user(db_session, "recruiter-directed@test.com", UserRole.RECRUITER)
+    job_id = await _create_job(db_session)
+    candidate_id = await _create_candidate(db_session)
+    await _create_pipeline(db_session, candidate_id, job_id)
+    await _create_scorecard(db_session, manager_2.id, candidate_id, job_id)
+
+    recruiter_service = CollaborationService(db_session, recruiter)
+    await recruiter_service.create_comment(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        comment_type="review_request",
+        message="Only manager 1 should see this request",
+        target_manager_id=manager_1.id,
+    )
+
+    manager_service = CollaborationService(db_session, manager_2)
+    comments = await manager_service.list_collaboration(candidate_id, job_id)
+
+    assert comments == []
 
 
 @pytest.mark.asyncio

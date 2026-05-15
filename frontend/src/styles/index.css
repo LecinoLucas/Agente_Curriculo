@@ -288,53 +288,57 @@
 
   :root[data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 — Marajó Red & White
+       Visual Theme 1 — Icy Rose & Champagne
        -----------------------------------------------------------------------
        Direção:
-       - Fundo branco/off-white limpo e moderno.
-       - Navbar em vermelho Marajó sólido com texto branco.
-       - Ações principais em vermelho vibrante.
+       - Estética sofisticada e ultra-limpa.
+       - Base em Branco Gelado (fundo frio e luminoso).
+       - Navbar em Rose Tint suave (mantido como solicitado).
+       - Primary em Rose Quartz (rosa seco elegante).
        ----------------------------------------------------------------------- */
 
-    --brand:               346 54% 19%;
-    --brand-dark:          346 54% 15%;
-    --brand-soft:          346 54% 95%;
-    --brand-glow:          346 54% 62%;
+    --brand:               330 45% 58%;
+    --brand-dark:          330 45% 45%;
+    --brand-soft:          330 60% 97%;
+    --brand-glow:          330 60% 88%;
 
-    --bg:                  0 0% 98%;
+    --bg:                  210 15% 99%;
     --surface:             0 0% 100%;
-    --surface-muted:       0 0% 94%;
-    --border:              0 0% 88%;
-    --border-strong:       0 0% 70%;
+    --surface-muted:       210 10% 97%;
+    --border:              210 10% 90%;
+    --border-strong:       210 10% 80%;
 
-    --background:          0 0% 98%;
+    --background:          210 15% 99%;
     --card:                0 0% 100%;
     --popover:             0 0% 100%;
-    --secondary:           0 0% 94%;
-    --muted:               0 0% 94%;
+    --secondary:           210 10% 97%;
+    --muted:               210 10% 97%;
 
-    --primary:             346 54% 19%;
+    --text:                222 24% 14%;
+    --text-muted:          218 11% 42%;
+
+    --primary:             330 45% 58%;
     --primary-foreground:  0 0% 100%;
-    --ring:                346 54% 19%;
+    --ring:                330 45% 58%;
 
-    --accent:              346 54% 95%;
-    --accent-foreground:   346 54% 40%;
-    --accent-soft:         346 54% 95%;
+    --accent:              20 60% 92%;
+    --accent-foreground:   330 50% 30%;
+    --accent-soft:         20 60% 92%;
 
-    --nav-bg:              346 54% 19%;
-    --nav-text:            0 0% 100%;
-    --nav-muted:           346 54% 80%;
-    --nav-active-bg:       346 54% 12%;
-    --nav-border:          346 54% 15%;
+    --nav-bg:              330 25% 83%;
+    --nav-text:            330 40% 25%;
+    --nav-muted:           330 10% 45%;
+    --nav-active-bg:       330 45% 96%;
+    --nav-border:          20 20% 90%;
 
-    --sidebar-accent:      346 54% 19%;
-    --hero-start:          346 54% 19%;
-    --hero-end:            0 0% 100%;
+    --sidebar-accent:      20 60% 92%;
+    --hero-start:          330 35% 15%;
+    --hero-end:            330 30% 25%;
 
-    --page-glow-start:     346 54% 95%;
-    --page-glow-end:       0 0% 100%;
-    --page-gradient-start: 0 0% 98%;
-    --page-gradient-end:   0 0% 95%;
+    --page-glow-start:     210 18% 96%;
+    --page-glow-end:       210 18% 96%;
+    --page-gradient-start: 210 18% 96%;
+    --page-gradient-end:   210 18% 96%;
   }
 
   :root[data-visual-theme="theme-2"] {
@@ -374,11 +378,11 @@
     --accent-foreground:   142 50% 22%;
     --accent-soft:         142 44% 90%;
 
-    --nav-bg:              142 70% 15%;
-    --nav-text:            142 20% 90%;
-    --nav-muted:           142 30% 70%;
-    --nav-active-bg:       142 70% 25%;
-    --nav-border:          142 34% 13%;
+    --nav-bg:              142 25% 82%;
+    --nav-text:            142 60% 15%;
+    --nav-muted:           142 20% 45%;
+    --nav-active-bg:       142 40% 92%;
+    --nav-border:          142 20% 90%;
 
     --sidebar-accent:      142 70% 45%;
     --hero-start:          142 70% 20%;
@@ -424,11 +428,11 @@
     --accent-foreground:   190 90% 20%;
     --accent-soft:         190 90% 92%;
 
-    --nav-bg:              260 30% 15%;
-    --nav-text:            210 50% 95%;
-    --nav-muted:           260 20% 70%;
-    --nav-active-bg:       260 40% 25%;
-    --nav-border:          260 30% 22%;
+    --nav-bg:              260 25% 82%;
+    --nav-text:            260 60% 15%;
+    --nav-muted:           260 20% 45%;
+    --nav-active-bg:       260 40% 92%;
+    --nav-border:          260 20% 90%;
 
     --sidebar-accent:      260 85% 60%;
     --hero-start:          260 85% 60%;
@@ -440,156 +444,346 @@
     --page-gradient-end:   210 30% 95%;
   }
 
-  :root[data-theme="dark"][data-visual-theme="theme-1"] {
+  :root[data-visual-theme="theme-4"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 Dark — Sophisticated Graphite & Wine
+       Visual Theme 4 — Crimson Carbon (Masculine & Bold)
        -----------------------------------------------------------------------
        Direção:
-       - Fundo cinza grafite profundo com leve toque azulado.
-       - Marca em vinho rico para detalhes e botões.
-       - Detalhes em ouro champanhe para contraste premium.
+       - Estética Racing/Corporate Bold.
+       - Base em Branco Gelado com detalhes em Carbono.
+       - Marca em Vermelho Carmesim/Ferrari vibrante.
+       - Navbar escura (Carbono) para um visual imponente.
+       ----------------------------------------------------------------------- */
+    --brand:               0 75% 45%;
+    --brand-dark:          0 80% 35%;
+    --brand-soft:          0 100% 97%;
+    --brand-glow:          0 80% 65%;
+
+    --bg:                  210 15% 98%;
+    --surface:             0 0% 100%;
+    --surface-muted:       210 10% 94%;
+    --border:              210 10% 88%;
+    --border-strong:       0 0% 20%;
+
+    --background:          210 15% 98%;
+    --card:                0 0% 100%;
+    --popover:             0 0% 100%;
+    --secondary:           210 10% 94%;
+    --muted:               210 10% 94%;
+
+    --primary:             0 75% 45%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                0 75% 45%;
+
+    --accent:              0 0% 12%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         0 0% 12%;
+
+    --nav-bg:              220 20% 12%;
+    --nav-text:            0 0% 100%;
+    --nav-muted:           0 0% 70%;
+    --nav-active-bg:       0 75% 45%;
+    --nav-border:          0 0% 25%;
+
+    --sidebar-accent:      0 75% 45%;
+    --hero-start:          0 75% 45%;
+    --hero-end:            0 50% 35%;
+
+    --page-glow-start:     0 80% 95%;
+    --page-glow-end:       220 20% 95%;
+    --page-gradient-start: 210 15% 98%;
+    --page-gradient-end:   210 10% 95%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-1"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 1 Dark — Soft Charcoal Rose (Cozy Dark)
+       -----------------------------------------------------------------------
+       Direção:
+       - Escuro suave e visível (18% de luminosidade).
+       - Fundo grafite levemente rosado/veludo.
+       - Texto claro para conforto e contraste moderado.
        ----------------------------------------------------------------------- */
 
-    --brand:               346 54% 40%;
-    --brand-dark:          346 54% 30%;
-    --brand-soft:          220 15% 15%;
-    --brand-glow:          346 54% 50%;
+    --brand:               330 35% 65%;
+    --brand-dark:          330 35% 50%;
+    --brand-soft:          330 15% 25%;
+    --brand-glow:          330 35% 75%;
 
-    --bg:                  220 15% 8%;
-    --surface:             220 15% 12%;
-    --surface-muted:       220 15% 16%;
-    --border:              220 10% 20%;
-    --border-strong:       220 10% 30%;
+    --bg:                  330 12% 18%;
+    --surface:             330 10% 24%;
+    --surface-muted:       330 10% 28%;
+    --border:              330 10% 34%;
+    --border-strong:       330 10% 45%;
 
-    --background:          220 15% 8%;
-    --card:                220 15% 12%;
-    --popover:             220 15% 12%;
-    --secondary:           220 15% 16%;
-    --muted:               220 15% 16%;
+    --background:          330 12% 18%;
+    --card:                330 10% 24%;
+    --popover:             330 10% 24%;
+    --secondary:           330 10% 28%;
+    --muted:               330 10% 28%;
 
-    --primary:             346 54% 40%;
-    --primary-foreground:  0 0% 100%;
-    --ring:                346 54% 40%;
+    --text:                330 10% 92%;
+    --text-muted:          330 10% 75%;
 
-    --accent:              45 30% 60%;
-    --accent-foreground:   220 15% 8%;
-    --accent-soft:         45 30% 20%;
+    --primary:             330 35% 65%;
+    --primary-foreground:  330 20% 5%;
+    --ring:                330 35% 65%;
 
-    --nav-bg:              220 15% 6%;
-    --nav-text:            0 0% 90%;
-    --nav-muted:           220 10% 60%;
-    --nav-active-bg:       220 15% 14%;
-    --nav-border:          220 10% 12%;
+    --foreground:          330 10% 92%;
+    --card-foreground:     330 10% 92%;
+    --popover-foreground:  330 10% 92%;
 
-    --sidebar-accent:      346 54% 40%;
+    --accent:              330 15% 30%;
+    --accent-foreground:   330 30% 90%;
+    --accent-soft:         330 15% 30%;
+
+    --nav-bg:              330 15% 14%;
+    --nav-text:            330 10% 92%;
+    --nav-muted:           330 10% 70%;
+    --nav-active-bg:       330 15% 22%;
+    --nav-border:          330 15% 16%;
+
+    --sidebar-accent:      348 42% 44%;
     --hero-start:          220 15% 6%;
-    --hero-end:            346 54% 30%;
+    --hero-end:            220 13% 12%;
 
     --page-glow-start:     220 15% 15%;
-    --page-glow-end:       346 54% 20%;
+    --page-glow-end:       220 13% 14%;
     --page-gradient-start: 220 15% 8%;
     --page-gradient-end:   220 15% 5%;
   }
 
+  /* --------------------------------------------------------------------------
+     Visual Theme 1 Overrides — Corporate Moonstone
+     Enforces border-radius, removes glows and glass effects on PipelinePage.
+     -------------------------------------------------------------------------- */
+
+  :root[data-visual-theme="theme-1"] {
+    & .glass,
+    & .ui-card {
+      border-radius: 1rem !important;
+      background: hsl(var(--surface)) !important;
+      border: 1px solid hsl(var(--border)) !important;
+      box-shadow:
+        0 16px 32px -28px hsl(var(--text) / 0.16),
+        0 1px 2px hsl(var(--text) / 0.05) !important;
+      backdrop-filter: none !important;
+    }
+
+    & .blur-3xl {
+      display: none !important;
+    }
+
+    & select,
+    & input,
+    & button,
+    & textarea {
+      border-radius: 0.75rem !important;
+    }
+
+    & .rounded-full {
+      border-radius: 0.625rem !important;
+    }
+  }
+
+  /* Global overrides for Theme 1 buttons to remove gradients */
+  :root[data-visual-theme="theme-1"] .ui-btn-primary {
+    background: hsl(var(--primary)) !important;
+    background-image: none !important;
+    border-color: hsl(var(--brand-dark)) !important;
+    border-radius: 0.75rem !important;
+    box-shadow: 0 10px 22px -18px hsl(var(--primary) / 0.45) !important;
+  }
+
+  :root[data-visual-theme="theme-1"] .ui-btn-primary:hover {
+    filter: brightness(0.97) !important;
+    box-shadow: 0 12px 26px -20px hsl(var(--primary) / 0.42) !important;
+  }
+
+  :root[data-visual-theme="theme-1"] .ui-btn-secondary,
+  :root[data-visual-theme="theme-1"] .ui-btn-danger {
+    border-radius: 0.75rem !important;
+  }
+
+  :root[data-visual-theme="theme-1"] .ui-btn-secondary {
+    background-color: hsl(var(--surface)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--text)) !important;
+    box-shadow: 0 1px 2px hsl(var(--text) / 0.05) !important;
+  }
+
+  :root[data-visual-theme="theme-1"] .ui-btn-secondary:hover {
+    background-color: hsl(var(--accent-soft)) !important;
+    border-color: hsl(var(--border-strong)) !important;
+  }
+
+  :root[data-visual-theme="theme-1"] .ui-input:focus {
+    border-color: hsl(var(--primary)) !important;
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.1) !important;
+  }
+
+  :root[data-visual-theme="theme-1"] .navbar {
+    background-color: hsl(var(--nav-bg)) !important;
+    border-color: hsl(var(--nav-border)) !important;
+    box-shadow: 0 16px 36px -30px rgba(15, 23, 42, 0.42);
+  }
+
   :root[data-theme="dark"][data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 Dark — Biolume Abyss
+       Visual Theme 2 Dark — Soft Mineral Abyss
        -----------------------------------------------------------------------
        Direção:
-       - Dark totalmente diferente: abismo petróleo, mint elétrico e coral vivo.
-       - Não é só "dark vermelho"; é um dark futurista, colorido e profundo.
-       - Combina neon controlado com fundo orgânico/mineral.
-       - Feito para parecer vivo sem estourar contraste nem cansar a vista.
+       - Dark suave inspirado no Nord e Catppuccin (verde acinzentado).
+       - Fundo confortável em 18% de luminosidade.
+       - Acentos em verde mineral desaturado.
        ----------------------------------------------------------------------- */
+    --brand:               142 35% 60%;
+    --brand-dark:          142 35% 45%;
+    --brand-soft:          142 15% 22%;
+    --brand-glow:          142 35% 70%;
 
-    --brand:               142 25% 35%;
-    --brand-dark:          142 25% 25%;
-    --brand-soft:          142 15% 15%;
-    --brand-glow:          142 25% 45%;
+    --bg:                  142 12% 18%;
+    --surface:             142 10% 24%;
+    --surface-muted:       142 10% 28%;
+    --border:              142 10% 34%;
+    --border-strong:       142 10% 45%;
 
-    --bg:                  196 44% 7%;
-    --surface:             194 34% 11%;
-    --surface-muted:       188 30% 16%;
-    --border:              184 22% 26%;
-    --border-strong:       142 25% 35%;
+    --background:          142 12% 18%;
+    --card:                142 10% 24%;
+    --popover:             142 10% 24%;
+    --secondary:           142 10% 28%;
+    --muted:               142 10% 28%;
 
-    --background:          196 44% 7%;
-    --card:                194 34% 11%;
-    --popover:             194 34% 11%;
-    --secondary:           188 30% 16%;
-    --muted:               188 30% 16%;
+    --text:                142 10% 92%;
+    --text-muted:          142 10% 75%;
 
-    --primary:             142 25% 35%;
-    --primary-foreground:  0 0% 100%;
-    --ring:                142 25% 35%;
+    --primary:             142 35% 60%;
+    --primary-foreground:  142 20% 5%;
+    --ring:                142 35% 60%;
 
-    --accent:              142 25% 18%;
-    --accent-foreground:   142 30% 86%;
-    --accent-soft:         142 25% 18%;
+    --accent:              142 15% 30%;
+    --accent-foreground:   142 30% 90%;
+    --accent-soft:         142 15% 30%;
 
-    --nav-bg:              142 20% 8%;
-    --nav-text:            166 84% 88%;
-    --nav-muted:           170 42% 68%;
-    --nav-active-bg:       184 48% 18%;
-    --nav-border:          166 36% 26%;
+    --nav-bg:              142 15% 14%;
+    --nav-text:            142 10% 92%;
+    --nav-muted:           142 10% 70%;
+    --nav-active-bg:       142 20% 22%;
+    --nav-border:          142 15% 18%;
 
-    --sidebar-accent:      166 84% 62%;
-    --hero-start:          166 84% 54%;
-    --hero-end:            10 90% 64%;
+    --sidebar-accent:      142 35% 60%;
+    --hero-start:          142 35% 55%;
+    --hero-end:            10 35% 60%;
 
-    --page-glow-start:     166 84% 42%;
-    --page-glow-end:       10 90% 52%;
-    --page-gradient-start: 196 44% 7%;
-    --page-gradient-end:   226 42% 7%;
+    --page-glow-start:     142 30% 30%;
+    --page-glow-end:       10 30% 45%;
+    --page-gradient-start: 142 10% 18%;
+    --page-gradient-end:   142 10% 14%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 Dark — Cyber Quartz (Nova Modernidade)
+       Visual Theme 3 Dark — Soft Cyber Violet
        -----------------------------------------------------------------------
        Direção:
-       - Dark futurista com fundo azul/violeta profundo.
-       - Efeitos neon controlados em Cyan e Violeta.
+       - Dark futurista porém suave (baseado em tons Catppuccin Violet).
+       - Fundo violeta acinzentado em 18% de luminosidade.
        ----------------------------------------------------------------------- */
-    --brand:               190 100% 50%;
-    --brand-dark:          190 100% 35%;
-    --brand-soft:          260 40% 15%;
-    --brand-glow:          190 100% 65%;
+    --brand:               260 35% 65%;
+    --brand-dark:          260 35% 50%;
+    --brand-soft:          260 15% 25%;
+    --brand-glow:          260 35% 75%;
 
-    --bg:                  240 30% 8%;
-    --surface:             240 25% 12%;
-    --surface-muted:       240 20% 16%;
-    --border:              240 15% 24%;
-    --border-strong:       190 70% 40%;
+    --bg:                  260 10% 18%;
+    --surface:             260 10% 24%;
+    --surface-muted:       260 10% 28%;
+    --border:              260 10% 34%;
+    --border-strong:       260 10% 45%;
 
-    --background:          240 30% 8%;
-    --card:                240 25% 12%;
-    --popover:             240 25% 12%;
-    --secondary:           240 20% 16%;
-    --muted:               240 20% 16%;
+    --background:          260 10% 18%;
+    --card:                260 10% 24%;
+    --popover:             260 10% 24%;
+    --secondary:           260 10% 28%;
+    --muted:               260 10% 28%;
 
-    --primary:             190 100% 50%;
-    --primary-foreground:  240 30% 5%;
-    --ring:                190 100% 50%;
+    --text:                260 10% 92%;
+    --text-muted:          260 10% 75%;
 
-    --accent:              260 60% 25%;
-    --accent-foreground:   260 100% 90%;
-    --accent-soft:         260 60% 25%;
+    --primary:             260 35% 65%;
+    --primary-foreground:  260 20% 5%;
+    --ring:                260 35% 65%;
 
-    --nav-bg:              240 40% 5%;
-    --nav-text:            190 100% 90%;
-    --nav-muted:           240 20% 70%;
-    --nav-active-bg:       240 30% 15%;
-    --nav-border:          190 50% 20%;
+    --accent:              260 15% 30%;
+    --accent-foreground:   260 30% 90%;
+    --accent-soft:         260 15% 30%;
 
-    --sidebar-accent:      190 100% 50%;
-    --hero-start:          260 100% 60%;
-    --hero-end:            190 100% 50%;
+    --nav-bg:              260 15% 14%;
+    --nav-text:            260 10% 92%;
+    --nav-muted:           260 10% 70%;
+    --nav-active-bg:       260 15% 22%;
+    --nav-border:          260 15% 16%;
 
-    --page-glow-start:     260 70% 30%;
-    --page-glow-end:       190 80% 25%;
-    --page-gradient-start: 240 30% 8%;
-    --page-gradient-end:   240 20% 5%;
+    --sidebar-accent:      260 35% 65%;
+    --hero-start:          260 35% 65%;
+    --hero-end:            190 35% 60%;
+
+    --page-glow-start:     260 20% 30%;
+    --page-glow-end:       190 20% 25%;
+    --page-gradient-start: 260 10% 18%;
+    --page-gradient-end:   260 10% 14%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-4"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme 4 Dark — Carbon Red (Soft Masculine)
+       -----------------------------------------------------------------------
+       Direção:
+       - Dark mode estilo Carbono com detalhes em Vermelho.
+       - Base suave (18% de luminosidade) para conforto.
+       - Alta legibilidade e visual imponente.
+       ----------------------------------------------------------------------- */
+    --brand:               0 75% 60%;
+    --brand-dark:          0 75% 45%;
+    --brand-soft:          0 10% 18%;
+    --brand-glow:          0 75% 70%;
+
+    --bg:                  0 0% 14%;
+    --surface:             0 0% 20%;
+    --surface-muted:       0 0% 24%;
+    --border:              0 0% 30%;
+    --border-strong:       0 75% 45%;
+
+    --background:          0 0% 14%;
+    --card:                0 0% 20%;
+    --popover:             0 0% 20%;
+    --secondary:           0 0% 24%;
+    --muted:               0 0% 24%;
+
+    --text:                0 0% 94%;
+    --text-muted:          0 0% 75%;
+
+    --primary:             0 75% 60%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                0 75% 60%;
+
+    --accent:              0 0% 25%;
+    --accent-foreground:   0 0% 100%;
+    --accent-soft:         0 0% 25%;
+
+    --nav-bg:              0 0% 10%;
+    --nav-text:            0 0% 95%;
+    --nav-muted:           0 0% 70%;
+    --nav-active-bg:       0 75% 50%;
+    --nav-border:          0 0% 18%;
+
+    --sidebar-accent:      0 75% 60%;
+    --hero-start:          0 75% 60%;
+    --hero-end:            0 50% 45%;
+
+    --page-glow-start:     0 50% 25%;
+    --page-glow-end:       0 0% 15%;
+    --page-gradient-start: 0 0% 14%;
+    --page-gradient-end:   0 0% 10%;
   }
 
   /* ==========================================================================
@@ -658,6 +852,13 @@
       radial-gradient(circle at 72% 86%, hsl(268 80% 48% / 0.16), transparent 28rem),
       radial-gradient(circle at 18% 92%, hsl(198 88% 45% / 0.14), transparent 24rem),
       linear-gradient(180deg, hsl(196 44% 7%), hsl(226 42% 7%));
+    color: hsl(var(--text));
+  }
+  :root[data-theme="dark"][data-visual-theme="theme-4"] body {
+    background:
+      radial-gradient(circle at 5% 5%, hsl(0 75% 35% / 0.18), transparent 28rem),
+      radial-gradient(circle at 95% 95%, hsl(0 0% 10% / 0.24), transparent 30rem),
+      linear-gradient(180deg, hsl(0 0% 12%), hsl(0 0% 8%));
     color: hsl(var(--text));
   }
 
@@ -960,6 +1161,11 @@
   .visual-theme-preview-theme-3 {
     background:
       linear-gradient(135deg, hsl(260 85% 60%), hsl(190 90% 50%));
+  }
+
+  .visual-theme-preview-theme-4 {
+    background:
+      linear-gradient(135deg, hsl(0 75% 45%), hsl(0 0% 12%));
   }
 
   .visual-theme-option-copy {

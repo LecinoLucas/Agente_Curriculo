@@ -24,6 +24,11 @@ const THEMES: Array<{
     label: "Tema 3",
     description: "Nova modernidade",
   },
+  {
+    value: "theme-4",
+    label: "Tema 4",
+    description: "Vermelho corporativo",
+  },
 ];
 
 export function VisualThemeSwitcher() {

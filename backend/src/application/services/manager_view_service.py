@@ -18,8 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.entities.user import User, UserRole
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.collaboration_comments_model import CollaborationCommentModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.user_model import UserModel
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +227,161 @@ class ManagerViewService:
             }
 
         return result
+
+    async def list_review_requests(self, user_id: UUID) -> list[dict]:
+        """
+        List review requests (comment_type='review_request') visible to the logged-in user.
+
+        MANAGER sees:
+          - Requests where target_manager_id == user_id, OR
+          - Requests where target_manager_id IS NULL AND there is a scorecard evaluator_id == user_id for that candidate+job
+        ADMIN sees all.
+
+        Status "answered" if any manager_feedback comment exists for same candidate+job.
+        """
+        req = sa.alias(CollaborationCommentModel, name="req")
+        fb = sa.alias(CollaborationCommentModel, name="fb")
+        scorecard_sub = sa.alias(InterviewScorecardModel, name="sc")
+        interview_sub = sa.alias(InterviewScheduleModel, name="iv")
+        target_manager = UserModel.__table__.alias("target_manager")
+
+        has_feedback_sub = (
+            sa.select(sa.literal(1))
+            .select_from(fb)
+            .where(
+                sa.and_(
+                    fb.c.candidate_id == req.c.candidate_id,
+                    fb.c.job_id == req.c.job_id,
+                    fb.c.comment_type == "manager_feedback",
+                )
+            )
+            .correlate(req)
+            .exists()
+        )
+
+        latest_interview_sq = (
+            sa.select(interview_sub.c.status)
+            .where(
+                sa.and_(
+                    interview_sub.c.candidate_id == req.c.candidate_id,
+                    interview_sub.c.job_id == req.c.job_id,
+                )
+            )
+            .correlate(req)
+            .order_by(interview_sub.c.scheduled_start.desc().nullslast())
+            .limit(1)
+            .scalar_subquery()
+        )
+
+        latest_scorecard_sq = (
+            sa.select(scorecard_sub.c.status)
+            .where(
+                sa.and_(
+                    scorecard_sub.c.candidate_id == req.c.candidate_id,
+                    scorecard_sub.c.job_id == req.c.job_id,
+                )
+            )
+            .correlate(req)
+            .order_by(scorecard_sub.c.created_at.desc().nullslast())
+            .limit(1)
+            .scalar_subquery()
+        )
+
+        pipeline_stage_sq = (
+            sa.select(CandidateJobPipelineModel.pipeline_stage)
+            .where(
+                sa.and_(
+                    CandidateJobPipelineModel.candidate_id == req.c.candidate_id,
+                    CandidateJobPipelineModel.job_id == req.c.job_id,
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                )
+            )
+            .correlate(req)
+            .limit(1)
+            .scalar_subquery()
+        )
+
+        query = (
+            sa.select(
+                req.c.id.label("request_id"),
+                req.c.candidate_id,
+                CandidateModel.full_name.label("candidate_name"),
+                req.c.job_id,
+                JobModel.title.label("job_title"),
+                req.c.author_id.label("requested_by"),
+                req.c.created_at.label("requested_at"),
+                req.c.message.label("latest_message"),
+                req.c.priority,
+                req.c.target_manager_id,
+                target_manager.c.full_name.label("target_manager_name"),
+                sa.case(
+                    (req.c.target_manager_id == user_id, True),
+                    else_=False,
+                ).label("is_directed_to_me"),
+                has_feedback_sub.label("answered"),
+                pipeline_stage_sq.label("pipeline_stage"),
+                latest_interview_sq.label("interview_status"),
+                latest_scorecard_sq.label("scorecard_status"),
+            )
+            .select_from(req)
+            .join(CandidateModel, CandidateModel.id == req.c.candidate_id)
+            .join(JobModel, JobModel.id == req.c.job_id)
+            .outerjoin(target_manager, target_manager.c.id == req.c.target_manager_id)
+            .where(req.c.comment_type == "review_request")
+            .order_by(req.c.created_at.desc())
+        )
+
+        if not self.is_admin:
+            manager_jobs_sq = (
+                sa.select(InterviewScorecardModel.job_id, InterviewScorecardModel.candidate_id)
+                .where(InterviewScorecardModel.evaluator_id == user_id)
+                .subquery()
+            )
+            query = query.where(
+                sa.or_(
+                    req.c.target_manager_id == user_id,
+                    sa.and_(
+                        req.c.target_manager_id.is_(None),
+                        sa.exists(
+                            sa.select(sa.literal(1))
+                            .select_from(manager_jobs_sq)
+                            .where(
+                                sa.and_(
+                                    manager_jobs_sq.c.job_id == req.c.job_id,
+                                    manager_jobs_sq.c.candidate_id == req.c.candidate_id,
+                                )
+                            )
+                        ),
+                    ),
+                )
+            )
+
+        result = await self.session.execute(query)
+        rows = result.fetchall()
+
+        return [
+            {
+                "request_id": str(row.request_id),
+                "candidate_id": str(row.candidate_id),
+                "candidate_name": row.candidate_name,
+                "job_id": str(row.job_id),
+                "job_title": row.job_title,
+                "requested_by": str(row.requested_by) if row.requested_by else None,
+                "requested_at": row.requested_at.isoformat() if row.requested_at else None,
+                "latest_message": row.latest_message,
+                "status": "answered" if row.answered else "pending",
+                "priority": row.priority,
+                "target_manager_id": (
+                    str(row.target_manager_id) if row.target_manager_id else None
+                ),
+                "target_manager_name": row.target_manager_name,
+                "is_directed_to_me": bool(row.is_directed_to_me),
+                "pipeline_stage": row.pipeline_stage,
+                "interview_status": row.interview_status,
+                "scorecard_status": row.scorecard_status,
+            }
+            for row in rows
+        ]
 
     async def _verify_manager_job_access(self, user_id: UUID, job_id: UUID) -> bool:
         """Check if manager is evaluator for this job. ADMIN always has access."""

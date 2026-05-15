@@ -9,27 +9,6 @@ const getBiOverviewMock = vi.fn();
 const listJobsMock = vi.fn();
 const listJobAreasMock = vi.fn();
 
-vi.mock("recharts", () => {
-  const Mock = ({ children, ...props }: any) => <div data-testid={props["data-testid"] ?? "recharts-mock"}>{children}</div>;
-  return {
-    ResponsiveContainer: Mock,
-    BarChart: Mock,
-    Bar: Mock,
-    LineChart: Mock,
-    Line: Mock,
-    AreaChart: Mock,
-    Area: Mock,
-    PieChart: Mock,
-    Pie: Mock,
-    Tooltip: Mock,
-    XAxis: Mock,
-    YAxis: Mock,
-    CartesianGrid: Mock,
-    Legend: Mock,
-    Cell: Mock,
-  };
-});
-
 vi.mock("../../services/adminBiService", () => ({
   adminBiService: {
     getBiOverview: (params: unknown) => getBiOverviewMock(params),
@@ -109,7 +88,7 @@ describe("AdminBiPage", () => {
     expect(screen.getByText("Vagas por status")).toBeInTheDocument();
   });
 
-  it("renderiza gráficos com dados mockados", async () => {
+  it("renderiza gráficos leves com dados mockados", async () => {
     render(
       <MemoryRouter>
         <AdminBiPage />
@@ -117,7 +96,8 @@ describe("AdminBiPage", () => {
     );
 
     await screen.findByText("Vagas por status");
-    expect(screen.getAllByTestId("recharts-mock").length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", { name: "Distribuição de vagas por status" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Volume de análises por status" })).toBeInTheDocument();
   });
 
   it("mostra empty state quando não há dados de IA", async () => {

@@ -1,0 +1,288 @@
+
+═══════════════════════════════════════════════════════════════════════════════
+                      FASE 20 — PRODUCT AUDIT SUMMARY
+                          Resume AI System (ATS)
+═══════════════════════════════════════════════════════════════════════════════
+
+MATURIDADE GERAL
+════════════════════════════════════════════════════════════════════════════════
+
+    MVP 50%        ████████░░ [✅ 100%]
+    │              Criar vaga, candidatura, entrevista, decisão
+    │
+    ├─→ Beta 70-80%  ███████░░░ [✅ 100%]
+    │   Colaboração, avaliação, pré-admissão, comunicação
+    │
+    └─→ Produção 90%+ ████░░░░░░ [⚠️ 40%] 🔴 BLOQUEADO
+        ERP, documentação, testes E2E
+
+
+FLUXOS DO SISTEMA (5 Jornadas)
+════════════════════════════════════════════════════════════════════════════════
+
+1️⃣  RECRUTADOR (9 etapas)
+    ┌────────────────────────────────────────────────────────┐
+    │ Criar     → Publicar   → Acompanhar → Pipeline        │
+    │   ✅         ✅          ✅            ✅              │
+    │                                                        │
+    │ Behavioral → Entrevista → Scorecard → Decisão → Comm │
+    │   ✅         ✅           ✅          ✅        ⚠️    │
+    │                                                        │
+    │ STATUS: 8✅ + 1⚠️  Risco: Baixo                       │
+    └────────────────────────────────────────────────────────┘
+
+2️⃣  CANDIDATO (7 etapas)
+    ┌────────────────────────────────────────────────────────┐
+    │ Candidatura → Portal → Behavioral → Entrevista        │
+    │   ✅          ✅      ✅           ✅                  │
+    │                                                        │
+    │ Mensagens → Documentos → Pré-admissão                │
+    │   ⚠️        ⚠️           ✅                            │
+    │                                                        │
+    │ STATUS: 5✅ + 2⚠️  Risco: Médio                       │
+    └────────────────────────────────────────────────────────┘
+
+3️⃣  GESTOR (5 etapas)
+    ┌────────────────────────────────────────────────────────┐
+    │ Dashboard → Candidatos → Colaboração → Feedback → SC  │
+    │   ✅        ✅          ✅             ✅        ✅    │
+    │                                                        │
+    │ STATUS: 5✅  Risco: Nenhum ✨                         │
+    └────────────────────────────────────────────────────────┘
+
+4️⃣  RH (6 etapas)
+    ┌────────────────────────────────────────────────────────┐
+    │ Decisão → Pré-admissão → Checklist → Documentos      │
+    │   ✅       ✅             ✅          ⚠️              │
+    │                                                        │
+    │ Pacote → ERP                                           │
+    │  ✅     🔴 (mock apenas)                              │
+    │                                                        │
+    │ STATUS: 4✅ + 2⚠️  Risco: 🔴 ALTO (ERP)            │
+    └────────────────────────────────────────────────────────┘
+
+5️⃣  TÉCNICO/ADMIN (7 etapas)
+    ┌────────────────────────────────────────────────────────┐
+    │ Health → Diagnostics → Auditoria → RBAC → Logs       │
+    │   ✅      ✅           ✅          ✅     ✅           │
+    │                                                        │
+    │ Migrations → E2E Tests                                │
+    │   ✅        ⚠️ (40% coverage)                          │
+    │                                                        │
+    │ STATUS: 6✅ + 1⚠️  Risco: Médio                       │
+    └────────────────────────────────────────────────────────┘
+
+
+BLOQUEIOS CRÍTICOS (Go-Live)
+════════════════════════════════════════════════════════════════════════════════
+
+    🔴 BLOQUEIO 1: ERP/Protheus
+    ├─ Status atual: Mock apenas
+    ├─ Impacto: RH não consegue gerar admissão real
+    ├─ Ação: Validar com Protheus em homologação
+    └─ Esforço: 4-6 semanas
+
+    🔴 BLOQUEIO 2: Document Validation
+    ├─ Status atual: Upload/download sem checklist
+    ├─ Impacto: Sem validação obrigatória (risco legal)
+    ├─ Ação: Implementar checklist + validação
+    └─ Esforço: 2-3 semanas
+
+    🔴 BLOQUEIO 3: E2E Tests
+    ├─ Status atual: 40% cobertura
+    ├─ Impacto: Bugs não detectados em produção
+    ├─ Ação: Expandir para 80% cobertura
+    └─ Esforço: 3-4 semanas
+
+
+MÓDULOS CLASSIFICADOS
+════════════════════════════════════════════════════════════════════════════════
+
+🟢 MADURO (Pronto Produção)
+├─ Job Management
+├─ Pipeline (8 estágios, transações seguras)
+├─ Candidato (busca, perfil)
+├─ Scorecard (draft/submitted)
+├─ Colaboração (recruiter-manager)
+├─ RBAC (3 camadas validadas)
+├─ Auditoria (rastreia tudo)
+└─ Scoring/IA (Decimal validado)
+
+🟡 BOM (85-95% pronto)
+├─ Avaliação Comportamental (templates, AI eval)
+├─ Entrevista (agenda, reschedule, cancel)
+├─ Pré-admissão (checklist, documentos)
+├─ Pacote Admissional (gerar, enviar)
+├─ Dashboard Manager
+└─ Admin UI
+
+🟠 PARCIAL (70-85% pronto)
+├─ Comunicação (templates estáticos, sem variáveis)
+├─ Portal Candidato (UI básica, sem notificações)
+├─ ERP Integration (ErpIntegrationAttemptModel exists)
+└─ E2E Tests (40% cobertura)
+
+🔴 FRÁGIL (< 70% pronto)
+├─ Document Validation (sem checklist obrigatório)
+└─ ERP Homologação (mock apenas)
+
+
+ROADMAP 4-6 SEMANAS → PRODUÇÃO
+════════════════════════════════════════════════════════════════════════════════
+
+    SEMANA 1-2:
+    ┌──────────────────────────────────────────────────────┐
+    │ P1 BLOCKERS (Paralelo A + B)                         │
+    │                                                      │
+    │ Team A (ERP)              Team B (Tests)             │
+    │ ├─ ERP DEV tests          ├─ E2E framework setup     │
+    │ ├─ Protheus integration   ├─ Expand to 60%          │
+    │ └─ Homolog planning       └─ CI pipeline             │
+    └──────────────────────────────────────────────────────┘
+
+    SEMANA 2-4:
+    ┌──────────────────────────────────────────────────────┐
+    │ P1 CONTINUAÇÃO                                       │
+    │                                                      │
+    │ Team A (ERP+Docs)         Team B (Tests)             │
+    │ ├─ ERP homologation       ├─ Expand to 80%          │
+    │ ├─ Document validation    ├─ Edge cases             │
+    │ └─ Checklist CRUD         └─ Performance tests       │
+    └──────────────────────────────────────────────────────┘
+
+    SEMANA 3-5:
+    ┌──────────────────────────────────────────────────────┐
+    │ P2 MELHORIAS (Se P1 no progresso)                   │
+    │                                                      │
+    │ Notificações Sistema                                 │
+    │ ├─ Manager notified (solicita revisão)              │
+    │ ├─ Recruiter notified (feedback recebido)           │
+    │ └─ Visual indicator (não lido)                       │
+    │                                                      │
+    │ Portal UX                                            │
+    │ ├─ Notifications                                    │
+    │ ├─ Chat direto                                      │
+    │ └─ Status tracking                                  │
+    └──────────────────────────────────────────────────────┘
+
+    SEMANA 5-6:
+    ┌──────────────────────────────────────────────────────┐
+    │ FINAL VALIDATION                                     │
+    │                                                      │
+    │ ├─ Load tests produção (<2s, 95%)                   │
+    │ ├─ Security audit                                   │
+    │ ├─ Runbook operacional                              │
+    │ └─ Go-live validation                               │
+    └──────────────────────────────────────────────────────┘
+
+
+RECOMENDAÇÕES
+════════════════════════════════════════════════════════════════════════════════
+
+    ✅ FAZER AGORA (P1)
+    └─ ERP integração + validação
+    └─ Document validation checklist
+    └─ E2E tests 80% cobertura
+    └─ Notificações sistema (paralelo)
+    └─ Runbook operacional
+
+    🟡 FAZER DEPOIS (P2-P3)
+    └─ Communication templates dinâmicos
+    └─ Meeting links auto-geração
+    └─ Manager dashboard métricas
+    └─ Behavioral assessment customizado
+    └─ Pre-admission templates reutilizáveis
+
+    ❌ NÃO FAZER (out of scope ATS)
+    └─ Mobile app nativa
+    └─ WhatsApp/SMS
+    └─ Advanced BI
+    └─ Video interviews
+    └─ Candidate marketplace
+
+
+INVESTIMENTO NECESSÁRIO
+════════════════════════════════════════════════════════════════════════════════
+
+    P1 (BLOCKERS)      9-13 weeks   Esforço Alto    ROI: 10x
+    ├─ ERP Integration      4-6 weeks
+    ├─ Document Validation  2-3 weeks
+    └─ E2E Tests            3-4 weeks
+
+    P2 (UX IMPROVEMENTS) 6-8 weeks   Esforço Médio   ROI: 5x
+    ├─ Notificações sistema    2-3 weeks
+    ├─ Portal UX               2-3 weeks
+    └─ Communication templates 2 weeks
+
+    P3 (POLISH)        4-6 weeks   Esforço Baixo    ROI: 2x
+    ├─ Manager dashboard       2 weeks
+    ├─ Behavioral templates    2 weeks
+    └─ Auto-generated links    1-2 weeks
+
+    ────────────────────────────────────────────────────────
+    TOTAL TO PRODUCTION:  4-6 weeks (P1 only)
+    TOTAL TO v1.5:        8-10 weeks (P1+P2)
+    TOTAL TO v2.0:        12-14 weeks (P1+P2+P3)
+
+
+READINESS CHECKLIST
+════════════════════════════════════════════════════════════════════════════════
+
+    MUST-HAVE (Bloqueia go-live):
+    ☐ ERP Protheus validado em homologação
+    ☐ Document validation checklist operacional
+    ☐ E2E tests 80% cobertura
+
+    SHOULD-HAVE (Recomendado):
+    ☐ System notifications working
+    ☐ Portal UX testado com usuários
+    ☐ Load tests <2s (95% confidence)
+    ☐ Runbook operacional
+    ☐ Backup/DR testado
+
+    NICE-TO-HAVE (Semana 2):
+    ☐ Manager dashboard métricas
+    ☐ Communication variables
+    ☐ Auto-generated meeting links
+
+
+SCORE FINAL
+════════════════════════════════════════════════════════════════════════════════
+
+    Features        80/100   ████████░░   🟡 Good (P1 pending)
+    Code Quality    88/100   ████████░░   ✅ Good
+    Security       100/100   ██████████   ✅ Perfect
+    Performance     95/100   █████████░   ✅ Perfect
+    UX              70/100   ███████░░░   🟡 Fair (Portal needs work)
+    Tests           65/100   ██████░░░░   🟡 Fair (E2E weak)
+    Ops Ready       60/100   ██████░░░░   🟡 Fair (Backup/DR pending)
+    ────────────────────────────────────────────────────────
+    OVERALL         79/100   ████████░░   🟡 BETA ADVANCED
+
+    ✅ Ready for: Beta (closed), Staging (full)
+    ❌ Not ready for: Production (open)
+
+
+STATUS TIMELINE
+════════════════════════════════════════════════════════════════════════════════
+
+    TODAY (2026-05-14)     Current State: Beta Advanced
+    │                      Maturity: 80%
+    │
+    ├─ 2 weeks    Phase 1: ERP + Docs + E2E research
+    │             Maturity: 82%
+    │
+    ├─ 4 weeks    Phase 2: ERP DEV + Document validation
+    │             Maturity: 85%
+    │
+    ├─ 6 weeks    🚀 PRODUCTION READY (if P1 on track)
+    │             Maturity: 95%
+    │
+    └─ 10 weeks   v1.5 with P2 features (notifications, UX)
+                  Maturity: 98%
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                         Próximo: Fase 20.1 Planning
+                         (ERP Homologação + Documents)
+═══════════════════════════════════════════════════════════════════════════════

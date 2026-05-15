@@ -4,12 +4,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.collaboration_service import CollaborationService
+from src.application.services.collaboration_service import (
+    CollaborationService,
+    CollaborationValidationError,
+)
 from src.interface.api.dependencies import RecruiterOrAdmin, ManagerOrAdmin, get_db
 from src.interface.api.schemas.collaboration_schemas import (
     CollaborationListResponse,
     CreateCommentRequest,
     ManagerFeedbackRequest,
+    RequestManagerReviewRequest,
     CollaborationComment,
 )
 
@@ -66,23 +70,32 @@ async def create_collaboration_comment(
 
 
 @router.post(
-    "/jobs/{job_id}/candidates/{candidate_id}/collaboration/request-review",
+    "/jobs/{job_id}/candidates/{candidate_id}/collaboration/request-manager-review",
     response_model=CollaborationComment,
 )
 async def request_manager_review(
     job_id: UUID,
     candidate_id: UUID,
-    payload: CreateCommentRequest,
+    payload: RequestManagerReviewRequest,
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> CollaborationComment:
-    """Recruiter requests manager review of candidate."""
-    comment = await _service(db, current_user).create_comment(
-        candidate_id=candidate_id,
-        job_id=job_id,
-        comment_type="review_request",
-        message=payload.message,
-    )
+    """Recruiter/admin requests manager review of candidate."""
+    try:
+        comment = await _service(db, current_user).create_comment(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            comment_type="review_request",
+            message=payload.message,
+            target_manager_id=payload.target_manager_id,
+            priority=payload.priority,
+        )
+    except CollaborationValidationError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
     if not comment:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

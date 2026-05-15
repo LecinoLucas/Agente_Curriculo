@@ -1,4 +1,4 @@
-import { UserSummary } from "../types/domain";
+import { ManagerListResponse, UserSummary } from "../types/domain";
 import { Paginated } from "../types/api";
 import { httpRequest } from "./http";
 import { tokenStorage } from "../utils/storage";
@@ -74,6 +74,9 @@ export const usersService = {
 
   stats: (): Promise<UserStats> =>
     httpRequest<UserStats>("/api/v1/users/stats"),
+
+  listManagers: (): Promise<ManagerListResponse> =>
+    httpRequest<ManagerListResponse>("/api/v1/users/managers"),
 
   uploadAvatar: (formData: FormData): Promise<UserSummary> => {
     const headers = new Headers();
