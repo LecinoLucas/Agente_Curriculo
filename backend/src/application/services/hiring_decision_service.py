@@ -169,9 +169,37 @@ class HiringDecisionService:
             raise ValidationException("Observações são obrigatórias para decisões de contratação ou rejeição.")
 
         if decision_outcome == "hire" and reason_code != "other":
-            scorecard = await self._repository.latest_submitted_scorecard(candidate_id=candidate_id, job_id=job_id)
-            if scorecard is None:
-                raise ValidationException("Contratação exige scorecard enviado, salvo reason_code=other com observação.")
+            job = await self._repository.get_job(job_id)
+
+            if job is not None and job.requires_scorecard:
+                scorecard = await self._repository.latest_submitted_scorecard(candidate_id=candidate_id, job_id=job_id)
+                if scorecard is None:
+                    raise ValidationException("Contratação exige scorecard enviado conforme política da vaga.")
+
+            assignment = None
+            if job is not None and job.requires_behavioral_assessment and job.behavioral_template_id is not None:
+                assignment = await self._repository.latest_behavioral_assignment(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    template_id=job.behavioral_template_id,
+                )
+                if assignment is None or assignment.status != "submitted":
+                    raise ValidationException("Contratação exige avaliação comportamental submetida conforme política da vaga.")
+
+            if job is not None and job.requires_behavioral_ai_evaluation and job.behavioral_template_id is not None and assignment is not None:
+                ai_eval = await self._repository.ai_evaluation_for_assignment(assignment.id)
+                if ai_eval is None or ai_eval.status != "completed":
+                    raise ValidationException("Contratação exige avaliação de IA comportamental concluída conforme política da vaga.")
+
+            if job is not None and job.requires_interview:
+                interview = await self._repository.latest_completed_interview(candidate_id=candidate_id, job_id=job_id)
+                if interview is None:
+                    raise ValidationException("Contratação exige entrevista realizada conforme política da vaga.")
+
+            if job is not None and job.requires_manager_review:
+                has_feedback = await self._repository.has_manager_feedback(candidate_id=candidate_id, job_id=job_id)
+                if not has_feedback:
+                    raise ValidationException("Contratação exige revisão do gestor conforme política da vaga.")
 
     async def _summary_snapshot(self, *, candidate_id: UUID, job_id: UUID) -> dict:
         summary = await self._summary_service.get_summary(candidate_id=candidate_id, job_id=job_id)

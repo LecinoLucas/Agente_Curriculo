@@ -4,6 +4,7 @@ import {
   buildUpdateJobPayload,
   formatJobArea,
   EMPTY_FORM,
+  SELECTION_FLOW_DEFAULTS,
 } from "../jobFormConfig";
 import type { JobFormValues } from "../jobFormConfig";
 
@@ -123,6 +124,92 @@ describe("jobFormConfig", () => {
 
       const payload = buildUpdateJobPayload(form);
       expect(payload.behavioral_template_id).toBeNull();
+    });
+  });
+
+  describe("SELECTION_FLOW_DEFAULTS", () => {
+    it("simple flow has all gates false", () => {
+      const d = SELECTION_FLOW_DEFAULTS.simple;
+      expect(d.requires_behavioral_assessment).toBe(false);
+      expect(d.requires_behavioral_ai_evaluation).toBe(false);
+      expect(d.requires_interview).toBe(false);
+      expect(d.requires_scorecard).toBe(false);
+      expect(d.requires_manager_review).toBe(false);
+    });
+
+    it("standard flow has behavioral + ai + interview + scorecard true, manager false", () => {
+      const d = SELECTION_FLOW_DEFAULTS.standard;
+      expect(d.requires_behavioral_assessment).toBe(true);
+      expect(d.requires_behavioral_ai_evaluation).toBe(true);
+      expect(d.requires_interview).toBe(true);
+      expect(d.requires_scorecard).toBe(true);
+      expect(d.requires_manager_review).toBe(false);
+    });
+
+    it("technical flow has interview + scorecard + manager true, behavioral false", () => {
+      const d = SELECTION_FLOW_DEFAULTS.technical;
+      expect(d.requires_behavioral_assessment).toBe(false);
+      expect(d.requires_behavioral_ai_evaluation).toBe(false);
+      expect(d.requires_interview).toBe(true);
+      expect(d.requires_scorecard).toBe(true);
+      expect(d.requires_manager_review).toBe(true);
+    });
+
+    it("leadership flow has all main gates true", () => {
+      const d = SELECTION_FLOW_DEFAULTS.leadership;
+      expect(d.requires_behavioral_assessment).toBe(true);
+      expect(d.requires_behavioral_ai_evaluation).toBe(true);
+      expect(d.requires_interview).toBe(true);
+      expect(d.requires_scorecard).toBe(true);
+      expect(d.requires_manager_review).toBe(true);
+    });
+  });
+
+  describe("policy fields in payloads", () => {
+    it("buildCreateJobPayload includes all policy fields", () => {
+      const form: JobFormValues = {
+        ...EMPTY_FORM,
+        title: "Test",
+        description: "Test",
+        selection_flow_type: "technical",
+        requires_behavioral_assessment: false,
+        requires_behavioral_ai_evaluation: false,
+        requires_interview: true,
+        requires_scorecard: true,
+        requires_manager_review: true,
+      };
+
+      const payload = buildCreateJobPayload(form);
+      expect(payload.selection_flow_type).toBe("technical");
+      expect(payload.requires_behavioral_assessment).toBe(false);
+      expect(payload.requires_interview).toBe(true);
+      expect(payload.requires_manager_review).toBe(true);
+    });
+
+    it("buildUpdateJobPayload includes all policy fields", () => {
+      const form: JobFormValues = {
+        ...EMPTY_FORM,
+        title: "Test",
+        description: "Test",
+        selection_flow_type: "leadership",
+        requires_behavioral_assessment: true,
+        requires_behavioral_ai_evaluation: true,
+        requires_interview: true,
+        requires_scorecard: true,
+        requires_manager_review: true,
+      };
+
+      const payload = buildUpdateJobPayload(form);
+      expect(payload.selection_flow_type).toBe("leadership");
+      expect(payload.requires_manager_review).toBe(true);
+    });
+
+    it("EMPTY_FORM defaults to standard flow with correct gates", () => {
+      expect(EMPTY_FORM.selection_flow_type).toBe("standard");
+      expect(EMPTY_FORM.requires_behavioral_assessment).toBe(true);
+      expect(EMPTY_FORM.requires_interview).toBe(true);
+      expect(EMPTY_FORM.requires_scorecard).toBe(true);
+      expect(EMPTY_FORM.requires_manager_review).toBe(false);
     });
   });
 });

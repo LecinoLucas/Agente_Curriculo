@@ -125,6 +125,12 @@ class JobService:
             priority=body.priority,
             skill_requirements=validated_skill_requirements,
             created_by=created_by,
+            selection_flow_type=body.selection_flow_type or "standard",
+            requires_behavioral_assessment=body.requires_behavioral_assessment if body.requires_behavioral_assessment is not None else True,
+            requires_behavioral_ai_evaluation=body.requires_behavioral_ai_evaluation if body.requires_behavioral_ai_evaluation is not None else True,
+            requires_interview=body.requires_interview if body.requires_interview is not None else True,
+            requires_scorecard=body.requires_scorecard if body.requires_scorecard is not None else True,
+            requires_manager_review=body.requires_manager_review if body.requires_manager_review is not None else False,
         )
         saved_job = await self._repository.create(job)
         await self._maybe_generate_job_profile(saved_job)
@@ -195,6 +201,12 @@ class JobService:
             "behavioral_requirements",
             "priority",
             "skill_requirements",
+            "selection_flow_type",
+            "requires_behavioral_assessment",
+            "requires_behavioral_ai_evaluation",
+            "requires_interview",
+            "requires_scorecard",
+            "requires_manager_review",
         ):
             if field_name not in provided_fields:
                 continue

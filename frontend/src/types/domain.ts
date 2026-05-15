@@ -363,6 +363,12 @@ export type Job = {
   quality_score: number | null;
   quality_status: "weak" | "acceptable" | "good" | null;
   behavioral_template_id: string | null;
+  selection_flow_type: "simple" | "standard" | "technical" | "leadership";
+  requires_behavioral_assessment: boolean;
+  requires_behavioral_ai_evaluation: boolean;
+  requires_interview: boolean;
+  requires_scorecard: boolean;
+  requires_manager_review: boolean;
   created_by: string;
   archived_at?: string | null;
   archived_by?: string | null;

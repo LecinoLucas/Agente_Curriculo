@@ -1,8 +1,11 @@
-import type { Job, JobFormValues } from "../../../types/domain";
-import { trimToNull } from "../jobFormConfig";
+import type { Job } from "../../../types/domain";
+import type { JobFormValues } from "../jobFormConfig";
+import { SELECTION_FLOW_DEFAULTS, trimToNull } from "../jobFormConfig";
 import { normalizeDealBreakers } from "./dealBreakerHelpers";
 
 export function toForm(job: Job): JobFormValues {
+  const flowType = (job.selection_flow_type as JobFormValues["selection_flow_type"]) ?? "standard";
+  const policyDefaults = SELECTION_FLOW_DEFAULTS[flowType];
   return {
     title: job.title,
     description: job.description,
@@ -23,6 +26,12 @@ export function toForm(job: Job): JobFormValues {
     location: job.location ?? "",
     salary_min: job.salary_min ?? undefined,
     salary_max: job.salary_max ?? undefined,
+    selection_flow_type: flowType,
+    requires_behavioral_assessment: job.requires_behavioral_assessment ?? policyDefaults.requires_behavioral_assessment,
+    requires_behavioral_ai_evaluation: job.requires_behavioral_ai_evaluation ?? policyDefaults.requires_behavioral_ai_evaluation,
+    requires_interview: job.requires_interview ?? policyDefaults.requires_interview,
+    requires_scorecard: job.requires_scorecard ?? policyDefaults.requires_scorecard,
+    requires_manager_review: job.requires_manager_review ?? policyDefaults.requires_manager_review,
   };
 }
 

@@ -3,11 +3,45 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from typing import Self
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.interface.api.schemas.common import APISchemaModel, ORMAPISchemaModel
 
 JOB_PRIORITY = Literal["low", "normal", "high", "urgent"]
+SELECTION_FLOW_TYPE = Literal["simple", "standard", "technical", "leadership"]
+
+SELECTION_FLOW_DEFAULTS: dict[str, dict[str, bool]] = {
+    "simple": {
+        "requires_behavioral_assessment": False,
+        "requires_behavioral_ai_evaluation": False,
+        "requires_interview": False,
+        "requires_scorecard": False,
+        "requires_manager_review": False,
+    },
+    "standard": {
+        "requires_behavioral_assessment": True,
+        "requires_behavioral_ai_evaluation": True,
+        "requires_interview": True,
+        "requires_scorecard": True,
+        "requires_manager_review": False,
+    },
+    "technical": {
+        "requires_behavioral_assessment": False,
+        "requires_behavioral_ai_evaluation": False,
+        "requires_interview": True,
+        "requires_scorecard": True,
+        "requires_manager_review": True,
+    },
+    "leadership": {
+        "requires_behavioral_assessment": True,
+        "requires_behavioral_ai_evaluation": True,
+        "requires_interview": True,
+        "requires_scorecard": True,
+        "requires_manager_review": True,
+    },
+}
 
 DEAL_BREAKER_FIELDS = Literal[
     "location",
@@ -103,6 +137,12 @@ class JobResponse(ORMAPISchemaModel):
     quality_status: Literal["weak", "acceptable", "good"] | None = None
     skill_requirements: dict[str, list[str]] | None = None
     behavioral_template_id: UUID | None = None
+    selection_flow_type: SELECTION_FLOW_TYPE
+    requires_behavioral_assessment: bool
+    requires_behavioral_ai_evaluation: bool
+    requires_interview: bool
+    requires_scorecard: bool
+    requires_manager_review: bool
     created_by: UUID
     archived_at: datetime | None = None
     archived_by: UUID | None = None
@@ -157,6 +197,22 @@ class CreateJobRequest(APISchemaModel):
     behavioral_requirements: list[str] = Field(default_factory=list)
     priority: JOB_PRIORITY = "normal"
     skill_requirements: dict[str, list[str]] | None = None
+    selection_flow_type: SELECTION_FLOW_TYPE | None = None
+    requires_behavioral_assessment: bool | None = None
+    requires_behavioral_ai_evaluation: bool | None = None
+    requires_interview: bool | None = None
+    requires_scorecard: bool | None = None
+    requires_manager_review: bool | None = None
+
+    @model_validator(mode="after")
+    def apply_flow_defaults(self) -> Self:
+        flow = self.selection_flow_type or "standard"
+        self.selection_flow_type = flow
+        defaults = SELECTION_FLOW_DEFAULTS[flow]
+        for field, default in defaults.items():
+            if getattr(self, field) is None:
+                setattr(self, field, default)
+        return self
 
     @field_validator("job_area", mode="before")
     @classmethod
@@ -202,6 +258,12 @@ class UpdateJobRequest(APISchemaModel):
     behavioral_requirements: list[str] | None = None
     priority: JOB_PRIORITY | None = None
     skill_requirements: dict[str, list[str]] | None = None
+    selection_flow_type: SELECTION_FLOW_TYPE | None = None
+    requires_behavioral_assessment: bool | None = None
+    requires_behavioral_ai_evaluation: bool | None = None
+    requires_interview: bool | None = None
+    requires_scorecard: bool | None = None
+    requires_manager_review: bool | None = None
 
     @field_validator("job_area", mode="before")
     @classmethod

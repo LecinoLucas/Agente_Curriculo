@@ -7,6 +7,7 @@ from src.application.services.candidate_score_status_deriver import derive_candi
 from src.infrastructure.database.models.behavioral_assignment_model import (
     BehavioralAssessmentAIEvaluationModel,
 )
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.repositories.sqlalchemy_decision_summary_repository import SQLAlchemyDecisionSummaryRepository
 from src.interface.api.schemas.decision_summary_schemas import (
@@ -61,15 +62,31 @@ class DecisionSummaryService:
             + (["score_stale"] if has_stale_score and "score_stale" not in score_status.warnings else []),
         )
 
+        requires_behavioral = job.requires_behavioral_assessment if job is not None else True
+        requires_interview = job.requires_interview if job is not None else True
+        requires_scorecard = job.requires_scorecard if job is not None else True
+        requires_manager_review = job.requires_manager_review if job is not None else False
+
         behavioral = await self._build_behavioral(
             job.behavioral_template_id if job is not None else None,
             candidate_id,
             job_id,
+            requires_behavioral_assessment=requires_behavioral,
         )
         scorecard_model = await self._repository.get_latest_scorecard(candidate_id=candidate_id, job_id=job_id)
         interview_model = await self._repository.get_latest_interview(candidate_id=candidate_id, job_id=job_id)
         scorecard = self._scorecard_response(scorecard_model)
-        readiness = self._readiness(active_job_decision, behavioral, scorecard)
+        has_manager = await self._repository.has_manager_feedback(candidate_id=candidate_id, job_id=job_id)
+        readiness = self._readiness(
+            active_job_decision,
+            behavioral,
+            scorecard,
+            interview=interview_model,
+            requires_interview=requires_interview,
+            requires_scorecard=requires_scorecard,
+            requires_manager_review=requires_manager_review,
+            has_manager_feedback=has_manager,
+        )
 
         return CandidateDecisionSummaryResponse(
             candidate_id=candidate_id,
@@ -96,8 +113,10 @@ class DecisionSummaryService:
         template_id: UUID | None,
         candidate_id: UUID,
         job_id: UUID,
+        *,
+        requires_behavioral_assessment: bool,
     ) -> DecisionSummaryBehavioralAssessmentResponse:
-        if template_id is None:
+        if not requires_behavioral_assessment or template_id is None:
             return DecisionSummaryBehavioralAssessmentResponse(template_required=False)
 
         assignment = await self._repository.get_latest_assignment(
@@ -170,6 +189,12 @@ class DecisionSummaryService:
         active_job_decision: DecisionSummaryActiveJobDecisionResponse,
         behavioral: DecisionSummaryBehavioralAssessmentResponse,
         scorecard: DecisionSummaryInterviewScorecardResponse,
+        *,
+        interview: InterviewScheduleModel | None,
+        requires_interview: bool,
+        requires_scorecard: bool,
+        requires_manager_review: bool,
+        has_manager_feedback: bool,
     ) -> DecisionReadinessResponse:
         missing_items: list[str] = []
         warnings = list(active_job_decision.warnings)
@@ -208,13 +233,31 @@ class DecisionSummaryService:
                 next_action="run_or_wait_behavioral_ai",
             )
 
-        if scorecard.status != "submitted":
+        if requires_interview and (interview is None or interview.status not in ("completed", "awaiting_feedback")):
+            missing_items.append("interview")
+            return DecisionReadinessResponse(
+                status="waiting_interview",
+                missing_items=missing_items,
+                warnings=warnings,
+                next_action="schedule_and_complete_interview",
+            )
+
+        if requires_scorecard and scorecard.status != "submitted":
             missing_items.append("interview_scorecard")
             return DecisionReadinessResponse(
                 status="waiting_interview_scorecard",
                 missing_items=missing_items,
                 warnings=warnings,
                 next_action="complete_interview_scorecard",
+            )
+
+        if requires_manager_review and not has_manager_feedback:
+            missing_items.append("manager_review")
+            return DecisionReadinessResponse(
+                status="waiting_manager_review",
+                missing_items=missing_items,
+                warnings=warnings,
+                next_action="request_manager_review",
             )
 
         return DecisionReadinessResponse(

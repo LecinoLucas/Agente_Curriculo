@@ -21,6 +21,12 @@ export type CreateJobRequestPayload = {
   behavioral_requirements?: string[];
   behavioral_template_id?: string;
   priority?: "low" | "normal" | "high" | "urgent";
+  selection_flow_type?: "simple" | "standard" | "technical" | "leadership";
+  requires_behavioral_assessment?: boolean;
+  requires_behavioral_ai_evaluation?: boolean;
+  requires_interview?: boolean;
+  requires_scorecard?: boolean;
+  requires_manager_review?: boolean;
 };
 
 export type UpdateJobRequestPayload = {
@@ -42,6 +48,12 @@ export type UpdateJobRequestPayload = {
   behavioral_requirements?: string[];
   behavioral_template_id?: string | null;
   priority?: "low" | "normal" | "high" | "urgent" | null;
+  selection_flow_type?: "simple" | "standard" | "technical" | "leadership" | null;
+  requires_behavioral_assessment?: boolean | null;
+  requires_behavioral_ai_evaluation?: boolean | null;
+  requires_interview?: boolean | null;
+  requires_scorecard?: boolean | null;
+  requires_manager_review?: boolean | null;
 };
 
 function normalizeAiStatus(value: unknown): JobCandidate["ai_status"] {

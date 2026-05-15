@@ -16,6 +16,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import (
     InterviewScorecardItemModel,
     InterviewScorecardModel,
@@ -101,6 +102,24 @@ async def _seed_candidate_job(db_session: AsyncSession) -> tuple[UUID, UUID]:
     )
     await db_session.commit()
     return job_id, candidate_id
+
+
+async def _add_completed_interview(db_session: AsyncSession, *, job_id: UUID, candidate_id: UUID) -> InterviewScheduleModel:
+    from datetime import timedelta
+    now = datetime.now(UTC)
+    interview = InterviewScheduleModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        title="Entrevista técnica",
+        interview_type="technical",
+        status="completed",
+        scheduled_start=now,
+        scheduled_end=now + timedelta(hours=1),
+    )
+    db_session.add(interview)
+    await db_session.commit()
+    return interview
 
 
 async def _add_submitted_scorecard(db_session: AsyncSession, *, job_id: UUID, candidate_id: UUID) -> InterviewScorecardModel:
@@ -306,6 +325,7 @@ async def test_pipeline_action_false_does_not_move_pipeline(client: AsyncClient,
 async def test_pipeline_action_true_moves_pipeline_with_event(client: AsyncClient, db_session: AsyncSession) -> None:
     headers = await _recruiter_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _add_completed_interview(db_session, job_id=job_id, candidate_id=candidate_id)
     await _add_submitted_scorecard(db_session, job_id=job_id, candidate_id=candidate_id)
 
     payload = await _create_decision(

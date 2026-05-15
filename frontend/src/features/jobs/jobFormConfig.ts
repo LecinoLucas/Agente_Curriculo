@@ -2,6 +2,8 @@ import type { CreateJobRequestPayload, UpdateJobRequestPayload } from "../../ser
 import type { DealBreaker, Job, JobQualityResult } from "../../types/domain";
 import { normalizeDealBreakers } from "./utils/dealBreakerHelpers";
 
+export type SelectionFlowType = "simple" | "standard" | "technical" | "leadership";
+
 export type JobFormValues = {
   title: string;
   description: string;
@@ -22,6 +24,12 @@ export type JobFormValues = {
   location?: string;
   salary_min?: number;
   salary_max?: number;
+  selection_flow_type: SelectionFlowType;
+  requires_behavioral_assessment: boolean;
+  requires_behavioral_ai_evaluation: boolean;
+  requires_interview: boolean;
+  requires_scorecard: boolean;
+  requires_manager_review: boolean;
 };
 
 export type PendingJobSkill = {
@@ -31,6 +39,43 @@ export type PendingJobSkill = {
   minimum_level: string | null;
   minimum_years: number | null;
   weight: number;
+};
+
+export const SELECTION_FLOW_DEFAULTS: Record<SelectionFlowType, {
+  requires_behavioral_assessment: boolean;
+  requires_behavioral_ai_evaluation: boolean;
+  requires_interview: boolean;
+  requires_scorecard: boolean;
+  requires_manager_review: boolean;
+}> = {
+  simple: {
+    requires_behavioral_assessment: false,
+    requires_behavioral_ai_evaluation: false,
+    requires_interview: false,
+    requires_scorecard: false,
+    requires_manager_review: false,
+  },
+  standard: {
+    requires_behavioral_assessment: true,
+    requires_behavioral_ai_evaluation: true,
+    requires_interview: true,
+    requires_scorecard: true,
+    requires_manager_review: false,
+  },
+  technical: {
+    requires_behavioral_assessment: false,
+    requires_behavioral_ai_evaluation: false,
+    requires_interview: true,
+    requires_scorecard: true,
+    requires_manager_review: true,
+  },
+  leadership: {
+    requires_behavioral_assessment: true,
+    requires_behavioral_ai_evaluation: true,
+    requires_interview: true,
+    requires_scorecard: true,
+    requires_manager_review: true,
+  },
 };
 
 export const EMPTY_FORM: JobFormValues = {
@@ -51,6 +96,8 @@ export const EMPTY_FORM: JobFormValues = {
   deal_breakers: [],
   work_model: "",
   location: "",
+  selection_flow_type: "standard",
+  ...SELECTION_FLOW_DEFAULTS.standard,
 };
 
 export function formatJobArea(value: string | null | undefined): string {
@@ -162,6 +209,13 @@ export function buildCreateJobPayload(form: JobFormValues): CreateJobRequestPayl
   if (behavioralRequirements.length > 0) payload.behavioral_requirements = behavioralRequirements;
   if (form.behavioral_template_id) payload.behavioral_template_id = form.behavioral_template_id;
 
+  payload.selection_flow_type = form.selection_flow_type;
+  payload.requires_behavioral_assessment = form.requires_behavioral_assessment;
+  payload.requires_behavioral_ai_evaluation = form.requires_behavioral_ai_evaluation;
+  payload.requires_interview = form.requires_interview;
+  payload.requires_scorecard = form.requires_scorecard;
+  payload.requires_manager_review = form.requires_manager_review;
+
   return payload;
 }
 
@@ -185,5 +239,11 @@ export function buildUpdateJobPayload(form: JobFormValues): UpdateJobRequestPayl
     salary_min: form.salary_min !== undefined ? String(form.salary_min) : null,
     salary_max: form.salary_max !== undefined ? String(form.salary_max) : null,
     behavioral_template_id: form.behavioral_template_id || null,
+    selection_flow_type: form.selection_flow_type,
+    requires_behavioral_assessment: form.requires_behavioral_assessment,
+    requires_behavioral_ai_evaluation: form.requires_behavioral_ai_evaluation,
+    requires_interview: form.requires_interview,
+    requires_scorecard: form.requires_scorecard,
+    requires_manager_review: form.requires_manager_review,
   };
 }

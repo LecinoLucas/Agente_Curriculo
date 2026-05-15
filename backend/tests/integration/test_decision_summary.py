@@ -25,6 +25,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
     CandidateJobPipelineModel,
 )
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import (
     InterviewScorecardItemModel,
     InterviewScorecardModel,
@@ -226,6 +227,24 @@ async def _add_behavioral_assignment(
     return assignment
 
 
+async def _add_completed_interview(db_session: AsyncSession, *, job_id: UUID, candidate_id: UUID) -> InterviewScheduleModel:
+    from datetime import timedelta
+    now = datetime.now(UTC)
+    interview = InterviewScheduleModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        title="Entrevista técnica",
+        interview_type="technical",
+        status="completed",
+        scheduled_start=now,
+        scheduled_end=now + timedelta(hours=1),
+    )
+    db_session.add(interview)
+    await db_session.commit()
+    return interview
+
+
 async def _add_submitted_scorecard(db_session: AsyncSession, *, job_id: UUID, candidate_id: UUID) -> InterviewScorecardModel:
     scorecard = InterviewScorecardModel(
         id=uuid4(),
@@ -326,6 +345,7 @@ async def test_pending_scorecard_returns_waiting_interview_scorecard(client: Asy
         template_id=template.id,
         questions=questions,
     )
+    await _add_completed_interview(db_session, job_id=job_id, candidate_id=candidate_id)
 
     payload = await _get_summary(client, headers, job_id, candidate_id)
 
@@ -344,6 +364,7 @@ async def test_completed_inputs_returns_ready_for_human_decision(client: AsyncCl
         template_id=template.id,
         questions=questions,
     )
+    await _add_completed_interview(db_session, job_id=job_id, candidate_id=candidate_id)
     await _add_submitted_scorecard(db_session, job_id=job_id, candidate_id=candidate_id)
 
     payload = await _get_summary(client, headers, job_id, candidate_id)

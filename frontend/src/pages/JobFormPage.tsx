@@ -14,6 +14,7 @@ import { JobFormMandatorySkillsStep } from "../features/jobs/sections/JobFormMan
 import { JobFormDifferentialsStep } from "../features/jobs/sections/JobFormDifferentialsStep";
 import { JobFormDealBreakersStep } from "../features/jobs/sections/JobFormDealBreakersStep";
 import { BehavioralTemplateSelector } from "../features/jobs/components/BehavioralTemplateSelector";
+import { JobAssessmentPolicyStep } from "../features/jobs/components/JobAssessmentPolicyStep";
 import { JobFormReviewStep } from "../features/jobs/sections/JobFormReviewStep";
 import {
   buildCreateJobPayload,
@@ -48,6 +49,7 @@ type StepId =
   | "differentials"
   | "deal-breakers"
   | "behavioral"
+  | "assessment-policy"
   | "review";
 
 const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
@@ -57,6 +59,7 @@ const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
   { id: "differentials", label: "Diferenciais", hint: "Bônus controlado para ferramentas e extras" },
   { id: "deal-breakers", label: "Critérios eliminatórios", hint: "Regras de bloqueio explícitas" },
   { id: "behavioral", label: "Avaliação comportamental", hint: "Selecione o template comportamental oficial" },
+  { id: "assessment-policy", label: "Fluxo de avaliação", hint: "Configure os gates obrigatórios da decisão final" },
   { id: "review", label: "Revisão e publicação", hint: "Checklist final e mensagens do backend" },
 ];
 
@@ -423,6 +426,14 @@ export function JobFormPage() {
           <BehavioralTemplateSelector
             value={form.behavioral_template_id}
             onChange={(id) => setForm((current) => ({ ...current, behavioral_template_id: id }))}
+          />
+        );
+
+      case "assessment-policy":
+        return (
+          <JobAssessmentPolicyStep
+            form={form}
+            onChange={(updates) => setForm((current) => ({ ...current, ...updates }))}
           />
         );
     }

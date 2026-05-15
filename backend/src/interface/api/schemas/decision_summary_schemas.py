@@ -10,7 +10,9 @@ DecisionReadinessStatus = Literal[
     "missing_job_match",
     "waiting_behavioral_assessment",
     "waiting_behavioral_ai",
+    "waiting_interview",
     "waiting_interview_scorecard",
+    "waiting_manager_review",
     "ready_for_human_decision",
     "needs_attention",
 ]

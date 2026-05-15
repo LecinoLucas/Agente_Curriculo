@@ -74,6 +74,12 @@ class JobModel(Base):
         server_default=sa.text("NOW()"),
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
+    selection_flow_type: Mapped[str] = mapped_column(sa.String(30), nullable=False, server_default="standard")
+    requires_behavioral_assessment: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, server_default=sa.text("true"))
+    requires_behavioral_ai_evaluation: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, server_default=sa.text("true"))
+    requires_interview: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, server_default=sa.text("true"))
+    requires_scorecard: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, server_default=sa.text("true"))
+    requires_manager_review: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, server_default=sa.text("false"))
 
 
 class JobRequiredSkillModel(Base):

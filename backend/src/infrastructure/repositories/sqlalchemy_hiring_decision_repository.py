@@ -10,7 +10,9 @@ from src.infrastructure.database.models.behavioral_assignment_model import (
     BehavioralAssessmentAssignmentModel,
 )
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.collaboration_comments_model import CollaborationCommentModel
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.job_model import JobModel
 
@@ -108,6 +110,28 @@ class SQLAlchemyHiringDecisionRepository:
             )
             .limit(1)
         )
+
+    async def latest_completed_interview(self, *, candidate_id: UUID, job_id: UUID) -> InterviewScheduleModel | None:
+        return await self._session.scalar(
+            sa.select(InterviewScheduleModel)
+            .where(
+                InterviewScheduleModel.candidate_id == candidate_id,
+                InterviewScheduleModel.job_id == job_id,
+                InterviewScheduleModel.status.in_(["completed", "awaiting_feedback"]),
+            )
+            .order_by(InterviewScheduleModel.scheduled_start.desc().nullslast(), InterviewScheduleModel.created_at.desc())
+            .limit(1)
+        )
+
+    async def has_manager_feedback(self, *, candidate_id: UUID, job_id: UUID) -> bool:
+        result = await self._session.scalar(
+            sa.select(sa.func.count()).select_from(CollaborationCommentModel).where(
+                CollaborationCommentModel.candidate_id == candidate_id,
+                CollaborationCommentModel.job_id == job_id,
+                CollaborationCommentModel.author_role == "manager",
+            )
+        )
+        return (result or 0) > 0
 
     async def add(self, decision: CandidateJobHiringDecisionModel) -> CandidateJobHiringDecisionModel:
         self._session.add(decision)
