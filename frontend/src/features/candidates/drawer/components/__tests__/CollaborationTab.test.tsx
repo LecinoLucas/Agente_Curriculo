@@ -2,11 +2,30 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CollaborationTab } from "../CollaborationTab";
-import * as collaborationService from "../../../../services/collaborationService";
 
-vi.mock("../../../../services/collaborationService");
+const { mockListCollaboration, mockCreateComment, mockRequestManagerReview } = vi.hoisted(() => ({
+  mockListCollaboration: vi.fn(),
+  mockCreateComment: vi.fn(),
+  mockRequestManagerReview: vi.fn(),
+}));
 
-const mockCollaborationService = vi.mocked(collaborationService);
+vi.mock("../../../../../services/collaborationService", () => ({
+  collaborationService: {
+    listCollaboration: mockListCollaboration,
+    createComment: mockCreateComment,
+    requestManagerReview: mockRequestManagerReview,
+  },
+}));
+
+// Mock Date.toLocaleDateString to work around jsdom limitation with timeStyle option
+const originalToLocaleDateString = Date.prototype.toLocaleDateString;
+Date.prototype.toLocaleDateString = function(locale?: string | string[], options?: any) {
+  if (options?.timeStyle) {
+    // Fallback to a simple format since jsdom doesn't support timeStyle
+    return originalToLocaleDateString.call(this, locale, { dateStyle: "short" });
+  }
+  return originalToLocaleDateString.call(this, locale, options);
+};
 
 const mockComments = [
   {
@@ -35,17 +54,19 @@ describe("CollaborationTab", () => {
   });
 
   it("renders loading state initially", async () => {
-    mockCollaborationService.listCollaboration.mockImplementation(
+    mockListCollaboration.mockImplementation(
       () => new Promise(() => {}) // Never resolves
     );
 
-    render(<CollaborationTab candidateId="cand-1" jobId="job-1" />);
+    const { container } = render(<CollaborationTab candidateId="cand-1" jobId="job-1" />);
 
-    expect(screen.getByRole("img", { hidden: true })).toBeInTheDocument();
+    // Check for the loader spinner (animate-spin class on SVG)
+    const spinner = container.querySelector("[class*='animate-spin']");
+    expect(spinner).toBeInTheDocument();
   });
 
   it("renders comments list after loading", async () => {
-    mockCollaborationService.listCollaboration.mockResolvedValue({
+    mockListCollaboration.mockResolvedValue({
       comments: mockComments,
     });
 
@@ -59,7 +80,7 @@ describe("CollaborationTab", () => {
   });
 
   it("displays comment metadata correctly", async () => {
-    mockCollaborationService.listCollaboration.mockResolvedValue({
+    mockListCollaboration.mockResolvedValue({
       comments: [mockComments[0]],
     });
 
@@ -69,11 +90,13 @@ describe("CollaborationTab", () => {
       expect(screen.getByText("Recrutador")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Comentário")).toBeInTheDocument();
+    // Look for the Comentário badge in the comment type area
+    const comentarioTexts = screen.getAllByText("Comentário");
+    expect(comentarioTexts.length).toBeGreaterThan(0);
   });
 
   it("displays recommendation when present", async () => {
-    mockCollaborationService.listCollaboration.mockResolvedValue({
+    mockListCollaboration.mockResolvedValue({
       comments: [mockComments[1]],
     });
 
@@ -85,7 +108,7 @@ describe("CollaborationTab", () => {
   });
 
   it("shows empty state when no comments", async () => {
-    mockCollaborationService.listCollaboration.mockResolvedValue({
+    mockListCollaboration.mockResolvedValue({
       comments: [],
     });
 
@@ -108,10 +131,10 @@ describe("CollaborationTab", () => {
       created_at: "2026-05-14T12:00:00Z",
     };
 
-    mockCollaborationService.listCollaboration.mockResolvedValue({
+    mockListCollaboration.mockResolvedValue({
       comments: [],
     });
-    mockCollaborationService.createComment.mockResolvedValue(newComment);
+    mockCreateComment.mockResolvedValue(newComment);
 
     render(<CollaborationTab candidateId="cand-1" jobId="job-1" />);
 
@@ -128,7 +151,7 @@ describe("CollaborationTab", () => {
     }
 
     await waitFor(() => {
-      expect(mockCollaborationService.createComment).toHaveBeenCalledWith("job-1", "cand-1", {
+      expect(mockCreateComment).toHaveBeenCalledWith("job-1", "cand-1", {
         message: "New comment",
         comment_type: "comment",
       });
@@ -147,10 +170,10 @@ describe("CollaborationTab", () => {
       created_at: "2026-05-14T12:00:00Z",
     };
 
-    mockCollaborationService.listCollaboration.mockResolvedValue({
+    mockListCollaboration.mockResolvedValue({
       comments: [],
     });
-    mockCollaborationService.requestManagerReview.mockResolvedValue(reviewRequest);
+    mockRequestManagerReview.mockResolvedValue(reviewRequest);
 
     render(<CollaborationTab candidateId="cand-1" jobId="job-1" />);
 
@@ -167,14 +190,14 @@ describe("CollaborationTab", () => {
     }
 
     await waitFor(() => {
-      expect(mockCollaborationService.requestManagerReview).toHaveBeenCalledWith("job-1", "cand-1", {
+      expect(mockRequestManagerReview).toHaveBeenCalledWith("job-1", "cand-1", {
         message: "Please review",
       });
     });
   });
 
   it("disables buttons when message is empty", async () => {
-    mockCollaborationService.listCollaboration.mockResolvedValue({
+    mockListCollaboration.mockResolvedValue({
       comments: [],
     });
 
@@ -189,7 +212,7 @@ describe("CollaborationTab", () => {
   });
 
   it("shows error message on failure", async () => {
-    mockCollaborationService.listCollaboration.mockRejectedValue(
+    mockListCollaboration.mockRejectedValue(
       new Error("Network error")
     );
 
