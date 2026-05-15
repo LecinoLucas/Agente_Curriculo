@@ -34,6 +34,7 @@ interface CandidateAnalysisStatusCardProps {
   highlights?: string[];
   onPrimaryAction?: () => void;
   compact?: boolean;
+  extractionStatus?: string | null | undefined;
 }
 
 export function CandidateAnalysisStatusCard({
@@ -48,6 +49,7 @@ export function CandidateAnalysisStatusCard({
   highlights = [],
   onPrimaryAction,
   compact = false,
+  extractionStatus = null,
 }: CandidateAnalysisStatusCardProps) {
   const uiState = getCandidateAnalysisUiState({
     hasResume,
@@ -57,6 +59,7 @@ export function CandidateAnalysisStatusCard({
     aiStatus,
     errorMessage,
     pollingAnalysisId,
+    extractionStatus,
   });
   const Icon = getStatusIcon(uiState.state);
   const hasScore = jobFitScore !== null && jobFitScore !== undefined;

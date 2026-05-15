@@ -164,6 +164,7 @@ export function getCandidateAnalysisUiState({
   aiStatus,
   errorMessage,
   pollingAnalysisId = null,
+  extractionStatus,
 }: {
   hasResume: boolean;
   activeJobId: string | null;
@@ -172,7 +173,32 @@ export function getCandidateAnalysisUiState({
   aiStatus: string | null | undefined;
   errorMessage?: string | null;
   pollingAnalysisId?: string | null;
+  extractionStatus?: string | null | undefined;
 }): CandidateAnalysisUiState {
+  // Handle document extraction failures separately
+  if (extractionStatus === "failed") {
+    return {
+      state: "failed",
+      title: "Falha na extração do currículo",
+      description: "Não foi possível extrair o texto do currículo. Tente enviar novamente.",
+      primaryAction: "Tentar novamente",
+      severity: "danger",
+      inProgress: false,
+    };
+  }
+
+  // If document is still extracting, show extraction status
+  if (extractionStatus === "pending" || extractionStatus === "processing") {
+    return {
+      state: "processing",
+      title: "Extraindo currículo",
+      description: "Extraindo dados do currículo...",
+      primaryAction: "Acompanhar extração",
+      severity: "info",
+      inProgress: true,
+    };
+  }
+
   if (!hasResume) {
     return {
       state: "no_resume",

@@ -23,14 +23,6 @@ type NewCandidateFormErrors = {
   form?: string;
 };
 
-function formatCpfInput(raw: string): string {
-  const d = raw.replace(/\D/g, "").slice(0, 11);
-  if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  if (d.length > 6) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-  if (d.length > 3) return `${d.slice(0, 3)}.${d.slice(3)}`;
-  return d;
-}
-
 function canLinkToJob(job: Job | null): boolean {
   return isPipelineOperationalJob(job?.status);
 }
@@ -129,12 +121,12 @@ export function NewCandidateModal({
     trimmedName: string;
     trimmedEmail: string;
     trimmedPhone: string;
-    cpfDigits: string;
+    cpfValue: string | undefined;
   } | null {
     const trimmedName = fullName.trim();
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPhone = phone.trim();
-    const cpfDigits = cpf.replace(/\D/g, "");
+    const cpfValue = cpf.trim();
     const nextErrors: NewCandidateFormErrors = {};
 
     if (!trimmedName) {
@@ -145,9 +137,6 @@ export function NewCandidateModal({
     } else if (!EMAIL_RE.test(trimmedEmail)) {
       nextErrors.email = "Informe um e-mail válido";
     }
-    if (cpfDigits && cpfDigits.length !== 11) {
-      nextErrors.cpf = "CPF deve ter 11 dígitos";
-    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -155,14 +144,14 @@ export function NewCandidateModal({
     }
 
     setErrors({});
-    return { trimmedName, trimmedEmail, trimmedPhone, cpfDigits };
+    return { trimmedName, trimmedEmail, trimmedPhone, cpfValue: cpfValue || undefined };
   }
 
   async function handleSave(addToJob: boolean) {
     const validated = validateForm();
     if (!validated) return;
 
-    const { trimmedName, trimmedEmail, trimmedPhone, cpfDigits } = validated;
+    const { trimmedName, trimmedEmail, trimmedPhone, cpfValue } = validated;
 
     setLoading(true);
     setErrors({});
@@ -172,7 +161,7 @@ export function NewCandidateModal({
     try {
       const check = await candidatesService.checkDuplicate(
         trimmedEmail,
-        cpfDigits || undefined,
+        cpfValue,
       );
 
       if (check.exists && check.candidate_id) {
@@ -197,7 +186,7 @@ export function NewCandidateModal({
         full_name: trimmedName,
         email: trimmedEmail,
         phone: trimmedPhone || undefined,
-        cpf: cpfDigits || undefined,
+        cpf: cpfValue,
         location_city: city || undefined,
         internal_notes: notes || undefined,
       });
@@ -364,11 +353,10 @@ export function NewCandidateModal({
               type="text"
               value={cpf}
               onChange={(e) => {
-                setCpf(formatCpfInput(e.target.value));
+                setCpf(e.target.value);
                 clearDuplicate("cpf");
               }}
-              placeholder="000.000.000-00"
-              maxLength={14}
+              placeholder="Digite qualquer valor"
               className={[
                 "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
                 errors.cpf

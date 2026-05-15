@@ -247,16 +247,17 @@ async def test_apply_talent_pool_no_pipeline(
 
 
 @pytest.mark.asyncio
-async def test_apply_rejects_invalid_cpf(
+async def test_apply_accepts_arbitrary_cpf(
+    db_session: AsyncSession,
     client: AsyncClient,
     valid_pdf_bytes: bytes,
 ) -> None:
-    """POST /api/v1/public/candidates/apply rejeita CPF inválido."""
+    """POST /api/v1/public/candidates/apply aceita CPF livre no fluxo público."""
     response = await client.post(
         "/api/v1/public/candidates/apply",
         data={
             "full_name": "João Silva",
-            "cpf": "00000000000",
+            "cpf": "CPF livre 123/abc",
             "email": "joao@example.com",
             "phone": "11987654321",
             "city": "São Paulo",
@@ -270,8 +271,58 @@ async def test_apply_rejects_invalid_cpf(
         },
         files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
     )
-    assert response.status_code == status.HTTP_409_CONFLICT
-    assert "CPF" in response.json()["detail"]
+    assert response.status_code == status.HTTP_201_CREATED
+    stored_cpf = await db_session.scalar(
+        sa.text("SELECT cpf FROM candidates WHERE email = :email"),
+        {"email": "joao@example.com"},
+    )
+    assert stored_cpf == "CPF livre 123/abc"
+
+
+@pytest.mark.asyncio
+async def test_apply_enqueues_resume_extraction_only_after_commit(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    published_job: JobModel,
+    valid_pdf_bytes: bytes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enqueued_version_ids: list[str] = []
+    transaction_states: list[bool] = []
+
+    def _fake_enqueue(resume_version_id: UUID) -> None:
+        enqueued_version_ids.append(str(resume_version_id))
+        transaction_states.append(db_session.in_transaction())
+
+    monkeypatch.setattr(
+        "src.interface.api.routers.public.enqueue_resume_extraction",
+        _fake_enqueue,
+    )
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Fila Corrigida",
+            "cpf": "fila-livre",
+            "email": "fila.corrigida@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "5000-7000",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    payload = response.json()
+    assert enqueued_version_ids == [payload["resume_version_id"]]
+    assert transaction_states == [False]
 
 
 @pytest.mark.asyncio

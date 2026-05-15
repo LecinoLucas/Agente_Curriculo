@@ -27,7 +27,13 @@ class RefreshTokenUseCase:
         if not user_id:
             raise UnauthorizedException("Refresh token inválido ou expirado")
 
-        user = await self._user_repo.find_by_id(UUID(str(user_id)))
+        try:
+            user_uuid = UUID(str(user_id))
+        except (ValueError, TypeError, AttributeError):
+            await redis.delete(redis_key)
+            raise UnauthorizedException("Refresh token inválido")
+
+        user = await self._user_repo.find_by_id(user_uuid)
         if user is None or not user.is_active:
             await redis.delete(redis_key)
             raise UnauthorizedException("Usuário não encontrado ou inativo")

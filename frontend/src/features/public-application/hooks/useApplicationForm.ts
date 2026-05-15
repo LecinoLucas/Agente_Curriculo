@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react";
-import { cleanCpf, validateCpf } from "../utils/cpf";
-import { cleanPhone, validatePhone } from "../utils/phone";
+import { validatePhone } from "../utils/phone";
 import type { ApplicationErrors, FormData, Step } from "../types";
 
 const INITIAL_FORM: FormData = {
@@ -38,14 +37,10 @@ export function useApplicationForm() {
     if (currentStep === "personal-data") {
       if (!form.fullName.trim()) {
         newErrors.fullName = "Nome completo é obrigatório";
-      } else if (form.fullName.split(/\s+/).length < 2) {
-        newErrors.fullName = "Nome deve ter pelo menos 2 palavras";
       }
 
       if (!form.cpf) {
         newErrors.cpf = "CPF é obrigatório";
-      } else if (!validateCpf(form.cpf)) {
-        newErrors.cpf = "CPF inválido";
       }
 
       if (!form.email) {

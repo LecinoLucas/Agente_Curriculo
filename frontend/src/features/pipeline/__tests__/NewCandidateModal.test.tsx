@@ -150,4 +150,42 @@ describe("NewCandidateModal", () => {
       expect(screen.getByText("Erro de rede")).toBeInTheDocument();
     });
   });
+
+  it("deve permitir qualquer valor de CPF no cadastro manual", async () => {
+    (candidatesService.checkDuplicate as any).mockResolvedValue({ exists: false });
+    (candidatesService.create as any).mockResolvedValue({ id: "123" });
+
+    render(
+      <NewCandidateModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onCreated={mockOnCreated}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Nome do candidato"), {
+      target: { value: "Teste Silva" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("email@exemplo.com"), {
+      target: { value: "teste@exemplo.com" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Digite qualquer valor"), {
+      target: { value: "CPF-LIVRE-1234567890" },
+    });
+
+    fireEvent.click(screen.getByText("Salvar candidato"));
+
+    await waitFor(() => {
+      expect(candidatesService.checkDuplicate).toHaveBeenCalledWith(
+        "teste@exemplo.com",
+        "CPF-LIVRE-1234567890",
+      );
+      expect(candidatesService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cpf: "CPF-LIVRE-1234567890",
+        }),
+      );
+      expect(mockOnCreated).toHaveBeenCalledWith("123");
+    });
+  });
 });

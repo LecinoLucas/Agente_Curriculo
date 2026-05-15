@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { Loader2, Mail, Phone, RefreshCw, Users } from "lucide-react";
 
 import { ActionMenu } from "../components/common/ActionMenu";
 import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";

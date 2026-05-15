@@ -18,7 +18,6 @@ from src.application.services.candidate_portal_service import (
     CandidatePortalService,
 )
 from src.application.services.public_application_service import (
-    PublicApplicationCpfError,
     PublicApplicationEmailError,
     PublicApplicationExistingAccountError,
     PublicApplicationFileError,
@@ -38,6 +37,7 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePortalUpdateProfileRequest,
 )
 from src.interface.api.schemas.public_schemas import PublicApplyResponse, PublicJobResponse
+from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
 
 router = APIRouter(prefix="/public", tags=["public"])
 logger = structlog.get_logger(__name__)
@@ -95,9 +95,8 @@ async def apply(
     Sem autenticação requerida.
     """
     try:
-        # Validar nome
-        if not full_name or len(full_name.split()) < 2:
-            raise ValidationException("Nome deve ter pelo menos duas palavras")
+        if not full_name.strip():
+            raise ValidationException("Nome completo é obrigatório")
 
         # Validar estado (UF)
         state_upper = state.strip().upper()
@@ -153,14 +152,9 @@ async def apply(
         )
 
         await db.commit()
+        enqueue_resume_extraction(result.resume_version_id)
         return result
 
-    except PublicApplicationCpfError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        )
     except PublicApplicationEmailError as exc:
         await db.rollback()
         raise HTTPException(
@@ -346,4 +340,3 @@ async def upload_candidate_portal_resume(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Não foi possível enviar o currículo",
         )
-

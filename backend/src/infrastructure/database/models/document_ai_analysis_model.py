@@ -62,4 +62,10 @@ class DocumentAIAnalysisModel(Base):
         ),
         sa.Index("idx_document_ai_analyses_document_created", "document_id", "created_at"),
         sa.Index("idx_document_ai_analyses_status", "status"),
+        sa.Index(
+            "idx_document_ai_analyses_stale_detection",
+            "status",
+            "created_at",
+            postgresql_where=sa.text("status = 'processing'"),
+        ),
     )

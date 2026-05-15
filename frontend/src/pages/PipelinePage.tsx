@@ -306,10 +306,10 @@ export function PipelinePage() {
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-6 py-8 pb-12">
       {/* ── Page header ── */}
-      <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[hsl(var(--brand))] to-[hsl(var(--hero-end))] p-8 text-white shadow-2xl">
-        <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+      <div className="relative overflow-hidden rounded-[2rem] bg-[hsl(var(--nav-bg))] p-4 text-white shadow-2xl">
+        <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Pipeline do Recrutador</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Pipeline do Recrutador</h1>
             <p className="mt-2 text-lg font-medium text-white/80">
               Gerencie o fluxo de talentos com inteligência e agilidade.
             </p>
@@ -352,7 +352,7 @@ export function PipelinePage() {
               <div className="max-w-md space-y-3">
                 <label
                   htmlFor="pipeline-job-select"
-                  className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-[hsl(var(--text-muted))]"
+                  className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[hsl(var(--text-muted))]"
                 >
                   <div className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--primary))]" />
                   Vaga Selecionada
@@ -478,7 +478,7 @@ export function PipelinePage() {
             <div className="mb-6 flex flex-col gap-4 border-b border-[hsl(var(--border))]/50 pb-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="ui-text-muted text-[10px] font-black uppercase tracking-[0.2em]">
+                  <p className="ui-text-muted text-[10px] font-bold uppercase tracking-[0.2em]">
                     Controle de Fluxo
                   </p>
                   {board ? (
@@ -487,7 +487,7 @@ export function PipelinePage() {
                     </span>
                   ) : null}
                 </div>
-                <h2 className="mt-3 truncate text-2xl font-black text-[hsl(var(--text))]">
+                <h2 className="mt-3 truncate text-2xl font-bold text-[hsl(var(--text))]">
                   {selectedJob ? selectedJob.title : "Candidatos"}
                 </h2>
               </div>
@@ -568,7 +568,7 @@ export function PipelinePage() {
               <div className="flex flex-col items-center justify-center gap-4 py-12">
                 <div className="rounded-[2.5rem] border border-[hsl(var(--border))]/30 bg-[hsl(var(--surface-muted))]/30 p-12 max-w-lg text-center backdrop-blur-sm">
                   <div className="mb-6 flex justify-center text-6xl">🧭</div>
-                  <h3 className="text-xl font-black text-[hsl(var(--text))]">
+                  <h3 className="text-xl font-bold text-[hsl(var(--text))]">
                     Nenhum Candidato no Fluxo
                   </h3>
                   <p className="mt-3 text-base text-[hsl(var(--text-muted))] leading-relaxed">
@@ -578,7 +578,7 @@ export function PipelinePage() {
                     <button
                       onClick={handleOpenSourceCandidates}
                       disabled={!canUse}
-                      className={`hover-lift inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-sm font-black transition shadow-xl ${
+                      className={`hover-lift inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-sm font-bold transition shadow-xl ${
                         canUse
                           ? "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90"
                           : "bg-[hsl(var(--primary))]/50 text-white cursor-not-allowed"
@@ -707,10 +707,10 @@ function RankingPanel({
     >
       <div className="flex items-start justify-between gap-4 border-b border-[hsl(var(--border))]/50 pb-6">
         <div className="min-w-0">
-          <p className="ui-text-muted text-[10px] font-black uppercase tracking-[0.2em]">
+          <p className="ui-text-muted text-[10px] font-bold uppercase tracking-[0.2em]">
             Ranking IA Marajó
           </p>
-          <h3 className="mt-2 text-lg font-black text-[hsl(var(--text))] truncate">{jobTitle}</h3>
+          <h3 className="mt-2 text-lg font-bold text-[hsl(var(--text))] truncate">{jobTitle}</h3>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {onRefresh ? (
@@ -829,10 +829,10 @@ function RankingCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10 text-[11px] font-black text-[hsl(var(--primary))]">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10 text-[11px] font-bold text-[hsl(var(--primary))]">
               {entry.rank}
             </span>
-            <p className="truncate text-sm font-black text-[hsl(var(--text))]">{entry.candidate_name}</p>
+            <p className="truncate text-sm font-bold text-[hsl(var(--text))]">{entry.candidate_name}</p>
           </div>
           <div className="mt-2 flex items-center gap-2">
             <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--text-muted))]">
@@ -841,10 +841,10 @@ function RankingCard({
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[10px] font-black uppercase tracking-wider text-[hsl(var(--text-muted))]">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">
             Match
           </p>
-          <p className="mt-1 text-xl font-black tabular-nums text-[hsl(var(--primary))]">
+          <p className="mt-1 text-xl font-bold tabular-nums text-[hsl(var(--primary))]">
             {Math.round(entry.job_fit_score)}%
           </p>
         </div>
@@ -852,7 +852,7 @@ function RankingCard({
 
       {hasDealBreakerRejection && dealBreakerDisplay ? (
         <div className="mt-4 rounded-xl border-2 border-[hsl(var(--danger))]/20 bg-white/80 p-3 shadow-inner">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[hsl(var(--danger))]">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--danger))]">
             Critério Eliminatório
           </p>
           <p className="mt-2 text-xs font-bold text-[hsl(var(--text))]">
@@ -893,11 +893,11 @@ function RankingCard({
 function MetaCell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="rounded-2xl border-2 border-[hsl(var(--border))]/30 bg-white/50 px-4 py-3 shadow-sm transition-colors hover:border-[hsl(var(--border))]/60">
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-[hsl(var(--text-muted))]">
+      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[hsl(var(--text-muted))]">
         <div className="h-1 w-1 rounded-full bg-[hsl(var(--border-strong))]" />
         {label}
       </div>
-      <div className="mt-2 text-sm font-black text-[hsl(var(--text))]">{children}</div>
+      <div className="mt-2 text-sm font-bold text-[hsl(var(--text))]">{children}</div>
     </div>
   );
 }

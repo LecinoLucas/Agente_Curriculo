@@ -22,16 +22,6 @@ type EditCandidateErrors = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function formatCpfInput(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 11);
-  if (digits.length > 9) {
-    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
-  }
-  if (digits.length > 6) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-  if (digits.length > 3) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-  return digits;
-}
-
 export function EditCandidateModal({
   isOpen,
   onClose,
@@ -50,7 +40,7 @@ export function EditCandidateModal({
     setFullName(candidate.full_name ?? "");
     setEmail(candidate.email ?? "");
     setPhone(candidate.phone ?? "");
-    setCpf(formatCpfInput(candidate.cpf ?? ""));
+    setCpf(candidate.cpf ?? "");
     setErrors({});
     setSaving(false);
   }, [candidate, isOpen]);
@@ -59,7 +49,7 @@ export function EditCandidateModal({
     () => ({
       fullName: candidate?.full_name.trim() ?? "",
       email: candidate?.email?.trim().toLowerCase() ?? "",
-      cpfDigits: (candidate?.cpf ?? "").replace(/\D/g, ""),
+      cpf: candidate?.cpf?.trim() ?? "",
     }),
     [candidate],
   );
@@ -75,7 +65,7 @@ export function EditCandidateModal({
     const trimmedName = fullName.trim();
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPhone = phone.trim();
-    const cpfDigits = cpf.replace(/\D/g, "");
+    const cpfValue = cpf.trim();
     const nextErrors: EditCandidateErrors = {};
 
     if (!trimmedName) {
@@ -86,9 +76,6 @@ export function EditCandidateModal({
     } else if (!EMAIL_RE.test(trimmedEmail)) {
       nextErrors.email = "Informe um e-mail válido";
     }
-    if (cpfDigits && cpfDigits.length !== 11) {
-      nextErrors.cpf = "CPF deve ter 11 dígitos";
-    }
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -96,17 +83,17 @@ export function EditCandidateModal({
     }
 
     setErrors({});
-    return { trimmedName, trimmedEmail, trimmedPhone, cpfDigits };
+    return { trimmedName, trimmedEmail, trimmedPhone, cpfValue: cpfValue || undefined };
   }
 
-  async function validateDuplicate(trimmedEmail: string, cpfDigits: string): Promise<boolean> {
+  async function validateDuplicate(trimmedEmail: string, cpfValue: string | undefined): Promise<boolean> {
     const emailChanged = trimmedEmail !== originalValues.email;
-    const cpfChanged = cpfDigits !== originalValues.cpfDigits;
+    const cpfChanged = (cpfValue ?? "") !== originalValues.cpf;
     if (!emailChanged && !cpfChanged) return true;
 
     const check = await candidatesService.checkDuplicate(
       emailChanged ? trimmedEmail : undefined,
-      cpfChanged && cpfDigits ? cpfDigits : undefined,
+      cpfChanged ? cpfValue : undefined,
     );
 
     if (check.exists && check.candidate_id && check.candidate_id !== candidate.id) {
@@ -122,19 +109,19 @@ export function EditCandidateModal({
     const validated = validateForm();
     if (!validated) return;
 
-    const { trimmedName, trimmedEmail, trimmedPhone, cpfDigits } = validated;
+    const { trimmedName, trimmedEmail, trimmedPhone, cpfValue } = validated;
     setSaving(true);
     setErrors({});
 
     try {
-      const isValidDuplicateState = await validateDuplicate(trimmedEmail, cpfDigits);
+      const isValidDuplicateState = await validateDuplicate(trimmedEmail, cpfValue);
       if (!isValidDuplicateState) return;
 
       const updatedCandidate = await candidatesService.update(candidate.id, {
         full_name: trimmedName,
         email: trimmedEmail,
         phone: trimmedPhone || undefined,
-        cpf: cpfDigits || undefined,
+        cpf: cpfValue,
       });
 
       await onSuccess(updatedCandidate);
@@ -256,14 +243,12 @@ export function EditCandidateModal({
               <span className="text-sm font-medium text-[hsl(var(--text))]">CPF</span>
               <input
                 type="text"
-                inputMode="numeric"
                 value={cpf}
                 onChange={(event) => {
-                  setCpf(formatCpfInput(event.target.value));
+                  setCpf(event.target.value);
                   setErrors((current) => ({ ...current, cpf: undefined, form: undefined }));
                 }}
-                placeholder="000.000.000-00"
-                maxLength={14}
+                placeholder="Digite qualquer valor"
                 className={[
                   "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
                   errors.cpf

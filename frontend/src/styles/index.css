@@ -296,10 +296,10 @@
        - Ações principais em vermelho vibrante.
        ----------------------------------------------------------------------- */
 
-    --brand:               356 45% 50%;
-    --brand-dark:          356 45% 40%;
-    --brand-soft:          356 45% 95%;
-    --brand-glow:          356 45% 62%;
+    --brand:               346 54% 19%;
+    --brand-dark:          346 54% 15%;
+    --brand-soft:          346 54% 95%;
+    --brand-glow:          346 54% 62%;
 
     --bg:                  0 0% 98%;
     --surface:             0 0% 100%;
@@ -313,25 +313,25 @@
     --secondary:           0 0% 94%;
     --muted:               0 0% 94%;
 
-    --primary:             356 45% 50%;
+    --primary:             346 54% 19%;
     --primary-foreground:  0 0% 100%;
-    --ring:                356 45% 50%;
+    --ring:                346 54% 19%;
 
-    --accent:              356 45% 95%;
-    --accent-foreground:   356 45% 40%;
-    --accent-soft:         356 45% 95%;
+    --accent:              346 54% 95%;
+    --accent-foreground:   346 54% 40%;
+    --accent-soft:         346 54% 95%;
 
-    --nav-bg:              356 45% 40%;
+    --nav-bg:              346 54% 19%;
     --nav-text:            0 0% 100%;
-    --nav-muted:           356 45% 80%;
-    --nav-active-bg:       356 45% 30%;
-    --nav-border:          356 45% 30%;
+    --nav-muted:           346 54% 80%;
+    --nav-active-bg:       346 54% 12%;
+    --nav-border:          346 54% 15%;
 
-    --sidebar-accent:      356 45% 50%;
-    --hero-start:          356 45% 50%;
+    --sidebar-accent:      346 54% 19%;
+    --hero-start:          346 54% 19%;
     --hero-end:            0 0% 100%;
 
-    --page-glow-start:     356 45% 95%;
+    --page-glow-start:     346 54% 95%;
     --page-glow-end:       0 0% 100%;
     --page-gradient-start: 0 0% 98%;
     --page-gradient-end:   0 0% 95%;
@@ -349,16 +349,16 @@
        - Pistache/mint aparece só como apoio vivo, sem virar tema infantil.
        ----------------------------------------------------------------------- */
 
-    --brand:               8 82% 54%;
-    --brand-dark:          8 68% 38%;
-    --brand-soft:          12 78% 94%;
-    --brand-glow:          16 88% 62%;
+    --brand:               142 70% 45%;
+    --brand-dark:          142 70% 35%;
+    --brand-soft:          142 70% 95%;
+    --brand-glow:          142 70% 55%;
 
     --bg:                  50 44% 94%;
     --surface:             46 52% 98%;
     --surface-muted:       86 28% 90%;
     --border:              64 20% 74%;
-    --border-strong:       170 18% 48%;
+    --border-strong:       142 18% 48%;
 
     --background:          50 44% 94%;
     --card:                46 52% 98%;
@@ -366,26 +366,26 @@
     --secondary:           86 28% 90%;
     --muted:               86 28% 90%;
 
-    --primary:             8 82% 54%;
+    --primary:             142 70% 45%;
     --primary-foreground:  0 0% 100%;
-    --ring:                8 82% 54%;
+    --ring:                142 70% 45%;
 
-    --accent:              166 44% 90%;
-    --accent-foreground:   174 50% 22%;
-    --accent-soft:         166 44% 90%;
+    --accent:              142 44% 90%;
+    --accent-foreground:   142 50% 22%;
+    --accent-soft:         142 44% 90%;
 
-    --nav-bg:              176 38% 18%;
-    --nav-text:            48 60% 94%;
-    --nav-muted:           160 30% 76%;
-    --nav-active-bg:       168 46% 30%;
-    --nav-border:          176 34% 13%;
+    --nav-bg:              142 70% 15%;
+    --nav-text:            142 20% 90%;
+    --nav-muted:           142 30% 70%;
+    --nav-active-bg:       142 70% 25%;
+    --nav-border:          142 34% 13%;
 
-    --sidebar-accent:      8 82% 54%;
-    --hero-start:          176 54% 30%;
-    --hero-end:            8 82% 54%;
+    --sidebar-accent:      142 70% 45%;
+    --hero-start:          142 70% 20%;
+    --hero-end:            142 70% 45%;
 
-    --page-glow-start:     166 56% 88%;
-    --page-glow-end:       16 88% 92%;
+    --page-glow-start:     142 56% 88%;
+    --page-glow-end:       142 88% 92%;
     --page-gradient-start: 50 48% 95%;
     --page-gradient-end:   82 28% 88%;
   }
@@ -442,53 +442,53 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 Dark — Marajó Red & Dark
+       Visual Theme 1 Dark — Sophisticated Graphite & Wine
        -----------------------------------------------------------------------
        Direção:
-       - Fundo vinho escuro/marrom avermelhado profundo.
-       - Navbar sólida em vermelho escuro.
-       - Detalhes em branco e vermelho brilhante.
+       - Fundo cinza grafite profundo com leve toque azulado.
+       - Marca em vinho rico para detalhes e botões.
+       - Detalhes em ouro champanhe para contraste premium.
        ----------------------------------------------------------------------- */
 
-    --brand:               356 45% 60%;
-    --brand-dark:          356 45% 45%;
-    --brand-soft:          356 40% 20%;
-    --brand-glow:          356 45% 68%;
+    --brand:               346 54% 40%;
+    --brand-dark:          346 54% 30%;
+    --brand-soft:          220 15% 15%;
+    --brand-glow:          346 54% 50%;
 
-    --bg:                  356 40% 6%;
-    --surface:             356 30% 11%;
-    --surface-muted:       356 20% 16%;
-    --border:              356 15% 24%;
-    --border-strong:       356 40% 42%;
+    --bg:                  220 15% 8%;
+    --surface:             220 15% 12%;
+    --surface-muted:       220 15% 16%;
+    --border:              220 10% 20%;
+    --border-strong:       220 10% 30%;
 
-    --background:          356 40% 6%;
-    --card:                356 30% 11%;
-    --popover:             356 30% 11%;
-    --secondary:           356 20% 16%;
-    --muted:               356 20% 16%;
+    --background:          220 15% 8%;
+    --card:                220 15% 12%;
+    --popover:             220 15% 12%;
+    --secondary:           220 15% 16%;
+    --muted:               220 15% 16%;
 
-    --primary:             356 45% 60%;
+    --primary:             346 54% 40%;
     --primary-foreground:  0 0% 100%;
-    --ring:                356 45% 60%;
+    --ring:                346 54% 40%;
 
-    --accent:              356 40% 20%;
-    --accent-foreground:   0 0% 100%;
-    --accent-soft:         356 40% 20%;
+    --accent:              45 30% 60%;
+    --accent-foreground:   220 15% 8%;
+    --accent-soft:         45 30% 20%;
 
-    --nav-bg:              356 40% 4%;
-    --nav-text:            0 0% 100%;
-    --nav-muted:           356 20% 70%;
-    --nav-active-bg:       356 40% 15%;
-    --nav-border:          356 30% 20%;
+    --nav-bg:              220 15% 6%;
+    --nav-text:            0 0% 90%;
+    --nav-muted:           220 10% 60%;
+    --nav-active-bg:       220 15% 14%;
+    --nav-border:          220 10% 12%;
 
-    --sidebar-accent:      356 45% 60%;
-    --hero-start:          356 45% 60%;
-    --hero-end:            356 40% 20%;
+    --sidebar-accent:      346 54% 40%;
+    --hero-start:          220 15% 6%;
+    --hero-end:            346 54% 30%;
 
-    --page-glow-start:     356 45% 44%;
-    --page-glow-end:       268 90% 48%;
-    --page-gradient-start: 250 26% 7%;
-    --page-gradient-end:   222 30% 6%;
+    --page-glow-start:     220 15% 15%;
+    --page-glow-end:       346 54% 20%;
+    --page-gradient-start: 220 15% 8%;
+    --page-gradient-end:   220 15% 5%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-2"] {
@@ -502,16 +502,16 @@
        - Feito para parecer vivo sem estourar contraste nem cansar a vista.
        ----------------------------------------------------------------------- */
 
-    --brand:               10 90% 64%;
-    --brand-dark:          8 72% 46%;
-    --brand-soft:          8 40% 20%;
-    --brand-glow:          14 96% 68%;
+    --brand:               142 25% 35%;
+    --brand-dark:          142 25% 25%;
+    --brand-soft:          142 15% 15%;
+    --brand-glow:          142 25% 45%;
 
     --bg:                  196 44% 7%;
     --surface:             194 34% 11%;
     --surface-muted:       188 30% 16%;
     --border:              184 22% 26%;
-    --border-strong:       166 42% 42%;
+    --border-strong:       142 25% 35%;
 
     --background:          196 44% 7%;
     --card:                194 34% 11%;
@@ -519,15 +519,15 @@
     --secondary:           188 30% 16%;
     --muted:               188 30% 16%;
 
-    --primary:             10 90% 64%;
+    --primary:             142 25% 35%;
     --primary-foreground:  0 0% 100%;
-    --ring:                166 84% 62%;
+    --ring:                142 25% 35%;
 
-    --accent:              166 56% 18%;
-    --accent-foreground:   164 90% 86%;
-    --accent-soft:         166 56% 18%;
+    --accent:              142 25% 18%;
+    --accent-foreground:   142 30% 86%;
+    --accent-soft:         142 25% 18%;
 
-    --nav-bg:              198 48% 6%;
+    --nav-bg:              142 20% 8%;
     --nav-text:            166 84% 88%;
     --nav-muted:           170 42% 68%;
     --nav-active-bg:       184 48% 18%;
@@ -603,6 +603,7 @@
 
   html {
     color-scheme: light;
+    font-size: 112.5%;
   }
 
   :root[data-theme="dark"] {

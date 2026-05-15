@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Sparkles, Send } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
@@ -80,13 +80,23 @@ export function PublicApplicationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-2xl">
+    <div className="relative min-h-screen overflow-hidden bg-[hsl(var(--bg))] px-4 py-12 sm:px-6 lg:px-8">
+      {/* Background Orbs */}
+      <div className="pointer-events-none absolute left-[-10%] top-[-10%] h-[40rem] w-[40rem] rounded-full bg-[hsl(var(--primary)/0.05)] blur-[120px]" />
+      <div className="pointer-events-none absolute right-[-5%] bottom-[-10%] h-[35rem] w-[35rem] rounded-full bg-[hsl(var(--brand-glow)/0.08)] blur-[100px]" />
+
+      <div className="relative mx-auto max-w-3xl">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900">Processo seletivo</h1>
-          <p className="mt-2 text-gray-600">
-            Bem-vindo(a)! Ficamos felizes com seu interesse em fazer parte do nosso time.
+        <div className="mb-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--primary))]">
+            <Sparkles className="h-3 w-3" />
+            Oportunidade Marajó
+          </div>
+          <h1 className="font-heading text-4xl font-extrabold tracking-tight text-[hsl(var(--text))] sm:text-5xl">
+            Sua jornada <span className="bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] bg-clip-text text-transparent">profissional</span>
+          </h1>
+          <p className="mt-4 text-[hsl(var(--text-muted))] sm:text-lg">
+            Estamos ansiosos para conhecer você. Preencha os dados abaixo para iniciar seu processo.
           </p>
         </div>
 
@@ -94,7 +104,8 @@ export function PublicApplicationPage() {
         <ApplicationIntroCard />
 
         {/* Form */}
-        <form className="rounded-lg bg-white p-8 shadow" onSubmit={handleFormSubmit} noValidate>
+        <form className="relative overflow-hidden rounded-[2.5rem] border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface)/0.7)] p-8 shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 duration-500" onSubmit={handleFormSubmit} noValidate>
+          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--primary)/0.02)] to-transparent pointer-events-none" />
           {/* Progress indicator */}
           <div className="mb-8">
             <div className="flex items-center justify-between">
