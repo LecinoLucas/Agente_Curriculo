@@ -310,6 +310,8 @@ class CandidateRankingService:
     async def get_ranking(
         self,
         job_id: UUID,
+        page: int = 1,
+        page_size: int = 20,
     ) -> dict[str, Any]:
         """Return the ranking for this job from persisted candidate_job_scores.
 
@@ -318,8 +320,9 @@ class CandidateRankingService:
         - stale fresh matches tied to inactive job_profile_analysis
         - recompute missing current scores for completed analyses
 
-        Only scores computed with the currently active version are returned.
-        Raises RankingJobNotFoundError / NoActiveScoreVersionError as needed.
+        Stats and auto-repair operate on full dataset. Pagination is applied
+        after building entries. Only scores computed with the currently active
+        version are returned. Raises RankingJobNotFoundError / NoActiveScoreVersionError as needed.
         """
         await self._context_loader.assert_job_exists(job_id)
         version = await self._context_loader.load_active_version()
@@ -351,14 +354,71 @@ class CandidateRankingService:
         # Get accurate stats directly from database (not from already-filtered entries)
         stats = await self._score_store.calculate_data_quality_stats(job_id)
 
+        # Apply pagination after building full entries list
+        total_candidates = len(entries)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_entries = entries[start_idx:end_idx]
+
+        # Recalculate ranks for paginated slice
+        for i, entry in enumerate(paginated_entries):
+            entry["rank"] = start_idx + i + 1
+
+        total_pages = (total_candidates + page_size - 1) // page_size if total_candidates > 0 else 1
+
         return self._public_builder.build_ranking_response(
             job_id=job_id,
-            entries=entries,
+            entries=paginated_entries,
             threshold_high=threshold_high,
             threshold_low=threshold_low,
             version=version,
             data_quality_stats=stats,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
         )
+
+    async def get_ranking_entry(
+        self,
+        job_id: UUID,
+        candidate_id: UUID,
+    ) -> dict[str, Any]:
+        """Return the ranking entry for a specific candidate in this job.
+
+        Applies same consistency auto-repair as get_ranking before reading.
+        Returns the single entry with full rank position in the full ranking.
+        Raises RankingJobNotFoundError / NoActiveScoreVersionError / CandidateNotInActivePipelineError as needed.
+        """
+        await self._context_loader.assert_job_exists(job_id)
+        version = await self._context_loader.load_active_version()
+        threshold_high, threshold_low = _resolve_thresholds(version)
+        await self._auto_repair_missing_current_scores(
+            job_id=job_id,
+            version_id=version.id,
+        )
+
+        rows = await self._score_store.fetch_persisted_scores(job_id, version.id)
+
+        entry_rank = 0
+        found_entry = None
+        for row in rows:
+            if not _has_valid_persisted_ranking_row(row):
+                continue
+            entry_rank += 1
+            if row.get("candidate_id") == candidate_id:
+                found_entry = self._public_builder.build_entry(
+                    row=row,
+                    rank=entry_rank,
+                    version=version,
+                )
+                break
+
+        if not found_entry:
+            raise CandidateNotInActivePipelineError(
+                f"Candidate {candidate_id} not found in ranking for job {job_id}"
+            )
+
+        return found_entry
 
     async def _auto_repair_missing_current_scores(
         self,

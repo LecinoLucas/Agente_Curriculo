@@ -461,6 +461,9 @@ export type JobRanking = {
   score_version: string;
   candidates: JobRankingEntry[];
   data_quality_stats?: DataQualityStats;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
 };
 
 export type AIAnalysisStatus = "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";

@@ -102,8 +102,11 @@ class CandidateRankingPublicBuilder:
         threshold_low: Decimal,
         version: ScoreModelVersionModel,
         data_quality_stats: dict[str, int] | None,
+        page: int | None = None,
+        page_size: int | None = None,
+        total_pages: int | None = None,
     ) -> dict[str, Any]:
-        return {
+        response = {
             "job_id": job_id,
             "total_candidates": len(entries),
             "threshold_high": threshold_high,
@@ -112,3 +115,10 @@ class CandidateRankingPublicBuilder:
             "candidates": entries,
             "data_quality_stats": data_quality_stats,
         }
+        if page is not None:
+            response["page"] = page
+        if page_size is not None:
+            response["page_size"] = page_size
+        if total_pages is not None:
+            response["total_pages"] = total_pages
+        return response

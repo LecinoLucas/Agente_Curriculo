@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AnalysisResult, CandidateOverview, JobRankingEntry } from "../../../../types/domain";
 import { analysisService } from "../../../../services/analysisService";
-import { getJobRanking } from "../../../../services/jobsService";
+import { getCandidateRankingEntry } from "../../../../services/jobsService";
 import { formatContextError } from "../../../../services/errorMessages";
 import type { PanelTab } from "../../../pipeline/PipelineContext";
 
@@ -132,12 +132,9 @@ export function useCandidateData({
     setRankingEntryLoading(true);
     setRankingEntryError(null);
 
-    void getJobRanking(candidateActiveJobId)
-      .then((ranking) => {
+    void getCandidateRankingEntry(candidateActiveJobId, candidateId)
+      .then((entry) => {
         if (abortController.signal.aborted) return;
-        const entry = ranking.candidates.find(
-          (candidate) => candidate.candidate_id === candidateId,
-        ) ?? null;
         rankingEntryCacheRef.current.set(cacheKey, entry);
         setRankingEntry(entry);
       })
