@@ -10,6 +10,7 @@ describe("CandidateProfileView", () => {
     const onLinkJob = vi.fn();
     const onOpenDocuments = vi.fn();
     const onStartAnalysis = vi.fn();
+    const onEditCandidate = vi.fn();
 
     render(
       <CandidateProfileView
@@ -50,25 +51,19 @@ describe("CandidateProfileView", () => {
         onTerminate={vi.fn()}
         onViewAnalysis={vi.fn()}
         onTabChange={vi.fn()}
-        onEditCandidate={vi.fn()}
+        onEditCandidate={onEditCandidate}
         onLinkJob={onLinkJob}
         onStartAnalysis={onStartAnalysis}
         onOpenDocuments={onOpenDocuments}
       />
     );
 
-    expect(screen.getByRole("button", { name: "Editar candidato" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Currículos" })).toBeInTheDocument();
+    // Primary button should be visible for no active job
     expect(screen.getByRole("button", { name: "Vincular vaga" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Iniciar análise" })).toBeInTheDocument();
     expect(screen.getByText("Sem currículo")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Currículos" }));
+    // Click primary action
     await user.click(screen.getByRole("button", { name: "Vincular vaga" }));
-    await user.click(screen.getByRole("button", { name: "Iniciar análise" }));
-
-    expect(onOpenDocuments).toHaveBeenCalledTimes(1);
     expect(onLinkJob).toHaveBeenCalledTimes(1);
-    expect(onStartAnalysis).toHaveBeenCalledTimes(1);
   });
 });

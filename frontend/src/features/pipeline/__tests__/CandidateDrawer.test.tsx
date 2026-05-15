@@ -173,7 +173,8 @@ vi.mock("../PipelineContext", () => ({
   }),
 }));
 
-import { CandidateDrawer, TransferJobModal } from "../CandidateDrawer";
+import { CandidateDrawer } from "../CandidateDrawer";
+import { TransferJobModal } from "../candidate-drawer/TransferJobModal";
 
 describe("CandidateDrawer", () => {
   beforeEach(() => {
