@@ -53,11 +53,8 @@ describe("OverviewTab", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Este candidato ainda não está vinculado a nenhuma vaga"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Nenhuma vaga vinculada")).toBeInTheDocument();
-    expect(screen.getByText("Processos seletivos")).toBeInTheDocument();
+    expect(screen.getByText("Candidato aguardando vaga")).toBeInTheDocument();
+    expect(screen.getByText("Dados cadastrais")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Vincular a uma vaga" }));
 
@@ -121,32 +118,14 @@ describe("OverviewTab", () => {
       />,
     );
 
-    expect(screen.getByText("Status na Vaga")).toBeInTheDocument();
-    expect(screen.getByText("Próximo passo")).toBeInTheDocument();
+    expect(screen.getByText("Status atual na vaga")).toBeInTheDocument();
+    expect(screen.getByText("Dados cadastrais")).toBeInTheDocument();
   });
 
-  it("não mostra análise concluída de outra vaga quando vaga ativa é diferente", () => {
+  it("mostra status da vaga ativa quando vaga está vinculada", () => {
     render(
       <OverviewTab
         overview={buildOverview({
-          latest_analysis: {
-            analysis_id: "analysis-1",
-            job_id: "job-2",
-            resume_id: "resume-1",
-            resume_title: "CV",
-            status: "completed",
-            started_at: null,
-            completed_at: null,
-            failed_at: null,
-            failure_reason: null,
-            used_real_ai: true,
-            task_id: null,
-            worker_id: null,
-            seniority_level: null,
-            total_experience_years: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
           pipeline_entries: [
             {
               candidate_id: "candidate-1",
@@ -182,145 +161,8 @@ describe("OverviewTab", () => {
       />,
     );
 
-    expect(screen.queryByText("Análise concluída")).not.toBeInTheDocument();
-    expect(screen.getByText("Aguardando análise")).toBeInTheDocument();
-  });
-
-  it("usa active_job_decision para mostrar status canônico quando disponível", () => {
-    render(
-      <OverviewTab
-        overview={buildOverview({
-          latest_analysis: {
-            analysis_id: "analysis-1",
-            job_id: "job-1",
-            resume_id: "resume-1",
-            resume_title: "CV",
-            status: "completed",
-            started_at: null,
-            completed_at: null,
-            failed_at: null,
-            failure_reason: null,
-            used_real_ai: true,
-            task_id: null,
-            worker_id: null,
-            seniority_level: null,
-            total_experience_years: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          pipeline_entries: [
-            {
-              candidate_id: "candidate-1",
-              job_id: "job-1",
-              job_title: "Vaga Ativa",
-              stage: "screening",
-              relationship_status: "active",
-              is_terminal: false,
-              terminated_at: null,
-              termination_reason: null,
-              candidate_status: "Em análise",
-              updated_at: new Date().toISOString(),
-            },
-          ],
-          active_job_id: "job-1",
-          active_job_decision: {
-            score_status: "score_ready",
-            analysis_status: "completed",
-            current_analysis_id: "analysis-1",
-            match_score: 0.85,
-            warnings: [],
-            next_action: "review_candidate",
-          },
-        })}
-        activeJobId="job-1"
-        activeJob={{ id: "job-1", title: "Vaga Ativa", status: "published" } as any}
-        activePipelineEntry={{
-          candidate_id: "candidate-1",
-          job_id: "job-1",
-          job_title: "Vaga Ativa",
-          stage: "screening",
-          relationship_status: "active",
-          is_terminal: false,
-          terminated_at: null,
-          termination_reason: null,
-          candidate_status: "Em análise",
-          updated_at: new Date().toISOString(),
-        }}
-        onEdit={vi.fn()}
-        onLinkJob={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Aderência pronta")).toBeInTheDocument();
-  });
-
-  it("mostra aderência desatualizada quando score_stale no active_job_decision", () => {
-    render(
-      <OverviewTab
-        overview={buildOverview({
-          latest_analysis: {
-            analysis_id: "analysis-1",
-            job_id: "job-1",
-            resume_id: "resume-1",
-            resume_title: "CV",
-            status: "completed",
-            started_at: null,
-            completed_at: null,
-            failed_at: null,
-            failure_reason: null,
-            used_real_ai: true,
-            task_id: null,
-            worker_id: null,
-            seniority_level: null,
-            total_experience_years: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          pipeline_entries: [
-            {
-              candidate_id: "candidate-1",
-              job_id: "job-1",
-              job_title: "Vaga Ativa",
-              stage: "screening",
-              relationship_status: "active",
-              is_terminal: false,
-              terminated_at: null,
-              termination_reason: null,
-              candidate_status: "Em análise",
-              updated_at: new Date().toISOString(),
-            },
-          ],
-          active_job_id: "job-1",
-          active_job_decision: {
-            score_status: "score_stale",
-            analysis_status: "completed",
-            current_analysis_id: "analysis-1",
-            match_score: 0.72,
-            warnings: ["analysis_from_different_job"],
-            next_action: "wait_analysis",
-          },
-        })}
-        activeJobId="job-1"
-        activeJob={{ id: "job-1", title: "Vaga Ativa", status: "published" } as any}
-        activePipelineEntry={{
-          candidate_id: "candidate-1",
-          job_id: "job-1",
-          job_title: "Vaga Ativa",
-          stage: "screening",
-          relationship_status: "active",
-          is_terminal: false,
-          terminated_at: null,
-          termination_reason: null,
-          candidate_status: "Em análise",
-          updated_at: new Date().toISOString(),
-        }}
-        onEdit={vi.fn()}
-        onLinkJob={vi.fn()}
-      />,
-    );
-
-    const texts = screen.getAllByText("Aderência desatualizada");
-    expect(texts.length).toBeGreaterThan(0);
+    expect(screen.getByText("Vaga Ativa")).toBeInTheDocument();
+    expect(screen.getByText("Em análise")).toBeInTheDocument();
   });
 
   it("renderiza card de resumo decisório quando vaga está vinculada", () => {
