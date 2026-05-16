@@ -579,6 +579,25 @@ def _canonicalize_candidate_profile(data: dict[str, Any]) -> dict[str, Any]:
     return _normalize_resume_profiler_v2(data)
 
 
+# ── CV quality score ───────────────────────────────────────────────────────────
+
+def _parse_cv_quality_score(cv_quality: Any) -> tuple[float, dict[str, float]]:
+    if not isinstance(cv_quality, dict):
+        return 0.0, {}
+
+    total = _coerce_float(cv_quality.get("total"))
+    if total is not None:
+        score = _clamp_score(total)
+    else:
+        part_keys = ("structure", "clarity", "professionalism", "completeness")
+        parts = [_coerce_float(cv_quality.get(k)) for k in part_keys]
+        valid = [p for p in parts if p is not None]
+        score = _clamp_score(sum(valid)) if valid else 0.0
+
+    quality = {k: score for k in ("structure", "clarity", "professionalism", "completeness")}
+    return score, quality
+
+
 # ── Main entry ─────────────────────────────────────────────────────────────────
 
 def parse_analysis_response(raw: str) -> dict[str, Any]:
@@ -603,7 +622,13 @@ def parse_analysis_response(raw: str) -> dict[str, Any]:
     if total_exp_years is None:
         total_exp_years = canonical.get("total_experience_years")
 
+    communication_score, communication_quality = _parse_cv_quality_score(
+        data.get("cv_quality_score")
+    )
+
     extracted_data = dict(canonical)
+    if communication_quality:
+        extracted_data["communication_quality"] = communication_quality
     parsed_location = normalize_text(
         data.get("location")
         or personal_info.get("location")
@@ -621,6 +646,7 @@ def parse_analysis_response(raw: str) -> dict[str, Any]:
         "candidate_summary": str(summary).strip() if summary else None,
         "seniority_level": canonical.get("detected_level"),
         "total_experience_years": total_exp_years,
+        "communication_score": communication_score,
         "highest_education_level": canonical.get("education_level"),
         "highest_education_field": (
             canonical.get("education", [{}])[0].get("field")
