@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Plus, ChevronDown, ChevronRight } from "lucide-react";
+import { AlertCircle, Plus, ChevronDown, ChevronRight, Layers } from "lucide-react";
 import { behavioralTemplatesService } from "../services/behavioralTemplatesService";
 import type { BehavioralAssessmentTemplate, BehavioralTemplateCompetency } from "../types/domain";
 import { toast } from "@/shared/utils/toast";
+import { TemplateGalleryModal } from "../features/behavioral-templates/TemplateGalleryModal";
+import { importTemplateToApi, type RawTemplate } from "../features/behavioral-templates/templateImporter";
 
 export function BehavioralTemplatesPage() {
   const [templates, setTemplates] = useState<BehavioralAssessmentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [importingName, setImportingName] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: "", description: "" });
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -81,6 +85,20 @@ export function BehavioralTemplatesPage() {
     setIsFormOpen(true);
   }
 
+  async function handleImportTemplate(template: RawTemplate) {
+    setImportingName(template.name);
+    try {
+      await importTemplateToApi(template, behavioralTemplatesService);
+      toast.success(`Template "${template.name.replace("Avaliação Comportamental — ", "")}" importado`);
+      setIsGalleryOpen(false);
+      await loadTemplates();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao importar template");
+    } finally {
+      setImportingName(null);
+    }
+  }
+
   function handleCloseForm() {
     setFormData({ name: "", description: "" });
     setEditingId(null);
@@ -115,10 +133,16 @@ export function BehavioralTemplatesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Templates Comportamentais</h1>
           <p className="mt-1 text-sm text-gray-500">Gerencie templates de avaliação com competências e perguntas</p>
         </div>
-        <Button onClick={() => setIsFormOpen(true)} className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Template
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsGalleryOpen(true)} variant="outline" className="flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            Usar modelo pronto
+          </Button>
+          <Button onClick={() => setIsFormOpen(true)} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Template
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -256,6 +280,14 @@ export function BehavioralTemplatesPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {isGalleryOpen && (
+        <TemplateGalleryModal
+          onClose={() => setIsGalleryOpen(false)}
+          onImport={handleImportTemplate}
+          importingName={importingName}
+        />
       )}
     </div>
   );

@@ -1,0 +1,252 @@
+{
+  "name": "Avaliação Comportamental — Tecnologia e Suporte",
+  "description": "Modelo de avaliação comportamental por competências para funções de TI, suporte técnico, análise de sistemas, desenvolvimento e operações de infraestrutura. Foca em resolução de problemas, comunicação técnica e aprendizagem contínua.",
+  "version": 1,
+  "status": "draft",
+  "estimated_minutes": 20,
+  "scoring_method": "weighted_competency_average",
+  "instructions_to_candidate": "Responda com exemplos reais de situações técnicas. Nas perguntas abertas, descreva o contexto, o que você analisou, o que fez e qual foi o resultado.",
+  "competencies": [
+    {
+      "key": "resolucao_problemas_tec",
+      "name": "Resolução de Problemas Técnicos",
+      "description": "Capacidade de diagnosticar, analisar e resolver problemas técnicos com método, clareza e agilidade.",
+      "weight": 30,
+      "questions": [
+        {
+          "key": "prob_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 15,
+          "prompt": "Descreva um problema técnico complexo que você resolveu. Qual era o problema, o que você analisou e quais passos tomou para resolver?",
+          "evaluation_criteria": [
+            "Descreve o problema com clareza técnica",
+            "Mostra diagnóstico estruturado",
+            "Apresenta os passos de resolução",
+            "Demonstra raciocínio analítico",
+            "Apresenta resultado e aprendizado"
+          ],
+          "score_guide": {
+            "1": "Resposta vaga, sem análise ou método de resolução.",
+            "3": "Descreve o problema, mas com método parcial ou resultado pouco claro.",
+            "5": "Diagnóstico estruturado, passos claros, resultado mensurável e aprendizado registrado."
+          }
+        },
+        {
+          "key": "prob_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 10,
+          "prompt": "Você recebe um chamado crítico com informações incompletas. O que faz primeiro?",
+          "options": [
+            { "key": "a", "label": "Tenta resolver sem pedir mais informações para ser ágil.", "score": 2 },
+            { "key": "b", "label": "Coleta as informações mínimas necessárias, reproduz o problema e então age.", "score": 5 },
+            { "key": "c", "label": "Encaminha para outro setor sem tentar investigar.", "score": 1 },
+            { "key": "d", "label": "Aguarda mais informações sem nenhuma ação inicial.", "score": 1 }
+          ]
+        },
+        {
+          "key": "prob_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Quando não consegue resolver um problema sozinho, você busca ajuda ou documentação sem hesitar?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "comunicacao_usuarios",
+      "name": "Comunicação com Usuários e Stakeholders",
+      "description": "Capacidade de traduzir questões técnicas para linguagem acessível, gerenciar expectativas e manter comunicação clara durante incidentes.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "com_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Conte uma situação em que você precisou explicar um problema técnico para alguém sem conhecimento técnico. Como abordou?",
+          "evaluation_criteria": [
+            "Adapta a linguagem ao interlocutor",
+            "É claro e objetivo",
+            "Usa analogias ou exemplos práticos",
+            "Verifica se o outro entendeu",
+            "Mantém postura profissional"
+          ],
+          "score_guide": {
+            "1": "Usou linguagem técnica sem adaptar ou foi impaciente.",
+            "3": "Adaptou, mas com pouca clareza ou sem verificar a compreensão.",
+            "5": "Adaptou a linguagem, foi claro, verificou o entendimento e manteve postura profissional."
+          }
+        },
+        {
+          "key": "com_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 6,
+          "prompt": "Um sistema crítico cai e vários usuários abrem chamados ao mesmo tempo. Como você prioriza a comunicação?",
+          "options": [
+            { "key": "a", "label": "Responde cada chamado individualmente conforme chegar.", "score": 2 },
+            { "key": "b", "label": "Emite uma comunicação geral para todos os afetados, informa o status e o prazo estimado.", "score": 5 },
+            { "key": "c", "label": "Foca apenas em resolver e só comunica depois que o sistema voltar.", "score": 2 },
+            { "key": "d", "label": "Pede para o gestor comunicar enquanto você resolve.", "score": 3 }
+          ]
+        },
+        {
+          "key": "com_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 4,
+          "prompt": "Você documenta as soluções encontradas para que outros possam reutilizá-las?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "aprendizagem_tecnica",
+      "name": "Aprendizagem Técnica Contínua",
+      "description": "Capacidade de acompanhar evoluções tecnológicas, adquirir novas competências técnicas e aplicar o aprendizado no trabalho.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "apr_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Conte sobre uma tecnologia, linguagem ou ferramenta que você aprendeu por conta própria para resolver um problema ou melhorar seu trabalho.",
+          "evaluation_criteria": [
+            "Identifica a necessidade de aprender",
+            "Busca fontes de aprendizagem adequadas",
+            "Aplica o aprendizado na prática",
+            "Compartilha com a equipe quando relevante"
+          ],
+          "score_guide": {
+            "1": "Não demonstra iniciativa ou aplicação prática.",
+            "3": "Aprendeu, mas sem estratégia clara ou aplicação limitada.",
+            "5": "Identificou a necessidade, aprendeu com método e aplicou com resultado."
+          }
+        },
+        {
+          "key": "apr_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 6,
+          "prompt": "Uma nova tecnologia foi adotada na empresa e você ainda não tem experiência com ela. O que faz?",
+          "options": [
+            { "key": "a", "label": "Aguarda o treinamento formal da empresa antes de qualquer iniciativa.", "score": 2 },
+            { "key": "b", "label": "Busca documentação, faz testes em ambiente seguro e pede apoio de quem já domina.", "score": 5 },
+            { "key": "c", "label": "Evita usar a nova tecnologia e continua com os métodos antigos.", "score": 1 },
+            { "key": "d", "label": "Usa em produção sem testar para aprender mais rápido.", "score": 1 }
+          ]
+        },
+        {
+          "key": "apr_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 4,
+          "prompt": "Você acompanha tendências da sua área técnica fora do horário de trabalho (artigos, fóruns, cursos)?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "organizacao_documentacao",
+      "name": "Organização e Documentação",
+      "description": "Capacidade de organizar o trabalho, documentar soluções e manter registros que reduzam dependência pessoal.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "org_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 10,
+          "prompt": "Você resolve um problema recorrente que consomia tempo da equipe. O que faz depois de resolver?",
+          "options": [
+            { "key": "a", "label": "Resolve e segue para o próximo chamado.", "score": 2 },
+            { "key": "b", "label": "Documenta a solução em formato reutilizável e compartilha com a equipe.", "score": 5 },
+            { "key": "c", "label": "Guarda o conhecimento para si.", "score": 1 },
+            { "key": "d", "label": "Explica verbalmente para um colega, sem registrar.", "score": 3 }
+          ]
+        },
+        {
+          "key": "org_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 10,
+          "prompt": "Você organiza suas tarefas e prioridades de chamados de forma que outras pessoas consigam entender seu status sem precisar te perguntar?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "pressao_incidentes",
+      "name": "Trabalho sob Pressão e Incidentes",
+      "description": "Capacidade de manter o raciocínio claro e a postura profissional durante incidentes críticos e situações de alta pressão.",
+      "weight": 10,
+      "questions": [
+        {
+          "key": "press_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 6,
+          "prompt": "Descreva uma situação de incidente ou falha grave em que você foi acionado. Como você agiu e qual foi o resultado?",
+          "evaluation_criteria": [
+            "Mantém calma e raciocínio estruturado",
+            "Prioriza as ações corretas",
+            "Comunica o status durante o incidente",
+            "Resolve ou escalona adequadamente",
+            "Registra e aprende após o incidente"
+          ],
+          "score_guide": {
+            "1": "Perdeu o controle, agiu sem método ou fugiu da responsabilidade.",
+            "3": "Agiu, mas com comunicação limitada ou resolução parcial.",
+            "5": "Manteve calma, agiu com método, comunicou e aprendeu com o incidente."
+          }
+        },
+        {
+          "key": "press_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 4,
+          "prompt": "Em situações de alta pressão, você consegue manter o raciocínio estruturado e evitar decisões impulsivas?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    }
+  ],
+  "final_interpretation": {
+    "bands": [
+      { "min": 0,  "max": 39,  "label": "Baixa evidência técnico-comportamental", "description": "As respostas indicam lacunas importantes em comportamentos técnicos esperados. Recomenda-se entrevista técnica complementar." },
+      { "min": 40, "max": 59,  "label": "Evidência parcial",                       "description": "Há indicadores positivos, mas com pontos de atenção relevantes. Validar em entrevista técnica." },
+      { "min": 60, "max": 79,  "label": "Boa aderência comportamental técnica",    "description": "O candidato demonstra comportamentos adequados para a área de tecnologia." },
+      { "min": 80, "max": 100, "label": "Forte evidência comportamental técnica",  "description": "O candidato apresenta evidências consistentes de maturidade técnica e comportamental." }
+    ]
+  },
+  "compliance_notes": [
+    "Este modelo não deve ser apresentado como teste psicológico.",
+    "Combine com avaliação técnica prática (teste de código, case, etc.) para decisões mais robustas.",
+    "Adapte as perguntas para o stack tecnológico específico da vaga, se necessário.",
+    "Mantenha os mesmos critérios para todos os candidatos da mesma vaga."
+  ]
+}

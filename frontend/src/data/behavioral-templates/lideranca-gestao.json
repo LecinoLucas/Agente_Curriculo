@@ -1,0 +1,252 @@
+{
+  "name": "Avaliação Comportamental — Liderança e Gestão",
+  "description": "Modelo de avaliação comportamental por competências para funções de liderança, supervisão, coordenação e gestão de equipes. Foca em evidências de comportamentos de liderança operacional e desenvolvimento de pessoas.",
+  "version": 1,
+  "status": "draft",
+  "estimated_minutes": 22,
+  "scoring_method": "weighted_competency_average",
+  "instructions_to_candidate": "Responda com base em experiências reais de liderança. Nas perguntas abertas, descreva a situação, o desafio, o que você fez como líder e qual foi o resultado para a equipe.",
+  "competencies": [
+    {
+      "key": "gestao_equipe",
+      "name": "Gestão de Equipe",
+      "description": "Capacidade de organizar, orientar e desenvolver a equipe para entrega de resultados com qualidade.",
+      "weight": 30,
+      "questions": [
+        {
+          "key": "gest_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 15,
+          "prompt": "Conte uma situação em que você precisou reorganizar sua equipe para cumprir uma meta crítica. O que fez e qual foi o resultado?",
+          "evaluation_criteria": [
+            "Analisa a situação antes de agir",
+            "Define papéis e responsabilidades com clareza",
+            "Comunica a equipe de forma objetiva",
+            "Acompanha e ajusta durante a execução",
+            "Apresenta resultado concreto"
+          ],
+          "score_guide": {
+            "1": "Ação reativa, sem planejamento ou comunicação clara.",
+            "3": "Reorganizou com esforço, mas com lacunas de acompanhamento ou resultado.",
+            "5": "Planejou, comunicou, acompanhou e entregou resultado com a equipe."
+          }
+        },
+        {
+          "key": "gest_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 10,
+          "prompt": "Um colaborador da sua equipe está entregando abaixo do esperado repetidamente. Qual é a sua abordagem?",
+          "options": [
+            { "key": "a", "label": "Aguarda melhorar sozinho para não criar conflito.", "score": 1 },
+            { "key": "b", "label": "Conversa individualmente para entender o problema, alinha expectativas e acompanha de perto.", "score": 5 },
+            { "key": "c", "label": "Redistribui as tarefas dele para outros sem conversar.", "score": 2 },
+            { "key": "d", "label": "Comunica o RH imediatamente sem antes tentar resolver.", "score": 2 }
+          ]
+        },
+        {
+          "key": "gest_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Com que frequência você oferece feedback estruturado aos membros da sua equipe?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "tomada_decisao",
+      "name": "Tomada de Decisão sob Pressão",
+      "description": "Capacidade de analisar situações complexas, decidir com clareza e assumir responsabilidade pelas decisões tomadas.",
+      "weight": 25,
+      "questions": [
+        {
+          "key": "dec_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 12,
+          "prompt": "Descreva uma decisão difícil que você precisou tomar sob pressão de tempo. Como chegou à decisão e qual foi o resultado?",
+          "evaluation_criteria": [
+            "Analisa informações disponíveis",
+            "Considera impactos antes de decidir",
+            "Decide com clareza e sem transferir responsabilidade",
+            "Comunica a decisão à equipe",
+            "Aprende com o resultado"
+          ],
+          "score_guide": {
+            "1": "Hesitou, transferiu a decisão ou agiu sem considerar impactos.",
+            "3": "Decidiu, mas com pouca análise ou comunicação inadequada.",
+            "5": "Analisou, decidiu com clareza, comunicou e assumiu o resultado."
+          }
+        },
+        {
+          "key": "dec_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 8,
+          "prompt": "Você precisa tomar uma decisão operacional urgente e não tem todas as informações necessárias. O que faz?",
+          "options": [
+            { "key": "a", "label": "Espera ter todas as informações antes de qualquer ação.", "score": 1 },
+            { "key": "b", "label": "Reúne as informações disponíveis, decide com os dados que tem e monitora o resultado.", "score": 5 },
+            { "key": "c", "label": "Pede para alguém da equipe decidir no seu lugar.", "score": 1 },
+            { "key": "d", "label": "Decide de forma aleatória para não perder tempo.", "score": 1 }
+          ]
+        },
+        {
+          "key": "dec_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você costuma assumir a responsabilidade pelas decisões que toma, mesmo quando o resultado não é o esperado?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "gestao_conflitos",
+      "name": "Gestão de Conflitos e Comunicação",
+      "description": "Capacidade de mediar conflitos, dar e receber feedback de forma construtiva e manter o ambiente de trabalho saudável.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "conf_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Conte uma situação em que dois membros da sua equipe tiveram um conflito que afetou o trabalho. Como você mediou?",
+          "evaluation_criteria": [
+            "Ouviu as duas partes",
+            "Manteve imparcialidade",
+            "Focou no impacto profissional, não pessoal",
+            "Chegou a uma solução prática",
+            "Acompanhou o resultado"
+          ],
+          "score_guide": {
+            "1": "Ignorou, tomou partido ou piorou a situação.",
+            "3": "Tentou mediar, mas sem estrutura ou resultado claro.",
+            "5": "Ouviu, mediou com imparcialidade e chegou a uma resolução concreta."
+          }
+        },
+        {
+          "key": "conf_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 6,
+          "prompt": "Um colaborador discorda abertamente de uma diretriz que você passou para a equipe. Qual é sua reação?",
+          "options": [
+            { "key": "a", "label": "Ignora a discordância e segue com a instrução sem ouvir.", "score": 1 },
+            { "key": "b", "label": "Ouve a perspectiva do colaborador, explica o racional da decisão e alinha a conduta.", "score": 5 },
+            { "key": "c", "label": "Pune o colaborador por questionar a decisão.", "score": 1 },
+            { "key": "d", "label": "Muda a decisão para evitar o conflito.", "score": 2 }
+          ]
+        },
+        {
+          "key": "conf_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 4,
+          "prompt": "Você consegue dar feedback negativo de forma direta, respeitosa e orientada ao desenvolvimento?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "desenvolvimento_pessoas",
+      "name": "Desenvolvimento de Pessoas",
+      "description": "Capacidade de identificar potencial na equipe, delegar com eficácia e criar condições para que as pessoas cresçam.",
+      "weight": 15,
+      "questions": [
+        {
+          "key": "dev_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 8,
+          "prompt": "Descreva uma situação em que você identificou e desenvolveu o potencial de um colaborador. Como fez isso?",
+          "evaluation_criteria": [
+            "Identifica o potencial com critério",
+            "Cria oportunidades de desenvolvimento",
+            "Acompanha o progresso",
+            "Dá autonomia gradual"
+          ],
+          "score_guide": {
+            "1": "Não demonstra ação concreta de desenvolvimento.",
+            "3": "Deu oportunidade, mas sem acompanhamento ou método.",
+            "5": "Identificou, criou oportunidades, acompanhou e o colaborador cresceu."
+          }
+        },
+        {
+          "key": "dev_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 7,
+          "prompt": "Você delega tarefas com instruções claras e acompanha o resultado sem microgerenciar?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "foco_resultados",
+      "name": "Foco em Resultados",
+      "description": "Capacidade de definir metas claras, acompanhar indicadores e mobilizar a equipe para a entrega.",
+      "weight": 10,
+      "questions": [
+        {
+          "key": "res_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 5,
+          "prompt": "Sua equipe está atrasada na entrega de uma meta mensal. O que você faz primeiro?",
+          "options": [
+            { "key": "a", "label": "Espera o final do mês para ver se compensa.", "score": 1 },
+            { "key": "b", "label": "Identifica o gargalo, realinha o plano com a equipe e reforça os esforços críticos.", "score": 5 },
+            { "key": "c", "label": "Pressiona a equipe sem entender a causa do atraso.", "score": 2 },
+            { "key": "d", "label": "Reporta o atraso ao gestor e aguarda orientação.", "score": 3 }
+          ]
+        },
+        {
+          "key": "res_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você acompanha indicadores de desempenho da equipe com regularidade e age quando os números desviam?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    }
+  ],
+  "final_interpretation": {
+    "bands": [
+      { "min": 0,  "max": 39,  "label": "Baixa evidência de liderança",    "description": "As respostas indicam pouca aderência às competências de liderança. Recomenda-se avaliação aprofundada antes de qualquer decisão." },
+      { "min": 40, "max": 59,  "label": "Liderança em desenvolvimento",     "description": "Há evidências pontuais, mas o candidato ainda está desenvolvendo competências de gestão. Validar em entrevista." },
+      { "min": 60, "max": 79,  "label": "Boa aderência de liderança",       "description": "O candidato demonstra comportamentos de liderança consistentes e adequados ao nível da função." },
+      { "min": 80, "max": 100, "label": "Forte evidência de liderança",     "description": "O candidato apresenta evidências sólidas de maturidade gerencial e comportamentos de alto impacto." }
+    ]
+  },
+  "compliance_notes": [
+    "Este modelo não deve ser apresentado como teste psicológico.",
+    "Use os resultados como apoio à decisão, não como critério único de seleção.",
+    "Adapte o peso das competências conforme o nível hierárquico da vaga (supervisor, gerente, diretor).",
+    "Mantenha os mesmos critérios para todos os candidatos do mesmo nível."
+  ]
+}

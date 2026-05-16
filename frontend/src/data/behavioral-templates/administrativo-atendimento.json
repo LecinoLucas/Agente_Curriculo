@@ -1,0 +1,281 @@
+{
+  "name": "Avaliação Comportamental — Administrativo e Atendimento",
+  "description": "Modelo de avaliação comportamental por competências para funções administrativas, atendimento ao cliente, suporte interno e rotinas operacionais. Não é teste psicológico; é uma avaliação estruturada de evidências comportamentais relacionadas ao trabalho.",
+  "version": 1,
+  "status": "draft",
+  "estimated_minutes": 18,
+  "scoring_method": "weighted_competency_average",
+  "instructions_to_candidate": "Responda com exemplos reais sempre que possível. Nas perguntas abertas, descreva a situação, o desafio, o que você fez e qual foi o resultado.",
+  "competencies": [
+    {
+      "key": "organizacao",
+      "name": "Organização e Priorização",
+      "description": "Capacidade de organizar tarefas, definir prioridades e cumprir prazos em rotina com múltiplas demandas.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "org_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Conte uma situação em que você precisou lidar com muitas tarefas ao mesmo tempo. Como você organizou suas prioridades e qual foi o resultado?",
+          "evaluation_criteria": [
+            "Descreve uma situação real e específica",
+            "Explica como definiu prioridades",
+            "Mostra método de organização",
+            "Apresenta resultado concreto"
+          ],
+          "score_guide": {
+            "1": "Resposta vaga, sem exemplo ou sem método claro.",
+            "3": "Apresenta exemplo razoável, mas com pouca clareza sobre priorização ou resultado.",
+            "5": "Apresenta exemplo claro, método de organização e resultado mensurável."
+          }
+        },
+        {
+          "key": "org_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Com que frequência você organiza suas tarefas antes de iniciar o dia de trabalho?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        },
+        {
+          "key": "org_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você recebeu três demandas urgentes ao mesmo tempo. O que faz primeiro?",
+          "options": [
+            { "key": "a", "label": "Começa pela mais fácil para terminar rápido.", "score": 2 },
+            { "key": "b", "label": "Verifica prazo, impacto e dependências antes de definir a ordem.", "score": 5 },
+            { "key": "c", "label": "Escolhe uma aleatoriamente para não perder tempo.", "score": 1 },
+            { "key": "d", "label": "Espera alguém decidir por você.", "score": 1 }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "atendimento_cliente",
+      "name": "Atendimento e Comunicação",
+      "description": "Capacidade de ouvir, entender problemas, comunicar-se com clareza e lidar com clientes ou usuários internos.",
+      "weight": 25,
+      "questions": [
+        {
+          "key": "atend_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 10,
+          "prompt": "Um cliente chega irritado reclamando de um erro que não foi causado por você. Qual é a melhor primeira atitude?",
+          "options": [
+            { "key": "a", "label": "Explicar imediatamente que a culpa não foi sua.", "score": 1 },
+            { "key": "b", "label": "Escutar, reconhecer o incômodo e entender os detalhes antes de encaminhar a solução.", "score": 5 },
+            { "key": "c", "label": "Pedir para o cliente procurar outro setor sem ouvir toda a reclamação.", "score": 1 },
+            { "key": "d", "label": "Responder de forma firme para encerrar rapidamente o atendimento.", "score": 1 }
+          ]
+        },
+        {
+          "key": "atend_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Descreva uma situação em que você precisou lidar com uma pessoa insatisfeita. O que você fez e qual foi o resultado?",
+          "evaluation_criteria": [
+            "Mostra escuta ativa",
+            "Comunica-se com respeito",
+            "Busca solução prática",
+            "Demonstra controle emocional",
+            "Apresenta resultado"
+          ],
+          "score_guide": {
+            "1": "Resposta genérica ou defensiva, sem foco em solução.",
+            "3": "Mostra tentativa de resolver, mas com pouca clareza de abordagem.",
+            "5": "Demonstra escuta, empatia, ação objetiva e resultado positivo."
+          }
+        },
+        {
+          "key": "atend_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Quando precisa explicar um problema técnico ou administrativo, você costuma adaptar a linguagem para quem está ouvindo?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "responsabilidade",
+      "name": "Responsabilidade e Confiabilidade",
+      "description": "Capacidade de assumir compromissos, comunicar riscos e agir com responsabilidade diante de erros ou problemas.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "resp_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 8,
+          "prompt": "Você percebe um erro em um processo que ninguém notou. O que faz?",
+          "options": [
+            { "key": "a", "label": "Ignora, pois ninguém percebeu.", "score": 1 },
+            { "key": "b", "label": "Corrige escondido, sem avisar ninguém.", "score": 2 },
+            { "key": "c", "label": "Comunica o responsável, ajuda a corrigir e registra o aprendizado para evitar repetição.", "score": 5 },
+            { "key": "d", "label": "Comenta com colegas antes de avisar o responsável.", "score": 2 }
+          ]
+        },
+        {
+          "key": "resp_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 8,
+          "prompt": "Conte uma situação em que você cometeu ou identificou um erro no trabalho. Como lidou com isso?",
+          "evaluation_criteria": [
+            "Assume responsabilidade",
+            "Comunica o problema de forma adequada",
+            "Age para corrigir",
+            "Aprende com a situação"
+          ],
+          "score_guide": {
+            "1": "Evita responsabilidade ou culpa terceiros.",
+            "3": "Reconhece o problema, mas apresenta pouca ação corretiva.",
+            "5": "Assume, comunica, corrige e mostra aprendizado."
+          }
+        },
+        {
+          "key": "resp_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 4,
+          "prompt": "Quando percebe que não vai cumprir um prazo, você avisa com antecedência?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "colaboracao",
+      "name": "Trabalho em Equipe",
+      "description": "Capacidade de colaborar, lidar com divergências e contribuir para o resultado coletivo.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "colab_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Descreva uma situação em que você discordou de um colega. Como resolveu a situação?",
+          "evaluation_criteria": [
+            "Demonstra respeito",
+            "Busca entendimento",
+            "Foca no problema, não na pessoa",
+            "Chega a uma solução ou acordo"
+          ],
+          "score_guide": {
+            "1": "Mostra postura conflitiva ou evita resolver.",
+            "3": "Relata diálogo, mas com pouca clareza de solução.",
+            "5": "Demonstra maturidade, escuta e solução colaborativa."
+          }
+        },
+        {
+          "key": "colab_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 6,
+          "prompt": "Um colega novo está com dificuldade em uma tarefa que você domina. O que você faz?",
+          "options": [
+            { "key": "a", "label": "Ajuda quando possível e explica o caminho para ele ganhar autonomia.", "score": 5 },
+            { "key": "b", "label": "Faz a tarefa por ele para terminar mais rápido.", "score": 3 },
+            { "key": "c", "label": "Ignora porque cada um precisa aprender sozinho.", "score": 1 },
+            { "key": "d", "label": "Reclama com o gestor antes de tentar ajudar.", "score": 1 }
+          ]
+        },
+        {
+          "key": "colab_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 4,
+          "prompt": "Você costuma compartilhar informações importantes com a equipe sem precisar ser cobrado?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "aprendizagem",
+      "name": "Aprendizagem e Adaptabilidade",
+      "description": "Capacidade de aprender processos, ferramentas e se adaptar a mudanças no trabalho.",
+      "weight": 15,
+      "questions": [
+        {
+          "key": "apr_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 8,
+          "prompt": "Conte sobre uma ferramenta, sistema ou processo que você precisou aprender rapidamente. Como fez para aprender?",
+          "evaluation_criteria": [
+            "Mostra iniciativa",
+            "Demonstra método de aprendizagem",
+            "Busca ajuda ou fontes adequadas",
+            "Aplica o aprendizado na prática"
+          ],
+          "score_guide": {
+            "1": "Não demonstra iniciativa ou método.",
+            "3": "Aprendeu com apoio, mas sem clareza de estratégia.",
+            "5": "Demonstra autonomia, método e aplicação prática."
+          }
+        },
+        {
+          "key": "apr_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 4,
+          "prompt": "Você recebe uma nova rotina que nunca executou. Qual atitude mais representa você?",
+          "options": [
+            { "key": "a", "label": "Espera alguém explicar tudo antes de começar.", "score": 2 },
+            { "key": "b", "label": "Procura entender o objetivo, pede orientação inicial e pratica com acompanhamento.", "score": 5 },
+            { "key": "c", "label": "Tenta fazer sem perguntar para não parecer inseguro.", "score": 2 },
+            { "key": "d", "label": "Evita a tarefa até alguém assumir.", "score": 1 }
+          ]
+        },
+        {
+          "key": "apr_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 3,
+          "prompt": "Quando algo muda na rotina, você costuma se adaptar sem perder produtividade por muito tempo?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    }
+  ],
+  "final_interpretation": {
+    "bands": [
+      { "min": 0,  "max": 39,  "label": "Baixa evidência comportamental", "description": "As respostas apresentam pouca evidência das competências avaliadas. Recomenda-se entrevista complementar antes de qualquer decisão." },
+      { "min": 40, "max": 59,  "label": "Evidência parcial",              "description": "Há sinais comportamentais úteis, mas com lacunas importantes. Recomenda-se validar os pontos críticos em entrevista." },
+      { "min": 60, "max": 79,  "label": "Boa evidência comportamental",   "description": "As respostas indicam boa aderência comportamental às competências avaliadas." },
+      { "min": 80, "max": 100, "label": "Forte evidência comportamental", "description": "As respostas apresentam evidências consistentes e alinhadas às competências avaliadas." }
+    ]
+  },
+  "compliance_notes": [
+    "Este modelo não deve ser apresentado como teste psicológico.",
+    "Use os resultados como apoio à decisão, não como critério único de contratação.",
+    "As perguntas devem estar relacionadas às competências da vaga.",
+    "Recomenda-se manter critérios padronizados para todos os candidatos da mesma vaga."
+  ]
+}

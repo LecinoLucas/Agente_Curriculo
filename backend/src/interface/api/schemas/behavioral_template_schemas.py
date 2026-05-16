@@ -1,7 +1,7 @@
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # Request Models
@@ -18,7 +18,7 @@ class BehavioralTemplateUpdateRequest(BaseModel):
 class BehavioralCompetencyCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
-    weight: float = Field(default=1.0, ge=0)
+    weight: float = Field(default=1.0, gt=0)
     display_order: int = Field(default=0, ge=0)
 
 
@@ -33,9 +33,16 @@ class BehavioralQuestionCreateRequest(BaseModel):
     question_text: str = Field(min_length=1)
     answer_type: Literal["text", "scale", "multiple_choice"]
     is_required: bool = Field(default=True)
-    weight: float = Field(default=1.0, ge=0)
+    weight: float = Field(default=1.0, gt=0)
     display_order: int = Field(default=0, ge=0)
     options_json: list[str] | None = None
+
+    @model_validator(mode="after")
+    def validate_multiple_choice_options(self) -> Self:
+        if self.answer_type == "multiple_choice":
+            if not self.options_json:
+                raise ValueError("Perguntas de múltipla escolha exigem ao menos uma alternativa em options_json.")
+        return self
 
 
 class BehavioralQuestionUpdateRequest(BaseModel):

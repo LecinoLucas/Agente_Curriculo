@@ -1,0 +1,230 @@
+{
+  "name": "Avaliação Comportamental — Aprendizagem e Adaptabilidade",
+  "description": "Modelo de avaliação comportamental por competências para funções que exigem alta capacidade de aprendizagem, adaptação rápida e resiliência. Indicado para trainees, jovens talentos, posições multifuncionais e ambientes de alta mudança.",
+  "version": 1,
+  "status": "draft",
+  "estimated_minutes": 16,
+  "scoring_method": "weighted_competency_average",
+  "instructions_to_candidate": "Responda com base em situações reais. Nas perguntas abertas, descreva o contexto, o que você fez para se adaptar ou aprender e qual foi o resultado.",
+  "competencies": [
+    {
+      "key": "curiosidade_iniciativa",
+      "name": "Curiosidade e Iniciativa",
+      "description": "Capacidade de buscar conhecimento por iniciativa própria, fazer perguntas relevantes e agir sem esperar ser instruído em todos os passos.",
+      "weight": 30,
+      "questions": [
+        {
+          "key": "cur_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 15,
+          "prompt": "Conte sobre uma situação em que você aprendeu algo novo por iniciativa própria, sem que ninguém pedisse. O que te motivou e como isso impactou seu trabalho?",
+          "evaluation_criteria": [
+            "Identifica a oportunidade de aprender sem ser solicitado",
+            "Demonstra método de aprendizagem autônomo",
+            "Aplica o conhecimento na prática",
+            "Apresenta impacto concreto"
+          ],
+          "score_guide": {
+            "1": "Não demonstra iniciativa ou aplicação prática.",
+            "3": "Aprendeu por iniciativa, mas sem clareza de método ou impacto.",
+            "5": "Identificou oportunidade, aprendeu com método e gerou impacto concreto."
+          }
+        },
+        {
+          "key": "cur_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 10,
+          "prompt": "Você percebe que há uma maneira mais eficiente de fazer uma tarefa rotineira. O que faz?",
+          "options": [
+            { "key": "a", "label": "Continua do jeito que sempre foi feito para não arriscar.", "score": 1 },
+            { "key": "b", "label": "Testa a ideia em pequena escala, valida e propõe a melhoria formalmente.", "score": 5 },
+            { "key": "c", "label": "Muda sem avisar ninguém para agilizar o processo.", "score": 2 },
+            { "key": "d", "label": "Sugere verbalmente, mas não documenta nem acompanha.", "score": 3 }
+          ]
+        },
+        {
+          "key": "cur_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você costuma buscar informações ou estudar temas relacionados ao seu trabalho por conta própria, sem esperar treinamentos formais?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "gestao_mudancas",
+      "name": "Adaptação a Mudanças",
+      "description": "Capacidade de ajustar comportamento, método e expectativas diante de mudanças no ambiente, nas prioridades ou nas ferramentas de trabalho.",
+      "weight": 25,
+      "questions": [
+        {
+          "key": "mud_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 12,
+          "prompt": "Descreva uma mudança significativa no seu trabalho (novo processo, nova ferramenta, reestruturação). Como você reagiu e o que fez para se adaptar?",
+          "evaluation_criteria": [
+            "Aceita a mudança sem postura defensiva",
+            "Busca entender o novo contexto",
+            "Age para se adaptar rapidamente",
+            "Mantém produtividade durante a transição",
+            "Contribui para a adaptação da equipe"
+          ],
+          "score_guide": {
+            "1": "Resistiu à mudança ou demorou muito para se adaptar.",
+            "3": "Se adaptou, mas com resistência inicial ou perda prolongada de produtividade.",
+            "5": "Aceitou, entendeu o novo contexto, adaptou-se e contribuiu para a equipe."
+          }
+        },
+        {
+          "key": "mud_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 8,
+          "prompt": "Uma mudança de processo afeta a forma como você trabalha. A equipe está dividida entre aceitar e resistir. Qual é a sua postura?",
+          "options": [
+            { "key": "a", "label": "Se junta ao grupo que resiste para não ficar isolado.", "score": 1 },
+            { "key": "b", "label": "Busca entender a razão da mudança, se adapta e ajuda os colegas a entenderem.", "score": 5 },
+            { "key": "c", "label": "Aceita em silêncio, mas não muda sua prática real.", "score": 1 },
+            { "key": "d", "label": "Espera a situação se resolver sozinha antes de agir.", "score": 2 }
+          ]
+        },
+        {
+          "key": "mud_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Quando as prioridades do seu trabalho mudam de forma inesperada, você consegue se reorganizar rapidamente?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "autodesenvolvimento",
+      "name": "Autodesenvolvimento e Feedback",
+      "description": "Capacidade de identificar pontos de melhoria em si mesmo, buscar feedback e agir para evoluir continuamente.",
+      "weight": 25,
+      "questions": [
+        {
+          "key": "auto_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 12,
+          "prompt": "Conte uma situação em que você recebeu um feedback difícil. Como reagiu e o que fez a partir disso?",
+          "evaluation_criteria": [
+            "Ouviu sem postura defensiva",
+            "Reconheceu o ponto de melhoria",
+            "Tomou uma ação concreta para melhorar",
+            "Demonstra evolução"
+          ],
+          "score_guide": {
+            "1": "Rejeitou o feedback ou não tomou nenhuma ação.",
+            "3": "Aceitou, mas a ação de melhoria foi limitada ou vaga.",
+            "5": "Ouviu, reconheceu, agiu de forma concreta e demonstrou evolução."
+          }
+        },
+        {
+          "key": "auto_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 8,
+          "prompt": "Você percebe que cometeu um erro que impactou o resultado. Qual é a sua reação?",
+          "options": [
+            { "key": "a", "label": "Tenta esconder para não ser julgado.", "score": 1 },
+            { "key": "b", "label": "Reconhece, comunica, corrige e analisa o que pode aprender com a situação.", "score": 5 },
+            { "key": "c", "label": "Justifica o erro com fatores externos.", "score": 2 },
+            { "key": "d", "label": "Corrige em silêncio sem comunicar ou analisar a causa.", "score": 2 }
+          ]
+        },
+        {
+          "key": "auto_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você busca ativamente feedback sobre seu desempenho, mesmo sem ser solicitado?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "resiliencia",
+      "name": "Resiliência e Gestão de Frustração",
+      "description": "Capacidade de manter o desempenho e a postura profissional diante de erros, fracassos e situações adversas.",
+      "weight": 20,
+      "questions": [
+        {
+          "key": "res_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Descreva uma situação em que as coisas não saíram como planejado, apesar do seu esforço. Como você lidou com a frustração e o que fez a seguir?",
+          "evaluation_criteria": [
+            "Reconhece a frustração sem deixá-la dominar",
+            "Mantém postura profissional",
+            "Analisa o que aconteceu sem se vitimizar",
+            "Age para reconstruir ou tentar novamente"
+          ],
+          "score_guide": {
+            "1": "Deixou a frustração afetar o desempenho ou culpou terceiros.",
+            "3": "Lidou com dificuldade, mas recuperou-se parcialmente.",
+            "5": "Reconheceu, manteve a postura, analisou e agiu de forma construtiva."
+          }
+        },
+        {
+          "key": "res_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 6,
+          "prompt": "Após um erro que gerou crítica da liderança, como você costuma reagir nos dias seguintes?",
+          "options": [
+            { "key": "a", "label": "Fica desmotivado por um tempo e tem queda de produtividade.", "score": 2 },
+            { "key": "b", "label": "Analisa o que aconteceu, ajusta sua abordagem e volta com energia.", "score": 5 },
+            { "key": "c", "label": "Evita fazer coisas novas para não errar de novo.", "score": 1 },
+            { "key": "d", "label": "Ignora a crítica e segue como antes.", "score": 1 }
+          ]
+        },
+        {
+          "key": "res_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 4,
+          "prompt": "Quando você enfrenta situações de alta pressão ou frustração, consegue manter a qualidade do seu trabalho sem impactar o relacionamento com a equipe?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    }
+  ],
+  "final_interpretation": {
+    "bands": [
+      { "min": 0,  "max": 39,  "label": "Baixa evidência de adaptabilidade", "description": "As respostas indicam dificuldade de adaptação e aprendizagem. Recomenda-se entrevista complementar para avaliar potencial de desenvolvimento." },
+      { "min": 40, "max": 59,  "label": "Adaptabilidade em desenvolvimento",  "description": "Há evidências de potencial, mas com lacunas a desenvolver. Validar em entrevista e considerar o plano de onboarding." },
+      { "min": 60, "max": 79,  "label": "Boa aderência comportamental",        "description": "O candidato demonstra boa capacidade de aprendizagem e adaptação para o nível da função." },
+      { "min": 80, "max": 100, "label": "Forte evidência de adaptabilidade",   "description": "O candidato apresenta evidências sólidas de curiosidade, resiliência e capacidade de crescimento acelerado." }
+    ]
+  },
+  "compliance_notes": [
+    "Este modelo não deve ser apresentado como teste psicológico.",
+    "Use os resultados como apoio à decisão, não como critério único de contratação.",
+    "Especialmente útil para processos de trainee, jovem aprendiz e posições com forte plano de desenvolvimento.",
+    "Mantenha os mesmos critérios para todos os candidatos da mesma vaga."
+  ]
+}

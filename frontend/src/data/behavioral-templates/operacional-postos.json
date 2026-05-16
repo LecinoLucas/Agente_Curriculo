@@ -1,0 +1,244 @@
+{
+  "name": "Avaliação Comportamental — Operacional e Postos",
+  "description": "Modelo de avaliação comportamental por competências para funções operacionais, segurança patrimonial, produção, logística e manutenção. Foca em disciplina, atenção, procedimentos e confiabilidade.",
+  "version": 1,
+  "status": "draft",
+  "estimated_minutes": 15,
+  "scoring_method": "weighted_competency_average",
+  "instructions_to_candidate": "Responda com base em experiências reais de trabalho. Nas perguntas abertas, descreva o que aconteceu, o que você fez e qual foi o resultado.",
+  "competencies": [
+    {
+      "key": "disciplina_pontualidade",
+      "name": "Disciplina e Pontualidade",
+      "description": "Cumprimento de horários, regras, uniformes e procedimentos com consistência e sem necessidade de supervisão constante.",
+      "weight": 25,
+      "questions": [
+        {
+          "key": "disc_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 10,
+          "prompt": "Você está trabalhando em um posto e percebe que o seu horário de intervalo já acabou, mas o colega que deveria te substituir ainda não chegou. O que você faz?",
+          "options": [
+            { "key": "a", "label": "Vai ao intervalo mesmo assim, pois é seu direito.", "score": 1 },
+            { "key": "b", "label": "Permanece no posto, comunica o responsável e aguarda a substituição.", "score": 5 },
+            { "key": "c", "label": "Reclama em voz alta para os colegas antes de qualquer atitude.", "score": 1 },
+            { "key": "d", "label": "Abandona o posto após tentar contato por mensagem.", "score": 2 }
+          ]
+        },
+        {
+          "key": "disc_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Conte uma situação em que você precisou seguir uma regra ou procedimento com o qual não concordou. Como agiu?",
+          "evaluation_criteria": [
+            "Demonstra respeito às normas mesmo sem concordar",
+            "Busca canal adequado para questionar",
+            "Age de forma profissional",
+            "Não desrespeita a hierarquia"
+          ],
+          "score_guide": {
+            "1": "Descumpriu a regra ou agiu de forma impulsiva.",
+            "3": "Seguiu, mas com postura resistente ou pouco profissional.",
+            "5": "Seguiu o procedimento e buscou o canal correto para expor sua visão."
+          }
+        },
+        {
+          "key": "disc_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Com que frequência você chega no horário certo ao trabalho, sem atrasos?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "seguranca_normas",
+      "name": "Segurança e Cumprimento de Normas",
+      "description": "Atenção às normas de segurança, uso correto de EPIs, protocolos de acesso e prevenção de riscos.",
+      "weight": 25,
+      "questions": [
+        {
+          "key": "seg_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 10,
+          "prompt": "Um colega descumpre uma norma de segurança importante por achar que é desnecessária. Você:",
+          "options": [
+            { "key": "a", "label": "Ignora, pois não é seu problema.", "score": 1 },
+            { "key": "b", "label": "Alerta o colega no momento e, se necessário, comunica o responsável.", "score": 5 },
+            { "key": "c", "label": "Faz o mesmo para não parecer diferente do grupo.", "score": 1 },
+            { "key": "d", "label": "Comenta só depois do turno, sem agir no momento.", "score": 2 }
+          ]
+        },
+        {
+          "key": "seg_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 10,
+          "prompt": "Descreva uma situação em que você identificou um risco ou irregularidade no ambiente de trabalho. O que você fez?",
+          "evaluation_criteria": [
+            "Identifica o risco de forma concreta",
+            "Age com rapidez e responsabilidade",
+            "Comunica à liderança ou ao setor adequado",
+            "Contribui para evitar dano"
+          ],
+          "score_guide": {
+            "1": "Ignorou ou não comunicou o risco.",
+            "3": "Comunicou, mas sem clareza ou urgência adequada.",
+            "5": "Identificou, agiu preventivamente e comunicou de forma eficaz."
+          }
+        },
+        {
+          "key": "seg_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você usa os equipamentos de proteção individual (EPIs) e segue os protocolos de segurança mesmo quando ninguém está observando?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "atencao_vigilancia",
+      "name": "Atenção e Vigilância",
+      "description": "Capacidade de manter foco durante turnos longos, perceber situações anômalas e agir com atenção em tarefas repetitivas.",
+      "weight": 25,
+      "questions": [
+        {
+          "key": "atenc_text_star_01",
+          "type": "text",
+          "required": true,
+          "weight": 12,
+          "prompt": "Conte uma situação em que sua atenção evitou um problema no trabalho. O que você percebeu e o que fez?",
+          "evaluation_criteria": [
+            "Descreve o que percebeu com clareza",
+            "Age rapidamente",
+            "Comunica ou registra a ocorrência",
+            "Contribui para evitar dano ou prejuízo"
+          ],
+          "score_guide": {
+            "1": "Resposta vaga ou sem ação concreta.",
+            "3": "Percebeu, mas agiu com demora ou sem clareza.",
+            "5": "Percebeu rapidamente, agiu e comunicou com eficácia."
+          }
+        },
+        {
+          "key": "atenc_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 8,
+          "prompt": "Durante turnos longos ou tarefas repetitivas, você consegue manter o foco e a atenção sem perder a qualidade?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        },
+        {
+          "key": "atenc_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você está em um turno tranquilo e começa a sentir sono. O que faz?",
+          "options": [
+            { "key": "a", "label": "Tenta resistir em silêncio sem comunicar ninguém.", "score": 2 },
+            { "key": "b", "label": "Comunica o responsável e solicita uma pausa ou substituição temporária.", "score": 5 },
+            { "key": "c", "label": "Usa o celular para se distrair e ficar acordado.", "score": 2 },
+            { "key": "d", "label": "Cochila rapidamente sem avisar.", "score": 1 }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "comunicacao_operacional",
+      "name": "Comunicação Operacional",
+      "description": "Capacidade de registrar ocorrências, passar informações no turno, comunicar problemas e interagir com a equipe de forma clara e objetiva.",
+      "weight": 15,
+      "questions": [
+        {
+          "key": "com_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 8,
+          "prompt": "Ao final do seu turno, aconteceu um incidente que precisa ser informado ao turno seguinte. O que você faz?",
+          "options": [
+            { "key": "a", "label": "Conta verbalmente para o colega que vai assumir.", "score": 3 },
+            { "key": "b", "label": "Registra no livro de ocorrências e repassa verbalmente, com hora e detalhes.", "score": 5 },
+            { "key": "c", "label": "Não passa a informação para não criar confusão.", "score": 1 },
+            { "key": "d", "label": "Manda mensagem pelo celular para o responsável e vai embora.", "score": 2 }
+          ]
+        },
+        {
+          "key": "com_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 7,
+          "prompt": "Você costuma registrar ou comunicar as ocorrências do seu turno de forma clara e no momento adequado?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    },
+    {
+      "key": "trabalho_equipe_op",
+      "name": "Cooperação e Postura Profissional",
+      "description": "Capacidade de colaborar com a equipe, manter postura profissional e apoiar colegas quando necessário.",
+      "weight": 10,
+      "questions": [
+        {
+          "key": "coop_choice_01",
+          "type": "multiple_choice",
+          "required": true,
+          "weight": 5,
+          "prompt": "Um colega precisa de apoio em uma tarefa fora da sua função habitual, mas dentro das suas possibilidades. O que você faz?",
+          "options": [
+            { "key": "a", "label": "Ajuda sem hesitar, dentro do que é permitido.", "score": 5 },
+            { "key": "b", "label": "Nega porque não é sua responsabilidade.", "score": 1 },
+            { "key": "c", "label": "Ajuda, mas reclama depois para o gestor.", "score": 2 },
+            { "key": "d", "label": "Pergunta ao supervisor antes de ajudar.", "score": 4 }
+          ]
+        },
+        {
+          "key": "coop_scale_01",
+          "type": "scale",
+          "required": true,
+          "weight": 5,
+          "prompt": "Você mantém postura profissional com clientes, visitantes e colegas mesmo em situações tensas ou cansativas?",
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": { "1": "Quase nunca", "2": "Raramente", "3": "Às vezes", "4": "Frequentemente", "5": "Sempre" }
+          }
+        }
+      ]
+    }
+  ],
+  "final_interpretation": {
+    "bands": [
+      { "min": 0,  "max": 39,  "label": "Baixa evidência comportamental", "description": "As respostas indicam baixa aderência às competências operacionais. Recomenda-se entrevista complementar." },
+      { "min": 40, "max": 59,  "label": "Evidência parcial",              "description": "Há indicadores positivos, mas com lacunas relevantes. Validar pontos críticos antes da decisão." },
+      { "min": 60, "max": 79,  "label": "Boa evidência comportamental",   "description": "O candidato demonstra aderência satisfatória às competências operacionais." },
+      { "min": 80, "max": 100, "label": "Forte evidência comportamental", "description": "O candidato apresenta evidências consistentes de comportamentos adequados para o posto." }
+    ]
+  },
+  "compliance_notes": [
+    "Este modelo não deve ser apresentado como teste psicológico.",
+    "Use os resultados como apoio à decisão, não como critério único de contratação.",
+    "Adapte as perguntas se a função tiver requisitos específicos de segurança ou protocolo.",
+    "Mantenha os mesmos critérios para todos os candidatos da mesma vaga."
+  ]
+}
