@@ -91,6 +91,7 @@ export function CandidateDrawer({
     notifyCandidatesChanged,
     moveCandidateStage,
     invalidateBoard,
+    invalidateRanking,
     patchCandidate,
   } = usePipeline();
 
@@ -500,6 +501,7 @@ export function CandidateDrawer({
         syncCandidateOverview(targetCandidateId),
         refreshBoard(),
       ]);
+      invalidateRanking();
 
       pushActionFeedbackForCandidate(targetCandidateId, {
         tone: linkResult.analysis?.blocked ? "warning" : "success",
@@ -528,6 +530,7 @@ export function CandidateDrawer({
   }, [
     selectedCandidateId,
     activeBoardJobId,
+    invalidateRanking,
     pushActionFeedbackForCandidate,
     refreshBoard,
     startPolling,
