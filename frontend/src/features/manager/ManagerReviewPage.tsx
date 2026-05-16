@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Loader2, Send, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, Save, Send, Users } from "lucide-react";
 
 import { collaborationService } from "../../services/collaborationService";
-import { managerService, type ManagerCandidateDetailResponse } from "../../services/managerService";
+import {
+  managerService,
+  type ManagerCandidateDetailResponse,
+  type ScorecardFinalRecommendation,
+  type ScorecardResponse,
+} from "../../services/managerService";
 import type { ReviewRequestItem } from "../../types/domain";
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -41,6 +46,14 @@ export function ManagerReviewPage() {
   const [recommendation, setRecommendation] = useState<"advance" | "hold" | "reject" | "request_interview">("advance");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
+
+  // Scorecard state
+  const [scorecard, setScorecard] = useState<ScorecardResponse | null>(null);
+  const [loadingScorecard, setLoadingScorecard] = useState(false);
+  const [scorecardRec, setScorecardRec] = useState<ScorecardFinalRecommendation>("yes");
+  const [scorecardNotes, setScorecardNotes] = useState("");
+  const [savingScorecard, setSavingScorecard] = useState(false);
+  const [scorecardError, setScorecardError] = useState<string | null>(null);
 
   // Candidate browse state (tab 2)
   const [jobs, setJobs] = useState<{ id: string; title: string; candidate_count: number; assigned_count: number }[]>([]);
@@ -81,14 +94,70 @@ export function ManagerReviewPage() {
     setFeedbackMessage("");
     setFeedbackSent(false);
     setCandidateSummary(null);
+    setScorecard(null);
+    setScorecardNotes("");
+    setScorecardRec("yes");
+    setScorecardError(null);
     setLoadingSummary(true);
+    setLoadingScorecard(true);
+
+    void managerService.getCandidateSummary(req.job_id, req.candidate_id)
+      .then(setCandidateSummary)
+      .catch(() => {})
+      .finally(() => setLoadingSummary(false));
+
+    void managerService.getScorecard(req.job_id, req.candidate_id)
+      .then((env) => {
+        setScorecard(env.scorecard);
+        if (env.scorecard) {
+          setScorecardRec(env.scorecard.final_recommendation ?? "yes");
+          setScorecardNotes(env.scorecard.overall_notes ?? "");
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingScorecard(false));
+  }
+
+  async function handleSaveScorecard() {
+    if (!selectedRequest) return;
+    setSavingScorecard(true);
+    setScorecardError(null);
     try {
-      const summary = await managerService.getCandidateSummary(req.job_id, req.candidate_id);
-      setCandidateSummary(summary);
+      let sc = scorecard;
+      if (!sc) {
+        sc = await managerService.createScorecard(selectedRequest.job_id, selectedRequest.candidate_id, { items: [] });
+      }
+      const updated = await managerService.patchScorecard(sc.id, {
+        final_recommendation: scorecardRec,
+        overall_notes: scorecardNotes,
+      });
+      setScorecard(updated);
     } catch {
-      // summary unavailable (not evaluator) — still allow viewing request details
+      setScorecardError("Não foi possível salvar o rascunho.");
     } finally {
-      setLoadingSummary(false);
+      setSavingScorecard(false);
+    }
+  }
+
+  async function handleSubmitScorecard() {
+    if (!selectedRequest) return;
+    setSavingScorecard(true);
+    setScorecardError(null);
+    try {
+      let sc = scorecard;
+      if (!sc) {
+        sc = await managerService.createScorecard(selectedRequest.job_id, selectedRequest.candidate_id, { items: [] });
+      }
+      sc = await managerService.patchScorecard(sc.id, {
+        final_recommendation: scorecardRec,
+        overall_notes: scorecardNotes,
+      });
+      const submitted = await managerService.submitScorecard(sc.id);
+      setScorecard(submitted);
+    } catch {
+      setScorecardError("Não foi possível enviar a avaliação.");
+    } finally {
+      setSavingScorecard(false);
     }
   }
 
@@ -349,6 +418,81 @@ export function ManagerReviewPage() {
                     </p>
                   </div>
                 ) : null}
+
+                {/* Scorecard panel */}
+                <div className="rounded-lg border border-[hsl(var(--border))]/60 bg-[hsl(var(--bg))] p-4 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">Avaliação do Gestor</p>
+                  {loadingScorecard ? (
+                    <div className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Carregando avaliação...
+                    </div>
+                  ) : scorecard?.status === "submitted" ? (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1 text-sm text-emerald-800">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Avaliação enviada
+                      </div>
+                      {scorecard.final_recommendation && (
+                        <p className="text-xs">Recomendação: {scorecard.final_recommendation.replace(/_/g, " ")}</p>
+                      )}
+                      {scorecard.overall_notes && (
+                        <p className="text-xs text-emerald-700">{scorecard.overall_notes}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Recomendação final</label>
+                        <select
+                          value={scorecardRec}
+                          onChange={(e) => setScorecardRec(e.target.value as ScorecardFinalRecommendation)}
+                          disabled={savingScorecard}
+                          className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+                        >
+                          <option value="strong_yes">Forte SIM</option>
+                          <option value="yes">SIM</option>
+                          <option value="no">NÃO</option>
+                          <option value="strong_no">Forte NÃO</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Observações gerais</label>
+                        <textarea
+                          value={scorecardNotes}
+                          onChange={(e) => setScorecardNotes(e.target.value)}
+                          rows={3}
+                          disabled={savingScorecard}
+                          placeholder="Descreva sua avaliação detalhada do candidato..."
+                          className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] resize-none"
+                        />
+                      </div>
+                      {scorecardError && (
+                        <p className="text-xs text-rose-600">{scorecardError}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveScorecard()}
+                          disabled={savingScorecard}
+                          className="flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+                        >
+                          {savingScorecard ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          Salvar rascunho
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleSubmitScorecard()}
+                          disabled={savingScorecard}
+                          className="flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-50"
+                        >
+                          {savingScorecard ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                          Enviar avaliação
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Feedback form */}
                 {feedbackSent ? (

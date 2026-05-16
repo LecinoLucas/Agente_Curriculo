@@ -6,7 +6,7 @@ Safe data retrieval without exposing:
 - Other managers' data
 
 For ADMIN: bypasses evaluator scope check, sees all jobs/candidates.
-For MANAGER: restricted to jobs where they are evaluator.
+For MANAGER: restricted to jobs where they are evaluator OR have a directed review_request.
 """
 
 import logging
@@ -25,6 +25,8 @@ from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.user_model import UserModel
 
 logger = logging.getLogger(__name__)
+
+_REVIEW_REQUEST_TYPE = "review_request"
 
 
 class ManagerViewService:
@@ -65,24 +67,39 @@ class ManagerViewService:
                 JobModel.title,
             )
         else:
-            # MANAGER sees only jobs where they are evaluator
+            # MANAGER sees jobs where they are evaluator OR have a directed review_request
+            scorecard_job_ids = (
+                sa.select(InterviewScorecardModel.job_id)
+                .where(InterviewScorecardModel.evaluator_id == user_id)
+            )
+            review_request_job_ids = (
+                sa.select(CollaborationCommentModel.job_id)
+                .where(
+                    CollaborationCommentModel.comment_type == _REVIEW_REQUEST_TYPE,
+                    CollaborationCommentModel.target_manager_id == user_id,
+                )
+            )
             query = sa.select(
                 JobModel.id,
                 JobModel.title,
                 sa.func.count(sa.distinct(CandidateJobPipelineModel.candidate_id)).label("candidate_count"),
                 sa.func.count(sa.distinct(InterviewScorecardModel.id)).label("assigned_count"),
             ).select_from(
-                InterviewScorecardModel
-            ).join(
-                JobModel, InterviewScorecardModel.job_id == JobModel.id
+                JobModel
             ).outerjoin(
                 CandidateJobPipelineModel,
                 sa.and_(
                     CandidateJobPipelineModel.job_id == JobModel.id,
                     CandidateJobPipelineModel.pipeline_status == "active",
                 )
+            ).outerjoin(
+                InterviewScorecardModel,
+                sa.and_(
+                    InterviewScorecardModel.job_id == JobModel.id,
+                    InterviewScorecardModel.evaluator_id == user_id,
+                )
             ).where(
-                InterviewScorecardModel.evaluator_id == user_id
+                JobModel.id.in_(sa.union(scorecard_job_ids, review_request_job_ids))
             ).group_by(
                 JobModel.id,
                 JobModel.title,
@@ -103,15 +120,28 @@ class ManagerViewService:
 
     async def list_job_candidates(self, user_id: UUID, job_id: UUID) -> list[dict]:
         """
-        List candidates in a job where user is evaluator.
+        List candidates in a job where user is evaluator or has a directed review_request.
 
-        Validates: user is evaluator for this job, then returns safe candidate summary.
+        Validates: user has access to this job, then returns safe candidate summary.
         Returns: [{ id, name, email, pipeline_stage, scorecard_status }]
         """
         # Verify manager has access to this job
         can_access = await self._verify_manager_job_access(user_id, job_id)
         if not can_access:
             return []
+
+        # Candidates reachable via scorecard evaluator_id or directed review_request
+        accessible_candidate_ids_sq = sa.union(
+            sa.select(InterviewScorecardModel.candidate_id).where(
+                InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.evaluator_id == user_id,
+            ),
+            sa.select(CollaborationCommentModel.candidate_id).where(
+                CollaborationCommentModel.job_id == job_id,
+                CollaborationCommentModel.comment_type == _REVIEW_REQUEST_TYPE,
+                CollaborationCommentModel.target_manager_id == user_id,
+            ),
+        )
 
         query = sa.select(
             CandidateModel.id,
@@ -134,6 +164,7 @@ class ManagerViewService:
             sa.and_(
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.candidate_id.in_(accessible_candidate_ids_sq),
             )
         ).group_by(
             CandidateModel.id,
@@ -384,10 +415,10 @@ class ManagerViewService:
         ]
 
     async def _verify_manager_job_access(self, user_id: UUID, job_id: UUID) -> bool:
-        """Check if manager is evaluator for this job. ADMIN always has access."""
+        """Check if manager is evaluator for this job OR has a directed review_request. ADMIN always has access."""
         if self.is_admin:
             return True
-        count = await self.session.scalar(
+        scorecard_count = await self.session.scalar(
             sa.select(sa.func.count(InterviewScorecardModel.id)).where(
                 sa.and_(
                     InterviewScorecardModel.job_id == job_id,
@@ -395,15 +426,26 @@ class ManagerViewService:
                 )
             )
         )
-        return (count or 0) > 0
+        if (scorecard_count or 0) > 0:
+            return True
+        review_request_count = await self.session.scalar(
+            sa.select(sa.func.count(CollaborationCommentModel.id)).where(
+                sa.and_(
+                    CollaborationCommentModel.job_id == job_id,
+                    CollaborationCommentModel.comment_type == _REVIEW_REQUEST_TYPE,
+                    CollaborationCommentModel.target_manager_id == user_id,
+                )
+            )
+        )
+        return (review_request_count or 0) > 0
 
     async def _verify_manager_candidate_access(
         self, user_id: UUID, job_id: UUID, candidate_id: UUID
     ) -> bool:
-        """Check if manager is evaluator for this candidate in this job. ADMIN always has access."""
+        """Check if manager is evaluator for this candidate OR has a directed review_request. ADMIN always has access."""
         if self.is_admin:
             return True
-        count = await self.session.scalar(
+        scorecard_count = await self.session.scalar(
             sa.select(sa.func.count(InterviewScorecardModel.id)).where(
                 sa.and_(
                     InterviewScorecardModel.job_id == job_id,
@@ -412,4 +454,16 @@ class ManagerViewService:
                 )
             )
         )
-        return (count or 0) > 0
+        if (scorecard_count or 0) > 0:
+            return True
+        review_request_count = await self.session.scalar(
+            sa.select(sa.func.count(CollaborationCommentModel.id)).where(
+                sa.and_(
+                    CollaborationCommentModel.job_id == job_id,
+                    CollaborationCommentModel.candidate_id == candidate_id,
+                    CollaborationCommentModel.comment_type == _REVIEW_REQUEST_TYPE,
+                    CollaborationCommentModel.target_manager_id == user_id,
+                )
+            )
+        )
+        return (review_request_count or 0) > 0

@@ -38,6 +38,32 @@ export type ManagerJobCandidatesResponse = {
   candidates: ManagerCandidateSummary[];
 };
 
+export type ScorecardFinalRecommendation = "strong_yes" | "yes" | "no" | "strong_no";
+
+export type ScorecardResponse = {
+  id: string;
+  candidate_id: string;
+  job_id: string;
+  evaluator_id: string;
+  status: "draft" | "submitted";
+  final_recommendation: ScorecardFinalRecommendation | null;
+  overall_notes: string | null;
+  submitted_at: string | null;
+  items: Array<{
+    id: string;
+    competency_name: string;
+    question_text: string | null;
+    rating: number | null;
+    evidence: string | null;
+    display_order: number;
+  }>;
+};
+
+export type ScorecardEnvelopeResponse = {
+  scorecard: ScorecardResponse | null;
+  suggested_behavioral_questions: string[];
+};
+
 export const managerService = {
   listJobs: () =>
     httpRequest<ManagerJobListResponse>("/api/v1/manager/jobs"),
@@ -47,4 +73,24 @@ export const managerService = {
 
   getCandidateSummary: (jobId: string, candidateId: string) =>
     httpRequest<ManagerCandidateDetailResponse>(`/api/v1/manager/jobs/${jobId}/candidates/${candidateId}/summary`),
+
+  getScorecard: (jobId: string, candidateId: string) =>
+    httpRequest<ScorecardEnvelopeResponse>(`/api/v1/jobs/${jobId}/candidates/${candidateId}/interview-scorecard`),
+
+  createScorecard: (jobId: string, candidateId: string, body: { items: Array<{ competency_name: string; question_text?: string; display_order: number }> }) =>
+    httpRequest<ScorecardResponse>(`/api/v1/jobs/${jobId}/candidates/${candidateId}/interview-scorecard`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  patchScorecard: (scorecardId: string, body: Partial<{ final_recommendation: ScorecardFinalRecommendation; overall_notes: string; items: Array<{ competency_name: string; rating?: number; evidence?: string; display_order?: number }> }>) =>
+    httpRequest<ScorecardResponse>(`/api/v1/interview-scorecards/${scorecardId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  submitScorecard: (scorecardId: string) =>
+    httpRequest<ScorecardResponse>(`/api/v1/interview-scorecards/${scorecardId}/submit`, {
+      method: "POST",
+    }),
 };

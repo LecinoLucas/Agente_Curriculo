@@ -23,6 +23,7 @@ from src.infrastructure.database.models.interview_scorecard_model import Intervi
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel, ScoreModelVersionModel
+from src.infrastructure.database.models.user_model import UserModel
 
 
 class SQLAlchemyDecisionSummaryRepository:
@@ -207,11 +208,24 @@ class SQLAlchemyDecisionSummaryRepository:
         )
 
     async def has_manager_feedback(self, *, candidate_id: UUID, job_id: UUID) -> bool:
-        result = await self._session.scalar(
+        comment_count = await self._session.scalar(
             sa.select(sa.func.count()).select_from(CollaborationCommentModel).where(
                 CollaborationCommentModel.candidate_id == candidate_id,
                 CollaborationCommentModel.job_id == job_id,
                 CollaborationCommentModel.author_role == "manager",
             )
         )
-        return (result or 0) > 0
+        if (comment_count or 0) > 0:
+            return True
+        scorecard_count = await self._session.scalar(
+            sa.select(sa.func.count())
+            .select_from(InterviewScorecardModel)
+            .join(UserModel, UserModel.id == InterviewScorecardModel.evaluator_id)
+            .where(
+                InterviewScorecardModel.candidate_id == candidate_id,
+                InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.status == "submitted",
+                UserModel.role == "manager",
+            )
+        )
+        return (scorecard_count or 0) > 0

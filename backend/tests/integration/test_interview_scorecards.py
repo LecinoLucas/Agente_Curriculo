@@ -18,6 +18,7 @@ from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralAssessmentTemplateModel,
 )
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.collaboration_comments_model import CollaborationCommentModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
 
@@ -340,3 +341,248 @@ async def test_get_includes_behavioral_ai_questions_as_support_only(client: Asyn
         "Como você valida alinhamento?",
         "Quando escalou um conflito?",
     ]
+
+
+# ── Manager-specific access tests ────────────────────────────────────────────
+
+async def _manager_headers(client: AsyncClient, db_session: AsyncSession) -> tuple[dict[str, str], UUID]:
+    user = await _create_active_user(
+        db_session,
+        f"manager-{uuid4().hex}@example.com",
+        "Senha123!",
+        UserRole.MANAGER,
+    )
+    headers = await _auth_headers(client, user.email, "Senha123!")
+    return headers, user.id
+
+
+async def _seed_review_request(
+    db_session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+    target_manager_id: UUID,
+    author_id: UUID,
+) -> None:
+    comment = CollaborationCommentModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        author_id=author_id,
+        author_role="recruiter",
+        comment_type="review_request",
+        message="Por favor avalie este candidato.",
+        target_manager_id=target_manager_id,
+        created_at=datetime.now(UTC),
+    )
+    db_session.add(comment)
+    await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_manager_without_access_cannot_get_scorecard(client: AsyncClient, db_session: AsyncSession) -> None:
+    mgr_headers, _mgr_id = await _manager_headers(client, db_session)
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+
+    response = await client.get(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=mgr_headers,
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_manager_with_review_request_can_get_scorecard(client: AsyncClient, db_session: AsyncSession) -> None:
+    mgr_headers, mgr_id = await _manager_headers(client, db_session)
+    admin_user = await _create_active_user(
+        db_session, f"admin-seed-{uuid4().hex}@example.com", "Senha123!", UserRole.ADMIN
+    )
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+    await _seed_review_request(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        target_manager_id=mgr_id,
+        author_id=admin_user.id,
+    )
+
+    response = await client.get(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=mgr_headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+
+
+@pytest.mark.asyncio
+async def test_manager_with_review_request_can_create_scorecard(client: AsyncClient, db_session: AsyncSession) -> None:
+    mgr_headers, mgr_id = await _manager_headers(client, db_session)
+    admin_user = await _create_active_user(
+        db_session, f"admin-seed-{uuid4().hex}@example.com", "Senha123!", UserRole.ADMIN
+    )
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+    await _seed_review_request(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        target_manager_id=mgr_id,
+        author_id=admin_user.id,
+    )
+
+    response = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=mgr_headers,
+        json={
+            "items": [
+                {"competency_name": "Liderança", "question_text": "Descreva uma situação de liderança.", "display_order": 1}
+            ]
+        },
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED, response.text
+    payload = response.json()
+    assert payload["evaluator_id"] == str(mgr_id)
+    assert payload["status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_manager_can_edit_own_scorecard(client: AsyncClient, db_session: AsyncSession) -> None:
+    mgr_headers, mgr_id = await _manager_headers(client, db_session)
+    admin_user = await _create_active_user(
+        db_session, f"admin-seed-{uuid4().hex}@example.com", "Senha123!", UserRole.ADMIN
+    )
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+    await _seed_review_request(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        target_manager_id=mgr_id,
+        author_id=admin_user.id,
+    )
+    create_resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=mgr_headers,
+        json={"items": [{"competency_name": "Comunicação", "display_order": 1}]},
+    )
+    assert create_resp.status_code == status.HTTP_201_CREATED, create_resp.text
+    scorecard_id = create_resp.json()["id"]
+
+    patch_resp = await client.patch(
+        f"/api/v1/interview-scorecards/{scorecard_id}",
+        headers=mgr_headers,
+        json={"overall_notes": "Bom perfil para a vaga."},
+    )
+
+    assert patch_resp.status_code == status.HTTP_200_OK, patch_resp.text
+    assert patch_resp.json()["overall_notes"] == "Bom perfil para a vaga."
+
+
+@pytest.mark.asyncio
+async def test_manager_cannot_edit_other_managers_scorecard(client: AsyncClient, db_session: AsyncSession) -> None:
+    mgr1_headers, mgr1_id = await _manager_headers(client, db_session)
+    mgr2_headers, mgr2_id = await _manager_headers(client, db_session)
+    rec_headers, rec_id = await _recruiter_headers(client, db_session)
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+
+    create_resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=rec_headers,
+        json={"items": [{"competency_name": "Adaptabilidade", "display_order": 1}]},
+    )
+    assert create_resp.status_code == status.HTTP_201_CREATED, create_resp.text
+    scorecard_id = create_resp.json()["id"]
+
+    await _seed_review_request(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        target_manager_id=mgr2_id,
+        author_id=rec_id,
+    )
+
+    patch_resp = await client.patch(
+        f"/api/v1/interview-scorecards/{scorecard_id}",
+        headers=mgr2_headers,
+        json={"overall_notes": "Não deveria conseguir editar."},
+    )
+
+    assert patch_resp.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_manager_can_submit_own_scorecard(client: AsyncClient, db_session: AsyncSession) -> None:
+    mgr_headers, mgr_id = await _manager_headers(client, db_session)
+    admin_user = await _create_active_user(
+        db_session, f"admin-seed-{uuid4().hex}@example.com", "Senha123!", UserRole.ADMIN
+    )
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+    await _seed_review_request(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        target_manager_id=mgr_id,
+        author_id=admin_user.id,
+    )
+    create_resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=mgr_headers,
+        json={"items": [{"competency_name": "Comunicação", "display_order": 1}]},
+    )
+    scorecard_id = create_resp.json()["id"]
+    await client.patch(
+        f"/api/v1/interview-scorecards/{scorecard_id}",
+        headers=mgr_headers,
+        json={
+            "final_recommendation": "yes",
+            "items": [{"competency_name": "Comunicação", "rating": 4, "evidence": "Boa comunicação observada.", "display_order": 1}],
+        },
+    )
+
+    submit_resp = await client.post(
+        f"/api/v1/interview-scorecards/{scorecard_id}/submit",
+        headers=mgr_headers,
+    )
+
+    assert submit_resp.status_code == status.HTTP_200_OK, submit_resp.text
+    assert submit_resp.json()["status"] == "submitted"
+
+
+@pytest.mark.asyncio
+async def test_submitted_manager_scorecard_satisfies_has_manager_feedback_gate(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from src.infrastructure.repositories.sqlalchemy_hiring_decision_repository import SQLAlchemyHiringDecisionRepository
+
+    mgr_headers, mgr_id = await _manager_headers(client, db_session)
+    admin_user = await _create_active_user(
+        db_session, f"admin-seed-{uuid4().hex}@example.com", "Senha123!", UserRole.ADMIN
+    )
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+    await _seed_review_request(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        target_manager_id=mgr_id,
+        author_id=admin_user.id,
+    )
+    create_resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=mgr_headers,
+        json={"items": [{"competency_name": "Técnica", "display_order": 1}]},
+    )
+    scorecard_id = create_resp.json()["id"]
+    await client.patch(
+        f"/api/v1/interview-scorecards/{scorecard_id}",
+        headers=mgr_headers,
+        json={
+            "final_recommendation": "strong_yes",
+            "items": [{"competency_name": "Técnica", "rating": 5, "evidence": "Excelente repertório.", "display_order": 1}],
+        },
+    )
+    await client.post(f"/api/v1/interview-scorecards/{scorecard_id}/submit", headers=mgr_headers)
+
+    repo = SQLAlchemyHiringDecisionRepository(db_session)
+    result = await repo.has_manager_feedback(candidate_id=candidate_id, job_id=job_id)
+
+    assert result is True

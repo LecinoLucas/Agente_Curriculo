@@ -10,12 +10,20 @@ const {
   mockListJobs,
   mockListCandidates,
   mockGetCandidateSummary,
+  mockGetScorecard,
+  mockCreateScorecard,
+  mockPatchScorecard,
+  mockSubmitScorecard,
 } = vi.hoisted(() => ({
   mockListReviewRequests: vi.fn(),
   mockSubmitManagerFeedback: vi.fn(),
   mockListJobs: vi.fn(),
   mockListCandidates: vi.fn(),
   mockGetCandidateSummary: vi.fn(),
+  mockGetScorecard: vi.fn(),
+  mockCreateScorecard: vi.fn(),
+  mockPatchScorecard: vi.fn(),
+  mockSubmitScorecard: vi.fn(),
 }));
 
 vi.mock("../../../services/collaborationService", () => ({
@@ -30,6 +38,10 @@ vi.mock("../../../services/managerService", () => ({
     listJobs: mockListJobs,
     listCandidates: mockListCandidates,
     getCandidateSummary: mockGetCandidateSummary,
+    getScorecard: mockGetScorecard,
+    createScorecard: mockCreateScorecard,
+    patchScorecard: mockPatchScorecard,
+    submitScorecard: mockSubmitScorecard,
   },
 }));
 
@@ -93,6 +105,28 @@ describe("ManagerReviewPage", () => {
       ],
     });
     mockGetCandidateSummary.mockResolvedValue(mockSummary);
+    mockGetScorecard.mockResolvedValue({ scorecard: null, suggested_behavioral_questions: [] });
+
+    const draftScorecard = {
+      id: "sc-1",
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      evaluator_id: "manager-1",
+      status: "draft",
+      final_recommendation: "yes",
+      overall_notes: null,
+      submitted_at: null,
+      items: [],
+    };
+    mockCreateScorecard.mockResolvedValue(draftScorecard);
+    mockPatchScorecard.mockImplementation((_, body) =>
+      Promise.resolve({ ...draftScorecard, ...body })
+    );
+    mockSubmitScorecard.mockResolvedValue({
+      ...draftScorecard,
+      status: "submitted",
+      submitted_at: "2026-05-16T10:00:00Z",
+    });
   });
 
   it("renderiza solicitações de revisão ao abrir a página", async () => {
@@ -160,5 +194,160 @@ describe("ManagerReviewPage", () => {
     expect(
       await screen.findByText("Não foi possível carregar as solicitações de revisão."),
     ).toBeInTheDocument();
+  });
+
+  it("carrega scorecard ao selecionar solicitação", async () => {
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+
+    await waitFor(() => {
+      expect(mockGetScorecard).toHaveBeenCalledWith("job-1", "cand-1");
+    });
+    expect(await screen.findByText("Avaliação do Gestor")).toBeInTheDocument();
+  });
+
+  it("exibe formulário de scorecard com recomendação e observações quando não há scorecard salvo", async () => {
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+    await screen.findByText("Avaliação do Gestor");
+
+    expect(screen.getByRole("button", { name: /salvar rascunho/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /enviar avaliação/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Descreva sua avaliação detalhada do candidato...")).toBeInTheDocument();
+  });
+
+  it("salva rascunho de scorecard criando novo quando não existe", async () => {
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+    await screen.findByText("Avaliação do Gestor");
+
+    await user.type(
+      screen.getByPlaceholderText("Descreva sua avaliação detalhada do candidato..."),
+      "Candidato demonstra boas habilidades."
+    );
+    await user.click(screen.getByRole("button", { name: /salvar rascunho/i }));
+
+    await waitFor(() => {
+      expect(mockCreateScorecard).toHaveBeenCalledWith("job-1", "cand-1", { items: [] });
+      expect(mockPatchScorecard).toHaveBeenCalledWith("sc-1", {
+        final_recommendation: "yes",
+        overall_notes: "Candidato demonstra boas habilidades.",
+      });
+    });
+  });
+
+  it("salva rascunho sem criar novo quando scorecard já existe", async () => {
+    const existingDraft = {
+      id: "sc-existing",
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      evaluator_id: "manager-1",
+      status: "draft",
+      final_recommendation: "strong_yes",
+      overall_notes: "Nota anterior",
+      submitted_at: null,
+      items: [],
+    };
+    mockGetScorecard.mockResolvedValue({ scorecard: existingDraft, suggested_behavioral_questions: [] });
+    mockPatchScorecard.mockResolvedValue({ ...existingDraft, overall_notes: "Nota atualizada" });
+
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+    await screen.findByText("Avaliação do Gestor");
+
+    // Existing notes should be pre-filled
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText("Descreva sua avaliação detalhada do candidato...") as HTMLTextAreaElement).value).toBe("Nota anterior");
+    });
+
+    await user.click(screen.getByRole("button", { name: /salvar rascunho/i }));
+
+    await waitFor(() => {
+      expect(mockCreateScorecard).not.toHaveBeenCalled();
+      expect(mockPatchScorecard).toHaveBeenCalledWith("sc-existing", expect.objectContaining({
+        final_recommendation: "strong_yes",
+      }));
+    });
+  });
+
+  it("submete scorecard e exibe estado 'Avaliação enviada' com campos bloqueados", async () => {
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+    await screen.findByText("Avaliação do Gestor");
+
+    await user.click(screen.getByRole("button", { name: /enviar avaliação/i }));
+
+    await waitFor(() => {
+      expect(mockSubmitScorecard).toHaveBeenCalledWith("sc-1");
+    });
+
+    expect(await screen.findByText("Avaliação enviada")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /salvar rascunho/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /enviar avaliação/i })).not.toBeInTheDocument();
+  });
+
+  it("exibe scorecard já submetido em modo leitura ao selecionar solicitação", async () => {
+    mockGetScorecard.mockResolvedValue({
+      scorecard: {
+        id: "sc-submitted",
+        candidate_id: "cand-1",
+        job_id: "job-1",
+        evaluator_id: "manager-1",
+        status: "submitted",
+        final_recommendation: "strong_yes",
+        overall_notes: "Excelente candidato.",
+        submitted_at: "2026-05-16T09:00:00Z",
+        items: [],
+      },
+      suggested_behavioral_questions: [],
+    });
+
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+
+    expect(await screen.findByText("Avaliação enviada")).toBeInTheDocument();
+    expect(await screen.findByText("Excelente candidato.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /salvar rascunho/i })).not.toBeInTheDocument();
+  });
+
+  it("sem solicitações exibe estado vazio com mensagem correta", async () => {
+    mockListReviewRequests.mockResolvedValue({ requests: [] });
+    render(<ManagerReviewPage />);
+
+    expect(await screen.findByText("Nenhuma solicitação pendente")).toBeInTheDocument();
+    expect(screen.getByText(/quando um recrutador solicitar/i)).toBeInTheDocument();
+  });
+
+  it("exibe contador de pendentes na aba de solicitações", async () => {
+    const pending2 = [
+      mockRequest,
+      { ...mockRequest, request_id: "req-2", candidate_name: "Maria Souza", status: "pending" as const },
+    ];
+    mockListReviewRequests.mockResolvedValue({ requests: pending2 });
+    render(<ManagerReviewPage />);
+
+    await screen.findByText("João Silva");
+    // Badge should show count 2
+    const badge = screen.getByText("2");
+    expect(badge).toBeInTheDocument();
+  });
+
+  it("gestor não vê área admin nem recruiter no menu", async () => {
+    render(<ManagerReviewPage />);
+    await screen.findByText("João Silva");
+    expect(screen.queryByText(/painel admin/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/importação/i)).not.toBeInTheDocument();
   });
 });

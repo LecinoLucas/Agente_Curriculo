@@ -1,12 +1,14 @@
 import { UserRole, UserStatus } from "../../../types/auth";
 
-export const ROLES: UserRole[] = ["admin", "recruiter", "viewer", "candidate"];
-export const INTERNAL_ROLES: UserRole[] = ["admin", "recruiter", "viewer"];
+export const ROLES: UserRole[] = ["admin", "recruiter", "manager", "hr", "viewer", "candidate"];
+export const INTERNAL_ROLES: UserRole[] = ["admin", "recruiter", "manager", "hr", "viewer"];
 export const STATUSES: UserStatus[] = ["active", "pending_verification", "suspended", "inactive"];
 
 export const ROLE_LABEL: Record<string, string> = {
   admin: "Administrador",
   recruiter: "Recrutador",
+  manager: "Gestor",
+  hr: "RH",
   candidate: "Candidato",
   viewer: "Leitor",
 };
@@ -14,6 +16,8 @@ export const ROLE_LABEL: Record<string, string> = {
 export const ROLE_CLASS: Record<string, string> = {
   admin: "bg-indigo-50 text-indigo-700 border-indigo-200",
   recruiter: "bg-purple-50 text-purple-700 border-purple-200",
+  manager: "bg-teal-50 text-teal-700 border-teal-200",
+  hr: "bg-sky-50 text-sky-700 border-sky-200",
   viewer: "bg-gray-100 text-gray-600 border-gray-200",
   candidate: "bg-amber-50 text-amber-700 border-amber-200",
 };
