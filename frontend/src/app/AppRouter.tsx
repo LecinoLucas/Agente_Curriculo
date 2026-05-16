@@ -37,9 +37,6 @@ const UsersPage = lazy(() =>
   import("../pages/UsersPage").then((m) => ({ default: m.UsersPage }))
 );
 
-const SkillsPage = lazy(() =>
-  import("../pages/SkillsPage").then((m) => ({ default: m.SkillsPage }))
-);
 
 const CadastrosPage = lazy(() =>
   import("../pages/CadastrosPage").then((m) => ({ default: m.CadastrosPage }))
@@ -251,7 +248,7 @@ export function AppRouter() {
 
         <Route
           path="admin/skills"
-          element={protectedPage(<SkillsPage />, ADMIN_ROLES)}
+          element={<Navigate to="/admin/cadastros" replace />}
         />
 
         <Route
@@ -276,7 +273,7 @@ export function AppRouter() {
 
         <Route
           path="admin/behavioral-templates"
-          element={protectedPage(<BehavioralTemplatesPage />, ADMIN_ROLES)}
+          element={protectedPage(<BehavioralTemplatesPage />, ["admin", "recruiter"])}
         />
       </Route>
 

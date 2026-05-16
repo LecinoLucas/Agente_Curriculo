@@ -29,20 +29,20 @@ const NAVIGATION_CONFIG: NavGroup[] = [
   {
     label: "Dashboard",
     caption: "Visão geral",
-    roles: ["admin", "recruiter", "viewer"],
+    roles: ["admin", "recruiter", "viewer", "manager"],
     isDropdown: false,
-    items: [{ to: "/dashboard", label: "Dashboard", caption: "Visão geral", roles: ["admin", "recruiter", "viewer"] }],
+    items: [{ to: "/dashboard", label: "Dashboard", caption: "Visão geral", roles: ["admin", "recruiter", "viewer", "manager"] }],
   },
   {
     label: "Processo Seletivo",
     caption: "Gestão e Pipeline",
-    roles: ["admin", "recruiter", "viewer"],
+    roles: ["admin", "recruiter", "viewer", "manager"],
     isDropdown: true,
     items: [
-      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer"] },
-      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer"] },
-      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer"] },
-      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer"] },
+      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer", "manager"] },
+      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer", "manager"] },
+      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer", "manager"] },
+      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer", "manager"] },
     ],
   },
   {
@@ -72,6 +72,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
       { to: "/admin", label: "Painel admin", caption: "Visão geral", roles: ["admin"] },
       { to: "/admin/usuarios", label: "Usuários", caption: "Equipe e acessos", roles: ["admin"] },
       { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ["admin"] },
+      { to: "/admin/behavioral-templates", label: "Avaliações", caption: "Templates comportamentais", roles: ["admin"] },
       { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ["admin"] },
       { to: "/admin/bi", label: "BI / Métricas", caption: "Indicadores e gráficos", roles: ["admin"] },
       { to: "/admin/health", label: "Health", caption: "Status e consumo", roles: ["admin"] },
@@ -105,6 +106,7 @@ const RECRUITER_NAV_ITEMS: Array<{ to: string; label: string; roles: UserRole[] 
   { to: "/importar", label: "Importação", roles: ["admin", "recruiter"] },
   { to: "/importar-formulario", label: "Formulários", roles: ["admin", "recruiter"] },
   { to: "/analises-ia", label: "Análises IA", roles: ["admin", "recruiter"] },
+  { to: "/admin/behavioral-templates", label: "Avaliações", roles: ["admin", "recruiter"] },
 ];
 
 function RecruiterNavigation() {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, BarChart3, CheckCircle2, FileSearch, ShieldCheck, Tags, Users } from "lucide-react";
+import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, ShieldCheck, Tags, Users } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -79,6 +79,15 @@ export function AdminPage() {
           description="Indicadores de vagas, candidatos, análises e uso de IA."
           buttonLabel="Ver BI"
           onButtonClick={() => navigate("/admin/bi")}
+          variant="default"
+        />
+
+        <AdminQuickAction
+          icon={<ClipboardList className="h-4 w-4 text-teal-600" />}
+          title="Avaliações comportamentais"
+          description="Crie e gerencie templates de avaliação com competências e perguntas estruturadas. Vincule templates às vagas para avaliação de candidatos."
+          buttonLabel="Gerenciar templates"
+          onButtonClick={() => navigate("/admin/behavioral-templates")}
           variant="default"
         />
 
