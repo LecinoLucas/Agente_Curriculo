@@ -2,10 +2,10 @@ import { useState } from "react";
 import { X, Eye, Download, Clock, Layers, HelpCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  BUNDLED_TEMPLATES,
   countTemplateQuestions,
   type RawTemplate,
 } from "./templateImporter";
+import { BUNDLED_TEMPLATES } from "./catalog/behavioralTemplateCatalog";
 import { CandidatePreviewModal } from "./CandidatePreviewModal";
 
 type Props = {

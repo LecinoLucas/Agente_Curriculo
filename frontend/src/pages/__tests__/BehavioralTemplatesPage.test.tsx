@@ -45,6 +45,30 @@ vi.mock("../../features/behavioral-templates/templateImporter", async (importOri
     ],
   };
 });
+vi.mock("../../features/behavioral-templates/catalog/behavioralTemplateCatalog", () => {
+  return {
+    BUNDLED_TEMPLATES: [
+      {
+        name: "Avaliação Comportamental — Teste",
+        description: "Template de teste",
+        version: 1,
+        status: "draft",
+        estimated_minutes: 10,
+        competencies: [
+          {
+            key: "comp_1",
+            name: "Competência Teste",
+            description: "Desc",
+            weight: 100,
+            questions: [
+              { key: "q1", type: "text", required: true, weight: 10, prompt: "Pergunta 1" },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+});
 
 describe("BehavioralTemplatesPage", () => {
   beforeEach(() => {
@@ -419,6 +443,29 @@ describe("BehavioralTemplatesPage", () => {
       );
       expect(mockNavigate).toHaveBeenCalledWith("/admin/behavioral-templates/imported-1/edit");
     });
+  });
+
+  it("quando listTemplates falha, a página mostra erro/estado adequado e NÃO renderiza modelos do catálogo como se fossem templates reais", async () => {
+    const apiError = new Error("Erro de conexão de rede ou permissão negada.");
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockRejectedValue(apiError);
+
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
+
+    // Wait for the loading block to complete and show error screen
+    await waitFor(() => {
+      expect(screen.getByTestId("error-state")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Falha ao Carregar Avaliações")).toBeInTheDocument();
+    expect(screen.getByText("Erro de conexão de rede ou permissão negada.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /tentar novamente/i })).toBeInTheDocument();
+
+    // Verify it did not fallback to or render catalog templates as the active template list
+    expect(screen.queryByText("Avaliação Comportamental — Teste")).not.toBeInTheDocument();
   });
 
   it("build passa", () => {

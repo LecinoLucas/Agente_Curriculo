@@ -23,7 +23,9 @@ import {
   FolderPlus,
   SlidersHorizontal,
   HelpCircle,
-  FolderGit2
+  FolderGit2,
+  RefreshCw,
+  AlertTriangle
 } from "lucide-react";
 import { behavioralTemplatesService } from "../services/behavioralTemplatesService";
 import type { BehavioralAssessmentTemplate } from "../types/domain";
@@ -64,6 +66,7 @@ export function BehavioralTemplatesPage() {
   const [newTemplateAudience, setNewTemplateAudience] = useState("");
   const [newTemplateDuration, setNewTemplateDuration] = useState(20);
   const [creating, setCreating] = useState(false);
+  const [formSubmitted, setFormSubmitted] = useState(false);
 
   useEffect(() => {
     void loadTemplates();
@@ -103,6 +106,7 @@ export function BehavioralTemplatesPage() {
   // Handle manual template creation
   async function handleCreateTemplateSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setFormSubmitted(true);
     if (!newTemplateName.trim()) {
       toast.error("O nome do template é obrigatório.");
       return;
@@ -288,6 +292,7 @@ export function BehavioralTemplatesPage() {
               setNewTemplateCategory("Geral");
               setNewTemplateAudience("");
               setNewTemplateDuration(20);
+              setFormSubmitted(false);
               setIsDrawerOpen(true);
             }}
             className="flex items-center gap-2 bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90"
@@ -298,227 +303,247 @@ export function BehavioralTemplatesPage() {
         </div>
       </div>
 
-      {/* ── KPI METRICS CARDS ── */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {/* Ativos */}
-        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <ClipboardList className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Ativos em Produção</span>
-            <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalActive}</h3>
-          </div>
-        </div>
-
-        {/* Rascunhos */}
-        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <FolderGit2 className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Rascunhos Editáveis</span>
-            <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalDrafts}</h3>
-          </div>
-        </div>
-
-        {/* Arquivados */}
-        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-            <Archive className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Arquivados</span>
-            <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalArchived}</h3>
-          </div>
-        </div>
-      </div>
-
-      {/* ── TOOLBAR: SEARCH & FILTERS ── */}
-      <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 space-y-4 shadow-2xs">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[hsl(var(--text-muted))]" />
-            <input
-              type="text"
-              placeholder="Buscar avaliações por nome ou descrição..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="ui-input pl-9 w-full"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* Status Selector */}
-            <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
-              >
-                <option value="all">Todos os Status</option>
-                <option value="active">Apenas Ativos</option>
-                <option value="draft">Apenas Rascunhos</option>
-                <option value="archived">Apenas Arquivados</option>
-              </select>
-            </div>
-
-            {/* Sort Selector */}
-            <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
-              <ArrowUpDown className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
-              >
-                <option value="recent">Mais Recentes</option>
-                <option value="name">Ordem Alfabética</option>
-                <option value="questions">Mais Perguntas</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Category filtering chips */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[hsl(var(--border))]">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] mr-1">Categoria:</span>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold border transition-all duration-200 ${
-                selectedCategory === cat
-                  ? "bg-[hsl(var(--primary))] text-white border-transparent"
-                  : "bg-[hsl(var(--bg))] text-[hsl(var(--text-muted))] border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]"
-              }`}
-            >
-              {cat === "all" ? "Todas" : cat}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── TEMPLATE LIST CARDS ── */}
-      {sortedTemplates.length === 0 ? (
-        <div className="border-2 border-dashed rounded-2xl p-12 text-center text-[hsl(var(--text-muted))] bg-[hsl(var(--surface))]">
-          <AlertCircle className="h-10 w-10 text-[hsl(var(--text-muted))] mx-auto mb-2 opacity-50" />
-          <h4 className="font-semibold text-sm">Nenhum template encontrado</h4>
-          <p className="text-xs max-w-xs mx-auto mt-1 leading-relaxed">
-            Nenhuma avaliação atende aos filtros definidos. Crie um novo template ou use um modelo pronto.
+      {error ? (
+        <div className="border border-red-200 rounded-2xl p-12 text-center text-[hsl(var(--text))] bg-red-50/20 max-w-xl mx-auto space-y-4 shadow-sm" data-testid="error-state">
+          <AlertTriangle className="h-12 w-12 text-red-600 mx-auto animate-pulse" />
+          <h3 className="text-lg font-bold text-red-950">Falha ao Carregar Avaliações</h3>
+          <p className="text-xs text-red-850 leading-relaxed max-w-md mx-auto">
+            {error || "Não foi possível conectar ao servidor para carregar as avaliações comportamentais."}
           </p>
+          <div className="pt-2">
+            <Button
+              onClick={() => void loadTemplates()}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-2 mx-auto"
+            >
+              <RefreshCw className="h-4 w-4" /> Tentar novamente
+            </Button>
+          </div>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {sortedTemplates.map((template) => {
-            const parsed = parseTemplateDescription(template.description);
-            const category = parsed.category || "Geral";
-            const colorClass = (CATEGORY_COLORS && CATEGORY_COLORS[template.name]) ?? "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+        <>
+          {/* ── KPI METRICS CARDS ── */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {/* Ativos */}
+            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Ativos em Produção</span>
+                <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalActive}</h3>
+              </div>
+            </div>
 
-            return (
-              <div
-                key={template.id}
-                className="group rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 transition-all duration-200 hover:shadow-md flex flex-col justify-between"
-              >
-                <div>
-                  {/* Badges bar */}
-                  <div className="flex items-center justify-between mb-3.5">
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${colorClass}`}>
-                      {category}
-                    </span>
+            {/* Rascunhos */}
+            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
+              <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <FolderGit2 className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Rascunhos Editáveis</span>
+                <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalDrafts}</h3>
+              </div>
+            </div>
 
-                    <div className="flex gap-1 items-center">
-                      <span className="text-[10px] text-gray-500 font-bold bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
-                        v{template.version}
-                      </span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                        template.status === "active"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : template.status === "archived"
-                          ? "bg-red-50 text-red-700 border border-red-200"
-                          : "bg-gray-50 text-gray-700 border border-gray-200"
-                      }`}>
-                        {template.status === "active" ? "Ativo" : template.status === "archived" ? "Arquivado" : "Rascunho"}
-                      </span>
-                    </div>
-                  </div>
+            {/* Arquivados */}
+            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
+              <div className="h-10 w-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                <Archive className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Arquivados</span>
+                <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalArchived}</h3>
+              </div>
+            </div>
+          </div>
 
-                  {/* Name & Desc */}
-                  <h3 className="text-sm font-bold text-[hsl(var(--text))] leading-snug group-hover:text-[hsl(var(--primary))] transition-colors">
-                    {template.name}
-                  </h3>
-                  <p className="mt-1.5 text-xs text-[hsl(var(--text-muted))] leading-relaxed line-clamp-2">
-                    {parsed.description || "Sem descrição disponível."}
-                  </p>
+          {/* ── TOOLBAR: SEARCH & FILTERS ── */}
+          <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 space-y-4 shadow-2xs">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-[hsl(var(--text-muted))]" />
+                <input
+                  type="text"
+                  placeholder="Buscar avaliações por nome ou descrição..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="ui-input pl-9 w-full"
+                />
+              </div>
 
-                  {/* Metrics preview row */}
-                  <div className="mt-4 grid grid-cols-2 gap-2 border-y border-[hsl(var(--border))]/60 py-2 text-[11px] text-[hsl(var(--text-muted))]">
-                    <span className="flex items-center gap-1">
-                      <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                      {template.competency_count} {template.competency_count === 1 ? "competência" : "competências"}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <FileText className="h-3.5 w-3.5 shrink-0" />
-                      {template.question_count} {template.question_count === 1 ? "pergunta" : "perguntas"}
-                    </span>
-                    {parsed.target_audience && (
-                      <span className="flex items-center gap-1 col-span-2 truncate">
-                        <User className="h-3.5 w-3.5 shrink-0" />
-                        {parsed.target_audience}
-                      </span>
-                    )}
-                    {parsed.duration && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5 shrink-0" />
-                        ~{parsed.duration} minutos
-                      </span>
-                    )}
-                  </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                {/* Status Selector */}
+                <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
+                  >
+                    <option value="all">Todos os Status</option>
+                    <option value="active">Apenas Ativos</option>
+                    <option value="draft">Apenas Rascunhos</option>
+                    <option value="archived">Apenas Arquivados</option>
+                  </select>
                 </div>
 
-                {/* Operations & CTAs row */}
-                <div className="mt-5 pt-3 flex gap-2 items-center justify-between border-t border-[hsl(var(--border))]/40">
-                  <div className="flex gap-1.5">
-                    {/* Quick actions for recruiter convenience */}
-                    <button
-                      onClick={() => void handleDuplicate(template)}
-                      title="Duplicar Rascunho"
-                      className="p-2 rounded-xl border hover:bg-gray-50 text-gray-500"
-                    >
-                      <Layers className="h-4 w-4" />
-                    </button>
-                    {template.status !== "active" && template.status !== "archived" && (
-                      <button
-                        onClick={() => void handleActivate(template.id)}
-                        title="Ativar Avaliação"
-                        className="p-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-600"
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
-                    )}
-                    {template.status !== "archived" && (
-                      <button
-                        onClick={() => void handleArchive(template.id)}
-                        title="Arquivar Avaliação"
-                        className="p-2 rounded-xl border border-red-100 hover:bg-red-50 text-red-500"
-                      >
-                        <Archive className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  <Button
-                    onClick={() => navigate(`/admin/behavioral-templates/${template.id}/edit`)}
-                    className="bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90 flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl font-semibold"
+                {/* Sort Selector */}
+                <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
+                  <ArrowUpDown className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
                   >
-                    Editar Estrutura
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
+                    <option value="recent">Mais Recentes</option>
+                    <option value="name">Ordem Alfabética</option>
+                    <option value="questions">Mais Perguntas</option>
+                  </select>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+
+            {/* Category filtering chips */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[hsl(var(--border))]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] mr-1">Categoria:</span>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold border transition-all duration-200 ${
+                    selectedCategory === cat
+                      ? "bg-[hsl(var(--primary))] text-white border-transparent"
+                      : "bg-[hsl(var(--bg))] text-[hsl(var(--text-muted))] border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]"
+                  }`}
+                >
+                  {cat === "all" ? "Todas" : cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── TEMPLATE LIST CARDS ── */}
+          {sortedTemplates.length === 0 ? (
+            <div className="border-2 border-dashed rounded-2xl p-12 text-center text-[hsl(var(--text-muted))] bg-[hsl(var(--surface))]">
+              <AlertCircle className="h-10 w-10 text-[hsl(var(--text-muted))] mx-auto mb-2 opacity-50" />
+              <h4 className="font-semibold text-sm">Nenhum template encontrado</h4>
+              <p className="text-xs max-w-xs mx-auto mt-1 leading-relaxed">
+                Nenhuma avaliação atende aos filtros definidos. Crie um novo template ou use um modelo pronto.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {sortedTemplates.map((template) => {
+                const parsed = parseTemplateDescription(template.description);
+                const category = parsed.category || "Geral";
+                const colorClass = (CATEGORY_COLORS && CATEGORY_COLORS[template.name]) ?? "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+
+                return (
+                  <div
+                    key={template.id}
+                    className="group rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Badges bar */}
+                      <div className="flex items-center justify-between mb-3.5">
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${colorClass}`}>
+                          {category}
+                        </span>
+
+                        <div className="flex gap-1 items-center">
+                          <span className="text-[10px] text-gray-500 font-bold bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
+                            v{template.version}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            template.status === "active"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : template.status === "archived"
+                              ? "bg-red-50 text-red-700 border border-red-200"
+                              : "bg-gray-50 text-gray-700 border border-gray-200"
+                          }`}>
+                            {template.status === "active" ? "Ativo" : template.status === "archived" ? "Arquivado" : "Rascunho"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Name & Desc */}
+                      <h3 className="text-sm font-bold text-[hsl(var(--text))] leading-snug group-hover:text-[hsl(var(--primary))] transition-colors">
+                        {template.name}
+                      </h3>
+                      <p className="mt-1.5 text-xs text-[hsl(var(--text-muted))] leading-relaxed line-clamp-2">
+                        {parsed.description || "Sem descrição disponível."}
+                      </p>
+
+                      {/* Metrics preview row */}
+                      <div className="mt-4 grid grid-cols-2 gap-2 border-y border-[hsl(var(--border))]/60 py-2 text-[11px] text-[hsl(var(--text-muted))]">
+                        <span className="flex items-center gap-1">
+                          <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                          {template.competency_count} {template.competency_count === 1 ? "competência" : "competências"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FileText className="h-3.5 w-3.5 shrink-0" />
+                          {template.question_count} {template.question_count === 1 ? "pergunta" : "perguntas"}
+                        </span>
+                        {parsed.target_audience && (
+                          <span className="flex items-center gap-1 col-span-2 truncate">
+                            <User className="h-3.5 w-3.5 shrink-0" />
+                            {parsed.target_audience}
+                          </span>
+                        )}
+                        {parsed.duration && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5 shrink-0" />
+                            ~{parsed.duration} minutos
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Operations & CTAs row */}
+                    <div className="mt-5 pt-3 flex gap-2 items-center justify-between border-t border-[hsl(var(--border))]/40">
+                      <div className="flex gap-1.5">
+                        {/* Quick actions for recruiter convenience */}
+                        <button
+                          onClick={() => void handleDuplicate(template)}
+                          title="Duplicar Rascunho"
+                          className="p-2 rounded-xl border hover:bg-gray-50 text-gray-500"
+                        >
+                          <Layers className="h-4 w-4" />
+                        </button>
+                        {template.status !== "active" && template.status !== "archived" && (
+                          <button
+                            onClick={() => void handleActivate(template.id)}
+                            title="Ativar Avaliação"
+                            className="p-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-600"
+                          >
+                            <ArrowRight className="h-4 w-4" />
+                          </button>
+                        )}
+                        {template.status !== "archived" && (
+                          <button
+                            onClick={() => void handleArchive(template.id)}
+                            title="Arquivar Avaliação"
+                            className="p-2 rounded-xl border border-red-100 hover:bg-red-50 text-red-500"
+                          >
+                            <Archive className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <Button
+                        onClick={() => navigate(`/admin/behavioral-templates/${template.id}/edit`)}
+                        className="bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90 flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl font-semibold"
+                      >
+                        Editar Estrutura
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* ── LATERAL DRAWER FOR NEW TEMPLATE ── */}
@@ -578,6 +603,8 @@ export function BehavioralTemplatesPage() {
                   onChange={(e) => setNewTemplateName(e.target.value)}
                   placeholder="Ex: Avaliação de Atendimento ao Cliente"
                   className="ui-input w-full"
+                  aria-required="true"
+                  aria-invalid={formSubmitted && !newTemplateName.trim() ? "true" : "false"}
                 />
               </div>
 
@@ -590,6 +617,8 @@ export function BehavioralTemplatesPage() {
                   onChange={(e) => setNewTemplateDesc(e.target.value)}
                   placeholder="Explique os objetivos e os focos comportamentais analisados por este template..."
                   className="ui-input w-full min-h-20 resize-none"
+                  aria-required="true"
+                  aria-invalid={formSubmitted && !newTemplateDesc.trim() ? "true" : "false"}
                 />
               </div>
 

@@ -56,6 +56,61 @@ export function BehavioralTemplateEditorPage() {
   const [showValidation, setShowValidation] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
+  // Local edit states to prevent keystroke-level API spam and Visual stability/focus jumping
+  const [localCompName, setLocalCompName] = useState("");
+  const [localCompDesc, setLocalCompDesc] = useState("");
+  const [localCompWeight, setLocalCompWeight] = useState<number | string>("");
+
+  const [localQuestText, setLocalQuestText] = useState("");
+  const [localQuestInstruction, setLocalQuestInstruction] = useState("");
+  const [localQuestEvidence, setLocalQuestEvidence] = useState("");
+  const [localQuestCriteria, setLocalQuestCriteria] = useState("");
+  const [localQuestAlert, setLocalQuestAlert] = useState("");
+  const [localQuestNotes, setLocalQuestNotes] = useState("");
+  const [localQuestWeight, setLocalQuestWeight] = useState<number | string>("");
+  const [localQuestOptions, setLocalQuestOptions] = useState<string[]>([]);
+  const [localQuestScaleLabels, setLocalQuestScaleLabels] = useState<Record<number, string>>({});
+
+  const selectedComp = template?.competencies?.find((c) => c.id === selectedCompId);
+  const selectedQuest = selectedComp?.questions?.find((q) => q.id === selectedQuestId);
+  const parsedQuestMetadata = selectedQuest ? parseQuestionText(selectedQuest.question_text) : null;
+
+  useEffect(() => {
+    if (selectedComp) {
+      setLocalCompName(selectedComp.name);
+      setLocalCompDesc(selectedComp.description ?? "");
+      setLocalCompWeight(selectedComp.weight);
+    } else {
+      setLocalCompName("");
+      setLocalCompDesc("");
+      setLocalCompWeight("");
+    }
+  }, [selectedCompId, selectedComp?.id]);
+
+  useEffect(() => {
+    if (selectedQuest && parsedQuestMetadata) {
+      setLocalQuestText(parsedQuestMetadata.text);
+      setLocalQuestInstruction(parsedQuestMetadata.instruction ?? "");
+      setLocalQuestEvidence(parsedQuestMetadata.evidence ?? "");
+      setLocalQuestCriteria(parsedQuestMetadata.criteria ?? "");
+      setLocalQuestAlert(parsedQuestMetadata.alert ?? "");
+      setLocalQuestNotes(parsedQuestMetadata.notes ?? "");
+      setLocalQuestWeight(selectedQuest.weight);
+      setLocalQuestOptions(selectedQuest.options_json ?? []);
+      setLocalQuestScaleLabels(parsedQuestMetadata.scale_labels ?? {});
+    } else {
+      setLocalQuestText("");
+      setLocalQuestInstruction("");
+      setLocalQuestEvidence("");
+      setLocalQuestCriteria("");
+      setLocalQuestAlert("");
+      setLocalQuestNotes("");
+      setLocalQuestWeight("");
+      setLocalQuestOptions([]);
+      setLocalQuestScaleLabels({});
+    }
+  }, [selectedQuestId, selectedQuest?.id]);
+
   useEffect(() => {
     if (templateId) {
       void loadTemplate();
@@ -398,9 +453,6 @@ export function BehavioralTemplateEditorPage() {
     );
   }
 
-  const selectedComp = template.competencies?.find((c) => c.id === selectedCompId);
-  const selectedQuest = selectedComp?.questions?.find((q) => q.id === selectedQuestId);
-  const parsedQuestMetadata = selectedQuest ? parseQuestionText(selectedQuest.question_text) : null;
 
   return (
     <div className="flex flex-col min-h-screen bg-[hsl(var(--bg))]">
@@ -603,9 +655,21 @@ export function BehavioralTemplateEditorPage() {
                   <div className="flex items-center justify-between">
                     <input
                       type="text"
-                      value={selectedComp.name}
-                      onChange={(e) => void handleUpdateCompetency(selectedComp, { name: e.target.value })}
-                      className="text-sm font-bold text-[hsl(var(--text))] bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[hsl(var(--primary))] outline-none"
+                      value={localCompName}
+                      onChange={(e) => setLocalCompName(e.target.value)}
+                      onBlur={() => {
+                        if (localCompName.trim() && localCompName !== selectedComp.name) {
+                          void handleUpdateCompetency(selectedComp, { name: localCompName });
+                        } else {
+                          setLocalCompName(selectedComp.name);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="text-sm font-bold text-[hsl(var(--text))] bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[hsl(var(--primary))] outline-none font-bold"
                     />
                     <div className="flex items-center gap-1">
                       <button
@@ -629,9 +693,19 @@ export function BehavioralTemplateEditorPage() {
                     <div className="col-span-9">
                       <input
                         type="text"
-                        value={selectedComp.description ?? ""}
+                        value={localCompDesc}
                         placeholder="Adicione uma breve descrição para contextualizar..."
-                        onChange={(e) => void handleUpdateCompetency(selectedComp, { description: e.target.value })}
+                        onChange={(e) => setLocalCompDesc(e.target.value)}
+                        onBlur={() => {
+                          if (localCompDesc !== (selectedComp.description ?? "")) {
+                            void handleUpdateCompetency(selectedComp, { description: localCompDesc });
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur();
+                          }
+                        }}
                         className="text-xs text-[hsl(var(--text-muted))] bg-transparent w-full border-b border-transparent hover:border-gray-300 outline-none"
                       />
                     </div>
@@ -639,8 +713,21 @@ export function BehavioralTemplateEditorPage() {
                       <label className="text-[10px] font-bold text-[hsl(var(--text-muted))]">Peso:</label>
                       <input
                         type="number"
-                        value={selectedComp.weight}
-                        onChange={(e) => void handleUpdateCompetency(selectedComp, { weight: Number(e.target.value) })}
+                        value={localCompWeight}
+                        onChange={(e) => setLocalCompWeight(e.target.value)}
+                        onBlur={() => {
+                          const w = Number(localCompWeight);
+                          if (!isNaN(w) && w >= 0 && w !== selectedComp.weight) {
+                            void handleUpdateCompetency(selectedComp, { weight: w });
+                          } else {
+                            setLocalCompWeight(selectedComp.weight);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur();
+                          }
+                        }}
                         className="w-14 text-xs font-semibold text-center border rounded px-1"
                       />
                       <span className="text-xs text-gray-500">%</span>
@@ -775,10 +862,15 @@ export function BehavioralTemplateEditorPage() {
                 <div>
                   <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase mb-1">Texto da Pergunta *</label>
                   <textarea
-                    value={parsedQuestMetadata.text}
-                    onChange={(e) => {
-                      const newObj = { ...parsedQuestMetadata, text: e.target.value };
-                      void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                    value={localQuestText}
+                    onChange={(e) => setLocalQuestText(e.target.value)}
+                    onBlur={() => {
+                      if (localQuestText.trim() && localQuestText !== parsedQuestMetadata.text) {
+                        const newObj = { ...parsedQuestMetadata, text: localQuestText };
+                        void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                      } else {
+                        setLocalQuestText(parsedQuestMetadata.text);
+                      }
                     }}
                     className="ui-input w-full min-h-16"
                     placeholder="Enunciado ou provocação comportamental..."
@@ -809,8 +901,21 @@ export function BehavioralTemplateEditorPage() {
                     <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase mb-1">Peso</label>
                     <input
                       type="number"
-                      value={selectedQuest.weight}
-                      onChange={(e) => void handleUpdateQuestion(selectedQuest, { weight: Number(e.target.value) })}
+                      value={localQuestWeight}
+                      onChange={(e) => setLocalQuestWeight(e.target.value)}
+                      onBlur={() => {
+                        const w = Number(localQuestWeight);
+                        if (!isNaN(w) && w >= 0 && w !== selectedQuest.weight) {
+                          void handleUpdateQuestion(selectedQuest, { weight: w });
+                        } else {
+                          setLocalQuestWeight(selectedQuest.weight);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                        }
+                      }}
                       className="ui-input w-full"
                     />
                   </div>
@@ -820,11 +925,19 @@ export function BehavioralTemplateEditorPage() {
                   <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase mb-1">Instrução ao Candidato</label>
                   <input
                     type="text"
-                    value={parsedQuestMetadata.instruction ?? ""}
+                    value={localQuestInstruction}
                     placeholder="Dicas sobre como estruturar a resposta..."
-                    onChange={(e) => {
-                      const newObj = { ...parsedQuestMetadata, instruction: e.target.value };
-                      void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                    onChange={(e) => setLocalQuestInstruction(e.target.value)}
+                    onBlur={() => {
+                      if (localQuestInstruction !== (parsedQuestMetadata.instruction ?? "")) {
+                        const newObj = { ...parsedQuestMetadata, instruction: localQuestInstruction };
+                        void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.currentTarget.blur();
+                      }
                     }}
                     className="ui-input w-full"
                   />
@@ -847,15 +960,26 @@ export function BehavioralTemplateEditorPage() {
                     <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">Alternativas</span>
                     
                     <div className="space-y-2">
-                      {(selectedQuest.options_json ?? []).map((opt, oIdx) => (
+                      {localQuestOptions.map((opt, oIdx) => (
                         <div key={oIdx} className="flex items-center gap-2">
                           <input
                             type="text"
                             value={opt}
                             onChange={(e) => {
-                              const nextOpts = [...(selectedQuest.options_json ?? [])];
+                              const nextOpts = [...localQuestOptions];
                               nextOpts[oIdx] = e.target.value;
-                              void handleUpdateQuestion(selectedQuest, { options_json: nextOpts });
+                              setLocalQuestOptions(nextOpts);
+                            }}
+                            onBlur={() => {
+                              const currentOpts = selectedQuest.options_json ?? [];
+                              if (JSON.stringify(localQuestOptions) !== JSON.stringify(currentOpts)) {
+                                void handleUpdateQuestion(selectedQuest, { options_json: localQuestOptions });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                              }
                             }}
                             className="ui-input flex-1 text-xs"
                           />
@@ -919,14 +1043,25 @@ export function BehavioralTemplateEditorPage() {
                           <span className="col-span-2 text-xs font-bold text-center bg-gray-100 rounded py-1">{val}</span>
                           <input
                             type="text"
-                            value={parsedQuestMetadata.scale_labels?.[val] ?? ""}
+                            value={localQuestScaleLabels[val] ?? ""}
                             onChange={(e) => {
-                              const nextLabels = { ...(parsedQuestMetadata.scale_labels ?? {}) };
+                              const nextLabels = { ...localQuestScaleLabels };
                               nextLabels[val] = e.target.value;
-                              const nextMetadata = { ...parsedQuestMetadata, scale_labels: nextLabels };
-                              void handleUpdateQuestion(selectedQuest, {
-                                question_text: serializeQuestionText(nextMetadata),
-                              });
+                              setLocalQuestScaleLabels(nextLabels);
+                            }}
+                            onBlur={() => {
+                              const currentLabels = parsedQuestMetadata.scale_labels ?? {};
+                              if (JSON.stringify(localQuestScaleLabels) !== JSON.stringify(currentLabels)) {
+                                const nextMetadata = { ...parsedQuestMetadata, scale_labels: localQuestScaleLabels };
+                                void handleUpdateQuestion(selectedQuest, {
+                                  question_text: serializeQuestionText(nextMetadata),
+                                });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                              }
                             }}
                             className="ui-input col-span-10 text-xs"
                             placeholder="Legenda correspondente..."
@@ -947,10 +1082,13 @@ export function BehavioralTemplateEditorPage() {
                   <div>
                     <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Evidências Esperadas</label>
                     <textarea
-                      value={parsedQuestMetadata.evidence ?? ""}
-                      onChange={(e) => {
-                        const newObj = { ...parsedQuestMetadata, evidence: e.target.value };
-                        void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                      value={localQuestEvidence}
+                      onChange={(e) => setLocalQuestEvidence(e.target.value)}
+                      onBlur={() => {
+                        if (localQuestEvidence !== (parsedQuestMetadata.evidence ?? "")) {
+                          const newObj = { ...parsedQuestMetadata, evidence: localQuestEvidence };
+                          void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                        }
                       }}
                       className="ui-input w-full min-h-14 text-xs"
                       placeholder="Quais ações ou vivências o avaliador deve procurar?"
@@ -960,10 +1098,13 @@ export function BehavioralTemplateEditorPage() {
                   <div>
                     <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Critérios de Boa Resposta</label>
                     <textarea
-                      value={parsedQuestMetadata.criteria ?? ""}
-                      onChange={(e) => {
-                        const newObj = { ...parsedQuestMetadata, criteria: e.target.value };
-                        void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                      value={localQuestCriteria}
+                      onChange={(e) => setLocalQuestCriteria(e.target.value)}
+                      onBlur={() => {
+                        if (localQuestCriteria !== (parsedQuestMetadata.criteria ?? "")) {
+                          const newObj = { ...parsedQuestMetadata, criteria: localQuestCriteria };
+                          void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                        }
                       }}
                       className="ui-input w-full min-h-14 text-xs"
                       placeholder="O que diferencia uma resposta excelente das demais?"
@@ -973,10 +1114,13 @@ export function BehavioralTemplateEditorPage() {
                   <div>
                     <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Sinais de Alerta (Red Flags)</label>
                     <textarea
-                      value={parsedQuestMetadata.alert ?? ""}
-                      onChange={(e) => {
-                        const newObj = { ...parsedQuestMetadata, alert: e.target.value };
-                        void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                      value={localQuestAlert}
+                      onChange={(e) => setLocalQuestAlert(e.target.value)}
+                      onBlur={() => {
+                        if (localQuestAlert !== (parsedQuestMetadata.alert ?? "")) {
+                          const newObj = { ...parsedQuestMetadata, alert: localQuestAlert };
+                          void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                        }
                       }}
                       className="ui-input w-full min-h-14 text-xs border-red-200 focus:border-red-400"
                       placeholder="Atitudes, omissões ou discursos incompatíveis..."
@@ -986,10 +1130,13 @@ export function BehavioralTemplateEditorPage() {
                   <div>
                     <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Observações Internas</label>
                     <textarea
-                      value={parsedQuestMetadata.notes ?? ""}
-                      onChange={(e) => {
-                        const newObj = { ...parsedQuestMetadata, notes: e.target.value };
-                        void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                      value={localQuestNotes}
+                      onChange={(e) => setLocalQuestNotes(e.target.value)}
+                      onBlur={() => {
+                        if (localQuestNotes !== (parsedQuestMetadata.notes ?? "")) {
+                          const newObj = { ...parsedQuestMetadata, notes: localQuestNotes };
+                          void handleUpdateQuestion(selectedQuest, { question_text: serializeQuestionText(newObj) });
+                        }
                       }}
                       className="ui-input w-full min-h-14 text-xs"
                       placeholder="Outros direcionamentos ou detalhes operacionais da vaga..."

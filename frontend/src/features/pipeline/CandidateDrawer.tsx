@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { SkeletonRows } from "../../components/common/Skeleton";
@@ -13,13 +13,6 @@ import {
 import { useCandidateDecision } from "../candidates/drawer/hooks/useCandidateDecision";
 import { useCandidateDrawerActions } from "../candidates/drawer/hooks/useCandidateDrawerActions";
 import { useCandidateData } from "../candidates/drawer/hooks/useCandidateData";
-import { DocumentsTab as DocumentsTabComponent } from "../candidates/drawer/tabs/DocumentsTab";
-import { InterviewTab } from "../candidates/drawer/tabs/InterviewTab";
-import { CandidateBehavioralAssessmentPanel } from "../candidates/drawer/components/CandidateBehavioralAssessmentPanel";
-import { CandidateCommunicationsPanel } from "../candidates/drawer/components/CandidateCommunicationsPanel";
-import { CollaborationTab } from "../candidates/drawer/components/CollaborationTab";
-import { CandidatePreAdmissionPanel } from "../candidates/drawer/components/CandidatePreAdmissionPanel";
-import { AgendaInterviewModal } from "../agenda/AgendaInterviewModal";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { analysisService } from "../../services/analysisService";
@@ -35,9 +28,6 @@ import type {
   TransferCandidateJobResponse,
 } from "../../types/domain";
 import { type PanelTab, usePipeline } from "./PipelineContext";
-import { EditCandidateModal } from "./EditCandidateModal";
-import { InterviewQuickScheduleModal } from "./InterviewQuickScheduleModal";
-import { LinkCandidateJobModal } from "../candidates/components/LinkCandidateJobModal";
 import {
   buildAnalysisDecisionToast,
   shouldTrackAnalysisDecision,
@@ -53,8 +43,55 @@ import {
   NEXT_PIPELINE_STAGE,
   buildStageActionFeedback,
 } from "./candidate-drawer/candidateDrawerUtils";
-import { TransferJobModal } from "./candidate-drawer/TransferJobModal";
 import { CandidateDrawerOverlay } from "./candidate-drawer/CandidateDrawerOverlay";
+
+const DocumentsTabComponent = lazy(() =>
+  import("../candidates/drawer/tabs/DocumentsTab").then((m) => ({ default: m.DocumentsTab }))
+);
+const InterviewTab = lazy(() =>
+  import("../candidates/drawer/tabs/InterviewTab").then((m) => ({ default: m.InterviewTab }))
+);
+const CandidateBehavioralAssessmentPanel = lazy(() =>
+  import("../candidates/drawer/components/CandidateBehavioralAssessmentPanel").then((m) => ({
+    default: m.CandidateBehavioralAssessmentPanel,
+  }))
+);
+const CandidateCommunicationsPanel = lazy(() =>
+  import("../candidates/drawer/components/CandidateCommunicationsPanel").then((m) => ({
+    default: m.CandidateCommunicationsPanel,
+  }))
+);
+const CollaborationTab = lazy(() =>
+  import("../candidates/drawer/components/CollaborationTab").then((m) => ({ default: m.CollaborationTab }))
+);
+const CandidatePreAdmissionPanel = lazy(() =>
+  import("../candidates/drawer/components/CandidatePreAdmissionPanel").then((m) => ({
+    default: m.CandidatePreAdmissionPanel,
+  }))
+);
+const AgendaInterviewModal = lazy(() =>
+  import("../agenda/AgendaInterviewModal").then((m) => ({ default: m.AgendaInterviewModal }))
+);
+const EditCandidateModal = lazy(() =>
+  import("./EditCandidateModal").then((m) => ({ default: m.EditCandidateModal }))
+);
+const InterviewQuickScheduleModal = lazy(() =>
+  import("./InterviewQuickScheduleModal").then((m) => ({ default: m.InterviewQuickScheduleModal }))
+);
+const LinkCandidateJobModal = lazy(() =>
+  import("../candidates/components/LinkCandidateJobModal").then((m) => ({ default: m.LinkCandidateJobModal }))
+);
+const TransferJobModal = lazy(() =>
+  import("./candidate-drawer/TransferJobModal").then((m) => ({ default: m.TransferJobModal }))
+);
+
+function TabFallback() {
+  return (
+    <div className="flex flex-1 items-center justify-center py-8 text-sm text-[hsl(var(--muted))]">
+      Carregando…
+    </div>
+  );
+}
 
 interface CandidateDrawerProps {
   mode?: "overlay" | "workspace";
@@ -107,6 +144,10 @@ export function CandidateDrawer({
   const visibleCandidateIdRef = useRef<string | null>(selectedCandidateId);
   const pendingStageCandidateRef = useRef<string | null>(null);
   const pendingLinkCandidateRef = useRef<string | null>(null);
+  const editModalMountedRef = useRef(false);
+  const transferJobModalMountedRef = useRef(false);
+  const linkJobModalMountedRef = useRef(false);
+  const agendaModalMountedRef = useRef(false);
 
   const {
     analysisResult,
@@ -793,68 +834,80 @@ export function CandidateDrawer({
           ) : null}
 
           {profileTabKey === "documents" ? (
-            <DocumentsTabComponent
-              overview={candidateOverview}
-              activeJobId={candidateActiveJobId}
-              activePipelineEntry={primaryPipelineEntry}
-              canSpendRealTokens={canSpendRealTokens}
-              pollingAnalysisId={pollingAnalysisId}
-              refreshCandidateOverview={refreshCandidateOverview}
-              startPolling={startPolling}
-              switchPanelTab={switchPanelTab}
-              syncAnalysisStart={syncAnalysisStart}
-              notifyCandidatesChanged={notifyCandidatesChanged}
-              onActionFeedback={pushActionFeedback}
-            />
+            <Suspense fallback={<TabFallback />}>
+              <DocumentsTabComponent
+                overview={candidateOverview}
+                activeJobId={candidateActiveJobId}
+                activePipelineEntry={primaryPipelineEntry}
+                canSpendRealTokens={canSpendRealTokens}
+                pollingAnalysisId={pollingAnalysisId}
+                refreshCandidateOverview={refreshCandidateOverview}
+                startPolling={startPolling}
+                switchPanelTab={switchPanelTab}
+                syncAnalysisStart={syncAnalysisStart}
+                notifyCandidatesChanged={notifyCandidatesChanged}
+                onActionFeedback={pushActionFeedback}
+              />
+            </Suspense>
           ) : null}
 
           {/* Keep-alive: interview tab stays mounted after first visit */}
           <div className={profileTabKey !== "interview" ? "hidden" : undefined}>
             {visitedTabs.has("interview") ? (
-              <InterviewTab
-                jobId={candidateActiveJobId}
-                candidateId={candidate?.id ?? null}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <InterviewTab
+                  jobId={candidateActiveJobId}
+                  candidateId={candidate?.id ?? null}
+                />
+              </Suspense>
             ) : null}
           </div>
 
           {/* Keep-alive: assessment tab stays mounted after first visit */}
           <div className={profileTabKey !== "assessment" ? "hidden" : undefined}>
             {visitedTabs.has("assessment") ? (
-              <CandidateBehavioralAssessmentPanel
-                jobId={candidateActiveJobId}
-                candidateId={candidate?.id ?? null}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <CandidateBehavioralAssessmentPanel
+                  jobId={candidateActiveJobId}
+                  candidateId={candidate?.id ?? null}
+                />
+              </Suspense>
             ) : null}
           </div>
 
           {/* Keep-alive: communications tab stays mounted after first visit */}
           <div className={profileTabKey !== "communications" ? "hidden" : undefined}>
             {visitedTabs.has("communications") ? (
-              <CandidateCommunicationsPanel
-                jobId={candidateActiveJobId}
-                candidateId={candidate?.id ?? null}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <CandidateCommunicationsPanel
+                  jobId={candidateActiveJobId}
+                  candidateId={candidate?.id ?? null}
+                />
+              </Suspense>
             ) : null}
           </div>
 
           {/* Keep-alive: collaboration tab stays mounted after first visit */}
           <div className={profileTabKey !== "collaboration" ? "hidden" : undefined}>
             {visitedTabs.has("collaboration") && candidateActiveJobId && candidate?.id ? (
-              <CollaborationTab
-                jobId={candidateActiveJobId}
-                candidateId={candidate.id}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <CollaborationTab
+                  jobId={candidateActiveJobId}
+                  candidateId={candidate.id}
+                />
+              </Suspense>
             ) : null}
           </div>
 
           {/* Keep-alive: pre_admission tab stays mounted after first visit */}
           <div className={profileTabKey !== "pre_admission" ? "hidden" : undefined}>
             {visitedTabs.has("pre_admission") ? (
-              <CandidatePreAdmissionPanel
-                jobId={candidateActiveJobId}
-                candidateId={candidate?.id ?? null}
-              />
+              <Suspense fallback={<TabFallback />}>
+                <CandidatePreAdmissionPanel
+                  jobId={candidateActiveJobId}
+                  candidateId={candidate?.id ?? null}
+                />
+              </Suspense>
             ) : null}
           </div>
         </CandidateProfileView>
@@ -896,110 +949,133 @@ export function CandidateDrawer({
     </>
   );
 
+  if (editModalOpen) editModalMountedRef.current = true;
+  if (transferJobModalOpen) transferJobModalMountedRef.current = true;
+  if (linkJobModalOpen) linkJobModalMountedRef.current = true;
+  if (fullAgendaOpen) agendaModalMountedRef.current = true;
+
   const modalsContent = (
     <>
-      <EditCandidateModal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        candidate={candidate}
-        onSuccess={async (updatedCandidate) => {
-          patchCandidate(updatedCandidate.id, updatedCandidate);
-          notifyCandidatesChanged();
-          void syncCandidateOverview(updatedCandidate.id);
-        }}
-      />
+      {editModalMountedRef.current && (
+        <Suspense fallback={null}>
+          <EditCandidateModal
+            isOpen={editModalOpen}
+            onClose={() => setEditModalOpen(false)}
+            candidate={candidate}
+            onSuccess={async (updatedCandidate) => {
+              patchCandidate(updatedCandidate.id, updatedCandidate);
+              notifyCandidatesChanged();
+              void syncCandidateOverview(updatedCandidate.id);
+            }}
+          />
+        </Suspense>
+      )}
 
-      <TransferJobModal
-        isOpen={transferJobModalOpen}
-        candidateId={candidate?.id ?? null}
-        fromJobId={primaryPipelineEntry?.job_id ?? null}
-        availableJobs={transferAvailableJobs}
-        canTransfer={canTransferCurrentJob}
-        onClose={() => setTransferJobModalOpen(false)}
-        onSuccess={async (transferResult: TransferCandidateJobResponse) => {
-          if (!candidate?.id) return;
+      {transferJobModalMountedRef.current && (
+        <Suspense fallback={null}>
+          <TransferJobModal
+            isOpen={transferJobModalOpen}
+            candidateId={candidate?.id ?? null}
+            fromJobId={primaryPipelineEntry?.job_id ?? null}
+            availableJobs={transferAvailableJobs}
+            canTransfer={canTransferCurrentJob}
+            onClose={() => setTransferJobModalOpen(false)}
+            onSuccess={async (transferResult: TransferCandidateJobResponse) => {
+              if (!candidate?.id) return;
 
-          if (shouldTrackAnalysisDecision(transferResult.analysis)) {
-            await syncAnalysisStart({
-              candidateId: candidate.id,
-              analysisId: transferResult.analysis!.analysis_id!,
-              status: transferResult.analysis!.status ?? "pending",
-              jobId: transferResult.to_job_id,
-            });
-            startPolling(
-              transferResult.analysis!.analysis_id!,
-              candidate.id,
-              transferResult.analysis!.status ?? "pending",
-              transferResult.to_job_id,
-            );
-          }
+              if (shouldTrackAnalysisDecision(transferResult.analysis)) {
+                await syncAnalysisStart({
+                  candidateId: candidate.id,
+                  analysisId: transferResult.analysis!.analysis_id!,
+                  status: transferResult.analysis!.status ?? "pending",
+                  jobId: transferResult.to_job_id,
+                });
+                startPolling(
+                  transferResult.analysis!.analysis_id!,
+                  candidate.id,
+                  transferResult.analysis!.status ?? "pending",
+                  transferResult.to_job_id,
+                );
+              }
 
-          const analysisToast = buildAnalysisDecisionToast(transferResult.analysis);
-          if (analysisToast) {
-            if (analysisToast.tone === "success") toast.success(analysisToast.message);
-            if (analysisToast.tone === "info") toast.info(analysisToast.message);
-            if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
-            if (analysisToast.tone === "error") toast.error(analysisToast.message);
-          }
+              const analysisToast = buildAnalysisDecisionToast(transferResult.analysis);
+              if (analysisToast) {
+                if (analysisToast.tone === "success") toast.success(analysisToast.message);
+                if (analysisToast.tone === "info") toast.info(analysisToast.message);
+                if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
+                if (analysisToast.tone === "error") toast.error(analysisToast.message);
+              }
 
-          await Promise.all([
-            syncCandidateOverview(candidate.id),
-            refreshBoard(),
-          ]);
-          setTransferJobModalOpen(false);
-        }}
-      />
+              await Promise.all([
+                syncCandidateOverview(candidate.id),
+                refreshBoard(),
+              ]);
+              setTransferJobModalOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
 
-      <LinkCandidateJobModal
-        isOpen={linkJobModalOpen}
-        candidateId={candidate?.id ?? null}
-        candidateName={candidate?.full_name ?? null}
-        linkedJobIds={candidateOverview?.pipeline_entries.map((entry) => entry.job_id) ?? []}
-        onClose={() => setLinkJobModalOpen(false)}
-        onLinked={async (jobId) => {
-          if (candidate?.id) {
-            await syncCandidateOverview(candidate.id);
-          }
-          if (jobId === activeBoardJobId) {
-            await invalidateBoard(jobId, true);
-          }
-          pushActionFeedback({
-            tone: "success",
-            title: "Vaga vinculada com sucesso",
-            detail: "O candidato já pode seguir para análise, score e acompanhamento no funil.",
-          });
-        }}
-      />
+      {linkJobModalMountedRef.current && (
+        <Suspense fallback={null}>
+          <LinkCandidateJobModal
+            isOpen={linkJobModalOpen}
+            candidateId={candidate?.id ?? null}
+            candidateName={candidate?.full_name ?? null}
+            linkedJobIds={candidateOverview?.pipeline_entries.map((entry) => entry.job_id) ?? []}
+            onClose={() => setLinkJobModalOpen(false)}
+            onLinked={async (jobId) => {
+              if (candidate?.id) {
+                await syncCandidateOverview(candidate.id);
+              }
+              if (jobId === activeBoardJobId) {
+                await invalidateBoard(jobId, true);
+              }
+              pushActionFeedback({
+                tone: "success",
+                title: "Vaga vinculada com sucesso",
+                detail: "O candidato já pode seguir para análise, score e acompanhamento no funil.",
+              });
+            }}
+          />
+        </Suspense>
+      )}
 
       {quickInterviewOpen && candidate && candidateActiveJobId ? (
-        <InterviewQuickScheduleModal
-          candidateName={candidate.full_name}
-          jobTitle={activeJobLabel ?? "vaga ativa"}
-          isSaving={stageSaving}
-          onClose={() => setQuickInterviewOpen(false)}
-          onMoveWithoutScheduling={handleMoveToInterviewWithoutScheduling}
-          onSchedule={handleScheduleInterview}
-          onOpenFullAgenda={() => {
-            setQuickInterviewOpen(false);
-            setFullAgendaOpen(true);
-          }}
-        />
+        <Suspense fallback={null}>
+          <InterviewQuickScheduleModal
+            candidateName={candidate.full_name}
+            jobTitle={activeJobLabel ?? "vaga ativa"}
+            isSaving={stageSaving}
+            onClose={() => setQuickInterviewOpen(false)}
+            onMoveWithoutScheduling={handleMoveToInterviewWithoutScheduling}
+            onSchedule={handleScheduleInterview}
+            onOpenFullAgenda={() => {
+              setQuickInterviewOpen(false);
+              setFullAgendaOpen(true);
+            }}
+          />
+        </Suspense>
       ) : null}
 
-      <AgendaInterviewModal
-        isOpen={fullAgendaOpen}
-        isEdit={false}
-        initialCandidateId={candidate?.id ?? null}
-        initialJobId={candidateActiveJobId}
-        initialPipelineId={null}
-        onClose={() => setFullAgendaOpen(false)}
-        onSuccess={async () => {
-          if (!candidate?.id) return;
-          await handleStageChange("hr_interview", { bypassInterviewModal: true });
-          await syncCandidateOverview(candidate.id);
-          setFullAgendaOpen(false);
-        }}
-      />
+      {agendaModalMountedRef.current && (
+        <Suspense fallback={null}>
+          <AgendaInterviewModal
+            isOpen={fullAgendaOpen}
+            isEdit={false}
+            initialCandidateId={candidate?.id ?? null}
+            initialJobId={candidateActiveJobId}
+            initialPipelineId={null}
+            onClose={() => setFullAgendaOpen(false)}
+            onSuccess={async () => {
+              if (!candidate?.id) return;
+              await handleStageChange("hr_interview", { bypassInterviewModal: true });
+              await syncCandidateOverview(candidate.id);
+              setFullAgendaOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
     </>
   );
 
