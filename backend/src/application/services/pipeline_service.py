@@ -20,6 +20,11 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     _candidate_job_pipeline_key,
 )
 from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
+from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+    SQLAlchemyBehavioralAssignmentRepository,
+)
+
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest,
     AddCandidateToJobResponse,
@@ -444,7 +449,9 @@ class PipelineService:
         if body.initial_stage != "entry":
             raise PipelineInvalidTransitionError("initial_stage deve ser 'entry'")
 
-        await self._ensure_available_job(body.job_id)
+        job = await self._repository.find_available_job(body.job_id)
+        if job is None:
+            raise PipelineDestinationJobUnavailableError
         await self._ensure_active_candidate(candidate_id)
 
         active_entry = await self._repository.find_active_entry_by_candidate(candidate_id)
@@ -501,6 +508,16 @@ class PipelineService:
             )
         )
 
+        if job.behavioral_template_id is not None:
+            db_session = self._session or self._repository._session
+            await BehavioralAssignmentService(
+                SQLAlchemyBehavioralAssignmentRepository(db_session)
+            ).ensure_assignment_for_application(
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                template_id=job.behavioral_template_id,
+            )
+
         return AddCandidateToJobResponse(
             candidate_id=saved_row["candidate_id"],
             job_id=saved_row["job_id"],
@@ -518,7 +535,9 @@ class PipelineService:
         moved_by: UUID,
     ) -> TransferCandidateJobResponse:
         await self._ensure_active_candidate(candidate_id)
-        await self._ensure_published_transfer_job(body.to_job_id)
+        to_job = await self._repository.find_active_job(body.to_job_id)
+        if to_job is None or to_job.status != "published":
+            raise PipelineTransferNotAllowedError
 
         source_entry = await self._repository.find_active_entry_by_candidate(candidate_id)
         if source_entry is None:
@@ -624,6 +643,16 @@ class PipelineService:
                 "Não foi possível concluir a transferência. Recarregue e tente novamente."
             ) from exc
 
+        if to_job.behavioral_template_id is not None:
+            db_session = self._session or self._repository._session
+            await BehavioralAssignmentService(
+                SQLAlchemyBehavioralAssignmentRepository(db_session)
+            ).ensure_assignment_for_application(
+                candidate_id=candidate_id,
+                job_id=body.to_job_id,
+                template_id=to_job.behavioral_template_id,
+            )
+
         await publish_domain_event(
             DomainEvent(
                 event_type=DomainEventType.CANDIDATE_JOB_TRANSFERRED,
@@ -659,7 +688,9 @@ class PipelineService:
         body: ReconsiderCandidateRequest,
         moved_by: UUID,
     ) -> ReconsiderCandidateResponse:
-        await self._ensure_available_job(body.job_id)
+        job = await self._repository.find_available_job(body.job_id)
+        if job is None:
+            raise PipelineDestinationJobUnavailableError
         await self._ensure_active_candidate(candidate_id)
 
         active_entry = await self._repository.find_active_entry_by_candidate(candidate_id)
@@ -712,6 +743,16 @@ class PipelineService:
                 created_at=now,
             )
         )
+
+        if job.behavioral_template_id is not None:
+            db_session = self._session or self._repository._session
+            await BehavioralAssignmentService(
+                SQLAlchemyBehavioralAssignmentRepository(db_session)
+            ).ensure_assignment_for_application(
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                template_id=job.behavioral_template_id,
+            )
 
         return ReconsiderCandidateResponse(
             candidate_id=saved_row["candidate_id"],

@@ -333,3 +333,68 @@ class BehavioralTemplateService:
                 raise ValidationException("Cannot link archived template to a job")
 
         await self._repository.link_to_job(job_id, template_id)
+        await self._invalidate_job_scores(job_id)
+
+        if template_id is not None:
+            await self._create_retroactive_assignments(job_id, template_id)
+
+    async def _create_retroactive_assignments(self, job_id: UUID, template_id: UUID) -> None:
+        import sqlalchemy as sa
+        from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+        from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+        from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+            SQLAlchemyBehavioralAssignmentRepository,
+        )
+
+        _EARLY_STAGES = ("entry", "screening")
+
+        session = self._repository._session
+        result = await session.execute(
+            sa.select(CandidateJobPipelineModel.candidate_id).where(
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+                CandidateJobPipelineModel.pipeline_stage.in_(_EARLY_STAGES),
+            )
+        )
+        candidate_ids = [row.candidate_id for row in result]
+
+        if not candidate_ids:
+            return
+
+        assignment_service = BehavioralAssignmentService(SQLAlchemyBehavioralAssignmentRepository(session))
+        for candidate_id in candidate_ids:
+            await assignment_service.ensure_assignment_for_application(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                template_id=template_id,
+            )
+
+    async def _invalidate_job_scores(self, job_id: UUID) -> None:
+        """Invalidate scores and matches for a job after template change."""
+        import sqlalchemy as sa
+        from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
+        from src.infrastructure.database.models.profile_analysis_model import (
+            CandidateJobMatchModel,
+            JobProfileAnalysisModel,
+        )
+
+        session = self._repository._session
+        await session.execute(
+            sa.delete(CandidateJobScoreModel).where(CandidateJobScoreModel.job_id == job_id)
+        )
+        await session.execute(
+            sa.delete(CandidateJobMatchModel).where(CandidateJobMatchModel.job_id == job_id)
+        )
+        await session.execute(
+            sa.update(JobProfileAnalysisModel)
+            .where(
+                JobProfileAnalysisModel.job_id == job_id,
+                JobProfileAnalysisModel.is_active.is_(True),
+            )
+            .values(
+                is_active=False,
+                superseded_at=datetime.now(UTC),
+            )
+        )

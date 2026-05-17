@@ -426,6 +426,15 @@ export function JobFormPage() {
           <BehavioralTemplateSelector
             value={form.behavioral_template_id}
             onChange={(id) => setForm((current) => ({ ...current, behavioral_template_id: id }))}
+            onPopulateBehavioralRequirements={(requirements) =>
+              setForm((current) => ({
+                ...current,
+                behavioral_requirements: [
+                  ...current.behavioral_requirements.filter((r) => !requirements.includes(r)),
+                  ...requirements,
+                ],
+              }))
+            }
           />
         );
 

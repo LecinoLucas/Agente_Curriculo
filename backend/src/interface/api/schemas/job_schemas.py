@@ -258,6 +258,7 @@ class UpdateJobRequest(APISchemaModel):
     behavioral_requirements: list[str] | None = None
     priority: JOB_PRIORITY | None = None
     skill_requirements: dict[str, list[str]] | None = None
+    behavioral_template_id: UUID | None = None
     selection_flow_type: SELECTION_FLOW_TYPE | None = None
     requires_behavioral_assessment: bool | None = None
     requires_behavioral_ai_evaluation: bool | None = None

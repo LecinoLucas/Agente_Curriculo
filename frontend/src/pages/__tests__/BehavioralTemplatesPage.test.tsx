@@ -120,7 +120,7 @@ describe("BehavioralTemplatesPage", () => {
     const nameInput = screen.getByPlaceholderText("Ex: Avaliação de Liderança");
     fireEvent.change(nameInput, { target: { value: "New Template" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
 
     await waitFor(() => {
       expect(behavioralTemplatesService.behavioralTemplatesService.createTemplate).toHaveBeenCalledWith({
@@ -259,7 +259,7 @@ describe("BehavioralTemplatesPage", () => {
     });
 
     fireEvent.click(screen.getByText("Novo Template"));
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
 
     expect(vi.mocked(toast.toast.error)).toHaveBeenCalledWith("Nome do template é obrigatório");
     expect(behavioralTemplatesService.behavioralTemplatesService.createTemplate).not.toHaveBeenCalled();
@@ -280,7 +280,7 @@ describe("BehavioralTemplatesPage", () => {
     fireEvent.click(screen.getByText("Novo Template"));
     const nameInput = screen.getByPlaceholderText("Ex: Avaliação de Liderança");
     fireEvent.change(nameInput, { target: { value: "Duplicado" } });
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
 
     await waitFor(() => {
       expect(vi.mocked(toast.toast.error)).toHaveBeenCalledWith("Template com esse nome já existe");
@@ -312,8 +312,8 @@ describe("BehavioralTemplatesPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
 
-    expect(screen.getByText("Editar Template")).toBeInTheDocument();
-    expect((screen.getByPlaceholderText("Ex: Avaliação de Liderança") as HTMLInputElement).value).toBe("Template Existente");
+    expect(screen.getByText("Editar template")).toBeInTheDocument();
+    expect((screen.getByPlaceholderText("Nome do template") as HTMLInputElement).value).toBe("Template Existente");
   });
 
   it("abre galeria de modelos ao clicar em 'Usar modelo pronto'", async () => {
