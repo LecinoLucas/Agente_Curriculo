@@ -24,6 +24,20 @@ export const communicationService = {
     );
   },
 
+  sendCustomMessage(
+    jobId: string,
+    candidateId: string,
+    payload: { subject: string; body: string; channel?: string; audience?: string }
+  ) {
+    return httpRequest<CandidateCommunication>(
+      `/api/v1/jobs/${jobId}/candidates/${candidateId}/communications/send`,
+      {
+        method: "POST",
+        body: payload,
+      }
+    );
+  },
+
   retryCommunication(commId: string) {
     return httpRequest<{ message: string }>(`/api/v1/communications/${commId}/retry`, {
       method: "POST",

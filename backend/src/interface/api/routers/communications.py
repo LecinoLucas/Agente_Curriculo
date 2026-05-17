@@ -19,6 +19,7 @@ from src.interface.api.schemas.communication_schemas import (
     CommunicationMarkReadRequest,
     CommunicationResponse,
     CommunicationRetryRequest,
+    CommunicationSendRequest,
     CommunicationTemplateCreateRequest,
     CommunicationTemplateListResponse,
     CommunicationTemplateResponse,
@@ -171,3 +172,28 @@ async def update_template(
         return CommunicationTemplateResponse.model_validate(template)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post(
+    "/jobs/{job_id}/candidates/{candidate_id}/communications/send",
+    response_model=CommunicationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_custom_message(
+    job_id: UUID,
+    candidate_id: UUID,
+    request: CommunicationSendRequest,
+    current_user: RecruiterOrAdmin,
+    service: CommunicationService = Depends(_get_service),
+) -> CommunicationResponse:
+    """Send a custom direct communication message to the candidate."""
+    comm = await service.send_custom_message(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        subject=request.subject,
+        body=request.body,
+        channel=request.channel,
+        audience=request.audience,
+        created_by=current_user.id,
+    )
+    return CommunicationResponse.model_validate(comm)

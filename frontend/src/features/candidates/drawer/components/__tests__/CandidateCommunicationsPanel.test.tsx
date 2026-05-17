@@ -9,6 +9,7 @@ vi.mock("../../../../../services/communicationService", () => ({
   communicationService: {
     getRecruiterCommunications: vi.fn(),
     retryCommunication: vi.fn(),
+    sendCustomMessage: vi.fn(),
   },
 }));
 
@@ -59,7 +60,7 @@ describe("CandidateCommunicationsPanel", () => {
 
     render(<CandidateCommunicationsPanel jobId="job-1" candidateId="candidate-1" />);
 
-    expect(await screen.findByText("Nenhuma comunicação registrada.")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhuma comunicação registrada")).toBeInTheDocument();
   });
 
   it("mostra loading e error state", async () => {
@@ -67,9 +68,12 @@ describe("CandidateCommunicationsPanel", () => {
       new Error("Falha de rede"),
     );
 
-    render(<CandidateCommunicationsPanel jobId="job-1" candidateId="candidate-1" />);
+    const { container } = render(
+      <CandidateCommunicationsPanel jobId="job-1" candidateId="candidate-1" />
+    );
 
-    expect(screen.getByText("Carregando comunicações...")).toBeInTheDocument();
+    // Verify loading skeleton is visible
+    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
     expect(await screen.findByText("Falha de rede")).toBeInTheDocument();
   });
 
@@ -101,5 +105,51 @@ describe("CandidateCommunicationsPanel", () => {
     await waitFor(() => {
       expect(communicationService.getRecruiterCommunications).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("abre compositor, digita mensagem e envia com sucesso", async () => {
+    vi.mocked(communicationService.getRecruiterCommunications)
+      .mockResolvedValueOnce({ communications: [] })
+      .mockResolvedValueOnce({
+        communications: [
+          communication({
+            subject: "Contato Direto",
+            body: "Olá candidato, tudo bem?",
+            template_key: "custom_message",
+          }),
+        ],
+      });
+    vi.mocked(communicationService.sendCustomMessage).mockResolvedValue(communication());
+
+    render(<CandidateCommunicationsPanel jobId="job-1" candidateId="candidate-1" />);
+
+    // Click Speaker button to open composer
+    const composeBtn = await screen.findByRole("button", { name: /falar com candidato/i });
+    fireEvent.click(composeBtn);
+
+    // Verify fields are present
+    expect(screen.getByText("Nova Comunicação Direta")).toBeInTheDocument();
+    const subjectInput = screen.getByLabelText("Assunto");
+    const bodyInput = screen.getByLabelText("Mensagem");
+
+    // Fill form
+    fireEvent.change(subjectInput, { target: { value: "Contato Direto" } });
+    fireEvent.change(bodyInput, { target: { value: "Olá candidato, tudo bem?" } });
+
+    // Submit
+    const submitBtn = screen.getByRole("button", { name: /enviar mensagem/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(communicationService.sendCustomMessage).toHaveBeenCalledWith("job-1", "candidate-1", {
+        subject: "Contato Direto",
+        body: "Olá candidato, tudo bem?",
+        channel: "email",
+        audience: "candidate",
+      });
+    });
+
+    // Verify it is reloaded
+    expect(await screen.findByText("Contato Direto")).toBeInTheDocument();
   });
 });

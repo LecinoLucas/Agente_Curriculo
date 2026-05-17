@@ -18,12 +18,41 @@ class CollaborationCommentModel(Base):
     candidate_id: Mapped[UUID] = mapped_column(UUIDType(as_uuid=True), ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False)
     job_id: Mapped[UUID] = mapped_column(UUIDType(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
     author_id: Mapped[UUID | None] = mapped_column(UUIDType(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    author_role: Mapped[str] = mapped_column(String(50), nullable=False)
-    comment_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    visibility: Mapped[str] = mapped_column(String(50), nullable=False, default="internal")
+    author_role: Mapped[str] = mapped_column(
+        sa.Enum(
+            "admin", "recruiter", "manager", "hr", "viewer", "candidate",
+            name="collaboration_author_role"
+        ),
+        nullable=False,
+    )
+    comment_type: Mapped[str] = mapped_column(
+        sa.Enum(
+            "comment",
+            "review_request",
+            "manager_feedback",
+            "interview_request",
+            name="collaboration_comment_type",
+        ),
+        nullable=False,
+    )
+    visibility: Mapped[str] = mapped_column(
+        sa.Enum("internal", name="collaboration_visibility"),
+        nullable=False,
+        default="internal",
+    )
     target_manager_id: Mapped[UUID | None] = mapped_column(UUIDType(as_uuid=True), nullable=True)
     priority: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    recommendation: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    recommendation: Mapped[str | None] = mapped_column(
+        sa.Enum(
+            "advance",
+            "hold",
+            "reject",
+            "request_interview",
+            "none",
+            name="collaboration_recommendation",
+        ),
+        nullable=True,
+    )
     message: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now())

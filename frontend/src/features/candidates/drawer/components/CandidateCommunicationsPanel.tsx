@@ -202,6 +202,14 @@ export function CandidateCommunicationsPanel({
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Custom Message Compose States
+  const [isComposing, setIsComposing] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [channel, setChannel] = useState<"email" | "internal">("email");
+  const [audience, setAudience] = useState<"candidate" | "manager" | "hr">("candidate");
+  const [sending, setSending] = useState(false);
+
   const loadCommunications = useCallback(async () => {
     if (!jobId || !candidateId) {
       setCommunications([]);
@@ -237,6 +245,32 @@ export function CandidateCommunicationsPanel({
     }
   };
 
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subject.trim() || !body.trim() || !jobId || !candidateId) return;
+
+    setSending(true);
+    setError(null);
+    try {
+      await communicationService.sendCustomMessage(jobId, candidateId, {
+        subject,
+        body,
+        channel,
+        audience,
+      });
+      setSubject("");
+      setBody("");
+      setChannel("email");
+      setAudience("candidate");
+      setIsComposing(false);
+      await loadCommunications();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível enviar a mensagem.");
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (!jobId || !candidateId) {
     return (
       <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-sm text-[hsl(var(--text-muted))] flex items-center justify-center bg-[hsl(var(--surface-muted))/0.2]">
@@ -246,7 +280,7 @@ export function CandidateCommunicationsPanel({
   }
 
   return (
-    <section aria-label="Comunicações do candidato" className="space-y-6">
+    <section aria-label="Comunicações do candidato" className="space-y-6 p-5 pb-24">
       <div className="flex items-center justify-between border-b border-[hsl(var(--border))/0.6] pb-4">
         <div>
           <h3 className="text-lg font-bold tracking-tight text-[hsl(var(--text))]">Comunicações</h3>
@@ -254,7 +288,99 @@ export function CandidateCommunicationsPanel({
             Histórico de entrega de mensagens automatizadas e contatos.
           </p>
         </div>
+        {!isComposing && (
+          <button
+            type="button"
+            onClick={() => setIsComposing(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-hover))] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition"
+          >
+            Falar com Candidato
+          </button>
+        )}
       </div>
+
+      {/* Custom Message Composition Box */}
+      {isComposing ? (
+        <form onSubmit={handleSend} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-sm space-y-4 transition-all duration-300">
+          <div className="flex items-center justify-between border-b border-[hsl(var(--border))/0.5] pb-2">
+            <h4 className="text-sm font-bold text-[hsl(var(--text))]">Nova Comunicação Direta</h4>
+            <span className="text-xs text-[hsl(var(--text-muted))]">Escreva e envie uma mensagem direta</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label htmlFor="comm-channel" className="text-xs font-semibold text-[hsl(var(--text))]">Canal de Envio</label>
+              <select
+                id="comm-channel"
+                value={channel}
+                onChange={(e) => setChannel(e.target.value as "email" | "internal")}
+                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
+              >
+                <option value="email">E-mail</option>
+                <option value="internal">Portal Interno (Notificação)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="comm-audience" className="text-xs font-semibold text-[hsl(var(--text))]">Público Alvo</label>
+              <select
+                id="comm-audience"
+                value={audience}
+                onChange={(e) => setAudience(e.target.value as "candidate" | "manager" | "hr")}
+                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
+              >
+                <option value="candidate">Candidato</option>
+                <option value="manager">Gestor da Vaga</option>
+                <option value="hr">Equipe de RH</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="comm-subject" className="text-xs font-semibold text-[hsl(var(--text))]">Assunto</label>
+            <input
+              id="comm-subject"
+              type="text"
+              required
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Digite o assunto da mensagem..."
+              className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="comm-body" className="text-xs font-semibold text-[hsl(var(--text))]">Mensagem</label>
+            <textarea
+              id="comm-body"
+              required
+              rows={4}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Escreva sua mensagem aqui..."
+              className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-[hsl(var(--border))/0.5]">
+            <button
+              type="button"
+              onClick={() => setIsComposing(false)}
+              disabled={sending}
+              className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs font-bold text-[hsl(var(--text))] bg-[hsl(var(--surface))] hover:bg-[hsl(var(--surface-muted))] transition disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={sending || !subject.trim() || !body.trim()}
+              className="rounded-lg bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary-hover))] px-4 py-2 text-xs font-bold text-white transition disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {sending ? "Enviando..." : "Enviar Mensagem"}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {loading ? <CommunicationSkeleton /> : null}
 

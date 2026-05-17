@@ -245,3 +245,28 @@ class CommunicationService:
             subject_template=subject_template,
             status=status,
         )
+
+    async def send_custom_message(
+        self,
+        candidate_id: UUID,
+        job_id: UUID,
+        subject: str,
+        body: str,
+        channel: str = "email",
+        audience: str = "candidate",
+        created_by: UUID | None = None,
+    ):
+        """Create and deliver a custom communication message to the candidate."""
+        comm = await self.repository.create_communication(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            channel=channel,
+            audience=audience,
+            body=body,
+            subject=subject,
+            template_key="custom_message",
+            status="draft",
+            created_by=created_by,
+        )
+        await self._deliver(comm)
+        return comm

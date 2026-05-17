@@ -85,3 +85,11 @@ class CommunicationMarkReadRequest(BaseModel):
 class CommunicationTemplateListResponse(BaseModel):
     """Response with list of templates."""
     templates: list[CommunicationTemplateResponse] = Field(..., description="List of templates")
+
+
+class CommunicationSendRequest(BaseModel):
+    """Request to send a custom communication message."""
+    subject: str = Field(..., min_length=1, description="Message subject")
+    body: str = Field(..., min_length=1, description="Message body")
+    channel: str = Field("email", description="Channel: 'internal' or 'email'")
+    audience: str = Field("candidate", description="Audience: 'candidate', 'recruiter', 'manager', or 'hr'")
