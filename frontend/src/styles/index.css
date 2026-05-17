@@ -964,11 +964,9 @@
     font-weight: 700;
   }
 
-  .navbar a:hover,
-  .navbar button:hover {
-    color: hsl(0 0% 100%);
-    background-color: hsl(var(--nav-active-bg));
-  }
+  /* Removido estilo global de hover que causava conflito com backdrops e menus internos.
+     O hover agora é tratado individualmente por classes Tailwind nos componentes. */
+
 
   .navbar .text-muted,
   .navbar [data-muted="true"] {

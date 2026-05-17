@@ -51,10 +51,8 @@ export function VisualThemeSwitcher() {
 
       {open ? (
         <>
-          <button
-            type="button"
+          <div
             className="visual-theme-backdrop"
-            aria-label="Fechar seletor de tema"
             onClick={() => setOpen(false)}
           />
 

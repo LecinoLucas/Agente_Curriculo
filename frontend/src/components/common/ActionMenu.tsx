@@ -41,10 +41,8 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
 
       {open ? (
         <>
-          <button
-            type="button"
+          <div
             className="fixed inset-0 z-20 cursor-default"
-            aria-label="Fechar menu"
             onClick={() => setOpen(false)}
           />
           <div className={cn(
