@@ -67,3 +67,7 @@ backend/output.txt
 frontend/src/pages/.!*.tsx
 
 backend/private_uploads/
+
+__pycache__/
+*.pyc
+backend/private_uploads/
