@@ -114,7 +114,7 @@ function RecruiterNavigation() {
   const { closeCandidate } = usePipeline();
   const visibleItems = RECRUITER_NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
   return (
-    <nav className="ml-2 hidden flex-1 items-center gap-2 lg:flex">
+    <nav className="hidden lg:flex items-center gap-2.5 mx-auto">
       {visibleItems.map((item) => (
         <NavLink
           key={item.to}
@@ -126,7 +126,7 @@ function RecruiterNavigation() {
           }}
           className={({ isActive }) =>
             cn(
-              "group relative flex flex-col items-center justify-center rounded-xl border px-4 py-2 transition-all duration-150",
+              "group relative flex flex-col items-center justify-center rounded-xl border px-4 py-1.5 transition-all duration-150",
               isActive
                 ? "border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.65)]"
                 : "border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]",
@@ -170,7 +170,7 @@ function AdminNavigation() {
   }, [openDropdownLabel]);
 
   return (
-    <nav className="ml-2 hidden flex-1 items-center gap-2 lg:flex">
+    <nav className="hidden lg:flex items-center gap-2.5 mx-auto">
       {visibleGroups.map((group) => {
         if (!group.isDropdown) {
           const item = group.items[0];
@@ -186,7 +186,7 @@ function AdminNavigation() {
               }}
               className={({ isActive }) =>
                 cn(
-                  "group relative flex min-w-[118px] flex-col rounded-xl px-3.5 py-2.5 transition-all duration-150",
+                  "group relative flex min-w-[118px] flex-col rounded-xl px-3.5 py-1.5 transition-all duration-150",
                   isActive
                     ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.65)]"
                     : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]",
@@ -209,7 +209,7 @@ function AdminNavigation() {
             <button
               type="button"
               className={cn(
-                "group relative flex min-w-[118px] flex-col rounded-xl px-3.5 py-2.5 transition-all duration-150",
+                "group relative flex min-w-[118px] flex-col rounded-xl px-3.5 py-1.5 transition-all duration-150",
                 isGroupActive
                   ? "border border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] shadow-[0_8px_20px_-18px_rgba(15,23,42,0.65)]"
                   : "border border-transparent text-[hsl(var(--nav-muted))] hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]",
@@ -326,10 +326,10 @@ export function AppShell() {
 
       {/* ── Top navigation bar (dark in light mode, darker-dark in dark mode) ── */}
       <header className="navbar sticky top-0 z-40 border-b border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] shadow-[0_14px_28px_-24px_rgba(15,23,42,0.48)]">
-        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-3.5 sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-2 sm:px-6">
 
           {/* Brand */}
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex flex-1 min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={() => navigate("/pipeline")}
@@ -353,7 +353,7 @@ export function AppShell() {
           {user?.role === "admin" || user?.role === "manager" ? <AdminNavigation /> : <RecruiterNavigation />}
 
           {/* Right-side controls */}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex flex-1 items-center justify-end gap-2">
             <VisualThemeSwitcher />
 
             {/* Theme toggle */}
@@ -371,7 +371,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => navigate("/perfil")}
-              className="hidden items-center gap-3 rounded-xl border border-transparent px-3.5 py-2.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] lg:flex"
+              className="hidden items-center gap-3 rounded-xl border border-transparent px-3.5 py-1.5 text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] lg:flex"
             >
               <div className="text-right">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--nav-muted))]">

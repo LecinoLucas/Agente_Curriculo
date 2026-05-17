@@ -1,4 +1,4 @@
-import { Loader2, LogIn, ShieldCheck, ArrowRight, Sparkles } from "lucide-react";
+import { Loader2, LogIn, ShieldCheck, ArrowRight, Sparkles, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -19,6 +19,7 @@ export function CandidateLoginPage() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     setErrorMessage(null);
@@ -62,6 +63,20 @@ export function CandidateLoginPage() {
         {/* Left Side: Brand & Info */}
         <div className="flex w-full flex-col gap-8 lg:w-1/2 animate-in fade-in slide-in-from-left-8 duration-700">
           <div className="space-y-6 text-center lg:text-left">
+            <div className="flex items-center justify-center lg:justify-start gap-2.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary))] text-lg font-bold text-white shadow-md">
+                RA
+              </div>
+              <div className="flex flex-col text-left">
+                <span className="font-heading text-base font-extrabold leading-tight text-[hsl(var(--text))]">
+                  Marajó RH
+                </span>
+                <span className="text-[10px] text-[hsl(var(--text-muted))] leading-tight">
+                  Recrutamento & Seleção
+                </span>
+              </div>
+            </div>
+
             <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--primary))]">
               <Sparkles className="h-3.5 w-3.5" />
               Ambiente Restrito
@@ -123,15 +138,29 @@ export function CandidateLoginPage() {
                       Esqueceu a senha?
                     </Link>
                   </div>
-                  <Input
-                    id="candidate-login-password"
-                    type="password"
-                    placeholder="••••••••"
-                    className="h-12 rounded-xl border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] px-4 focus-visible:ring-[hsl(var(--primary))]"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    disabled={isSubmitting}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="candidate-login-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      className="h-12 rounded-xl border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] pl-4 pr-12 focus-visible:ring-[hsl(var(--primary))]"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      disabled={isSubmitting}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))/0.2] hover:text-[hsl(var(--text))] transition-colors"
+                      title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {errorMessage ? (

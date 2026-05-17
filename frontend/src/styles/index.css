@@ -288,57 +288,57 @@
 
   :root[data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 — Icy Rose & Champagne
+       Visual Theme 1 — Enterprise Slate & Cyan/Teal (Light)
        -----------------------------------------------------------------------
        Direção:
-       - Estética sofisticada e ultra-limpa.
-       - Base em Branco Gelado (fundo frio e luminoso).
-       - Navbar em Rose Tint suave (mantido como solicitado).
-       - Primary em Rose Quartz (rosa seco elegante).
+       - Estética premium, limpa e moderna.
+       - Base em Warm Light Gray (fundo luminoso e confortável).
+       - Navbar em Dark Navy elegante para contraste corporativo sofisticado.
+       - Primary em Cyan/Teal vibrante e inovador.
        ----------------------------------------------------------------------- */
 
-    --brand:               330 45% 58%;
-    --brand-dark:          330 45% 45%;
-    --brand-soft:          330 60% 97%;
-    --brand-glow:          330 60% 88%;
+    --brand:               188 95% 38%;
+    --brand-dark:          188 95% 30%;
+    --brand-soft:          188 80% 96%;
+    --brand-glow:          188 80% 88%;
 
-    --bg:                  210 15% 99%;
+    --bg:                  210 20% 98%;
     --surface:             0 0% 100%;
-    --surface-muted:       210 10% 97%;
-    --border:              210 10% 90%;
-    --border-strong:       210 10% 80%;
+    --surface-muted:       210 12% 95%;
+    --border:              210 12% 88%;
+    --border-strong:       210 12% 76%;
 
-    --background:          210 15% 99%;
+    --background:          210 20% 98%;
     --card:                0 0% 100%;
     --popover:             0 0% 100%;
-    --secondary:           210 10% 97%;
-    --muted:               210 10% 97%;
+    --secondary:           210 12% 95%;
+    --muted:               210 12% 95%;
 
-    --text:                222 24% 14%;
-    --text-muted:          218 11% 42%;
+    --text:                215 30% 14%;
+    --text-muted:          215 14% 42%;
 
-    --primary:             330 45% 58%;
+    --primary:             188 95% 38%;
     --primary-foreground:  0 0% 100%;
-    --ring:                330 45% 58%;
+    --ring:                188 95% 38%;
 
-    --accent:              20 60% 92%;
-    --accent-foreground:   330 50% 30%;
-    --accent-soft:         20 60% 92%;
+    --accent:              188 80% 95%;
+    --accent-foreground:   188 90% 22%;
+    --accent-soft:         188 80% 95%;
 
-    --nav-bg:              330 25% 83%;
-    --nav-text:            330 40% 25%;
-    --nav-muted:           330 10% 45%;
-    --nav-active-bg:       330 45% 96%;
-    --nav-border:          20 20% 90%;
+    --nav-bg:              347 88% 19%;
+    --nav-text:            0 0% 100%;
+    --nav-muted:           347 30% 80%;
+    --nav-active-bg:       347 70% 30%;
+    --nav-border:          347 45% 25%;
 
-    --sidebar-accent:      20 60% 92%;
-    --hero-start:          330 35% 15%;
-    --hero-end:            330 30% 25%;
+    --sidebar-accent:      188 80% 95%;
+    --hero-start:          215 45% 15%;
+    --hero-end:            215 40% 22%;
 
-    --page-glow-start:     210 18% 96%;
-    --page-glow-end:       210 18% 96%;
-    --page-gradient-start: 210 18% 96%;
-    --page-gradient-end:   210 18% 96%;
+    --page-glow-start:     188 95% 96%;
+    --page-glow-end:       258 90% 96%;
+    --page-gradient-start: 210 20% 98%;
+    --page-gradient-end:   210 15% 97%;
   }
 
   :root[data-visual-theme="theme-2"] {
@@ -497,60 +497,60 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 Dark — Soft Charcoal Rose (Cozy Dark)
+       Visual Theme 1 Dark — Enterprise SaaS Navy & Cyan/Teal (Dark)
        -----------------------------------------------------------------------
        Direção:
-       - Escuro suave e visível (18% de luminosidade).
-       - Fundo grafite levemente rosado/veludo.
-       - Texto claro para conforto e contraste moderado.
+       - Escuro profundo e moderno, estilo dashboard SaaS premium.
+       - Base em Dark Navy/Graphite (#050B14, #07111F, #0B1626).
+       - Destaque em Cyan/Teal com cores semânticas controladas.
        ----------------------------------------------------------------------- */
 
-    --brand:               330 35% 65%;
-    --brand-dark:          330 35% 50%;
-    --brand-soft:          330 15% 25%;
-    --brand-glow:          330 35% 75%;
+    --brand:               188 95% 43%;
+    --brand-dark:          188 95% 34%;
+    --brand-soft:          188 40% 16%;
+    --brand-glow:          188 95% 55%;
 
-    --bg:                  330 12% 18%;
-    --surface:             330 10% 24%;
-    --surface-muted:       330 10% 28%;
-    --border:              330 10% 34%;
-    --border-strong:       330 10% 45%;
+    --bg:                  216 60% 5%;
+    --surface:             216 55% 10%;
+    --surface-muted:       214 48% 12%;
+    --border:              216 40% 16%;
+    --border-strong:       188 86% 40%;
 
-    --background:          330 12% 18%;
-    --card:                330 10% 24%;
-    --popover:             330 10% 24%;
-    --secondary:           330 10% 28%;
-    --muted:               330 10% 28%;
+    --background:          216 60% 5%;
+    --card:                213 51% 12%;
+    --popover:             216 55% 10%;
+    --secondary:           214 48% 12%;
+    --muted:               214 48% 12%;
 
-    --text:                330 10% 92%;
-    --text-muted:          330 10% 75%;
+    --text:                210 40% 98%;
+    --text-muted:          214 32% 84%;
 
-    --primary:             330 35% 65%;
-    --primary-foreground:  330 20% 5%;
-    --ring:                330 35% 65%;
+    --primary:             188 95% 43%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                188 95% 43%;
 
-    --foreground:          330 10% 92%;
-    --card-foreground:     330 10% 92%;
-    --popover-foreground:  330 10% 92%;
+    --foreground:          210 40% 98%;
+    --card-foreground:     210 40% 98%;
+    --popover-foreground:  210 40% 98%;
 
-    --accent:              330 15% 30%;
-    --accent-foreground:   330 30% 90%;
-    --accent-soft:         330 15% 30%;
+    --accent:              188 40% 16%;
+    --accent-foreground:   210 40% 98%;
+    --accent-soft:         188 40% 16%;
 
-    --nav-bg:              330 15% 14%;
-    --nav-text:            330 10% 92%;
-    --nav-muted:           330 10% 70%;
-    --nav-active-bg:       330 15% 22%;
-    --nav-border:          330 15% 16%;
+    --nav-bg:              215 63% 7%;
+    --nav-text:            210 40% 98%;
+    --nav-muted:           214 32% 84%;
+    --nav-active-bg:       188 95% 43%;
+    --nav-border:          216 40% 16%;
 
-    --sidebar-accent:      348 42% 44%;
-    --hero-start:          220 15% 6%;
-    --hero-end:            220 13% 12%;
+    --sidebar-accent:      188 95% 43%;
+    --hero-start:          215 63% 7%;
+    --hero-end:            216 60% 5%;
 
-    --page-glow-start:     220 15% 15%;
-    --page-glow-end:       220 13% 14%;
-    --page-gradient-start: 220 15% 8%;
-    --page-gradient-end:   220 15% 5%;
+    --page-glow-start:     188 95% 43%;
+    --page-glow-end:       258 90% 66%;
+    --page-gradient-start: 216 60% 5%;
+    --page-gradient-end:   215 63% 7%;
   }
 
   /* --------------------------------------------------------------------------
@@ -562,12 +562,13 @@
     & .glass,
     & .ui-card {
       border-radius: 1rem !important;
-      background: hsl(var(--surface)) !important;
-      border: 1px solid hsl(var(--border)) !important;
+      background: rgba(255, 255, 255, 0.75) !important;
+      border: 1px solid rgba(210, 215, 222, 0.4) !important;
       box-shadow:
-        0 16px 32px -28px hsl(var(--text) / 0.16),
-        0 1px 2px hsl(var(--text) / 0.05) !important;
-      backdrop-filter: none !important;
+        0 18px 45px rgba(0, 0, 0, 0.03),
+        0 1px 2px rgba(0, 0, 0, 0.01) !important;
+      backdrop-filter: blur(16px) !important;
+      -webkit-backdrop-filter: blur(16px) !important;
     }
 
     & .blur-3xl {
@@ -583,6 +584,19 @@
 
     & .rounded-full {
       border-radius: 0.625rem !important;
+    }
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-1"] {
+    & .glass,
+    & .ui-card {
+      background: rgba(15, 29, 46, 0.82) !important;
+      border: 1px solid rgba(148, 163, 184, 0.12) !important;
+      box-shadow:
+        0 18px 45px rgba(0, 0, 0, 0.28),
+        0 0 32px rgba(6, 182, 212, 0.04) !important;
+      backdrop-filter: blur(16px) !important;
+      -webkit-backdrop-filter: blur(16px) !important;
     }
   }
 
@@ -838,11 +852,9 @@
   }
   :root[data-theme="dark"][data-visual-theme="theme-1"] body {
     background:
-      radial-gradient(circle at 8% 8%, hsl(356 92% 44% / 0.32), transparent 28rem),
-      radial-gradient(circle at 88% 12%, hsl(268 90% 48% / 0.30), transparent 30rem),
-      radial-gradient(circle at 72% 88%, hsl(205 88% 42% / 0.18), transparent 28rem),
-      radial-gradient(circle at 20% 92%, hsl(42 78% 42% / 0.14), transparent 24rem),
-      linear-gradient(180deg, hsl(250 26% 7%), hsl(222 30% 6%));
+      radial-gradient(circle at 12% 12%, hsl(188 95% 43% / 0.12), transparent 32rem),
+      radial-gradient(circle at 88% 15%, hsl(258 90% 66% / 0.08), transparent 30rem),
+      linear-gradient(180deg, #050B14, #07111F) !important;
     color: hsl(var(--text));
   }
   :root[data-theme="dark"][data-visual-theme="theme-2"] body {
@@ -972,6 +984,43 @@
   .navbar [data-muted="true"] {
     color: hsl(var(--nav-muted));
     font-weight: 600;
+  }
+
+  /* Correção para botões dentro de menus dropdown (como ActionMenu) na navbar no Tema 1 */
+  .navbar .ui-card button {
+    color: hsl(var(--text)) !important;
+    font-weight: 500 !important;
+  }
+
+  .navbar .ui-card button:hover {
+    background-color: hsl(var(--surface-muted)) !important;
+  }
+
+  .navbar .ui-card button.text-\[hsl\(var\(--danger\)\)\] {
+    color: hsl(var(--danger)) !important;
+  }
+
+  /* Correção para links de navegação dentro de dropdowns na navbar no Tema 1 */
+  .navbar .absolute a,
+  .navbar [role="menu"] a,
+  .navbar [data-dropdown] a {
+    color: hsl(var(--text-muted)) !important;
+    font-weight: 500 !important;
+  }
+
+  .navbar .absolute a:hover,
+  .navbar [role="menu"] a:hover,
+  .navbar [data-dropdown] a:hover {
+    color: hsl(var(--text)) !important;
+    background-color: hsl(var(--accent-soft)) !important;
+  }
+
+  .navbar .absolute a.active,
+  .navbar [role="menu"] a.active,
+  .navbar [data-dropdown] a.active {
+    color: hsl(var(--nav-text)) !important;
+    background-color: hsl(var(--nav-active-bg)) !important;
+    font-weight: 600 !important;
   }
 
   /* --------------------------------------------------------------------------

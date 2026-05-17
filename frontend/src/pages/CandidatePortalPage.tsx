@@ -17,6 +17,8 @@ import {
   User,
   Menu,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { ChangeEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -309,6 +311,7 @@ export function CandidatePortalPage() {
   const [assessmentSaving, setAssessmentSaving] = useState(false);
   const [currentTab, setCurrentTab] = useState("inicio");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
 
   const activeApplication: CandidatePortalActiveApplication | null =
     overview?.active_application ?? null;
@@ -350,6 +353,16 @@ export function CandidatePortalPage() {
   useEffect(() => {
     void loadPortalData();
   }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (!loading && !isRefreshing && !isSaving && !isUploading && !assessmentSaving) {
+        void loadPortalData(true);
+      }
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [loading, isRefreshing, isSaving, isUploading, assessmentSaving]);
 
   const handleContactChange = (field: keyof ContactFormState, value: string) => {
     setContactForm((current) => ({ ...current, [field]: value }));
@@ -522,14 +535,44 @@ export function CandidatePortalPage() {
   return (
     <div className="flex min-h-screen bg-[hsl(var(--bg))]">
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#5c061a] text-white transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:relative md:flex md:flex-col`}>
-        <div className="flex items-center justify-between h-16 px-6 border-b border-white/10">
-          <span className="font-heading text-lg font-bold">Portal do Candidato</span>
+      <div className={`fixed inset-y-0 left-0 z-50 bg-[#5c061a] text-white transition-all duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col ${isSidebarCollapsed ? 'w-64 md:w-[76px]' : 'w-64 md:w-64'}`}>
+        <div className={`flex items-center h-16 border-b border-white/10 transition-all duration-300 ${isSidebarCollapsed ? 'px-4 justify-center' : 'px-6 justify-between'}`}>
+          {!isSidebarCollapsed ? (
+            <div className="flex items-center gap-2.5 animate-in fade-in duration-300 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-extrabold text-[#5c061a] shadow-sm">
+                RA
+              </div>
+              <div className="flex flex-col text-left min-w-0">
+                <span className="font-heading text-sm font-bold leading-tight text-white truncate">
+                  Marajó RH
+                </span>
+                <span className="text-[10px] text-white/60 leading-tight truncate">
+                  Portal do Candidato
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-extrabold text-[#5c061a] shadow-sm animate-in fade-in duration-300">
+              RA
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="hidden md:flex h-8 w-8 items-center justify-center rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+            title={isSidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          >
+            {isSidebarCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
+          </button>
           <button className="md:hidden" onClick={() => setIsSidebarOpen(false)}>
             <X className="h-6 w-6" />
           </button>
         </div>
-        <nav className="flex-1 px-4 py-6 space-y-2">
+        <nav className={`flex-1 py-6 space-y-2 transition-all duration-300 ${isSidebarCollapsed ? 'px-2' : 'px-4'}`}>
           {[
             { id: "inicio", label: "Início", icon: <Home className="h-5 w-5" /> },
             { id: "vagas", label: "Minhas Candidaturas", icon: <Briefcase className="h-5 w-5" /> },
@@ -542,25 +585,39 @@ export function CandidatePortalPage() {
                 setCurrentTab(tab.id);
                 setIsSidebarOpen(false);
               }}
-              className={`flex items-center gap-3 w-full px-4 py-3 font-bold text-sm rounded-xl transition-colors ${
+              title={isSidebarCollapsed ? tab.label : undefined}
+              className={`flex items-center font-bold text-sm rounded-xl transition-all duration-300 ${
+                isSidebarCollapsed ? 'justify-center p-3 w-full' : 'gap-3 px-4 py-3 w-full'
+              } ${
                 currentTab === tab.id
                   ? "bg-white/20 text-white"
                   : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               {tab.icon}
-              {tab.label}
+              {!isSidebarCollapsed && (
+                <span className="truncate animate-in fade-in duration-300">
+                  {tab.label}
+                </span>
+              )}
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-white/10">
+        <div className={`border-t border-white/10 transition-all duration-300 ${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
           <Button 
             variant="outline" 
             onClick={handleLogout} 
-            className="w-full h-10 border-white/20 bg-white/5 text-sm font-bold text-white backdrop-blur-md hover:bg-[hsl(var(--danger))] hover:border-[hsl(var(--danger))]"
+            title={isSidebarCollapsed ? "Sair" : undefined}
+            className={`border-white/20 bg-white/5 font-bold text-white backdrop-blur-md hover:bg-[hsl(var(--danger))] hover:border-[hsl(var(--danger))] transition-all duration-300 ${
+              isSidebarCollapsed ? 'w-full h-10 p-0 justify-center' : 'w-full h-10'
+            }`}
           >
-            <LogOut className="mr-2 h-4 w-4" />
-            Sair
+            <LogOut className={`h-4 w-4 transition-all duration-300 ${isSidebarCollapsed ? '' : 'mr-2'}`} />
+            {!isSidebarCollapsed && (
+              <span className="truncate animate-in fade-in duration-300">
+                Sair
+              </span>
+            )}
           </Button>
         </div>
       </div>

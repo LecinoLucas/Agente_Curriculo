@@ -110,7 +110,7 @@ export function MoreActionsMenu({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="rounded-lg p-2 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+        className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))] transition shadow-sm"
         aria-label="Mais ações"
         aria-expanded={isOpen}
       >
