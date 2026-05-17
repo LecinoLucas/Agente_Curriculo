@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   Menu,
   Moon,
@@ -215,21 +217,50 @@ export function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
 
-  // Hover-based sidebar: expands on mouse-enter, collapses on mouse-leave
-  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(false);
+  // ── Sidebar Hybrid State ────────────────────────────────────────────────
+  // `pinnedExpanded`: estado real salvo pelo usuário (persistido no localStorage)
+  // `hoverExpanded`:  expansão temporária por hover (não persiste)
+  // `sidebarExpanded`: o que a sidebar deve renderizar (pinned OR hover)
+  const [pinnedExpanded, setPinnedExpanded] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("ats_sidebar_expanded");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
+  });
+  const [hoverExpanded, setHoverExpanded] = useState(false);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSidebarMouseEnter = () => {
-    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-    setSidebarExpanded(true);
-  };
+  // A sidebar aparece expandida se o usuário a fixou expandida OU se está em hover temporário
+  const sidebarExpanded = pinnedExpanded || hoverExpanded;
 
-  const handleSidebarMouseLeave = () => {
+  /** Toggle manual — persiste e cancela qualquer hover temporário */
+  const handleToggleSidebar = useCallback(() => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    setHoverExpanded(false);
+    setPinnedExpanded((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("ats_sidebar_expanded", String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  /** Hover enter — expande temporariamente SOMENTE se estiver fixada recolhida */
+  const handleSidebarMouseEnter = useCallback(() => {
+    if (pinnedExpanded) return; // já está fixada expandida, não faz nada extra
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    setHoverExpanded(true);
+  }, [pinnedExpanded]);
+
+  /** Hover leave — volta ao estado salvo (fecha dropdown se hover foi quem abriu) */
+  const handleSidebarMouseLeave = useCallback(() => {
+    if (pinnedExpanded) return; // fixada expandida, não recolhe no mouse-leave
     hoverTimeout.current = setTimeout(() => {
-      setSidebarExpanded(false);
+      setHoverExpanded(false);
       setOpenDropdownLabel(null);
-    }, 200);
-  };
+    }, 220);
+  }, [pinnedExpanded]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -265,7 +296,9 @@ export function AppShell() {
 
   const handleGroupClick = (groupLabel: string) => {
     if (!sidebarExpanded) {
-      setSidebarExpanded(true);
+      // Se recolhida manualmente, fixar expandida antes de abrir o grupo
+      setPinnedExpanded(true);
+      try { localStorage.setItem("ats_sidebar_expanded", "true"); } catch {}
       setOpenDropdownLabel(groupLabel);
     } else {
       setOpenDropdownLabel(openDropdownLabel === groupLabel ? null : groupLabel);
@@ -436,6 +469,28 @@ export function AppShell() {
         {/* Sidebar Footer Controls & Profile */}
         <div className="mt-auto border-t border-[hsl(var(--nav-border))]/90 p-2.5 space-y-4 bg-black/10 transition-all duration-300">
           <div className="flex flex-col gap-2">
+
+            {/* Botão de toggle manual — persiste estado no localStorage */}
+            <button
+              type="button"
+              id="sidebar-toggle-btn"
+              onClick={handleToggleSidebar}
+              className={cn(
+                "flex w-full items-center rounded-xl py-2 text-sm font-semibold transition-all duration-300 border border-transparent",
+                "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
+                pinnedExpanded ? "pl-3.5 justify-between" : "justify-center"
+              )}
+              title={pinnedExpanded ? "Recolher menu" : "Expandir menu"}
+            >
+              {pinnedExpanded ? (
+                <>
+                  <span className="truncate">Recolher Menu</span>
+                  <ChevronLeft className="h-4 w-4 shrink-0 opacity-60" />
+                </>
+              ) : (
+                <ChevronRight className="h-5 w-5 shrink-0" />
+              )}
+            </button>
 
             <div className="flex items-center justify-between">
               {sidebarExpanded && (
