@@ -18,6 +18,7 @@ class CandidateResponse(BaseModel):
     email: str | None = None
     phone: str | None = None
     cpf: str | None = None
+    salary_expectation: str | None = None
     location_city: str | None = None
     location_state: str | None = None
     location_country: str
@@ -160,6 +161,7 @@ class CreateCandidateRequest(BaseModel):
     email: EmailStr
     phone: str | None = Field(default=None, max_length=50)
     cpf: str | None = None
+    salary_expectation: str | None = Field(default=None, max_length=100)
     location_city: str | None = Field(default=None, max_length=100)
     location_state: str | None = Field(default=None, max_length=100)
     location_country: str = Field(default="BR", max_length=10)
@@ -176,6 +178,7 @@ class UpdateCandidateRequest(BaseModel):
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=50)
     cpf: str | None = None
+    salary_expectation: str | None = Field(default=None, max_length=100)
     location_city: str | None = Field(default=None, max_length=100)
     location_state: str | None = Field(default=None, max_length=100)
     location_country: str | None = Field(default=None, max_length=10)

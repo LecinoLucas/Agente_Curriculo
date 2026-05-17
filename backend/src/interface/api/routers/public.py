@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
-import sqlalchemy as sa
 import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +10,11 @@ from src.application.services.candidate_portal_auth_service import (
     PORTAL_SESSION_TTL_HOURS,
     CandidatePortalAuthService,
     CandidatePortalInvalidCredentialsError,
+)
+from src.application.services.candidate_google_auth_service import (
+    CandidateGoogleAuthConflictError,
+    CandidateGoogleAuthEmailNotVerifiedError,
+    CandidateGoogleAuthService,
 )
 from src.application.services.candidate_portal_service import (
     CandidatePortalInvalidFileError,
@@ -30,6 +34,8 @@ from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.dependencies import CurrentCandidateSession, get_db
 from src.interface.api.schemas.candidate_portal_schemas import (
+    CandidateAuthGoogleRequest,
+    CandidateAuthGoogleResponse,
     CandidateAuthLoginRequest,
     CandidateAuthLoginResponse,
     CandidatePortalOverviewResponse,
@@ -38,6 +44,10 @@ from src.interface.api.schemas.candidate_portal_schemas import (
 )
 from src.interface.api.schemas.public_schemas import PublicApplyResponse, PublicJobResponse
 from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
+from src.infrastructure.security.google_identity_verifier import (
+    GoogleIdentityConfigurationError,
+    GoogleIdentityVerificationError,
+)
 
 router = APIRouter(prefix="/public", tags=["public"])
 logger = structlog.get_logger(__name__)
@@ -78,8 +88,8 @@ async def apply(
     desired_contract_type: str = Form(...),
     works_at_marajo_group: bool = Form(...),
     job_id: UUID | None = Form(default=None),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
+    password: str = Form(default=""),
+    confirm_password: str = Form(default=""),
     lgpd_consent: bool = Form(...),
     resume_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -107,7 +117,15 @@ async def apply(
         valid_contract_types = {"CLT", "PJ", "Indiferente"}
         if desired_contract_type not in valid_contract_types:
             raise ValidationException(f"Regime desejado deve ser um de: {', '.join(valid_contract_types)}")
-        if password != confirm_password:
+        token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
+        candidate_session = None
+        if token:
+            try:
+                candidate_session = await CandidatePortalAuthService(db).authenticate(token)
+            except Exception:
+                candidate_session = None
+
+        if candidate_session is None and password != confirm_password:
             raise ValidationException("Confirmação de senha não confere")
 
         # Ler arquivo
@@ -133,14 +151,18 @@ async def apply(
             file_name=file_name,
             file_content_type=file_content_type,
             lgpd_consent=lgpd_consent,
+            authenticated_candidate_id=candidate_session.candidate_id if candidate_session else None,
         )
 
         auth_service = CandidatePortalAuthService(db)
-        session_token, _ = await auth_service.create_session(
-            candidate_id=result.candidate_id,
-            ip_address=request.client.host if request and request.client else "unknown",
-            user_agent=request.headers.get("user-agent", "") if request else "",
-        )
+        session_token = token
+        if candidate_session is None:
+            session_token, _ = await auth_service.create_session(
+                candidate_id=result.candidate_id,
+                ip_address=request.client.host if request and request.client else "unknown",
+                user_agent=request.headers.get("user-agent", "") if request else "",
+            )
+        assert session_token is not None
         response.set_cookie(
             key=CANDIDATE_PORTAL_COOKIE_NAME,
             value=session_token,
@@ -208,6 +230,57 @@ async def apply(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao processar candidatura",
+        )
+
+
+@router.post("/candidate-auth/google", response_model=CandidateAuthGoogleResponse)
+async def login_candidate_portal_with_google(
+    body: CandidateAuthGoogleRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateAuthGoogleResponse:
+    try:
+        session_token, result = await CandidateGoogleAuthService(db).authenticate(
+            id_token=body.id_token,
+            ip_address=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        await db.commit()
+        response.set_cookie(
+            key=CANDIDATE_PORTAL_COOKIE_NAME,
+            value=session_token,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            max_age=PORTAL_SESSION_TTL_HOURS * 3600,
+            path="/",
+        )
+        return result
+    except GoogleIdentityConfigurationError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Login com Google não está configurado.",
+        )
+    except (GoogleIdentityVerificationError, CandidateGoogleAuthEmailNotVerifiedError):
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Não foi possível validar sua conta Google.",
+        )
+    except CandidateGoogleAuthConflictError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Não foi possível vincular esta conta Google com segurança.",
+        )
+    except Exception:
+        await db.rollback()
+        logger.exception("candidate_portal.google_login_failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível concluir o login com Google.",
         )
 
 

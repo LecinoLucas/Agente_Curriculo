@@ -7,6 +7,7 @@ import structlog
 
 from src.application.ports.file_storage import FileStorageService
 from src.application.services.audit_service import AuditService
+from src.application.services.candidate_salary_expectation import normalize_salary_expectation
 from src.application.services.candidate_score_status_deriver import (
     derive_candidate_score_status,
 )
@@ -36,6 +37,7 @@ logger = structlog.get_logger(__name__)
 
 APPLICATION_SOURCE_MANUAL = "manual"
 APPLICATION_SOURCE_PUBLIC = "public_application"
+APPLICATION_SOURCE_GOOGLE = "google_oauth"
 
 
 class CandidateNotFoundError(Exception):
@@ -122,7 +124,7 @@ class CandidateService:
 
         cpf = (
             self._clean_cpf(body.cpf)
-            if application_source not in {APPLICATION_SOURCE_MANUAL, APPLICATION_SOURCE_PUBLIC}
+            if application_source not in {APPLICATION_SOURCE_MANUAL, APPLICATION_SOURCE_PUBLIC, APPLICATION_SOURCE_GOOGLE}
             else self._clean_manual_cpf(body.cpf)
         )
         if cpf is not None and await self._repository.find_active_by_cpf(cpf):
@@ -136,6 +138,7 @@ class CandidateService:
             email=email,
             phone=body.phone,
             cpf=cpf,
+            salary_expectation=normalize_salary_expectation(body.salary_expectation),
             location_city=body.location_city,
             location_state=body.location_state,
             location_country=body.location_country.upper().strip(),
@@ -393,6 +396,8 @@ class CandidateService:
             candidate.full_name = self._clean_required_text(body.full_name)
         if body.phone is not None:
             candidate.phone = body.phone
+        if body.salary_expectation is not None:
+            candidate.salary_expectation = normalize_salary_expectation(body.salary_expectation)
         if body.location_city is not None:
             candidate.location_city = body.location_city
         if body.location_state is not None:

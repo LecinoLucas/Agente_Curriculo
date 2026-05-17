@@ -92,7 +92,15 @@ class CandidateModel(Base):
     )
     salary_expectation: Mapped[Optional[str]] = mapped_column(
         sa.String(100),
-        comment="Salary expectation from public application (free text)"
+        comment="Normalized salary expectation in BRL (decimal string)"
+    )
+    google_sub: Mapped[Optional[str]] = mapped_column(
+        sa.String(255),
+        comment="Stable Google subject identifier for candidate social login"
+    )
+    google_picture_url: Mapped[Optional[str]] = mapped_column(
+        sa.Text,
+        comment="Last Google profile picture URL seen during candidate social login"
     )
     works_at_marajo_group: Mapped[Optional[bool]] = mapped_column(
         sa.Boolean(),
@@ -122,6 +130,13 @@ class CandidateModel(Base):
         ),
         sa.Index("idx_candidates_email", "email"),
         sa.Index("idx_candidates_cpf", "cpf"),
+        sa.Index(
+            "uq_candidates_google_sub_not_null",
+            "google_sub",
+            unique=True,
+            postgresql_where=sa.text("google_sub IS NOT NULL"),
+            sqlite_where=sa.text("google_sub IS NOT NULL"),
+        ),
         sa.Index("idx_candidates_data_quality_status", "data_quality_status"),
     )
 

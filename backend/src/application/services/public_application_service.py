@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.candidate_service import CandidateService
 from src.application.services.candidate_service import APPLICATION_SOURCE_PUBLIC
+from src.application.services.candidate_salary_expectation import require_salary_expectation
 from src.application.services.communication_service import CommunicationService
 from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
@@ -108,6 +109,8 @@ class PublicApplicationService:
 
     @staticmethod
     def _validate_password(password: str) -> None:
+        if not password:
+            raise ValidationException("Senha é obrigatória para concluir o cadastro.")
         if len(password) < 8:
             raise ValidationException("Senha deve ter no mínimo 8 caracteres")
 
@@ -128,6 +131,7 @@ class PublicApplicationService:
         password: str,
         file_content_type: str | None = None,
         lgpd_consent: bool = False,
+        authenticated_candidate_id: UUID | None = None,
     ) -> PublicApplyResponse:
         """
         Processo completo de candidatura pública:
@@ -147,26 +151,42 @@ class PublicApplicationService:
 
         # 2. Normalizar CPF sem validação semântica
         cpf_clean = self._clean_cpf(cpf)
-        self._validate_password(password)
-
-        existing_by_cpf = await self._candidate_repo.find_active_by_cpf(cpf_clean)
+        normalized_salary_expectation = require_salary_expectation(salary_expectation)
 
         email_clean = email.lower().strip()
+        existing_by_cpf = await self._candidate_repo.find_active_by_cpf(cpf_clean)
         existing_by_email = await self._candidate_repo.find_active_by_email(email_clean)
 
         existing_candidate: CandidateModel | None = None
-        if existing_by_cpf and existing_by_email and existing_by_cpf.id != existing_by_email.id:
-            raise PublicApplicationExistingAccountError(
-                "Já existe um cadastro com este e-mail ou CPF. Faça login para continuar sua candidatura."
-            )
-        if existing_by_cpf or existing_by_email:
-            existing_candidate = existing_by_cpf or existing_by_email
-            assert existing_candidate is not None
-            if not existing_candidate.password_hash or not verify_password(password, existing_candidate.password_hash):
+        if authenticated_candidate_id is not None:
+            existing_candidate = await self._candidate_repo.find_active_by_id(authenticated_candidate_id)
+            if existing_candidate is None:
+                raise PublicApplicationExistingAccountError(
+                    "Não foi possível validar sua sessão. Faça login novamente para continuar."
+                )
+            if existing_by_email and existing_by_email.id != existing_candidate.id:
+                raise PublicApplicationExistingAccountError(
+                    "Já existe um cadastro com este e-mail. Faça login para continuar sua candidatura."
+                )
+            if existing_by_cpf and existing_by_cpf.id != existing_candidate.id:
+                raise PublicApplicationExistingAccountError(
+                    "Já existe um cadastro com este CPF. Faça login para continuar sua candidatura."
+                )
+        else:
+            self._validate_password(password)
+            if existing_by_cpf and existing_by_email and existing_by_cpf.id != existing_by_email.id:
                 raise PublicApplicationExistingAccountError(
                     "Já existe um cadastro com este e-mail ou CPF. Faça login para continuar sua candidatura."
                 )
+            if existing_by_cpf or existing_by_email:
+                existing_candidate = existing_by_cpf or existing_by_email
+                assert existing_candidate is not None
+                if not existing_candidate.password_hash or not verify_password(password, existing_candidate.password_hash):
+                    raise PublicApplicationExistingAccountError(
+                        "Já existe um cadastro com este e-mail ou CPF. Faça login para continuar sua candidatura."
+                    )
 
+        if existing_candidate is not None:
             existing_active = await self._pipeline_repo.find_active_entry_by_candidate(existing_candidate.id)
             if existing_active is not None:
                 raise PublicApplicationDuplicateJobError(
@@ -237,7 +257,7 @@ class PublicApplicationService:
         candidate.lgpd_consent_at = datetime.now(UTC)
         candidate.lgpd_consent_version = "1.0"
         candidate.desired_contract_type = desired_contract_type
-        candidate.salary_expectation = salary_expectation
+        candidate.salary_expectation = normalized_salary_expectation
         candidate.works_at_marajo_group = works_at_marajo_group
         await self.db.flush()
 

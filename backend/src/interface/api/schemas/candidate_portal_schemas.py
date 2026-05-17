@@ -14,10 +14,35 @@ class CandidateAuthLoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class CandidateAuthGoogleRequest(BaseModel):
+    id_token: str = Field(min_length=1, max_length=4096)
+
+
 class CandidateAuthLoginResponse(BaseModel):
     message: str
     redirect_to: str
     session_expires_at: datetime
+
+
+class CandidateAuthGoogleCandidateResponse(BaseModel):
+    id: UUID
+    full_name: str
+    email: str | None = None
+    phone: str | None = None
+    cpf: str | None = None
+    salary_expectation: str | None = None
+    has_resume: bool = False
+    picture_url: str | None = None
+    email_locked: bool = False
+
+
+class CandidateAuthGoogleResponse(BaseModel):
+    status: str
+    message: str
+    redirect_to: str
+    session_expires_at: datetime
+    candidate: CandidateAuthGoogleCandidateResponse
+    missing_fields: list[str] = Field(default_factory=list)
 
 
 class CandidatePortalResumeResponse(BaseModel):

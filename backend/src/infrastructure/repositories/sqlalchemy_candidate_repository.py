@@ -103,6 +103,9 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                     CandidateModel.lgpd_consent_version,
                     CandidateModel.desired_contract_type,
                     CandidateModel.salary_expectation,
+                    CandidateModel.google_sub,
+                    CandidateModel.google_picture_url,
+                    CandidateModel.last_login_at,
                     CandidateModel.works_at_marajo_group,
                 )
             )
@@ -133,6 +136,9 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                     CandidateModel.lgpd_consent_version,
                     CandidateModel.desired_contract_type,
                     CandidateModel.salary_expectation,
+                    CandidateModel.google_sub,
+                    CandidateModel.google_picture_url,
+                    CandidateModel.last_login_at,
                     CandidateModel.works_at_marajo_group,
                 )
             )

@@ -109,7 +109,7 @@ export function BehavioralTemplateEditorPage() {
       setLocalQuestOptions([]);
       setLocalQuestScaleLabels({});
     }
-  }, [selectedQuestId, selectedQuest?.id]);
+  }, [selectedQuestId, selectedQuest?.id, JSON.stringify(selectedQuest?.options_json)]);
 
   useEffect(() => {
     if (templateId) {
@@ -1008,6 +1008,7 @@ export function BehavioralTemplateEditorPage() {
                             type="button"
                             onClick={() => {
                               const nextOpts = (selectedQuest.options_json ?? []).filter((_, idx) => idx !== oIdx);
+                              setLocalQuestOptions(nextOpts);
                               void handleUpdateQuestion(selectedQuest, { options_json: nextOpts });
                             }}
                             className="p-1.5 rounded hover:bg-red-50 text-red-500"
@@ -1023,6 +1024,7 @@ export function BehavioralTemplateEditorPage() {
                       variant="outline"
                       onClick={() => {
                         const nextOpts = [...(selectedQuest.options_json ?? []), `Alternativa ${(selectedQuest.options_json?.length ?? 0) + 1}`];
+                        setLocalQuestOptions(nextOpts);
                         void handleUpdateQuestion(selectedQuest, { options_json: nextOpts });
                       }}
                       className="w-full text-xs flex items-center gap-1 justify-center"

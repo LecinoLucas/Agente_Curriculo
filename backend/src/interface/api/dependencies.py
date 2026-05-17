@@ -113,4 +113,23 @@ async def get_current_candidate_session(
     return session
 
 
+async def get_optional_candidate_session(
+    request: Request,
+    candidate_portal_token: str | None = Cookie(default=None, alias=CANDIDATE_PORTAL_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+) -> CandidatePortalSession | None:
+    if not candidate_portal_token:
+        return None
+
+    service = CandidatePortalAuthService(db)
+    try:
+        session = await service.authenticate(candidate_portal_token)
+    except CandidatePortalSessionError:
+        return None
+
+    request.state.candidate_id = session.candidate_id
+    return session
+
+
 CurrentCandidateSession = Annotated[CandidatePortalSession, Depends(get_current_candidate_session)]
+OptionalCandidateSession = Annotated[CandidatePortalSession | None, Depends(get_optional_candidate_session)]
