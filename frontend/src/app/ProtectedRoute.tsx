@@ -61,13 +61,49 @@ export function ProtectedRoute({
     return <Navigate to="/trocar-senha" replace />;
   }
 
-  // 🚫 role inválida
+  // 🚫 check dinâmico de telas configurado pelo administrador
+  let storedScreens = null;
+  try {
+    if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+      storedScreens = window.localStorage.getItem("app_screens_config");
+    }
+  } catch (e) {
+    console.error("Erro ao acessar localStorage no ProtectedRoute:", e);
+  }
+
+  if (storedScreens && user) {
+    try {
+      const screens = JSON.parse(storedScreens);
+      const currentPath = location.pathname;
+      
+      const matchedScreen = screens.find((s: any) => {
+        if (s.path === "/") return currentPath === "/";
+        // Verifica igualdade perfeita, sub-rotas ou match de prefixo base
+        return (
+          currentPath === s.path ||
+          currentPath.startsWith(s.path + "/") ||
+          (s.path !== "/" && currentPath.split("/")[1] === s.path.split("/")[1])
+        );
+      });
+
+      if (matchedScreen) {
+        // Administrador sempre tem bypass global para evitar auto-bloqueio acidental
+        if (user.role === "admin") {
+          // Permite acesso
+        } else if (!matchedScreen.roles.includes(user.role)) {
+          return <AccessDenied />;
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao analisar permissões dinâmicas no ProtectedRoute:", e);
+    }
+  }
+
+  // 🚫 role inválida (fallback estático)
   if (
     allowedRoles &&
     !allowedRoles.includes(user.role)
   ) {
-    // você pode trocar por redirect se quiser:
-    // return <Navigate to="/" replace />
     return <AccessDenied />;
   }
 

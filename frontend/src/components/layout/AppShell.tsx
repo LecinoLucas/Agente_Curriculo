@@ -164,10 +164,52 @@ function getNavIcon(key: string) {
   return <IconComponent className="h-5 w-5 shrink-0 opacity-70 transition-transform group-hover:scale-105 duration-200" />;
 }
 
+function usePathAllowed() {
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const handleChanged = () => setVersion((v) => v + 1);
+    window.addEventListener("screens-config-changed", handleChanged);
+    return () => window.removeEventListener("screens-config-changed", handleChanged);
+  }, []);
+
+  const isAllowed = (path: string, userRole: string) => {
+    if (userRole === "admin") return true; // Bypass administrador para proteção contra auto-bloqueio
+
+    let saved = null;
+    try {
+      if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+        saved = window.localStorage.getItem("app_screens_config");
+      }
+    } catch {}
+
+    if (saved) {
+      try {
+        const screens = JSON.parse(saved);
+        const matched = screens.find((s: any) => {
+          if (s.path === "/") return path === "/";
+          return path === s.path || path.startsWith(s.path + "/");
+        });
+        if (matched) {
+          return matched.roles.includes(userRole);
+        }
+      } catch {}
+    }
+    return true; // default fallback
+  };
+
+  return { isAllowed, version };
+}
+
 function RecruiterNavigation() {
   const { user } = useAuth();
   const { closeCandidate } = usePipeline();
-  const visibleItems = RECRUITER_NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
+  const { isAllowed } = usePathAllowed();
+
+  const visibleItems = RECRUITER_NAV_ITEMS.filter(
+    (item) => user && item.roles.includes(user.role) && isAllowed(item.to, user.role)
+  );
+
   return (
     <div className="flex flex-col gap-1 w-full">
       {visibleItems.map((item) => (
@@ -203,12 +245,24 @@ function AdminNavigation() {
   const { user } = useAuth();
   const location = useLocation();
   const { closeCandidate } = usePipeline();
+  const { isAllowed, version } = usePathAllowed();
   const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
 
-  const visibleGroups = useMemo(
-    () => NAVIGATION_CONFIG.filter((group) => user && group.roles.includes(user.role)),
-    [user],
-  );
+  const visibleGroups = useMemo(() => {
+    if (!user) return [];
+
+    return NAVIGATION_CONFIG.map((group) => {
+      if (group.isDropdown) {
+        const allowedItems = group.items.filter((item) => isAllowed(item.to, user.role));
+        return { ...group, items: allowedItems };
+      }
+      return group;
+    }).filter((group) => {
+      const hasAccess = group.roles.includes(user.role);
+      const hasAllowedItems = group.items.length > 0;
+      return hasAccess && hasAllowedItems;
+    });
+  }, [user, version]);
 
   useEffect(() => {
     const activeGroup = visibleGroups.find((group) =>
@@ -322,8 +376,12 @@ function AdminNavigation() {
 function RecruiterMobileNavigation({ setMobileMenuOpen }: { setMobileMenuOpen: (o: boolean) => void }) {
   const { user } = useAuth();
   const { closeCandidate } = usePipeline();
-  const visibleItems = RECRUITER_NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
+  const { isAllowed } = usePathAllowed();
   const onClose = () => setMobileMenuOpen(false);
+
+  const visibleItems = RECRUITER_NAV_ITEMS.filter(
+    (item) => user && item.roles.includes(user.role) && isAllowed(item.to, user.role)
+  );
 
   return (
     <div className="flex flex-col gap-1 w-full">
@@ -358,13 +416,25 @@ function AdminMobileNavigation({ setMobileMenuOpen }: { setMobileMenuOpen: (o: b
   const { user } = useAuth();
   const location = useLocation();
   const { closeCandidate } = usePipeline();
+  const { isAllowed, version } = usePathAllowed();
   const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
   const onClose = () => setMobileMenuOpen(false);
 
-  const visibleGroups = useMemo(
-    () => NAVIGATION_CONFIG.filter((group) => user && group.roles.includes(user.role)),
-    [user],
-  );
+  const visibleGroups = useMemo(() => {
+    if (!user) return [];
+
+    return NAVIGATION_CONFIG.map((group) => {
+      if (group.isDropdown) {
+        const allowedItems = group.items.filter((item) => isAllowed(item.to, user.role));
+        return { ...group, items: allowedItems };
+      }
+      return group;
+    }).filter((group) => {
+      const hasAccess = group.roles.includes(user.role);
+      const hasAllowedItems = group.items.length > 0;
+      return hasAccess && hasAllowedItems;
+    });
+  }, [user, version]);
 
   return (
     <div className="flex flex-col gap-2 w-full">

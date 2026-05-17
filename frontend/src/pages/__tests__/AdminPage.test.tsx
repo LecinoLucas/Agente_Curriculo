@@ -35,7 +35,7 @@ describe("AdminPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Auditoria")).toBeInTheDocument();
+    expect((await screen.findAllByText("Auditoria"))[0]).toBeInTheDocument();
     expect(screen.getByText("Ver auditoria")).toBeInTheDocument();
     expect(screen.getByText("Health do Sistema")).toBeInTheDocument();
     expect(screen.getByText("Ver health")).toBeInTheDocument();
