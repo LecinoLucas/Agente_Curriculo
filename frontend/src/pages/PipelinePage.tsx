@@ -245,14 +245,14 @@ export function PipelinePage() {
     };
   }, []);
 
-  // ── Effect 1: URL → context sync ──────────────────────────────────────────
-  // URL is the source of truth for which job is active.
-  // When the user navigates directly (/pipeline/abc) or uses back/forward,
-  // the URL param changes and this effect tells the context to load that job.
   useEffect(() => {
     if (!jobIdParam) return;
     if (jobIdParam !== activeJobId) {
-      setActiveJob(jobIdParam);
+      // Defer state update to next tick to avoid React render warnings
+      const handle = setTimeout(() => {
+        setActiveJob(jobIdParam);
+      }, 0);
+      return () => clearTimeout(handle);
     }
   }, [jobIdParam, activeJobId, setActiveJob]);
 
