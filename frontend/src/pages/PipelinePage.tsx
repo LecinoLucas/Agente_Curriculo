@@ -95,6 +95,123 @@ export function PipelinePage() {
     openCandidate,
   } = usePipeline();
 
+  // ── Auto-Refresh & Countdown states ──
+  const [autoRefreshActive, setAutoRefreshActive] = useState(true);
+  const [secondsLeft, setSecondsLeft] = useState(30);
+  const [lastUpdated, setLastUpdated] = useState(() =>
+    new Date().toLocaleTimeString("pt-BR", { hour12: false })
+  );
+  const [isTabVisible, setIsTabVisible] = useState(true);
+
+  const autoRefreshActiveRef = useRef(autoRefreshActive);
+  const isTabVisibleRef = useRef(isTabVisible);
+  const activeJobIdRef = useRef(activeJobId);
+  const boardLoadingRef = useRef(boardLoading);
+  const rankingLoadingRef = useRef(rankingLoading);
+  const showRankingRef = useRef(showRanking);
+
+  useEffect(() => {
+    autoRefreshActiveRef.current = autoRefreshActive;
+  }, [autoRefreshActive]);
+
+  useEffect(() => {
+    isTabVisibleRef.current = isTabVisible;
+  }, [isTabVisible]);
+
+  useEffect(() => {
+    activeJobIdRef.current = activeJobId;
+  }, [activeJobId]);
+
+  useEffect(() => {
+    boardLoadingRef.current = boardLoading;
+  }, [boardLoading]);
+
+  useEffect(() => {
+    rankingLoadingRef.current = rankingLoading;
+  }, [rankingLoading]);
+
+  useEffect(() => {
+    showRankingRef.current = showRanking;
+  }, [showRanking]);
+
+  // Tab visibility listener
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabVisible(document.visibilityState === "visible");
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  // Reset timer on job selection change
+  useEffect(() => {
+    if (activeJobId) {
+      setSecondsLeft(30);
+      setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
+    }
+  }, [activeJobId]);
+
+  // Unified refresh function
+  const triggerRefresh = async () => {
+    if (boardLoadingRef.current || rankingLoadingRef.current || !activeJobIdRef.current) return;
+
+    const jobId = activeJobIdRef.current;
+    const promises = [refreshBoard()];
+
+    if (showRankingRef.current) {
+      setRankingLoading(true);
+      setRankingError(null);
+      promises.push(
+        loadRanking(jobId, true)
+          .then((result) => {
+            setRanking(result);
+          })
+          .catch((err: unknown) => {
+            setRanking(null);
+            setRankingError(
+              formatContextError(
+                err,
+                "Não foi possível carregar o ranking desta vaga.",
+                "Tente atualizar novamente.",
+              ),
+            );
+          })
+          .finally(() => setRankingLoading(false))
+      );
+    }
+
+    await Promise.all(promises);
+    setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
+  };
+
+  // Manual refresh handler
+  const handleManualRefresh = async () => {
+    if (boardLoading || !activeJobId) return;
+    setSecondsLeft(30);
+    await triggerRefresh();
+  };
+
+  // 1-second countdown ticker
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!autoRefreshActiveRef.current || !isTabVisibleRef.current || !activeJobIdRef.current) {
+        return;
+      }
+
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          void triggerRefresh();
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setPipelineJobsLoading(true);
@@ -331,9 +448,48 @@ export function PipelinePage() {
               <UserPlus className="h-5 w-5" />
               Adicionar Candidatos
             </button>
+            {/* Auto-Refresh Timer Widget */}
+            {activeJobId && (
+              <div className="flex items-center gap-3 rounded-xl border border-[hsl(var(--border))]/80 bg-[hsl(var(--surface-muted))]/60 px-4 py-2 text-xs font-semibold shadow-sm transition">
+                <div className="flex flex-col text-left">
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-[hsl(var(--text-muted))]">
+                    <span className={`h-1.5 w-1.5 rounded-full ${autoRefreshActive ? "bg-cyan-500 animate-pulse" : "bg-slate-400"}`} />
+                    Auto-Refresh
+                  </div>
+                  <div className="mt-0.5 text-xs font-bold text-[hsl(var(--text))]">
+                    Última: <span className="font-mono">{lastUpdated}</span>
+                  </div>
+                </div>
+                <div className="h-6 w-px bg-[hsl(var(--border))]/60" />
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--text-muted))]">
+                    Próxima
+                  </span>
+                  <span className="mt-0.5 font-mono text-xs font-extrabold text-[hsl(var(--primary))]">
+                    {autoRefreshActive ? `${secondsLeft}s` : "Pausado"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoRefreshActive((prev) => !prev)}
+                  className={`ml-1 flex h-7 w-7 items-center justify-center rounded-lg border border-[hsl(var(--border))] transition-all hover:bg-[hsl(var(--surface))] ${
+                    autoRefreshActive 
+                      ? "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]" 
+                      : "bg-cyan-500/10 border-cyan-500/20 text-cyan-500 hover:bg-cyan-500/20"
+                  }`}
+                  title={autoRefreshActive ? "Pausar atualização automática" : "Ativar atualização automática"}
+                >
+                  {autoRefreshActive ? (
+                    <span className="text-[10px] font-bold">PAUSE</span>
+                  ) : (
+                    <span className="text-[10px] font-bold">PLAY</span>
+                  )}
+                </button>
+              </div>
+            )}
             <button
               type="button"
-              onClick={() => void refreshBoard()}
+              onClick={() => void handleManualRefresh()}
               disabled={boardLoading || !activeJobId}
               className="ui-btn-secondary inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition disabled:opacity-40"
             >
@@ -521,7 +677,7 @@ export function PipelinePage() {
                 <span>{boardError}</span>
                 <button
                   type="button"
-                  onClick={() => void refreshBoard()}
+                  onClick={() => void handleManualRefresh()}
                   className="ml-4 text-xs underline hover:no-underline"
                 >
                   Tentar novamente
