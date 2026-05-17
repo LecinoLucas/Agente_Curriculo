@@ -65,3 +65,7 @@ filterwarnings = [
 python_version = "3.12"
 strict = true
 plugins = ["sqlalchemy.ext.mypy.plugin"]
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["."]

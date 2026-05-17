@@ -669,7 +669,7 @@ export function BehavioralTemplateEditorPage() {
                           e.currentTarget.blur();
                         }
                       }}
-                      className="text-sm font-bold text-[hsl(var(--text))] bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[hsl(var(--primary))] outline-none font-bold"
+                      className="text-sm font-bold text-[hsl(var(--text))] bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[hsl(var(--primary))] outline-none"
                     />
                     <div className="flex items-center gap-1">
                       <button

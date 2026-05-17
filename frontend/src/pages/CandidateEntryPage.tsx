@@ -61,7 +61,7 @@ export function CandidateEntryPage() {
         <div className="grid w-full gap-5 md:grid-cols-2 max-w-4xl">
           
           {/* Channel A: New Sourcing & Application */}
-          <div className="group relative flex flex-col justify-between overflow-hidden rounded-[1.75rem] border border-[hsl(var(--border)/0.25)] bg-[hsl(var(--surface)/0.65)] p-5 md:p-6 shadow-xl backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:border-[hsl(var(--primary)/0.3)] hover:shadow-[0_12px_30px_-8px_hsl(var(--primary)/0.08)] animate-in fade-in slide-in-from-left-8 duration-700 delay-200">
+          <div className="group relative flex flex-col justify-between overflow-hidden rounded-[1.75rem] border border-[hsl(var(--border)/0.25)] bg-[hsl(var(--surface)/0.65)] p-5 md:p-6 shadow-xl backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:border-[hsl(var(--primary)/0.3)] hover:shadow-[0_12px_30px_-8px_hsl(var(--primary)/0.08)] animate-in fade-in slide-in-from-left-8 delay-200">
             <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--primary)/0.03)] via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
             
             <div className="relative">
@@ -117,7 +117,7 @@ export function CandidateEntryPage() {
           </div>
 
           {/* Channel B: Active Candidate Portal Area */}
-          <div className="group relative flex flex-col justify-between overflow-hidden rounded-[1.75rem] border border-[hsl(var(--border)/0.25)] bg-[hsl(var(--surface)/0.65)] p-5 md:p-6 shadow-xl backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:border-[hsl(var(--primary)/0.3)] hover:shadow-[0_12px_30px_-8px_hsl(var(--primary)/0.08)] animate-in fade-in slide-in-from-right-8 duration-700 delay-200">
+          <div className="group relative flex flex-col justify-between overflow-hidden rounded-[1.75rem] border border-[hsl(var(--border)/0.25)] bg-[hsl(var(--surface)/0.65)] p-5 md:p-6 shadow-xl backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:border-[hsl(var(--primary)/0.3)] hover:shadow-[0_12px_30px_-8px_hsl(var(--primary)/0.08)] animate-in fade-in slide-in-from-right-8 delay-200">
             <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--primary)/0.03)] via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
 
             <div className="relative">
