@@ -38,7 +38,7 @@ describe("AdminPage", () => {
     // Aba Geral (inicialmente ativa)
     expect((await screen.findAllByText("Auditoria"))[0]).toBeInTheDocument();
     expect(screen.getByText("Ver auditoria")).toBeInTheDocument();
-    expect(screen.getByText("Health do Sistema")).toBeInTheDocument();
+    expect(screen.getAllByText("Health do Sistema")[0]).toBeInTheDocument();
     expect(screen.getByText("Ver health")).toBeInTheDocument();
     expect(screen.getByText("BI de Recrutamento")).toBeInTheDocument();
     expect(screen.getByText("Ver BI")).toBeInTheDocument();
@@ -54,5 +54,23 @@ describe("AdminPage", () => {
     expect(screen.getByText("Diagnóstico Candidato/Vaga")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diagnosticar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reparar" })).toBeInTheDocument();
+  });
+
+  it("alterna para a aba Health do Sistema de forma lazy", async () => {
+    render(
+      <MemoryRouter>
+        <AdminPage />
+      </MemoryRouter>,
+    );
+
+    // Inicialmente, as informações internas de status detalhado de Health (como chaves Gemini em cooldown, latência etc.) não devem estar no DOM
+    expect(screen.queryByText("Status geral")).not.toBeInTheDocument();
+
+    // Clicar na aba de Health do Sistema
+    const healthTabButton = screen.getByRole("button", { name: "Health do Sistema" });
+    fireEvent.click(healthTabButton);
+
+    // Agora que foi montado, o indicador de status deve começar a carregar
+    expect(screen.getByText("Carregando status do sistema...")).toBeInTheDocument();
   });
 });

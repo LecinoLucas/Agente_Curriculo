@@ -161,7 +161,11 @@ function SectionShell({
   return <>{children}</>;
 }
 
-export function SystemHealthPage() {
+type SystemHealthPageProps = {
+  hideHeader?: boolean;
+};
+
+export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps = {}) {
   const [activeTab, setActiveTab] = useState<HealthTab>("overview");
   const [aiFilters, setAiFilters] = useState({
     date_from: "",
@@ -259,10 +263,12 @@ export function SystemHealthPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-6 pb-12">
-      <PageHeader
-        title="Health do Sistema"
-        subtitle="Acompanhe status técnico, filas, banco de dados e consumo de IA."
-      />
+      {!hideHeader && (
+        <PageHeader
+          title="Health do Sistema"
+          subtitle="Acompanhe status técnico, filas, banco de dados e consumo de IA."
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
         {TAB_ITEMS.map((tab) => (

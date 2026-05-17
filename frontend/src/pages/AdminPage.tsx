@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, ShieldCheck, Tags, Users } from "lucide-react";
+import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, HeartPulse, ShieldCheck, Tags, Users } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -10,13 +10,15 @@ import { PermissionsMatrix } from "../features/admin/components/PermissionsMatri
 import { RoleCard } from "../features/admin/components/RoleCard";
 import { CandidateJobFlowDiagnosticsCard } from "../features/admin/components/CandidateJobFlowDiagnosticsCard";
 import { ROLES } from "../features/admin/config/adminConfig";
+import { SystemHealthPage } from "./SystemHealthPage";
 
-type AdminTab = "overview" | "permissions" | "diagnostics";
+type AdminTab = "overview" | "permissions" | "diagnostics" | "health";
 
 const TAB_ITEMS: Array<{ key: AdminTab; label: string }> = [
   { key: "overview", label: "Painel Geral e Ações" },
   { key: "permissions", label: "Matriz de Permissões" },
   { key: "diagnostics", label: "Diagnóstico Operacional" },
+  { key: "health", label: "Health do Sistema" },
 ];
 
 export function AdminPage() {
@@ -54,6 +56,7 @@ export function AdminPage() {
               {tab.key === "overview" && <Activity className="h-4 w-4 text-[hsl(var(--primary))]" />}
               {tab.key === "permissions" && <ShieldCheck className="h-4 w-4 text-emerald-600" />}
               {tab.key === "diagnostics" && <FileSearch className="h-4 w-4 text-amber-600" />}
+              {tab.key === "health" && <HeartPulse className="h-4 w-4 text-rose-600" />}
               {tab.label}
             </button>
           );
@@ -105,7 +108,7 @@ export function AdminPage() {
               title="Health do Sistema"
               description="Monitore backend, filas, banco e uso de IA."
               buttonLabel="Ver health"
-              onButtonClick={() => navigate("/admin/health")}
+              onButtonClick={() => setActiveTab("health")}
               variant="default"
             />
 
@@ -163,6 +166,13 @@ export function AdminPage() {
             </p>
             <CandidateJobFlowDiagnosticsCard />
           </section>
+        </div>
+      )}
+
+      {activeTab === "health" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* System health page embedded without double header */}
+          <SystemHealthPage hideHeader />
         </div>
       )}
     </div>
