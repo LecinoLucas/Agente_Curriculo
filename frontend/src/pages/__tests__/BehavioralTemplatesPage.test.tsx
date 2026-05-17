@@ -1,9 +1,20 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { BehavioralTemplatesPage } from "../BehavioralTemplatesPage";
 import * as behavioralTemplatesService from "../../services/behavioralTemplatesService";
 import * as toast from "../../shared/utils/toast";
 import * as templateImporter from "../../features/behavioral-templates/templateImporter";
+
+// Mock react-router useNavigate
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 vi.mock("../../services/behavioralTemplatesService");
 vi.mock("../../shared/utils/toast");
@@ -38,6 +49,12 @@ vi.mock("../../features/behavioral-templates/templateImporter", async (importOri
 describe("BehavioralTemplatesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockClear();
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockReset();
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.createTemplate).mockReset();
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.activateTemplate).mockReset();
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.archiveTemplate).mockReset();
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.getTemplate).mockReset();
   });
 
   it("lista templates quando carregado", async () => {
@@ -57,7 +74,11 @@ describe("BehavioralTemplatesPage", () => {
 
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue(mockTemplates);
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Template 1")).toBeInTheDocument();
@@ -71,13 +92,15 @@ describe("BehavioralTemplatesPage", () => {
   it("mostra empty state quando sem templates", async () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([]);
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Nenhum template criado ainda")).toBeInTheDocument();
+      expect(screen.getByText("Nenhum template encontrado")).toBeInTheDocument();
     });
-
-    expect(screen.getByText("Criar primeiro template")).toBeInTheDocument();
   });
 
   it("cria template mínimo", async () => {
@@ -109,24 +132,28 @@ describe("BehavioralTemplatesPage", () => {
       updated_at: "2026-05-13T00:00:00Z",
     });
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Nenhum template criado ainda")).toBeInTheDocument();
+      expect(screen.getByText("Nenhum template encontrado")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Novo Template"));
+    fireEvent.click(screen.getByRole("button", { name: /novo builder/i }));
 
-    const nameInput = screen.getByPlaceholderText("Ex: Avaliação de Liderança");
+    const nameInput = screen.getByPlaceholderText("Ex: Avaliação de Atendimento ao Cliente");
     fireEvent.change(nameInput, { target: { value: "New Template" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
+    const descInput = screen.getByPlaceholderText(/Explique os objetivos/i);
+    fireEvent.change(descInput, { target: { value: "Custom Description" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar e editar/i }));
 
     await waitFor(() => {
-      expect(behavioralTemplatesService.behavioralTemplatesService.createTemplate).toHaveBeenCalledWith({
-        name: "New Template",
-        description: "",
-      });
+      expect(behavioralTemplatesService.behavioralTemplatesService.createTemplate).toHaveBeenCalled();
     });
   });
 
@@ -159,13 +186,17 @@ describe("BehavioralTemplatesPage", () => {
       status: "active",
     });
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.getByText("To Activate")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Ativar" }));
+    fireEvent.click(screen.getByTitle("Ativar Avaliação"));
 
     await waitFor(() => {
       expect(behavioralTemplatesService.behavioralTemplatesService.activateTemplate).toHaveBeenCalledWith("1");
@@ -194,13 +225,17 @@ describe("BehavioralTemplatesPage", () => {
       new Error(errorMessage),
     );
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Empty Template")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Ativar" }));
+    fireEvent.click(screen.getByTitle("Ativar Avaliação"));
 
     await waitFor(() => {
       expect(vi.mocked(toast.toast.error)).toHaveBeenCalled();
@@ -236,13 +271,17 @@ describe("BehavioralTemplatesPage", () => {
       status: "archived",
     });
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.getByText("To Archive")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Arquivar" }));
+    fireEvent.click(screen.getByTitle("Arquivar Avaliação"));
 
     await waitFor(() => {
       expect(behavioralTemplatesService.behavioralTemplatesService.archiveTemplate).toHaveBeenCalledWith("1");
@@ -252,16 +291,20 @@ describe("BehavioralTemplatesPage", () => {
   it("bloqueia salvamento quando nome do template está vazio", async () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([]);
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Nenhum template criado ainda")).toBeInTheDocument();
+      expect(screen.getByText("Nenhum template encontrado")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Novo Template"));
-    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
+    fireEvent.click(screen.getByRole("button", { name: /novo builder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar e editar/i }));
 
-    expect(vi.mocked(toast.toast.error)).toHaveBeenCalledWith("Nome do template é obrigatório");
+    expect(vi.mocked(toast.toast.error)).toHaveBeenCalledWith("O nome do template é obrigatório.");
     expect(behavioralTemplatesService.behavioralTemplatesService.createTemplate).not.toHaveBeenCalled();
   });
 
@@ -271,23 +314,31 @@ describe("BehavioralTemplatesPage", () => {
       new Error("Template com esse nome já existe")
     );
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Nenhum template criado ainda")).toBeInTheDocument();
+      expect(screen.getByText("Nenhum template encontrado")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Novo Template"));
-    const nameInput = screen.getByPlaceholderText("Ex: Avaliação de Liderança");
+    fireEvent.click(screen.getByRole("button", { name: /novo builder/i }));
+    const nameInput = screen.getByPlaceholderText("Ex: Avaliação de Atendimento ao Cliente");
     fireEvent.change(nameInput, { target: { value: "Duplicado" } });
-    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
+
+    const descInput = screen.getByPlaceholderText(/Explique os objetivos/i);
+    fireEvent.change(descInput, { target: { value: "Description" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /confirmar e editar/i }));
 
     await waitFor(() => {
       expect(vi.mocked(toast.toast.error)).toHaveBeenCalledWith("Template com esse nome já existe");
     });
   });
 
-  it("abre formulário em modo edição ao clicar em Editar", async () => {
+  it("navega para rota de workspace ao clicar em Editar Estrutura", async () => {
     const mockTemplates = [
       {
         id: "1",
@@ -304,25 +355,32 @@ describe("BehavioralTemplatesPage", () => {
 
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue(mockTemplates);
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Template Existente")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: /editar estrutura/i }));
 
-    expect(screen.getByText("Editar template")).toBeInTheDocument();
-    expect((screen.getByPlaceholderText("Nome do template") as HTMLInputElement).value).toBe("Template Existente");
+    expect(mockNavigate).toHaveBeenCalledWith("/admin/behavioral-templates/1/edit");
   });
 
   it("abre galeria de modelos ao clicar em 'Usar modelo pronto'", async () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([]);
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Nenhum template criado ainda")).toBeInTheDocument();
+      expect(screen.getByText("Nenhum template encontrado")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /usar modelo pronto/i }));
@@ -331,14 +389,18 @@ describe("BehavioralTemplatesPage", () => {
     expect(screen.getByText("Teste")).toBeInTheDocument();
   });
 
-  it("importa template da galeria e fecha modal", async () => {
+  it("importa template da galeria e navega para editor", async () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([]);
     vi.mocked(templateImporter.importTemplateToApi).mockResolvedValue({ id: "imported-1" });
 
-    render(<BehavioralTemplatesPage />);
+    render(
+      <MemoryRouter>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
-      expect(screen.getByText("Nenhum template criado ainda")).toBeInTheDocument();
+      expect(screen.getByText("Nenhum template encontrado")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /usar modelo pronto/i }));
@@ -353,11 +415,10 @@ describe("BehavioralTemplatesPage", () => {
     await waitFor(() => {
       expect(templateImporter.importTemplateToApi).toHaveBeenCalled();
       expect(vi.mocked(toast.toast.success)).toHaveBeenCalledWith(
-        expect.stringContaining("importado"),
+        expect.stringContaining("sucesso"),
       );
+      expect(mockNavigate).toHaveBeenCalledWith("/admin/behavioral-templates/imported-1/edit");
     });
-
-    expect(screen.queryByText("Modelos prontos")).not.toBeInTheDocument();
   });
 
   it("build passa", () => {

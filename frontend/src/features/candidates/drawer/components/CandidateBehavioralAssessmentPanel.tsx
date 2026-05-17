@@ -3,6 +3,8 @@ import { AlertCircle, CheckCircle2, Clock, Loader } from "lucide-react";
 import type { BehavioralAssignmentDetailResponse } from "../../../../types/domain";
 import { getCandidateBehavioralAssessment } from "../../../../services/behavioralAssessmentService";
 import { BehavioralAIEvaluationPanel } from "./BehavioralAIEvaluationPanel";
+import { parseQuestionText } from "../../../behavioral-templates/behavioralTemplateHelper";
+
 
 interface CandidateBehavioralAssessmentPanelProps {
   jobId: string | null;
@@ -194,14 +196,17 @@ export function CandidateBehavioralAssessmentPanel({
               </div>
 
               <div className="space-y-3">
-                {competency.questions.map((question) => (
-                  <div key={question.id} className="space-y-2 rounded-lg bg-[hsl(var(--surface-muted))]/30 p-3">
-                    <p className="text-sm font-medium text-[hsl(var(--text))]">{question.question_text}</p>
-                    <div className="text-sm">
-                      {renderAnswer(question.answer)}
+                {competency.questions.map((question) => {
+                  const parsed = parseQuestionText(question.question_text);
+                  return (
+                    <div key={question.id} className="space-y-2 rounded-lg bg-[hsl(var(--surface-muted))]/30 p-3">
+                      <p className="text-sm font-medium text-[hsl(var(--text))]">{parsed.text}</p>
+                      <div className="text-sm">
+                        {renderAnswer(question.answer)}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

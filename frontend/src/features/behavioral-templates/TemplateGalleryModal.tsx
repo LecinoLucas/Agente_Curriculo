@@ -14,25 +14,15 @@ type Props = {
   importingName: string | null;
 };
 
-const CATEGORY_COLORS: Record<string, string> = {
-  "Avaliação Comportamental — Administrativo e Atendimento": "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  "Avaliação Comportamental — Operacional e Postos":         "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  "Avaliação Comportamental — Liderança e Gestão":           "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
-  "Avaliação Comportamental — Tecnologia e Suporte":         "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300",
-  "Avaliação Comportamental — Aprendizagem e Adaptabilidade":"bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
-};
-
-function categoryTag(name: string): string {
-  if (name.includes("Administrativo")) return "Administrativo";
-  if (name.includes("Operacional")) return "Operacional";
-  if (name.includes("Liderança")) return "Liderança";
-  if (name.includes("Tecnologia")) return "Tecnologia";
-  if (name.includes("Aprendizagem")) return "Aprendizagem";
-  return "Geral";
-}
+import {
+  CATEGORY_COLORS,
+  categoryTag
+} from "./behavioralTemplateHelper";
 
 export function TemplateGalleryModal({ onClose, onImport, importingName }: Props) {
   const [previewTemplate, setPreviewTemplate] = useState<RawTemplate | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   if (previewTemplate) {
     return (
@@ -42,6 +32,16 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
       />
     );
   }
+
+  const categories = ["all", "Administrativo", "Operacional", "Liderança", "Tecnologia", "Aprendizagem"];
+
+  const filteredTemplates = BUNDLED_TEMPLATES.filter((template) => {
+    const category = categoryTag(template.name);
+    const matchesCategory = selectedCategory === "all" || category === selectedCategory;
+    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          template.description.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
@@ -65,6 +65,37 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
           </button>
         </div>
 
+        {/* Search & Filter Chips */}
+        <div className="px-6 pt-4 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              placeholder="Buscar modelos por nome ou descrição..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="ui-input flex-1"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-semibold transition-all duration-200 border",
+                  selectedCategory === cat
+                    ? "bg-[hsl(var(--primary))] text-white border-transparent"
+                    : "bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]"
+                )}
+              >
+                {cat === "all" ? "Todos" : cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Compliance note */}
         <div className="mx-6 mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           <HelpCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -75,100 +106,111 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
         </div>
 
         {/* Template grid */}
-        <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
-          {BUNDLED_TEMPLATES.map((template) => {
-            const isImporting = importingName === template.name;
-            const totalQ = countTemplateQuestions(template);
-            const colorClass = CATEGORY_COLORS[template.name] ?? "bg-gray-100 text-gray-800";
+        {filteredTemplates.length === 0 ? (
+          <div className="p-12 text-center text-[hsl(var(--text-muted))]">
+            Nenhum modelo encontrado correspondente aos termos de busca.
+          </div>
+        ) : (
+          <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredTemplates.map((template) => {
+              const isImporting = importingName === template.name;
+              const totalQ = countTemplateQuestions(template);
+              const colorClass = CATEGORY_COLORS[template.name] ?? "bg-gray-100 text-gray-800";
 
-            return (
-              <div
-                key={template.name}
-                className={cn(
-                  "flex flex-col rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-5 transition-shadow",
-                  isImporting ? "opacity-80" : "hover:shadow-md",
-                )}
-              >
-                {/* Category badge */}
-                <span className={cn("mb-3 w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold", colorClass)}>
-                  {categoryTag(template.name)}
-                </span>
-
-                {/* Name */}
-                <h3 className="text-sm font-bold leading-snug text-[hsl(var(--text))]">
-                  {template.name.replace("Avaliação Comportamental — ", "")}
-                </h3>
-                <p className="mt-1.5 line-clamp-3 text-xs text-[hsl(var(--text-muted))]">
-                  {template.description}
-                </p>
-
-                {/* Meta */}
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-[hsl(var(--text-muted))]">
-                  <span className="flex items-center gap-1">
-                    <Layers className="h-3.5 w-3.5" />
-                    {template.competencies.length} competências
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <HelpCircle className="h-3.5 w-3.5" />
-                    {totalQ} perguntas
-                  </span>
-                  {template.estimated_minutes && (
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      ~{template.estimated_minutes} min
-                    </span>
+              return (
+                <div
+                  key={template.name}
+                  className={cn(
+                    "flex flex-col rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-5 transition-all duration-200",
+                    isImporting ? "opacity-80" : "hover:shadow-md hover:border-[hsl(var(--primary))]/30",
                   )}
-                </div>
+                >
+                  {/* Category badge */}
+                  <span className={cn("mb-3 w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold", colorClass)}>
+                    {categoryTag(template.name)}
+                  </span>
 
-                {/* Competency list */}
-                <ul className="mt-3 space-y-0.5 border-t border-[hsl(var(--border))] pt-3">
-                  {template.competencies.map((c) => (
-                    <li key={c.key} className="flex items-center gap-1.5 text-xs text-[hsl(var(--text-muted))]">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--primary))]" />
-                      {c.name}
-                    </li>
-                  ))}
-                </ul>
+                  {/* Name */}
+                  <h3 className="text-sm font-bold leading-snug text-[hsl(var(--text))]">
+                    {template.name.replace("Avaliação Comportamental — ", "")}
+                  </h3>
+                  <p className="mt-1.5 line-clamp-3 text-xs text-[hsl(var(--text-muted))]">
+                    {template.description}
+                  </p>
 
-                {/* Actions */}
-                <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewTemplate(template)}
-                    disabled={importingName !== null}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))] disabled:opacity-40"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    Preview
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onImport(template)}
-                    disabled={importingName !== null}
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors",
-                      isImporting
-                        ? "bg-[hsl(var(--primary))]/60 text-white"
-                        : "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40",
+                  {/* Meta */}
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-[hsl(var(--text-muted))]">
+                    <span className="flex items-center gap-1">
+                      <Layers className="h-3.5 w-3.5" />
+                      {template.competencies.length} competências
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <HelpCircle className="h-3.5 w-3.5" />
+                      {totalQ} perguntas
+                    </span>
+                    {template.estimated_minutes && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" />
+                        ~{template.estimated_minutes} min
+                      </span>
                     )}
-                  >
-                    {isImporting ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Importando…
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-3.5 w-3.5" />
-                        Usar modelo
-                      </>
+                  </div>
+
+                  {/* Competency list */}
+                  <ul className="mt-3 space-y-0.5 border-t border-[hsl(var(--border))] pt-3">
+                    {template.competencies.slice(0, 3).map((c) => (
+                      <li key={c.key} className="flex items-center gap-1.5 text-xs text-[hsl(var(--text-muted))] line-clamp-1">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--primary))]" />
+                        {c.name}
+                      </li>
+                    ))}
+                    {template.competencies.length > 3 && (
+                      <li className="text-xs text-[hsl(var(--text-muted))] italic pl-3">
+                        + {template.competencies.length - 3} competências...
+                      </li>
                     )}
-                  </button>
+                  </ul>
+
+                  {/* Actions */}
+                  <div className="mt-auto pt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTemplate(template)}
+                      disabled={importingName !== null}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))] disabled:opacity-40"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onImport(template)}
+                      disabled={importingName !== null}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors",
+                        isImporting
+                          ? "bg-[hsl(var(--primary))]/60 text-white"
+                          : "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90 disabled:opacity-40",
+                      )}
+                    >
+                      {isImporting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Importando…
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-3.5 w-3.5" />
+                          Usar modelo
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex justify-end border-t border-[hsl(var(--border))] px-6 py-4">

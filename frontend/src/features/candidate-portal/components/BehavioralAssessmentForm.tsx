@@ -28,6 +28,8 @@ function buildInitialAnswers(assignment: BehavioralAssignmentDetail): Record<str
   return result;
 }
 
+import { parseQuestionText } from "../../behavioral-templates/behavioralTemplateHelper";
+
 function optionList(question: BehavioralAssignmentQuestion): string[] {
   if (Array.isArray(question.options_json)) {
     return question.options_json.map((item) => String(item));
@@ -104,6 +106,7 @@ export function BehavioralAssessmentForm({
     if (requiredMissing(assignment, answers)) {
       setValidationMessage("Responda todas as perguntas obrigatórias antes de enviar.");
       return;
+      return;
     }
     setValidationMessage(null);
     await onSubmit(payload);
@@ -143,12 +146,18 @@ export function BehavioralAssessmentForm({
                 selected_options_json: [],
               };
               const options = optionList(question);
+              const parsed = parseQuestionText(question.question_text);
               return (
                 <div key={question.id} className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
                   <label className="block text-sm font-medium text-foreground">
-                    {question.question_text}
+                    {parsed.text}
                     {question.is_required ? <span className="text-destructive"> *</span> : null}
                   </label>
+                  
+                  {parsed.instruction ? (
+                    <p className="text-xs text-muted-foreground mt-1 mb-2">{parsed.instruction}</p>
+                  ) : null}
+
                   {question.answer_type === "text" ? (
                     <textarea
                       className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -158,20 +167,29 @@ export function BehavioralAssessmentForm({
                     />
                   ) : null}
                   {question.answer_type === "scale" ? (
-                    <div className="flex flex-wrap gap-2">
-                      {[1, 2, 3, 4, 5].map((value) => (
-                        <label key={value} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                          <input
-                            type="radio"
-                            name={question.id}
-                            value={value}
-                            disabled={isSubmitted}
-                            checked={current.answer_value === String(value)}
-                            onChange={() => updateAnswer(question.id, { answer_value: String(value) })}
-                          />
-                          {value}
-                        </label>
-                      ))}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {[1, 2, 3, 4, 5].map((value) => (
+                          <label key={value} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                            <input
+                              type="radio"
+                              name={question.id}
+                              value={value}
+                              disabled={isSubmitted}
+                              checked={current.answer_value === String(value)}
+                              onChange={() => updateAnswer(question.id, { answer_value: String(value) })}
+                            />
+                            {value}
+                          </label>
+                        ))}
+                      </div>
+                      {parsed.scale_labels ? (
+                        <div className="flex justify-between w-full text-xs text-muted-foreground px-1">
+                          <span>1 = {parsed.scale_labels[1] ?? "Muito baixo"}</span>
+                          <span>3 = {parsed.scale_labels[3] ?? "Médio"}</span>
+                          <span>5 = {parsed.scale_labels[5] ?? "Alto"}</span>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {question.answer_type === "multiple_choice" ? (

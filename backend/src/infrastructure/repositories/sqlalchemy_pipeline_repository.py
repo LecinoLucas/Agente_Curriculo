@@ -195,6 +195,18 @@ class SQLAlchemyPipelineRepository:
         return entry
 
     async def list_job_matches(self, job_id: UUID) -> list[dict]:
+        # Scope the analysis scan to only the candidates active in this job.
+        # Avoids a full scan of all completed analyses (can be very large)
+        # when the job has few active candidates.
+        _active_candidates_for_job = (
+            sa.select(CandidateJobPipelineModel.candidate_id)
+            .where(
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+            )
+        )
+
         latest_completed = (
             sa.select(
                 ResumeModel.candidate_id.label("candidate_id"),
@@ -211,6 +223,7 @@ class SQLAlchemyPipelineRepository:
             .where(
                 AnalysisModel.status == "completed",
                 ResumeModel.deleted_at.is_(None),
+                ResumeModel.candidate_id.in_(_active_candidates_for_job),
             )
             .subquery()
         )

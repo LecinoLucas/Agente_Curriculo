@@ -1,320 +1,72 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Plus, ChevronDown, ChevronRight, Layers, FileText, BarChart2, List, Loader2, X, Check } from "lucide-react";
+import {
+  Plus,
+  Layers,
+  FileText,
+  BarChart,
+  List,
+  Loader2,
+  X,
+  Search,
+  Filter,
+  ArrowUpDown,
+  BookOpen,
+  User,
+  Clock,
+  Settings,
+  AlertCircle,
+  Archive,
+  ArrowRight,
+  ClipboardList,
+  FolderPlus,
+  SlidersHorizontal,
+  HelpCircle,
+  FolderGit2
+} from "lucide-react";
 import { behavioralTemplatesService } from "../services/behavioralTemplatesService";
-import type { BehavioralAssessmentTemplate, BehavioralTemplateCompetency, BehavioralTemplateQuestion } from "../types/domain";
+import type { BehavioralAssessmentTemplate } from "../types/domain";
 import { toast } from "@/shared/utils/toast";
 import { TemplateGalleryModal } from "../features/behavioral-templates/TemplateGalleryModal";
 import { importTemplateToApi, type RawTemplate } from "../features/behavioral-templates/templateImporter";
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Rascunho",
-  active: "Ativo",
-  archived: "Arquivado",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  archived: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-};
-
-const ANSWER_TYPE_LABEL: Record<string, string> = {
-  text: "Texto livre",
-  scale: "Escala",
-  multiple_choice: "Múltipla escolha",
-};
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function QuestionTypeIcon({ type }: { type: string }) {
-  if (type === "scale") return <BarChart2 className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--text-muted))]" />;
-  if (type === "multiple_choice") return <List className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--text-muted))]" />;
-  return <FileText className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--text-muted))]" />;
-}
-
-function QuestionItem({ question, index }: { question: BehavioralTemplateQuestion; index: number }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-start gap-2">
-        <QuestionTypeIcon type={question.answer_type} />
-        <p className="text-sm text-[hsl(var(--text))] leading-snug">
-          <span className="font-medium text-[hsl(var(--text-muted))] mr-1">{index}.</span>
-          {question.question_text}
-          {question.is_required && (
-            <span className="ml-1 text-[hsl(var(--danger))] text-xs">*</span>
-          )}
-        </p>
-      </div>
-      <div className="pl-5 flex flex-wrap items-center gap-2">
-        <span className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-[10px] font-semibold text-[hsl(var(--text-muted))]">
-          {ANSWER_TYPE_LABEL[question.answer_type] ?? question.answer_type}
-        </span>
-        {question.answer_type === "multiple_choice" && question.options_json && question.options_json.length > 0 && (
-          <div className="mt-1 space-y-0.5 w-full">
-            {question.options_json.map((opt, i) => (
-              <p key={i} className="text-xs text-[hsl(var(--text-muted))]">
-                <span className="font-medium">{String.fromCharCode(97 + i)})</span> {opt}
-              </p>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CompetencySection({
-  competency,
-  questionOffset,
-}: {
-  competency: BehavioralTemplateCompetency;
-  questionOffset: number;
-}) {
-  const questions = competency.questions ?? [];
-  return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] overflow-hidden">
-      <div className="flex items-start justify-between gap-3 px-4 py-3 bg-[hsl(var(--surface-muted))]">
-        <div className="min-w-0">
-          <p className="font-semibold text-sm text-[hsl(var(--text))]">{competency.name}</p>
-          {competency.description && (
-            <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))] line-clamp-2">{competency.description}</p>
-          )}
-        </div>
-        <div className="shrink-0 flex flex-col items-end gap-1">
-          <span className="rounded-full bg-[hsl(var(--primary))]/10 px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--primary))]">
-            peso {competency.weight}
-          </span>
-          <span className="text-[10px] text-[hsl(var(--text-muted))]">
-            {questions.length} {questions.length === 1 ? "pergunta" : "perguntas"}
-          </span>
-        </div>
-      </div>
-      {questions.length > 0 ? (
-        <div className="divide-y divide-[hsl(var(--border))]">
-          {questions.map((q, qi) => (
-            <div key={q.id} className="px-4 py-3">
-              <QuestionItem question={q} index={questionOffset + qi + 1} />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="px-4 py-3">
-          <p className="text-xs text-[hsl(var(--text-muted))] italic">Nenhuma pergunta nesta competência.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TemplateDetailView({ detail }: { detail: BehavioralAssessmentTemplate }) {
-  const competencies = detail.competencies ?? [];
-  if (competencies.length === 0) {
-    return (
-      <p className="text-sm text-[hsl(var(--text-muted))] italic">
-        Este template ainda não possui competências.
-      </p>
-    );
-  }
-  let questionOffset = 0;
-  return (
-    <div className="space-y-3">
-      {competencies.map((comp) => {
-        const section = (
-          <CompetencySection key={comp.id} competency={comp} questionOffset={questionOffset} />
-        );
-        questionOffset += (comp.questions ?? []).length;
-        return section;
-      })}
-    </div>
-  );
-}
-
-// ── Inline edit form inside the card ──────────────────────────────────────────
-
-function InlineEditForm({
-  template,
-  onSave,
-  onCancel,
-}: {
-  template: BehavioralAssessmentTemplate;
-  onSave: (data: { name: string; description: string }) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(template.name);
-  const [description, setDescription] = useState(template.description ?? "");
-  const [saving, setSaving] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    nameRef.current?.focus();
-    nameRef.current?.select();
-  }, []);
-
-  async function handleSave() {
-    if (!name.trim()) {
-      toast.error("Nome do template é obrigatório");
-      return;
-    }
-    setSaving(true);
-    try {
-      await onSave({ name: name.trim(), description });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="px-5 py-4 space-y-4">
-      <p className="text-xs font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
-        Editar template
-      </p>
-      <div className="space-y-3">
-        <div>
-          <label className="block text-sm font-medium text-[hsl(var(--text))] mb-1">Nome</label>
-          <input
-            ref={nameRef}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleSave();
-              if (e.key === "Escape") onCancel();
-            }}
-            className="ui-input w-full"
-            placeholder="Nome do template"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-[hsl(var(--text))] mb-1">Descrição</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onCancel();
-            }}
-            className="ui-input w-full resize-none"
-            placeholder="Descrição opcional…"
-            rows={2}
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          onClick={() => void handleSave()}
-          disabled={saving}
-          size="sm"
-          className="flex items-center gap-1.5"
-        >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          Salvar
-        </Button>
-        <Button onClick={onCancel} disabled={saving} size="sm" variant="outline" className="flex items-center gap-1.5">
-          <X className="h-3.5 w-3.5" />
-          Cancelar
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ── New template form (top of page) ───────────────────────────────────────────
-
-function NewTemplateForm({
-  onSave,
-  onCancel,
-}: {
-  onSave: (data: { name: string; description: string }) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    nameRef.current?.focus();
-  }, []);
-
-  async function handleSave() {
-    if (!name.trim()) {
-      toast.error("Nome do template é obrigatório");
-      return;
-    }
-    setSaving(true);
-    try {
-      await onSave({ name: name.trim(), description });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="mb-5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-5 py-5 space-y-4">
-      <p className="text-sm font-bold text-[hsl(var(--text))]">Novo template</p>
-      <div className="space-y-3">
-        <div>
-          <label className="block text-sm font-medium text-[hsl(var(--text))] mb-1">Nome</label>
-          <input
-            ref={nameRef}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleSave();
-              if (e.key === "Escape") onCancel();
-            }}
-            className="ui-input w-full"
-            placeholder="Ex: Avaliação de Liderança"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-[hsl(var(--text))] mb-1">Descrição</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="ui-input w-full resize-none"
-            placeholder="Descrição do template…"
-            rows={2}
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button onClick={() => void handleSave()} disabled={saving} size="sm" className="flex items-center gap-1.5">
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          Criar
-        </Button>
-        <Button onClick={onCancel} disabled={saving} size="sm" variant="outline" className="flex items-center gap-1.5">
-          <X className="h-3.5 w-3.5" />
-          Cancelar
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
-
-type TabKey = "templates" | "arquivados";
+import {
+  parseTemplateDescription,
+  serializeTemplateDescription,
+  categoryTag,
+  CATEGORY_COLORS,
+  type TemplateDescriptionMetadata
+} from "../features/behavioral-templates/behavioralTemplateHelper";
 
 export function BehavioralTemplatesPage() {
+  const navigate = useNavigate();
+
+  // API states
   const [templates, setTemplates] = useState<BehavioralAssessmentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("templates");
-  const [newTemplateOpen, setNewTemplateOpen] = useState(false);
+
+  // Search/Filters states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all"); // "all", "active", "draft", "archived"
+  const [sortBy, setSortBy] = useState("recent"); // "recent", "name", "questions"
+
+  // Modals/Sidebars
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [importingName, setImportingName] = useState<string | null>(null);
-  // Which card is in inline edit mode (mutually exclusive with expanded)
-  const [editingId, setEditingId] = useState<string | null>(null);
-  // Which card is expanded to show competencies/questions
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Detail cache: fetched lazily on expand, keyed by template ID
-  const [detailCache, setDetailCache] = useState<Record<string, BehavioralAssessmentTemplate>>({});
-  const [detailLoading, setDetailLoading] = useState<string | null>(null);
+
+  // Drawer Form states
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [newTemplateDesc, setNewTemplateDesc] = useState("");
+  const [newTemplateCategory, setNewTemplateCategory] = useState("Geral");
+  const [newTemplateAudience, setNewTemplateAudience] = useState("");
+  const [newTemplateDuration, setNewTemplateDuration] = useState(20);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    loadTemplates();
+    void loadTemplates();
   }, []);
 
   async function loadTemplates() {
@@ -331,68 +83,69 @@ export function BehavioralTemplatesPage() {
     }
   }
 
-  function invalidateDetailCache(id: string) {
-    setDetailCache((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }
-
-  async function handleExpandTemplate(templateId: string) {
-    // Editing and expanding are mutually exclusive
-    if (editingId === templateId) return;
-
-    const isClosing = expandedId === templateId;
-    setExpandedId(isClosing ? null : templateId);
-    if (isClosing || detailCache[templateId]) return;
-
-    setDetailLoading(templateId);
+  // Handle template import from gallery
+  async function handleImportTemplate(template: RawTemplate) {
+    setImportingName(template.name);
     try {
-      const detail = await behavioralTemplatesService.getTemplate(templateId);
-      setDetailCache((prev) => ({ ...prev, [templateId]: detail }));
-    } catch {
-      // Section stays open but shows the error state
-    } finally {
-      setDetailLoading(null);
-    }
-  }
-
-  function handleStartEdit(template: BehavioralAssessmentTemplate) {
-    // Close expand + new form before entering edit mode
-    setExpandedId(null);
-    setNewTemplateOpen(false);
-    setEditingId(template.id);
-  }
-
-  function handleCancelEdit() {
-    setEditingId(null);
-  }
-
-  async function handleSaveEdit(id: string, data: { name: string; description: string }) {
-    await behavioralTemplatesService.updateTemplate(id, data);
-    toast.success("Template atualizado");
-    invalidateDetailCache(id);
-    setEditingId(null);
-    await loadTemplates();
-  }
-
-  async function handleCreateTemplate(data: { name: string; description: string }) {
-    try {
-      await behavioralTemplatesService.createTemplate(data);
-      toast.success("Template criado");
-      setNewTemplateOpen(false);
-      await loadTemplates();
+      const result = await importTemplateToApi(template, behavioralTemplatesService);
+      toast.success(`Modelo "${template.name.replace("Avaliação Comportamental — ", "")}" importado com sucesso!`);
+      setIsGalleryOpen(false);
+      setIsDrawerOpen(false);
+      // Redirect straight to 3-column workspace in draft status
+      navigate(`/admin/behavioral-templates/${result.id}/edit`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao criar template");
+      toast.error(err instanceof Error ? err.message : "Erro ao importar modelo");
+    } finally {
+      setImportingName(null);
     }
   }
 
+  // Handle manual template creation
+  async function handleCreateTemplateSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newTemplateName.trim()) {
+      toast.error("O nome do template é obrigatório.");
+      return;
+    }
+    if (!newTemplateDesc.trim()) {
+      toast.error("A descrição do template é obrigatória.");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const customMetadata: TemplateDescriptionMetadata = {
+        description: newTemplateDesc.trim(),
+        category: newTemplateCategory,
+        target_audience: newTemplateAudience.trim(),
+        duration: newTemplateDuration,
+        flow_type: "standard",
+        required_components: [],
+      };
+
+      const serializedDescription = serializeTemplateDescription(customMetadata);
+
+      const result = await behavioralTemplatesService.createTemplate({
+        name: newTemplateName.trim(),
+        description: serializedDescription,
+      });
+
+      toast.success("Rascunho criado! Iniciando workspace...");
+      setIsDrawerOpen(false);
+      // Redirect directly to structural workspace
+      navigate(`/admin/behavioral-templates/${result.id}/edit`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao criar rascunho");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  // Duplicate, archive, activate quick actions
   async function handleActivate(id: string) {
     try {
       await behavioralTemplatesService.activateTemplate(id);
-      toast.success("Template ativado");
-      invalidateDetailCache(id);
+      toast.success("Template ativado com sucesso!");
       await loadTemplates();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao ativar template");
@@ -403,268 +156,523 @@ export function BehavioralTemplatesPage() {
     try {
       await behavioralTemplatesService.archiveTemplate(id);
       toast.success("Template arquivado");
-      invalidateDetailCache(id);
       await loadTemplates();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao arquivar template");
     }
   }
 
-  async function handleImportTemplate(template: RawTemplate) {
-    setImportingName(template.name);
+  async function handleDuplicate(templateItem: BehavioralAssessmentTemplate) {
     try {
-      await importTemplateToApi(template, behavioralTemplatesService);
-      toast.success(`Template "${template.name.replace("Avaliação Comportamental — ", "")}" importado`);
-      setIsGalleryOpen(false);
+      const detail = await behavioralTemplatesService.getTemplate(templateItem.id);
+      
+      const parsed = parseTemplateDescription(detail.description);
+      const newMeta: TemplateDescriptionMetadata = {
+        ...parsed,
+        description: `${parsed.description} (Cópia)`,
+      };
+
+      const duplicated = await behavioralTemplatesService.createTemplate({
+        name: `${detail.name} (Cópia)`,
+        description: serializeTemplateDescription(newMeta),
+      });
+
+      // Copy competencies and questions
+      if (detail.competencies && detail.competencies.length > 0) {
+        for (const c of detail.competencies) {
+          const newComp = await behavioralTemplatesService.createCompetency(duplicated.id, {
+            name: c.name,
+            description: c.description,
+            weight: c.weight,
+            display_order: c.display_order,
+          });
+
+          if (c.questions && c.questions.length > 0) {
+            for (const q of c.questions) {
+              await behavioralTemplatesService.createQuestion(duplicated.id, newComp.id, {
+                question_text: q.question_text,
+                answer_type: q.answer_type,
+                is_required: q.is_required,
+                weight: q.weight,
+                display_order: q.display_order,
+                options_json: q.options_json,
+              });
+            }
+          }
+        }
+      }
+
+      toast.success("Template duplicado com sucesso!");
       await loadTemplates();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao importar template");
-    } finally {
-      setImportingName(null);
+    } catch {
+      toast.error("Erro ao duplicar template");
     }
   }
 
-  const visibleTemplates = templates.filter((t) =>
-    activeTab === "arquivados" ? t.status === "archived" : t.status !== "archived",
-  );
+  // Metrics KPIs calculations
+  const totalActive = templates.filter((t) => t.status === "active").length;
+  const totalDrafts = templates.filter((t) => t.status === "draft").length;
+  const totalArchived = templates.filter((t) => t.status === "archived").length;
 
-  const archivedCount = templates.filter((t) => t.status === "archived").length;
+  // Search and filter logic
+  const filteredTemplates = templates.filter((template) => {
+    const parsed = parseTemplateDescription(template.description);
+    const category = parsed.category || "Geral";
+
+    const matchesSearch =
+      template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      parsed.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory = selectedCategory === "all" || category === selectedCategory;
+
+    const matchesStatus =
+      selectedStatus === "all"
+        ? true
+        : selectedStatus === "active"
+        ? template.status === "active"
+        : selectedStatus === "draft"
+        ? template.status === "draft"
+        : template.status === "archived";
+
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  // Sorting
+  const sortedTemplates = [...filteredTemplates].sort((a, b) => {
+    if (sortBy === "name") {
+      return a.name.localeCompare(b.name);
+    }
+    if (sortBy === "questions") {
+      return (b.question_count ?? 0) - (a.question_count ?? 0);
+    }
+    // Default: 'recent'
+    return b.id.localeCompare(a.id);
+  });
+
+  const categories = ["all", "Administrativo", "Operacional", "Liderança", "Tecnologia", "Aprendizagem", "Geral"];
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-[hsl(var(--text-muted))]">Carregando templates…</p>
+      <div className="flex h-[80vh] items-center justify-center bg-[hsl(var(--bg))]">
+        <div className="text-center space-y-2">
+          <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))] mx-auto" />
+          <p className="text-sm text-[hsl(var(--text-muted))]">Carregando painel de avaliações…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-      {/* ── Header ── */}
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 bg-[hsl(var(--bg))] min-h-screen">
+      {/* ── HEADER ── */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--text))]">Templates Comportamentais</h1>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-            Gerencie templates de avaliação com competências e perguntas
+          <h1 className="text-2xl font-bold text-[hsl(var(--text))] tracking-tight">Templates Comportamentais</h1>
+          <p className="mt-1 text-sm text-[hsl(var(--text-muted))] leading-relaxed">
+            Painel de controle de avaliações operacionais estruturadas por competências e scorecards.
           </p>
         </div>
-        {activeTab === "templates" && (
-          <div className="flex gap-2">
-            <Button
-              onClick={() => setIsGalleryOpen(true)}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Layers className="h-4 w-4" />
-              Usar modelo pronto
-            </Button>
-            <Button
-              onClick={() => {
-                setNewTemplateOpen(true);
-                setEditingId(null);
-              }}
-              className="flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Novo Template
-            </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setIsGalleryOpen(true)}
+            variant="outline"
+            className="flex items-center gap-2 border-[hsl(var(--border))] hover:bg-[hsl(var(--accent-soft))]"
+          >
+            <Layers className="h-4 w-4 text-[hsl(var(--text-muted))]" />
+            Usar modelo pronto
+          </Button>
+          <Button
+            onClick={() => {
+              setNewTemplateName("");
+              setNewTemplateDesc("");
+              setNewTemplateCategory("Geral");
+              setNewTemplateAudience("");
+              setNewTemplateDuration(20);
+              setIsDrawerOpen(true);
+            }}
+            className="flex items-center gap-2 bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90"
+          >
+            <Plus className="h-4 w-4" />
+            Novo Builder
+          </Button>
+        </div>
+      </div>
+
+      {/* ── KPI METRICS CARDS ── */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        {/* Ativos */}
+        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
+          <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <ClipboardList className="h-5 w-5" />
           </div>
-        )}
-      </div>
-
-      {/* ── Tabs ── */}
-      <div className="mb-5 flex gap-1 border-b border-[hsl(var(--border))]">
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("templates");
-            setNewTemplateOpen(false);
-            setEditingId(null);
-            setExpandedId(null);
-          }}
-          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "templates"
-              ? "border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
-              : "border-transparent text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
-          }`}
-        >
-          Templates
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("arquivados");
-            setNewTemplateOpen(false);
-            setEditingId(null);
-            setExpandedId(null);
-          }}
-          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === "arquivados"
-              ? "border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
-              : "border-transparent text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
-          }`}
-        >
-          Arquivados
-          {archivedCount > 0 && (
-            <span className="rounded-full bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-xs font-semibold text-[hsl(var(--text-muted))]">
-              {archivedCount}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* ── Error banner ── */}
-      {error && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
-          <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-red-900 dark:text-red-400">Erro</p>
-            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Ativos em Produção</span>
+            <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalActive}</h3>
           </div>
         </div>
-      )}
 
-      {/* ── New template form (top of page, only in Templates tab) ── */}
-      {activeTab === "templates" && newTemplateOpen && (
-        <NewTemplateForm
-          onSave={handleCreateTemplate}
-          onCancel={() => setNewTemplateOpen(false)}
-        />
-      )}
+        {/* Rascunhos */}
+        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
+          <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <FolderGit2 className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Rascunhos Editáveis</span>
+            <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalDrafts}</h3>
+          </div>
+        </div>
 
-      {/* ── Empty state ── */}
-      {visibleTemplates.length === 0 ? (
-        <div className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] p-12 text-center">
-          {activeTab === "arquivados" ? (
-            <p className="text-[hsl(var(--text-muted))]">Nenhum template arquivado</p>
-          ) : (
-            <>
-              <p className="text-[hsl(var(--text-muted))]">Nenhum template criado ainda</p>
-              <Button
-                onClick={() => setNewTemplateOpen(true)}
-                variant="ghost"
-                className="mt-4"
+        {/* Arquivados */}
+        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
+          <div className="h-10 w-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+            <Archive className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Arquivados</span>
+            <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalArchived}</h3>
+          </div>
+        </div>
+      </div>
+
+      {/* ── TOOLBAR: SEARCH & FILTERS ── */}
+      <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 space-y-4 shadow-2xs">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[hsl(var(--text-muted))]" />
+            <input
+              type="text"
+              placeholder="Buscar avaliações por nome ou descrição..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="ui-input pl-9 w-full"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Status Selector */}
+            <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
               >
-                Criar primeiro template
-              </Button>
-            </>
-          )}
+                <option value="all">Todos os Status</option>
+                <option value="active">Apenas Ativos</option>
+                <option value="draft">Apenas Rascunhos</option>
+                <option value="archived">Apenas Arquivados</option>
+              </select>
+            </div>
+
+            {/* Sort Selector */}
+            <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
+              <ArrowUpDown className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
+              >
+                <option value="recent">Mais Recentes</option>
+                <option value="name">Ordem Alfabética</option>
+                <option value="questions">Mais Perguntas</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Category filtering chips */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[hsl(var(--border))]">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] mr-1">Categoria:</span>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold border transition-all duration-200 ${
+                selectedCategory === cat
+                  ? "bg-[hsl(var(--primary))] text-white border-transparent"
+                  : "bg-[hsl(var(--bg))] text-[hsl(var(--text-muted))] border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]"
+              }`}
+            >
+              {cat === "all" ? "Todas" : cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── TEMPLATE LIST CARDS ── */}
+      {sortedTemplates.length === 0 ? (
+        <div className="border-2 border-dashed rounded-2xl p-12 text-center text-[hsl(var(--text-muted))] bg-[hsl(var(--surface))]">
+          <AlertCircle className="h-10 w-10 text-[hsl(var(--text-muted))] mx-auto mb-2 opacity-50" />
+          <h4 className="font-semibold text-sm">Nenhum template encontrado</h4>
+          <p className="text-xs max-w-xs mx-auto mt-1 leading-relaxed">
+            Nenhuma avaliação atende aos filtros definidos. Crie um novo template ou use um modelo pronto.
+          </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {visibleTemplates.map((template) => {
-            const isEditing = editingId === template.id;
-            const isExpanded = expandedId === template.id;
-            const isArchived = template.status === "archived";
+        <div className="grid gap-4 sm:grid-cols-2">
+          {sortedTemplates.map((template) => {
+            const parsed = parseTemplateDescription(template.description);
+            const category = parsed.category || "Geral";
+            const colorClass = (CATEGORY_COLORS && CATEGORY_COLORS[template.name]) ?? "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
 
             return (
               <div
                 key={template.id}
-                className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] overflow-hidden"
+                className="group rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 transition-all duration-200 hover:shadow-md flex flex-col justify-between"
               >
-                {/* ── Inline edit form (not available for archived) ── */}
-                {isEditing ? (
-                  <InlineEditForm
-                    template={template}
-                    onSave={(data) => handleSaveEdit(template.id, data)}
-                    onCancel={handleCancelEdit}
-                  />
-                ) : (
-                  /* ── Normal card header ── */
-                  <div
-                    className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-[hsl(var(--surface-muted))] transition-colors select-none"
-                    onClick={() => void handleExpandTemplate(template.id)}
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-5 w-5 shrink-0 text-[hsl(var(--text-muted))]" />
-                    ) : (
-                      <ChevronRight className="h-5 w-5 shrink-0 text-[hsl(var(--text-muted))]" />
-                    )}
+                <div>
+                  {/* Badges bar */}
+                  <div className="flex items-center justify-between mb-3.5">
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${colorClass}`}>
+                      {category}
+                    </span>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className={`font-semibold ${isArchived ? "text-[hsl(var(--text-muted))]" : "text-[hsl(var(--text))]"}`}>
-                          {template.name}
-                        </h3>
-                        <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLOR[template.status] ?? "bg-gray-100 text-gray-700"}`}
-                        >
-                          {STATUS_LABEL[template.status] ?? template.status}
-                        </span>
-                      </div>
-                      {template.description && (
-                        <p className="mt-1 text-sm text-[hsl(var(--text-muted))] line-clamp-1">
-                          {template.description}
-                        </p>
-                      )}
-                      <div className="mt-1.5 flex gap-4 text-xs text-[hsl(var(--text-muted))]">
-                        <span>{template.competency_count} {template.competency_count === 1 ? "competência" : "competências"}</span>
-                        <span>{template.question_count} {template.question_count === 1 ? "pergunta" : "perguntas"}</span>
-                        <span>v{template.version}</span>
-                      </div>
+                    <div className="flex gap-1 items-center">
+                      <span className="text-[10px] text-gray-500 font-bold bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
+                        v{template.version}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        template.status === "active"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : template.status === "archived"
+                          ? "bg-red-50 text-red-700 border border-red-200"
+                          : "bg-gray-50 text-gray-700 border border-gray-200"
+                      }`}>
+                        {template.status === "active" ? "Ativo" : template.status === "archived" ? "Arquivado" : "Rascunho"}
+                      </span>
                     </div>
+                  </div>
 
-                    {/* Buttons — stop propagation so clicks don't toggle expand */}
-                    <div
-                      className="flex shrink-0 gap-2"
-                      onClick={(e) => e.stopPropagation()}
+                  {/* Name & Desc */}
+                  <h3 className="text-sm font-bold text-[hsl(var(--text))] leading-snug group-hover:text-[hsl(var(--primary))] transition-colors">
+                    {template.name}
+                  </h3>
+                  <p className="mt-1.5 text-xs text-[hsl(var(--text-muted))] leading-relaxed line-clamp-2">
+                    {parsed.description || "Sem descrição disponível."}
+                  </p>
+
+                  {/* Metrics preview row */}
+                  <div className="mt-4 grid grid-cols-2 gap-2 border-y border-[hsl(var(--border))]/60 py-2 text-[11px] text-[hsl(var(--text-muted))]">
+                    <span className="flex items-center gap-1">
+                      <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                      {template.competency_count} {template.competency_count === 1 ? "competência" : "competências"}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <FileText className="h-3.5 w-3.5 shrink-0" />
+                      {template.question_count} {template.question_count === 1 ? "pergunta" : "perguntas"}
+                    </span>
+                    {parsed.target_audience && (
+                      <span className="flex items-center gap-1 col-span-2 truncate">
+                        <User className="h-3.5 w-3.5 shrink-0" />
+                        {parsed.target_audience}
+                      </span>
+                    )}
+                    {parsed.duration && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        ~{parsed.duration} minutos
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Operations & CTAs row */}
+                <div className="mt-5 pt-3 flex gap-2 items-center justify-between border-t border-[hsl(var(--border))]/40">
+                  <div className="flex gap-1.5">
+                    {/* Quick actions for recruiter convenience */}
+                    <button
+                      onClick={() => void handleDuplicate(template)}
+                      title="Duplicar Rascunho"
+                      className="p-2 rounded-xl border hover:bg-gray-50 text-gray-500"
                     >
-                      {(template.status === "draft" || isArchived) && (
-                        <Button
-                          onClick={() => void handleActivate(template.id)}
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          Ativar
-                        </Button>
-                      )}
-                      {!isArchived && (
-                        <>
-                          <Button
-                            onClick={() => handleStartEdit(template)}
-                            size="sm"
-                            variant="outline"
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            onClick={() => void handleArchive(template.id)}
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                          >
-                            Arquivar
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Expanded detail (only when not editing) ── */}
-                {isExpanded && !isEditing && (
-                  <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-5 py-5">
-                    {detailLoading === template.id ? (
-                      <div className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Carregando competências e perguntas…
-                      </div>
-                    ) : detailCache[template.id] ? (
-                      <TemplateDetailView detail={detailCache[template.id]} />
-                    ) : (
-                      <p className="text-sm text-[hsl(var(--text-muted))] italic">
-                        Não foi possível carregar os detalhes. Tente expandir novamente.
-                      </p>
+                      <Layers className="h-4 w-4" />
+                    </button>
+                    {template.status !== "active" && template.status !== "archived" && (
+                      <button
+                        onClick={() => void handleActivate(template.id)}
+                        title="Ativar Avaliação"
+                        className="p-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-600"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    )}
+                    {template.status !== "archived" && (
+                      <button
+                        onClick={() => void handleArchive(template.id)}
+                        title="Arquivar Avaliação"
+                        className="p-2 rounded-xl border border-red-100 hover:bg-red-50 text-red-500"
+                      >
+                        <Archive className="h-4 w-4" />
+                      </button>
                     )}
                   </div>
-                )}
+
+                  <Button
+                    onClick={() => navigate(`/admin/behavioral-templates/${template.id}/edit`)}
+                    className="bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary))]/90 flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl font-semibold"
+                  >
+                    Editar Estrutura
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* ── Gallery modal ── */}
+      {/* ── LATERAL DRAWER FOR NEW TEMPLATE ── */}
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
+          {/* Overlay click to close */}
+          <div className="absolute inset-0" onClick={() => setIsDrawerOpen(false)} />
+
+          <div className="relative w-full max-w-md bg-[hsl(var(--surface))] h-full flex flex-col shadow-2xl border-l border-[hsl(var(--border))] animate-in slide-in-from-right duration-200">
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-[hsl(var(--border))] flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-[hsl(var(--text))] flex items-center gap-2">
+                  <FolderPlus className="h-5 w-5 text-[hsl(var(--primary))]" />
+                  Criar Nova Avaliação
+                </h3>
+                <p className="text-xs text-[hsl(var(--text-muted))] mt-0.5">Defina as informações estruturais do rascunho</p>
+              </div>
+              <button
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-1 rounded-xl text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Drawer Body / Form */}
+            <form onSubmit={(e) => void handleCreateTemplateSubmit(e)} className="flex-1 overflow-y-auto p-5 space-y-4">
+              
+              {/* Ready-made banner suggestion */}
+              <div className="rounded-xl bg-[hsl(var(--primary))]/5 border border-[hsl(var(--primary))]/20 p-3.5 space-y-2">
+                <p className="text-xs font-bold text-[hsl(var(--primary))] flex items-center gap-1.5">
+                  <Layers className="h-4 w-4" />
+                  Quer economizar tempo?
+                </p>
+                <p className="text-[11px] text-[hsl(var(--text-muted))] leading-relaxed">
+                  Temos templates comportamentais profissionais criados por especialistas em seleção humana prontos para uso.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsGalleryOpen(true);
+                  }}
+                  className="text-xs font-bold text-[hsl(var(--primary))] hover:underline flex items-center gap-1"
+                >
+                  Procurar na Vitrine <ArrowRight className="h-3 w-3" />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                  Nome do Template *
+                </label>
+                <input
+                  type="text"
+                  value={newTemplateName}
+                  onChange={(e) => setNewTemplateName(e.target.value)}
+                  placeholder="Ex: Avaliação de Atendimento ao Cliente"
+                  className="ui-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                  Descrição Comercial *
+                </label>
+                <textarea
+                  value={newTemplateDesc}
+                  onChange={(e) => setNewTemplateDesc(e.target.value)}
+                  placeholder="Explique os objetivos e os focos comportamentais analisados por este template..."
+                  className="ui-input w-full min-h-20 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                    Categoria
+                  </label>
+                  <select
+                    value={newTemplateCategory}
+                    onChange={(e) => setNewTemplateCategory(e.target.value)}
+                    className="ui-input w-full"
+                  >
+                    <option value="Administrativo">Administrativo</option>
+                    <option value="Operacional">Operacional</option>
+                    <option value="Liderança">Liderança</option>
+                    <option value="Tecnologia">Tecnologia</option>
+                    <option value="Aprendizagem">Aprendizagem</option>
+                    <option value="Geral">Geral</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                    Minutos Estimados
+                  </label>
+                  <input
+                    type="number"
+                    value={newTemplateDuration}
+                    onChange={(e) => setNewTemplateDuration(Number(e.target.value))}
+                    className="ui-input w-full"
+                    min={1}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                  Público-Alvo Recomendado
+                </label>
+                <input
+                  type="text"
+                  value={newTemplateAudience}
+                  onChange={(e) => setNewTemplateAudience(e.target.value)}
+                  placeholder="Ex: Consultores de Vendas, Operadores"
+                  className="ui-input w-full"
+                />
+              </div>
+
+              {/* Quality publishing validation advice */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-[11px] text-amber-800 leading-relaxed flex items-start gap-2">
+                <HelpCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                <p>
+                  <strong>Regra de Publicação:</strong> Para poder ativar/publicar esta avaliação, você precisará cadastrar competências que totalizem exatamente <strong>100%</strong> de peso.
+                </p>
+              </div>
+
+              {/* Drawer Action CTA */}
+              <div className="pt-4 border-t border-[hsl(var(--border))] flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDrawerOpen(false)}
+                  disabled={creating}
+                  className="rounded-xl text-xs"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={creating}
+                  className="bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 text-white rounded-xl text-xs flex items-center gap-1"
+                >
+                  {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Confirmar e Editar
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── GALLERY MODEL VETRINE MODAL ── */}
       {isGalleryOpen && (
         <TemplateGalleryModal
           onClose={() => setIsGalleryOpen(false)}

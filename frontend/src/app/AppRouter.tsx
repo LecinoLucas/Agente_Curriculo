@@ -60,6 +60,12 @@ const BehavioralTemplatesPage = lazy(() =>
   }))
 );
 
+const BehavioralTemplateEditorPage = lazy(() =>
+  import("../pages/BehavioralTemplateEditorPage").then((m) => ({
+    default: m.BehavioralTemplateEditorPage,
+  }))
+);
+
 const AnalisesIaPage = lazy(() =>
   import("../pages/AnalisesIaPage").then((m) => ({
     default: m.AnalisesIaPage,
@@ -274,6 +280,11 @@ export function AppRouter() {
         <Route
           path="admin/behavioral-templates"
           element={protectedPage(<BehavioralTemplatesPage />, ["admin", "recruiter"])}
+        />
+
+        <Route
+          path="admin/behavioral-templates/:templateId/edit"
+          element={protectedPage(<BehavioralTemplateEditorPage />, ["admin", "recruiter"])}
         />
       </Route>
 

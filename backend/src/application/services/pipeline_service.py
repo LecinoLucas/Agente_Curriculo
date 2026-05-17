@@ -1,4 +1,5 @@
 import json
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -277,10 +278,19 @@ class PipelineService:
         return [self._row_to_match_response(row) for row in rows]
 
     async def get_board(self, job_id: UUID) -> PipelineBoardResponse:
+        _t0 = time.perf_counter()
         matches = await self.list_job_matches(job_id)
         by_stage: dict[str, list[JobMatchCandidateResponse]] = {stage: [] for stage in KANBAN_STAGES}
         for item in matches:
             by_stage[item.stage].append(item)
+        _duration_ms = (time.perf_counter() - _t0) * 1000
+        logger.debug(
+            "pipeline.board.query_timing",
+            job_id=str(job_id),
+            candidate_count=len(matches),
+            stage_counts={stage: len(candidates) for stage, candidates in by_stage.items() if candidates},
+            duration_ms=round(_duration_ms, 2),
+        )
 
         columns = [
             PipelineColumnResponse(

@@ -324,6 +324,7 @@ class CandidateRankingService:
         after building entries. Only scores computed with the currently active
         version are returned. Raises RankingJobNotFoundError / NoActiveScoreVersionError as needed.
         """
+        _t0 = perf_counter()
         await self._context_loader.assert_job_exists(job_id)
         version = await self._context_loader.load_active_version()
         threshold_high, threshold_low = _resolve_thresholds(version)
@@ -332,7 +333,9 @@ class CandidateRankingService:
             version_id=version.id,
         )
 
+        _t_fetch = perf_counter()
         rows = await self._score_store.fetch_persisted_scores(job_id, version.id)
+        _fetch_ms = (perf_counter() - _t_fetch) * 1000
 
         entries = []
         for row in rows:
@@ -365,6 +368,17 @@ class CandidateRankingService:
             entry["rank"] = start_idx + i + 1
 
         total_pages = (total_candidates + page_size - 1) // page_size if total_candidates > 0 else 1
+
+        _duration_ms = (perf_counter() - _t0) * 1000
+        logger.debug(
+            "pipeline.ranking.query_timing",
+            job_id=str(job_id),
+            candidate_count=total_candidates,
+            page=page,
+            page_size=page_size,
+            fetch_ms=round(_fetch_ms, 2),
+            duration_ms=round(_duration_ms, 2),
+        )
 
         return self._public_builder.build_ranking_response(
             job_id=job_id,
