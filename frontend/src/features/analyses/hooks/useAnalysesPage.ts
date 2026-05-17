@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAsyncState } from "../../../hooks/useAsyncState";
 import { analysisService } from "../../../services/analysisService";
 import { formatContextError } from "../../../services/errorMessages";
@@ -33,6 +33,7 @@ export function useAnalysesPage() {
   const [discardTarget, setDiscardTarget] = useState<AnalysisGlobalItem | null>(null);
 
   const { data, loading, error, run } = useAsyncState<Paginated<AnalysisGlobalItem>>();
+  const loadingRef = useRef(loading);
 
   // Debounce search
   useEffect(() => {
@@ -68,6 +69,10 @@ export function useAnalysesPage() {
         }),
     );
   }, [page, search, statusFilter, aiFilter, run, hasActiveFilters]);
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   useEffect(() => {
     fetchData();
@@ -159,18 +164,23 @@ export function useAnalysesPage() {
   useEffect(() => {
     if (!hasInFlightAnalyses) return;
 
-    const intervalId = window.setInterval(() => {
+    const poll = () => {
+      if (document.hidden) return;
+      if (loadingRef.current) return;
       fetchData();
-    }, 4000);
+    };
 
-    return () => window.clearInterval(intervalId);
-  }, [fetchData, hasInFlightAnalyses]);
+    const intervalId = window.setInterval(poll, 4000);
 
-  useEffect(() => {
-    if (!hasInFlightAnalyses) return;
-    const onFocus = () => fetchData();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    const handleVisibility = () => {
+      if (!document.hidden) poll();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [fetchData, hasInFlightAnalyses]);
 
   const total = data?.total ?? 0;

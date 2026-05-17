@@ -247,3 +247,56 @@ export function buildUpdateJobPayload(form: JobFormValues): UpdateJobRequestPayl
     requires_manager_review: form.requires_manager_review,
   };
 }
+
+export type BehavioralTemplateValidationResult = {
+  /** Whether the template configuration is valid for publishing */
+  valid: boolean;
+  /** Severity: "ok" | "warning" | "error" */
+  level: "ok" | "warning" | "error";
+  /** Human-readable message shown in UI */
+  message: string | null;
+};
+
+/**
+ * Pure validation helper — no side-effects, no API calls.
+ * Used by the checklist/review step and by tests.
+ *
+ * Rules:
+ * - If requires_behavioral_assessment is false → always valid (template optional)
+ * - If requires_behavioral_assessment is true:
+ *   - templateStatus === "active" → valid (ok)
+ *   - templateStatus === "draft" → invalid (error) — must be published first
+ *   - templateStatus === "archived" → invalid (error) — cannot be used
+ *   - templateStatus is null/undefined → invalid (error) — must select one
+ */
+export function validateBehavioralTemplate(
+  requiresAssessment: boolean,
+  templateStatus: "active" | "draft" | "archived" | null | undefined,
+): BehavioralTemplateValidationResult {
+  if (!requiresAssessment) {
+    return { valid: true, level: "ok", message: null };
+  }
+  if (templateStatus === "active") {
+    return { valid: true, level: "ok", message: "Template ativo vinculado." };
+  }
+  if (templateStatus === "draft") {
+    return {
+      valid: false,
+      level: "error",
+      message: "Template em rascunho — publique o template antes de usar esta vaga.",
+    };
+  }
+  if (templateStatus === "archived") {
+    return {
+      valid: false,
+      level: "error",
+      message: "Template arquivado — selecione um template ativo.",
+    };
+  }
+  return {
+    valid: false,
+    level: "error",
+    message: "Esta vaga exige avaliação comportamental. Selecione um template ativo.",
+  };
+}
+

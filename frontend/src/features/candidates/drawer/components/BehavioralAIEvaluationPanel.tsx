@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader, RefreshCw, Sparkles } from "lucide-react";
 import type { BehavioralAIEvaluationResponse } from "../../../../types/domain";
 import {
@@ -22,6 +22,21 @@ export function BehavioralAIEvaluationPanel({
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const isMountedRef = useRef(true);
+  const isPollingRef = useRef(false);
+  const pollIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (pollIntervalRef.current !== null) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   // Load evaluation on mount
   useEffect(() => {
@@ -47,19 +62,44 @@ export function BehavioralAIEvaluationPanel({
       const result = await triggerBehavioralAnalysis(jobId, candidateId);
       if (result) {
         setEvaluation({ ...result, assignment_id: "" } as BehavioralAIEvaluationResponse);
-        // Poll for result
-        const pollInterval = setInterval(async () => {
-          const updated = await getBehavioralEvaluation(jobId, candidateId);
-          if (updated) {
-            setEvaluation(updated);
-            if (updated.status === "completed" || updated.status === "failed") {
-              clearInterval(pollInterval);
-            }
-          }
-        }, 3000);
 
-        // Stop polling after 5 minutes
-        setTimeout(() => clearInterval(pollInterval), 300000);
+        // Clear any previous interval before starting a new one
+        if (pollIntervalRef.current !== null) {
+          clearInterval(pollIntervalRef.current);
+        }
+
+        const poll = async () => {
+          if (document.hidden) return;
+          if (isPollingRef.current) return;
+          if (!isMountedRef.current) return;
+
+          isPollingRef.current = true;
+          try {
+            const updated = await getBehavioralEvaluation(jobId, candidateId);
+            if (!isMountedRef.current) return;
+            if (updated) {
+              setEvaluation(updated);
+              if (updated.status === "completed" || updated.status === "failed") {
+                if (pollIntervalRef.current !== null) {
+                  clearInterval(pollIntervalRef.current);
+                  pollIntervalRef.current = null;
+                }
+              }
+            }
+          } finally {
+            isPollingRef.current = false;
+          }
+        };
+
+        pollIntervalRef.current = window.setInterval(poll, 3000);
+
+        // Hard stop after 5 minutes
+        window.setTimeout(() => {
+          if (pollIntervalRef.current !== null) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+        }, 300_000);
       } else {
         setError("Falha ao disparar análise assistida");
       }

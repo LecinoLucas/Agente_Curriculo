@@ -40,16 +40,13 @@ export function useAnalysisPolling({
     let running = false;
 
     const pollStatuses = async () => {
-      if (running) {
-        return;
-      }
+      if (document.hidden) return;
+      if (running) return;
       running = true;
 
       try {
         for (const target of targets) {
-          if (cancelled) {
-            return;
-          }
+          if (cancelled) return;
 
           try {
             const status = await analysisService.status(target.analysisId);
@@ -72,9 +69,15 @@ export function useAnalysisPolling({
       void pollStatuses();
     }, intervalMs);
 
+    const handleVisibility = () => {
+      if (!document.hidden) void pollStatuses();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [enabled, intervalMs, targets]);
 }

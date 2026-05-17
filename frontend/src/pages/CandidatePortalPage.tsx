@@ -355,13 +355,24 @@ export function CandidatePortalPage() {
   }, []);
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
+    const poll = () => {
+      if (document.hidden) return;
       if (!loading && !isRefreshing && !isSaving && !isUploading && !assessmentSaving) {
         void loadPortalData(true);
       }
-    }, 15000);
+    };
 
-    return () => clearInterval(intervalId);
+    const intervalId = setInterval(poll, 15000);
+
+    const handleVisibility = () => {
+      if (!document.hidden) poll();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [loading, isRefreshing, isSaving, isUploading, assessmentSaving]);
 
   const handleContactChange = (field: keyof ContactFormState, value: string) => {

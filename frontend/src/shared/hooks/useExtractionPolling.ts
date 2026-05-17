@@ -70,6 +70,11 @@ export function useExtractionPolling({
       return;
     }
 
+    if (document.hidden) {
+      setIsPolling(false);
+      return;
+    }
+
     const currentRunId = ++runIdRef.current;
     setIsPolling(true);
 
@@ -179,6 +184,19 @@ export function useExtractionPolling({
       stop();
     };
   }, [enabled, executePoll, normalizedItems, stop]);
+
+  useEffect(() => {
+    if (!enabled || normalizedItems.length === 0) return;
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        clearTimer();
+        void executePoll();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [enabled, normalizedItems, clearTimer, executePoll]);
 
   return {
     statuses,

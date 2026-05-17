@@ -19,6 +19,7 @@ type JobFormReviewStepProps = {
   eliminatorySkills: Array<JobSkill | PendingJobSkill>;
   jobQuality: JobQualityResult | null;
   backendPublishErrors: string[];
+  selectedTemplateStatus?: "active" | "draft" | "archived" | null;
 };
 
 export function JobFormReviewStep({
@@ -28,6 +29,7 @@ export function JobFormReviewStep({
   eliminatorySkills,
   jobQuality,
   backendPublishErrors,
+  selectedTemplateStatus,
 }: JobFormReviewStepProps) {
   return (
     <div className="space-y-6">
@@ -62,12 +64,25 @@ export function JobFormReviewStep({
         description="Esses itens precisam estar corretos para a publicação ser liberada."
       >
         <div className="space-y-2">
-          {[
+          {([
             { ok: trimToNull(form.job_area ?? "") !== null, label: "Área da vaga definida" },
             { ok: trimToNull(form.seniority_level ?? "") !== null, label: "Senioridade definida" },
             { ok: (form.minimum_years_experience ?? 0) > 0, label: "Experiência mínima preenchida" },
             { ok: mandatorySkills.length >= 2, label: "Pelo menos 2 skills essenciais" },
-          ].map((item) => (
+            ...(form.requires_behavioral_assessment
+              ? [
+                  {
+                    ok: selectedTemplateStatus === "active",
+                    label:
+                      selectedTemplateStatus === "draft"
+                        ? "Template comportamental selecionado, mas ainda em rascunho — deve ser publicado"
+                        : selectedTemplateStatus === "archived"
+                          ? "Template comportamental arquivado — selecione um template ativo"
+                          : "Template comportamental ativo selecionado (obrigatório para esta vaga)",
+                  },
+                ]
+              : []),
+          ] as { ok: boolean; label: string }[]).map((item) => (
             <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--border))] px-4 py-3 text-sm">
               {item.ok ? (
                 <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />

@@ -34,7 +34,7 @@ import { getJob, getJobQuality, publishJob, type CreateJobRequestPayload, type U
 import { jobSkillsService } from "../services/jobSkillsService";
 import { skillEquivalencesService } from "../services/skillEquivalencesService";
 import { toast } from "../shared/utils/toast";
-import type { Job } from "../types/domain";
+import type { Job, BehavioralAssessmentTemplate } from "../types/domain";
 import {
   formatJobStatus,
   formatSeniority,
@@ -85,6 +85,8 @@ export function JobFormPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [selectedTemplateStatus, setSelectedTemplateStatus] =
+    useState<BehavioralAssessmentTemplate["status"] | null>(null);
 
   const refreshQuality = async (jobIdToRefresh: string) => {
     try {
@@ -418,6 +420,7 @@ export function JobFormPage() {
             eliminatorySkills={eliminatorySkills}
             jobQuality={jobQuality}
             backendPublishErrors={backendPublishErrors}
+            selectedTemplateStatus={selectedTemplateStatus}
           />
         );
 
@@ -426,6 +429,8 @@ export function JobFormPage() {
           <BehavioralTemplateSelector
             value={form.behavioral_template_id}
             onChange={(id) => setForm((current) => ({ ...current, behavioral_template_id: id }))}
+            requiresAssessment={form.requires_behavioral_assessment}
+            onTemplateStatusChange={setSelectedTemplateStatus}
             onPopulateBehavioralRequirements={(requirements) =>
               setForm((current) => ({
                 ...current,

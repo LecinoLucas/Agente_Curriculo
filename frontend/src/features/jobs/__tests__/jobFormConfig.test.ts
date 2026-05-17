@@ -5,6 +5,7 @@ import {
   formatJobArea,
   EMPTY_FORM,
   SELECTION_FLOW_DEFAULTS,
+  validateBehavioralTemplate,
 } from "../jobFormConfig";
 import type { JobFormValues } from "../jobFormConfig";
 
@@ -212,4 +213,42 @@ describe("jobFormConfig", () => {
       expect(EMPTY_FORM.requires_manager_review).toBe(false);
     });
   });
+
+  // ── Fase 26C: validateBehavioralTemplate ──────────────────────────────────
+  describe("validateBehavioralTemplate", () => {
+    it("vaga simples (sem avaliação) é sempre válida, independente do template", () => {
+      expect(validateBehavioralTemplate(false, null).valid).toBe(true);
+      expect(validateBehavioralTemplate(false, "draft").valid).toBe(true);
+      expect(validateBehavioralTemplate(false, "archived").valid).toBe(true);
+      expect(validateBehavioralTemplate(false, "active").valid).toBe(true);
+    });
+
+    it("vaga com requires_behavioral_assessment=true e template ativo é válida", () => {
+      const result = validateBehavioralTemplate(true, "active");
+      expect(result.valid).toBe(true);
+      expect(result.level).toBe("ok");
+    });
+
+    it("vaga com requires_behavioral_assessment=true e template em rascunho é inválida", () => {
+      const result = validateBehavioralTemplate(true, "draft");
+      expect(result.valid).toBe(false);
+      expect(result.level).toBe("error");
+      expect(result.message).toContain("rascunho");
+    });
+
+    it("template arquivado não pode ser selecionado (retorna inválido)", () => {
+      const result = validateBehavioralTemplate(true, "archived");
+      expect(result.valid).toBe(false);
+      expect(result.level).toBe("error");
+      expect(result.message).toContain("arquivado");
+    });
+
+    it("vaga com requires_behavioral_assessment=true sem template selecionado é inválida", () => {
+      const result = validateBehavioralTemplate(true, null);
+      expect(result.valid).toBe(false);
+      expect(result.level).toBe("error");
+      expect(result.message).not.toBeNull();
+    });
+  });
 });
+
