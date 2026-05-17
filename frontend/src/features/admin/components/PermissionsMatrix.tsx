@@ -239,15 +239,12 @@ export function PermissionsMatrix() {
                     <div>{r.label}</div>
                   </th>
                 ))}
-                <th className="h-12 px-4 text-center text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] w-20">
-                  Ações
-                </th>
               </tr>
             </thead>
             <tbody>
               {filteredScreens.length === 0 ? (
                 <tr>
-                  <td colSpan={ROLES.length + 2} className="py-8 text-center text-sm text-[hsl(var(--text-muted))]">
+                  <td colSpan={ROLES.length + 1} className="py-8 text-center text-sm text-[hsl(var(--text-muted))]">
                     Nenhuma tela encontrada para a pesquisa.
                   </td>
                 </tr>
@@ -272,7 +269,7 @@ export function PermissionsMatrix() {
                             type="button"
                             onClick={() => handleToggleRole(screen.path, role.key)}
                             disabled={isEssentialAdminRoute}
-                            title={isEssentialAdminRoute ? "Acesso administrativo obrigatório para esta rota" : `Clique para ${isAllowed ? "remover" : "liberar"} acesso`}
+                            title={isEssentialAdminRoute ? "Acesso administrative obrigatório para esta rota" : `Clique para ${isAllowed ? "remover" : "liberar"} acesso`}
                             className={[
                               "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
                               isAllowed
@@ -290,23 +287,6 @@ export function PermissionsMatrix() {
                         </td>
                       );
                     })}
-
-                    <td className="px-4 py-3.5 text-center">
-                      {["/admin", "/perfil", "/dashboard"].includes(screen.path) ? (
-                        <span className="text-[10px] font-semibold text-[hsl(var(--text-muted))] uppercase">
-                          Sistema
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteScreen(screen.path)}
-                          className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Excluir tela"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </td>
                   </tr>
                 ))
               )}
