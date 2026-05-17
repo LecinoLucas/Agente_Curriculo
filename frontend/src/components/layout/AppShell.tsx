@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   Menu,
   Moon,
@@ -27,7 +29,6 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { ActionMenu } from "../common/ActionMenu";
 import { useAuth } from "../../features/auth/useAuth";
 import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { useTheme } from "../../hooks/useTheme";
@@ -54,53 +55,66 @@ const NAVIGATION_CONFIG: NavGroup[] = [
   {
     label: "Dashboard",
     caption: "Visão geral",
-    roles: ["admin", "recruiter", "viewer", "manager"],
+    roles: ["admin", "recruiter", "viewer", "manager", "hr"],
     isDropdown: false,
-    items: [{ to: "/dashboard", label: "Dashboard", caption: "Visão geral", roles: ["admin", "recruiter", "viewer", "manager"] }],
-  },
-  {
-    label: "Processo Seletivo",
-    caption: "Gestão e Pipeline",
-    roles: ["admin", "recruiter", "viewer", "manager"],
-    isDropdown: true,
     items: [
-      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer", "manager"] },
-      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer", "manager"] },
-      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer", "manager"] },
-      { to: "/agenda", label: "Agenda", caption: "Calendário", roles: ["admin", "recruiter", "viewer", "manager"] },
+      { to: "/dashboard", label: "Dashboard", caption: "Visão geral", roles: ["admin", "recruiter", "viewer", "manager", "hr"] }
     ],
   },
   {
-    label: "Ferramentas",
-    caption: "Importação e IA",
+    label: "Recrutamento",
+    caption: "Processo Seletivo",
+    roles: ["admin", "recruiter", "viewer", "manager", "hr"],
+    isDropdown: true,
+    items: [
+      { to: "/pipeline", label: "Pipeline", caption: "Fluxo e etapas", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
+      { to: "/vagas", label: "Vagas", caption: "Oportunidades", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
+      { to: "/candidatos", label: "Candidatos", caption: "Base de perfis", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
+      { to: "/agenda", label: "Agenda de entrevistas", caption: "Calendário", roles: ["admin", "recruiter", "viewer", "manager", "hr"] },
+    ],
+  },
+  {
+    label: "Avaliações",
+    caption: "Gestão Comportamental",
     roles: ["admin", "recruiter"],
     isDropdown: true,
     items: [
-      { to: "/importar", label: "Importação Manual", caption: "Carga de CVs", roles: ["admin", "recruiter"] },
-      { to: "/importar-formulario", label: "Formulários", caption: "Google Forms / Drive", roles: ["admin", "recruiter"] },
-      { to: "/analises-ia", label: "Análises IA", caption: "Status e execuções", roles: ["admin", "recruiter"] },
+      { to: "/admin/behavioral-templates", label: "Templates comportamentais", caption: "Templates de testes", roles: ["admin", "recruiter"] },
     ],
   },
   {
-    label: "Revisão",
-    caption: "Candidatos atribuídos",
+    label: "Gestores",
+    caption: "Revisão e Decisão",
     roles: ["admin", "manager"],
-    isDropdown: false,
-    items: [{ to: "/manager", label: "Revisão", caption: "Candidatos atribuídos", roles: ["admin", "manager"] }],
+    isDropdown: true,
+    items: [
+      { to: "/manager", label: "Revisões pendentes", caption: "Candidatos atribuídos", roles: ["admin", "manager"] },
+    ],
   },
   {
-    label: "Admin",
-    caption: "Gerenciamento",
+    label: "IA & Automação",
+    caption: "Carga e Inteligência",
+    roles: ["admin", "recruiter"],
+    isDropdown: true,
+    items: [
+      { to: "/analises-ia", label: "Análises IA", caption: "Status e execuções", roles: ["admin", "recruiter"] },
+      { to: "/importar", label: "Importação de currículos", caption: "Carga de CVs", roles: ["admin", "recruiter"] },
+      { to: "/importar-formulario", label: "Importação por formulário", caption: "Google Forms / Drive", roles: ["admin", "recruiter"] },
+    ],
+  },
+  {
+    label: "Administração",
+    caption: "Configurações Gerais",
     roles: ["admin"],
     isDropdown: true,
     items: [
-      { to: "/admin", label: "Painel admin", caption: "Visão geral", roles: ["admin"] },
+      { to: "/admin", label: "Admin", caption: "Visão geral", roles: ["admin"] },
       { to: "/admin/usuarios", label: "Usuários", caption: "Equipe e acessos", roles: ["admin"] },
       { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ["admin"] },
-      { to: "/admin/behavioral-templates", label: "Avaliações", caption: "Templates comportamentais", roles: ["admin"] },
       { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ["admin"] },
-      { to: "/admin/bi", label: "BI / Métricas", caption: "Indicadores e gráficos", roles: ["admin"] },
-      { to: "/candidato/portal", label: "Portal do Candidato", caption: "Preview", roles: ["admin"] },
+      { to: "/admin/health", label: "Saúde do sistema", caption: "Diagnósticos e Logs", roles: ["admin"] },
+      { to: "/admin/bi", label: "BI", caption: "Indicadores e gráficos", roles: ["admin"] },
+      { to: "/candidato/portal", label: "Preview Portal do Candidato", caption: "Visualização do candidato", roles: ["admin"] },
     ],
   },
   {
@@ -108,7 +122,9 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     caption: "Sua candidatura",
     roles: ["candidate"],
     isDropdown: false,
-    items: [{ to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: ["candidate"] }],
+    items: [
+      { to: "/candidato/portal", label: "Portal do Candidato", caption: "Sua candidatura", roles: ["candidate"] }
+    ],
   },
 ];
 
@@ -120,18 +136,6 @@ const ROLE_LABELS: Record<UserRole, string> = {
   manager:   "Gestor",
   hr:        "RH",
 };
-
-const RECRUITER_NAV_ITEMS: Array<{ to: string; label: string; roles: UserRole[] }> = [
-  { to: "/dashboard", label: "Dashboard", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/pipeline", label: "Pipeline", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/vagas", label: "Vagas", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/candidatos", label: "Candidatos", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/agenda", label: "Agenda", roles: ["admin", "recruiter", "viewer"] },
-  { to: "/importar", label: "Importação", roles: ["admin", "recruiter"] },
-  { to: "/importar-formulario", label: "Formulários", roles: ["admin", "recruiter"] },
-  { to: "/analises-ia", label: "Análises IA", roles: ["admin", "recruiter"] },
-  { to: "/admin/behavioral-templates", label: "Avaliações", roles: ["admin", "recruiter"] },
-];
 
 const ICON_MAP: Record<string, any> = {
   "/dashboard": LayoutDashboard,
@@ -152,10 +156,11 @@ const ICON_MAP: Record<string, any> = {
   "/admin/health": Activity,
   "/candidato/portal": User,
   "Dashboard": LayoutDashboard,
-  "Processo Seletivo": Briefcase,
-  "Ferramentas": Sparkles,
-  "Revisão": ShieldCheck,
-  "Admin": Settings,
+  "Recrutamento": Briefcase,
+  "Avaliações": GraduationCap,
+  "Gestores": UserRound,
+  "IA & Automação": Sparkles,
+  "Administração": Settings,
   "Portal do Candidato": User,
 };
 
@@ -174,7 +179,7 @@ function usePathAllowed() {
   }, []);
 
   const isAllowed = (path: string, userRole: string) => {
-    if (userRole === "admin") return true; // Bypass administrador para proteção contra auto-bloqueio
+    if (userRole === "admin") return true;
 
     let saved = null;
     try {
@@ -195,333 +200,10 @@ function usePathAllowed() {
         }
       } catch {}
     }
-    return true; // default fallback
+    return true;
   };
 
   return { isAllowed, version };
-}
-
-function RecruiterNavigation() {
-  const { user } = useAuth();
-  const { closeCandidate } = usePipeline();
-  const { isAllowed } = usePathAllowed();
-
-  const visibleItems = RECRUITER_NAV_ITEMS.filter(
-    (item) => user && item.roles.includes(user.role) && isAllowed(item.to, user.role)
-  );
-
-  return (
-    <div className="flex flex-col gap-1 w-full">
-      {visibleItems.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          onClick={() => {
-            if (item.to === "/pipeline") {
-              closeCandidate();
-            }
-          }}
-          className={({ isActive }) =>
-            cn(
-              "flex items-center rounded-xl py-2 pl-3.5 group-hover:px-4 group-hover:py-2.5 text-sm font-semibold transition-all duration-300 border border-transparent",
-              isActive
-                ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))] shadow-sm"
-                : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-            )
-          }
-          title={item.label}
-        >
-          {getNavIcon(item.to)}
-          <span className="ml-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 truncate text-sm font-semibold tracking-tight">
-            {item.label}
-          </span>
-        </NavLink>
-      ))}
-    </div>
-  );
-}
-
-function AdminNavigation() {
-  const { user } = useAuth();
-  const location = useLocation();
-  const { closeCandidate } = usePipeline();
-  const { isAllowed, version } = usePathAllowed();
-  const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
-
-  const visibleGroups = useMemo(() => {
-    if (!user) return [];
-
-    return NAVIGATION_CONFIG.map((group) => {
-      if (group.isDropdown) {
-        const allowedItems = group.items.filter((item) => isAllowed(item.to, user.role));
-        return { ...group, items: allowedItems };
-      }
-      return group;
-    }).filter((group) => {
-      const hasAccess = group.roles.includes(user.role);
-      const hasAllowedItems = group.items.length > 0;
-      return hasAccess && hasAllowedItems;
-    });
-  }, [user, version]);
-
-  useEffect(() => {
-    const activeGroup = visibleGroups.find((group) =>
-      group.isDropdown && group.items.some((item) => location.pathname.startsWith(item.to))
-    );
-    if (activeGroup) {
-      setOpenDropdownLabel(activeGroup.label);
-    }
-  }, [location.pathname, visibleGroups]);
-
-  return (
-    <div className="flex flex-col gap-1.5 w-full">
-      {visibleGroups.map((group) => {
-        if (!group.isDropdown) {
-          const item = group.items[0];
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/admin"}
-              onClick={() => {
-                if (item.to === "/pipeline") {
-                  closeCandidate();
-                }
-              }}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center rounded-xl py-2 pl-3.5 group-hover:px-4 group-hover:py-2.5 text-sm font-semibold transition-all duration-300 border border-transparent",
-                  isActive
-                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))] shadow-sm"
-                    : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-                )
-              }
-              title={item.label}
-            >
-              {getNavIcon(item.to)}
-              <span className="ml-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 truncate text-sm font-semibold tracking-tight">
-                {item.label}
-              </span>
-            </NavLink>
-          );
-        }
-
-        const isGroupActive = group.items.some((item) => location.pathname.startsWith(item.to));
-        const isOpen = openDropdownLabel === group.label;
-
-        return (
-          <div key={group.label} className="flex flex-col gap-1 w-full">
-            <button
-              type="button"
-              className={cn(
-                "flex w-full items-center justify-between rounded-xl py-2 pl-3.5 group-hover:px-4 group-hover:py-2.5 text-sm font-semibold transition-all duration-300 border border-transparent",
-                isGroupActive
-                  ? "text-[hsl(var(--nav-text))] font-bold bg-white/5"
-                  : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-              )}
-              onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
-              aria-expanded={isOpen}
-              title={group.label}
-            >
-              <div className="flex items-center min-w-0">
-                {getNavIcon(group.label)}
-                <span className="ml-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 truncate text-sm font-semibold tracking-tight">
-                  {group.label}
-                </span>
-              </div>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 shrink-0 transition-all duration-300 opacity-0 group-hover:opacity-60",
-                  isOpen && "rotate-180 opacity-100"
-                )}
-              />
-            </button>
-
-            {isOpen && (
-              <div className="hidden group-hover:flex flex-col gap-1 pl-9 pr-1 py-1 transition-all duration-300">
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === "/admin"}
-                    onClick={() => {
-                      if (item.to === "/pipeline") {
-                        closeCandidate();
-                      }
-                    }}
-                    className={({ isActive }) =>
-                      cn(
-                        "flex items-center rounded-lg py-2 px-3 text-xs font-semibold transition-all duration-300 border border-transparent",
-                        isActive
-                          ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))]/30 shadow-sm"
-                          : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-                      )
-                    }
-                    title={item.label}
-                  >
-                    <span className="truncate opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      {item.label}
-                    </span>
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function RecruiterMobileNavigation({ setMobileMenuOpen }: { setMobileMenuOpen: (o: boolean) => void }) {
-  const { user } = useAuth();
-  const { closeCandidate } = usePipeline();
-  const { isAllowed } = usePathAllowed();
-  const onClose = () => setMobileMenuOpen(false);
-
-  const visibleItems = RECRUITER_NAV_ITEMS.filter(
-    (item) => user && item.roles.includes(user.role) && isAllowed(item.to, user.role)
-  );
-
-  return (
-    <div className="flex flex-col gap-1 w-full">
-      {visibleItems.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          onClick={() => {
-            onClose();
-            if (item.to === "/pipeline") {
-              closeCandidate();
-            }
-          }}
-          className={({ isActive }) =>
-            cn(
-              "flex items-center rounded-xl p-3 text-base font-semibold transition-all duration-150 border border-transparent",
-              isActive
-                ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))] shadow-sm"
-                : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-            )
-          }
-        >
-          {getNavIcon(item.to)}
-          <span className="ml-3 text-base font-semibold tracking-tight">{item.label}</span>
-        </NavLink>
-      ))}
-    </div>
-  );
-}
-
-function AdminMobileNavigation({ setMobileMenuOpen }: { setMobileMenuOpen: (o: boolean) => void }) {
-  const { user } = useAuth();
-  const location = useLocation();
-  const { closeCandidate } = usePipeline();
-  const { isAllowed, version } = usePathAllowed();
-  const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
-  const onClose = () => setMobileMenuOpen(false);
-
-  const visibleGroups = useMemo(() => {
-    if (!user) return [];
-
-    return NAVIGATION_CONFIG.map((group) => {
-      if (group.isDropdown) {
-        const allowedItems = group.items.filter((item) => isAllowed(item.to, user.role));
-        return { ...group, items: allowedItems };
-      }
-      return group;
-    }).filter((group) => {
-      const hasAccess = group.roles.includes(user.role);
-      const hasAllowedItems = group.items.length > 0;
-      return hasAccess && hasAllowedItems;
-    });
-  }, [user, version]);
-
-  return (
-    <div className="flex flex-col gap-2 w-full">
-      {visibleGroups.map((group) => {
-        if (!group.isDropdown) {
-          const item = group.items[0];
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/admin"}
-              onClick={() => {
-                onClose();
-                if (item.to === "/pipeline") {
-                  closeCandidate();
-                }
-              }}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center rounded-xl p-3 text-base font-semibold transition-all duration-150 border border-transparent",
-                  isActive
-                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))] shadow-sm"
-                    : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-                )
-              }
-            >
-              {getNavIcon(item.to)}
-              <span className="ml-3 text-base font-semibold tracking-tight">{item.label}</span>
-            </NavLink>
-          );
-        }
-
-        const isGroupActive = group.items.some((item) => location.pathname.startsWith(item.to));
-        const isOpen = openDropdownLabel === group.label;
-
-        return (
-          <div key={group.label} className="flex flex-col gap-1 w-full">
-            <button
-              type="button"
-              className={cn(
-                "flex w-full items-center justify-between rounded-xl p-3 text-base font-semibold transition-all duration-150 border border-transparent",
-                isGroupActive
-                  ? "text-[hsl(var(--nav-text))] font-bold bg-white/5"
-                  : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-              )}
-              onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
-              aria-expanded={isOpen}
-            >
-              <div className="flex items-center min-w-0">
-                {getNavIcon(group.label)}
-                <span className="ml-3 text-base font-semibold tracking-tight">{group.label}</span>
-              </div>
-              <ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform opacity-60", isOpen && "rotate-180")} />
-            </button>
-
-            {isOpen && (
-              <div className="flex flex-col gap-1 pl-10 pr-2 py-1 transition-all">
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === "/admin"}
-                    onClick={() => {
-                      onClose();
-                      if (item.to === "/pipeline") {
-                        closeCandidate();
-                      }
-                    }}
-                    className={({ isActive }) =>
-                      cn(
-                        "flex items-center rounded-lg py-2.5 px-3 text-sm font-semibold transition-all duration-150 border border-transparent",
-                        isActive
-                          ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))]/30 shadow-sm"
-                          : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
-                      )
-                    }
-                  >
-                    <span className="truncate">{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export function AppShell() {
@@ -529,60 +211,256 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { closeCandidate } = usePipeline();
+  const { isAllowed, version } = usePathAllowed();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
+
+  // Persistence of sidebar desktop state
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("ats_sidebar_expanded");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleSidebar = () => {
+    setSidebarExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("ats_sidebar_expanded", String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [user?.role]);
 
+  // Unified dynamic visible navigation list filter
+  const visibleGroups = useMemo(() => {
+    if (!user) return [];
+
+    return NAVIGATION_CONFIG.map((group) => {
+      const allowedItems = group.items.filter(
+        (item) => item.roles.includes(user.role) && isAllowed(item.to, user.role)
+      );
+      return { ...group, items: allowedItems };
+    }).filter((group) => {
+      const hasAccess = group.roles.includes(user.role);
+      const hasAllowedItems = group.items.length > 0;
+      return hasAccess && hasAllowedItems;
+    });
+  }, [user, version]);
+
+  // Automatically expand/highlight active route group
+  useEffect(() => {
+    const activeGroup = visibleGroups.find((group) =>
+      group.isDropdown && group.items.some((item) => isItemActive(item.to))
+    );
+    if (activeGroup) {
+      setOpenDropdownLabel(activeGroup.label);
+    }
+  }, [location.pathname, visibleGroups]);
+
+  const isItemActive = (itemTo: string) => {
+    if (itemTo === "/admin") {
+      return location.pathname === "/admin";
+    }
+    if (itemTo === "/candidato/portal") {
+      return location.pathname === "/candidato/portal";
+    }
+    return location.pathname.startsWith(itemTo);
+  };
+
+  const handleGroupClick = (groupLabel: string) => {
+    if (!sidebarExpanded) {
+      setSidebarExpanded(true);
+      setOpenDropdownLabel(groupLabel);
+    } else {
+      setOpenDropdownLabel(openDropdownLabel === groupLabel ? null : groupLabel);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))] flex flex-col lg:flex-row">
+      
       {/* ── Left Vertical Sidebar (Desktop Only) ── */}
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 z-50 w-16 hover:w-64 flex-col border-r border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] transition-all duration-300 ease-in-out group shadow-[4px_0_24px_-10px_rgba(0,0,0,0.3)] hover:shadow-[8px_0_36px_-6px_rgba(0,0,0,0.5)]">
-        {/* Brand */}
-        <div className="flex h-16 shrink-0 items-center border-b border-[hsl(var(--nav-border))]/90 px-3.5 group-hover:px-6 transition-all duration-300">
-          <button
-            type="button"
-            onClick={() => navigate("/pipeline")}
-            className="flex items-center gap-3 rounded-xl border border-transparent text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] px-1 py-1"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-xs font-extrabold text-white shadow-sm">
-              RA
-            </div>
-            <div className="min-w-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ml-3">
-              <p className="font-heading text-sm font-extrabold tracking-tight text-[hsl(var(--nav-text))] truncate">
-                Marajo RH
-              </p>
-              <p className="text-[10px] text-[hsl(var(--nav-muted))] leading-tight truncate">
-                ATS & Recrutamento IA
-              </p>
-            </div>
-          </button>
+      <aside
+        className={cn(
+          "hidden lg:flex fixed inset-y-0 left-0 z-50 flex-col border-r border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] transition-all duration-300 ease-in-out shadow-[4px_0_24px_-10px_rgba(0,0,0,0.3)]",
+          sidebarExpanded ? "w-64" : "w-16"
+        )}
+      >
+        {/* Brand Header */}
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-[hsl(var(--nav-border))]/90 px-3.5 transition-all duration-300">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => navigate("/pipeline")}
+              className="flex items-center gap-3 rounded-xl border border-transparent text-left transition hover:border-[hsl(var(--nav-border))]/70 hover:bg-[hsl(var(--nav-active-bg))] px-1 py-1"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-xs font-extrabold text-white shadow-sm">
+                RA
+              </div>
+              {sidebarExpanded && (
+                <div className="min-w-0 transition-opacity duration-300 ml-1">
+                  <p className="font-heading text-sm font-extrabold tracking-tight text-[hsl(var(--nav-text))] truncate">
+                    Marajo RH
+                  </p>
+                  <p className="text-[10px] text-[hsl(var(--nav-muted))] leading-tight truncate">
+                    ATS & Recrutamento IA
+                  </p>
+                </div>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Desktop Vertical Nav Links */}
-        <nav className="flex-1 overflow-y-auto px-2 group-hover:px-4 py-6 space-y-1.5 transition-all duration-300">
-          {user?.role === "admin" || user?.role === "manager" ? <AdminNavigation /> : <RecruiterNavigation />}
+        {/* Dynamic Nav Links */}
+        <nav className="flex-1 overflow-y-auto px-2 py-6 space-y-1.5 transition-all duration-300">
+          <div className="flex flex-col gap-1.5 w-full">
+            {visibleGroups.map((group) => {
+              if (!group.isDropdown) {
+                const item = group.items[0];
+                const active = isItemActive(item.to);
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => {
+                      if (item.to === "/pipeline") {
+                        closeCandidate();
+                      }
+                    }}
+                    className={
+                      cn(
+                        "flex items-center rounded-xl py-2 pl-3.5 text-sm font-semibold transition-all duration-300 border border-transparent",
+                        active
+                          ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))] shadow-sm font-bold animate-in fade-in duration-100"
+                          : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                      )
+                    }
+                    title={!sidebarExpanded ? item.label : undefined}
+                  >
+                    {getNavIcon(item.to)}
+                    {sidebarExpanded && (
+                      <span className="ml-3 truncate text-sm font-semibold tracking-tight">
+                        {item.label}
+                      </span>
+                    )}
+                  </NavLink>
+                );
+              }
+
+              const isGroupActive = group.items.some((item) => isItemActive(item.to));
+              const isOpen = openDropdownLabel === group.label;
+
+              return (
+                <div key={group.label} className="flex flex-col gap-1 w-full">
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-xl py-2 pl-3.5 text-sm font-semibold transition-all duration-300 border border-transparent",
+                      isGroupActive
+                        ? "text-[hsl(var(--nav-text))] font-bold bg-white/5"
+                        : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                    )}
+                    onClick={() => handleGroupClick(group.label)}
+                    aria-expanded={isOpen}
+                    title={!sidebarExpanded ? group.label : undefined}
+                  >
+                    <div className="flex items-center min-w-0">
+                      {getNavIcon(group.label)}
+                      {sidebarExpanded && (
+                        <span className="ml-3 truncate text-sm font-semibold tracking-tight">
+                          {group.label}
+                        </span>
+                      )}
+                    </div>
+                    {sidebarExpanded && (
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 shrink-0 transition-transform duration-300 opacity-60",
+                          isOpen && "rotate-180 opacity-100"
+                        )}
+                      />
+                    )}
+                  </button>
+
+                  {isOpen && sidebarExpanded && (
+                    <div className="flex flex-col gap-1 pl-9 pr-1 py-1 transition-all duration-300 animate-in slide-in-from-top-1">
+                      {group.items.map((item) => {
+                        const active = isItemActive(item.to);
+                        return (
+                          <NavLink
+                            key={item.to}
+                            to={item.to}
+                            onClick={() => {
+                              if (item.to === "/pipeline") {
+                                closeCandidate();
+                              }
+                            }}
+                            className={
+                              cn(
+                                "flex items-center rounded-lg py-1.5 px-3 text-xs font-semibold transition-all duration-300 border border-transparent",
+                                active
+                                  ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))]/30 shadow-sm font-bold"
+                                  : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                              )
+                            }
+                            title={item.label}
+                          >
+                            <span className="truncate">
+                              {item.label}
+                            </span>
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </nav>
 
         {/* Sidebar Footer Controls & Profile */}
-        <div className="mt-auto border-t border-[hsl(var(--nav-border))]/90 p-2.5 group-hover:p-4 space-y-4 bg-black/10 transition-all duration-300">
-          <div className="flex items-center justify-between">
-            <div className="w-0 group-hover:w-auto overflow-hidden group-hover:overflow-visible opacity-0 group-hover:opacity-100 transition-all duration-300">
-              <VisualThemeSwitcher />
-            </div>
+        <div className="mt-auto border-t border-[hsl(var(--nav-border))]/90 p-2.5 space-y-4 bg-black/10 transition-all duration-300">
+          <div className="flex flex-col gap-2">
+            {/* Manual Toggle Sidebar Button */}
             <button
               type="button"
-              onClick={toggleTheme}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
-              title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
+              onClick={handleToggleSidebar}
+              className="flex w-full items-center rounded-xl py-2 pl-3.5 text-sm font-semibold transition-all duration-300 border border-transparent text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+              title={sidebarExpanded ? "Recolher menu" : "Expandir menu"}
             >
-              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              {sidebarExpanded ? <ChevronLeft className="h-5 w-5 shrink-0" /> : <ChevronRight className="h-5 w-5 shrink-0" />}
+              {sidebarExpanded && <span className="ml-3 truncate">Recolher Menu</span>}
             </button>
+
+            <div className="flex items-center justify-between">
+              {sidebarExpanded && (
+                <div className="w-auto overflow-visible opacity-100 transition-all duration-300">
+                  <VisualThemeSwitcher />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 text-[hsl(var(--nav-muted))] transition hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
+                title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
+              >
+                {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-[hsl(var(--nav-border))]/60 bg-white/5 p-1.5 group-hover:p-3 backdrop-blur-sm transition-all duration-300">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-[hsl(var(--nav-border))]/60 bg-white/5 p-1.5 backdrop-blur-sm transition-all duration-300">
             <button
               type="button"
               onClick={() => navigate("/perfil")}
@@ -592,26 +470,28 @@ export function AppShell() {
                 <img
                   src={user.avatar_url}
                   alt={user.full_name}
-                  className="h-7 w-7 group-hover:h-8 group-hover:w-8 shrink-0 rounded-lg object-cover transition-all duration-300"
+                  className="h-7 w-7 shrink-0 rounded-lg object-cover transition-all duration-300"
                 />
               ) : (
-                <div className="flex h-7 w-7 group-hover:h-8 group-hover:w-8 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))] text-xs font-semibold text-white transition-all duration-300">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))] text-xs font-semibold text-white transition-all duration-300">
                   {user?.full_name?.charAt(0).toUpperCase() ?? "?"}
                 </div>
               )}
-              <div className="min-w-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ml-2">
-                <p className="text-xs font-bold text-[hsl(var(--nav-text))] truncate">
-                  {user?.full_name.split(' ')[0]}
-                </p>
-                <p className="text-[10px] text-[hsl(var(--nav-muted))] truncate">
-                  {user?.role ? ROLE_LABELS[user.role] : ""}
-                </p>
-              </div>
+              {sidebarExpanded && (
+                <div className="min-w-0 opacity-100 transition-opacity duration-300 ml-2">
+                  <p className="text-xs font-bold text-[hsl(var(--nav-text))] truncate">
+                    {user?.full_name.split(' ')[0]}
+                  </p>
+                  <p className="text-[10px] text-[hsl(var(--nav-muted))] truncate">
+                    {user?.role ? ROLE_LABELS[user.role] : ""}
+                  </p>
+                </div>
+              )}
             </button>
             <button
               type="button"
               onClick={() => void logout()}
-              className="h-7 w-7 group-hover:h-8 group-hover:w-8 shrink-0 flex items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--danger))] hover:text-white transition-colors duration-300"
+              className="h-7 w-7 shrink-0 flex items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--danger))] hover:text-white transition-colors duration-300"
               title="Sair"
             >
               <LogOut className="h-4 w-4" />
@@ -621,7 +501,12 @@ export function AppShell() {
       </aside>
 
       {/* ── Main Content Area and Header ── */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-16">
+      <div
+        className={cn(
+          "flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out",
+          sidebarExpanded ? "lg:pl-64" : "lg:pl-16"
+        )}
+      >
         {/* Global Sticky Top Header */}
         <header className="flex h-16 w-full items-center justify-between border-b border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))]/90 backdrop-blur-md px-6 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-3">
@@ -631,7 +516,7 @@ export function AppShell() {
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="lg:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/80 transition-all"
             >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              <Menu className="h-5 w-5" />
             </button>
 
             {/* Desktop Page Breadcrumbs */}
@@ -647,7 +532,7 @@ export function AppShell() {
 
             {/* Mobile Brand */}
             <div className="lg:hidden flex items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-[10px] font-extrabold text-white animate-pulse">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-[10px] font-extrabold text-white">
                 RA
               </div>
               <p className="font-heading text-xs font-extrabold tracking-tight text-[hsl(var(--text))]">
@@ -662,18 +547,143 @@ export function AppShell() {
           </div>
         </header>
 
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden fixed inset-x-0 top-16 z-40 border-b border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-bg))] px-4 py-5 shadow-2xl animate-in slide-in-from-top duration-300 flex flex-col gap-4">
-            <nav className="flex flex-col gap-2">
-              {user?.role === "admin" || user?.role === "manager" ? (
-                <AdminMobileNavigation setMobileMenuOpen={setMobileMenuOpen} />
-              ) : (
-                <RecruiterMobileNavigation setMobileMenuOpen={setMobileMenuOpen} />
-              )}
-            </nav>
+        {/* ── Mobile Drawer Navigation (Lateral Sliding Panel) ── */}
+        <div
+          className={cn(
+            "fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out",
+            mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          )}
+        >
+          {/* Backdrop Blur Overlay */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
+            onClick={() => setMobileMenuOpen(false)}
+          />
 
-            <div className="border-t border-[hsl(var(--nav-border))] pt-4 flex flex-col gap-3">
+          {/* Lateral Drawer Content */}
+          <aside
+            className={cn(
+              "absolute inset-y-0 left-0 w-72 bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] p-5 shadow-2xl transition-transform duration-300 ease-in-out flex flex-col justify-between",
+              mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            )}
+          >
+            <div className="flex flex-col gap-4 overflow-y-auto flex-1 pb-4">
+              
+              {/* Header inside Drawer */}
+              <div className="flex items-center justify-between border-b border-[hsl(var(--nav-border))]/90 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-xs font-extrabold text-white">
+                    RA
+                  </div>
+                  <div>
+                    <p className="font-heading text-sm font-extrabold tracking-tight text-[hsl(var(--nav-text))]">
+                      Marajo RH
+                    </p>
+                    <p className="text-[10px] text-[hsl(var(--nav-muted))] leading-tight">
+                      ATS & Recrutamento IA
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-[hsl(var(--nav-muted))] hover:text-[hsl(var(--nav-text))] transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Mobile Drawer Menu List */}
+              <nav className="space-y-1.5 pt-2">
+                {visibleGroups.map((group) => {
+                  if (!group.isDropdown) {
+                    const item = group.items[0];
+                    const active = isItemActive(item.to);
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          if (item.to === "/pipeline") {
+                            closeCandidate();
+                          }
+                        }}
+                        className={
+                          cn(
+                            "flex items-center rounded-xl p-3 text-sm font-semibold transition-all duration-150 border border-transparent",
+                            active
+                              ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))] shadow-sm font-bold"
+                              : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                          )
+                        }
+                      >
+                        {getNavIcon(item.to)}
+                        <span className="ml-3 truncate">{item.label}</span>
+                      </NavLink>
+                    );
+                  }
+
+                  const isGroupActive = group.items.some((item) => isItemActive(item.to));
+                  const isOpen = openDropdownLabel === group.label;
+
+                  return (
+                    <div key={group.label} className="flex flex-col gap-1 w-full">
+                      <button
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl p-3 text-sm font-semibold transition-all duration-150 border border-transparent",
+                          isGroupActive
+                            ? "text-[hsl(var(--nav-text))] font-bold bg-white/5"
+                            : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                        )}
+                        onClick={() => setOpenDropdownLabel(isOpen ? null : group.label)}
+                        aria-expanded={isOpen}
+                      >
+                        <div className="flex items-center min-w-0">
+                          {getNavIcon(group.label)}
+                          <span className="ml-3 truncate">{group.label}</span>
+                        </div>
+                        <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform duration-300 opacity-60", isOpen && "rotate-180")} />
+                      </button>
+
+                      {isOpen && (
+                        <div className="flex flex-col gap-1 pl-10 pr-2 py-1 transition-all">
+                          {group.items.map((item) => {
+                            const active = isItemActive(item.to);
+                            return (
+                              <NavLink
+                                key={item.to}
+                                to={item.to}
+                                onClick={() => {
+                                  setMobileMenuOpen(false);
+                                  if (item.to === "/pipeline") {
+                                    closeCandidate();
+                                  }
+                                }}
+                                className={
+                                  cn(
+                                    "flex items-center rounded-lg py-2 px-3 text-xs font-semibold transition-all duration-150 border border-transparent",
+                                    active
+                                      ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))]/30 shadow-sm font-bold"
+                                      : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                                  )
+                                }
+                              >
+                                <span className="truncate">{item.label}</span>
+                              </NavLink>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </nav>
+            </div>
+
+            {/* Mobile Footer inside Drawer */}
+            <div className="border-t border-[hsl(var(--nav-border))]/90 pt-4 flex flex-col gap-3">
               <div className="flex items-center justify-between px-2">
                 <VisualThemeSwitcher />
                 <div className="flex items-center gap-2">
@@ -690,24 +700,24 @@ export function AppShell() {
                       setMobileMenuOpen(false);
                       navigate("/perfil");
                     }}
-                    className="h-9 px-4 rounded-xl border border-white/20 bg-white/5 font-semibold text-xs text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                    className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg border border-white/10 text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--nav-active-bg))] hover:text-[hsl(var(--nav-text))]"
+                    title="Perfil"
                   >
                     <UserRound className="h-4 w-4" />
-                    Perfil
                   </button>
                   <button
                     type="button"
                     onClick={() => void logout()}
-                    className="h-9 px-4 rounded-xl border border-transparent bg-[hsl(var(--danger))]/15 font-semibold text-xs text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger))] hover:text-white transition-all flex items-center justify-center gap-2"
+                    className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] hover:bg-[hsl(var(--danger))] hover:text-white transition-colors duration-300"
+                    title="Sair"
                   >
                     <LogOut className="h-4 w-4" />
-                    Sair
                   </button>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          </aside>
+        </div>
 
         {/* Main Content Wrapper */}
         <main className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8">

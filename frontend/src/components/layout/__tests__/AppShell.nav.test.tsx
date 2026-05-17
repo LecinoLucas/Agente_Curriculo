@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const { mockUseAuth, mockUsePipeline, mockUseTheme } = vi.hoisted(() => ({
@@ -40,72 +40,98 @@ function renderShell(role: string) {
   );
 }
 
-describe("AppShell — navegação por role", () => {
-  beforeEach(() => vi.clearAllMocks());
+describe("AppShell — Reorganização Profissional da Navegação", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
 
-  describe("admin", () => {
-    it("vê Dashboard, Processo Seletivo, Ferramentas, Revisão, Admin", () => {
+  describe("Navegação do Admin", () => {
+    it("vê Dashboard, Recrutamento, Avaliações, Gestores, IA & Automação e Administração", () => {
       renderShell("admin");
-      expect(screen.getByText("Dashboard")).toBeInTheDocument();
-      expect(screen.getByText("Processo Seletivo")).toBeInTheDocument();
-      expect(screen.getByText("Ferramentas")).toBeInTheDocument();
-      expect(screen.getByText("Revisão")).toBeInTheDocument();
-      expect(screen.getByText("Admin")).toBeInTheDocument();
+      expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Recrutamento").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Avaliações").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Gestores").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("IA & Automação").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Administração").length).toBeGreaterThan(0);
+    });
+
+    it("não renderiza o Portal do Candidato dentro do grupo Administração", () => {
+      renderShell("admin");
+      
+      // Abre o dropdown "Administração" usando o primeiro elemento (desktop)
+      const adminGroupBtn = screen.getAllByText("Administração")[0];
+      fireEvent.click(adminGroupBtn);
+
+      // O item do Portal do Candidato para o admin deve ser "Preview Portal do Candidato"
+      expect(screen.getAllByText("Preview Portal do Candidato").length).toBeGreaterThan(0);
+      expect(screen.queryByText("Portal do Candidato")).not.toBeInTheDocument();
     });
   });
 
-  describe("manager", () => {
-    it("vê Dashboard, Processo Seletivo e Revisão", () => {
-      renderShell("manager");
-      expect(screen.getByText("Dashboard")).toBeInTheDocument();
-      expect(screen.getByText("Processo Seletivo")).toBeInTheDocument();
-      expect(screen.getByText("Revisão")).toBeInTheDocument();
-    });
-
-    it("não vê Ferramentas nem Admin", () => {
-      renderShell("manager");
-      expect(screen.queryByText("Ferramentas")).not.toBeInTheDocument();
-      expect(screen.queryByText("Admin")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("recruiter", () => {
-    it("vê Dashboard, Pipeline, Vagas, Candidatos, Agenda, Importação, Análises IA, Avaliações", () => {
+  describe("Navegação do Recrutador (recruiter)", () => {
+    it("vê Dashboard, Recrutamento, Avaliações e IA & Automação", () => {
       renderShell("recruiter");
-      expect(screen.getByText("Dashboard")).toBeInTheDocument();
-      expect(screen.getByText("Pipeline")).toBeInTheDocument();
-      expect(screen.getByText("Vagas")).toBeInTheDocument();
-      expect(screen.getByText("Candidatos")).toBeInTheDocument();
-      expect(screen.getByText("Agenda")).toBeInTheDocument();
-      expect(screen.getByText("Importação")).toBeInTheDocument();
-      expect(screen.getByText("Análises IA")).toBeInTheDocument();
-      expect(screen.getByText("Avaliações")).toBeInTheDocument();
+      expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Recrutamento").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Avaliações").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("IA & Automação").length).toBeGreaterThan(0);
     });
 
-    it("não vê Admin nem Revisão", () => {
+    it("não vê Gestores nem Administração", () => {
       renderShell("recruiter");
-      expect(screen.queryByText("Admin")).not.toBeInTheDocument();
-      expect(screen.queryByText("Revisão")).not.toBeInTheDocument();
+      expect(screen.queryByText("Gestores")).not.toBeInTheDocument();
+      expect(screen.queryByText("Administração")).not.toBeInTheDocument();
     });
   });
 
-  describe("viewer", () => {
-    it("vê Dashboard, Pipeline, Vagas, Candidatos, Agenda", () => {
-      renderShell("viewer");
-      expect(screen.getByText("Dashboard")).toBeInTheDocument();
-      expect(screen.getByText("Pipeline")).toBeInTheDocument();
-      expect(screen.getByText("Vagas")).toBeInTheDocument();
-      expect(screen.getByText("Candidatos")).toBeInTheDocument();
-      expect(screen.getByText("Agenda")).toBeInTheDocument();
+  describe("Navegação do Gestor (manager)", () => {
+    it("vê Dashboard, Recrutamento e Gestores", () => {
+      renderShell("manager");
+      expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Recrutamento").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Gestores").length).toBeGreaterThan(0);
     });
 
-    it("não vê Importação, Análises IA, Avaliações, Admin, Revisão", () => {
-      renderShell("viewer");
-      expect(screen.queryByText("Importação")).not.toBeInTheDocument();
-      expect(screen.queryByText("Análises IA")).not.toBeInTheDocument();
+    it("não vê Avaliações, IA & Automação nem Administração", () => {
+      renderShell("manager");
       expect(screen.queryByText("Avaliações")).not.toBeInTheDocument();
-      expect(screen.queryByText("Admin")).not.toBeInTheDocument();
-      expect(screen.queryByText("Revisão")).not.toBeInTheDocument();
+      expect(screen.queryByText("IA & Automação")).not.toBeInTheDocument();
+      expect(screen.queryByText("Administração")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Navegação do Visualizador (viewer)", () => {
+    it("vê Dashboard e Recrutamento", () => {
+      renderShell("viewer");
+      expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Recrutamento").length).toBeGreaterThan(0);
+    });
+
+    it("não vê Avaliações, Gestores, IA & Automação nem Administração", () => {
+      renderShell("viewer");
+      expect(screen.queryByText("Avaliações")).not.toBeInTheDocument();
+      expect(screen.queryByText("Gestores")).not.toBeInTheDocument();
+      expect(screen.queryByText("IA & Automação")).not.toBeInTheDocument();
+      expect(screen.queryByText("Administração")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Comportamento de Recolher/Expandir da Sidebar", () => {
+    it("está expandida por padrão e salva estado no localStorage ao recolher", () => {
+      renderShell("admin");
+      
+      // Encontra e clica no botão "Recolher Menu"
+      const toggleBtn = screen.getByText("Recolher Menu");
+      expect(toggleBtn).toBeInTheDocument();
+
+      fireEvent.click(toggleBtn);
+      expect(localStorage.getItem("ats_sidebar_expanded")).toBe("false");
+
+      // Clicando de novo, deve expandir e salvar "true"
+      fireEvent.click(screen.getByTitle("Expandir menu"));
+      expect(localStorage.getItem("ats_sidebar_expanded")).toBe("true");
     });
   });
 });
