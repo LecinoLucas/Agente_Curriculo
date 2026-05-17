@@ -65,3 +65,5 @@ backend/output.txt
 *.tmp
 *.swp
 frontend/src/pages/.!*.tsx
+
+backend/private_uploads/
