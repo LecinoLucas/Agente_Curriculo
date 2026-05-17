@@ -139,7 +139,7 @@ export type CandidateLatestAnalysisPipelineOverview = {
 };
 
 export type CandidateJobMatchOverview = {
-  analysis_id: string;
+  analysis_id: string | null;
   job_id: string;
   job_title: string;
   job_status: string;

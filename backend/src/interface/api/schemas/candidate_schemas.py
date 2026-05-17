@@ -89,7 +89,7 @@ class CandidateActiveJobDecisionResponse(BaseModel):
 
 
 class CandidateJobMatchSummaryResponse(BaseModel):
-    analysis_id: UUID
+    analysis_id: UUID | None = None
     job_id: UUID
     job_title: str
     job_status: str

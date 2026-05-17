@@ -40,7 +40,7 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import _cand
 
 logger = structlog.get_logger(__name__)
 
-SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024
 
 

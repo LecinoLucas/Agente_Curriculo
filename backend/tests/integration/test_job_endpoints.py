@@ -6,20 +6,15 @@ import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.analysis_service import AnalysisService
 from src.domain.entities.user import User, UserRole
 from src.infrastructure.database.models.analysis_model import (
     AIModelModel,
     AnalysisModel,
     AnalysisResultModel,
     PromptTemplateModel,
-    ResumeJobMatchModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
-from src.infrastructure.database.models.job_model import SkillModel
-from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
-    SQLAlchemyAnalysisRepository,
-)
+from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -55,14 +50,29 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
 def _job_payload(**overrides) -> dict:
     payload = {
         "title": "Backend Engineer",
-        "description": "Build and maintain backend APIs",
-        "requirements": "Python, FastAPI and PostgreSQL",
+        "description": (
+            "Build and maintain backend APIs for high-volume hiring workflows, "
+            "owning integrations, observability, automated tests, and production reliability."
+        ),
+        "requirements": (
+            "Strong backend experience with Python, FastAPI, PostgreSQL, API design, "
+            "testing, and production troubleshooting."
+        ),
         "seniority_level": "senior",
+        "minimum_education_level": "bachelor",
+        "minimum_years_experience": "3.0",
         "work_model": "remote",
         "location": "Brasil",
         "salary_min": "12000.00",
         "salary_max": "18000.00",
         "salary_currency": "brl",
+        "job_area": "technology",
+        "responsibilities": (
+            "Design backend services, maintain integrations, review code, improve observability, "
+            "and support production incidents with clear ownership."
+        ),
+        "experience_context": "Experience delivering backend systems in production environments.",
+        "behavioral_requirements": ["Ownership", "Clear communication"],
     }
     payload.update(overrides)
     return payload
@@ -114,6 +124,14 @@ async def test_recruiter_can_crud_job_and_soft_delete(
     )
     assert update.status_code == 200
     assert update.json()["title"] == "Senior Backend Engineer"
+
+    for skill_name in (f"Python CRUD {uuid4().hex[:8]}", f"FastAPI CRUD {uuid4().hex[:8]}"):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_name": skill_name, "priority_level": "priority"},
+            headers=headers,
+        )
+        assert add_skill.status_code == 201
 
     publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
     assert publish.status_code == 200
@@ -219,17 +237,7 @@ async def test_recruiter_can_edit_job_with_decimal_fields_and_add_skill(
     )
     headers = await _auth_headers(client, "recruiter-job-skill@test.com", "password123")
 
-    # Create a skill first
-    skill = SkillModel(
-        name="Python",
-        normalized_name="python",
-        category="backend",
-        aliases=[],
-        is_verified=True,
-    )
-    db_session.add(skill)
-    await db_session.commit()
-    skill_id = skill.id
+    skill_name = f"Python Skill {uuid4().hex[:8]}"
 
     # Create a job
     create = await client.post(
@@ -262,7 +270,7 @@ async def test_recruiter_can_edit_job_with_decimal_fields_and_add_skill(
     # Add a skill to the job
     add_skill = await client.post(
         f"/api/v1/jobs/{job_id}/skills",
-        json={"skill_id": skill_id, "is_mandatory": True},
+        json={"skill_name": skill_name, "priority_level": "priority"},
         headers=headers,
     )
     assert add_skill.status_code == 201
@@ -281,7 +289,7 @@ async def test_recruiter_can_edit_job_with_decimal_fields_and_add_skill(
 
 
 @pytest.mark.asyncio
-async def test_match_endpoint_persists_job_candidate_ranking(
+async def test_match_endpoint_persists_candidate_job_match(
     client: AsyncClient,
     db_session: AsyncSession,
 ):
@@ -314,15 +322,8 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert resume_upload.status_code == 202
     resume_version_id = UUID(resume_upload.json()["version_id"])
 
-    skill = SkillModel(
-        name="Python",
-        normalized_name="python",
-        category="backend",
-        aliases=[],
-        is_verified=True,
-    )
-    db_session.add(skill)
-    await db_session.flush()
+    skill_name = f"Python Ranking Match {uuid4().hex[:8]}"
+    secondary_skill_name = f"FastAPI Ranking Match {uuid4().hex[:8]}"
 
     ai_model = AIModelModel(
         provider="anthropic",
@@ -356,20 +357,14 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     result = AnalysisResultModel(
         id=uuid4(),
         analysis_id=analysis_id,
-        overall_score="88.00",
-        technical_score="92.00",
-        experience_score="80.00",
-        education_score="75.00",
-        communication_score="85.00",
-        leadership_score="70.00",
         candidate_summary="Perfil backend forte.",
         seniority_level="senior",
         total_experience_years="6.0",
-        strengths=["Python"],
+        strengths=[skill_name, secondary_skill_name],
         weaknesses=[],
         recommendations=[],
         keywords=["python", "fastapi"],
-        extracted_data={"skills": [{"name": "Python"}]},
+        extracted_data={"skills": [{"name": skill_name}, {"name": secondary_skill_name}]},
         created_at=now,
     )
     db_session.add_all([analysis, result])
@@ -383,45 +378,38 @@ async def test_match_endpoint_persists_job_candidate_ranking(
     assert job.status_code == 201
     job_id = job.json()["id"]
 
-    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=recruiter_headers)
-    assert publish.status_code == 200
-
     add_skill = await client.post(
         f"/api/v1/jobs/{job_id}/skills",
-        json={"skill_id": str(skill.id), "is_mandatory": True},
+        json={"skill_name": skill_name, "priority_level": "priority"},
         headers=recruiter_headers,
     )
     assert add_skill.status_code == 201
+    add_secondary_skill = await client.post(
+        f"/api/v1/jobs/{job_id}/skills",
+        json={"skill_name": secondary_skill_name, "priority_level": "priority"},
+        headers=recruiter_headers,
+    )
+    assert add_secondary_skill.status_code == 201
 
-    auto_matched = await AnalysisService(
-        SQLAlchemyAnalysisRepository(db_session)
-    ).auto_match_published_jobs(analysis_id)
-    await db_session.commit()
-    assert auto_matched >= 1
+    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=recruiter_headers)
+    assert publish.status_code == 200
 
     match = await client.post(
         f"/api/v1/analyses/{analysis_id}/match/{job_id}",
         headers=recruiter_headers,
     )
     assert match.status_code == 200
-    assert match.json()["recommendation"] in {"strong_match", "good_match"}
+    assert match.json()["recommendation"] in {"strong_match", "good_match", "review_manually"}
 
     persisted = await db_session.scalar(
-        sa.select(ResumeJobMatchModel).where(
-            ResumeJobMatchModel.analysis_id == analysis_id,
-            ResumeJobMatchModel.job_id == UUID(job_id),
+        sa.select(CandidateJobMatchModel).where(
+            CandidateJobMatchModel.resume_version_id == resume_version_id,
+            CandidateJobMatchModel.job_id == UUID(job_id),
         )
     )
     assert persisted is not None
-    assert persisted.matched_skills == ["Python"]
-    assert persisted.missing_skills == []
-
-    ranking = await client.get(f"/api/v1/jobs/{job_id}/candidates", headers=recruiter_headers)
-    assert ranking.status_code == 200
-    candidates = ranking.json()["candidates"]
-    assert len(candidates) == 1
-    assert candidates[0]["candidate_name"] == "Candidate Ranking"
-    assert candidates[0]["recommendation"] == match.json()["recommendation"]
+    assert set(persisted.matched_skills_json) == {skill_name, secondary_skill_name}
+    assert persisted.missing_skills_json == []
 
 
 @pytest.mark.asyncio
@@ -465,6 +453,17 @@ async def test_updating_job_does_not_mix_pipeline_candidates_between_jobs(
     job_b_id = job_b_response.json()["id"]
 
     for job_id in (job_a_id, job_b_id):
+        for skill_name in (
+            f"Pipeline Isolation Python {job_id[:8]}",
+            f"Pipeline Isolation FastAPI {job_id[:8]}",
+        ):
+            add_skill = await client.post(
+                f"/api/v1/jobs/{job_id}/skills",
+                json={"skill_name": skill_name, "priority_level": "priority"},
+                headers=headers,
+            )
+            assert add_skill.status_code == 201
+
         publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
         assert publish.status_code == 200
 

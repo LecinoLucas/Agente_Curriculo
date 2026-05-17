@@ -17,7 +17,7 @@ from src.infrastructure.security.google_identity_verifier import (
     GoogleIdentityVerifier,
 )
 
-SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 
 
 async def _create_candidate(

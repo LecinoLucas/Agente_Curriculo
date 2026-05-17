@@ -187,7 +187,7 @@ async def system_user_for_public_app(db_session: AsyncSession):
     from src.infrastructure.database.models.user_model import UserModel
     from datetime import datetime, timezone
 
-    SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+    SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 
     # Check if user exists
     user = await db_session.scalar(

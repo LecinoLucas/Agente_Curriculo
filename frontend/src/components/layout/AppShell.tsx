@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   Menu,
   Moon,
@@ -217,24 +215,20 @@ export function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
 
-  // Persistence of sidebar desktop state
-  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem("ats_sidebar_expanded");
-      return saved === null ? true : saved === "true";
-    } catch {
-      return true;
-    }
-  });
+  // Hover-based sidebar: expands on mouse-enter, collapses on mouse-leave
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(false);
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleToggleSidebar = () => {
-    setSidebarExpanded((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("ats_sidebar_expanded", String(next));
-      } catch {}
-      return next;
-    });
+  const handleSidebarMouseEnter = () => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    setSidebarExpanded(true);
+  };
+
+  const handleSidebarMouseLeave = () => {
+    hoverTimeout.current = setTimeout(() => {
+      setSidebarExpanded(false);
+      setOpenDropdownLabel(null);
+    }, 200);
   };
 
   useEffect(() => {
@@ -283,6 +277,8 @@ export function AppShell() {
       
       {/* ── Left Vertical Sidebar (Desktop Only) ── */}
       <aside
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
         className={cn(
           "hidden lg:flex fixed inset-y-0 left-0 z-50 flex-col border-r border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] text-[hsl(var(--nav-text))] transition-all duration-300 ease-in-out shadow-[4px_0_24px_-10px_rgba(0,0,0,0.3)]",
           sidebarExpanded ? "w-64" : "w-16"
@@ -440,16 +436,6 @@ export function AppShell() {
         {/* Sidebar Footer Controls & Profile */}
         <div className="mt-auto border-t border-[hsl(var(--nav-border))]/90 p-2.5 space-y-4 bg-black/10 transition-all duration-300">
           <div className="flex flex-col gap-2">
-            {/* Manual Toggle Sidebar Button */}
-            <button
-              type="button"
-              onClick={handleToggleSidebar}
-              className="flex w-full items-center rounded-xl py-2 pl-3.5 text-sm font-semibold transition-all duration-300 border border-transparent text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
-              title={sidebarExpanded ? "Recolher menu" : "Expandir menu"}
-            >
-              {sidebarExpanded ? <ChevronLeft className="h-5 w-5 shrink-0" /> : <ChevronRight className="h-5 w-5 shrink-0" />}
-              {sidebarExpanded && <span className="ml-3 truncate">Recolher Menu</span>}
-            </button>
 
             <div className="flex items-center justify-between">
               {sidebarExpanded && (

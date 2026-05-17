@@ -33,7 +33,7 @@ from src.interface.workers.resume_extraction_tasks import _process_resume_extrac
 from src.domain.entities.user import UserRole
 from tests.integration.helpers import _auth_headers, _create_active_user
 
-SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 
 
 @pytest.fixture

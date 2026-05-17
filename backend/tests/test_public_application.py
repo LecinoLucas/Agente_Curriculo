@@ -20,7 +20,7 @@ from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.security.password_service import hash_password
 
-SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 
 
 async def _get_candidate_application_source(

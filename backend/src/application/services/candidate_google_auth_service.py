@@ -18,7 +18,7 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidateAuthGoogleResponse,
 )
 
-SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 
 
 class CandidateGoogleAuthConflictError(Exception):

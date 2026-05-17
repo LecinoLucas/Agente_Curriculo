@@ -466,6 +466,7 @@ async def test_demo_full_flow_20_1(
                 "cpf": "390.533.447-05",
                 "city": "São Paulo",
                 "state": "SP",
+                "salary_expectation": "8000",
                 "desired_contract_type": "CLT",
                 "works_at_marajo_group": "false",
                 "job_id": job_id,

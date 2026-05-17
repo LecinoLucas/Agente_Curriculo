@@ -69,23 +69,6 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
     async def find_active_by_id(self, candidate_id: UUID) -> CandidateModel | None:
         return await self._session.scalar(
             sa.select(CandidateModel)
-            .options(
-                sa.orm.load_only(
-                    CandidateModel.id,
-                    CandidateModel.full_name,
-                    CandidateModel.email,
-                    CandidateModel.phone,
-                    CandidateModel.cpf,
-                    CandidateModel.location_city,
-                    CandidateModel.location_state,
-                    CandidateModel.salary_expectation,
-                    CandidateModel.google_sub,
-                    CandidateModel.google_picture_url,
-                    CandidateModel.application_source,
-                    CandidateModel.deleted_at,
-                    CandidateModel.archived_at,
-                )
-            )
             .where(
                 CandidateModel.id == candidate_id,
                 CandidateModel.deleted_at.is_(None),

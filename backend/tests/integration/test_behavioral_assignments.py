@@ -28,7 +28,7 @@ from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository
 
 from .helpers import _auth_headers, _create_active_user
 
-SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
+SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 
 
 @pytest.fixture

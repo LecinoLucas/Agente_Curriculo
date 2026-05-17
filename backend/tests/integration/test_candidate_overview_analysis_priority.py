@@ -229,3 +229,40 @@ async def test_candidate_overview_does_not_fallback_to_global_analysis_without_a
     assert target is not None
     assert target.get("active_job_id") is None
     assert target.get("active_job_job_fit_score") is None
+
+
+@pytest.mark.asyncio
+async def test_candidate_overview_allows_top_match_without_current_analysis_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-overview-null-analysis-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    active_job_id, candidate_id, _ = await _seed_scoring_case(
+        db_session,
+        recruiter.id,
+        job_title="Pipeline Without Current Analysis",
+    )
+
+    pipeline_row = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == active_job_id,
+        )
+    )
+    assert pipeline_row is not None
+    pipeline_row.current_analysis_id = None
+    await db_session.commit()
+
+    response = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert response.status_code == 200, response.text
+
+    payload = response.json()
+    assert payload["top_matches"]
+    assert payload["top_matches"][0]["job_id"] == str(active_job_id)
+    assert payload["top_matches"][0]["analysis_id"] is None
