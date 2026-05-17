@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -28,19 +28,29 @@ describe("AdminPage", () => {
     });
   });
 
-  it("exibe cards admin e o diagnóstico candidato/vaga", async () => {
+  it("exibe cards admin e o diagnóstico candidato/vaga ao alternar as abas", async () => {
     render(
       <MemoryRouter>
         <AdminPage />
       </MemoryRouter>,
     );
 
+    // Aba Geral (inicialmente ativa)
     expect((await screen.findAllByText("Auditoria"))[0]).toBeInTheDocument();
     expect(screen.getByText("Ver auditoria")).toBeInTheDocument();
     expect(screen.getByText("Health do Sistema")).toBeInTheDocument();
     expect(screen.getByText("Ver health")).toBeInTheDocument();
     expect(screen.getByText("BI de Recrutamento")).toBeInTheDocument();
     expect(screen.getByText("Ver BI")).toBeInTheDocument();
+
+    // Diagnóstico não deve estar no DOM ainda
+    expect(screen.queryByText("Diagnóstico Candidato/Vaga")).not.toBeInTheDocument();
+
+    // Clicar na aba de Diagnóstico Operacional
+    const diagTabButton = screen.getByRole("button", { name: "Diagnóstico Operacional" });
+    fireEvent.click(diagTabButton);
+
+    // Diagnóstico agora deve estar visível
     expect(screen.getByText("Diagnóstico Candidato/Vaga")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diagnosticar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reparar" })).toBeInTheDocument();
