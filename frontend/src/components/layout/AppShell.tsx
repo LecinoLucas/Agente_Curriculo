@@ -499,7 +499,7 @@ export function AppShell() {
         {/* Sidebar Footer Controls & Profile */}
         <div className="mt-auto border-t border-[hsl(var(--nav-border))]/90 p-2.5 group-hover:p-4 space-y-4 bg-black/10 transition-all duration-300">
           <div className="flex items-center justify-between">
-            <div className="w-0 group-hover:w-auto overflow-hidden opacity-0 group-hover:opacity-100 transition-all duration-300">
+            <div className="w-0 group-hover:w-auto overflow-hidden group-hover:overflow-visible opacity-0 group-hover:opacity-100 transition-all duration-300">
               <VisualThemeSwitcher />
             </div>
             <button

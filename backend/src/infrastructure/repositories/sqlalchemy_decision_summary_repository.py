@@ -208,18 +208,13 @@ class SQLAlchemyDecisionSummaryRepository:
         )
 
     async def has_manager_feedback(self, *, candidate_id: UUID, job_id: UUID) -> bool:
-        comment_count = await self._session.scalar(
-            sa.select(sa.func.count()).select_from(CollaborationCommentModel).where(
-                CollaborationCommentModel.candidate_id == candidate_id,
-                CollaborationCommentModel.job_id == job_id,
-                CollaborationCommentModel.author_role == "manager",
-            )
+        has_comment = sa.exists().where(
+            CollaborationCommentModel.candidate_id == candidate_id,
+            CollaborationCommentModel.job_id == job_id,
+            CollaborationCommentModel.author_role == "manager",
         )
-        if (comment_count or 0) > 0:
-            return True
-        scorecard_count = await self._session.scalar(
-            sa.select(sa.func.count())
-            .select_from(InterviewScorecardModel)
+        has_scorecard = sa.exists(
+            sa.select(InterviewScorecardModel.id)
             .join(UserModel, UserModel.id == InterviewScorecardModel.evaluator_id)
             .where(
                 InterviewScorecardModel.candidate_id == candidate_id,
@@ -228,4 +223,6 @@ class SQLAlchemyDecisionSummaryRepository:
                 UserModel.role == "manager",
             )
         )
-        return (scorecard_count or 0) > 0
+        return bool(
+            await self._session.scalar(sa.select(sa.or_(has_comment, has_scorecard)))
+        )
