@@ -73,8 +73,8 @@ export const KanbanCard = memo(function KanbanCard({
     <div
       onClick={onCardClick ? () => onCardClick(candidate.candidate_id) : undefined}
       className={[
-        "group relative select-none rounded-xl border bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)]",
-        isTopMatch ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/[0.02]" : "border-slate-100",
+        "group relative select-none rounded-xl border bg-white dark:bg-[hsl(var(--card))] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)]",
+        isTopMatch ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/[0.02]" : "border-slate-100 dark:border-slate-800/80",
         isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
         "kanban-card-enter",
       ]
@@ -96,9 +96,9 @@ export const KanbanCard = memo(function KanbanCard({
             {rank && rank <= 3 && (
               <span
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-black border ${
-                  rank === 1 ? "border-amber-200 bg-amber-50 text-amber-700" :
-                  rank === 2 ? "border-slate-200 bg-slate-50 text-slate-600" :
-                  "border-amber-300/40 bg-orange-50 text-orange-700"
+                  rank === 1 ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-400" :
+                  rank === 2 ? "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400" :
+                  "border-amber-300/40 bg-orange-50 text-orange-700 dark:border-amber-900/40 dark:bg-orange-950/40 dark:text-orange-400"
                 }`}
               >
                 {rank}
@@ -109,7 +109,7 @@ export const KanbanCard = memo(function KanbanCard({
                 Mais aderente
               </span>
             )}
-            <span className="truncate text-sm font-bold tracking-tight text-slate-800 transition-colors group-hover:text-[hsl(var(--primary))]">
+            <span className="truncate text-sm font-bold tracking-tight text-slate-800 dark:text-slate-100 transition-colors group-hover:text-[hsl(var(--primary))]">
               {name}
             </span>
           </div>
@@ -124,9 +124,9 @@ export const KanbanCard = memo(function KanbanCard({
 
       {/* Origin and Timing line */}
       {(source || dateLabel) && (
-        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-50 pt-2 text-[9px] font-semibold text-slate-400">
+        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2 text-[9px] font-semibold text-slate-400">
           {source ? (
-            <span className="inline-flex items-center rounded bg-slate-100/70 px-1.5 py-0.5 text-slate-500 font-medium">
+            <span className="inline-flex items-center rounded bg-slate-100/70 dark:bg-slate-800/60 px-1.5 py-0.5 text-slate-500 dark:text-slate-400 font-medium">
               {source === "public_application" ? "Candidatura Pública" : source}
             </span>
           ) : (
@@ -142,7 +142,7 @@ export const KanbanCard = memo(function KanbanCard({
           {skills.map((skill) => (
             <span
               key={skill}
-              className="rounded bg-slate-50 border border-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 truncate max-w-[100px] inline-block"
+              className="rounded bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[100px] inline-block"
               title={skill}
             >
               {skill}
@@ -152,7 +152,7 @@ export const KanbanCard = memo(function KanbanCard({
       )}
 
       {/* Footer block: Match Score and Indicators */}
-      <div className="mt-3.5 flex items-center justify-between gap-2.5 border-t border-slate-50 pt-3 min-w-0">
+      <div className="mt-3.5 flex items-center justify-between gap-2.5 border-t border-slate-100 dark:border-slate-800/80 pt-3 min-w-0">
         {isSaving ? (
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 animate-pulse truncate">
             Sincronizando…
@@ -164,7 +164,7 @@ export const KanbanCard = memo(function KanbanCard({
                 <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
                   Match
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 min-w-[24px]">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 min-w-[24px]">
                   <div
                     className="h-full bg-[hsl(var(--primary))] transition-all duration-500"
                     style={{ width: `${Math.round(jobFitScore)}%` }}
@@ -179,7 +179,7 @@ export const KanbanCard = memo(function KanbanCard({
                 <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
                   Match
                 </span>
-                <span className="rounded bg-slate-50 border border-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 shrink-0">
+                <span className="rounded bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 shrink-0">
                   Pendente
                 </span>
               </div>
@@ -194,7 +194,7 @@ export const KanbanCard = memo(function KanbanCard({
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" title="Avaliação concluída" />
               )}
               {candidate.email && (
-                <Mail className="h-3.5 w-3.5 text-slate-300 group-hover:text-slate-400" title="Comunicação ativa" />
+                <Mail className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 dark:group-hover:text-slate-400" title="Comunicação active" />
               )}
               {hasWarning && (
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-pulse" title="Alerta do sistema" />

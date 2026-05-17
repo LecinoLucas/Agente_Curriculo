@@ -671,6 +671,10 @@
     --text:                142 10% 92%;
     --text-muted:          142 10% 75%;
 
+    --foreground:          142 10% 92%;
+    --card-foreground:     142 10% 92%;
+    --popover-foreground:  142 10% 92%;
+
     --primary:             142 35% 60%;
     --primary-foreground:  142 20% 5%;
     --ring:                142 35% 60%;
@@ -722,6 +726,10 @@
 
     --text:                260 10% 92%;
     --text-muted:          260 10% 75%;
+
+    --foreground:          260 10% 92%;
+    --card-foreground:     260 10% 92%;
+    --popover-foreground:  260 10% 92%;
 
     --primary:             260 35% 65%;
     --primary-foreground:  260 20% 5%;
@@ -775,6 +783,10 @@
 
     --text:                0 0% 94%;
     --text-muted:          0 0% 75%;
+
+    --foreground:          0 0% 94%;
+    --card-foreground:     0 0% 94%;
+    --popover-foreground:  0 0% 94%;
 
     --primary:             0 75% 60%;
     --primary-foreground:  0 0% 100%;

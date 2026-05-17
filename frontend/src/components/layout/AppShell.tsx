@@ -257,15 +257,7 @@ export function AppShell() {
     });
   }, [user, version]);
 
-  // Automatically expand/highlight active route group
-  useEffect(() => {
-    const activeGroup = visibleGroups.find((group) =>
-      group.isDropdown && group.items.some((item) => isItemActive(item.to))
-    );
-    if (activeGroup) {
-      setOpenDropdownLabel(activeGroup.label);
-    }
-  }, [location.pathname, visibleGroups]);
+
 
   const isItemActive = (itemTo: string) => {
     if (itemTo === "/admin") {
@@ -337,14 +329,22 @@ export function AppShell() {
                         closeCandidate();
                       }
                     }}
-                    className={
-                      cn(
-                        "flex items-center rounded-xl py-2 pl-3.5 text-sm font-semibold transition-all duration-300 border border-transparent",
-                        active
-                          ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))] shadow-sm font-bold animate-in fade-in duration-100"
-                          : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
-                      )
-                    }
+                    className={cn(
+                      "flex items-center transition-all duration-300 border border-transparent",
+                      sidebarExpanded
+                        ? cn(
+                            "rounded-xl py-2 text-sm font-semibold",
+                            active
+                              ? "bg-gradient-to-r from-[hsl(var(--primary)/0.12)] to-[hsl(var(--primary)/0.01)] text-[hsl(var(--primary))] dark:text-white border-l-4 border-l-[hsl(var(--primary))] pl-2.5 font-bold shadow-sm"
+                              : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))] hover:translate-x-1 pl-3.5"
+                          )
+                        : cn(
+                            "justify-center rounded-xl w-10 h-10 mx-auto",
+                            active
+                              ? "bg-[hsl(var(--primary))] text-white shadow-md shadow-[hsl(var(--primary)/0.3)] font-bold scale-105"
+                              : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))] hover:scale-105"
+                          )
+                    )}
                     title={!sidebarExpanded ? item.label : undefined}
                   >
                     {getNavIcon(item.to)}
@@ -365,10 +365,20 @@ export function AppShell() {
                   <button
                     type="button"
                     className={cn(
-                      "flex w-full items-center justify-between rounded-xl py-2 pl-3.5 text-sm font-semibold transition-all duration-300 border border-transparent",
-                      isGroupActive
-                        ? "text-[hsl(var(--nav-text))] font-bold bg-white/5"
-                        : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
+                      "flex w-full items-center transition-all duration-300 border border-transparent",
+                      sidebarExpanded
+                        ? cn(
+                            "justify-between rounded-xl py-2 text-sm font-semibold",
+                            isGroupActive
+                              ? "text-[hsl(var(--nav-text))] font-bold bg-white/5 pl-3.5"
+                              : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))] hover:translate-x-1 pl-3.5"
+                          )
+                        : cn(
+                            "justify-center rounded-xl w-10 h-10 mx-auto",
+                            isGroupActive
+                              ? "bg-white/5 text-[hsl(var(--nav-text))] font-bold"
+                              : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))] hover:scale-105"
+                          )
                     )}
                     onClick={() => handleGroupClick(group.label)}
                     aria-expanded={isOpen}
@@ -405,14 +415,12 @@ export function AppShell() {
                                 closeCandidate();
                               }
                             }}
-                            className={
-                              cn(
-                                "flex items-center rounded-lg py-1.5 px-3 text-xs font-semibold transition-all duration-300 border border-transparent",
-                                active
-                                  ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] border-[hsl(var(--nav-border))]/30 shadow-sm font-bold"
-                                  : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]"
-                              )
-                            }
+                            className={cn(
+                              "flex items-center rounded-lg py-1.5 px-3 text-xs font-semibold transition-all duration-300 border border-transparent",
+                              active
+                                ? "bg-gradient-to-r from-[hsl(var(--primary)/0.08)] to-transparent text-[hsl(var(--primary))] dark:text-white border-l-2 border-l-[hsl(var(--primary))] pl-2.5 font-bold shadow-sm"
+                                : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))] hover:translate-x-1"
+                            )}
                             title={item.label}
                           >
                             <span className="truncate">

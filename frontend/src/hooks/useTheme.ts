@@ -17,6 +17,11 @@ export function useTheme() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
     window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
@@ -32,6 +37,11 @@ export function useTheme() {
   function setTheme(next: AppTheme) {
     window.localStorage.setItem(THEME_KEY, next);
     document.documentElement.dataset.theme = next;
+    if (next === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
     setThemeState(next);
     window.dispatchEvent(new Event(THEME_EVENT));
   }

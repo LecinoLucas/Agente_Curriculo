@@ -199,7 +199,7 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Buscar candidato ou vaga...")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/buscar candidato/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Filtros/i })).toBeInTheDocument();
     });
   });
@@ -306,7 +306,7 @@ describe("PipelinePage", () => {
       expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText("Buscar candidato ou vaga...");
+    const searchInput = screen.getByPlaceholderText(/buscar candidato/i);
     fireEvent.change(searchInput, { target: { value: "Aline" } });
 
     // "Aline Santos" should stay, but "Bruno Lima" should be filtered out

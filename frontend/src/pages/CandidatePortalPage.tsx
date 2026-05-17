@@ -255,9 +255,9 @@ function CandidateVerticalTimeline({ timeline }: { timeline: CandidatePortalTime
                   className={[
                     "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300",
                     isCurrent ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.05)] text-[hsl(var(--primary))] shadow-[0_0_12px_hsl(var(--primary)/0.2)]" : "",
-                    isCompleted ? "border-emerald-500 bg-emerald-50 text-emerald-600" : "",
-                    isClosed ? "border-slate-400 bg-slate-50 text-slate-600" : "",
-                    !isCurrent && !isCompleted && !isClosed ? "border-[hsl(var(--border)/0.6)] bg-white text-[hsl(var(--text-muted)/0.5)]" : "",
+                    isCompleted ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400" : "",
+                    isClosed ? "border-slate-400 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400" : "",
+                    !isCurrent && !isCompleted && !isClosed ? "border-[hsl(var(--border)/0.6)] bg-white dark:bg-slate-900 text-[hsl(var(--text-muted)/0.5)]" : "",
                   ].join(" ")}
                 >
                   {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : stepIcon(step)}
@@ -697,7 +697,7 @@ export function CandidatePortalPage() {
                       { label: "Localização", val: overview.candidate.city ? `${overview.candidate.city}/${overview.candidate.state}` : "Pendente", icon: <MapPin className="h-4 w-4" /> },
                       { label: "Currículo", val: overview.latest_resume?.file_name ? "Enviado" : "Não ident.", icon: <FileText className="h-4 w-4" /> },
                     ].map((item, i) => (
-                      <div key={i} className="rounded-2xl border border-[hsl(var(--border)/0.3)] bg-white/40 p-4 backdrop-blur-sm">
+                      <div key={i} className="rounded-2xl border border-[hsl(var(--border)/0.3)] bg-white/40 dark:bg-slate-900/40 p-4 backdrop-blur-sm">
                         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
                           {item.icon}
                           {item.label}
@@ -917,7 +917,7 @@ export function CandidatePortalPage() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                   <div className="flex items-center gap-4 rounded-2xl border border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface-muted)/0.1)] p-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm text-[hsl(var(--primary))]">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-slate-900 shadow-sm text-[hsl(var(--primary))]">
                       <FileText className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
