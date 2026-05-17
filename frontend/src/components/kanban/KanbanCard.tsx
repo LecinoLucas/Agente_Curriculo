@@ -1,6 +1,7 @@
 import { memo, type CSSProperties } from "react";
 import type { JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
+import { Calendar, Mail, FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface KanbanCardProps {
   candidate: JobCandidate;
@@ -11,6 +12,30 @@ interface KanbanCardProps {
   rank?: number;
 }
 
+// Helper to get initials from a name
+function getInitials(name: string): string {
+  if (!name) return "";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0][0].toUpperCase();
+}
+
+// Generate deterministically consistent HSL colors based on the candidate's name
+function getAvatarStyles(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return {
+    backgroundColor: `hsl(${h}, 65%, 93%)`,
+    color: `hsl(${h}, 75%, 34%)`,
+    borderColor: `hsl(${h}, 65%, 85%)`,
+  };
+}
+
 export const KanbanCard = memo(function KanbanCard({
   candidate,
   isSaving,
@@ -19,7 +44,11 @@ export const KanbanCard = memo(function KanbanCard({
   isTopMatch = false,
   rank,
 }: KanbanCardProps) {
-  const skills = (candidate.top_skills ?? []).slice(0, 3);
+  const name = candidate.candidate_name || "Sem Nome";
+  const initials = getInitials(name);
+  const avatarStyle = getAvatarStyles(name);
+
+  const skills = (candidate.top_skills ?? []).slice(0, 2); // Show max 2 top skills for space
   const jobFitScore = candidate.job_fit_score;
   const seniority = candidate.seniority_level ? formatSeniority(candidate.seniority_level) : null;
   const experience =
@@ -28,91 +57,148 @@ export const KanbanCard = memo(function KanbanCard({
       : null;
   const meta = [seniority, experience].filter(Boolean);
 
+  // Cast candidate to any to check for optionally populated values (source/origem/updated_at) without breaking types
+  const rawCandidate = candidate as any;
+  const source = rawCandidate.application_source_label || rawCandidate.application_source || rawCandidate.source || null;
+  const dateLabel = rawCandidate.updated_at
+    ? new Date(rawCandidate.updated_at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })
+    : null;
+
+  // Derive indicators based on actual candidate data
+  const hasScheduledInterview = candidate.stage === "hr_interview" || candidate.stage === "technical_interview";
+  const assessmentCompleted = candidate.ai_status === "completed";
+  const hasWarning = rawCandidate.candidate_status === "blocked" || rawCandidate.candidate_status === "error";
+
   return (
     <div
       onClick={onCardClick ? () => onCardClick(candidate.candidate_id) : undefined}
       className={[
-        "relative overflow-hidden select-none rounded-2xl border bg-[hsl(var(--surface))] p-4 shadow-sm transition-all duration-200",
-        isTopMatch ? "border-[hsl(var(--primary))]/26 bg-[hsl(var(--primary))]/5" : "border-[hsl(var(--border))]",
+        "group relative select-none rounded-xl border bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)]",
+        isTopMatch ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/[0.02]" : "border-slate-100",
         isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
-        onCardClick ? "hover:border-[hsl(var(--border-strong))] hover:shadow-[0_12px_24px_-22px_hsl(var(--text)/0.22)]" : "",
         "kanban-card-enter",
       ]
         .filter(Boolean)
         .join(" ")}
       style={{ "--enter-delay": `${enterDelay}ms` } as CSSProperties}
+      data-testid={`kanban-card-${candidate.candidate_id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col min-w-0">
-          <div className="flex items-center gap-2">
+      {/* Header element: Avatar + Name & Rank */}
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-transform group-hover:scale-105"
+          style={avatarStyle}
+        >
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
             {rank && rank <= 3 && (
-              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[10px] font-bold ${
-                rank === 1 ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]" :
-                rank === 2 ? "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))]" :
-                rank === 3 ? "border-[hsl(var(--border-strong))]/40 bg-[hsl(var(--accent-soft))] text-[hsl(var(--text))]" : ""
-              }`}>
+              <span
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-black border ${
+                  rank === 1 ? "border-amber-200 bg-amber-50 text-amber-700" :
+                  rank === 2 ? "border-slate-200 bg-slate-50 text-slate-600" :
+                  "border-amber-300/40 bg-orange-50 text-orange-700"
+                }`}
+              >
                 {rank}
               </span>
             )}
             {isTopMatch && !rank && (
-              <span className="rounded-lg border border-[hsl(var(--primary))]/18 bg-[hsl(var(--primary))]/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-[hsl(var(--primary))]">
+              <span className="rounded bg-[hsl(var(--primary))]/10 border border-[hsl(var(--primary))]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[hsl(var(--primary))]">
                 Mais aderente
               </span>
             )}
-            <span className="truncate text-sm font-bold tracking-tight text-[hsl(var(--text))]">
-              {candidate.candidate_name}
+            <span className="truncate text-sm font-bold tracking-tight text-slate-800 transition-colors group-hover:text-[hsl(var(--primary))]">
+              {name}
             </span>
           </div>
-          {meta.length > 0 ? (
-            <p className="mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">
+          
+          {meta.length > 0 && (
+            <p className="mt-1 text-[10px] font-medium text-slate-400">
               {meta.join(" • ")}
             </p>
-          ) : null}
+          )}
         </div>
       </div>
 
-      {/* Top skills */}
-      {skills.length > 0 ? (
-        <div className="mt-4 flex flex-wrap gap-1.5">
+      {/* Origin and Timing line */}
+      {(source || dateLabel) && (
+        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-50 pt-2 text-[9px] font-semibold text-slate-400">
+          {source ? (
+            <span className="inline-flex items-center rounded bg-slate-100/70 px-1.5 py-0.5 text-slate-500 font-medium">
+              {source === "public_application" ? "Candidatura Pública" : source}
+            </span>
+          ) : (
+            <span />
+          )}
+          {dateLabel && <span>{dateLabel}</span>}
+        </div>
+      )}
+
+      {/* Top skills tags */}
+      {skills.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1">
           {skills.map((skill) => (
             <span
               key={skill}
-              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[10px] font-semibold text-[hsl(var(--text-muted))]"
+              className="rounded bg-slate-50 border border-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500"
             >
               {skill}
             </span>
           ))}
         </div>
-      ) : null}
+      )}
 
-      {/* Footer: official job fit score */}
-      <div className="mt-4 flex items-center justify-between gap-2 border-t border-[hsl(var(--border))]/40 pt-4">
+      {/* Footer block: Match Score and Indicators */}
+      <div className="mt-3.5 flex items-center justify-between gap-3 border-t border-slate-50 pt-3">
         {isSaving ? (
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))] animate-pulse">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 animate-pulse">
             Sincronizando…
           </span>
         ) : (
           <>
-            <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-[hsl(var(--text-muted))]">
-              Match IA
-            </span>
             {jobFitScore !== null && jobFitScore !== undefined ? (
-              <div className="flex items-center gap-1.5">
-                <div className="h-1.5 w-12 overflow-hidden rounded-lg bg-[hsl(var(--surface-muted))]">
-                   <div 
-                     className="h-full bg-[hsl(var(--primary))] transition-all duration-500" 
-                     style={{ width: `${Math.round(jobFitScore)}%` }}
-                   />
+              <div className="flex flex-1 items-center gap-2">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                  Match IA
+                </span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full bg-[hsl(var(--primary))] transition-all duration-500"
+                    style={{ width: `${Math.round(jobFitScore)}%` }}
+                  />
                 </div>
-                <span className="text-xs font-bold tabular-nums text-[hsl(var(--primary))]">
+                <span className="text-xs font-black tabular-nums text-[hsl(var(--primary))]">
                   {Math.round(jobFitScore)}%
                 </span>
               </div>
             ) : (
-              <span className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[9px] font-semibold text-[hsl(var(--text-muted))]">
-                Pendente
-              </span>
+              <div className="flex flex-1 items-center justify-between">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                  Match IA
+                </span>
+                <span className="rounded bg-slate-50 border border-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">
+                  Pendente
+                </span>
+              </div>
             )}
+
+            {/* Micro indicators icons */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {hasScheduledInterview && (
+                <Calendar className="h-3.5 w-3.5 text-indigo-500" title="Entrevista agendada" />
+              )}
+              {assessmentCompleted && (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" title="Avaliação concluída" />
+              )}
+              {candidate.email && (
+                <Mail className="h-3.5 w-3.5 text-slate-300 group-hover:text-slate-400" title="Comunicação ativa" />
+              )}
+              {hasWarning && (
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-pulse" title="Alerta do sistema" />
+              )}
+            </div>
           </>
         )}
       </div>
