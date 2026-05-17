@@ -37,7 +37,7 @@ Criado script `scripts/cleanup_stale_document_ai_analyses.py` que:
 ### Option 1: Cleanup para candidato específico (teste8@gmail.com)
 
 ```bash
-cd /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend
+cd backend
 
 # Executar cleanup para o candidato teste8@gmail.com
 python scripts/cleanup_stale_document_ai_analyses.py \
