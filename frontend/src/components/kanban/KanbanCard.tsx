@@ -142,7 +142,8 @@ export const KanbanCard = memo(function KanbanCard({
           {skills.map((skill) => (
             <span
               key={skill}
-              className="rounded bg-slate-50 border border-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500"
+              className="rounded bg-slate-50 border border-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 truncate max-w-[100px] inline-block"
+              title={skill}
             >
               {skill}
             </span>
@@ -151,34 +152,34 @@ export const KanbanCard = memo(function KanbanCard({
       )}
 
       {/* Footer block: Match Score and Indicators */}
-      <div className="mt-3.5 flex items-center justify-between gap-3 border-t border-slate-50 pt-3">
+      <div className="mt-3.5 flex items-center justify-between gap-2.5 border-t border-slate-50 pt-3 min-w-0">
         {isSaving ? (
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 animate-pulse">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 animate-pulse truncate">
             Sincronizando…
           </span>
         ) : (
           <>
             {jobFitScore !== null && jobFitScore !== undefined ? (
-              <div className="flex flex-1 items-center gap-2">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                  Match IA
+              <div className="flex flex-1 items-center gap-1.5 min-w-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
+                  Match
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 min-w-[24px]">
                   <div
                     className="h-full bg-[hsl(var(--primary))] transition-all duration-500"
                     style={{ width: `${Math.round(jobFitScore)}%` }}
                   />
                 </div>
-                <span className="text-xs font-black tabular-nums text-[hsl(var(--primary))]">
+                <span className="text-xs font-black tabular-nums text-[hsl(var(--primary))] shrink-0">
                   {Math.round(jobFitScore)}%
                 </span>
               </div>
             ) : (
-              <div className="flex flex-1 items-center justify-between">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                  Match IA
+              <div className="flex flex-1 items-center justify-between gap-1.5 min-w-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
+                  Match
                 </span>
-                <span className="rounded bg-slate-50 border border-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">
+                <span className="rounded bg-slate-50 border border-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 shrink-0">
                   Pendente
                 </span>
               </div>

@@ -77,7 +77,7 @@ export const KanbanColumn = memo(function KanbanColumn({
   return (
     <div
       className={[
-        "flex w-[21rem] shrink-0 flex-col rounded-2xl border p-4 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.03)]",
+        "flex w-[21rem] min-w-[320px] shrink-0 flex-col rounded-2xl border p-4 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.03)]",
         "kanban-column-enter",
         theme.border,
         theme.bg,
@@ -89,27 +89,27 @@ export const KanbanColumn = memo(function KanbanColumn({
       data-testid={`kanban-column-${column.stage}`}
     >
       {/* Column Header */}
-      <div className="mb-4 flex flex-col gap-1 border-b border-dashed border-slate-200/60 pb-3 px-1">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+      <div className="mb-4 flex flex-col gap-1 border-b border-dashed border-slate-200/60 pb-3 px-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-700 truncate min-w-0" title={column.label}>
             {column.label}
           </span>
           <span
             className={[
-              "flex h-5 min-w-[1.25rem] items-center justify-center rounded px-1.5 text-[10px] font-black tabular-nums shadow-sm",
+              "flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded px-1.5 text-[10px] font-black tabular-nums shadow-sm",
               theme.accent,
             ].join(" ")}
           >
             {column.candidates.length}
           </span>
         </div>
-        <p className="text-[10px] font-medium text-slate-400">
+        <p className="text-[10px] font-medium text-slate-400 truncate" title={theme.desc}>
           {theme.desc}
         </p>
       </div>
 
       {/* Candidate Cards list */}
-      <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto pr-0.5 ui-scrollbar">
+      <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto pr-0.5 ui-scrollbar min-h-0">
         {column.candidates.map((c, cardIndex) => {
           const isTopMatch =
             showTopMatchHighlight &&
@@ -131,10 +131,11 @@ export const KanbanColumn = memo(function KanbanColumn({
 
         {column.candidates.length === 0 ? (
           <div
-            className="flex h-24 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/50 text-xs font-semibold text-slate-400 shadow-sm"
+            className="flex flex-1 min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/40 text-xs font-semibold text-slate-400 shadow-sm px-4 py-6 text-center animate-in fade-in duration-200"
           >
-            <span className="text-lg mb-1">📭</span>
-            Vazio
+            <span className="text-2xl mb-1.5 opacity-50">📭</span>
+            <span className="font-extrabold tracking-tight text-slate-400">Vazio</span>
+            <span className="text-[10px] text-slate-400/70 mt-1 leading-tight max-w-[150px]">Nenhum candidato nesta fase</span>
           </div>
         ) : null}
       </div>

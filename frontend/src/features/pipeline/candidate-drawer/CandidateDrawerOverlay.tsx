@@ -42,7 +42,7 @@ export function CandidateDrawerOverlay({
         aria-modal="true"
         aria-label="Painel do candidato"
         className={[
-          "fixed inset-y-0 right-0 z-50 flex w-[800px] max-w-full flex-col bg-[hsl(var(--surface))] shadow-2xl",
+          "fixed inset-y-0 right-0 z-50 flex w-[800px] max-w-[calc(100vw-16px)] sm:max-w-[calc(100vw-80px)] lg:max-w-[800px] flex-col bg-[hsl(var(--surface))] shadow-2xl",
           mode === "overlay" ? "overflow-y-auto" : "overflow-hidden",
           "transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "translate-x-full",
