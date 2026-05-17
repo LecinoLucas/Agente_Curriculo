@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AppRouter } from "./app/AppRouter";
 import { GoogleCalendarOAuthBridge } from "./app/GoogleCalendarOAuthBridge";
 import { AuthProvider } from "./features/auth/AuthContext";
+import { NotificationsProvider } from "./features/notifications/NotificationsContext";
 import { ToastContainer } from "./components/common/ToastContainer";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { initializeVisualTheme } from "./hooks/useVisualTheme";
@@ -21,10 +22,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       }}
     >
       <AuthProvider>
-        <ErrorBoundary>
-          <GoogleCalendarOAuthBridge />
-          <AppRouter />
-        </ErrorBoundary>
+        <NotificationsProvider>
+          <ErrorBoundary>
+            <GoogleCalendarOAuthBridge />
+            <AppRouter />
+          </ErrorBoundary>
+        </NotificationsProvider>
       </AuthProvider>
       <ToastContainer />
     </BrowserRouter>

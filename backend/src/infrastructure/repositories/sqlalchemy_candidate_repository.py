@@ -1,8 +1,12 @@
 from dataclasses import dataclass
+import time
 from uuid import UUID
 
+import structlog
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = structlog.get_logger(__name__)
 
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
@@ -193,179 +197,9 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         *,
         application_source: str | None = None,
     ) -> tuple[list[dict], int]:
-        active_score_version = (
-            sa.select(ScoreModelVersionModel.id)
-            .where(ScoreModelVersionModel.is_active.is_(True))
-            .limit(1)
-            .scalar_subquery()
-        )
-        resume_count_sq = (
-            sa.select(sa.func.count(sa.distinct(ResumeModel.id)))
-            .where(
-                ResumeModel.candidate_id == CandidateModel.id,
-                ResumeModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .scalar_subquery()
-        )
-        linked_job_count_sq = (
-            sa.select(sa.func.count(sa.distinct(CandidateJobPipelineModel.job_id)))
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                JobModel.deleted_at.is_(None),
-                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
-            )
-            .correlate(CandidateModel)
-            .scalar_subquery()
-        )
-        latest_job_id_sq = (
-            sa.select(CandidateJobPipelineModel.job_id)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(CandidateJobPipelineModel.updated_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        latest_job_title_sq = (
-            sa.select(JobModel.title)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(CandidateJobPipelineModel.updated_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        latest_job_stage_sq = (
-            sa.select(CandidateJobPipelineModel.pipeline_stage)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(CandidateJobPipelineModel.updated_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        latest_relationship_status_sq = (
-            sa.select(CandidateJobPipelineModel.relationship_status)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(CandidateJobPipelineModel.updated_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        active_job_id_sq = (
-            sa.select(CandidateJobPipelineModel.job_id)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
-                CandidateJobPipelineModel.is_terminal.is_(False),
-                CandidateJobPipelineModel.terminated_at.is_(None),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(CandidateJobPipelineModel.updated_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        active_job_title_sq = (
-            sa.select(JobModel.title)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
-                CandidateJobPipelineModel.is_terminal.is_(False),
-                CandidateJobPipelineModel.terminated_at.is_(None),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(CandidateJobPipelineModel.updated_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        active_job_stage_sq = (
-            sa.select(CandidateJobPipelineModel.pipeline_stage)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
-                CandidateJobPipelineModel.is_terminal.is_(False),
-                CandidateJobPipelineModel.terminated_at.is_(None),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(CandidateJobPipelineModel.updated_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        active_job_job_fit_score_sq = (
-            sa.select(CandidateJobScoreModel.final_score)
-            .select_from(CandidateJobPipelineModel)
-            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .join(
-                CandidateJobScoreModel,
-                sa.and_(
-                    CandidateJobScoreModel.candidate_id == CandidateJobPipelineModel.candidate_id,
-                    CandidateJobScoreModel.job_id == CandidateJobPipelineModel.job_id,
-                    CandidateJobScoreModel.version_id == active_score_version,
-                    CandidateJobScoreModel.freshness_status == "fresh",
-                ),
-            )
-            .where(
-                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
-                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
-                CandidateJobPipelineModel.is_terminal.is_(False),
-                CandidateJobPipelineModel.terminated_at.is_(None),
-                JobModel.deleted_at.is_(None),
-            )
-            .correlate(CandidateModel)
-            .order_by(
-                CandidateJobPipelineModel.updated_at.desc(),
-                CandidateJobScoreModel.final_score.desc().nulls_last(),
-            )
-            .limit(1)
-            .scalar_subquery()
-        )
-        ai_status_sq = (
-            sa.select(AnalysisModel.status)
-            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
-            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-            .where(
-                ResumeModel.candidate_id == CandidateModel.id,
-                ResumeModel.deleted_at.is_(None),
-                AnalysisModel.status != "discarded",
-            )
-            .correlate(CandidateModel)
-            .order_by(AnalysisModel.created_at.desc())
-            .limit(1)
-            .scalar_subquery()
-        )
-        filters = [CandidateModel.deleted_at.is_(None)]
+        # ── WHERE filters ─────────────────────────────────────────────────────
+        # EXISTS is cheaper than COUNT for has_resume: short-circuits on first row.
+        filters: list = [CandidateModel.deleted_at.is_(None)]
         if archived:
             filters.append(CandidateModel.archived_at.is_not(None))
         else:
@@ -380,13 +214,37 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                     sa.func.lower(CandidateModel.email).like(term),
                 )
             )
-        if has_resume is True:
-            filters.append(resume_count_sq > 0)
-        elif has_resume is False:
-            filters.append(resume_count_sq == 0)
+        if has_resume is not None:
+            _resume_exists = (
+                sa.select(sa.literal(1))
+                .where(
+                    ResumeModel.candidate_id == CandidateModel.id,
+                    ResumeModel.deleted_at.is_(None),
+                )
+                .correlate(CandidateModel)
+                .exists()
+            )
+            filters.append(_resume_exists if has_resume else ~_resume_exists)
         if ai_status_filter:
-            filters.append(ai_status_sq.in_(ai_status_filter))
+            # Scalar subquery only when this filter is active; used in WHERE only.
+            _ai_filter_sq = (
+                sa.select(AnalysisModel.status)
+                .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+                .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+                .where(
+                    ResumeModel.candidate_id == CandidateModel.id,
+                    ResumeModel.deleted_at.is_(None),
+                    AnalysisModel.status != "discarded",
+                )
+                .correlate(CandidateModel)
+                .order_by(AnalysisModel.created_at.desc())
+                .limit(1)
+                .scalar_subquery()
+            )
+            filters.append(_ai_filter_sq.in_(ai_status_filter))
 
+        # ── COUNT (unchanged contract) ─────────────────────────────────────────
+        _t0 = time.perf_counter()
         total = int(
             (
                 await self._session.scalar(
@@ -397,9 +255,13 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             )
             or 0
         )
+        _count_ms = (time.perf_counter() - _t0) * 1000
 
+        # ── CTE 1: paginated candidate base rows ───────────────────────────────
+        # All enrichment CTEs reference this CTE's IDs, so they only scan rows
+        # for the current page (≤ page_size candidates) instead of the full table.
         offset = (page - 1) * page_size
-        result = await self._session.execute(
+        page_cte = (
             sa.select(
                 CandidateModel.id,
                 CandidateModel.full_name,
@@ -411,24 +273,229 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
                 CandidateModel.archived_at,
                 CandidateModel.archive_reason,
                 CandidateModel.application_source,
-                resume_count_sq.label("resume_count"),
-                linked_job_count_sq.label("linked_job_count"),
-                latest_job_id_sq.label("latest_job_id"),
-                latest_job_title_sq.label("latest_job_title"),
-                latest_job_stage_sq.label("latest_job_stage"),
-                latest_relationship_status_sq.label("latest_relationship_status"),
-                active_job_id_sq.label("active_job_id"),
-                active_job_title_sq.label("active_job_title"),
-                active_job_stage_sq.label("active_job_stage"),
-                active_job_job_fit_score_sq.label("active_job_job_fit_score"),
-                ai_status_sq.label("ai_status"),
             )
             .where(*filters)
             .order_by(CandidateModel.created_at.desc())
-            .offset(offset)
             .limit(page_size)
+            .offset(offset)
+            .cte("page")
         )
-        return [dict(row) for row in result.mappings().all()], total
+        page_ids = sa.select(page_cte.c.id)
+
+        # ── CTE 2: resume counts (one GROUP BY scan for all page candidates) ──
+        resume_counts_cte = (
+            sa.select(
+                ResumeModel.candidate_id,
+                sa.func.count(sa.distinct(ResumeModel.id)).label("cnt"),
+            )
+            .where(
+                ResumeModel.deleted_at.is_(None),
+                ResumeModel.candidate_id.in_(page_ids),
+            )
+            .group_by(ResumeModel.candidate_id)
+            .cte("resume_counts")
+        )
+
+        # ── CTE 3: linked job counts (visible statuses) ────────────────────────
+        linked_counts_cte = (
+            sa.select(
+                CandidateJobPipelineModel.candidate_id,
+                sa.func.count(sa.distinct(CandidateJobPipelineModel.job_id)).label("cnt"),
+            )
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                JobModel.deleted_at.is_(None),
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
+                CandidateJobPipelineModel.candidate_id.in_(page_ids),
+            )
+            .group_by(CandidateJobPipelineModel.candidate_id)
+            .cte("linked_counts")
+        )
+
+        # ── CTE 4: latest visible pipeline per candidate (ROW_NUMBER) ──────────
+        # Replaces 4 identical correlated subqueries that differed only by column.
+        _latest_ranked = (
+            sa.select(
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                JobModel.title.label("job_title"),
+                CandidateJobPipelineModel.pipeline_stage,
+                CandidateJobPipelineModel.relationship_status,
+                sa.func.row_number()
+                .over(
+                    partition_by=CandidateJobPipelineModel.candidate_id,
+                    order_by=CandidateJobPipelineModel.updated_at.desc(),
+                )
+                .label("rn"),
+            )
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.relationship_status.in_(_VISIBLE_RELATIONSHIP_STATUSES),
+                JobModel.deleted_at.is_(None),
+                CandidateJobPipelineModel.candidate_id.in_(page_ids),
+            )
+            .subquery("latest_ranked")
+        )
+        latest_pipeline_cte = (
+            sa.select(
+                _latest_ranked.c.candidate_id,
+                _latest_ranked.c.job_id.label("latest_job_id"),
+                _latest_ranked.c.job_title.label("latest_job_title"),
+                _latest_ranked.c.pipeline_stage.label("latest_job_stage"),
+                _latest_ranked.c.relationship_status.label("latest_relationship_status"),
+            )
+            .where(_latest_ranked.c.rn == 1)
+            .cte("latest_pipeline")
+        )
+
+        # ── CTE 5: active pipeline per candidate (ROW_NUMBER) ─────────────────
+        # Replaces 3 identical correlated subqueries that differed only by column.
+        _active_ranked = (
+            sa.select(
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.job_id,
+                JobModel.title.label("job_title"),
+                CandidateJobPipelineModel.pipeline_stage,
+                sa.func.row_number()
+                .over(
+                    partition_by=CandidateJobPipelineModel.candidate_id,
+                    order_by=CandidateJobPipelineModel.updated_at.desc(),
+                )
+                .label("rn"),
+            )
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+                JobModel.deleted_at.is_(None),
+                CandidateJobPipelineModel.candidate_id.in_(page_ids),
+            )
+            .subquery("active_ranked")
+        )
+        active_pipeline_cte = (
+            sa.select(
+                _active_ranked.c.candidate_id,
+                _active_ranked.c.job_id.label("active_job_id"),
+                _active_ranked.c.job_title.label("active_job_title"),
+                _active_ranked.c.pipeline_stage.label("active_job_stage"),
+            )
+            .where(_active_ranked.c.rn == 1)
+            .cte("active_pipeline")
+        )
+
+        # ── CTE 6: fresh score for each candidate's active job ─────────────────
+        # Joins to active_pipeline_cte so it scans only relevant score rows.
+        # The unique constraint (candidate_id, job_id, version_id) guarantees
+        # at most one fresh row per (candidate, active_job, version).
+        active_score_version = (
+            sa.select(ScoreModelVersionModel.id)
+            .where(ScoreModelVersionModel.is_active.is_(True))
+            .limit(1)
+            .scalar_subquery()
+        )
+        score_cte = (
+            sa.select(
+                CandidateJobScoreModel.candidate_id,
+                CandidateJobScoreModel.final_score,
+            )
+            .join(
+                active_pipeline_cte,
+                sa.and_(
+                    CandidateJobScoreModel.candidate_id == active_pipeline_cte.c.candidate_id,
+                    CandidateJobScoreModel.job_id == active_pipeline_cte.c.active_job_id,
+                ),
+            )
+            .where(
+                CandidateJobScoreModel.version_id == active_score_version,
+                CandidateJobScoreModel.freshness_status == "fresh",
+                CandidateJobScoreModel.final_score.is_not(None),
+            )
+            .cte("active_scores")
+        )
+
+        # ── CTE 7: latest non-discarded AI analysis status ─────────────────────
+        _ai_ranked = (
+            sa.select(
+                ResumeModel.candidate_id,
+                AnalysisModel.status,
+                sa.func.row_number()
+                .over(
+                    partition_by=ResumeModel.candidate_id,
+                    order_by=AnalysisModel.created_at.desc(),
+                )
+                .label("rn"),
+            )
+            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .where(
+                ResumeModel.deleted_at.is_(None),
+                AnalysisModel.status != "discarded",
+                ResumeModel.candidate_id.in_(page_ids),
+            )
+            .subquery("ai_ranked")
+        )
+        ai_status_cte = (
+            sa.select(
+                _ai_ranked.c.candidate_id,
+                _ai_ranked.c.status.label("ai_status"),
+            )
+            .where(_ai_ranked.c.rn == 1)
+            .cte("ai_statuses")
+        )
+
+        # ── Final query: LEFT JOIN all enrichment CTEs to the page ────────────
+        _t1 = time.perf_counter()
+        result = await self._session.execute(
+            sa.select(
+                page_cte.c.id,
+                page_cte.c.full_name,
+                page_cte.c.email,
+                page_cte.c.phone,
+                page_cte.c.cpf,
+                page_cte.c.tags,
+                page_cte.c.created_at,
+                page_cte.c.archived_at,
+                page_cte.c.archive_reason,
+                page_cte.c.application_source,
+                sa.func.coalesce(resume_counts_cte.c.cnt, 0).label("resume_count"),
+                sa.func.coalesce(linked_counts_cte.c.cnt, 0).label("linked_job_count"),
+                latest_pipeline_cte.c.latest_job_id,
+                latest_pipeline_cte.c.latest_job_title,
+                latest_pipeline_cte.c.latest_job_stage,
+                latest_pipeline_cte.c.latest_relationship_status,
+                active_pipeline_cte.c.active_job_id,
+                active_pipeline_cte.c.active_job_title,
+                active_pipeline_cte.c.active_job_stage,
+                score_cte.c.final_score.label("active_job_job_fit_score"),
+                ai_status_cte.c.ai_status,
+            )
+            .select_from(page_cte)
+            .outerjoin(resume_counts_cte, resume_counts_cte.c.candidate_id == page_cte.c.id)
+            .outerjoin(linked_counts_cte, linked_counts_cte.c.candidate_id == page_cte.c.id)
+            .outerjoin(latest_pipeline_cte, latest_pipeline_cte.c.candidate_id == page_cte.c.id)
+            .outerjoin(active_pipeline_cte, active_pipeline_cte.c.candidate_id == page_cte.c.id)
+            .outerjoin(score_cte, score_cte.c.candidate_id == page_cte.c.id)
+            .outerjoin(ai_status_cte, ai_status_cte.c.candidate_id == page_cte.c.id)
+            .order_by(page_cte.c.created_at.desc())
+        )
+        rows = [dict(row) for row in result.mappings().all()]
+        _data_ms = (time.perf_counter() - _t1) * 1000
+
+        logger.debug(
+            "candidate_summaries.query_timing",
+            page=page,
+            page_size=page_size,
+            has_search=search is not None,
+            has_resume=has_resume,
+            has_ai_status_filter=bool(ai_status_filter),
+            count_ms=round(_count_ms, 2),
+            data_ms=round(_data_ms, 2),
+            duration_ms=round(_count_ms + _data_ms, 2),
+            result_count=len(rows),
+            total=total,
+        )
+        return rows, total
 
     async def save(self, candidate: CandidateModel | CandidateEntity) -> CandidateModel:
         if isinstance(candidate, CandidateEntity):

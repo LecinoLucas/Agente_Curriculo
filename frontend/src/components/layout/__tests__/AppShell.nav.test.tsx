@@ -20,6 +20,7 @@ vi.mock("react-router-dom", async () => {
 });
 
 import { AppShell } from "../AppShell";
+import { NotificationsProvider } from "../../../features/notifications/NotificationsContext";
 
 function makeUser(role: string) {
   return { id: "u-1", full_name: "Test User", email: "test@test.com", role, avatar_url: null };
@@ -32,7 +33,9 @@ function renderShell(role: string) {
 
   return render(
     <MemoryRouter initialEntries={["/dashboard"]}>
-      <AppShell />
+      <NotificationsProvider>
+        <AppShell />
+      </NotificationsProvider>
     </MemoryRouter>,
   );
 }

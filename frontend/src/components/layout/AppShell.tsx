@@ -33,6 +33,7 @@ import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { useTheme } from "../../hooks/useTheme";
 import { UserRole } from "../../types/auth";
 import { VisualThemeSwitcher } from "./VisualThemeSwitcher";
+import { NotificationsBell } from "../../features/notifications/components/NotificationsBell";
 
 type NavItem = {
   to: string;
@@ -99,7 +100,6 @@ const NAVIGATION_CONFIG: NavGroup[] = [
       { to: "/admin/behavioral-templates", label: "Avaliações", caption: "Templates comportamentais", roles: ["admin"] },
       { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ["admin"] },
       { to: "/admin/bi", label: "BI / Métricas", caption: "Indicadores e gráficos", roles: ["admin"] },
-      { to: "/admin/health", label: "Health", caption: "Status e consumo", roles: ["admin"] },
       { to: "/candidato/portal", label: "Portal do Candidato", caption: "Preview", roles: ["admin"] },
     ],
   },
@@ -620,26 +620,46 @@ export function AppShell() {
         </div>
       </aside>
 
-      {/* ── Main Content Area and Header for Mobile ── */}
+      {/* ── Main Content Area and Header ── */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-16">
-        {/* Mobile Top Header */}
-        <header className="lg:hidden flex h-16 w-full items-center justify-between border-b border-[hsl(var(--nav-border))]/90 bg-[hsl(var(--nav-bg))] px-6 text-white sticky top-0 z-40 shadow-sm">
+        {/* Global Sticky Top Header */}
+        <header className="flex h-16 w-full items-center justify-between border-b border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))]/90 backdrop-blur-md px-6 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-xs font-extrabold text-white">
-              RA
+            {/* Mobile Hamburger menu */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden flex h-10 w-10 items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/80 transition-all"
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+
+            {/* Desktop Page Breadcrumbs */}
+            <div className="hidden lg:flex items-center gap-2 text-xs font-semibold text-[hsl(var(--text-muted))]">
+              <span className="text-[hsl(var(--primary))] font-extrabold tracking-tight">ATS Marajo</span>
+              <span className="opacity-40">/</span>
+              <span className="capitalize font-bold text-[hsl(var(--text))]">
+                {location.pathname === "/"
+                  ? "Dashboard"
+                  : location.pathname.substring(1).replace(/-/g, " ").replace(/\//g, " / ")}
+              </span>
             </div>
-            <p className="font-heading text-sm font-extrabold tracking-tight text-[hsl(var(--nav-text))]">
-              Marajo RH
-            </p>
+
+            {/* Mobile Brand */}
+            <div className="lg:hidden flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[hsl(var(--primary))] text-[10px] font-extrabold text-white animate-pulse">
+                RA
+              </div>
+              <p className="font-heading text-xs font-extrabold tracking-tight text-[hsl(var(--text))]">
+                Marajo RH
+              </p>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white transition-all"
-          >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          {/* Right controls: Notifications bell */}
+          <div className="flex items-center gap-3">
+            <NotificationsBell />
+          </div>
         </header>
 
         {/* Mobile Dropdown Menu */}

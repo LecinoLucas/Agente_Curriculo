@@ -27,6 +27,7 @@ from src.interface.api.routers import (
     admin_bi,
     admin_audit_logs,
     admin_system_health,
+    admin_notifications,
     admission_packages,
     ai_models,
     analyses,
@@ -98,6 +99,7 @@ app.include_router(admin_bi.router, prefix=_PREFIX)
 app.include_router(admin_diagnostics.router, prefix=_PREFIX)
 app.include_router(admin_audit_logs.router, prefix=_PREFIX)
 app.include_router(admin_system_health.router, prefix=_PREFIX)
+app.include_router(admin_notifications.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(communications.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)
