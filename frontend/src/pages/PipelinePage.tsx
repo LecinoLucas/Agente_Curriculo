@@ -477,7 +477,7 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-6 pb-12 text-slate-800">
+    <div className="flex w-full flex-col gap-6 pb-12 text-slate-800 min-w-0">
       
       {/* ── SaaS Breadcrumb and Header Control Area ── */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 pb-4">
@@ -824,8 +824,8 @@ export function PipelinePage() {
 
               {/* Kanban columns scroll */}
               {board && !boardError && (
-                <div className="overflow-x-auto pb-4">
-                  <div className="flex min-w-max items-stretch gap-6 h-[720px] max-h-[85vh]">
+                <div className="overflow-x-auto pb-4 min-w-0 w-full">
+                  <div className="flex min-w-max items-stretch gap-6 min-h-[500px] h-[calc(100vh-360px)] max-h-[85vh]">
                     {mainCols.map((col, idx) => (
                       <KanbanColumn
                         key={col.stage}
