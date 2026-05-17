@@ -151,6 +151,7 @@ export function CandidateLoginPage() {
                     id="candidate-login-email"
                     type="email"
                     placeholder="seu@email.com"
+                    autoComplete="email"
                     className="h-12 rounded-xl border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] px-4 focus-visible:ring-[hsl(var(--primary))]"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -172,6 +173,7 @@ export function CandidateLoginPage() {
                       id="candidate-login-password"
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
+                      autoComplete="current-password"
                       className="h-12 rounded-xl border-[hsl(var(--border)/0.8)] bg-[hsl(var(--bg)/0.5)] pl-4 pr-12 focus-visible:ring-[hsl(var(--primary))]"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}

@@ -33,6 +33,14 @@ class UserStatus(str, Enum):
     INACTIVE = "inactive"
 
 
+class UserPreferredTheme(str, Enum):
+    THEME_1 = "theme_1"
+    THEME_2 = "theme_2"
+    THEME_3 = "theme_3"
+    THEME_4 = "theme_4"
+
+
+DEFAULT_PREFERRED_THEME = UserPreferredTheme.THEME_4
 MAX_FAILED_LOGINS = 5
 LOCKOUT_DURATION_MINUTES = 15
 
@@ -54,6 +62,7 @@ class User:
     login_count: int = 0
     failed_login_count: int = 0
     locked_until: Optional[datetime] = None
+    preferred_theme: Optional[UserPreferredTheme] = DEFAULT_PREFERRED_THEME
     deleted_at: Optional[datetime] = None
 
     @classmethod

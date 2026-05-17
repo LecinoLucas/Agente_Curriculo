@@ -36,6 +36,7 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
           <input
             id="candidate-full-name"
             type="text"
+            autoComplete="name"
             value={form.fullName}
             onChange={(e) => onChange("fullName", e.target.value)}
             placeholder="João Silva Santos"
@@ -69,6 +70,7 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
           <input
             id="candidate-email"
             type="email"
+            autoComplete="email"
             value={form.email}
             onChange={(e) => onChange("email", e.target.value)}
             placeholder="seu.email@example.com"
@@ -86,6 +88,7 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
           <input
             id="candidate-phone"
             type="tel"
+            autoComplete="tel"
             value={formatPhone(form.phone)}
             onChange={(e) => onChange("phone", e.target.value.replace(/\D/g, ""))}
             placeholder="(11) 98765-4321"
@@ -121,6 +124,7 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
           <input
             id="candidate-city"
             type="text"
+            autoComplete="address-level2"
             value={form.city}
             onChange={(e) => onChange("city", e.target.value)}
             placeholder="São Paulo"
@@ -139,6 +143,7 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
             <input
               id="candidate-password"
               type="password"
+              autoComplete="new-password"
               value={form.password}
               onChange={(e) => onChange("password", e.target.value)}
               placeholder="Mínimo 8 caracteres"
@@ -154,6 +159,7 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
             <input
               id="candidate-confirm-password"
               type="password"
+              autoComplete="new-password"
               value={form.confirmPassword}
               onChange={(e) => onChange("confirmPassword", e.target.value)}
               placeholder="Repita sua senha"

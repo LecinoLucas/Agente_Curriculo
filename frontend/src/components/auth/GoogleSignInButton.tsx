@@ -5,6 +5,8 @@ import { Button } from "../ui/button";
 
 const GOOGLE_GSI_SCRIPT_ID = "google-identity-services";
 const GOOGLE_GSI_SRC = "https://accounts.google.com/gsi/client";
+const GOOGLE_ORIGIN_MESSAGE =
+  "Google OAuth não autorizado para esta origem. Adicione http://localhost:5173 em Authorized JavaScript origins.";
 
 type GoogleSignInButtonProps = {
   disabled?: boolean;
@@ -14,6 +16,15 @@ type GoogleSignInButtonProps = {
 
 function getGoogleClientId(): string {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? "";
+}
+
+function isGoogleOriginError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("origin is not allowed") ||
+    normalized.includes("not allowed for the given client id") ||
+    normalized.includes("idpiframe_initialization_failed")
+  );
 }
 
 function loadGoogleScript(): Promise<void> {
@@ -58,7 +69,15 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
       return;
     }
 
+    const handleGoogleError = (event: ErrorEvent) => {
+      const message = event.message || event.error?.message || "";
+      if (!isGoogleOriginError(message)) return;
+      console.error(GOOGLE_ORIGIN_MESSAGE);
+      onError?.(GOOGLE_ORIGIN_MESSAGE);
+    };
+
     setIsLoading(true);
+    window.addEventListener("error", handleGoogleError);
     loadGoogleScript()
       .then(() => {
         if (cancelled || !window.google?.accounts?.id || !hiddenButtonContainerRef.current) {
@@ -66,26 +85,36 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
         }
 
         hiddenButtonContainerRef.current.innerHTML = "";
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (response) => {
-            if (!response.credential) {
-              onError?.("Não foi possível iniciar o login com Google.");
-              return;
-            }
-            void onCredential(response.credential);
-          },
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        });
-        window.google.accounts.id.renderButton(hiddenButtonContainerRef.current, {
-          theme: "outline",
-          size: "large",
-          text: "continue_with",
-          shape: "pill",
-          width: 260,
-          logo_alignment: "left",
-        });
+        try {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (response) => {
+              if (!response.credential) {
+                onError?.("Não foi possível iniciar o login com Google.");
+                return;
+              }
+              void onCredential(response.credential);
+            },
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+          window.google.accounts.id.renderButton(hiddenButtonContainerRef.current, {
+            theme: "outline",
+            size: "large",
+            text: "continue_with",
+            shape: "pill",
+            width: 260,
+            logo_alignment: "left",
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (isGoogleOriginError(message)) {
+            console.error(GOOGLE_ORIGIN_MESSAGE);
+            onError?.(GOOGLE_ORIGIN_MESSAGE);
+            return;
+          }
+          throw error;
+        }
         setIsReady(true);
       })
       .catch((error) => {
@@ -101,6 +130,7 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
 
     return () => {
       cancelled = true;
+      window.removeEventListener("error", handleGoogleError);
     };
   }, [clientId, onCredential, onError]);
 
@@ -121,6 +151,14 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
 
   const unavailableInDev = !clientId && import.meta.env.DEV;
 
+  if (!clientId) {
+    return unavailableInDev ? (
+      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Defina `VITE_GOOGLE_CLIENT_ID` para habilitar o Google neste ambiente.
+      </p>
+    ) : null;
+  }
+
   return (
     <div className="space-y-2">
       <Button
@@ -133,9 +171,6 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
         Continuar com Google
       </Button>
-      {unavailableInDev ? (
-        <p className="text-xs text-amber-700">Defina `VITE_GOOGLE_CLIENT_ID` para habilitar o Google neste ambiente.</p>
-      ) : null}
       <div ref={hiddenButtonContainerRef} className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0" aria-hidden />
     </div>
   );

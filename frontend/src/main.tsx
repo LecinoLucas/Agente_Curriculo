@@ -8,7 +8,8 @@ import { AuthProvider } from "./features/auth/AuthContext";
 import { NotificationsProvider } from "./features/notifications/NotificationsContext";
 import { ToastContainer } from "./components/common/ToastContainer";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
-import { initializeVisualTheme } from "./hooks/useVisualTheme";
+import { VisualThemeProvider } from "./hooks/useVisualTheme";
+import { initializeVisualTheme } from "./hooks/visualThemeStorage";
 import "./styles/index.css";
 
 initializeVisualTheme();
@@ -22,12 +23,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       }}
     >
       <AuthProvider>
-        <NotificationsProvider>
-          <ErrorBoundary>
-            <GoogleCalendarOAuthBridge />
-            <AppRouter />
-          </ErrorBoundary>
-        </NotificationsProvider>
+        <VisualThemeProvider>
+          <NotificationsProvider>
+            <ErrorBoundary>
+              <GoogleCalendarOAuthBridge />
+              <AppRouter />
+            </ErrorBoundary>
+          </NotificationsProvider>
+        </VisualThemeProvider>
       </AuthProvider>
       <ToastContainer />
     </BrowserRouter>

@@ -1,4 +1,9 @@
-import { createContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react";
+import { useLocation } from "react-router-dom";
+
+import { HttpError } from "../../services/http";
+import { useAuth } from "../auth/useAuth";
+import { tokenStorage } from "../../utils/storage";
 import { Notification } from "./types";
 import { notificationStorage } from "./notificationStorage";
 import { notificationService } from "./notificationService";
@@ -73,8 +78,24 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 ];
 
 const DISMISSED_KEY = "ats-notifications-dismissed-ids";
+const INTERNAL_NOTIFICATION_ROLES = new Set(["admin", "recruiter", "manager", "hr"]);
+
+function isPublicNotificationRoute(pathname: string, isAuthenticated: boolean): boolean {
+  if (pathname === "/login" || pathname === "/candidato/login" || pathname === "/candidato/cadastro") {
+    return true;
+  }
+
+  if (pathname === "/candidato" || pathname.startsWith("/candidatura")) {
+    return true;
+  }
+
+  return pathname.startsWith("/candidato/portal") && !isAuthenticated;
+}
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
+  const [isPollingStoppedByUnauthorized, setIsPollingStoppedByUnauthorized] = useState(false);
   const [readStates, setReadStates] = useState<Record<string, boolean>>(() =>
     notificationStorage.loadReadStates()
   );
@@ -91,73 +112,75 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return [];
   });
 
-  const [notifications, setNotifications] = useState<Notification[]>(() => {
-    const isDev =
-      import.meta.env?.DEV ||
-      process.env.NODE_ENV === "development" ||
-      process.env.NODE_ENV === "test";
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
-    if (isDev) {
-      const initialReadStates = notificationStorage.loadReadStates();
-      return MOCK_NOTIFICATIONS.map((n) => ({
-        ...n,
-        read: initialReadStates[n.id] ?? n.read,
-      }));
-    }
-
-    return [];
-  });
+  const shouldFetchNotifications = useMemo(() => {
+    if (isLoading || isPollingStoppedByUnauthorized) return false;
+    if (!isAuthenticated || !user) return false;
+    if (!tokenStorage.get()) return false;
+    if (isPublicNotificationRoute(location.pathname, isAuthenticated)) return false;
+    return INTERNAL_NOTIFICATION_ROLES.has(user.role);
+  }, [isAuthenticated, isLoading, isPollingStoppedByUnauthorized, location.pathname, user]);
 
   const fetchNotifications = useCallback(async () => {
+    if (!shouldFetchNotifications) {
+      setNotifications([]);
+      return;
+    }
+
     if (typeof document !== "undefined" && document.hidden) {
       return;
     }
 
-    const isTest = typeof process !== "undefined" && process.env.NODE_ENV === "test";
     const isDev =
       import.meta.env?.DEV ||
       process.env.NODE_ENV === "development";
 
     const currentReadStates = notificationStorage.loadReadStates();
 
-    if (isTest) {
-      const mockMerged = MOCK_NOTIFICATIONS.filter((n) => !dismissedIds.includes(n.id)).map(
-        (n): Notification => ({
+    try {
+      const backendNotifs = await notificationService.getNotifications();
+
+      const merged = backendNotifs
+        .filter((n) => !dismissedIds.includes(n.id))
+        .map((n): Notification => ({
           ...n,
-          read: currentReadStates[n.id] ?? n.read,
-        })
-      );
-      setNotifications(mockMerged);
-      return;
+          read: currentReadStates[n.id] ?? false,
+          timestamp: n.timestamp ?? new Date().toISOString(),
+        }));
+
+      if (merged.length === 0 && isDev) {
+        const mockMerged = MOCK_NOTIFICATIONS.filter((n) => !dismissedIds.includes(n.id)).map(
+          (n): Notification => ({
+            ...n,
+            read: currentReadStates[n.id] ?? n.read,
+          })
+        );
+        setNotifications(mockMerged);
+        return;
+      }
+
+      setNotifications(merged);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 401) {
+        setIsPollingStoppedByUnauthorized(true);
+        setNotifications([]);
+        return;
+      }
+
+      console.error("[NotificationsContext] Failed to fetch notifications", error);
+      if (!isDev) {
+        setNotifications([]);
+      }
     }
-
-    const backendNotifs = await notificationService.getNotifications();
-
-    // Filtra dismissed e mescla dados
-    const merged = backendNotifs
-      .filter((n) => !dismissedIds.includes(n.id))
-      .map((n): Notification => ({
-        ...n,
-        read: currentReadStates[n.id] ?? false,
-        timestamp: n.timestamp ?? new Date().toISOString(),
-      }));
-
-    if (merged.length === 0 && isDev) {
-      // Retorna mocks em desenvolvimento caso não haja notificações ativas do backend
-      const mockMerged = MOCK_NOTIFICATIONS.filter((n) => !dismissedIds.includes(n.id)).map(
-        (n): Notification => ({
-          ...n,
-          read: currentReadStates[n.id] ?? n.read,
-        })
-      );
-      setNotifications(mockMerged);
-      return;
-    }
-
-    setNotifications(merged);
-  }, [dismissedIds]);
+  }, [dismissedIds, shouldFetchNotifications]);
 
   useEffect(() => {
+    if (!shouldFetchNotifications) {
+      setNotifications([]);
+      return;
+    }
+
     fetchNotifications();
 
     const intervalId = window.setInterval(fetchNotifications, 60 * 1000);
@@ -173,7 +196,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchNotifications]);
+  }, [fetchNotifications, shouldFetchNotifications]);
+
+  useEffect(() => {
+    setIsPollingStoppedByUnauthorized(false);
+  }, [user?.id, location.pathname]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

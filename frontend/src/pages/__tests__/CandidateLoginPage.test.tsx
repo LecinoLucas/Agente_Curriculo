@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CandidateLoginPage } from "../CandidateLoginPage";
 import { candidateAuthService } from "../../services/candidateAuthService";
@@ -18,25 +18,44 @@ vi.mock("../../services/candidateAuthService", () => ({
   },
 }));
 
-vi.mock("../../components/auth/GoogleSignInButton", () => ({
-  GoogleSignInButton: ({ onCredential, onError }: { onCredential: (idToken: string) => void; onError: (message: string) => void }) => (
-    <div>
-      <button type="button" onClick={() => onCredential("google-credential")}>
-        Continuar com Google
-      </button>
-      <button type="button" onClick={() => onError("Falha no Google")}>
-        Simular erro Google
-      </button>
-    </div>
-  ),
-}));
+function installGoogleMock() {
+  let credentialCallback: ((response: { credential?: string }) => void) | null = null;
+
+  window.google = {
+    accounts: {
+      id: {
+        initialize: vi.fn((options) => {
+          credentialCallback = options.callback;
+        }),
+        renderButton: vi.fn((element) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.addEventListener("click", () => {
+            credentialCallback?.({ credential: "google-credential" });
+          });
+          element.appendChild(button);
+        }),
+        prompt: vi.fn(),
+      },
+    },
+  };
+}
 
 describe("CandidateLoginPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    delete window.google;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete window.google;
   });
 
   it("permite login com Google", async () => {
+    vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "test-client.apps.googleusercontent.com");
+    installGoogleMock();
     (candidateAuthService.googleLogin as any).mockResolvedValue({
       status: "authenticated",
       message: "ok",
@@ -65,7 +84,11 @@ describe("CandidateLoginPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /continuar com google/i }));
+    const googleButton = await screen.findByRole("button", { name: /continuar com google/i });
+    await waitFor(() => {
+      expect(googleButton).toBeEnabled();
+    });
+    fireEvent.click(googleButton);
     expect(await screen.findByText("Portal destino")).toBeInTheDocument();
   });
 
@@ -90,5 +113,33 @@ describe("CandidateLoginPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /acessar minha conta/i }));
 
     expect(await screen.findByText("Portal destino")).toBeInTheDocument();
+  });
+
+  it("usa autocomplete correto nos campos de e-mail e senha", () => {
+    render(
+      <MemoryRouter initialEntries={["/candidato/login"]}>
+        <Routes>
+          <Route path="/candidato/login" element={<CandidateLoginPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText("E-mail")).toHaveAttribute("autocomplete", "email");
+    expect(screen.getByLabelText("Senha")).toHaveAttribute("autocomplete", "current-password");
+  });
+
+  it("não renderiza botão Google e mostra aviso seguro sem VITE_GOOGLE_CLIENT_ID", () => {
+    vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "");
+
+    render(
+      <MemoryRouter initialEntries={["/candidato/login"]}>
+        <Routes>
+          <Route path="/candidato/login" element={<CandidateLoginPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("button", { name: /continuar com google/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/defina `VITE_GOOGLE_CLIENT_ID`/i)).toBeInTheDocument();
   });
 });

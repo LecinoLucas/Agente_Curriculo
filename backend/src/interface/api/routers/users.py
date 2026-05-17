@@ -20,7 +20,7 @@ from src.application.services.user_profile_service import (
 from src.application.services.user_security_service import PasswordReuseError, UserSecurityService
 from src.application.use_cases.users.create_user import CreateUserUseCase
 from src.core.settings import settings
-from src.domain.entities.user import UserRole, UserStatus
+from src.domain.entities.user import DEFAULT_PREFERRED_THEME, User, UserPreferredTheme, UserRole, UserStatus
 from src.domain.exceptions import ConflictException, UnauthorizedException
 from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.sqlalchemy_user_admin_repository import SQLAlchemyUserAdminRepository
@@ -34,6 +34,8 @@ from src.interface.api.schemas.user_schemas import (
     ManagerListResponse,
     PatchMyProfileRequest,
     PatchUserRequest,
+    UpdateMyPreferencesRequest,
+    UserPreferencesResponse,
     UserResponse,
     UserStatsResponse,
 )
@@ -61,6 +63,26 @@ def _handle_user_profile_error(exc: Exception) -> None:
     if isinstance(exc, InvalidProfileTextError):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Nome não pode estar em branco")
     raise exc
+
+
+def _preferred_theme_or_default(user: User) -> UserPreferredTheme:
+    return user.preferred_theme or DEFAULT_PREFERRED_THEME
+
+
+def _user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        status=user.status,
+        real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
+        must_change_password=user.must_change_password,
+        last_login_at=user.last_login_at,
+        created_at=user.created_at,
+        avatar_url=user.avatar_url,
+        preferred_theme=_preferred_theme_or_default(user),
+    )
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -105,18 +127,7 @@ async def create_user(
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: CurrentUser) -> UserResponse:
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        role=current_user.role,
-        status=current_user.status,
-        real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
-        must_change_password=current_user.must_change_password,
-        last_login_at=current_user.last_login_at,
-        created_at=current_user.created_at,
-        avatar_url=current_user.avatar_url,
-    )
+    return _user_response(current_user)
 
 
 @router.patch("/me", response_model=UserResponse)
@@ -129,18 +140,7 @@ async def patch_me(
     try:
         updated = await service.update_me(current_user, body.full_name)
         await db.commit()
-        return UserResponse(
-            id=updated.id,
-            email=updated.email,
-            full_name=updated.full_name,
-            role=updated.role,
-            status=updated.status,
-            real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
-            must_change_password=updated.must_change_password,
-            last_login_at=updated.last_login_at,
-            created_at=updated.created_at,
-            avatar_url=updated.avatar_url,
-        )
+        return _user_response(updated)
     except Exception as exc:
         await db.rollback()
         _handle_user_profile_error(exc)
@@ -159,18 +159,7 @@ async def upload_avatar(
         content_type = file.content_type or "application/octet-stream"
         updated = await service.upload_avatar(current_user, content, content_type)
         await db.commit()
-        return UserResponse(
-            id=updated.id,
-            email=updated.email,
-            full_name=updated.full_name,
-            role=updated.role,
-            status=updated.status,
-            real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
-            must_change_password=updated.must_change_password,
-            last_login_at=updated.last_login_at,
-            created_at=updated.created_at,
-            avatar_url=updated.avatar_url,
-        )
+        return _user_response(updated)
     except InvalidAvatarError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
@@ -188,18 +177,7 @@ async def delete_avatar(
     current_user.updated_at = datetime.now(timezone.utc)
     updated = await repo.save(current_user)
     await db.commit()
-    return UserResponse(
-        id=updated.id,
-        email=updated.email,
-        full_name=updated.full_name,
-        role=updated.role,
-        status=updated.status,
-        real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
-        must_change_password=updated.must_change_password,
-        last_login_at=updated.last_login_at,
-        created_at=updated.created_at,
-        avatar_url=updated.avatar_url,
-    )
+    return _user_response(updated)
 
 
 @router.patch("/me/password", response_model=UserResponse)
@@ -216,18 +194,7 @@ async def change_my_password(
             new_password=body.new_password,
         )
         await db.commit()
-        return UserResponse(
-            id=updated.id,
-            email=updated.email,
-            full_name=updated.full_name,
-            role=updated.role,
-            status=updated.status,
-            real_ai_token_spend_enabled=settings.ALLOW_AI_TOKEN_SPEND,
-            must_change_password=updated.must_change_password,
-            last_login_at=updated.last_login_at,
-            created_at=updated.created_at,
-            avatar_url=updated.avatar_url,
-        )
+        return _user_response(updated)
     except UnauthorizedException as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message)
@@ -237,6 +204,20 @@ async def change_my_password(
     except Exception:
         await db.rollback()
         raise
+
+
+@router.patch("/me/preferences", response_model=UserPreferencesResponse)
+async def update_my_preferences(
+    body: UpdateMyPreferencesRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> UserPreferencesResponse:
+    repo = SQLAlchemyUserRepository(db)
+    current_user.preferred_theme = body.preferred_theme
+    current_user.updated_at = datetime.now(timezone.utc)
+    updated = await repo.save(current_user)
+    await db.commit()
+    return UserPreferencesResponse(preferred_theme=_preferred_theme_or_default(updated))
 
 
 @router.get("", response_model=PaginatedResponse[UserResponse])

@@ -5,7 +5,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.entities.user import User, UserRole, UserStatus
+from src.domain.entities.user import User, UserPreferredTheme, UserRole, UserStatus
 from src.domain.repositories.user_repository import UserRepository
 from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.base_soft_delete_repository import BaseSoftDeleteRepository
@@ -77,6 +77,7 @@ class SQLAlchemyUserRepository(UserRepository, BaseSoftDeleteRepository[UserMode
             login_count=model.login_count,
             failed_login_count=model.failed_login_count,
             locked_until=model.locked_until,
+            preferred_theme=UserPreferredTheme(model.preferred_theme) if model.preferred_theme else None,
             deleted_at=model.deleted_at,
         )
 
@@ -96,6 +97,7 @@ class SQLAlchemyUserRepository(UserRepository, BaseSoftDeleteRepository[UserMode
             login_count=user.login_count,
             failed_login_count=user.failed_login_count,
             locked_until=user.locked_until,
+            preferred_theme=user.preferred_theme.value if user.preferred_theme else None,
             created_at=user.created_at,
             updated_at=user.updated_at,
             deleted_at=user.deleted_at,
@@ -115,5 +117,6 @@ class SQLAlchemyUserRepository(UserRepository, BaseSoftDeleteRepository[UserMode
         model.login_count = user.login_count
         model.failed_login_count = user.failed_login_count
         model.locked_until = user.locked_until
+        model.preferred_theme = user.preferred_theme.value if user.preferred_theme else None
         model.updated_at = datetime.now(timezone.utc)
         model.deleted_at = user.deleted_at

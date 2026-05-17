@@ -1,5 +1,6 @@
 export type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr";
 export type UserStatus = "pending_verification" | "active" | "suspended" | "inactive";
+export type UserPreferredTheme = "theme_1" | "theme_2" | "theme_3" | "theme_4";
 
 export type AuthUser = {
   id: string;
@@ -12,6 +13,7 @@ export type AuthUser = {
   last_login_at: string | null;
   created_at: string | null;
   avatar_url?: string | null;
+  preferred_theme?: UserPreferredTheme | null;
 };
 
 export type LoginPayload = {
@@ -23,6 +25,10 @@ export type LoginResponse = {
   access_token: string;
   must_change_password: boolean;
   token_type: string;
+};
+
+export type UserPreferencesResponse = {
+  preferred_theme: UserPreferredTheme;
 };
 
 export type CandidateGoogleLoginPayload = {

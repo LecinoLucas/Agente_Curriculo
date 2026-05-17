@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
-from src.domain.entities.user import UserRole, UserStatus
+from src.domain.entities.user import DEFAULT_PREFERRED_THEME, UserPreferredTheme, UserRole, UserStatus
 
 
 class CreateUserRequest(BaseModel):
@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     avatar_url: Optional[str] = None
+    preferred_theme: Optional[UserPreferredTheme] = DEFAULT_PREFERRED_THEME
 
     model_config = {"from_attributes": True}
 
@@ -53,6 +54,14 @@ class ResetUserPasswordRequest(BaseModel):
 class ChangeMyPasswordRequest(BaseModel):
     current_password: str = Field(min_length=8, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class UpdateMyPreferencesRequest(BaseModel):
+    preferred_theme: UserPreferredTheme
+
+
+class UserPreferencesResponse(BaseModel):
+    preferred_theme: UserPreferredTheme
 
 
 class UserStatsResponse(BaseModel):

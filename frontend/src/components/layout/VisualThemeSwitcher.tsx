@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Check, Palette } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { VisualTheme, useVisualTheme } from "../../hooks/useVisualTheme";
+import { useVisualTheme } from "../../hooks/useVisualTheme";
+import { type VisualTheme } from "../../hooks/visualThemeStorage";
 
 const THEMES: Array<{
   value: VisualTheme;

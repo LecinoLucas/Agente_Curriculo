@@ -1,4 +1,4 @@
-import { AuthUser, LoginPayload, LoginResponse } from "../types/auth";
+import { AuthUser, LoginPayload, LoginResponse, UserPreferredTheme, UserPreferencesResponse } from "../types/auth";
 import { httpRequest } from "./http";
 
 export const authService = {
@@ -24,6 +24,12 @@ export const authService = {
 
   updateMyPassword: (payload: { current_password: string; new_password: string }) =>
     httpRequest<AuthUser>("/api/v1/users/me/password", {
+      method: "PATCH",
+      body: payload,
+    }),
+
+  updateMyPreferences: (payload: { preferred_theme: UserPreferredTheme }) =>
+    httpRequest<UserPreferencesResponse>("/api/v1/users/me/preferences", {
       method: "PATCH",
       body: payload,
     }),

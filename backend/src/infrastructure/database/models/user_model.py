@@ -10,6 +10,12 @@ from src.infrastructure.database.base import Base
 
 class UserModel(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        sa.CheckConstraint(
+            "preferred_theme IS NULL OR preferred_theme IN ('theme_1', 'theme_2', 'theme_3', 'theme_4')",
+            name="ck_users_preferred_theme",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         sa.UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")
@@ -41,6 +47,12 @@ class UserModel(Base):
     login_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     failed_login_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     locked_until: Mapped[Optional[datetime]] = mapped_column(sa.TIMESTAMP(timezone=True))
+    preferred_theme: Mapped[Optional[str]] = mapped_column(
+        sa.String(20),
+        nullable=True,
+        default="theme_4",
+        server_default="theme_4",
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("NOW()")
     )

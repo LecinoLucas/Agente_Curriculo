@@ -194,7 +194,14 @@ async function refreshToken(): Promise<void> {
 
       if (!response.ok) {
         tokenStorage.clear();
-        throw new HttpError(401, "Sessão expirada. Faça login novamente.", undefined, null);
+        throw new HttpError(
+          response.status,
+          response.status === 401
+            ? "Sessão expirada. Faça login novamente."
+            : "Não foi possível renovar a sessão.",
+          undefined,
+          null,
+        );
       }
 
       const payload = (await response.json()) as { access_token: string };
@@ -276,6 +283,7 @@ async function applyDevHttpChaos(method: string, path: string): Promise<void> {
 export async function httpRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, withAuth = true, retryOnUnauthorized = true } = options;
   const isFormData = body instanceof FormData;
+  const token = withAuth ? tokenStorage.get() : null;
 
   const headers = new Headers();
   if (!isFormData) {
@@ -283,7 +291,6 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
   }
 
   if (withAuth) {
-    const token = tokenStorage.get();
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
@@ -317,9 +324,20 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
     }
   }
 
-  if (response.status === 401 && withAuth && retryOnUnauthorized && !path.includes("/auth/refresh")) {
+  if (
+    response.status === 401 &&
+    withAuth &&
+    retryOnUnauthorized &&
+    token &&
+    tokenStorage.hasRefreshSession() &&
+    !path.includes("/auth/refresh")
+  ) {
     await refreshToken();
     return httpRequest<T>(path, { ...options, retryOnUnauthorized: false });
+  }
+
+  if (response.status === 401 && withAuth && !token) {
+    tokenStorage.clear();
   }
 
   if (!response.ok) {

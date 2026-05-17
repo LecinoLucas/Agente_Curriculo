@@ -2,7 +2,7 @@ import { createContext, PropsWithChildren, useEffect, useMemo, useRef, useState 
 
 import { authService } from "../../services/authService";
 import { AuthUser } from "../../types/auth";
-import { AUTH_SESSION_CLEARED_EVENT, tokenStorage } from "../../utils/storage";
+import { ACCESS_TOKEN_KEY, AUTH_SESSION_CLEARED_EVENT, tokenStorage } from "../../utils/storage";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -11,6 +11,7 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateUser: (patch: Partial<AuthUser>) => void;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -23,6 +24,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const refreshUser = async () => {
     const me = await authService.me();
     setUser(me);
+  };
+
+  const updateUser = (patch: Partial<AuthUser>) => {
+    setUser((current) => (current ? { ...current, ...patch } : current));
   };
 
   useEffect(() => {
@@ -54,7 +59,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
 
     window.addEventListener(AUTH_SESSION_CLEARED_EVENT, handleSessionCleared);
-    return () => window.removeEventListener(AUTH_SESSION_CLEARED_EVENT, handleSessionCleared);
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === ACCESS_TOKEN_KEY && event.newValue === null) {
+        handleSessionCleared();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_CLEARED_EVENT, handleSessionCleared);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -64,6 +79,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   };
 
   const logout = async () => {
+    setUser(null);
     try {
       await authService.logout();
     } finally {
@@ -80,6 +96,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       login,
       logout,
       refreshUser,
+      updateUser,
     }),
     [user, isLoading],
   );
