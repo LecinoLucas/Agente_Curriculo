@@ -80,13 +80,13 @@ export const managerService = {
   createScorecard: (jobId: string, candidateId: string, body: { items: Array<{ competency_name: string; question_text?: string; display_order: number }> }) =>
     httpRequest<ScorecardResponse>(`/api/v1/jobs/${jobId}/candidates/${candidateId}/interview-scorecard`, {
       method: "POST",
-      body: JSON.stringify(body),
+      body,
     }),
 
   patchScorecard: (scorecardId: string, body: Partial<{ final_recommendation: ScorecardFinalRecommendation; overall_notes: string; items: Array<{ competency_name: string; rating?: number; evidence?: string; display_order?: number }> }>) =>
     httpRequest<ScorecardResponse>(`/api/v1/interview-scorecards/${scorecardId}`, {
       method: "PATCH",
-      body: JSON.stringify(body),
+      body,
     }),
 
   submitScorecard: (scorecardId: string) =>
