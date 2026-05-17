@@ -244,13 +244,13 @@ export const analysisService = {
   bulkForceFail: (analysisIds: string[]) =>
     httpRequest<{ processed: number; skipped: number }>(
       `/api/v1/analyses/bulk-force-fail`,
-      { method: "POST", body: JSON.stringify({ analysis_ids: analysisIds }) }
+      { method: "POST", body: { analysis_ids: analysisIds } }
     ),
 
   bulkRetry: (analysisIds: string[]) =>
     httpRequest<{ processed: number; skipped: number }>(
       `/api/v1/analyses/bulk-retry`,
-      { method: "POST", body: JSON.stringify({ analysis_ids: analysisIds }) }
+      { method: "POST", body: { analysis_ids: analysisIds } }
     ).catch((error) => rethrowAnalysisRateLimit(error)),
 
   listGlobal: (
