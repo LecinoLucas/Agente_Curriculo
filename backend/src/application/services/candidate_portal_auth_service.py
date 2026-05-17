@@ -146,6 +146,8 @@ class CandidatePortalAuthService:
         if session_row is None:
             raise CandidatePortalSessionError
 
+        print(f"DEBUG authenticate: candidate_id={session_row['candidate_id']!r} type={type(session_row['candidate_id'])}")
+        print(f"DEBUG authenticate: session_id={session_row['session_id']!r} type={type(session_row['session_id'])}")
         return CandidatePortalSession(
             candidate_id=session_row["candidate_id"],
             session_id=session_row["session_id"],

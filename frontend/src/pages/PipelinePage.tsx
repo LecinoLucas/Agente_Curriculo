@@ -248,13 +248,22 @@ export function PipelinePage() {
         return;
       }
 
+      // Read current value via ref-like pattern: check if we should refresh
+      // BEFORE entering a setState updater (avoids updating PipelineProvider
+      // from inside PipelinePage's setState — the "Cannot update a component
+      // while rendering" warning).
+      let shouldRefresh = false;
       setSecondsLeft((prev) => {
         if (prev <= 1) {
-          void triggerRefresh();
+          shouldRefresh = true;
           return 30;
         }
         return prev - 1;
       });
+
+      if (shouldRefresh) {
+        void triggerRefresh();
+      }
     }, 1000);
 
     return () => clearInterval(interval);
