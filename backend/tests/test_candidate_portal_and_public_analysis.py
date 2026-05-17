@@ -28,7 +28,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.resume_model import ResumeVersionModel
+from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.interface.workers.resume_extraction_tasks import _process_resume_extraction_async
 from src.domain.entities.user import UserRole
 from tests.integration.helpers import _auth_headers, _create_active_user
@@ -70,6 +70,7 @@ async def _create_candidate(
     cpf: str,
     phone: str = "11999999999",
     application_source: str = "manual",
+    create_resume: bool = True,
 ) -> CandidateModel:
     candidate = CandidateModel(
         id=uuid4(),
@@ -82,8 +83,33 @@ async def _create_candidate(
         location_country="BR",
         created_by=SYSTEM_USER_ID,
         application_source=application_source,
+        salary_expectation="5000.00",
+        lgpd_consent_at=datetime.now(UTC),
     )
     db_session.add(candidate)
+    if create_resume:
+        resume = ResumeModel(
+            id=uuid4(),
+            candidate_id=candidate.id,
+            title="Currículo",
+            status="active",
+            current_version=1,
+            created_by=SYSTEM_USER_ID,
+        )
+        version = ResumeVersionModel(
+            id=uuid4(),
+            resume_id=resume.id,
+            version_number=1,
+            s3_bucket="test",
+            s3_key=f"resumes/{candidate.id}/curriculo.pdf",
+            original_file_name="curriculo.pdf",
+            file_size_bytes=1024,
+            file_hash_sha256="a" * 64,
+            mime_type="application/pdf",
+            extraction_status="completed",
+            uploaded_by=SYSTEM_USER_ID,
+        )
+        db_session.add_all([resume, version])
     await db_session.commit()
     return candidate
 

@@ -43,6 +43,16 @@ async def _get_candidate_password_hash(
     )
 
 
+async def _get_candidate_salary_expectation(
+    db_session: AsyncSession,
+    email: str,
+) -> str | None:
+    return await db_session.scalar(
+        sa.text("SELECT salary_expectation FROM candidates WHERE email = :email"),
+        {"email": email.strip().lower()},
+    )
+
+
 async def _list_pipeline_rows(
     db_session: AsyncSession,
     *,
@@ -211,6 +221,92 @@ async def test_apply_creates_candidate_and_resume(
     password_hash = await _get_candidate_password_hash(db_session, "joao@example.com")
     assert password_hash is not None
     assert password_hash != "SenhaSegura123"
+    assert await _get_candidate_salary_expectation(db_session, "joao@example.com") == "5000.00"
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_missing_salary_expectation(
+    client: AsyncClient,
+    valid_pdf_bytes: bytes,
+) -> None:
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Sem Salario",
+            "cpf": "12345678909",
+            "email": "sem-salario@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.json()["detail"] == "Informe sua pretensão salarial."
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_invalid_salary_expectation(
+    client: AsyncClient,
+    valid_pdf_bytes: bytes,
+) -> None:
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Salario Invalido",
+            "cpf": "12345678909",
+            "email": "salario-invalido@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "R$ 0,00",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.json()["detail"] == "Informe uma pretensão salarial válida."
+
+
+@pytest.mark.asyncio
+async def test_apply_normalizes_brazilian_salary_expectation(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    valid_pdf_bytes: bytes,
+) -> None:
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Salario Normalizado",
+            "cpf": "12345678909",
+            "email": "salario-normalizado@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "R$ 2.500,00",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert await _get_candidate_salary_expectation(db_session, "salario-normalizado@example.com") == "2500.00"
 
 
 @pytest.mark.asyncio

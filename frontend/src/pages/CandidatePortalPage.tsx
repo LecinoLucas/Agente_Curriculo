@@ -98,6 +98,12 @@ function buildContactForm(overview: CandidatePortalOverview): ContactFormState {
   };
 }
 
+function isIncompleteCandidateProfileError(error: unknown): boolean {
+  if (!(error instanceof HttpError) || error.status !== 403) return false;
+  if (!error.detail || typeof error.detail !== "object") return false;
+  return (error.detail as Record<string, unknown>).code === "candidate_profile_incomplete";
+}
+
 function ApplicationCard({
   application,
 }: {
@@ -339,6 +345,10 @@ export function CandidatePortalPage() {
     } catch (error) {
       if (error instanceof HttpError && error.status === 401) {
         navigate("/candidato/login", { replace: true });
+        return;
+      }
+      if (isIncompleteCandidateProfileError(error)) {
+        navigate("/candidato/cadastro", { replace: true });
         return;
       }
       const message =

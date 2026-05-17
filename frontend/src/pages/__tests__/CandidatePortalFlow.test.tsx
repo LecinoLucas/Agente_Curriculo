@@ -7,6 +7,7 @@ import { CandidateLoginPage } from "../CandidateLoginPage";
 import { CandidatePortalPage } from "../CandidatePortalPage";
 import { candidatePortalService } from "../../services/candidatePortalService";
 import { communicationService } from "../../services/communicationService";
+import { HttpError } from "../../services/http";
 
 vi.mock("../../services/candidatePortalService", () => ({
   candidatePortalService: {
@@ -211,6 +212,34 @@ describe("Candidate portal flow", () => {
     // Verify no internal scores are shown to public candidates
     expect(screen.queryByText(/score de ia/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/internal_notes/i)).not.toBeInTheDocument();
+  });
+
+  it("redireciona candidato incompleto para completar cadastro", async () => {
+    (candidatePortalService.getOverview as any).mockRejectedValue(
+      new HttpError(
+        403,
+        "Sem permissão para esta operação",
+        undefined,
+        null,
+        {
+          code: "candidate_profile_incomplete",
+          message: "Complete seu cadastro para acessar o portal do candidato.",
+          missing_fields: ["cpf", "salary_expectation", "resume", "lgpd_consent"],
+          redirect_to: "/candidato/cadastro",
+        }
+      )
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/candidato/portal"]}>
+        <Routes>
+          <Route path="/candidato/portal" element={<CandidatePortalPage />} />
+          <Route path="/candidato/cadastro" element={<div>Cadastro candidato</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Cadastro candidato")).toBeInTheDocument();
   });
 
   it("portal mostra card e permite responder avaliação comportamental", async () => {

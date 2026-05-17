@@ -1,8 +1,13 @@
 import { useState, useCallback } from "react";
+import type { CandidateGoogleLoginResponse } from "../../../types/auth";
 import { validatePhone } from "../utils/phone";
+import { formatSalaryExpectationInput, normalizeSalaryExpectation } from "../utils/salary";
 import type { ApplicationErrors, FormData, Step } from "../types";
 
 const INITIAL_FORM: FormData = {
+  authMethod: "manual",
+  emailLocked: false,
+  googlePictureUrl: null,
   fullName: "",
   cpf: "",
   email: "",
@@ -63,20 +68,28 @@ export function useApplicationForm() {
         newErrors.state = "Estado é obrigatório";
       }
 
-      if (!form.password) {
-        newErrors.password = "Senha é obrigatória";
-      } else if (form.password.length < 8) {
-        newErrors.password = "Senha deve ter no mínimo 8 caracteres";
-      }
+      if (form.authMethod === "manual") {
+        if (!form.password) {
+          newErrors.password = "Senha é obrigatória";
+        } else if (form.password.length < 8) {
+          newErrors.password = "Senha deve ter no mínimo 8 caracteres";
+        }
 
-      if (!form.confirmPassword) {
-        newErrors.confirmPassword = "Confirmação de senha é obrigatória";
-      } else if (form.confirmPassword !== form.password) {
-        newErrors.confirmPassword = "Confirmação de senha não confere";
+        if (!form.confirmPassword) {
+          newErrors.confirmPassword = "Confirmação de senha é obrigatória";
+        } else if (form.confirmPassword !== form.password) {
+          newErrors.confirmPassword = "Confirmação de senha não confere";
+        }
       }
     }
 
     if (currentStep === "job-resume") {
+      if (!form.salaryExpectation.trim()) {
+        newErrors.salaryExpectation = "Informe sua pretensão salarial.";
+      } else if (!normalizeSalaryExpectation(form.salaryExpectation)) {
+        newErrors.salaryExpectation = "Informe uma pretensão salarial válida.";
+      }
+
       if (!form.resumeFile) {
         newErrors.resumeFile = "Currículo é obrigatório";
       } else if (!form.resumeFile.name.endsWith(".pdf")) {
@@ -125,6 +138,26 @@ export function useApplicationForm() {
     setIsSubmitting(false);
   }, []);
 
+  const applyGoogleCandidate = useCallback((payload: CandidateGoogleLoginResponse) => {
+    setForm((prev) => ({
+      ...prev,
+      authMethod: "google",
+      emailLocked: payload.candidate.email_locked,
+      googlePictureUrl: payload.candidate.picture_url,
+      fullName: payload.candidate.full_name ?? prev.fullName,
+      email: payload.candidate.email ?? prev.email,
+      phone: payload.candidate.phone ?? prev.phone,
+      cpf: payload.candidate.cpf ?? prev.cpf,
+      salaryExpectation: payload.candidate.salary_expectation
+        ? formatSalaryExpectationInput(payload.candidate.salary_expectation.replace(/\D/g, ""))
+        : prev.salaryExpectation,
+      password: "",
+      confirmPassword: "",
+    }));
+    setErrors({});
+    setCurrentStep("personal-data");
+  }, []);
+
   return {
     currentStep,
     form,
@@ -136,5 +169,7 @@ export function useApplicationForm() {
     prevStep,
     reset,
     validateStep,
+    applyGoogleCandidate,
+    setCurrentStep,
   };
 }

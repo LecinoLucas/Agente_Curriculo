@@ -10,6 +10,7 @@ from src.application.services.candidate_portal_auth_service import (
     PORTAL_SESSION_TTL_HOURS,
     CandidatePortalAuthService,
     CandidatePortalInvalidCredentialsError,
+    CandidatePortalLockedError,
 )
 from src.application.services.candidate_google_auth_service import (
     CandidateGoogleAuthConflictError,
@@ -17,6 +18,7 @@ from src.application.services.candidate_google_auth_service import (
     CandidateGoogleAuthService,
 )
 from src.application.services.candidate_portal_service import (
+    CandidatePortalIncompleteProfileError,
     CandidatePortalInvalidFileError,
     CandidatePortalProfileConflictError,
     CandidatePortalService,
@@ -32,7 +34,7 @@ from src.application.services.public_application_service import (
 )
 from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
-from src.interface.api.dependencies import CurrentCandidateSession, get_db
+from src.interface.api.dependencies import CurrentCandidateSession, candidate_profile_incomplete_detail, get_db
 from src.interface.api.schemas.candidate_portal_schemas import (
     CandidateAuthGoogleRequest,
     CandidateAuthGoogleResponse,
@@ -118,8 +120,9 @@ async def apply(
         if desired_contract_type not in valid_contract_types:
             raise ValidationException(f"Regime desejado deve ser um de: {', '.join(valid_contract_types)}")
         token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
+        use_existing_session = not password and not confirm_password
         candidate_session = None
-        if token:
+        if token and use_existing_session:
             try:
                 candidate_session = await CandidatePortalAuthService(db).authenticate(token)
             except Exception:
@@ -313,6 +316,12 @@ async def login_candidate_portal(
             redirect_to="/candidato/portal",
             session_expires_at=session_expires_at,
         )
+    except CandidatePortalLockedError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Conta temporariamente bloqueada. Tente novamente mais tarde.",
+        )
     except CandidatePortalInvalidCredentialsError:
         await db.rollback()
         raise HTTPException(
@@ -350,8 +359,14 @@ async def get_candidate_portal_overview(
     candidate_session: CurrentCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> CandidatePortalOverviewResponse:
-    service = CandidatePortalService(db)
-    return await service.get_overview(candidate_session.candidate_id)
+    try:
+        service = CandidatePortalService(db)
+        return await service.get_overview(candidate_session.candidate_id)
+    except CandidatePortalIncompleteProfileError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=candidate_profile_incomplete_detail(exc.missing_fields),
+        )
 
 
 @router.patch("/candidate-portal/profile", response_model=CandidatePortalOverviewResponse)
@@ -370,6 +385,12 @@ async def update_candidate_portal_profile(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Não foi possível atualizar os dados informados",
+        )
+    except CandidatePortalIncompleteProfileError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=candidate_profile_incomplete_detail(exc.missing_fields),
         )
 
 

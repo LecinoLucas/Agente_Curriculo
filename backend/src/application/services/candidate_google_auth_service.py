@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
-
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.candidate_profile_completion_service import CandidateProfileCompletionService
 from src.application.services.candidate_portal_auth_service import CandidatePortalAuthService
-from src.application.services.candidate_salary_expectation import has_salary_expectation
 from src.application.services.candidate_service import APPLICATION_SOURCE_GOOGLE, APPLICATION_SOURCE_PUBLIC
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import SQLAlchemyCandidateRepository
@@ -30,12 +27,6 @@ class CandidateGoogleAuthConflictError(Exception):
 
 class CandidateGoogleAuthEmailNotVerifiedError(Exception):
     pass
-
-
-@dataclass(slots=True)
-class CandidateCompletionState:
-    has_resume: bool
-    missing_fields: list[str]
 
 
 class CandidateGoogleAuthService:
@@ -61,7 +52,7 @@ class CandidateGoogleAuthService:
             raise CandidateGoogleAuthEmailNotVerifiedError
 
         candidate = await self._find_or_create_candidate(identity)
-        completion_state = await self._build_completion_state(candidate)
+        completion_state = await CandidateProfileCompletionService(self._db).get_completion_state(candidate.id)
 
         candidate.updated_at = datetime.now(UTC)
         candidate.last_login_at = datetime.now(UTC)
@@ -141,34 +132,4 @@ class CandidateGoogleAuthService:
         return candidate
 
     async def _find_active_by_google_sub(self, google_sub: str) -> CandidateModel | None:
-        return await self._db.scalar(
-            sa.select(CandidateModel).where(
-                CandidateModel.google_sub == google_sub,
-                CandidateModel.deleted_at.is_(None),
-                CandidateModel.archived_at.is_(None),
-            )
-        )
-
-    async def _build_completion_state(self, candidate: CandidateModel) -> CandidateCompletionState:
-        has_resume = bool(await self._candidate_repo.list_resume_summaries(candidate.id))
-        missing_fields: list[str] = []
-
-        if not candidate.full_name or not candidate.full_name.strip():
-            missing_fields.append("full_name")
-        if not candidate.email or not candidate.email.strip():
-            missing_fields.append("email")
-        if not candidate.phone or not candidate.phone.strip():
-            missing_fields.append("phone")
-        if not candidate.cpf or not candidate.cpf.strip():
-            missing_fields.append("cpf")
-        if not has_salary_expectation(candidate.salary_expectation):
-            missing_fields.append("salary_expectation")
-        if not has_resume:
-            missing_fields.append("resume")
-        if candidate.lgpd_consent_at is None:
-            missing_fields.append("lgpd_consent")
-
-        return CandidateCompletionState(
-            has_resume=has_resume,
-            missing_fields=missing_fields,
-        )
+        return await self._candidate_repo.find_active_by_google_sub(google_sub)

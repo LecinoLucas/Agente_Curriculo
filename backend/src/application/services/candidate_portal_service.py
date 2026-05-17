@@ -32,6 +32,7 @@ from src.interface.api.schemas.candidate_portal_schemas import (
     CandidatePortalUpdateProfileRequest,
 )
 from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
+from src.application.services.candidate_profile_completion_service import CandidateProfileCompletionService
 
 logger = structlog.get_logger(__name__)
 
@@ -46,6 +47,12 @@ class CandidatePortalInvalidFileError(Exception):
     pass
 
 
+class CandidatePortalIncompleteProfileError(Exception):
+    def __init__(self, missing_fields: list[str]) -> None:
+        self.missing_fields = missing_fields
+        super().__init__("Cadastro do candidato incompleto")
+
+
 class CandidatePortalService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
@@ -58,6 +65,10 @@ class CandidatePortalService:
             raise CandidatePortalProfileConflictError
 
         latest_resume = await self._build_latest_resume(candidate_id)
+        missing_fields = self._required_missing_fields(candidate, has_resume=latest_resume is not None)
+        if missing_fields:
+            raise CandidatePortalIncompleteProfileError(missing_fields)
+
         pipeline_rows = await self._candidate_repo.list_pipeline_entries_for_portal(candidate_id)
         active_pipeline_rows = await self._candidate_repo.list_active_pipeline_entries(candidate_id)
         active_pipeline_row = self._resolve_active_pipeline_row(
@@ -574,6 +585,10 @@ class CandidatePortalService:
         return digits or None
 
     @staticmethod
+    def _required_missing_fields(candidate: dict, *, has_resume: bool) -> list[str]:
+        return CandidateProfileCompletionService.find_missing_fields(candidate, has_resume=has_resume)
+
+    @staticmethod
     def _validate_pdf_upload(file_name: str, content_type: str | None, content: bytes) -> None:
         if not content:
             raise CandidatePortalInvalidFileError("Arquivo vazio")
@@ -597,6 +612,8 @@ class CandidatePortalService:
                 CandidateModel.location_city,
                 CandidateModel.location_state,
                 CandidateModel.application_source,
+                CandidateModel.salary_expectation,
+                CandidateModel.lgpd_consent_at,
                 CandidateModel.created_at,
             ).where(
                 CandidateModel.id == candidate_id,

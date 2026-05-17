@@ -10,7 +10,7 @@ from src.domain.exceptions import ConflictException, NotFoundException, Validati
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
     SQLAlchemyBehavioralAssignmentRepository,
 )
-from src.interface.api.dependencies import CurrentCandidateSession, get_db
+from src.interface.api.dependencies import CurrentCompleteCandidateSession, get_db
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 
 from src.interface.api.schemas.behavioral_assignment_schemas import (
@@ -29,7 +29,7 @@ def _service(db: AsyncSession) -> BehavioralAssignmentService:
 
 @router.get("", response_model=list[BehavioralAssignmentSummaryResponse])
 async def list_behavioral_assessments(
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> list[BehavioralAssignmentSummaryResponse]:
     return await _service(db).list_for_candidate(candidate_session.candidate_id)
@@ -38,7 +38,7 @@ async def list_behavioral_assessments(
 @router.get("/{assignment_id}", response_model=BehavioralAssignmentDetailResponse)
 async def get_behavioral_assessment(
     assignment_id: UUID,
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> BehavioralAssignmentDetailResponse:
     try:
@@ -53,7 +53,7 @@ async def get_behavioral_assessment(
 @router.post("/{assignment_id}/start", response_model=BehavioralAssignmentDetailResponse)
 async def start_behavioral_assessment(
     assignment_id: UUID,
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> BehavioralAssignmentDetailResponse:
     try:
@@ -75,7 +75,7 @@ async def start_behavioral_assessment(
 async def save_behavioral_answers(
     assignment_id: UUID,
     body: BehavioralAssignmentAnswersRequest,
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> BehavioralAssignmentDetailResponse:
     try:
@@ -100,7 +100,7 @@ async def save_behavioral_answers(
 @router.post("/{assignment_id}/submit", response_model=BehavioralAssignmentDetailResponse)
 async def submit_behavioral_assessment(
     assignment_id: UUID,
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     body: BehavioralAssignmentSubmitRequest | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> BehavioralAssignmentDetailResponse:

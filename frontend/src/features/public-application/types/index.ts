@@ -3,6 +3,10 @@ export type Step = "method" | "personal-data" | "job-resume" | "review";
 export type ApplicationStatus = "awaiting_job" | "entered_pipeline";
 
 export interface FormData {
+  authMethod: "manual" | "google";
+  emailLocked: boolean;
+  googlePictureUrl: string | null;
+
   // Personal data
   fullName: string;
   cpf: string;

@@ -13,7 +13,7 @@ from src.application.services.pre_admission_service import (
 )
 from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
 from src.infrastructure.database.models.pre_admission_model import PreAdmissionChecklistItemModel
-from src.interface.api.dependencies import CurrentCandidateSession, RecruiterHrOrAdmin, get_db
+from src.interface.api.dependencies import CurrentCompleteCandidateSession, RecruiterHrOrAdmin, get_db
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionEnvelopeResponse,
@@ -256,7 +256,7 @@ async def download_pre_admission_document(
     response_model=CandidatePortalPreAdmissionEnvelopeResponse,
 )
 async def get_candidate_portal_pre_admission(
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> CandidatePortalPreAdmissionEnvelopeResponse:
     return await _service(db).candidate_portal_get(candidate_id=candidate_session.candidate_id)
@@ -268,7 +268,7 @@ async def get_candidate_portal_pre_admission(
 )
 async def get_candidate_portal_pre_admission_case(
     case_id: UUID,
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> CandidatePortalPreAdmissionEnvelopeResponse:
     return await _service(db).candidate_portal_get(
@@ -285,7 +285,7 @@ async def get_candidate_portal_pre_admission_case(
 async def upload_candidate_portal_pre_admission_document(
     case_id: UUID,
     item_id: UUID,
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     document_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionDocumentResponse:
@@ -309,7 +309,7 @@ async def upload_candidate_portal_pre_admission_document(
 @router.get("/candidate-portal/pre-admission/documents/{document_id}/download")
 async def download_candidate_portal_pre_admission_document(
     document_id: UUID,
-    candidate_session: CurrentCandidateSession,
+    candidate_session: CurrentCompleteCandidateSession,
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
     try:

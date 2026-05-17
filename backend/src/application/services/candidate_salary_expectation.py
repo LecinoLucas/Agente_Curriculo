@@ -43,6 +43,9 @@ def _parse_salary_amount(raw_value: str) -> Decimal:
     if not cleaned:
         raise ValidationException("Informe uma pretensão salarial válida.")
 
+    if "-" in cleaned[1:]:
+        cleaned = next((part for part in cleaned.split("-") if part), cleaned)
+
     if "," in cleaned:
         cleaned = cleaned.replace(".", "").replace(",", ".")
     elif cleaned.count(".") > 1:

@@ -21,15 +21,18 @@ class LoginUseCase:
     async def execute(self, command: LoginCommand) -> LoginResult:
         user = await self._user_repo.find_by_email(command.email)
 
-        # Validação com mensagem genérica: não revelamos se o email existe
-        if user is None or not verify_password(command.password, user.password_hash):
-            if user is not None:
-                user.record_failed_login()
-                await self._user_repo.save(user)
+        # Não revelar se o email existe antes de qualquer check
+        if user is None:
             raise UnauthorizedException("Credenciais inválidas")
 
+        # Verificar bloqueio antes de executar bcrypt (evita custo desnecessário)
         if user.is_locked:
             raise AccountLockedException("Conta temporariamente bloqueada. Tente novamente mais tarde.")
+
+        if not verify_password(command.password, user.password_hash):
+            user.record_failed_login()
+            await self._user_repo.save(user)
+            raise UnauthorizedException("Credenciais inválidas")
 
         if not user.is_active:
             raise AccountInactiveException("Conta inativa ou pendente de verificação.")

@@ -2,6 +2,7 @@ import { Loader2, LogIn, ShieldCheck, ArrowRight, Sparkles, Eye, EyeOff } from "
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { GoogleSignInButton } from "../components/auth/GoogleSignInButton";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -11,7 +12,10 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Input } from "../components/ui/input";
+import { candidateAuthService } from "../services/candidateAuthService";
 import { candidatePortalService } from "../services/candidatePortalService";
+
+const GOOGLE_CANDIDATE_STORAGE_KEY = "candidate-google-auth";
 
 export function CandidateLoginPage() {
   const navigate = useNavigate();
@@ -51,6 +55,31 @@ export function CandidateLoginPage() {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void handleLogin();
+  };
+
+  const handleGoogleCredential = async (idToken: string) => {
+    setErrorMessage(null);
+    setIsSubmitting(true);
+    try {
+      const response = await candidateAuthService.googleLogin({ id_token: idToken });
+      if (response.status === "authenticated") {
+        sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
+        navigate(response.redirect_to, { replace: true });
+        return;
+      }
+
+      sessionStorage.setItem(GOOGLE_CANDIDATE_STORAGE_KEY, JSON.stringify(response));
+      navigate("/candidato/cadastro", {
+        replace: true,
+        state: { googleAuth: response },
+      });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Não foi possível concluir o login com Google."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -181,6 +210,12 @@ export function CandidateLoginPage() {
                   )}
                   Acessar minha conta
                 </Button>
+
+                <GoogleSignInButton
+                  disabled={isSubmitting}
+                  onCredential={handleGoogleCredential}
+                  onError={setErrorMessage}
+                />
 
                 <div className="relative my-8">
                   <div className="absolute inset-0 flex items-center">

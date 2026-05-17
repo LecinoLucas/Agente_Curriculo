@@ -11,6 +11,10 @@ from src.domain.exceptions import ForbiddenException, UnauthorizedException
 from src.infrastructure.database.connection import get_db_session
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.jwt_service import decode_access_token
+from src.application.services.candidate_profile_completion_service import (
+    CandidateProfileCompletionService,
+    CandidateProfileNotFoundError,
+)
 from src.application.services.candidate_portal_auth_service import (
     CANDIDATE_PORTAL_COOKIE_NAME,
     CandidatePortalSession,
@@ -131,5 +135,42 @@ async def get_optional_candidate_session(
     return session
 
 
+def candidate_profile_incomplete_detail(missing_fields: list[str]) -> dict:
+    return {
+        "code": "candidate_profile_incomplete",
+        "message": "Complete seu cadastro para acessar o portal do candidato.",
+        "missing_fields": missing_fields,
+        "redirect_to": "/candidato/cadastro",
+    }
+
+
+def raise_candidate_profile_incomplete(missing_fields: list[str]) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=candidate_profile_incomplete_detail(missing_fields),
+    )
+
+
+async def require_complete_candidate_profile(
+    request: Request,
+    candidate_session: CandidatePortalSession = Depends(get_current_candidate_session),
+    db: AsyncSession = Depends(get_db),
+) -> CandidatePortalSession:
+    try:
+        state = await CandidateProfileCompletionService(db).get_completion_state(candidate_session.candidate_id)
+    except CandidateProfileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão do candidato inválida ou expirada",
+        )
+
+    if state.missing_fields:
+        raise_candidate_profile_incomplete(state.missing_fields)
+
+    request.state.candidate_id = candidate_session.candidate_id
+    return candidate_session
+
+
 CurrentCandidateSession = Annotated[CandidatePortalSession, Depends(get_current_candidate_session)]
+CurrentCompleteCandidateSession = Annotated[CandidatePortalSession, Depends(require_complete_candidate_profile)]
 OptionalCandidateSession = Annotated[CandidatePortalSession | None, Depends(get_optional_candidate_session)]

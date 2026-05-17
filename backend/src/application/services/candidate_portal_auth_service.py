@@ -20,6 +20,10 @@ PORTAL_SESSION_PURPOSE = "portal_session"
 CANDIDATE_PORTAL_COOKIE_NAME = "candidate_portal_token"
 PORTAL_SESSION_TTL_HOURS = 24
 
+MAX_CANDIDATE_FAILED_LOGINS = 5
+CANDIDATE_LOCKOUT_TTL_SECONDS = 15 * 60  # 15 minutos
+_ATTEMPTS_KEY_PREFIX = "candidate_auth_attempts:"
+
 
 class CandidatePortalAuthError(Exception):
     pass
@@ -30,6 +34,10 @@ class CandidatePortalInvalidCredentialsError(CandidatePortalAuthError):
 
 
 class CandidatePortalSessionError(CandidatePortalAuthError):
+    pass
+
+
+class CandidatePortalLockedError(CandidatePortalAuthError):
     pass
 
 
@@ -55,6 +63,10 @@ class CandidatePortalAuthService:
         if clean_email is None or not password:
             raise CandidatePortalInvalidCredentialsError
 
+        # Verificar bloqueio temporário antes de qualquer operação custosa
+        if await self._is_locked(clean_email):
+            raise CandidatePortalLockedError
+
         row = await self._db.execute(
             sa.select(
                 CandidateModel.id,
@@ -73,7 +85,11 @@ class CandidatePortalAuthService:
 
         password_hash = candidate["password_hash"]
         if not password_hash or not verify_password(password, password_hash):
+            await self._record_failed_attempt(clean_email)
             raise CandidatePortalInvalidCredentialsError
+
+        # Sucesso: limpar contador de tentativas
+        await self._clear_failed_attempts(clean_email)
 
         await self._db.execute(
             sa.update(CandidateModel)
@@ -149,6 +165,24 @@ class CandidatePortalAuthService:
             )
             .values(used_at=datetime.now(UTC))
         )
+
+    async def _is_locked(self, email: str) -> bool:
+        redis = await get_redis()
+        key = f"{_ATTEMPTS_KEY_PREFIX}{self._sha256(email)}"
+        val = await redis.get(key)
+        return int(val) >= MAX_CANDIDATE_FAILED_LOGINS if val else False
+
+    async def _record_failed_attempt(self, email: str) -> None:
+        redis = await get_redis()
+        key = f"{_ATTEMPTS_KEY_PREFIX}{self._sha256(email)}"
+        val = await redis.get(key)
+        count = (int(val) if val else 0) + 1
+        await redis.setex(key, CANDIDATE_LOCKOUT_TTL_SECONDS, str(count))
+
+    async def _clear_failed_attempts(self, email: str) -> None:
+        redis = await get_redis()
+        key = f"{_ATTEMPTS_KEY_PREFIX}{self._sha256(email)}"
+        await redis.delete(key)
 
     @staticmethod
     def _normalize_email(value: str | None) -> str | None:

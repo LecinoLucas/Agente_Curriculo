@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.communication_service import CommunicationService
 from src.interface.api.dependencies import (
     AdminOnly,
-    CurrentCandidateSession,
+    CurrentCompleteCandidateSession,
     RecruiterOrAdmin,
     get_db,
 )
@@ -76,7 +76,7 @@ async def retry_communication(
     response_model=CommunicationListResponse,
 )
 async def list_communications_for_candidate(
-    current_session: CurrentCandidateSession,
+    current_session: CurrentCompleteCandidateSession,
     service: CommunicationService = Depends(_get_service),
 ) -> CommunicationListResponse:
     """List communications for current candidate."""
@@ -97,7 +97,7 @@ async def list_communications_for_candidate(
 async def mark_communication_read(
     communication_id: UUID,
     request: CommunicationMarkReadRequest,
-    current_session: CurrentCandidateSession,
+    current_session: CurrentCompleteCandidateSession,
     service: CommunicationService = Depends(_get_service),
 ) -> dict:
     """Mark communication as read."""

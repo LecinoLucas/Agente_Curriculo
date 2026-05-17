@@ -24,3 +24,28 @@ export type LoginResponse = {
   must_change_password: boolean;
   token_type: string;
 };
+
+export type CandidateGoogleLoginPayload = {
+  id_token: string;
+};
+
+export type CandidateGoogleProfile = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  cpf: string | null;
+  salary_expectation: string | null;
+  has_resume: boolean;
+  picture_url: string | null;
+  email_locked: boolean;
+};
+
+export type CandidateGoogleLoginResponse = {
+  status: "authenticated" | "needs_completion";
+  message: string;
+  redirect_to: string;
+  session_expires_at: string;
+  candidate: CandidateGoogleProfile;
+  missing_fields: string[];
+};

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid4
@@ -34,6 +34,7 @@ class UserStatus(str, Enum):
 
 
 MAX_FAILED_LOGINS = 5
+LOCKOUT_DURATION_MINUTES = 15
 
 
 @dataclass
@@ -93,7 +94,10 @@ class User:
     def is_locked(self) -> bool:
         if self.locked_until is None:
             return False
-        return datetime.now(timezone.utc) < self.locked_until
+        lu = self.locked_until
+        if lu.tzinfo is None:
+            lu = lu.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) < lu
 
     @property
     def is_deleted(self) -> bool:
@@ -102,10 +106,13 @@ class User:
     def record_failed_login(self) -> None:
         self.failed_login_count += 1
         self.updated_at = datetime.now(timezone.utc)
+        if self.failed_login_count >= MAX_FAILED_LOGINS:
+            self.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
 
     def record_successful_login(self) -> None:
         self.login_count += 1
         self.failed_login_count = 0
+        self.locked_until = None
         self.last_login_at = datetime.now(timezone.utc)
         self.updated_at = datetime.now(timezone.utc)
 

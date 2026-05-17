@@ -29,7 +29,7 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from src.interface.api.dependencies import CurrentUser, InternalUser, RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import AdminOnly, CurrentUser, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.analysis_schemas import (
     AnalysisGlobalItemResponse,
     AnalysisMatchResponse,
@@ -201,7 +201,7 @@ async def _analysis_result_response(
 @router.post("", response_model=AnalysisRequestResponse, status_code=status.HTTP_202_ACCEPTED)
 async def request_analysis(
     resume_version_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     job_id: UUID | None = Query(default=None),
     force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
@@ -373,7 +373,7 @@ async def get_analysis_status(
 @router.get("/{analysis_id}/result", response_model=AnalysisResultResponse)
 async def get_analysis_result(
     analysis_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisResultResponse:
     try:
@@ -425,7 +425,7 @@ async def match_analysis_to_job(
 
 @router.post("/stuck", status_code=status.HTTP_200_OK)
 async def detect_and_mark_stuck_analyses(
-    current_user: InternalUser,
+    current_user: AdminOnly,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Detect analyses stuck in processing/pending and mark them as failed.

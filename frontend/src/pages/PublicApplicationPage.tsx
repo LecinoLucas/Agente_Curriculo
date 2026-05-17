@@ -1,7 +1,8 @@
 import { ChevronLeft, ChevronRight, Loader2, Sparkles, Send } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
+import { candidateAuthService } from "../services/candidateAuthService";
 import { ApplicationIntroCard } from "../features/public-application/components/ApplicationIntroCard";
 import { JobResumeStep } from "../features/public-application/components/JobResumeStep";
 import { PersonalDataStep } from "../features/public-application/components/PersonalDataStep";
@@ -10,14 +11,84 @@ import { SignupMethodStep } from "../features/public-application/components/Sign
 import { SuccessScreen } from "../features/public-application/components/SuccessScreen";
 import { useApplicationForm } from "../features/public-application/hooks/useApplicationForm";
 import { publicApplicationService } from "../features/public-application/services/publicApplicationService";
+import { normalizeSalaryExpectation } from "../features/public-application/utils/salary";
 import type { ApplyResponse } from "../features/public-application/types";
+import type { CandidateGoogleLoginResponse } from "../types/auth";
 import { toast } from "../shared/utils/toast";
+
+const GOOGLE_CANDIDATE_STORAGE_KEY = "candidate-google-auth";
 
 export function PublicApplicationPage() {
   const navigate = useNavigate();
-  const { currentStep, form, errors, isSubmitting, setIsSubmitting, updateForm, nextStep, prevStep, reset } =
-    useApplicationForm();
+  const location = useLocation();
+  const {
+    currentStep,
+    form,
+    errors,
+    isSubmitting,
+    setIsSubmitting,
+    updateForm,
+    nextStep,
+    prevStep,
+    reset,
+    applyGoogleCandidate,
+  } = useApplicationForm();
   const [successResponse, setSuccessResponse] = useState<ApplyResponse | null>(null);
+  const [googleNotice, setGoogleNotice] = useState<string | null>(null);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  const syncGoogleState = useCallback(
+    (payload: CandidateGoogleLoginResponse) => {
+      sessionStorage.setItem(GOOGLE_CANDIDATE_STORAGE_KEY, JSON.stringify(payload));
+      applyGoogleCandidate(payload);
+      setGoogleNotice(payload.message);
+      setGoogleError(null);
+    },
+    [applyGoogleCandidate]
+  );
+
+  useEffect(() => {
+    const navigationState = location.state as { googleAuth?: CandidateGoogleLoginResponse } | null;
+    const fromNavigation = navigationState?.googleAuth;
+    if (fromNavigation) {
+      syncGoogleState(fromNavigation);
+      return;
+    }
+
+    const stored = sessionStorage.getItem(GOOGLE_CANDIDATE_STORAGE_KEY);
+    if (!stored) return;
+
+    try {
+      syncGoogleState(JSON.parse(stored) as CandidateGoogleLoginResponse);
+    } catch {
+      sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
+    }
+  }, [location.state, syncGoogleState]);
+
+  const handleGoogleCredential = useCallback(
+    async (idToken: string) => {
+      setIsSubmitting(true);
+      setGoogleError(null);
+      try {
+        const response = await candidateAuthService.googleLogin({ id_token: idToken });
+        if (response.status === "authenticated") {
+          sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
+          toast.success("Login com Google realizado com sucesso.");
+          navigate(response.redirect_to, { replace: true });
+          return;
+        }
+
+        syncGoogleState(response);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Não foi possível concluir o login com Google.";
+        setGoogleError(message);
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [navigate, setIsSubmitting, syncGoogleState]
+  );
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -29,9 +100,11 @@ export function PublicApplicationPage() {
       formData.append("phone", form.phone);
       formData.append("city", form.city);
       formData.append("state", form.state);
-      formData.append("password", form.password);
-      formData.append("confirm_password", form.confirmPassword);
-      formData.append("salary_expectation", form.salaryExpectation);
+      if (form.authMethod === "manual") {
+        formData.append("password", form.password);
+        formData.append("confirm_password", form.confirmPassword);
+      }
+      formData.append("salary_expectation", normalizeSalaryExpectation(form.salaryExpectation) ?? "");
       formData.append("desired_contract_type", form.desiredContractType);
       formData.append("works_at_marajo_group", form.worksAtMarajoGroup ? "true" : "false");
       formData.append("lgpd_consent", form.lgpdConsent ? "true" : "false");
@@ -44,6 +117,7 @@ export function PublicApplicationPage() {
 
       const response = await publicApplicationService.submitApplication(formData);
       setSuccessResponse(response);
+      sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
       toast.success("Candidatura enviada com sucesso!");
       navigate("/candidato/portal", { replace: true });
     } catch (err: unknown) {
@@ -70,6 +144,7 @@ export function PublicApplicationPage() {
           <SuccessScreen
             response={successResponse}
             onNewApplication={() => {
+              sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
               reset();
               setSuccessResponse(null);
             }}
@@ -106,8 +181,18 @@ export function PublicApplicationPage() {
         {/* Form */}
         <form className="relative overflow-hidden rounded-[2.5rem] border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface)/0.7)] p-8 shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 duration-500" onSubmit={handleFormSubmit} noValidate>
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--primary)/0.02)] to-transparent pointer-events-none" />
+          {googleNotice ? (
+            <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              {googleNotice}
+            </div>
+          ) : null}
+          {googleError ? (
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {googleError}
+            </div>
+          ) : null}
           {/* Progress indicator */}
-          <div className="mb-8">
+          {currentStep !== "method" ? <div className="mb-8">
             <div className="flex items-center justify-between">
               {(["method", "personal-data", "job-resume", "review"] as const).map((step, idx) => (
                 <div key={step} className="flex items-center">
@@ -129,11 +214,18 @@ export function PublicApplicationPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </div> : null}
 
           {/* Steps */}
           <div className="mb-8">
-            {currentStep === "method" && <SignupMethodStep onSelectManual={nextStep} />}
+            {currentStep === "method" && (
+              <SignupMethodStep
+                onSelectManual={nextStep}
+                onGoogleCredential={handleGoogleCredential}
+                onGoogleError={setGoogleError}
+                googleDisabled={isSubmitting}
+              />
+            )}
             {currentStep === "personal-data" && (
               <PersonalDataStep form={form} errors={errors} onChange={updateForm} />
             )}

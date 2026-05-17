@@ -164,6 +164,14 @@ class PublicApplicationService:
                 raise PublicApplicationExistingAccountError(
                     "Não foi possível validar sua sessão. Faça login novamente para continuar."
                 )
+            if (
+                existing_candidate.google_sub
+                and existing_candidate.email
+                and existing_candidate.email.lower().strip() != email_clean
+            ):
+                raise PublicApplicationExistingAccountError(
+                    "Não é possível alterar o e-mail validado pela conta Google."
+                )
             if existing_by_email and existing_by_email.id != existing_candidate.id:
                 raise PublicApplicationExistingAccountError(
                     "Já existe um cadastro com este e-mail. Faça login para continuar sua candidatura."
@@ -245,6 +253,7 @@ class PublicApplicationService:
             candidate.full_name = full_name.strip()
             candidate.email = email_clean
             candidate.phone = phone_clean
+            candidate.cpf = cpf_clean
             candidate.location_city = city.strip()
             candidate.location_state = state.strip().upper()
             candidate.application_source = APPLICATION_SOURCE_PUBLIC

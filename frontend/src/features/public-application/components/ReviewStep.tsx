@@ -9,10 +9,12 @@ interface Props {
 export function ReviewStep({ form, errors, onChange }: Props) {
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-gray-900">Revisão da candidatura</h2>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[hsl(var(--primary))]">Consentimento</p>
+        <h2 className="text-2xl font-semibold tracking-tight text-[hsl(var(--text))]">Revise e conclua sua candidatura</h2>
+      </div>
 
-      {/* Resumo de dados */}
-      <div className="space-y-3 rounded-lg bg-gray-50 p-4">
+      <div className="space-y-3 rounded-3xl bg-gray-50 p-5">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="font-medium text-gray-700">Nome:</span>
@@ -42,12 +44,10 @@ export function ReviewStep({ form, errors, onChange }: Props) {
           </div>
         </div>
 
-        {form.salaryExpectation && (
-          <div className="border-t pt-3">
-            <span className="font-medium text-gray-700">Pretensão salarial:</span>
-            <p className="text-gray-900">{form.salaryExpectation}</p>
-          </div>
-        )}
+        <div className="border-t pt-3">
+          <span className="font-medium text-gray-700">Pretensão salarial:</span>
+          <p className="text-gray-900">{form.salaryExpectation}</p>
+        </div>
 
         {form.jobId && (
           <div className="border-t pt-3">
@@ -64,10 +64,10 @@ export function ReviewStep({ form, errors, onChange }: Props) {
         )}
       </div>
 
-      {/* LGPD Consent */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-        <label className="flex gap-3">
+      <div className="rounded-3xl border border-blue-200 bg-blue-50 p-4">
+        <label htmlFor="candidate-lgpd-consent" className="flex gap-3">
           <input
+            id="candidate-lgpd-consent"
             type="checkbox"
             checked={form.lgpdConsent}
             onChange={(e) => onChange("lgpdConsent", e.target.checked)}
@@ -81,9 +81,8 @@ export function ReviewStep({ form, errors, onChange }: Props) {
         {errors.lgpdConsent && <p className="mt-2 text-sm text-red-600">{errors.lgpdConsent}</p>}
       </div>
 
-      {/* Warning */}
-      <div className="rounded-lg bg-gray-100 p-3 text-xs text-gray-700">
-        ✓ Após enviar, você receberá uma confirmação. Nossa equipe entrará em contato conforme disponibilidade.
+      <div className="rounded-2xl bg-gray-100 p-3 text-xs text-gray-700">
+        Após o envio, o portal do candidato continuará disponível para acompanhar o processo, atualizar currículo e receber comunicações.
       </div>
     </div>
   );

@@ -68,11 +68,30 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
 
     async def find_active_by_id(self, candidate_id: UUID) -> CandidateModel | None:
         return await self._session.scalar(
-            sa.select(CandidateModel).where(
+            sa.select(CandidateModel)
+            .options(
+                sa.orm.load_only(
+                    CandidateModel.id,
+                    CandidateModel.full_name,
+                    CandidateModel.email,
+                    CandidateModel.phone,
+                    CandidateModel.cpf,
+                    CandidateModel.location_city,
+                    CandidateModel.location_state,
+                    CandidateModel.salary_expectation,
+                    CandidateModel.google_sub,
+                    CandidateModel.google_picture_url,
+                    CandidateModel.application_source,
+                    CandidateModel.deleted_at,
+                    CandidateModel.archived_at,
+                )
+            )
+            .where(
                 CandidateModel.id == candidate_id,
                 CandidateModel.deleted_at.is_(None),
                 CandidateModel.archived_at.is_(None),
             )
+            .execution_options(populate_existing=True)
         )
 
     async def find_by_id(self, candidate_id: UUID) -> CandidateModel | None:
@@ -149,6 +168,38 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             )
         )
 
+    async def find_active_by_google_sub(self, google_sub: str) -> CandidateModel | None:
+        return await self._session.scalar(
+            sa.select(CandidateModel)
+            .options(
+                sa.orm.load_only(
+                    CandidateModel.id,
+                    CandidateModel.full_name,
+                    CandidateModel.email,
+                    CandidateModel.phone,
+                    CandidateModel.cpf,
+                    CandidateModel.location_city,
+                    CandidateModel.location_state,
+                    CandidateModel.location_country,
+                    CandidateModel.application_source,
+                    CandidateModel.password_hash,
+                    CandidateModel.password_created_at,
+                    CandidateModel.lgpd_consent_at,
+                    CandidateModel.lgpd_consent_version,
+                    CandidateModel.desired_contract_type,
+                    CandidateModel.salary_expectation,
+                    CandidateModel.google_sub,
+                    CandidateModel.google_picture_url,
+                    CandidateModel.last_login_at,
+                    CandidateModel.works_at_marajo_group,
+                )
+            )
+            .where(
+                CandidateModel.google_sub == google_sub,
+                CandidateModel.deleted_at.is_(None),
+                CandidateModel.archived_at.is_(None),
+            )
+        )
     async def list_active(
         self,
         page: int,
