@@ -14,6 +14,7 @@ import { getBehavioralEvaluation } from "../../services/behavioralAIEvaluationSe
 import { getCandidateBehavioralAssessment } from "../../services/behavioralAssessmentService";
 import { listJobs, getCandidateRankingEntry } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
+import { resumeService } from "../../services/resumeService";
 import { scoreExplanationService, type ScoreExplanationResponse } from "../../services/scoreExplanationService";
 import type { BehavioralAssignmentDetailResponse, CandidateOverview, CandidateListSummary, Job, JobRankingEntry } from "../../types/domain";
 
@@ -97,6 +98,17 @@ vi.mock("../../services/pipelineService", () => ({
     moveCandidateStage: vi.fn(),
     transferCandidateJob: vi.fn(),
     addCandidateToJob: vi.fn(),
+  },
+}));
+
+vi.mock("../../services/resumeService", () => ({
+  resumeService: {
+    get: vi.fn(),
+    downloadCandidateResume: vi.fn(),
+    fetchCandidateResumeFile: vi.fn(),
+    getCandidateResumeDownloadUrl: vi.fn(),
+    initiateUpload: vi.fn(),
+    uploadPdf: vi.fn(),
   },
 }));
 
@@ -395,6 +407,34 @@ const scoreExplanation: ScoreExplanationResponse = {
   feedback: null,
 };
 
+const detailedResume = {
+  id: "resume-1",
+  candidate_id: "candidate-1",
+  title: "Currículo Ana",
+  status: "active",
+  current_version: 2,
+  created_at: "2026-05-01T10:00:00Z",
+  updated_at: "2026-05-12T10:00:00Z",
+  versions: [
+    {
+      id: "version-2",
+      version_number: 2,
+      original_file_name: "ana-v2.pdf",
+      mime_type: "application/pdf",
+      extraction_status: "completed",
+      uploaded_at: "2026-05-12T10:00:00Z",
+    },
+    {
+      id: "version-1",
+      version_number: 1,
+      original_file_name: "ana-v1.pdf",
+      mime_type: "application/pdf",
+      extraction_status: "completed",
+      uploaded_at: "2026-05-11T10:00:00Z",
+    },
+  ],
+};
+
 describe("Candidate workspace flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -450,6 +490,19 @@ describe("Candidate workspace flow", () => {
       created_at: "2026-05-15T10:31:00Z",
       updated_at: "2026-05-15T10:32:00Z",
       completed_at: "2026-05-15T10:32:00Z",
+    });
+    vi.mocked(resumeService.get).mockResolvedValue(detailedResume);
+    vi.mocked(resumeService.downloadCandidateResume).mockResolvedValue();
+    vi.mocked(resumeService.fetchCandidateResumeFile).mockResolvedValue({
+      blob: new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+      contentType: "application/pdf",
+      filename: "ana-v2.pdf",
+    });
+    vi.mocked(resumeService.getCandidateResumeDownloadUrl).mockResolvedValue({
+      url: "http://localhost:8000/api/v1/candidates/candidate-1/resumes/resume-1/download",
+      expires_at: null,
+      content_type: "application/pdf",
+      filename: "ana-v2.pdf",
     });
     vi.mocked(pipelineService.getCandidateHistory).mockResolvedValue({
       candidate_id: "candidate-1",
@@ -518,6 +571,9 @@ describe("Candidate workspace flow", () => {
     await user.click(screen.getByRole("button", { name: /Currículo e documentos/i }));
     expect(screen.getByRole("button", { name: /Enviar currículo/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Baixar currículo/i })).toBeInTheDocument();
+    expect(screen.getByText("Currículo atual")).toBeInTheDocument();
+    expect(screen.getByText("Visualizar currículo")).toBeInTheDocument();
+    expect(screen.getByText("Versões do currículo")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Entrevistas/i }));
     expect(await screen.findByRole("button", { name: /Agendar entrevista/i })).toBeInTheDocument();
@@ -663,6 +719,19 @@ describe("Candidate workspace flow", () => {
     expect(scoreExplanationService.get).not.toHaveBeenCalled();
   });
 
+  it("abre diretamente a aba de documentos quando url contém tab=documents", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=documents"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Currículo atual")).toBeInTheDocument();
+    expect(screen.getByText("Visualização do currículo")).toBeInTheDocument();
+  });
+
   it("aba Avaliações renderiza assignment concluído com respostas em accordion e resumo", async () => {
     const user = userEvent.setup();
 
@@ -743,6 +812,7 @@ describe("Legacy drawer isolation", () => {
       const fullPath = join(dir, entry);
       if (fullPath.includes(`${join("src", "legacy")}${"/"}`)) return [];
       if (fullPath.includes(`${join("src", "pages", "__tests__")}${"/"}`)) return [];
+      if (fullPath.includes(`${join("src", "test")}${"/"}`)) return [];
       if (statSync(fullPath).isDirectory()) return walk(fullPath);
       return /\.(ts|tsx)$/.test(fullPath) ? [fullPath] : [];
     });

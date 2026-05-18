@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, X } from "lucide-react";
 
+import { CandidateScoreDimensionsCard } from "./CandidateScoreDimensionsCard";
 import { useCandidateOverview } from "../hooks/useCandidateOverview";
 import {
   ANALYSIS_STATUS_LABEL,
@@ -37,6 +38,7 @@ function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: (
   const activeJobScore = getActiveJobScore(overview, activeEntry);
   const lastNote = overview?.latest_note ?? null;
   const skillPreview = overview?.active_job_skill_preview ?? null;
+  const scoreDimensions = overview?.active_job_score_dimensions ?? null;
   const primaryResume = getPrimaryResume(overview);
   const latestMovement = formatLatestMovement(overview);
   const location = [candidate?.location_city, candidate?.location_state]
@@ -158,6 +160,8 @@ function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: (
                   ) : null}
                 </div>
               </SectionCard>
+
+              {activeEntry ? <CandidateScoreDimensionsCard dimensions={scoreDimensions} /> : null}
 
               <SectionCard testId="preview-skills">
                 <SectionLabel>Skills da vaga</SectionLabel>

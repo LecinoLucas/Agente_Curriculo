@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import re
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import exc as sa_exc
 
 from src.application.services.candidate_service import CandidateService
 from src.application.services.candidate_service import APPLICATION_SOURCE_PUBLIC
@@ -40,6 +41,8 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import _cand
 
 logger = structlog.get_logger(__name__)
 
+# Sentinela para operações administrativas (BehavioralAssignment, Analysis, Notifications)
+# NÃO usar para created_by de candidatos públicos (usar None)
 SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024
 
@@ -233,11 +236,28 @@ class PublicApplicationService:
                 location_country="BR",
             )
 
-            candidate = await self._candidate_service.create(
-                candidate_request,
-                SYSTEM_USER_ID,
-                application_source=APPLICATION_SOURCE_PUBLIC,
-            )
+            try:
+                # Para candidatos públicos, usar created_by=None (sem usuário sistema)
+                candidate = await self._candidate_service.create(
+                    candidate_request,
+                    None,  # Public candidates have no system user
+                    application_source=APPLICATION_SOURCE_PUBLIC,
+                )
+            except sa_exc.IntegrityError as e:
+                await self.db.rollback()
+                if "uq_candidates_active_cpf" in str(e):
+                    raise ValidationException(
+                        "CPF já registrado no sistema. Faça login para continuar sua candidatura."
+                    ) from e
+                if "uq_candidates_active_email" in str(e):
+                    raise ValidationException(
+                        "Email já registrado no sistema. Faça login para continuar sua candidatura."
+                    ) from e
+                logger.exception("integrity_error_candidate_creation", exc=str(e))
+                raise PublicApplicationError(
+                    "Erro ao processar candidatura. Tente novamente."
+                ) from e
+            
             candidate.password_hash = hash_password(password)
             candidate.password_created_at = datetime.now(UTC)
             logger.info(
@@ -271,36 +291,45 @@ class PublicApplicationService:
         await self.db.flush()
 
         # 8. Criar resume + upload
-        resume_id = uuid4()
-        resume = await self._resume_repo.create_resume(
-            ResumeModel(
-                id=resume_id,
-                candidate_id=candidate.id,
-                title="Currículo - Candidatura Pública",
-                status="active",
-                current_version=1,
-                created_by=SYSTEM_USER_ID,
+        try:
+            resume_id = uuid4()
+            # For public applications, created_by=None (no system user association)
+            resume = await self._resume_repo.create_resume(
+                ResumeModel(
+                    id=resume_id,
+                    candidate_id=candidate.id,
+                    title="Currículo - Candidatura Pública",
+                    status="active",
+                    current_version=1,
+                    created_by=None,  # Public application, no system user
+                )
             )
-        )
 
-        version_id = uuid4()
-        s3_key = f"resumes/{candidate.id}/{resume_id}/v1_original.pdf"
-        version = await self._resume_repo.create_version(
-            ResumeVersionModel(
-                id=version_id,
-                resume_id=resume.id,
-                version_number=1,
-                s3_bucket="resume-ai-dev-uploads",
-                s3_key=s3_key,
-                original_file_name=file_name,
-                file_size_bytes=len(file_bytes),
-                file_hash_sha256=sha256(file_bytes).hexdigest(),
-                mime_type="application/pdf",
-                extraction_status="pending",
-                uploaded_by=SYSTEM_USER_ID,
-                uploaded_at=datetime.now(UTC),
+            version_id = uuid4()
+            s3_key = f"resumes/{candidate.id}/{resume_id}/v1_original.pdf"
+            # For public applications, uploaded_by=None (no system user association)
+            version = await self._resume_repo.create_version(
+                ResumeVersionModel(
+                    id=version_id,
+                    resume_id=resume.id,
+                    version_number=1,
+                    s3_bucket="resume-ai-dev-uploads",
+                    s3_key=s3_key,
+                    original_file_name=file_name,
+                    file_size_bytes=len(file_bytes),
+                    file_hash_sha256=sha256(file_bytes).hexdigest(),
+                    mime_type="application/pdf",
+                    extraction_status="pending",
+                    uploaded_by=None,  # Public application, no system user
+                    uploaded_at=datetime.now(UTC),
+                )
             )
-        )
+        except sa_exc.IntegrityError as e:
+            await self.db.rollback()
+            logger.exception("integrity_error_resume_creation", candidate_id=str(candidate.id), exc=str(e))
+            raise PublicApplicationError(
+                "Erro ao processar seu currículo. Tente novamente."
+            ) from e
 
         # Escrever arquivo no storage
         write_resume_file(version.s3_key, file_bytes)
@@ -327,7 +356,7 @@ class PublicApplicationService:
                     job_id=job_id,
                     stage="entry",
                     status="active",
-                    moved_by=SYSTEM_USER_ID,
+                    moved_by=None,
                     updated_at=now,
                 )
                 if reactivated_pipeline is None:
@@ -342,7 +371,7 @@ class PublicApplicationService:
                         event_type="candidate_reapplied",
                         from_stage=existing_entry.pipeline_stage,
                         to_stage="entry",
-                        actor_id=SYSTEM_USER_ID,
+                        actor_id=None,
                         idempotency_key=f"public-reapply:{pipeline_id}:{version.id}",
                         metadata_payload={
                             "trigger": "public_application",
@@ -366,9 +395,10 @@ class PublicApplicationService:
                     job_id=job_id,
                     stage="entry",
                     status="active",
-                    moved_by=SYSTEM_USER_ID,
+                    moved_by=None,
                     updated_at=now,
                     resume_version_id=version.id,
+                    source="manual",
                 )
                 pipeline_id = created_pipeline.get("pipeline_id")
                 logger.info(
@@ -389,18 +419,22 @@ class PublicApplicationService:
             )
 
             try:
-                analysis_result = await RequestAnalysisUseCase(
-                    SQLAlchemyAnalysisRepository(self.db),
-                    self._resume_repo,
-                ).execute(
-                    RequestAnalysisCommand(
-                        resume_version_id=version.id,
-                        requested_by=SYSTEM_USER_ID,
-                        job_id=job_id,
-                        priority=5,
-                        allow_pending_resume_extraction=True,
+                # Use savepoint so a FK violation on analyses.requested_by
+                # (SYSTEM_USER_ID may not exist in prod) doesn't corrupt the
+                # outer transaction that holds the pipeline entry.
+                async with self.db.begin_nested():
+                    analysis_result = await RequestAnalysisUseCase(
+                        SQLAlchemyAnalysisRepository(self.db),
+                        self._resume_repo,
+                    ).execute(
+                        RequestAnalysisCommand(
+                            resume_version_id=version.id,
+                            requested_by=SYSTEM_USER_ID,
+                            job_id=job_id,
+                            priority=5,
+                            allow_pending_resume_extraction=True,
+                        )
                     )
-                )
                 analysis_id = analysis_result.analysis_id
                 analysis_status = str(analysis_result.status)
                 analysis_auto_requested = True
@@ -431,18 +465,19 @@ class PublicApplicationService:
         # Notification for candidate application
         if job_model:
             try:
-                await CommunicationService(self.db).notify_event(
-                    event_type="candidate_applied",
-                    candidate_id=candidate.id,
-                    job_id=job_model.id,
-                    related_entity_type="resume",
-                    related_entity_id=version.id,
-                    context={
-                        "candidate_name": candidate.full_name,
-                        "job_title": job_model.title,
-                    },
-                    actor_id=SYSTEM_USER_ID,
-                )
+                async with self.db.begin_nested():
+                    await CommunicationService(self.db).notify_event(
+                        event_type="candidate_applied",
+                        candidate_id=candidate.id,
+                        job_id=job_model.id,
+                        related_entity_type="resume",
+                        related_entity_id=version.id,
+                        context={
+                            "candidate_name": candidate.full_name,
+                            "job_title": job_model.title,
+                        },
+                        actor_id=None,
+                    )
             except Exception as e:
                 logger.warning(f"notification_failed event=candidate_applied: {e}")
 

@@ -199,9 +199,18 @@ async def list_candidates(
     current_user: RecruiterOrAdmin,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    search: str | None = Query(default=None, description="Busca por nome ou e-mail"),
+    search: str | None = Query(default=None, description="Busca por nome, e-mail, CPF, telefone ou skill"),
     archived: bool = Query(default=False),
     application_source: str | None = Query(default=None),
+    city: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    salary_min: float | None = Query(default=None, ge=0),
+    salary_max: float | None = Query(default=None, ge=0),
+    desired_contract_type: str | None = Query(default=None),
+    link_status_filter: str | None = Query(default=None),
+    has_resume: bool | None = Query(default=None),
+    skill: str | None = Query(default=None),
+    seniority: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[CandidateResponse]:
     candidates, total_items = await _candidate_service(db).list(
@@ -210,6 +219,15 @@ async def list_candidates(
         search,
         archived,
         application_source,
+        city,
+        state,
+        salary_min,
+        salary_max,
+        desired_contract_type,
+        link_status_filter,
+        has_resume,
+        skill,
+        seniority,
     )
 
     return PaginatedResponse[CandidateResponse](
@@ -231,6 +249,14 @@ async def list_candidate_summaries(
     ai_status: list[str] | None = Query(default=None),
     archived: bool = Query(default=False),
     application_source: str | None = Query(default=None),
+    city: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    salary_min: float | None = Query(default=None, ge=0),
+    salary_max: float | None = Query(default=None, ge=0),
+    desired_contract_type: str | None = Query(default=None),
+    link_status_filter: str | None = Query(default=None),
+    skill: str | None = Query(default=None),
+    seniority: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[CandidateListSummaryResponse]:
     items, total = await _candidate_service(db).list_summaries(
@@ -241,6 +267,14 @@ async def list_candidate_summaries(
         ai_status,
         archived,
         application_source,
+        city,
+        state,
+        salary_min,
+        salary_max,
+        desired_contract_type,
+        link_status_filter,
+        skill,
+        seniority,
     )
     return PaginatedResponse[CandidateListSummaryResponse](
         data=items,

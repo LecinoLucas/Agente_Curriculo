@@ -23,6 +23,27 @@ from typing import Optional
 from uuid import UUID
 
 
+# R07 — Idempotency key namespace.
+#
+# The old format (kept for back-compat reads):
+#     "analysis:{resume_version}:{prompt}:{model}:{job_or_generic}"
+# has no version prefix and no requester component, so callers across different
+# requesters could theoretically collide on the same string. New writes use v1.
+#
+# v1 format:
+#     "analysis:v1:{resume_version}:{job_or_null}:{ai_model}:{prompt_template}:{requested_by_or_system}"
+#
+# Properties:
+# - Same inputs → same string (idempotent across retries).
+# - Different inputs (any component) → different string.
+# - Stays under VARCHAR(255).
+# - Existing rows keep working (the column is `unique` on the string value;
+#   the new format simply doesn't overlap with the legacy format because of
+#   the `:v1:` token).
+_IDEMPOTENCY_KEY_VERSION = "v1"
+_SYSTEM_REQUESTER_TOKEN = "system"
+
+
 class AnalysisVersioningService:
     """
     Regras de negócio sobre o ciclo de vida e versionamento de análises.
@@ -34,15 +55,37 @@ class AnalysisVersioningService:
         prompt_template_id: UUID,
         ai_model_id: UUID,
         job_id: Optional[UUID] = None,
+        requested_by: Optional[UUID] = None,
     ) -> str:
         """
-        Chave de idempotência para evitar análises duplicadas na fila.
-        A mesma combinação de (resume_version, prompt, modelo, vaga) não deve
-        ser processada duas vezes simultaneamente.
+        Chave de idempotência v1 (namespaced, com requester).
 
         Nota: não bloqueia re-análises manuais — o use case pode sobrescrever
         a chave adicionando um timestamp ou flag force_reanalyze.
+
+        Re-chamadas com os mesmos inputs retornam a mesma string. Mudar qualquer
+        componente (resume_version, prompt, modelo, vaga, requester) gera string
+        diferente. Convive com chaves do formato legado: o prefixo `:v1:` evita
+        colisão com strings antigas.
         """
+        job_part = str(job_id) if job_id else "null"
+        requester_part = str(requested_by) if requested_by else _SYSTEM_REQUESTER_TOKEN
+        return (
+            f"analysis:{_IDEMPOTENCY_KEY_VERSION}:"
+            f"{resume_version_id}:{job_part}:"
+            f"{ai_model_id}:{prompt_template_id}:"
+            f"{requester_part}"
+        )
+
+    # Legacy builder kept exposed in case any old call path still imports it.
+    # Returns the pre-v1 string format. New code MUST call build_idempotency_key.
+    @staticmethod
+    def build_idempotency_key_legacy(
+        resume_version_id: UUID,
+        prompt_template_id: UUID,
+        ai_model_id: UUID,
+        job_id: Optional[UUID] = None,
+    ) -> str:
         job_part = str(job_id) if job_id else "generic"
         return (
             f"analysis:{resume_version_id}:{prompt_template_id}:{ai_model_id}:{job_part}"

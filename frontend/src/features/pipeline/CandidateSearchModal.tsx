@@ -154,7 +154,7 @@ export function CandidateSearchModal({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-sm font-medium text-[hsl(var(--text-muted))]">
-                Adicionar candidatos
+                Vincular candidatos
               </p>
               <h2 className="mt-1 truncate text-lg font-semibold text-[hsl(var(--text))]">
                 {activeJobTitle}
@@ -336,7 +336,7 @@ function RankedCandidateRow({
               : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
           }`}
         >
-          {isAdding ? "Adicionando…" : isAdded ? "✓ Adicionado" : "Adicionar"}
+          {isAdding ? "Vinculando…" : isAdded ? "✓ Vinculado" : "Vincular"}
         </button>
       </div>
 
@@ -347,17 +347,11 @@ function RankedCandidateRow({
   );
 }
 
-interface AddError {
-  message: string;
-  code?: string;
-}
-
 function OtherCandidateRow({
   candidate,
   isAdding,
   isAdded,
   error,
-  addError,
   onAdd,
   onOpen,
 }: {
@@ -365,14 +359,10 @@ function OtherCandidateRow({
   isAdding: boolean;
   isAdded: boolean;
   error?: string;
-  addError?: AddError;
   onAdd: () => void;
   onOpen: () => void;
 }) {
   const isLinked = Boolean(candidate.active_job_id);
-
-  const isLinkedError = addError?.code === "CANDIDATE_LINKED";
-
   const showOpenAction = isLinked;
 
   return (
@@ -416,7 +406,7 @@ function OtherCandidateRow({
                 : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
           }`}
         >
-          {isAdding ? "Adicionando…" : isAdded ? "✓ Adicionado" : "Adicionar"}
+          {isAdding ? "Vinculando…" : isAdded ? "✓ Vinculado" : "Vincular"}
         </button>
       </div>
 

@@ -80,7 +80,19 @@ class PromptTemplateModel(Base):
         server_default=sa.text("NOW()"),
     )
 
-    __table_args__ = (sa.UniqueConstraint("name", "version", name="uq_prompt_template_version"),)
+    __table_args__ = (
+        sa.UniqueConstraint("name", "version", name="uq_prompt_template_version"),
+        # R19: defense in depth — at most one active template per type.
+        # ai_admin_service.activate_template already enforces this at app level,
+        # but a DB-level partial unique index blocks bad direct writes.
+        sa.Index(
+            "uq_prompt_templates_one_active_per_type",
+            "template_type",
+            unique=True,
+            postgresql_where=sa.text("is_active = true"),
+            sqlite_where=sa.text("is_active = 1"),
+        ),
+    )
 
 
 class AnalysisModel(Base):

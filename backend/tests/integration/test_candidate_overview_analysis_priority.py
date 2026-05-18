@@ -120,7 +120,13 @@ async def test_candidate_overview_marks_matching_completed_only_with_current_ana
             source_analysis_created_at=active_analysis.created_at,
             final_score=Decimal("82.50"),
             decision_suggestion="advance",
-            breakdown={"skill_match": 85},
+            breakdown={
+                "skill_match_score": 85,
+                "experience_match_score": 50,
+                "seniority_match_score": 41,
+                "education_score": 50,
+                "confidence_score": 30,
+            },
             reason_codes=["strong_skill_match"],
             explanation_text="Score persisted for current analysis.",
             freshness_status="fresh",
@@ -143,6 +149,13 @@ async def test_candidate_overview_marks_matching_completed_only_with_current_ana
     assert payload["latest_analysis_pipeline"]["matching_status"] == "completed"
     assert payload["latest_analysis_pipeline"]["matched_jobs_count"] == 1
     assert payload["latest_analysis_pipeline"]["pending_jobs_count"] == 0
+    assert payload["active_job_score_dimensions"] == {
+        "skills": 85.0,
+        "experience": 50.0,
+        "seniority": 41.0,
+        "education": 50.0,
+        "confidence": 30.0,
+    }
 
 
 @pytest.mark.asyncio

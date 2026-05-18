@@ -143,7 +143,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         ) : null}
       </div>
 
-      {/* Inline "+ Adicionar candidato" button at the bottom of the first active column exclusively */}
+      {/* Inline "+ Vincular candidato" button at the bottom of the first active column exclusively */}
       {onAddCandidate && colIndex === 0 && column.stage !== "hired" && column.stage !== "rejected" && (
         <button
           type="button"
@@ -151,7 +151,7 @@ export const KanbanColumn = memo(function KanbanColumn({
           className="mt-3 flex items-center justify-center gap-1.5 w-full rounded-xl border border-dashed border-slate-200 dark:border-slate-800/85 bg-white/60 dark:bg-slate-900/20 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 transition-all hover:border-[hsl(var(--primary))]/30 hover:bg-white dark:hover:bg-slate-850 hover:text-[hsl(var(--primary))] dark:hover:text-[hsl(var(--primary))] hover:shadow-[0_2px_4px_rgba(0,0,0,0.02)]"
         >
           <Plus className="h-3.5 w-3.5" />
-          Adicionar candidato
+          Vincular candidato
         </button>
       )}
     </div>

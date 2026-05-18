@@ -1,5 +1,5 @@
-import { ChevronDown, PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, SlidersHorizontal, Plus, Briefcase, MapPin, Award, Layers, X, Globe } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Plus, Briefcase, MapPin, Award, Layers } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
@@ -11,11 +11,10 @@ import { SkeletonRows } from "../components/common/Skeleton";
 import { StatusPill } from "../components/common/StatusPill";
 import { EmptyState } from "../components/common/EmptyState";
 import { DataQualityBanner } from "../components/data-quality/DataQualityBanner";
-import { candidatesService } from "../services/candidatesService";
 import { formatContextError } from "../services/errorMessages";
 import { getJobRanking } from "../services/jobsService";
 import { pipelineService, type PipelineJobSummary } from "../services/pipelineService";
-import type { CandidateListSummary, JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
+import type { JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
 import {
   formatJobStatus,
   formatSeniority,
@@ -28,29 +27,6 @@ import {
   buildDealBreakerViolationDisplay,
   isDealBreakerReasonCode,
 } from "../features/pipeline/dealBreakerDisplay";
-
-// ── Phase 27E: filter types & constants ─────────────────────────────────────
-type ActiveFilters = {
-  aiStatus: string;
-  minMatchScore: number | null;
-};
-const DEFAULT_FILTERS: ActiveFilters = { aiStatus: "all", minMatchScore: null };
-
-const AI_STATUS_LABELS: Record<string, string> = {
-  all: "Todos",
-  pending: "Aguardando",
-  processing: "Processando",
-  completed: "Concluído",
-  failed: "Falhou",
-};
-
-const MIN_SCORE_OPTIONS: Array<{ label: string; value: number | null }> = [
-  { label: "Todos", value: null },
-  { label: "≥ 30%", value: 30 },
-  { label: "≥ 50%", value: 50 },
-  { label: "≥ 70%", value: 70 },
-  { label: "≥ 90%", value: 90 },
-];
 
 const MAIN_STAGES: ReadonlyArray<PipelineStage> = [
   "entry",
@@ -104,15 +80,7 @@ export function PipelinePage() {
   const rankingCacheRef = useRef<Map<string, JobRanking>>(new Map());
   const rankingFetchInFlightRef = useRef<Map<string, Promise<JobRanking>>>(new Map());
 
-  // Search & filter state
-  const [localSearch, setLocalSearch] = useState("");
-  const [filters, setFilters] = useState<ActiveFilters>(DEFAULT_FILTERS);
-  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
-  const [globalSearchActive, setGlobalSearchActive] = useState(false);
-  const [globalSearchResults, setGlobalSearchResults] = useState<CandidateListSummary[]>([]);
-  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
   const [previewCandidateId, setPreviewCandidateId] = useState<string | null>(null);
-  const filtersPanelRef = useRef<HTMLDivElement>(null);
 
   const {
     activeJobId,
@@ -181,24 +149,6 @@ export function PipelinePage() {
       setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
     }
   }, [activeJobId]);
-
-  // Close filter panel on click outside
-  useEffect(() => {
-    if (!showFiltersPanel) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (filtersPanelRef.current && !filtersPanelRef.current.contains(e.target as Node)) {
-        setShowFiltersPanel(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showFiltersPanel]);
-
-  // Reset global search when query or filters change
-  useEffect(() => {
-    setGlobalSearchActive(false);
-    setGlobalSearchResults([]);
-  }, [localSearch, filters]);
 
   // Unified refresh function
   const triggerRefresh = async () => {
@@ -421,60 +371,16 @@ export function PipelinePage() {
     [pipelineJobs, activeJobId],
   );
 
-  // All board candidates (unfiltered) for data-availability checks
-  const allBoardCandidates = useMemo(
-    () => (board?.columns ?? []).flatMap((col) => col.candidates),
-    [board],
-  );
-  const hasAiStatusData = useMemo(
-    () => allBoardCandidates.some((c) => c.ai_status != null),
-    [allBoardCandidates],
-  );
-  const hasMatchScoreData = useMemo(
-    () => allBoardCandidates.some((c) => c.job_fit_score != null),
-    [allBoardCandidates],
-  );
-
-  // Shared candidate filter function (local scope only)
-  const applyLocalFilters = useCallback(
-    (candidates: typeof allBoardCandidates) => {
-      let result = candidates;
-      if (localSearch.trim()) {
-        const q = localSearch.toLowerCase();
-        result = result.filter(
-          (c) =>
-            c.candidate_name.toLowerCase().includes(q) ||
-            (c.email ?? "").toLowerCase().includes(q),
-        );
-      }
-      if (filters.aiStatus !== "all") {
-        result = result.filter((c) => c.ai_status === filters.aiStatus);
-      }
-      if (filters.minMatchScore !== null) {
-        const minScore = filters.minMatchScore;
-        result = result.filter(
-          (c) => c.job_fit_score != null && c.job_fit_score >= minScore,
-        );
-      }
-      return result;
-    },
-    [localSearch, filters],
-  );
-
-  // Filter and sort columns based on localSearch, filters, and sortOrder
+  // Sort columns without local filtering; candidate discovery/search lives in CandidateSearchModal.
   const mainCols = useMemo(
     () =>
       (board?.columns ?? [])
         .filter((c) => (MAIN_STAGES as ReadonlyArray<string>).includes(c.stage))
-        .map((col) => {
-          const totalCount = col.candidates.length;
-          return {
-            ...col,
-            candidates: sortCandidatesByScore(applyLocalFilters(col.candidates), sortOrder),
-            totalCount,
-          };
-        }),
-    [board, sortOrder, applyLocalFilters],
+        .map((col) => ({
+          ...col,
+          candidates: sortCandidatesByScore(col.candidates, sortOrder),
+        })),
+    [board, sortOrder],
   );
 
   const rejectedCol = useMemo(() => {
@@ -482,10 +388,9 @@ export function PipelinePage() {
     if (!col) return null;
     return {
       ...col,
-      candidates: sortCandidatesByScore(applyLocalFilters(col.candidates), sortOrder),
-      totalCount: col.candidates.length,
+      candidates: sortCandidatesByScore(col.candidates, sortOrder),
     };
-  }, [board, sortOrder, applyLocalFilters]);
+  }, [board, sortOrder]);
 
   // Dynamic KPI calculation
   const totalActive = useMemo(() => {
@@ -532,21 +437,6 @@ export function PipelinePage() {
     ? "grid grid-cols-1 gap-6 xl:items-start xl:grid-cols-[minmax(0,1fr)_340px] xl:transition-[grid-template-columns] xl:duration-200"
     : "grid grid-cols-1 gap-6 xl:items-start xl:grid-cols-[minmax(0,1fr)] xl:transition-[grid-template-columns] xl:duration-200";
 
-  // Active filter derived values
-  const hasActiveLocalFilters =
-    localSearch.trim() !== "" || filters.aiStatus !== "all" || filters.minMatchScore !== null;
-  const activeFilterCount =
-    (localSearch.trim() ? 1 : 0) +
-    (filters.aiStatus !== "all" ? 1 : 0) +
-    (filters.minMatchScore !== null ? 1 : 0);
-
-  const filteredTotalVisible = useMemo(
-    () =>
-      mainCols.reduce((n, c) => n + c.candidates.length, 0) +
-      (rejectedCol?.candidates.length ?? 0),
-    [mainCols, rejectedCol],
-  );
-
   // ── Handlers ─────────────────────────────────────────────────────────────
   function handleSelectJob(nextJobId: string) {
     window.sessionStorage.setItem(PIPELINE_LAST_SELECTED_JOB_KEY, nextJobId);
@@ -558,29 +448,6 @@ export function PipelinePage() {
     void loadRanking(activeJobId);
     setShowSourceCandidates(true);
   };
-
-  function clearFilters() {
-    setLocalSearch("");
-    setFilters(DEFAULT_FILTERS);
-    setShowFiltersPanel(false);
-    setGlobalSearchActive(false);
-    setGlobalSearchResults([]);
-  }
-
-  async function handleGlobalSearch() {
-    if (!localSearch.trim()) return;
-    setGlobalSearchLoading(true);
-    try {
-      const result = await candidatesService.listSummaries(1, 20, localSearch.trim());
-      setGlobalSearchResults(result.data);
-      setGlobalSearchActive(true);
-    } catch {
-      setGlobalSearchResults([]);
-      setGlobalSearchActive(true);
-    } finally {
-      setGlobalSearchLoading(false);
-    }
-  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -602,119 +469,22 @@ export function PipelinePage() {
           </p>
         </div>
 
-        {/* Action and Search Controls */}
+        {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Local search bar — scoped to current job */}
-          <div className="relative min-w-[200px] sm:min-w-[280px]">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder={activeJobId ? "Buscar candidato nesta vaga..." : "Buscar candidato..."}
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-9 pr-8 text-xs font-medium text-slate-700 dark:text-slate-100 shadow-sm outline-none transition focus:border-[hsl(var(--primary))]/40 focus:ring-2 focus:ring-[hsl(var(--primary))]/5"
-            />
-            {localSearch && (
-              <button
-                type="button"
-                onClick={() => setLocalSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label="Limpar busca"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Quick filter trigger */}
-          <div className="relative" ref={filtersPanelRef}>
-            <button
-              type="button"
-              onClick={() => setShowFiltersPanel((p) => !p)}
-              className={[
-                "inline-flex h-10 items-center gap-1.5 rounded-xl border px-3.5 text-xs font-bold shadow-sm transition",
-                activeFilterCount > 0
-                  ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
-                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700",
-              ].join(" ")}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filtros
-              {activeFilterCount > 0 && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[9px] font-black text-white">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-
-            {/* Filter dropdown panel */}
-            {showFiltersPanel && (
-              <div className="absolute right-0 top-full z-30 mt-1.5 w-72 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-xl">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Filtros</span>
-                  {activeFilterCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={clearFilters}
-                      className="text-[10px] font-bold text-[hsl(var(--primary))] hover:underline"
-                    >
-                      Limpar tudo
-                    </button>
-                  )}
-                </div>
-
-                {hasAiStatusData && (
-                  <div className="mb-4">
-                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Status IA</p>
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(AI_STATUS_LABELS).map(([key, label]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setFilters((f) => ({ ...f, aiStatus: key }))}
-                          className={[
-                            "rounded-lg border px-2.5 py-1 text-[10px] font-bold transition",
-                            filters.aiStatus === key
-                              ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
-                              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:border-slate-300 hover:text-slate-700",
-                          ].join(" ")}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {hasMatchScoreData && (
-                  <div>
-                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Match IA mínimo</p>
-                    <div className="flex flex-wrap gap-1">
-                      {MIN_SCORE_OPTIONS.map((opt) => (
-                        <button
-                          key={String(opt.value)}
-                          type="button"
-                          onClick={() => setFilters((f) => ({ ...f, minMatchScore: opt.value }))}
-                          className={[
-                            "rounded-lg border px-2.5 py-1 text-[10px] font-bold transition",
-                            filters.minMatchScore === opt.value
-                              ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
-                              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:border-slate-300 hover:text-slate-700",
-                          ].join(" ")}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {!hasAiStatusData && !hasMatchScoreData && (
-                  <p className="text-xs text-slate-400">Nenhum filtro disponível para esta vaga ainda.</p>
-                )}
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={handleOpenSourceCandidates}
+            disabled={!canUse}
+            aria-label="Buscar candidatos"
+            title="Use o modal de vinculação para buscar e vincular candidatos"
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+              canUse
+                ? "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700"
+                : "cursor-not-allowed border-slate-200 dark:border-slate-850 bg-slate-100 dark:bg-slate-950 text-slate-400 dark:text-slate-500"
+            }`}
+          >
+            <Search className="h-4 w-4" />
+          </button>
 
           {/* Jobs Selector Select */}
           {pipelineJobsError ? (
@@ -758,48 +528,10 @@ export function PipelinePage() {
             }`}
           >
             <Plus className="h-4 w-4" />
-            Adicionar candidato
+            Vincular candidato
           </button>
         </div>
       </div>
-
-      {/* ── Active filter chips ── */}
-      {hasActiveLocalFilters && (
-        <div className="flex flex-wrap items-center gap-2">
-          {localSearch.trim() && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/5 pl-2.5 pr-1.5 py-1 text-[11px] font-bold text-[hsl(var(--primary))]">
-              <Search className="h-3 w-3" />
-              "{localSearch}"
-              <button type="button" onClick={() => setLocalSearch("")} className="ml-0.5 rounded hover:opacity-70">
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          )}
-          {filters.aiStatus !== "all" && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 pl-2.5 pr-1.5 py-1 text-[11px] font-bold text-indigo-700">
-              IA: {AI_STATUS_LABELS[filters.aiStatus]}
-              <button type="button" onClick={() => setFilters((f) => ({ ...f, aiStatus: "all" }))} className="ml-0.5 rounded hover:opacity-70">
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          )}
-          {filters.minMatchScore !== null && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 pl-2.5 pr-1.5 py-1 text-[11px] font-bold text-emerald-700">
-              Match ≥ {filters.minMatchScore}%
-              <button type="button" onClick={() => setFilters((f) => ({ ...f, minMatchScore: null }))} className="ml-0.5 rounded hover:opacity-70">
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="text-[10px] font-bold text-slate-400 hover:text-slate-600 hover:underline"
-          >
-            Limpar tudo
-          </button>
-        </div>
-      )}
 
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
@@ -859,18 +591,6 @@ export function PipelinePage() {
               </span>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Filter summary bar ── */}
-      {hasActiveLocalFilters && board && !boardError && (
-        <div className="flex items-center gap-2 rounded-xl border border-[hsl(var(--primary))]/10 bg-[hsl(var(--primary))]/[0.03] px-4 py-2 text-xs">
-          <span className="font-bold text-[hsl(var(--primary))]">
-            Exibindo {filteredTotalVisible} de {totalCandidatos} candidatos
-          </span>
-          {filteredTotalVisible === 0 && totalCandidatos > 0 && (
-            <span className="text-slate-400">— Nenhum candidato corresponde aos filtros ativos nesta vaga.</span>
-          )}
         </div>
       )}
 
@@ -1023,9 +743,7 @@ export function PipelinePage() {
                     {selectedJob ? selectedJob.title : "Candidatos"}
                   </h2>
                   <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">
-                    {hasActiveLocalFilters
-                      ? `Kanban • ${filteredTotalVisible} de ${totalCandidatos} candidatos`
-                      : `Visão de Quadro Kanban • ${totalActive} Candidatos em processo`}
+                    {`Visão de Quadro Kanban • ${totalActive} Candidatos em processo`}
                   </p>
                 </div>
 
@@ -1072,8 +790,8 @@ export function PipelinePage() {
               {/* Initial Loading skeletons */}
               {showInitialBoardLoading && <SkeletonRows rows={5} />}
 
-              {/* Kanban columns scroll — shown when there are visible candidates OR no filters active */}
-              {board && !boardError && (hasActiveLocalFilters ? filteredTotalVisible > 0 : true) && (
+              {/* Kanban columns scroll */}
+              {board && !boardError && (
                 <div className="overflow-x-auto pb-4 min-w-0 w-full">
                   <div className="flex min-w-max items-stretch gap-6 min-h-[500px] h-[calc(100vh-360px)] max-h-[85vh]">
                     {mainCols.map((col, idx) => (
@@ -1084,7 +802,6 @@ export function PipelinePage() {
                         onCardClick={setPreviewCandidateId}
                         disabled={!canUse}
                         showTopMatchHighlight={sortOrder === "score_desc"}
-                        totalCount={hasActiveLocalFilters ? col.totalCount : undefined}
                         onAddCandidate={activeJobAcceptsCandidates ? () => handleOpenSourceCandidates() : undefined}
                       />
                     ))}
@@ -1098,7 +815,6 @@ export function PipelinePage() {
                           onCardClick={setPreviewCandidateId}
                           disabled={!canUse}
                           showTopMatchHighlight={sortOrder === "score_desc"}
-                          totalCount={hasActiveLocalFilters ? rejectedCol.totalCount : undefined}
                         />
                       </>
                     )}
@@ -1106,109 +822,8 @@ export function PipelinePage() {
                 </div>
               )}
 
-              {/* No results in current job when filter is active */}
-              {!showInitialBoardLoading && board && !boardError && hasActiveLocalFilters && filteredTotalVisible === 0 && totalCandidatos > 0 && (
-                <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-                  <span className="text-4xl">🔍</span>
-                  <div>
-                    <p className="text-sm font-black text-slate-700 dark:text-slate-200">
-                      Nenhum candidato encontrado nesta vaga.
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      Nenhum dos {totalCandidatos} candidatos corresponde aos filtros ativos.
-                    </p>
-                  </div>
-                  {localSearch.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => void handleGlobalSearch()}
-                      disabled={globalSearchLoading}
-                      className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-2.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-60"
-                    >
-                      <Globe className="h-4 w-4" />
-                      {globalSearchLoading ? "Buscando..." : "Buscar em todas as vagas"}
-                    </button>
-                  )}
-                  <button type="button" onClick={clearFilters} className="text-xs font-bold text-slate-400 hover:text-slate-600 hover:underline">
-                    Limpar filtros
-                  </button>
-                </div>
-              )}
-
-              {/* Global search results panel */}
-              {globalSearchActive && (
-                <div className="mt-4 rounded-2xl border border-indigo-200 dark:border-indigo-900/40 bg-indigo-50/30 dark:bg-indigo-950/10 p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-500">Busca global</p>
-                      <h3 className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">
-                        Resultados para "{localSearch}"
-                      </h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setGlobalSearchActive(false); setGlobalSearchResults([]); }}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  {globalSearchLoading && <SkeletonRows rows={3} />}
-
-                  {!globalSearchLoading && globalSearchResults.length === 0 && (
-                    <div className="py-8 text-center">
-                      <p className="text-sm font-bold text-slate-500">Nenhum candidato encontrado.</p>
-                      <p className="mt-1 text-xs text-slate-400">Tente um termo diferente.</p>
-                    </div>
-                  )}
-
-                  {!globalSearchLoading && globalSearchResults.length > 0 && (
-                    <div className="space-y-2">
-                      {globalSearchResults.map((result) => (
-                        <div
-                          key={result.id}
-                          className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-bold text-slate-700 dark:text-slate-200">{result.full_name}</p>
-                            {result.email && (
-                              <p className="truncate text-[10px] text-slate-400">{result.email}</p>
-                            )}
-                          </div>
-                          <div className="hidden shrink-0 sm:block text-right">
-                            {result.active_job_title ? (
-                              <>
-                                <p className="text-[10px] font-bold text-slate-600 dark:text-slate-300 truncate max-w-[160px]">{result.active_job_title}</p>
-                                {result.active_job_stage && (
-                                  <p className="text-[9px] text-slate-400 uppercase tracking-wider">{result.active_job_stage}</p>
-                                )}
-                              </>
-                            ) : (
-                              <p className="text-[10px] text-slate-400">Sem vaga ativa</p>
-                            )}
-                          </div>
-                          {result.active_job_id ? (
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/pipeline/${result.active_job_id}`)}
-                              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[10px] font-bold text-indigo-700 transition hover:bg-indigo-100"
-                            >
-                              <Globe className="h-3 w-3" />
-                              Abrir pipeline
-                            </button>
-                          ) : (
-                            <span className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-[10px] font-bold text-slate-400">Sem vaga</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Empty state: Board empty (no filters, truly empty) */}
-              {!showInitialBoardLoading && board && !boardError && totalCandidatos === 0 && !hasActiveLocalFilters && (
+              {/* Empty state: Board empty */}
+              {!showInitialBoardLoading && board && !boardError && totalCandidatos === 0 && (
                 <div className="flex flex-col items-center justify-center gap-4 py-16">
                   <div className="max-w-md rounded-2xl border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-10 text-center">
                     <span className="text-5xl mb-4 block">🧭</span>
@@ -1229,7 +844,7 @@ export function PipelinePage() {
                         }`}
                       >
                         <UserPlus className="h-4 w-4" />
-                        Adicionar Candidatos
+                        Vincular candidatos
                       </button>
                       <button
                         onClick={() => canUse && setShowNewCandidate(true)}

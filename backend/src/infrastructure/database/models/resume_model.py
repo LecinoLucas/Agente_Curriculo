@@ -30,7 +30,9 @@ class ResumeModel(Base):
         server_default="active",
     )
     current_version: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="1")
-    created_by: Mapped[UUID] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False)
+    # When NULL: resume uploaded via public application.
+    # When NOT NULL: resume created by system or recruiter.
+    created_by: Mapped[Optional[UUID]] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
@@ -88,7 +90,9 @@ class ResumeVersionModel(Base):
     page_count: Mapped[Optional[int]] = mapped_column(sa.Integer)
     word_count: Mapped[Optional[int]] = mapped_column(sa.Integer)
     language_detected: Mapped[Optional[str]] = mapped_column(sa.String(10))
-    uploaded_by: Mapped[UUID] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False)
+    # When NULL: resume version uploaded via public application.
+    # When NOT NULL: version uploaded by system or recruiter.
+    uploaded_by: Mapped[Optional[UUID]] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,

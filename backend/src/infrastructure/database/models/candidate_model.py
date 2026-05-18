@@ -31,6 +31,11 @@ class CandidateModel(Base):
     email: Mapped[Optional[str]] = mapped_column(sa.String(255))
     phone: Mapped[Optional[str]] = mapped_column(sa.String(50))
     cpf: Mapped[Optional[str]] = mapped_column(sa.Text())
+    # R13: hash + last4 for LGPD-safe storage. Still nullable while we phase in.
+    # Application writes both on every CPF update; reads should prefer cpf_hash
+    # for equality lookups and cpf_last4 for display.
+    cpf_hash: Mapped[Optional[str]] = mapped_column(sa.String(64))
+    cpf_last4: Mapped[Optional[str]] = mapped_column(sa.String(4))
     location_city: Mapped[Optional[str]] = mapped_column(sa.String(100))
     location_state: Mapped[Optional[str]] = mapped_column(sa.String(100))
     location_country: Mapped[str] = mapped_column(sa.String(10), nullable=False, server_default="BR")
@@ -39,7 +44,9 @@ class CandidateModel(Base):
     portfolio_url: Mapped[Optional[str]] = mapped_column(sa.Text)
     internal_notes: Mapped[Optional[str]] = mapped_column(sa.Text)
     tags: Mapped[list] = mapped_column(JSONB_COMPAT, nullable=False, server_default="[]")
-    created_by: Mapped[UUID] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False)
+    # When NULL: candidate created via public application (no user system association).
+    # When NOT NULL: candidate created by system user or recruiter.
+    created_by: Mapped[Optional[UUID]] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
@@ -130,6 +137,7 @@ class CandidateModel(Base):
         ),
         sa.Index("idx_candidates_email", "email"),
         sa.Index("idx_candidates_cpf", "cpf"),
+        sa.Index("idx_candidates_cpf_hash", "cpf_hash"),
         sa.Index(
             "uq_candidates_google_sub_not_null",
             "google_sub",

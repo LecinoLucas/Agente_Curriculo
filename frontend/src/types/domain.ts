@@ -179,6 +179,14 @@ export type CandidateSkillPreview = {
   attention_points: string[];
 };
 
+export type CandidateScoreDimensions = {
+  skills?: number | null;
+  experience?: number | null;
+  seniority?: number | null;
+  education?: number | null;
+  confidence?: number | null;
+};
+
 export type CandidateLatestNoteOverview = {
   note_text: string;
   created_at: string;
@@ -208,6 +216,7 @@ export type CandidateOverview = {
   pipeline_entries: CandidatePipelineEntryOverview[];
   active_job_decision: CandidateActiveJobDecision | null;
   active_job_skill_preview: CandidateSkillPreview | null;
+  active_job_score_dimensions?: CandidateScoreDimensions | null;
   latest_note: CandidateLatestNoteOverview | null;
   preview_pendencies: CandidatePreviewPendencyOverview[];
   latest_movement: CandidateLatestMovementOverview | null;

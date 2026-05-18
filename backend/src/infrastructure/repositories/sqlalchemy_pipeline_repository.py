@@ -416,6 +416,44 @@ class SQLAlchemyPipelineRepository:
         await self._session.flush()
         return transition
 
+    async def count_pipeline_events_matching(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        event_type: str,
+        from_stage: str | None,
+        to_stage: str | None,
+        actor_id: UUID | None,
+    ) -> int:
+        """R08: how many events already exist with this exact prefix.
+
+        Used by the service layer to compute the next ``sequence`` value for
+        the idempotency_key when the same transition repeats legitimately
+        (e.g. A→B→A→B). Returns 0 when no event matches, so the first event
+        keeps the legacy idempotency_key format (backwards-compat with rows
+        written before R08).
+        """
+        stmt = sa.select(sa.func.count()).select_from(CandidateJobPipelineEventModel).where(
+            CandidateJobPipelineEventModel.candidate_id == candidate_id,
+            CandidateJobPipelineEventModel.job_id == job_id,
+            CandidateJobPipelineEventModel.event_type == event_type,
+        )
+        if from_stage is None:
+            stmt = stmt.where(CandidateJobPipelineEventModel.from_stage.is_(None))
+        else:
+            stmt = stmt.where(CandidateJobPipelineEventModel.from_stage == from_stage)
+        if to_stage is None:
+            stmt = stmt.where(CandidateJobPipelineEventModel.to_stage.is_(None))
+        else:
+            stmt = stmt.where(CandidateJobPipelineEventModel.to_stage == to_stage)
+        if actor_id is None:
+            stmt = stmt.where(CandidateJobPipelineEventModel.actor_id.is_(None))
+        else:
+            stmt = stmt.where(CandidateJobPipelineEventModel.actor_id == actor_id)
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one() or 0)
+
     async def create_entry(
         self,
         *,

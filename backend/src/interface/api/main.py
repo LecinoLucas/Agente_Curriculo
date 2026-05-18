@@ -130,9 +130,22 @@ app.include_router(dashboard.router, prefix=_PREFIX)
 
 
 # ── Static files ──────────────────────────────────────────────────────────────
+# LGPD/R13: NEVER mount `/uploads` as a whole. That directory contains resume
+# PDFs and pre-admission documents (CPF, RG, comprovante de endereço) under
+# `uploads/resumes/` and `uploads/pre_admission/`. Serving them as static files
+# would let anyone with the path download personal data without auth.
+#
+# Resume downloads go through `GET /api/v1/candidates/{id}/resume/download`,
+# which checks `RecruiterOrAdmin` permission and writes an audit log.
+# Pre-admission documents go through `GET /api/v1/pre-admission/documents/{id}/download`,
+# which requires an authenticated session.
+#
+# Only `uploads/avatars/` stays public (intentional, referenced by absolute path
+# in `users.avatar_url`).
 uploads_dir = Path(__file__).parent.parent.parent.parent / "uploads"
-uploads_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+avatars_dir = uploads_dir / "avatars"
+avatars_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads/avatars", StaticFiles(directory=str(avatars_dir)), name="uploads_avatars")
 
 
 # ── Exception handlers globais ───────────────────────────────────────────────

@@ -156,12 +156,15 @@ class RequestAnalysisUseCase:
 
         active_prompt = await self._analysis_repo.find_preferred_prompt_template("full_analysis")
 
-        # 5. Gera chave de idempotência
+        # 5. Gera chave de idempotência (R07 — formato v1 namespaced).
+        # Inclui requested_by para evitar colisão entre solicitantes distintos
+        # com o mesmo (resume_version, prompt, modelo, vaga).
         idempotency_key = AnalysisVersioningService.build_idempotency_key(
             resume_version_id=command.resume_version_id,
             prompt_template_id=active_prompt.id,
             ai_model_id=active_model.id,
             job_id=command.job_id,
+            requested_by=command.requested_by,
         )
         if command.force_reanalyze:
             import time

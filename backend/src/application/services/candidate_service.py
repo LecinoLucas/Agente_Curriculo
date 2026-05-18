@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +34,7 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidatePreviewPendencyResponse,
     CandidateResponse,
     CandidateResumeSummaryResponse,
+    CandidateScoreDimensionsResponse,
     CandidateSkillPreviewResponse,
     CreateCandidateRequest,
     UpdateCandidateRequest,
@@ -119,12 +122,18 @@ class CandidateService:
     async def create(
         self,
         body: CreateCandidateRequest,
-        created_by: UUID,
+        created_by: UUID | None,
         *,
         application_source: str = APPLICATION_SOURCE_MANUAL,
     ) -> CandidateModel:
         """
         Create a new Candidate.
+
+        Args:
+            body: CreateCandidateRequest with candidate details.
+            created_by: UUID of the user creating the candidate. 
+                       Can be None for public application candidates.
+            application_source: Source of the application (manual, public, google, etc).
 
         The user_id field in CreateCandidateRequest is RESERVED for future portal use.
         Currently, it MUST be NULL. Creating Candidates with user_id requires explicit
@@ -184,6 +193,15 @@ class CandidateService:
         search: str | None = None,
         archived: bool = False,
         application_source: str | None = None,
+        city: str | None = None,
+        state: str | None = None,
+        salary_min: float | None = None,
+        salary_max: float | None = None,
+        desired_contract_type: str | None = None,
+        link_status_filter: str | None = None,
+        has_resume: bool | None = None,
+        skill: str | None = None,
+        seniority: str | None = None,
     ) -> tuple[list[CandidateModel], int]:
         return await self._repository.list_active(
             page,
@@ -191,6 +209,15 @@ class CandidateService:
             search,
             archived,
             application_source=application_source,
+            city=city,
+            state=state,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            desired_contract_type=desired_contract_type,
+            link_status_filter=link_status_filter,
+            has_resume=has_resume,
+            skill=skill,
+            seniority=seniority,
         )
 
     async def list_summaries(
@@ -202,6 +229,14 @@ class CandidateService:
         ai_status_filter: list[str] | None = None,
         archived: bool = False,
         application_source: str | None = None,
+        city: str | None = None,
+        state: str | None = None,
+        salary_min: float | None = None,
+        salary_max: float | None = None,
+        desired_contract_type: str | None = None,
+        link_status_filter: str | None = None,
+        skill: str | None = None,
+        seniority: str | None = None,
     ) -> tuple[list[CandidateListSummaryResponse], int]:
         rows, total = await self._repository.list_summaries(
             page,
@@ -211,6 +246,14 @@ class CandidateService:
             ai_status_filter,
             archived,
             application_source=application_source,
+            city=city,
+            state=state,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            desired_contract_type=desired_contract_type,
+            link_status_filter=link_status_filter,
+            skill=skill,
+            seniority=seniority,
         )
         items = [
             CandidateListSummaryResponse(
@@ -352,13 +395,18 @@ class CandidateService:
             warnings=status_result.warnings,
             next_action=status_result.next_action,
         )
-        active_job_skill_preview = None
+
+        active_job_score = None
         if active_job_id is not None and pipeline_current_analysis_id is not None:
             active_job_score = await self._repository.find_candidate_job_score_for_analysis(
                 pipeline_current_analysis_id,
                 active_job_id,
             )
+
+        active_job_skill_preview = None
+        if active_job_score is not None:
             active_job_skill_preview = self._build_skill_preview(active_job_score)
+        active_job_score_dimensions = self._build_score_dimensions(active_job_score)
 
         latest_note_row = await self._repository.find_latest_candidate_note_summary(candidate_id)
         latest_movement_row = (
@@ -418,6 +466,7 @@ class CandidateService:
             ],
             active_job_decision=active_job_decision,
             active_job_skill_preview=active_job_skill_preview,
+            active_job_score_dimensions=active_job_score_dimensions,
             latest_note=(
                 CandidateLatestNoteResponse(**latest_note_row)
                 if latest_note_row is not None
@@ -468,6 +517,44 @@ class CandidateService:
             matched_skills=matched,
             attention_points=attention,
         )
+
+    @staticmethod
+    def _build_score_dimensions(score: object | None) -> CandidateScoreDimensionsResponse | None:
+        if score is None:
+            return None
+
+        breakdown = getattr(score, "breakdown", None)
+        if not isinstance(breakdown, dict):
+            return None
+
+        def _pick_number(*keys: str) -> float | None:
+            for key in keys:
+                value = breakdown.get(key)
+                if isinstance(value, (int, float)):
+                    return float(value)
+            return None
+
+        dimensions = CandidateScoreDimensionsResponse(
+            skills=_pick_number("skills_score", "skills", "skill_match_score"),
+            experience=_pick_number("experience_score", "experience", "experience_match_score"),
+            seniority=_pick_number("seniority_score", "seniority", "seniority_match_score"),
+            education=_pick_number("education_score", "education"),
+            confidence=_pick_number("confidence_score", "confidence", "data_confidence_score"),
+        )
+
+        if all(
+            value is None
+            for value in (
+                dimensions.skills,
+                dimensions.experience,
+                dimensions.seniority,
+                dimensions.education,
+                dimensions.confidence,
+            )
+        ):
+            return None
+
+        return dimensions
 
     @staticmethod
     def _build_preview_pendencies(

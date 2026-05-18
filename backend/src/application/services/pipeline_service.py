@@ -146,9 +146,24 @@ def _build_event_idempotency_key(
     from_stage: str | None,
     to_stage: str | None,
     actor_id: UUID | None,
+    sequence: int = 0,
 ) -> str:
-    """Generate deterministic idempotency key for pipeline events."""
-    return ":".join([
+    """Generate deterministic idempotency key for pipeline events.
+
+    R08: Legitimate repeats of the same transition (e.g. screening → hr_interview
+    → screening → hr_interview when a recruiter rolls back and tries again) used
+    to collide on the unique idempotency_key. We now accept an explicit
+    ``sequence`` integer:
+
+      - ``sequence == 0`` returns the legacy 6-segment format, so old keys
+        already in the DB and the first occurrence of a transition stay stable.
+      - ``sequence > 0`` appends ``:seq:{n}`` and is used for subsequent
+        repeats of the same (pipeline_id, event_type, from, to, actor) tuple.
+
+    Callers should compute ``sequence`` via
+    :func:`_compute_event_sequence` right before saving the event.
+    """
+    base = ":".join([
         "pipeline",
         str(pipeline_id),
         event_type,
@@ -156,6 +171,36 @@ def _build_event_idempotency_key(
         to_stage or "null",
         str(actor_id) if actor_id else "null",
     ])
+    if sequence <= 0:
+        return base
+    return f"{base}:seq:{sequence}"
+
+
+async def _compute_event_sequence(
+    repository: "SQLAlchemyPipelineRepository",
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+    event_type: str,
+    from_stage: str | None,
+    to_stage: str | None,
+    actor_id: UUID | None,
+) -> int:
+    """Return how many events already exist with this exact prefix.
+
+    Returns 0 if no event with that combination has been recorded yet — so the
+    first event uses the legacy idempotency_key format and matches any
+    pre-existing row. Subsequent events get sequence=1, 2, 3, … to avoid
+    colliding on the unique constraint.
+    """
+    return await repository.count_pipeline_events_matching(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        event_type=event_type,
+        from_stage=from_stage,
+        to_stage=to_stage,
+        actor_id=actor_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +454,16 @@ class PipelineService:
             )
 
         pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        # R08: count prior events with same prefix so A→B→A→B → 4 events, not 2.
+        sequence = await _compute_event_sequence(
+            self._repository,
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            event_type="stage_moved",
+            from_stage=from_stage,
+            to_stage=body.stage,
+            actor_id=moved_by,
+        )
         transition = CandidateJobPipelineEventModel(
             candidate_id=candidate_id,
             job_id=body.job_id,
@@ -417,7 +472,8 @@ class PipelineService:
             to_stage=body.stage,
             actor_id=moved_by,
             idempotency_key=_build_event_idempotency_key(
-                pipeline_id, "stage_moved", from_stage, body.stage, moved_by
+                pipeline_id, "stage_moved", from_stage, body.stage, moved_by,
+                sequence=sequence,
             ),
             metadata_payload={
                 "trigger": "manual",
@@ -496,19 +552,30 @@ class PipelineService:
                 updated_at=now,
             )
         pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        _added_from_stage = existing_entry.pipeline_stage if existing_entry else None
+        _added_sequence = await _compute_event_sequence(
+            self._repository,
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            event_type="candidate_added",
+            from_stage=_added_from_stage,
+            to_stage=body.initial_stage,
+            actor_id=moved_by,
+        )
         transition = await self._repository.save_transition(
             CandidateJobPipelineEventModel(
                 candidate_id=candidate_id,
                 job_id=body.job_id,
                 event_type="candidate_added",
-                from_stage=existing_entry.pipeline_stage if existing_entry is not None else None,
+                from_stage=_added_from_stage,
                 to_stage=body.initial_stage,
                 actor_id=moved_by,
                 idempotency_key=_build_event_idempotency_key(
                     pipeline_id, "candidate_added",
-                    existing_entry.pipeline_stage if existing_entry else None,
+                    _added_from_stage,
                     body.initial_stage,
                     moved_by,
+                    sequence=_added_sequence,
                 ),
                 metadata_payload={
                     "trigger": "manual",
@@ -581,6 +648,15 @@ class PipelineService:
                 raise PipelineEntryNotFoundError
 
             source_pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.from_job_id)
+            _src_seq = await _compute_event_sequence(
+                self._repository,
+                candidate_id=candidate_id,
+                job_id=body.from_job_id,
+                event_type="job_transferred_out",
+                from_stage=source_entry.pipeline_stage,
+                to_stage=source_entry.pipeline_stage,
+                actor_id=moved_by,
+            )
             source_transition = await self._repository.save_transition(
                 CandidateJobPipelineEventModel(
                     candidate_id=candidate_id,
@@ -594,6 +670,7 @@ class PipelineService:
                     idempotency_key=_build_event_idempotency_key(
                         source_pipeline_id, "job_transferred_out",
                         source_entry.pipeline_stage, source_entry.pipeline_stage, moved_by,
+                        sequence=_src_seq,
                     ),
                     metadata_payload={
                         "trigger": "manual",
@@ -627,20 +704,31 @@ class PipelineService:
                     updated_at=now,
                 )
             dest_pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.to_job_id)
+            _dest_from_stage = destination_any_entry.pipeline_stage if destination_any_entry is not None else None
+            _dest_seq = await _compute_event_sequence(
+                self._repository,
+                candidate_id=candidate_id,
+                job_id=body.to_job_id,
+                event_type="job_transferred_in",
+                from_stage=_dest_from_stage,
+                to_stage="entry",
+                actor_id=moved_by,
+            )
             destination_transition = await self._repository.save_transition(
                 CandidateJobPipelineEventModel(
                     candidate_id=candidate_id,
                     job_id=body.to_job_id,
                     event_type="job_transferred_in",
-                    from_stage=destination_any_entry.pipeline_stage if destination_any_entry is not None else None,
+                    from_stage=_dest_from_stage,
                     to_stage="entry",
                     from_job_id=body.from_job_id,
                     to_job_id=body.to_job_id,
                     actor_id=moved_by,
                     idempotency_key=_build_event_idempotency_key(
                         dest_pipeline_id, "job_transferred_in",
-                        destination_any_entry.pipeline_stage if destination_any_entry is not None else None,
+                        _dest_from_stage,
                         "entry", moved_by,
+                        sequence=_dest_seq,
                     ),
                     metadata_payload={
                         "trigger": "manual",
@@ -732,6 +820,15 @@ class PipelineService:
             )
 
         pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        _reconsider_seq = await _compute_event_sequence(
+            self._repository,
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            event_type="candidate_reconsidered",
+            from_stage=existing_entry.pipeline_stage,
+            to_stage=body.initial_stage,
+            actor_id=moved_by,
+        )
         transition = await self._repository.save_transition(
             CandidateJobPipelineEventModel(
                 candidate_id=candidate_id,
@@ -746,6 +843,7 @@ class PipelineService:
                     existing_entry.pipeline_stage,
                     body.initial_stage,
                     moved_by,
+                    sequence=_reconsider_seq,
                 ),
                 metadata_payload={
                     "trigger": "manual",
@@ -804,6 +902,15 @@ class PipelineService:
             raise PipelineEntryNotFoundError
 
         pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
+        _removed_seq = await _compute_event_sequence(
+            self._repository,
+            candidate_id=candidate_id,
+            job_id=job_id,
+            event_type="candidate_removed",
+            from_stage=entry.pipeline_stage,
+            to_stage=entry.pipeline_stage,
+            actor_id=moved_by,
+        )
         await self._repository.save_transition(
             CandidateJobPipelineEventModel(
                 candidate_id=candidate_id,
@@ -815,6 +922,7 @@ class PipelineService:
                 idempotency_key=_build_event_idempotency_key(
                     pipeline_id, "candidate_removed",
                     entry.pipeline_stage, entry.pipeline_stage, moved_by,
+                    sequence=_removed_seq,
                 ),
                 metadata_payload={"trigger": "manual", "reason": "candidate_removed"},
                 created_at=now,

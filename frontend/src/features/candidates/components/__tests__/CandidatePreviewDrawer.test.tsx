@@ -119,6 +119,13 @@ const baseOverview: CandidateOverview = {
     matched_skills: ["Protheus", "SQL", "Atendimento"],
     attention_points: ["ADVPL", "Experiência contábil"],
   },
+  active_job_score_dimensions: {
+    skills: 0,
+    experience: 50,
+    seniority: 41,
+    education: 50,
+    confidence: 30,
+  },
   latest_note: {
     note_text: "Boa comunicação na triagem.",
     created_at: "2026-05-16T10:00:00Z",
@@ -178,6 +185,53 @@ describe("CandidatePreviewDrawer", () => {
     expect(await screen.findByText("Skills ainda não disponíveis.")).toBeInTheDocument();
   });
 
+  it("renderiza card de Dimensões com percentuais e barras", async () => {
+    mockOverview();
+    renderDrawer();
+
+    const section = await screen.findByTestId("preview-score-dimensions");
+    expect(within(section).getByText("Dimensões")).toBeInTheDocument();
+    expect(within(section).getByText("Skills")).toBeInTheDocument();
+    expect(within(section).getByText("Experiência")).toBeInTheDocument();
+    expect(within(section).getByText("Senioridade")).toBeInTheDocument();
+    expect(within(section).getByText("Educação")).toBeInTheDocument();
+    expect(within(section).getByText("Confiança")).toBeInTheDocument();
+    expect(within(section).getByText("0%")).toBeInTheDocument();
+    expect(within(section).getAllByText("50%")).toHaveLength(2);
+    expect(within(section).getByText("41%")).toBeInTheDocument();
+    expect(within(section).getByText("30%")).toBeInTheDocument();
+
+    expect(screen.getByTestId("preview-dimension-bar-skills")).toHaveStyle({ width: "0%" });
+    expect(screen.getByTestId("preview-dimension-bar-experience")).toHaveStyle({ width: "50%" });
+    expect(screen.getByTestId("preview-dimension-bar-seniority")).toHaveStyle({ width: "41%" });
+    expect(screen.getByTestId("preview-dimension-bar-education")).toHaveStyle({ width: "50%" });
+    expect(screen.getByTestId("preview-dimension-bar-confidence")).toHaveStyle({ width: "30%" });
+  });
+
+  it("mostra fallback quando dimensões não estão disponíveis", async () => {
+    mockOverview({ active_job_score_dimensions: null });
+    renderDrawer();
+
+    expect(await screen.findByText("Dimensões ainda não disponíveis.")).toBeInTheDocument();
+  });
+
+  it("não usa dimensões de análise antiga", async () => {
+    mockOverview({
+      active_job_decision: {
+        ...baseOverview.active_job_decision,
+        current_analysis_id: "analysis-active",
+      },
+      latest_analysis: {
+        ...baseOverview.latest_analysis,
+        analysis_id: "analysis-old",
+      },
+      active_job_score_dimensions: null,
+    });
+    renderDrawer();
+
+    expect(await screen.findByText("Dimensões ainda não disponíveis.")).toBeInTheDocument();
+  });
+
   it("mostra botão Ver currículo quando há currículo", async () => {
     mockOverview();
     renderDrawer();
@@ -193,9 +247,8 @@ describe("CandidatePreviewDrawer", () => {
     expect(screen.queryByRole("button", { name: /Ver currículo/i })).not.toBeInTheDocument();
   });
 
-  it("abre nova aba ao clicar Ver currículo quando há URL segura", async () => {
+  it("navega para documentos ao clicar Ver currículo mesmo quando há URL direta", async () => {
     const user = userEvent.setup();
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     mockOverview({
       resumes: [
         {
@@ -208,7 +261,7 @@ describe("CandidatePreviewDrawer", () => {
 
     await user.click(await screen.findByRole("button", { name: /Ver currículo/i }));
 
-    expect(openSpy).toHaveBeenCalledWith("https://example.com/resume.pdf", "_blank", "noopener,noreferrer");
+    expect(screen.getByTestId("location")).toHaveTextContent("/candidatos/candidate-1?tab=documents");
   });
 
   it("navega para documentos ao clicar Ver currículo sem URL direta", async () => {

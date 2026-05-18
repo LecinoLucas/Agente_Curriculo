@@ -191,7 +191,7 @@ describe("PipelinePage", () => {
     });
   });
 
-  it("3. Renderiza a barra de buscas e filtros integrados", async () => {
+  it("3. Remove busca/filtros da barra e mantém atalho de lupa + vincular", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -201,8 +201,10 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/buscar candidato/i)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Filtros/i })).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/buscar candidato/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Filtros/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Buscar candidatos/i })).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /Vincular candidato/i }).length).toBeGreaterThan(0);
     });
   });
 
@@ -294,7 +296,7 @@ describe("PipelinePage", () => {
     expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1");
   });
 
-  it("9. Permite buscar candidatos pelo campo de busca dinâmico", async () => {
+  it("9. Mantém candidatos visíveis sem campo de busca local", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -308,12 +310,8 @@ describe("PipelinePage", () => {
       expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText(/buscar candidato/i);
-    fireEvent.change(searchInput, { target: { value: "Aline" } });
-
-    // "Aline Santos" should stay, but "Bruno Lima" should be filtered out
     expect(screen.getByText("Aline Santos")).toBeInTheDocument();
-    expect(screen.queryByText("Bruno Lima")).not.toBeInTheDocument();
+    expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
   });
 
   it("10. Renderiza banner com erro se a busca de vagas falhar", async () => {

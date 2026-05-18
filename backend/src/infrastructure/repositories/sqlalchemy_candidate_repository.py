@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 import time
 from uuid import UUID
 
@@ -202,22 +203,30 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         archived: bool = False,
         *,
         application_source: str | None = None,
+        city: str | None = None,
+        state: str | None = None,
+        salary_min: float | None = None,
+        salary_max: float | None = None,
+        desired_contract_type: str | None = None,
+        link_status_filter: str | None = None,
+        has_resume: bool | None = None,
+        skill: str | None = None,
+        seniority: str | None = None,
     ) -> tuple[list[CandidateModel], int]:
-        filters = [CandidateModel.deleted_at.is_(None)]
-        if archived:
-            filters.append(CandidateModel.archived_at.is_not(None))
-        else:
-            filters.append(CandidateModel.archived_at.is_(None))
-        if application_source:
-            filters.append(CandidateModel.application_source == application_source)
-        if search:
-            term = f"%{search.lower().strip()}%"
-            filters.append(
-                sa.or_(
-                    sa.func.lower(CandidateModel.full_name).like(term),
-                    sa.func.lower(CandidateModel.email).like(term),
-                )
-            )
+        filters = self._build_common_candidate_filters(
+            search=search,
+            archived=archived,
+            application_source=application_source,
+            has_resume=has_resume,
+            city=city,
+            state=state,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            desired_contract_type=desired_contract_type,
+            link_status_filter=link_status_filter,
+            skill=skill,
+            seniority=seniority,
+        )
 
         total = int(
             (
@@ -247,52 +256,31 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         archived: bool = False,
         *,
         application_source: str | None = None,
+        city: str | None = None,
+        state: str | None = None,
+        salary_min: float | None = None,
+        salary_max: float | None = None,
+        desired_contract_type: str | None = None,
+        link_status_filter: str | None = None,
+        skill: str | None = None,
+        seniority: str | None = None,
     ) -> tuple[list[dict], int]:
         # ── WHERE filters ─────────────────────────────────────────────────────
-        # EXISTS is cheaper than COUNT for has_resume: short-circuits on first row.
-        filters: list = [CandidateModel.deleted_at.is_(None)]
-        if archived:
-            filters.append(CandidateModel.archived_at.is_not(None))
-        else:
-            filters.append(CandidateModel.archived_at.is_(None))
-        if application_source:
-            filters.append(CandidateModel.application_source == application_source)
-        if search:
-            term = f"%{search.lower().strip()}%"
-            filters.append(
-                sa.or_(
-                    sa.func.lower(CandidateModel.full_name).like(term),
-                    sa.func.lower(CandidateModel.email).like(term),
-                )
-            )
-        if has_resume is not None:
-            _resume_exists = (
-                sa.select(sa.literal(1))
-                .where(
-                    ResumeModel.candidate_id == CandidateModel.id,
-                    ResumeModel.deleted_at.is_(None),
-                )
-                .correlate(CandidateModel)
-                .exists()
-            )
-            filters.append(_resume_exists if has_resume else ~_resume_exists)
-        if ai_status_filter:
-            # Scalar subquery only when this filter is active; used in WHERE only.
-            _ai_filter_sq = (
-                sa.select(AnalysisModel.status)
-                .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
-                .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-                .where(
-                    ResumeModel.candidate_id == CandidateModel.id,
-                    ResumeModel.deleted_at.is_(None),
-                    AnalysisModel.status != "discarded",
-                )
-                .correlate(CandidateModel)
-                .order_by(AnalysisModel.created_at.desc())
-                .limit(1)
-                .scalar_subquery()
-            )
-            filters.append(_ai_filter_sq.in_(ai_status_filter))
+        filters = self._build_common_candidate_filters(
+            search=search,
+            archived=archived,
+            application_source=application_source,
+            has_resume=has_resume,
+            city=city,
+            state=state,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            desired_contract_type=desired_contract_type,
+            link_status_filter=link_status_filter,
+            skill=skill,
+            seniority=seniority,
+            ai_status_filter=ai_status_filter,
+        )
 
         # ── COUNT (unchanged contract) ─────────────────────────────────────────
         _t0 = time.perf_counter()
@@ -1387,3 +1375,206 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             sa.delete(CandidateModel).where(CandidateModel.id == candidate_id)
         )
         await self._session.flush()
+    @staticmethod
+    def _normalized_digits_expr(column: sa.ColumnElement[str | None]) -> sa.ColumnElement[str]:
+        expr = sa.func.coalesce(column, "")
+        for token in (".", "-", "/", "(", ")", " ", "+"):
+            expr = sa.func.replace(expr, token, "")
+        return expr
+
+    def _build_common_candidate_filters(
+        self,
+        *,
+        search: str | None,
+        archived: bool,
+        application_source: str | None,
+        has_resume: bool | None = None,
+        city: str | None = None,
+        state: str | None = None,
+        salary_min: float | None = None,
+        salary_max: float | None = None,
+        desired_contract_type: str | None = None,
+        link_status_filter: str | None = None,
+        skill: str | None = None,
+        seniority: str | None = None,
+        ai_status_filter: list[str] | None = None,
+    ) -> list[sa.ColumnElement[bool]]:
+        filters: list[sa.ColumnElement[bool]] = [CandidateModel.deleted_at.is_(None)]
+        filters.append(CandidateModel.archived_at.is_not(None) if archived else CandidateModel.archived_at.is_(None))
+
+        if application_source:
+            filters.append(CandidateModel.application_source == application_source)
+
+        if city:
+            city_term = city.strip().lower()
+            if city_term:
+                filters.append(sa.func.lower(sa.func.coalesce(CandidateModel.location_city, "")) == city_term)
+
+        if state:
+            state_term = state.strip().lower()
+            if state_term:
+                filters.append(sa.func.lower(sa.func.coalesce(CandidateModel.location_state, "")) == state_term)
+
+        if desired_contract_type:
+            contract_term = desired_contract_type.strip().lower()
+            if contract_term:
+                filters.append(
+                    sa.func.lower(sa.func.coalesce(CandidateModel.desired_contract_type, "")) == contract_term
+                )
+
+        if salary_min is not None:
+            filters.append(
+                sa.and_(
+                    CandidateModel.salary_expectation.is_not(None),
+                    sa.cast(CandidateModel.salary_expectation, sa.Float) >= salary_min,
+                )
+            )
+        if salary_max is not None:
+            filters.append(
+                sa.and_(
+                    CandidateModel.salary_expectation.is_not(None),
+                    sa.cast(CandidateModel.salary_expectation, sa.Float) <= salary_max,
+                )
+            )
+
+        active_pipeline_exists = (
+            sa.select(sa.literal(1))
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .exists()
+        )
+        closed_pipeline_exists = (
+            sa.select(sa.literal(1))
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.relationship_status.in_(("hired", "rejected", "withdrawn", "archived")),
+                CandidateJobPipelineModel.is_terminal.is_(True),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .exists()
+        )
+
+        if link_status_filter:
+            normalized_link_status = link_status_filter.strip().lower()
+            if normalized_link_status in {"with_active_job", "com_vaga_ativa", "active"}:
+                filters.append(active_pipeline_exists)
+            elif normalized_link_status in {"without_active_job", "sem_vaga_ativa", "talent_pool"}:
+                filters.append(~active_pipeline_exists)
+            elif normalized_link_status in {"closed_process", "processo_encerrado"}:
+                filters.append(sa.and_(~active_pipeline_exists, closed_pipeline_exists))
+
+        if has_resume is not None:
+            resume_exists = (
+                sa.select(sa.literal(1))
+                .where(
+                    ResumeModel.candidate_id == CandidateModel.id,
+                    ResumeModel.deleted_at.is_(None),
+                )
+                .correlate(CandidateModel)
+                .exists()
+            )
+            filters.append(resume_exists if has_resume else ~resume_exists)
+
+        if ai_status_filter:
+            ai_status_sq = (
+                sa.select(AnalysisModel.status)
+                .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
+                .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+                .where(
+                    ResumeModel.candidate_id == CandidateModel.id,
+                    ResumeModel.deleted_at.is_(None),
+                    AnalysisModel.status != "discarded",
+                )
+                .correlate(CandidateModel)
+                .order_by(AnalysisModel.created_at.desc())
+                .limit(1)
+                .scalar_subquery()
+            )
+            filters.append(ai_status_sq.in_(ai_status_filter))
+
+        skill_term = (skill or "").strip().lower()
+        if skill_term:
+            skill_like = f"%{skill_term}%"
+            skill_exists = (
+                sa.select(sa.literal(1))
+                .select_from(CandidateProfileAnalysisModel)
+                .where(
+                    CandidateProfileAnalysisModel.candidate_id == CandidateModel.id,
+                    sa.func.lower(sa.cast(CandidateProfileAnalysisModel.skills_json, sa.String)).like(skill_like),
+                )
+                .correlate(CandidateModel)
+                .exists()
+            )
+            filters.append(
+                sa.or_(
+                    sa.func.lower(sa.cast(CandidateModel.tags, sa.String)).like(skill_like),
+                    skill_exists,
+                )
+            )
+
+        seniority_term = (seniority or "").strip().lower()
+        if seniority_term:
+            seniority_exists = (
+                sa.select(sa.literal(1))
+                .select_from(CandidateProfileAnalysisModel)
+                .where(
+                    CandidateProfileAnalysisModel.candidate_id == CandidateModel.id,
+                    sa.func.lower(sa.func.coalesce(CandidateProfileAnalysisModel.seniority_level, "")).like(
+                        f"%{seniority_term}%"
+                    ),
+                )
+                .correlate(CandidateModel)
+                .exists()
+            )
+            filters.append(seniority_exists)
+
+        if search:
+            normalized_search = search.strip().lower()
+            if normalized_search:
+                search_term = f"%{normalized_search}%"
+                digits_search = re.sub(r"\D+", "", search)
+                search_conditions: list[sa.ColumnElement[bool]] = [
+                    sa.func.lower(CandidateModel.full_name).like(search_term),
+                    sa.func.lower(CandidateModel.email).like(search_term),
+                    sa.func.lower(sa.cast(CandidateModel.tags, sa.String)).like(search_term),
+                    sa.exists(
+                        sa.select(sa.literal(1))
+                        .select_from(CandidateProfileAnalysisModel)
+                        .where(
+                            CandidateProfileAnalysisModel.candidate_id == CandidateModel.id,
+                            sa.func.lower(sa.cast(CandidateProfileAnalysisModel.skills_json, sa.String)).like(
+                                search_term
+                            ),
+                        )
+                        .correlate(CandidateModel)
+                    ),
+                ]
+                if digits_search:
+                    digits_term = f"%{digits_search}%"
+                    search_conditions.extend(
+                        [
+                            self._normalized_digits_expr(CandidateModel.cpf).like(digits_term),
+                            self._normalized_digits_expr(CandidateModel.phone).like(digits_term),
+                        ]
+                    )
+                else:
+                    search_conditions.extend(
+                        [
+                            sa.func.lower(sa.func.coalesce(CandidateModel.cpf, "")).like(search_term),
+                            sa.func.lower(sa.func.coalesce(CandidateModel.phone, "")).like(search_term),
+                        ]
+                    )
+                filters.append(sa.or_(*search_conditions))
+
+        return filters

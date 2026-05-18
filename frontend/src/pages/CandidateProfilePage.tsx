@@ -55,6 +55,8 @@ import type {
   Job,
   JobRankingEntry,
   PipelineStage,
+  Resume,
+  ResumeVersion,
 } from "../types/domain";
 import type { InterviewFormat, InterviewSchedule, InterviewType } from "../types/agenda";
 
@@ -1012,7 +1014,91 @@ function ProfileDocumentsTab({
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [resumesById, setResumesById] = useState<Record<string, Resume>>({});
+  const [resumesLoading, setResumesLoading] = useState(false);
+  const [resumesError, setResumesError] = useState<string | null>(null);
+  const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  const [previewFileName, setPreviewFileName] = useState<string | null>(null);
+  const [previewContentType, setPreviewContentType] = useState<string | null>(null);
   const canDownload = user?.role === "admin" || user?.role === "recruiter";
+  const currentResumeSummary = useMemo(() => {
+    if (resumes.length === 0) return null;
+    return resumes.find((resume) => resume.status === "active") ?? resumes[0];
+  }, [resumes]);
+  const selectedResumeSummary = useMemo(() => {
+    if (!selectedResumeId) return currentResumeSummary;
+    return resumes.find((resume) => resume.resume_id === selectedResumeId) ?? currentResumeSummary;
+  }, [currentResumeSummary, resumes, selectedResumeId]);
+  const selectedResumeDetails = selectedResumeSummary
+    ? resumesById[selectedResumeSummary.resume_id] ?? null
+    : null;
+  const selectedVersion = useMemo<ResumeVersion | null>(() => {
+    if (!selectedResumeDetails) return null;
+    if (selectedVersionId) {
+      return selectedResumeDetails.versions.find((version) => version.id === selectedVersionId) ?? null;
+    }
+    const fallbackVersionId = selectedResumeSummary?.current_version_id;
+    if (fallbackVersionId) {
+      return selectedResumeDetails.versions.find((version) => version.id === fallbackVersionId) ?? null;
+    }
+    return selectedResumeDetails.versions[0] ?? null;
+  }, [selectedResumeDetails, selectedResumeSummary, selectedVersionId]);
+
+  useEffect(() => {
+    setSelectedResumeId(currentResumeSummary?.resume_id ?? null);
+  }, [currentResumeSummary?.resume_id]);
+
+  useEffect(() => {
+    setSelectedVersionId(selectedResumeSummary?.current_version_id ?? null);
+  }, [selectedResumeSummary?.resume_id, selectedResumeSummary?.current_version_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (resumes.length === 0) {
+      setResumesById({});
+      setResumesError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setResumesLoading(true);
+    setResumesError(null);
+    void Promise.all(resumes.map((resume) => resumeService.get(resume.resume_id)))
+      .then((items) => {
+        if (cancelled) return;
+        const next: Record<string, Resume> = {};
+        for (const item of items) next[item.id] = item;
+        setResumesById(next);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setResumesError(
+          formatContextError(
+            err,
+            "Não foi possível carregar metadados do currículo.",
+            "Tente novamente em instantes.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setResumesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resumes]);
+
+  useEffect(() => {
+    return () => {
+      if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+    };
+  }, [previewObjectUrl]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setFile(event.target.files?.[0] ?? null);
@@ -1041,9 +1127,14 @@ function ProfileDocumentsTab({
   };
 
   const handleDownload = async () => {
+    if (!selectedResumeSummary) return;
     setDownloading(true);
     try {
-      await resumeService.downloadByCandidateId(overview.candidate.id);
+      await resumeService.downloadCandidateResume(
+        overview.candidate.id,
+        selectedResumeSummary.resume_id,
+        { versionId: selectedVersion?.id ?? selectedResumeSummary.current_version_id },
+      );
     } catch (err: unknown) {
       toast.error(
         formatContextError(
@@ -1056,6 +1147,83 @@ function ProfileDocumentsTab({
       setDownloading(false);
     }
   };
+
+  const canPreviewInline = (mimeType: string | null): boolean => {
+    if (!mimeType) return false;
+    if (mimeType === "application/pdf") return true;
+    return mimeType.startsWith("image/");
+  };
+
+  const isDocFormat = (mimeType: string | null, fileName: string | null): boolean => {
+    const lowerName = (fileName ?? "").toLowerCase();
+    if (lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) return true;
+    return (
+      mimeType === "application/msword" ||
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+  };
+
+  const handlePreview = async () => {
+    if (!selectedResumeSummary) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const payload = await resumeService.fetchCandidateResumeFile(
+        overview.candidate.id,
+        selectedResumeSummary.resume_id,
+        {
+          versionId: selectedVersion?.id ?? selectedResumeSummary.current_version_id,
+          disposition: "inline",
+        },
+      );
+      if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+      const objectUrl = URL.createObjectURL(payload.blob);
+      setPreviewObjectUrl(objectUrl);
+      setPreviewFileName(payload.filename);
+      setPreviewContentType(payload.contentType);
+    } catch (err: unknown) {
+      setPreviewError(
+        formatContextError(
+          err,
+          "Não foi possível carregar o currículo.",
+          "Tente novamente ou faça o download do arquivo.",
+        ),
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleOpenInNewTab = async () => {
+    if (!selectedResumeSummary) return;
+    try {
+      const payload = await resumeService.fetchCandidateResumeFile(
+        overview.candidate.id,
+        selectedResumeSummary.resume_id,
+        {
+          versionId: selectedVersion?.id ?? selectedResumeSummary.current_version_id,
+          disposition: "inline",
+        },
+      );
+      const objectUrl = URL.createObjectURL(payload.blob);
+      window.open(objectUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (err: unknown) {
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível abrir o currículo em nova aba.",
+          "Tente novamente.",
+        ),
+      );
+    }
+  };
+
+  const selectedFileName =
+    selectedVersion?.original_file_name ?? selectedResumeSummary?.current_file_name ?? null;
+  const selectedMimeType = selectedVersion?.mime_type ?? previewContentType ?? null;
+  const showInlinePreview = canPreviewInline(selectedMimeType);
+  const showDocFallback = isDocFormat(selectedMimeType, selectedFileName);
 
   return (
     <div className="space-y-4">
@@ -1070,7 +1238,7 @@ function ProfileDocumentsTab({
           <ActionButton onClick={() => void handleUpload()} disabled={!file || uploading} primary>
             {uploading ? "Enviando..." : "Enviar currículo"}
           </ActionButton>
-          {canDownload && resumes.some((resume) => resume.current_version_id) ? (
+          {canDownload && selectedResumeSummary?.current_version_id ? (
             <ActionButton onClick={() => void handleDownload()} disabled={downloading}>
               {downloading ? "Baixando..." : "Baixar currículo"}
             </ActionButton>
@@ -1089,26 +1257,123 @@ function ProfileDocumentsTab({
           description="Quando um currículo for enviado pelo candidato ou pelo recrutador, ele aparecerá aqui."
         />
       ) : (
-        <SectionCard title="Currículos enviados">
-          <ul className="space-y-3">
-            {resumes.map((resume) => (
-              <li
-                key={resume.resume_id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))] p-4"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-[hsl(var(--text))]">{resume.title}</p>
-                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                    {resume.current_file_name ?? "Sem arquivo"} · v{resume.current_version}
-                  </p>
+        <>
+          <SectionCard title="Currículo atual">
+            {selectedResumeSummary ? (
+              <div className="space-y-4">
+                <DefinitionList
+                  items={[
+                    ["Arquivo", selectedFileName ?? "Sem arquivo"],
+                    ["Tipo", selectedMimeType ?? "Não informado"],
+                    [
+                      "Data de envio",
+                      selectedVersion
+                        ? formatDateTime(selectedVersion.uploaded_at)
+                        : formatDateTime(selectedResumeSummary.updated_at),
+                    ],
+                    [
+                      "Status de extração",
+                      selectedVersion?.extraction_status ?? selectedResumeSummary.extraction_status ?? "-",
+                    ],
+                    ["Versão atual", `v${selectedResumeSummary.current_version}`],
+                  ]}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <ActionButton onClick={() => void handlePreview()} disabled={previewLoading}>
+                    {previewLoading ? "Carregando..." : "Visualizar currículo"}
+                  </ActionButton>
+                  {canDownload ? (
+                    <ActionButton onClick={() => void handleDownload()} disabled={downloading}>
+                      {downloading ? "Baixando..." : "Baixar"}
+                    </ActionButton>
+                  ) : null}
+                  <ActionButton onClick={() => void handleOpenInNewTab()}>
+                    Abrir em nova aba
+                  </ActionButton>
                 </div>
-                <Badge tone={resume.extraction_status === "failed" ? "danger" : "neutral"}>
-                  {resume.extraction_status ?? resume.status}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
+              </div>
+            ) : (
+              <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum currículo enviado.</p>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Visualização do currículo">
+            {previewLoading ? (
+              <div className="space-y-2">
+                <div className="h-4 w-56 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+                <div className="h-72 animate-pulse rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface-muted))]" />
+              </div>
+            ) : null}
+            {!previewLoading && previewError ? (
+              <p className="text-sm text-[hsl(var(--danger))]">Não foi possível carregar o currículo.</p>
+            ) : null}
+            {!previewLoading && !previewError && !previewObjectUrl ? (
+              <p className="text-sm text-[hsl(var(--text-muted))]">
+                Clique em "Visualizar currículo" para abrir o arquivo.
+              </p>
+            ) : null}
+            {!previewLoading && !previewError && previewObjectUrl && showInlinePreview ? (
+              selectedMimeType?.startsWith("image/") ? (
+                <img
+                  src={previewObjectUrl}
+                  alt={previewFileName ?? "Preview do currículo"}
+                  className="max-h-[70vh] w-full rounded-xl border border-[hsl(var(--border)/0.7)] object-contain"
+                />
+              ) : (
+                <iframe
+                  title={previewFileName ?? "Preview do currículo"}
+                  src={previewObjectUrl}
+                  className="h-[70vh] w-full rounded-xl border border-[hsl(var(--border)/0.7)]"
+                />
+              )
+            ) : null}
+            {!previewLoading && !previewError && previewObjectUrl && !showInlinePreview && showDocFallback ? (
+              <p className="text-sm text-[hsl(var(--text-muted))]">
+                Pré-visualização indisponível para este formato. Baixe o arquivo para visualizar.
+              </p>
+            ) : null}
+            {!previewLoading && !previewError && previewObjectUrl && !showInlinePreview && !showDocFallback ? (
+              <p className="text-sm text-[hsl(var(--text-muted))]">
+                Não foi possível renderizar este tipo de arquivo no navegador. Use "Baixar" ou "Abrir em nova aba".
+              </p>
+            ) : null}
+          </SectionCard>
+
+          <SectionCard title="Versões do currículo">
+            {resumesLoading ? (
+              <div className="h-16 animate-pulse rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface-muted))]" />
+            ) : null}
+            {!resumesLoading && resumesError ? (
+              <p className="text-sm text-[hsl(var(--danger))]">{resumesError}</p>
+            ) : null}
+            {!resumesLoading && !resumesError && selectedResumeDetails?.versions.length ? (
+              <ul className="space-y-2">
+                {selectedResumeDetails.versions.map((version) => (
+                  <li
+                    key={version.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))] px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                        v{version.version_number} · {version.original_file_name}
+                      </p>
+                      <p className="text-xs text-[hsl(var(--text-muted))]">
+                        {formatDateTime(version.uploaded_at)} · {version.mime_type}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVersionId(version.id)}
+                      className="rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]"
+                    >
+                      {selectedVersion?.id === version.id ? "Selecionada" : "Visualizar"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </SectionCard>
+        </>
       )}
     </div>
   );

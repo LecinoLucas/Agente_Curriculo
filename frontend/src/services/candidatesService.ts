@@ -62,6 +62,31 @@ export type ListCandidatesParams = {
   search?: string;
   archived?: boolean;
   application_source?: string;
+  city?: string;
+  state?: string;
+  salary_min?: number;
+  salary_max?: number;
+  desired_contract_type?: string;
+  link_status_filter?: string;
+  has_resume?: boolean;
+  skill?: string;
+  seniority?: string;
+};
+
+export type ListCandidateSummariesParams = {
+  search?: string;
+  has_resume?: boolean;
+  ai_status?: string[];
+  archived?: boolean;
+  application_source?: string;
+  city?: string;
+  state?: string;
+  salary_min?: number;
+  salary_max?: number;
+  desired_contract_type?: string;
+  link_status_filter?: string;
+  skill?: string;
+  seniority?: string;
 };
 
 function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_name?: string; created_by?: string; created_at?: string; updated_at?: string }): Candidate {
@@ -140,6 +165,23 @@ function normalizeSkillPreview(
   };
 }
 
+function normalizeScoreDimensions(
+  item: Partial<NonNullable<CandidateOverview["active_job_score_dimensions"]>> | null | undefined,
+): CandidateOverview["active_job_score_dimensions"] {
+  if (!item) return null;
+
+  const parseValue = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+
+  return {
+    skills: parseValue(item.skills),
+    experience: parseValue(item.experience),
+    seniority: parseValue(item.seniority),
+    education: parseValue(item.education),
+    confidence: parseValue(item.confidence),
+  };
+}
+
 function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candidate?: Partial<Candidate> }): CandidateOverview {
   const normalizedEntries = Array.isArray(item.pipeline_entries)
     ? item.pipeline_entries.map((entry) => ({
@@ -183,6 +225,7 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
     pipeline_entries: normalizedEntries,
     active_job_decision: item.active_job_decision ?? null,
     active_job_skill_preview: normalizeSkillPreview(item.active_job_skill_preview),
+    active_job_score_dimensions: normalizeScoreDimensions(item.active_job_score_dimensions),
     latest_note: item.latest_note ?? null,
     preview_pendencies: Array.isArray(item.preview_pendencies) ? item.preview_pendencies : [],
     latest_movement: item.latest_movement ?? null,
@@ -225,11 +268,29 @@ export const candidatesService = {
     const urlParams = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     const search = typeof params === "string" ? params : params.search;
     const archived = typeof params === "string" ? undefined : params.archived;
-    const applicationSource =
-      typeof params === "string" ? undefined : params.application_source;
+    const applicationSource = typeof params === "string" ? undefined : params.application_source;
+    const city = typeof params === "string" ? undefined : params.city;
+    const state = typeof params === "string" ? undefined : params.state;
+    const salaryMin = typeof params === "string" ? undefined : params.salary_min;
+    const salaryMax = typeof params === "string" ? undefined : params.salary_max;
+    const desiredContractType =
+      typeof params === "string" ? undefined : params.desired_contract_type;
+    const linkStatusFilter = typeof params === "string" ? undefined : params.link_status_filter;
+    const hasResume = typeof params === "string" ? undefined : params.has_resume;
+    const skill = typeof params === "string" ? undefined : params.skill;
+    const seniority = typeof params === "string" ? undefined : params.seniority;
     if (search) urlParams.set("search", search);
     if (archived !== undefined) urlParams.set("archived", String(archived));
     if (applicationSource) urlParams.set("application_source", applicationSource);
+    if (city) urlParams.set("city", city);
+    if (state) urlParams.set("state", state);
+    if (salaryMin !== undefined) urlParams.set("salary_min", String(salaryMin));
+    if (salaryMax !== undefined) urlParams.set("salary_max", String(salaryMax));
+    if (desiredContractType) urlParams.set("desired_contract_type", desiredContractType);
+    if (linkStatusFilter) urlParams.set("link_status_filter", linkStatusFilter);
+    if (hasResume !== undefined) urlParams.set("has_resume", String(hasResume));
+    if (skill) urlParams.set("skill", skill);
+    if (seniority) urlParams.set("seniority", seniority);
     return httpRequest<Paginated<Candidate>>(`/api/v1/candidates?${urlParams.toString()}`).then((payload) => ({
       data: Array.isArray(payload?.data) ? payload.data.map(normalizeCandidate) : [],
       total: payload?.total ?? 0,
@@ -250,18 +311,39 @@ export const candidatesService = {
   async listSummaries(
     page = 1,
     pageSize = 20,
-    search?: string,
+    searchOrParams?: string | ListCandidateSummariesParams,
     hasResume?: boolean,
     aiStatus?: string[],
     archived?: boolean,
     applicationSource?: string,
   ): Promise<Paginated<CandidateListSummary>> {
+    const paramsInput: ListCandidateSummariesParams =
+      typeof searchOrParams === "string"
+        ? {
+            search: searchOrParams,
+            has_resume: hasResume,
+            ai_status: aiStatus,
+            archived,
+            application_source: applicationSource,
+          }
+        : (searchOrParams ?? {});
+
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-    if (search) params.set("search", search);
-    if (hasResume !== undefined) params.set("has_resume", String(hasResume));
-    if (aiStatus?.length) aiStatus.forEach((s) => params.append("ai_status", s));
-    if (archived !== undefined) params.set("archived", String(archived));
-    if (applicationSource) params.set("application_source", applicationSource);
+    if (paramsInput.search) params.set("search", paramsInput.search);
+    if (paramsInput.has_resume !== undefined) params.set("has_resume", String(paramsInput.has_resume));
+    if (paramsInput.ai_status?.length) paramsInput.ai_status.forEach((s) => params.append("ai_status", s));
+    if (paramsInput.archived !== undefined) params.set("archived", String(paramsInput.archived));
+    if (paramsInput.application_source) params.set("application_source", paramsInput.application_source);
+    if (paramsInput.city) params.set("city", paramsInput.city);
+    if (paramsInput.state) params.set("state", paramsInput.state);
+    if (paramsInput.salary_min !== undefined) params.set("salary_min", String(paramsInput.salary_min));
+    if (paramsInput.salary_max !== undefined) params.set("salary_max", String(paramsInput.salary_max));
+    if (paramsInput.desired_contract_type) {
+      params.set("desired_contract_type", paramsInput.desired_contract_type);
+    }
+    if (paramsInput.link_status_filter) params.set("link_status_filter", paramsInput.link_status_filter);
+    if (paramsInput.skill) params.set("skill", paramsInput.skill);
+    if (paramsInput.seniority) params.set("seniority", paramsInput.seniority);
     return httpRequest<Paginated<CandidateListSummary>>(
       `/api/v1/candidates/summaries?${params.toString()}`,
     ).then((payload) => ({

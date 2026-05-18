@@ -48,15 +48,35 @@ export function CandidatesPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const {
+    activeTab,
+    setActiveTab,
     searchInput,
     setSearchInput,
     search,
+    city,
+    setCity,
+    state,
+    setState,
+    skill,
+    setSkill,
+    seniority,
+    setSeniority,
+    salaryMin,
+    setSalaryMin,
+    salaryMax,
+    setSalaryMax,
     resumeFilter,
     setResumeFilter,
     aiFilter,
     setAiFilter,
     applicationSourceFilter,
     setApplicationSourceFilter,
+    desiredContractTypeFilter,
+    setDesiredContractTypeFilter,
+    linkStatusFilter,
+    setLinkStatusFilter,
+    showAdvanced,
+    setShowAdvanced,
     hasActiveFilters,
     clearFilters,
   } = useCandidatesFilters({ setPage });
@@ -73,20 +93,36 @@ export function CandidatesPage() {
       aiFilter === "all" ? undefined :
       aiFilter === "processing_or_pending" ? ["processing", "pending", "retry_scheduled"] :
       [aiFilter];
-    const applicationSource =
-      applicationSourceFilter === "all" ? undefined : applicationSourceFilter;
+    const applicationSource = applicationSourceFilter === "all" ? undefined : applicationSourceFilter;
+    const desiredContractType =
+      desiredContractTypeFilter === "all" ? undefined : desiredContractTypeFilter;
+
+    const computedLinkStatus =
+      activeTab === "talent_pool" && linkStatusFilter === "all"
+        ? "without_active_job"
+        : linkStatusFilter === "all"
+          ? undefined
+          : linkStatusFilter;
+
+    const normalizedSalaryMin = salaryMin.trim() ? Number(salaryMin) : undefined;
+    const normalizedSalaryMax = salaryMax.trim() ? Number(salaryMax) : undefined;
 
     void run(() =>
       candidatesService
-        .listSummaries(
-          page,
-          PAGE_SIZE,
-          search || undefined,
-          hasResume,
-          aiStatus,
-          undefined,
-          applicationSource,
-        )
+        .listSummaries(page, PAGE_SIZE, {
+          search: search || undefined,
+          has_resume: hasResume,
+          ai_status: aiStatus,
+          application_source: applicationSource,
+          city: city.trim() || undefined,
+          state: state.trim() || undefined,
+          salary_min: Number.isFinite(normalizedSalaryMin) ? normalizedSalaryMin : undefined,
+          salary_max: Number.isFinite(normalizedSalaryMax) ? normalizedSalaryMax : undefined,
+          desired_contract_type: desiredContractType,
+          link_status_filter: computedLinkStatus,
+          skill: skill.trim() || undefined,
+          seniority: seniority.trim() || undefined,
+        })
         .catch((err: unknown) => {
           throw new Error(
             formatContextError(
@@ -97,7 +133,24 @@ export function CandidatesPage() {
           );
         }),
     );
-  }, [page, search, resumeFilter, aiFilter, applicationSourceFilter, run, hasActiveFilters]);
+  }, [
+    page,
+    search,
+    city,
+    state,
+    skill,
+    seniority,
+    salaryMin,
+    salaryMax,
+    resumeFilter,
+    aiFilter,
+    applicationSourceFilter,
+    desiredContractTypeFilter,
+    linkStatusFilter,
+    activeTab,
+    run,
+    hasActiveFilters,
+  ]);
 
   useEffect(() => {
     fetchCandidates();
@@ -235,14 +288,34 @@ export function CandidatesPage() {
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="bg-[hsl(var(--surface)/0.3)] px-6 py-4 lg:px-8">
             <CandidatesFilters
+              activeTab={activeTab}
+              onActiveTabChange={setActiveTab}
               searchInput={searchInput}
               onSearchInputChange={setSearchInput}
+              city={city}
+              onCityChange={setCity}
+              state={state}
+              onStateChange={setState}
+              skill={skill}
+              onSkillChange={setSkill}
+              seniority={seniority}
+              onSeniorityChange={setSeniority}
+              salaryMin={salaryMin}
+              onSalaryMinChange={setSalaryMin}
+              salaryMax={salaryMax}
+              onSalaryMaxChange={setSalaryMax}
               resumeFilter={resumeFilter}
               onResumeFilterChange={setResumeFilter}
               aiFilter={aiFilter}
               onAiFilterChange={setAiFilter}
               applicationSourceFilter={applicationSourceFilter}
               onApplicationSourceFilterChange={setApplicationSourceFilter}
+              desiredContractTypeFilter={desiredContractTypeFilter}
+              onDesiredContractTypeFilterChange={setDesiredContractTypeFilter}
+              linkStatusFilter={linkStatusFilter}
+              onLinkStatusFilterChange={setLinkStatusFilter}
+              showAdvanced={showAdvanced}
+              onToggleAdvanced={() => setShowAdvanced((value) => !value)}
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearFilters}
             />
@@ -307,6 +380,11 @@ export function CandidatesPage() {
                   </div>
                 ) : (
                   <>
+                    {activeTab === "saved" ? (
+                      <div className="mx-6 mt-6 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted)/0.25)] px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                        Buscas salvas entram na próxima fase. Use os filtros da base para montar a consulta agora.
+                      </div>
+                    ) : null}
                     {isRefreshing ? (
                       <div className="flex items-center justify-center gap-2 border-b border-[hsl(var(--primary)/0.1)] bg-[hsl(var(--accent-soft)/0.5)] py-2 text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--primary))]">
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -356,7 +434,7 @@ export function CandidatesPage() {
                               canDelete={canDeleteCandidates}
                               onArchive={() => setArchiveTarget(c)}
                               onDelete={() => setDeleteTarget(c)}
-                              onLinkJob={c.linked_job_count === 0 ? () => setLinkTarget(c) : undefined}
+                              onLinkJob={!c.active_job_id ? () => setLinkTarget(c) : undefined}
                             />
                           ))}
                         </tbody>

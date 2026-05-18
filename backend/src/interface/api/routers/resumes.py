@@ -16,7 +16,7 @@ from src.application.services.resume_service import (
     ResumeUploadCandidateRequiredError,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
-from src.interface.api.dependencies import RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import CurrentUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.resume_schemas import (
     ResumeExtractionStatusResponse,
