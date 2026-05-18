@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -8,12 +8,18 @@ from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Fase 30B — segurança de documentos sensíveis na pré-admissão (RBAC + path
+# traversal + content-type). Sempre no smoke.
+pytestmark = pytest.mark.smoke
+
+from src.domain.entities.user import UserRole
 from src.application.services.pre_admission_service import MAX_PRE_ADMISSION_DOCUMENT_BYTES
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionDocumentModel,
     PreAdmissionEventModel,
 )
 from src.infrastructure.storage import pre_admission_documents as document_storage
+from tests.integration.helpers import _auth_headers, _create_active_user
 
 from .test_pre_admission import (
     _create_plain_candidate,
@@ -32,6 +38,16 @@ def private_pre_admission_storage(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 def _upload(filename: str, content: bytes, mime_type: str) -> dict:
     return {"document_file": (filename, content, mime_type)}
+
+
+async def _staff_headers_for_role(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    role: UserRole,
+) -> dict[str, str]:
+    email = f"pre-admission-download-{role.value}-{uuid4().hex[:8]}@example.com"
+    await _create_active_user(db_session, email, "Senha123!", role)
+    return await _auth_headers(client, email, "Senha123!")
 
 
 async def _upload_for_seed(
@@ -182,7 +198,7 @@ async def test_candidate_cannot_download_other_candidate_document(
 
     response = await client.get(f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download")
 
-    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
@@ -214,11 +230,51 @@ async def test_staff_download_is_authorized_and_audited(client: AsyncClient, db_
         "document_id": document["id"],
         "checklist_item_id": item["id"],
         "actor_type": "staff",
+        "actor_role": "recruiter",
         "mime_type": "application/pdf",
         "size_bytes": document["size_bytes"],
     }
     assert "storage_key" not in event.payload_json
     assert "file_path" not in event.payload_json
+    assert "content" not in event.payload_json
+    assert "file_bytes" not in event.payload_json
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("role", "expected_status"),
+    [
+        (UserRole.ADMIN, status.HTTP_200_OK),
+        (UserRole.HR, status.HTTP_200_OK),
+        (UserRole.RECRUITER, status.HTTP_200_OK),  # contrato atual mantém recruiter com acesso
+        (UserRole.MANAGER, status.HTTP_403_FORBIDDEN),
+        (UserRole.VIEWER, status.HTTP_403_FORBIDDEN),
+        (UserRole.CANDIDATE, status.HTTP_403_FORBIDDEN),
+    ],
+)
+async def test_staff_download_role_matrix(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    role: UserRole,
+    expected_status: int,
+) -> None:
+    _seed_headers, _job_id, _candidate_id, _case, _item, document = await _upload_for_seed(
+        client,
+        db_session,
+        filename="cpf.pdf",
+        content=b"%PDF-1.4\n%%EOF",
+        mime_type="application/pdf",
+        token=f"portal-pre-admission-role-{role.value}",
+    )
+    client.cookies.clear()
+    role_headers = await _staff_headers_for_role(client, db_session, role)
+
+    response = await client.get(
+        f"/api/v1/pre-admission/documents/{document['id']}/download",
+        headers=role_headers,
+    )
+
+    assert response.status_code == expected_status
 
 
 @pytest.mark.asyncio
@@ -247,6 +303,74 @@ async def test_candidate_download_is_audited(client: AsyncClient, db_session: As
     assert event is not None
     assert event.payload_json["actor_type"] == "candidate"
     assert event.payload_json["checklist_item_id"] == item["id"]
+
+
+@pytest.mark.asyncio
+async def test_staff_download_sanitizes_content_disposition_filename(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers, _job_id, _candidate_id, _case, _item, document = await _upload_for_seed(
+        client,
+        db_session,
+        filename="cpf.pdf",
+        content=b"%PDF-1.4\n%%EOF",
+        mime_type="application/pdf",
+        token="portal-pre-admission-filename-sanitized",
+    )
+    db_document = await db_session.get(PreAdmissionDocumentModel, UUID(document["id"]))
+    assert db_document is not None
+    db_document.original_filename = "../../RG (sigiloso)\nfinal.pdf"
+    await db_session.commit()
+    client.cookies.clear()
+
+    response = await client.get(
+        f"/api/v1/pre-admission/documents/{document['id']}/download",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    disposition = response.headers.get("content-disposition", "")
+    assert "attachment" in disposition
+    assert "%0A" not in disposition
+    assert ".." not in disposition
+    assert "%2F" not in disposition
+    assert "%5C" not in disposition
+    assert "(" not in disposition
+    assert ")" not in disposition
+
+
+@pytest.mark.asyncio
+async def test_download_returns_controlled_404_when_storage_raises_file_not_found(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers, _job_id, _candidate_id, _case, _item, document = await _upload_for_seed(
+        client,
+        db_session,
+        filename="cpf.pdf",
+        content=b"%PDF-1.4\n%%EOF",
+        mime_type="application/pdf",
+        token="portal-pre-admission-storage-missing",
+    )
+    client.cookies.clear()
+
+    def _raise_file_not_found(_: str):
+        raise FileNotFoundError("missing file")
+
+    monkeypatch.setattr(
+        "src.application.services.pre_admission_service.resolve_pre_admission_document_path",
+        _raise_file_not_found,
+    )
+
+    response = await client.get(
+        f"/api/v1/pre-admission/documents/{document['id']}/download",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 @pytest.mark.asyncio

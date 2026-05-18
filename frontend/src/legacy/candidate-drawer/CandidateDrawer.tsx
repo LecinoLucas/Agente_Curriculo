@@ -9,10 +9,10 @@ import {
   type TabKey as ProfileTabKey,
   OverviewTabWithHistory,
   ScoreTabWithAnalysis,
-} from "../candidates/drawer/v2";
-import { useCandidateDecision } from "../candidates/drawer/hooks/useCandidateDecision";
-import { useCandidateDrawerActions } from "../candidates/drawer/hooks/useCandidateDrawerActions";
-import { useCandidateData } from "../candidates/drawer/hooks/useCandidateData";
+} from "../../features/candidates/drawer/v2";
+import { useCandidateDecision } from "../../features/candidates/drawer/hooks/useCandidateDecision";
+import { useCandidateDrawerActions } from "./useCandidateDrawerActions";
+import { useCandidateData } from "../../features/candidates/drawer/hooks/useCandidateData";
 import { formatContextError } from "../../services/errorMessages";
 import { feedback } from "../../services/feedback";
 import { analysisService } from "../../services/analysisService";
@@ -27,62 +27,67 @@ import type {
   PipelineStage,
   TransferCandidateJobResponse,
 } from "../../types/domain";
-import { type PanelTab, usePipeline } from "./PipelineContext";
+import { type PanelTab, usePipeline } from "../../features/pipeline/PipelineContext";
 import {
   buildAnalysisDecisionToast,
   shouldTrackAnalysisDecision,
-} from "./analysisDispatchFeedback";
+} from "../../features/pipeline/analysisDispatchFeedback";
 import {
   buildCandidateAnalysisSummary,
   getLatestAnalysisForActiveJob,
-} from "../candidates/utils/analysisStatus";
-import type { ScoreTabFocusRequest } from "../candidates/drawer/tabs/ScoreTab";
+} from "../../features/candidates/utils/analysisStatus";
+import type { ScoreTabFocusRequest } from "../../features/candidates/drawer/tabs/ScoreTab";
 import {
   isAnalysisInProgress,
   STAGE_LABEL,
   NEXT_PIPELINE_STAGE,
   buildStageActionFeedback,
-} from "./candidate-drawer/candidateDrawerUtils";
-import { CandidateDrawerOverlay } from "./candidate-drawer/CandidateDrawerOverlay";
+} from "./candidateDrawerUtils";
+import { CandidateDrawerOverlay } from "./CandidateDrawerOverlay";
 
 const DocumentsTabComponent = lazy(() =>
-  import("../candidates/drawer/tabs/DocumentsTab").then((m) => ({ default: m.DocumentsTab }))
+  import("../../features/candidates/drawer/tabs/DocumentsTab").then((m) => ({ default: m.DocumentsTab }))
 );
 const InterviewTab = lazy(() =>
-  import("../candidates/drawer/tabs/InterviewTab").then((m) => ({ default: m.InterviewTab }))
+  import("../../features/candidates/drawer/tabs/InterviewTab").then((m) => ({ default: m.InterviewTab }))
 );
 const CandidateBehavioralAssessmentPanel = lazy(() =>
-  import("../candidates/drawer/components/CandidateBehavioralAssessmentPanel").then((m) => ({
+  import("../../features/candidates/drawer/components/CandidateBehavioralAssessmentPanel").then((m) => ({
     default: m.CandidateBehavioralAssessmentPanel,
   }))
 );
 const CandidateCommunicationsPanel = lazy(() =>
-  import("../candidates/drawer/components/CandidateCommunicationsPanel").then((m) => ({
+  import("../../features/candidates/drawer/components/CandidateCommunicationsPanel").then((m) => ({
     default: m.CandidateCommunicationsPanel,
   }))
 );
 const CollaborationTab = lazy(() =>
-  import("../candidates/drawer/components/CollaborationTab").then((m) => ({ default: m.CollaborationTab }))
+  import("../../features/candidates/drawer/components/CollaborationTab").then((m) => ({ default: m.CollaborationTab }))
 );
 const CandidatePreAdmissionPanel = lazy(() =>
-  import("../candidates/drawer/components/CandidatePreAdmissionPanel").then((m) => ({
+  import("../../features/candidates/drawer/components/CandidatePreAdmissionPanel").then((m) => ({
     default: m.CandidatePreAdmissionPanel,
   }))
 );
+const CandidateNotesTab = lazy(() =>
+  import("../../features/candidates/drawer/components/CandidateNotesTab").then((m) => ({
+    default: m.CandidateNotesTab,
+  }))
+);
 const AgendaInterviewModal = lazy(() =>
-  import("../agenda/AgendaInterviewModal").then((m) => ({ default: m.AgendaInterviewModal }))
+  import("../../features/agenda/AgendaInterviewModal").then((m) => ({ default: m.AgendaInterviewModal }))
 );
 const EditCandidateModal = lazy(() =>
-  import("./EditCandidateModal").then((m) => ({ default: m.EditCandidateModal }))
+  import("../../features/pipeline/EditCandidateModal").then((m) => ({ default: m.EditCandidateModal }))
 );
 const InterviewQuickScheduleModal = lazy(() =>
-  import("./InterviewQuickScheduleModal").then((m) => ({ default: m.InterviewQuickScheduleModal }))
+  import("../../features/pipeline/InterviewQuickScheduleModal").then((m) => ({ default: m.InterviewQuickScheduleModal }))
 );
 const LinkCandidateJobModal = lazy(() =>
-  import("../candidates/components/LinkCandidateJobModal").then((m) => ({ default: m.LinkCandidateJobModal }))
+  import("../../features/candidates/components/LinkCandidateJobModal").then((m) => ({ default: m.LinkCandidateJobModal }))
 );
 const TransferJobModal = lazy(() =>
-  import("./candidate-drawer/TransferJobModal").then((m) => ({ default: m.TransferJobModal }))
+  import("./TransferJobModal").then((m) => ({ default: m.TransferJobModal }))
 );
 
 function TabFallback() {
@@ -95,12 +100,14 @@ function TabFallback() {
 
 interface CandidateDrawerProps {
   mode?: "overlay" | "workspace";
+  onClose?: () => void;
   onBackToList?: () => void;
   backToListLabel?: string;
 }
 
 export function CandidateDrawer({
   mode = "overlay",
+  onClose,
   onBackToList,
   backToListLabel,
 }: CandidateDrawerProps = {}) {
@@ -180,6 +187,11 @@ export function CandidateDrawer({
 
   const linkSaving =
     linkSavingCandidateId !== null && linkSavingCandidateId === selectedCandidateId;
+
+  const handleClose = useCallback(() => {
+    closeCandidate();
+    onClose?.();
+  }, [closeCandidate, onClose]);
 
   const {
     editModalOpen,
@@ -602,6 +614,7 @@ export function CandidateDrawer({
         assessment: "actions",
         communications: "actions",
         collaboration: "actions",
+        notes: "actions",
         pre_admission: "actions",
       };
 
@@ -712,6 +725,7 @@ export function CandidateDrawer({
         profileTabKey === "assessment" ||
         profileTabKey === "communications" ||
         profileTabKey === "collaboration" ||
+        profileTabKey === "notes" ||
         profileTabKey === "pre_admission"
       )
         ? profileTabKey
@@ -778,7 +792,7 @@ export function CandidateDrawer({
           interactionLocked={stageSaving || linkSaving}
           compact={mode === "overlay"}
           hasLinkedJobs={candidateOverview.pipeline_entries.length > 0}
-          onClose={closeCandidate}
+          onClose={handleClose}
           onAdvance={handleHeroAdvance}
           onTerminate={handleHeroTerminate}
           onViewAnalysis={handleHeroViewAnalysis}
@@ -788,7 +802,11 @@ export function CandidateDrawer({
           onLinkJob={handleOpenLinkJob}
           onStartAnalysis={handleStartAnalysis}
           onOpenDocuments={() => handleProfileTabChange("documents")}
-          onNavigateToFull={mode === "overlay" ? () => navigate("/candidatos") : undefined}
+          onNavigateToFull={
+            mode === "overlay" && candidateOverview.candidate.id
+              ? () => navigate(`/candidatos/${candidateOverview.candidate.id}`)
+              : undefined
+          }
           onBackToList={mode === "workspace" ? onBackToList : undefined}
           backToListLabel={backToListLabel}
           analysisActionLabel={analysisStarting ? "Iniciando análise…" : analysisSummary.actionLabel}
@@ -847,6 +865,7 @@ export function CandidateDrawer({
                 syncAnalysisStart={syncAnalysisStart}
                 notifyCandidatesChanged={notifyCandidatesChanged}
                 onActionFeedback={pushActionFeedback}
+                userRole={user?.role ?? "candidate"}
               />
             </Suspense>
           ) : null}
@@ -898,6 +917,12 @@ export function CandidateDrawer({
               </Suspense>
             ) : null}
           </div>
+
+          {profileTabKey === "notes" && candidate?.id ? (
+            <Suspense fallback={<TabFallback />}>
+              <CandidateNotesTab candidateId={candidate.id} />
+            </Suspense>
+          ) : null}
 
           {/* Keep-alive: pre_admission tab stays mounted after first visit */}
           <div className={profileTabKey !== "pre_admission" ? "hidden" : undefined}>
@@ -1084,7 +1109,7 @@ export function CandidateDrawer({
       <CandidateDrawerOverlay
         isOpen={isOpen}
         mode={mode}
-        onBackdropClick={closeCandidate}
+        onBackdropClick={handleClose}
       >
         {drawerContent}
       </CandidateDrawerOverlay>

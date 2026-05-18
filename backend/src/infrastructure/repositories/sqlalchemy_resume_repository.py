@@ -151,3 +151,74 @@ class SQLAlchemyResumeRepository(BaseSoftDeleteRepository[ResumeModel]):
         await self._session.flush()
         await self._session.refresh(candidate)
         return candidate
+
+    async def find_latest_resume_version_for_candidate(self, candidate_id: UUID) -> dict | None:
+        result = await self._session.execute(
+            sa.select(
+                ResumeModel.id.label("resume_id"),
+                ResumeVersionModel.id.label("version_id"),
+                ResumeVersionModel.s3_key,
+                ResumeVersionModel.s3_bucket,
+                ResumeVersionModel.original_file_name,
+                ResumeVersionModel.mime_type,
+            )
+            .join(
+                ResumeVersionModel,
+                sa.and_(
+                    ResumeVersionModel.resume_id == ResumeModel.id,
+                    ResumeVersionModel.version_number == ResumeModel.current_version,
+                ),
+            )
+            .where(
+                ResumeModel.candidate_id == candidate_id,
+                ResumeModel.deleted_at.is_(None),
+                ResumeModel.status == "active",
+            )
+            .order_by(ResumeModel.updated_at.desc())
+            .limit(1)
+        )
+        row = result.mappings().first()
+        return dict(row) if row is not None else None
+
+    async def find_resume_version_for_candidate(
+        self,
+        *,
+        candidate_id: UUID,
+        resume_id: UUID,
+        version_id: UUID | None = None,
+    ) -> dict | None:
+        version_filter = (
+            ResumeVersionModel.id == version_id
+            if version_id is not None
+            else ResumeVersionModel.version_number == ResumeModel.current_version
+        )
+
+        result = await self._session.execute(
+            sa.select(
+                ResumeModel.id.label("resume_id"),
+                ResumeModel.candidate_id.label("candidate_id"),
+                ResumeModel.current_version.label("current_version"),
+                ResumeVersionModel.id.label("version_id"),
+                ResumeVersionModel.version_number.label("version_number"),
+                ResumeVersionModel.s3_key.label("s3_key"),
+                ResumeVersionModel.s3_bucket.label("s3_bucket"),
+                ResumeVersionModel.original_file_name.label("original_file_name"),
+                ResumeVersionModel.mime_type.label("mime_type"),
+                ResumeVersionModel.extraction_status.label("extraction_status"),
+                ResumeVersionModel.uploaded_at.label("uploaded_at"),
+            )
+            .join(
+                ResumeVersionModel,
+                ResumeVersionModel.resume_id == ResumeModel.id,
+            )
+            .where(
+                ResumeModel.id == resume_id,
+                ResumeModel.candidate_id == candidate_id,
+                ResumeModel.deleted_at.is_(None),
+                version_filter,
+            )
+            .order_by(ResumeVersionModel.version_number.desc())
+            .limit(1)
+        )
+        row = result.mappings().first()
+        return dict(row) if row is not None else None

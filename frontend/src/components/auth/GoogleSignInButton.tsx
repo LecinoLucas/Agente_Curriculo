@@ -2,9 +2,14 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
+import {
+  initializeGoogleIdentity,
+  isGoogleOriginError,
+  loadGoogleScript,
+  renderGoogleButton,
+  setCredentialHandler,
+} from "../../services/googleIdentityService";
 
-const GOOGLE_GSI_SCRIPT_ID = "google-identity-services";
-const GOOGLE_GSI_SRC = "https://accounts.google.com/gsi/client";
 const GOOGLE_ORIGIN_MESSAGE =
   "Google OAuth não autorizado para esta origem. Adicione http://localhost:5173 em Authorized JavaScript origins.";
 
@@ -18,47 +23,22 @@ function getGoogleClientId(): string {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? "";
 }
 
-function isGoogleOriginError(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("origin is not allowed") ||
-    normalized.includes("not allowed for the given client id") ||
-    normalized.includes("idpiframe_initialization_failed")
-  );
-}
-
-function loadGoogleScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) {
-      resolve();
-      return;
-    }
-
-    const existing = document.getElementById(GOOGLE_GSI_SCRIPT_ID) as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Não foi possível carregar o Google.")), {
-        once: true,
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = GOOGLE_GSI_SCRIPT_ID;
-    script.src = GOOGLE_GSI_SRC;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Não foi possível carregar o Google."));
-    document.head.appendChild(script);
-  });
-}
-
 export function GoogleSignInButton({ disabled = false, onCredential, onError }: GoogleSignInButtonProps) {
   const clientId = getGoogleClientId();
   const hiddenButtonContainerRef = useRef<HTMLDivElement | null>(null);
+  const onCredentialRef = useRef(onCredential);
+  const onErrorRef = useRef(onError);
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(Boolean(clientId));
+
+  // Keep latest callback refs without retriggering the GIS init effect.
+  useEffect(() => {
+    onCredentialRef.current = onCredential;
+  }, [onCredential]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,44 +53,34 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
       const message = event.message || event.error?.message || "";
       if (!isGoogleOriginError(message)) return;
       console.error(GOOGLE_ORIGIN_MESSAGE);
-      onError?.(GOOGLE_ORIGIN_MESSAGE);
+      onErrorRef.current?.(GOOGLE_ORIGIN_MESSAGE);
     };
 
     setIsLoading(true);
     window.addEventListener("error", handleGoogleError);
+
+    setCredentialHandler((response) => {
+      if (!response.credential) {
+        onErrorRef.current?.("Não foi possível iniciar o login com Google.");
+        return;
+      }
+      void onCredentialRef.current(response.credential);
+    });
+
     loadGoogleScript()
       .then(() => {
         if (cancelled || !window.google?.accounts?.id || !hiddenButtonContainerRef.current) {
           return;
         }
 
-        hiddenButtonContainerRef.current.innerHTML = "";
         try {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: (response) => {
-              if (!response.credential) {
-                onError?.("Não foi possível iniciar o login com Google.");
-                return;
-              }
-              void onCredential(response.credential);
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
-          window.google.accounts.id.renderButton(hiddenButtonContainerRef.current, {
-            theme: "outline",
-            size: "large",
-            text: "continue_with",
-            shape: "pill",
-            width: 260,
-            logo_alignment: "left",
-          });
+          initializeGoogleIdentity(clientId);
+          renderGoogleButton(hiddenButtonContainerRef.current);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (isGoogleOriginError(message)) {
             console.error(GOOGLE_ORIGIN_MESSAGE);
-            onError?.(GOOGLE_ORIGIN_MESSAGE);
+            onErrorRef.current?.(GOOGLE_ORIGIN_MESSAGE);
             return;
           }
           throw error;
@@ -119,7 +89,7 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
       })
       .catch((error) => {
         if (!cancelled) {
-          onError?.(error instanceof Error ? error.message : "Não foi possível carregar o Google.");
+          onErrorRef.current?.(error instanceof Error ? error.message : "Não foi possível carregar o Google.");
         }
       })
       .finally(() => {
@@ -131,18 +101,19 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
     return () => {
       cancelled = true;
       window.removeEventListener("error", handleGoogleError);
+      setCredentialHandler(null);
     };
-  }, [clientId, onCredential, onError]);
+  }, [clientId]);
 
   const handleClick = () => {
     if (!clientId) {
-      onError?.("Login com Google indisponível neste ambiente.");
+      onErrorRef.current?.("Login com Google indisponível neste ambiente.");
       return;
     }
 
     const hiddenButton = hiddenButtonContainerRef.current?.firstElementChild as HTMLElement | null;
     if (!hiddenButton) {
-      onError?.("Login com Google ainda não está pronto. Tente novamente.");
+      onErrorRef.current?.("Login com Google ainda não está pronto. Tente novamente.");
       return;
     }
 

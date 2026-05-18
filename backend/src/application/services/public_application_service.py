@@ -381,9 +381,10 @@ class PublicApplicationService:
             status = "entered_pipeline"
             await BehavioralAssignmentService(
                 SQLAlchemyBehavioralAssignmentRepository(self.db)
-            ).ensure_assignment_for_application(
+            ).ensure_behavioral_assignment_for_candidate_job(
                 candidate_id=candidate.id,
                 job_id=job_id,
+                requires_behavioral_assessment=bool(job_model.requires_behavioral_assessment),
                 template_id=job_model.behavioral_template_id,
             )
 

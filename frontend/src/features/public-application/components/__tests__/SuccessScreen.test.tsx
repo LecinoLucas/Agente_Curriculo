@@ -1,13 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { SuccessScreen } from "../SuccessScreen";
 
 describe("SuccessScreen", () => {
   it('mostra CTA de acompanhamento e mensagem de análise para candidatura com vaga', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <SuccessScreen
           response={{
             candidate_id: "candidate-1",
@@ -41,7 +45,7 @@ describe("SuccessScreen", () => {
 
   it("mostra mensagem específica para Banco de Talentos", () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <SuccessScreen
           response={{
             candidate_id: "candidate-2",

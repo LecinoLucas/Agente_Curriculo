@@ -1,6 +1,7 @@
 import pytest
 import json
 import io
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient
 
@@ -330,7 +331,32 @@ startxref
     )
     assert resp.status_code == 200, f"Failed to submit interview scorecard: {resp.text}"
 
-    # ========== PASSO 12: Registrar decisão hire ==========
+    # ========== PASSO 12: Registrar entrevista realizada ==========
+    interview_start = datetime.now(UTC) + timedelta(days=2)
+    resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interviews",
+        headers=admin_headers,
+        json={
+            "title": "Entrevista técnica",
+            "interview_type": "technical",
+            "interview_format": "online",
+            "scheduled_start": interview_start.isoformat(),
+            "scheduled_end": (interview_start + timedelta(hours=1)).isoformat(),
+            "timezone": "America/Recife",
+        },
+    )
+    assert resp.status_code == 201, f"Failed to schedule interview: {resp.text}"
+    interview = resp.json()
+
+    resp = await client.post(
+        f"/api/v1/interviews/{interview['id']}/complete",
+        headers=admin_headers,
+        json={"internal_notes": "Entrevista realizada antes da decisão final."},
+    )
+    assert resp.status_code == 200, f"Failed to complete interview: {resp.text}"
+    assert resp.json()["status"] == "awaiting_feedback"
+
+    # ========== PASSO 13: Registrar decisão hire ==========
     resp = await client.post(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
         json={
@@ -604,10 +630,78 @@ async def test_admission_package_validation_blocks_with_pending_docs(
     )
     assert resp.status_code == 200, f"Failed to add candidate to job: {resp.status_code} {resp.text}"
 
+    # Criar e submeter scorecard exigido pela política standard
+    resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=admin_headers,
+        json={
+            "items": [
+                {
+                    "competency_name": "Comunicação",
+                    "question_text": "Como você comunica riscos em um projeto?",
+                    "display_order": 1,
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 201, f"Failed to create scorecard: {resp.status_code} {resp.text}"
+    scorecard = resp.json()
+
+    resp = await client.patch(
+        f"/api/v1/interview-scorecards/{scorecard['id']}",
+        headers=admin_headers,
+        json={
+            "final_recommendation": "yes",
+            "overall_notes": "Scorecard aprovado para teste de pacote.",
+            "items": [
+                {
+                    "competency_name": "Comunicação",
+                    "question_text": "Como você comunica riscos em um projeto?",
+                    "rating": 4,
+                    "evidence": "Resposta suficiente para avançar.",
+                    "display_order": 1,
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, f"Failed to patch scorecard: {resp.status_code} {resp.text}"
+
+    resp = await client.post(f"/api/v1/interview-scorecards/{scorecard['id']}/submit", headers=admin_headers)
+    assert resp.status_code == 200, f"Failed to submit scorecard: {resp.status_code} {resp.text}"
+
+    # Registrar entrevista realizada exigida pela política standard
+    interview_start = datetime.now(UTC) + timedelta(days=2)
+    resp = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interviews",
+        headers=admin_headers,
+        json={
+            "title": "Entrevista RH",
+            "interview_type": "hr",
+            "interview_format": "online",
+            "scheduled_start": interview_start.isoformat(),
+            "scheduled_end": (interview_start + timedelta(hours=1)).isoformat(),
+            "timezone": "America/Recife",
+        },
+    )
+    assert resp.status_code == 201, f"Failed to schedule interview: {resp.status_code} {resp.text}"
+    interview = resp.json()
+
+    resp = await client.post(
+        f"/api/v1/interviews/{interview['id']}/complete",
+        headers=admin_headers,
+        json={"internal_notes": "Entrevista realizada para liberar contratação."},
+    )
+    assert resp.status_code == 200, f"Failed to complete interview: {resp.status_code} {resp.text}"
+
     # Criar decisão hire
     resp = await client.post(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
-        json={"decision_outcome": "hire", "reason_code": "other", "notes": "Candidate approved for onboarding", "submit": True},
+        json={
+            "decision_outcome": "hire",
+            "reason_code": "strong_fit",
+            "notes": "Candidate approved for onboarding",
+            "submit": True,
+        },
         headers=admin_headers,
     )
     assert resp.status_code == 201, f"Failed to create hiring decision: {resp.status_code} {resp.text}"

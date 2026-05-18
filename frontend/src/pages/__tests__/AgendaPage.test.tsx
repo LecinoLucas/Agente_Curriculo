@@ -2,6 +2,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { GoogleCalendarOAuthBridge } from "../../app/GoogleCalendarOAuthBridge";
 import { GOOGLE_CALENDAR_OAUTH_RESULT_MESSAGE_TYPE } from "../../features/agenda/googleCalendarOAuth";
@@ -72,7 +76,7 @@ describe("AgendaPage", () => {
     vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <GoogleCalendarOAuthBridge />
         <AgendaPage />
       </MemoryRouter>,
@@ -90,13 +94,14 @@ describe("AgendaPage", () => {
   it("mostra erro quando não consegue obter a URL do Google", async () => {
     const user = userEvent.setup();
     const popup = { location: { href: "" }, close: vi.fn() };
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     getGoogleCalendarAuthUrlMock.mockRejectedValue(new Error("Falha"));
 
     vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <GoogleCalendarOAuthBridge />
         <AgendaPage />
       </MemoryRouter>,
@@ -111,6 +116,7 @@ describe("AgendaPage", () => {
       );
       expect(popup.close).toHaveBeenCalledOnce();
     });
+    errorSpy.mockRestore();
   });
 
   it("atualiza a UI após callback OAuth via postMessage", async () => {
@@ -122,7 +128,7 @@ describe("AgendaPage", () => {
       });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <GoogleCalendarOAuthBridge />
         <AgendaPage />
       </MemoryRouter>,

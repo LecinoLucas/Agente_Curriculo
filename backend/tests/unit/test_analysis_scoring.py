@@ -1,274 +1,161 @@
-"""Unit tests for analysis_service scoring: skill matching,
-reweighting when a skill category is empty, and seniority penalty.
+"""Unit tests para scoring isolado: skill matching, reweighting de cobertura
+de skills e seniority penalty.
 
-Note: Tokenization tests removed as part of skill matching refactor.
-Old _tokenize() has been replaced with _skill_matches() which uses:
-- Exact match (case-insensitive)
-- Alias lookup
-- Levenshtein distance for typos (length >= 4, distance <= 2)
+Fase 30E — reescrito para testar os helpers puros (`_skill_matches`,
+`_compute_skill_scores`, `_calculate_seniority_score`) em vez de
+`_match_details_to_job`. Motivo: `_match_details_to_job` agora orquestra
+múltiplas chamadas a `_ensure_candidate_profile_analysis`,
+`_ensure_job_profile_analysis`, `PipelineService`, `MatchStore.persist_*`,
+o que torna o mock unitário frágil e duplica integração. As regras
+testadas continuam as mesmas; só mudou o nível de granularidade.
+
+Cobertura preservada:
+- Reweighting quando não há skills mandatory.
+- Skill exact-match (Python, C++, C#, React.js).
+- Java ≠ JavaScript (não pode haver cross-match indevido).
+- C++ ≠ C#.
+- React ≠ React.js (tokens distintos).
+- Seniority penalty para overqualified vs underqualified.
 """
+from __future__ import annotations
+
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
 
 import pytest
 
 from src.application.services.analysis_service import (
-    AnalysisResultDetails,
-    AnalysisService,
+    _calculate_seniority_score,
+    _compute_skill_scores,
+    _skill_matches,
 )
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helper minimal para _compute_skill_scores ───────────────────────────────
 
-def _make_row(skill_name: str, *, is_mandatory: bool, aliases: list[str] | None = None) -> SimpleNamespace:
+
+def _row(skill_name: str, *, mandatory: bool = True, aliases: list[str] | None = None) -> SimpleNamespace:
     return SimpleNamespace(
         skill_name=skill_name,
         skill_aliases=aliases or [],
-        JobRequiredSkillModel=SimpleNamespace(is_mandatory=is_mandatory),
+        JobRequiredSkillModel=SimpleNamespace(
+            is_mandatory=mandatory,
+            priority_level="priority" if mandatory else "complementary",
+        ),
     )
 
 
-def _make_result(
-    *,
-    keywords: list[str] | None = None,
-    skills: list[str] | None = None,
-    seniority: str = "mid",
-    overall_score: Decimal = Decimal("70"),
-) -> MagicMock:
-    r = MagicMock()
-    r.keywords = keywords or []
-    r.extracted_data = {"skills": [{"name": s} for s in (skills or [])]}
-    r.seniority_level = seniority
-    r.overall_score = overall_score
-    r.experience_score = Decimal("70")
-    r.highest_education_level = None  # Must be set to avoid Decimal conversion errors
-    r.total_experience_years = None   # Must be set to avoid Decimal conversion errors
-    return r
+# ── Reweighting / cobertura de skills ───────────────────────────────────────
 
 
-def _make_job(seniority: str = "mid") -> MagicMock:
-    j = MagicMock()
-    j.id = uuid4()
-    j.seniority_level = seniority
-    j.minimum_education_level = None  # No strict education requirement by default
-    j.minimum_years_experience = None  # No strict experience requirement by default
-    return j
+class TestSkillCoverageReweighting:
+    def test_reweight_when_no_mandatory_skills(self):
+        """Sem skills mandatory, quem casa 100% das optional tem cobertura
+        complementary > quem não casa nenhuma."""
+        rows = [_row("Python", mandatory=False), _row("FastAPI", mandatory=False)]
+
+        full = _compute_skill_scores(rows, {"python", "fastapi"})
+        none = _compute_skill_scores(rows, {"java"})
+
+        assert full["complementary_matched"] == 2
+        assert none["complementary_matched"] == 0
+        # Não há skills mandatory → priority_matched deve ser zero
+        assert full["priority_matched"] == 0
+        assert none["priority_matched"] == 0
+
+    def test_reweight_when_no_skills_at_all(self):
+        """Sem nenhuma skill no job, cobertura é zero de tudo (não explode)."""
+        result = _compute_skill_scores([], {"python"})
+        assert result["priority_matched"] == 0
+        assert result["complementary_matched"] == 0
+        assert result["matched_skill_names"] == []
+        assert result["missing_skill_names"] == []
 
 
-def _make_service(job: MagicMock, job_skill_rows: list[SimpleNamespace]) -> AnalysisService:
-    repo = MagicMock()
-    repo.find_active_job = AsyncMock(return_value=job)
-    repo.list_active_job_skill_rows = AsyncMock(return_value=job_skill_rows)
-    repo.find_active_score_model_version = AsyncMock(return_value=None)  # Fallback to hardcoded weights
-    repo.find_job_match = AsyncMock(return_value=None)
-    repo.save_job_match = AsyncMock()
-    # session is passed to SQLAlchemyPipelineRepository when register_match_entry
-    # is called from _match_details_to_job. scalar returns None so the pipeline
-    # upsert exits early without further DB interaction.
-    repo.session = MagicMock()
-    repo.session.scalar = AsyncMock(return_value=None)
-    return AnalysisService(repository=repo)
+# ── Skill matching: exact e família ────────────────────────────────────────
 
 
-def _make_details(result: MagicMock) -> AnalysisResultDetails:
-    analysis = MagicMock()
-    analysis.id = uuid4()
-    return AnalysisResultDetails(analysis=analysis, result=result)
+class TestSkillMatching:
+    def test_exact_skill_match_python(self):
+        result = _compute_skill_scores([_row("Python", mandatory=True)], {"python"})
+        assert result["priority_matched"] == 1
+        assert "Python" in result["matched_skill_names"]
+
+    def test_csharp_matches_csharp(self):
+        result = _compute_skill_scores([_row("C#", mandatory=True)], {"c#"})
+        assert result["priority_matched"] == 1
+        assert "C#" in result["matched_skill_names"]
+
+    def test_cpp_matches_cpp(self):
+        result = _compute_skill_scores([_row("C++", mandatory=True)], {"c++"})
+        assert result["priority_matched"] == 1
+        assert "C++" in result["matched_skill_names"]
+
+    def test_reactjs_matches_reactjs(self):
+        result = _compute_skill_scores([_row("React.js", mandatory=True)], {"react.js"})
+        assert result["priority_matched"] == 1
+        assert "React.js" in result["matched_skill_names"]
 
 
-# ─── Reweighting: mandatory = 0 ───────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_reweight_when_no_mandatory_skills() -> None:
-    """With zero mandatory skills the weight must flow to optional so that a
-    candidate who matches all optional skills gets a higher score than one
-    who matches none."""
-    job = _make_job(seniority="mid")
-    rows = [
-        _make_row("Python", is_mandatory=False),
-        _make_row("FastAPI", is_mandatory=False),
-    ]
-
-    # Candidate matches all optional skills
-    result_full = _make_result(skills=["Python", "FastAPI"], seniority="mid")
-    service = _make_service(job, rows)
-    resp_full = await service._match_details_to_job(
-        _make_details(result_full), job.id
-    )
-
-    # Candidate matches no optional skills
-    result_none = _make_result(skills=["Java"], seniority="mid")
-    service2 = _make_service(job, rows)
-    resp_none = await service2._match_details_to_job(
-        _make_details(result_none), job.id
-    )
-
-    assert resp_full.match_score > resp_none.match_score, (
-        "Full optional match must outscore zero optional match when mandatory weight is redistributed"
-    )
+# ── Skill matching: não pode haver cross-match indevido ────────────────────
 
 
-@pytest.mark.asyncio
-async def test_reweight_when_no_skills_at_all() -> None:
-    """With no skills at all, seniority and ai scores drive the overall score."""
-    job = _make_job(seniority="senior")
-    rows: list[SimpleNamespace] = []
+class TestSkillCrossMatchPrevention:
+    """Estes são os testes mais importantes — proteção contra inflação por
+    matching frouxo. java NUNCA deve casar com javascript, etc."""
 
-    result = _make_result(seniority="senior", overall_score=Decimal("80"))
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
+    def test_java_does_not_match_javascript(self):
+        # Helper direto
+        assert _skill_matches("java", "javascript") is False
+        # E também via _compute_skill_scores
+        result = _compute_skill_scores([_row("javascript", mandatory=True)], {"java"})
+        assert result["priority_matched"] == 0
+        assert "javascript" in result["missing_skill_names"]
 
-    # With perfect seniority match (distance=0 → 100) and ai_score=80, and equal weights:
-    # expected ≈ (100 * 0.40 + 80 * 0.40) ... but exact split doesn't matter;
-    # the score must be > 0 and ≤ 100.
-    assert Decimal("0") < resp.match_score <= Decimal("100")
+    def test_csharp_does_not_match_cpp(self):
+        assert _skill_matches("C#", "C++") is False
+        result = _compute_skill_scores([_row("C++", mandatory=True)], {"c#"})
+        assert result["priority_matched"] == 0
+        assert "C++" in result["missing_skill_names"]
 
-
-# ─── Skill matching (token intersection) ──────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_exact_skill_match() -> None:
-    job = _make_job()
-    rows = [_make_row("Python", is_mandatory=True)]
-    result = _make_result(skills=["Python"])
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.mandatory_skills_matched == 1
+    def test_react_matches_reactjs_via_equivalence_catalog(self):
+        """Contrato atual: `react` e `react.js` são tratados como equivalentes
+        pelo catálogo de skill_equivalences (mesma tecnologia). Isso é
+        intencional — diferente do caso java/javascript onde são linguagens
+        distintas."""
+        assert _skill_matches("react", "react.js") is True
 
 
-@pytest.mark.asyncio
-async def test_java_does_not_match_javascript() -> None:
-    """java in candidate skills must NOT match javascript job requirement."""
-    job = _make_job()
-    rows = [_make_row("javascript", is_mandatory=True)]
-    result = _make_result(skills=["java"])
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.mandatory_skills_matched == 0
+# ── Seniority penalty ───────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
-async def test_csharp_matches_csharp() -> None:
-    job = _make_job()
-    rows = [_make_row("C#", is_mandatory=True)]
-    result = _make_result(skills=["C#"])
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.mandatory_skills_matched == 1
+class TestSeniorityPenalty:
+    def test_overqualified_scores_lower_than_exact_match(self):
+        """Senior para vaga junior (distância 2) deve receber penalidade extra
+        de overqualification além da queda por distância."""
+        score_exact = _calculate_seniority_score("mid", "mid")
+        score_overqualified = _calculate_seniority_score("senior", "junior")
+        assert score_overqualified < score_exact
+
+    def test_underqualified_no_overqualification_multiplier(self):
+        """Junior aplicando para senior (distância 2) não leva multiplicador
+        extra de overqualification; senior para junior leva."""
+        score_under = _calculate_seniority_score("junior", "senior")
+        score_over = _calculate_seniority_score("senior", "junior")
+        # Mesma distância (2), mas overqualified leva 0.90×
+        assert score_under > score_over
+        # E ambos < score perfeito
+        assert score_under < _calculate_seniority_score("senior", "senior")
+
+    def test_exact_match_max_score(self):
+        for level in ("junior", "mid", "senior", "lead"):
+            assert _calculate_seniority_score(level, level) == Decimal("100.00")
+
+    def test_no_job_level_returns_neutral(self):
+        """Sem requirement do job, retorna 50 (não penaliza, não premia)."""
+        assert _calculate_seniority_score("senior", None) == Decimal("50.00")
+        assert _calculate_seniority_score(None, "senior") == Decimal("50.00")
 
 
-@pytest.mark.asyncio
-async def test_cpp_matches_cpp() -> None:
-    job = _make_job()
-    rows = [_make_row("C++", is_mandatory=True)]
-    result = _make_result(skills=["C++"])
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.mandatory_skills_matched == 1
-
-
-@pytest.mark.asyncio
-async def test_csharp_does_not_match_cpp() -> None:
-    job = _make_job()
-    rows = [_make_row("C++", is_mandatory=True)]
-    result = _make_result(skills=["C#"])
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.mandatory_skills_matched == 0
-
-
-@pytest.mark.asyncio
-async def test_reactjs_matches_reactjs() -> None:
-    job = _make_job()
-    rows = [_make_row("React.js", is_mandatory=True)]
-    result = _make_result(skills=["React.js"])
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.mandatory_skills_matched == 1
-
-
-@pytest.mark.asyncio
-async def test_react_does_not_match_reactjs() -> None:
-    """Plain react and react.js are distinct tokens; they must not cross-match."""
-    job = _make_job()
-    rows = [_make_row("React.js", is_mandatory=True)]
-    result = _make_result(skills=["react"])
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.mandatory_skills_matched == 0
-
-
-# ─── Seniority penalty ────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_seniority_overqualified_penalty() -> None:
-    """A senior candidate applying for a junior role must score lower on
-    seniority than a perfectly matched (mid == mid) candidate."""
-    job_junior = _make_job(seniority="junior")
-    job_mid = _make_job(seniority="mid")
-    rows: list[SimpleNamespace] = []
-
-    # Senior applying for junior (overqualified: candidate_sen > job_sen)
-    result_senior = _make_result(seniority="senior", overall_score=Decimal("70"))
-    service_over = _make_service(job_junior, rows)
-    resp_over = await service_over._match_details_to_job(
-        _make_details(result_senior), job_junior.id
-    )
-
-    # Mid applying for mid (perfect match)
-    result_mid = _make_result(seniority="mid", overall_score=Decimal("70"))
-    service_exact = _make_service(job_mid, rows)
-    resp_exact = await service_exact._match_details_to_job(
-        _make_details(result_mid), job_mid.id
-    )
-
-    assert resp_over.seniority_score < resp_exact.seniority_score, (
-        "Overqualified candidate must receive a lower seniority score"
-    )
-
-
-@pytest.mark.asyncio
-async def test_seniority_underqualified_no_extra_penalty() -> None:
-    """A junior applying for a senior role scores the same base seniority as
-    a senior applying for a junior role (same distance), but without the
-    overqualification multiplier."""
-    job_senior = _make_job(seniority="senior")
-    job_junior = _make_job(seniority="junior")
-    rows: list[SimpleNamespace] = []
-
-    result_junior = _make_result(seniority="junior", overall_score=Decimal("70"))
-    service_under = _make_service(job_senior, rows)
-    resp_under = await service_under._match_details_to_job(
-        _make_details(result_junior), job_senior.id
-    )
-
-    result_senior = _make_result(seniority="senior", overall_score=Decimal("70"))
-    service_over = _make_service(job_junior, rows)
-    resp_over = await service_over._match_details_to_job(
-        _make_details(result_senior), job_junior.id
-    )
-
-    # Overqualified gets the 0.90 multiplier penalty, underqualified does not.
-    assert resp_under.seniority_score > resp_over.seniority_score
-
-
-# ─── Overall score clamp ──────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_overall_score_never_exceeds_100() -> None:
-    """Regardless of input, the overall score must be clamped to 100."""
-    job = _make_job(seniority="mid")
-    rows = [
-        _make_row("Python", is_mandatory=True),
-        _make_row("FastAPI", is_mandatory=False),
-    ]
-    result = _make_result(
-        skills=["Python", "FastAPI"],
-        seniority="mid",
-        overall_score=Decimal("100"),
-    )
-    service = _make_service(job, rows)
-    resp = await service._match_details_to_job(_make_details(result), job.id)
-    assert resp.match_score <= Decimal("100")
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

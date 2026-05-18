@@ -323,6 +323,9 @@ export function CandidatePortalPage() {
     overview?.active_application ?? null;
   const applicationHistory: CandidatePortalApplication[] = overview?.application_history ?? [];
   const behavioralAssessments: BehavioralAssignmentSummary[] = behavioralAssessmentSummaries;
+  const pendingBehavioralAssessments = behavioralAssessments.filter(
+    (item) => item.status === "pending" || item.status === "in_progress",
+  );
 
   async function loadPortalData(refresh = false) {
     if (refresh) {
@@ -441,6 +444,10 @@ export function CandidatePortalPage() {
   const handleLogout = async () => {
     try {
       await candidatePortalService.logout();
+    } catch (error) {
+      // Logout falhando no backend (ERR_EMPTY_RESPONSE, rede, etc.) não pode
+      // bloquear a saída do portal. A sessão local é limpa abaixo no finally.
+      console.warn("candidate.logout_failed", error);
     } finally {
       navigate("/candidato/login", { replace: true });
     }
@@ -720,6 +727,41 @@ export function CandidatePortalPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {pendingBehavioralAssessments.length > 0 ? (
+                <Card className="border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning))]/5 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base font-bold text-[hsl(var(--warning))]">
+                      Avaliação comportamental pendente
+                    </CardTitle>
+                    <CardDescription>
+                      Você possui {pendingBehavioralAssessments.length} avaliação(ões) aguardando resposta.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    {pendingBehavioralAssessments.slice(0, 2).map((assessment) => (
+                      <div
+                        key={assessment.id}
+                        className="rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] px-3 py-2"
+                      >
+                        <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                          {assessment.job_title || "Vaga vinculada"}
+                        </p>
+                        <p className="text-xs text-[hsl(var(--text-muted))]">
+                          {assessment.template_name}
+                        </p>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      className="w-full"
+                      onClick={() => setCurrentTab("avaliacoes")}
+                    >
+                      Responder avaliação
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : null}
 
               <CandidateMessagesCard />
             </div>

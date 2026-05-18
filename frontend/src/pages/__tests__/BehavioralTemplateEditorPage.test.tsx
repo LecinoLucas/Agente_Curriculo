@@ -4,6 +4,10 @@ import { MemoryRouter } from "react-router-dom";
 import { BehavioralTemplateEditorPage } from "../BehavioralTemplateEditorPage";
 import * as behavioralTemplatesService from "../../services/behavioralTemplatesService";
 import * as toast from "../../shared/utils/toast";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 // Mock react-router hooks
 const mockNavigate = vi.fn();
@@ -61,7 +65,7 @@ describe("BehavioralTemplateEditorPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.getTemplate).mockResolvedValue(mockTemplate);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplateEditorPage />
       </MemoryRouter>
     );
@@ -88,7 +92,7 @@ describe("BehavioralTemplateEditorPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplateEditorPage />
       </MemoryRouter>
     );
@@ -113,7 +117,7 @@ describe("BehavioralTemplateEditorPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.getTemplate).mockResolvedValue(mockTemplate);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplateEditorPage />
       </MemoryRouter>
     );
@@ -153,7 +157,7 @@ describe("BehavioralTemplateEditorPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplateEditorPage />
       </MemoryRouter>
     );

@@ -147,6 +147,21 @@ async def _add_submitted_scorecard(db_session: AsyncSession, *, job_id: UUID, ca
     return scorecard
 
 
+async def seed_candidate_ready_for_hire(
+    db_session: AsyncSession,
+    *,
+    job_id: UUID | None = None,
+    candidate_id: UUID | None = None,
+) -> tuple[UUID, UUID]:
+    if (job_id is None) != (candidate_id is None):
+        raise ValueError("job_id e candidate_id devem ser informados juntos.")
+    if job_id is None or candidate_id is None:
+        job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _add_completed_interview(db_session, job_id=job_id, candidate_id=candidate_id)
+    await _add_submitted_scorecard(db_session, job_id=job_id, candidate_id=candidate_id)
+    return job_id, candidate_id
+
+
 async def _create_decision(
     client: AsyncClient,
     headers: dict[str, str],
@@ -325,8 +340,7 @@ async def test_pipeline_action_false_does_not_move_pipeline(client: AsyncClient,
 async def test_pipeline_action_true_moves_pipeline_with_event(client: AsyncClient, db_session: AsyncSession) -> None:
     headers = await _recruiter_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
-    await _add_completed_interview(db_session, job_id=job_id, candidate_id=candidate_id)
-    await _add_submitted_scorecard(db_session, job_id=job_id, candidate_id=candidate_id)
+    await seed_candidate_ready_for_hire(db_session, job_id=job_id, candidate_id=candidate_id)
 
     payload = await _create_decision(
         client,

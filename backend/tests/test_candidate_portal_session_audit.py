@@ -38,6 +38,36 @@ ALLOWED_INCOMPLETE_SESSION_ENDPOINTS: dict[tuple[str, str, str, str], str] = {
         "POST",
         "/public/candidate-portal/resume",
     ): "candidate may need to upload the initial resume before completion",
+    (
+        "candidate_behavioral_assessments.py",
+        "list_behavioral_assessments",
+        "GET",
+        "/candidate-portal/behavioral-assessments",
+    ): "candidate must access pending behavioral assessments even with incomplete profile",
+    (
+        "candidate_behavioral_assessments.py",
+        "get_behavioral_assessment",
+        "GET",
+        "/candidate-portal/behavioral-assessments/{assignment_id}",
+    ): "candidate must access own behavioral assessment detail during onboarding",
+    (
+        "candidate_behavioral_assessments.py",
+        "start_behavioral_assessment",
+        "POST",
+        "/candidate-portal/behavioral-assessments/{assignment_id}/start",
+    ): "candidate must be able to start mandatory behavioral assessment before full profile completion",
+    (
+        "candidate_behavioral_assessments.py",
+        "save_behavioral_answers",
+        "PUT",
+        "/candidate-portal/behavioral-assessments/{assignment_id}/answers",
+    ): "candidate must save own behavioral answers before full profile completion",
+    (
+        "candidate_behavioral_assessments.py",
+        "submit_behavioral_assessment",
+        "POST",
+        "/candidate-portal/behavioral-assessments/{assignment_id}/submit",
+    ): "candidate must submit own behavioral assessment before full profile completion",
 }
 
 

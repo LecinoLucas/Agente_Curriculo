@@ -12,6 +12,15 @@ function statusLabel(status: string): string {
   return status;
 }
 
+function formatDeadline(deadline: string | null): string | null {
+  if (!deadline) return null;
+  return new Date(deadline).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 export function BehavioralAssessmentCard({
   assignment,
   onOpen,
@@ -21,7 +30,12 @@ export function BehavioralAssessmentCard({
   onOpen: (assignment: BehavioralAssignmentSummary) => void;
   disabled?: boolean;
 }) {
+  const isEvaluated =
+    assignment.status === "submitted" && assignment.ai_evaluation_status === "completed";
   const isSubmitted = assignment.status === "submitted";
+  const deadline = formatDeadline(assignment.expires_at);
+  const primaryStatus = isEvaluated ? "Avaliada" : statusLabel(assignment.status);
+
   return (
     <div className="rounded-xl border border-border/70 bg-background/80 p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -36,11 +50,12 @@ export function BehavioralAssessmentCard({
             <p>
               {assignment.answered_count} de {assignment.question_count} respostas
             </p>
+            {deadline ? <p>Prazo: {deadline}</p> : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
           <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-            {statusLabel(assignment.status)}
+            {primaryStatus}
           </span>
           <Button
             type="button"
@@ -49,7 +64,7 @@ export function BehavioralAssessmentCard({
             variant={isSubmitted ? "outline" : "default"}
           >
             {isSubmitted ? <Lock className="mr-2 h-4 w-4" /> : null}
-            {isSubmitted ? "Ver respostas" : "Responder"}
+            {isSubmitted ? "Ver respostas" : "Responder avaliação"}
           </Button>
         </div>
       </div>

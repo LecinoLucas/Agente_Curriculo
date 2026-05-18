@@ -54,6 +54,13 @@ testpaths = ["tests"]
 addopts = "--cov=src --cov-report=term-missing"
 markers = [
     "postgres: integration tests that require a real PostgreSQL test database and must be run explicitly with -m postgres",
+    "unit: testes unitários — dependências mockadas, sem DB/IO",
+    "integration: testes que sobem app/DB SQLite em memória via fixtures",
+    "e2e: cenários ponta-a-ponta longos (fluxo ATS completo, demo full flow)",
+    "security: testes de segurança/RBAC/LGPD/auth/secrets/upload",
+    "slow: testes >1s ou que executam cadeias pesadas (manter fora do smoke)",
+    "smoke: subset crítico para verificação rápida pós-mudança",
+    "legacy: teste preservado mas com fixtures/contrato desatualizados — pendente de reescrita em fase dedicada; excluído do smoke",
 ]
 filterwarnings = [
     "ignore:'asyncio\\.iscoroutinefunction' is deprecated and slated for removal in Python 3\\.16:DeprecationWarning:fastapi\\.routing",

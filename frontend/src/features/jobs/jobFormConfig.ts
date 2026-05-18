@@ -147,6 +147,9 @@ export function formatPublicationBlocker(blocker: string): string {
     seniority_level: "Senioridade não definida",
     minimum_years_experience: "Experiência mínima não definida",
     priority_skills: "Faltam pelo menos 2 skills essenciais",
+    behavioral_template_id: "Template comportamental ativo não selecionado",
+    behavioral_template_status: "Template comportamental vinculado não está ativo",
+    behavioral_template_structure: "Template comportamental vinculado não possui competências/perguntas válidas",
   };
 
   return labels[blocker] ?? blocker;
@@ -299,4 +302,3 @@ export function validateBehavioralTemplate(
     message: "Esta vaga exige avaliação comportamental. Selecione um template ativo.",
   };
 }
-

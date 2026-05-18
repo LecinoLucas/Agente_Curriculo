@@ -1,16 +1,14 @@
 import { RefreshCw } from "lucide-react";
-import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
-import { usePipeline } from "../features/pipeline/PipelineContext";
+import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { PageHeader } from "../components/common/PageHeader";
 import { AnalysisFilters } from "../features/analyses/components/AnalysisFilters";
 import { AnalysesTable } from "../features/analyses/components/AnalysesTable";
 import { DiscardAnalysisModal } from "../features/analyses/components/DiscardAnalysisModal";
 import { useAnalysesPage } from "../features/analyses/hooks/useAnalysesPage";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export function AnalisesIaPage() {
-  const { openCandidate, selectedCandidateId } = usePipeline();
-  const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const [previewCandidateId, setPreviewCandidateId] = useState<string | null>(null);
 
   const {
     page,
@@ -38,18 +36,6 @@ export function AnalisesIaPage() {
     handleForceFail,
     handleDiscard,
   } = useAnalysesPage();
-
-  const isWorkspaceOpen = selectedCandidateId !== null;
-  const showAnalysesList = !isWorkspaceOpen || !workspaceFocused;
-  const showWorkspace = isWorkspaceOpen && workspaceFocused;
-
-  useEffect(() => {
-    if (selectedCandidateId) {
-      setWorkspaceFocused(true);
-      return;
-    }
-    setWorkspaceFocused(false);
-  }, [selectedCandidateId]);
 
   return (
     <div className="flex h-full flex-col">
@@ -81,8 +67,7 @@ export function AnalisesIaPage() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {showAnalysesList ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden">
           {/* Filters */}
           <AnalysisFilters
             searchInput={searchInput}
@@ -124,8 +109,7 @@ export function AnalisesIaPage() {
             actionId={actionId}
             onOpen={(item) => {
               if (!item.candidate_id) return;
-              setWorkspaceFocused(true);
-              void openCandidate(item.candidate_id);
+              setPreviewCandidateId(item.candidate_id);
             }}
             onRetry={(item) => void handleRetry(item)}
             onForceFail={(item) => void handleForceFail(item)}
@@ -136,21 +120,16 @@ export function AnalisesIaPage() {
         )}
           </div>
         </div>
-        ) : null}
-
-        {showWorkspace ? (
-          <CandidateDrawer
-            mode="workspace"
-            onBackToList={() => setWorkspaceFocused(false)}
-            backToListLabel="Análises"
-          />
-        ) : null}
       </div>
       <DiscardAnalysisModal
         open={discardTarget != null}
         loading={discardTarget != null && actionId === discardTarget.id}
         onClose={() => setDiscardTarget(null)}
         onConfirm={handleDiscard}
+      />
+      <CandidatePreviewDrawer
+        candidateId={previewCandidateId}
+        onClose={() => setPreviewCandidateId(null)}
       />
     </div>
   );

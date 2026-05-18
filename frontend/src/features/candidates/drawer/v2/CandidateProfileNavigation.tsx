@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { BarChart3, FileText, UserRound, Calendar, CheckSquare, ClipboardList, Mail, MessageCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { BarChart3, FileText, UserRound, Calendar, CheckSquare, ClipboardList, Mail, MessageCircle, NotebookPen, ChevronDown, ChevronUp } from "lucide-react";
 import { getVisibleCandidateTabs, type GetVisibleCandidateTabsInput, type UserRole } from "../utils/getVisibleCandidateTabs";
 import type { PipelineStage } from "../../../../types/domain";
 
-type TabKey = "overview" | "score" | "documents" | "interview" | "assessment" | "pre_admission" | "communications" | "collaboration";
+type TabKey = "overview" | "score" | "documents" | "interview" | "assessment" | "pre_admission" | "communications" | "collaboration" | "notes";
 
 interface CandidateProfileNavigationProps {
   activeTab: TabKey;
@@ -31,6 +31,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof UserRound }> = [
   { key: "assessment", label: "Avaliação", icon: CheckSquare },
   { key: "communications", label: "Comunicações", icon: Mail },
   { key: "collaboration", label: "Colaboração", icon: MessageCircle },
+  { key: "notes", label: "Observações", icon: NotebookPen },
   { key: "pre_admission", label: "Pré-admissão", icon: ClipboardList },
 ];
 

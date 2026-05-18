@@ -329,8 +329,8 @@ class BehavioralTemplateService:
             if not template:
                 raise NotFoundException(f"Template {template_id} not found")
 
-            if template["status"] == "archived":
-                raise ValidationException("Cannot link archived template to a job")
+            if template["status"] != "active":
+                raise ValidationException("Only active templates can be linked to a job")
 
         await self._repository.link_to_job(job_id, template_id)
         await self._invalidate_job_scores(job_id)
@@ -341,21 +341,32 @@ class BehavioralTemplateService:
     async def _create_retroactive_assignments(self, job_id: UUID, template_id: UUID) -> None:
         import sqlalchemy as sa
         from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+        from src.infrastructure.database.models.job_model import JobModel
         from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
         from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
             SQLAlchemyBehavioralAssignmentRepository,
         )
 
-        _EARLY_STAGES = ("entry", "screening")
-
         session = self._repository._session
+        job_row = await session.execute(
+            sa.select(JobModel.requires_behavioral_assessment, JobModel.behavioral_template_id).where(
+                JobModel.id == job_id
+            )
+        )
+        job_data = job_row.first()
+        if job_data is None:
+            return
+        if not bool(job_data.requires_behavioral_assessment):
+            return
+        if job_data.behavioral_template_id != template_id:
+            return
+
         result = await session.execute(
             sa.select(CandidateJobPipelineModel.candidate_id).where(
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateJobPipelineModel.relationship_status == "active",
                 CandidateJobPipelineModel.is_terminal.is_(False),
                 CandidateJobPipelineModel.terminated_at.is_(None),
-                CandidateJobPipelineModel.pipeline_stage.in_(_EARLY_STAGES),
             )
         )
         candidate_ids = [row.candidate_id for row in result]
@@ -365,10 +376,12 @@ class BehavioralTemplateService:
 
         assignment_service = BehavioralAssignmentService(SQLAlchemyBehavioralAssignmentRepository(session))
         for candidate_id in candidate_ids:
-            await assignment_service.ensure_assignment_for_application(
+            await assignment_service.ensure_behavioral_assignment_for_candidate_job(
                 candidate_id=candidate_id,
                 job_id=job_id,
+                requires_behavioral_assessment=True,
                 template_id=template_id,
+                pipeline_active=True,
             )
 
     async def _invalidate_job_scores(self, job_id: UUID) -> None:

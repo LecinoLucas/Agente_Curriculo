@@ -37,6 +37,7 @@ alembic/versions/*.py
 !alembic/versions/h0d1e2f3a4b5_drop_legacy_assessment_tables.py
 !alembic/versions/i1e2f3a4b5c6_add_behavioral_assessment_assignments.py
 !alembic/versions/s7t8u9v0w1x2_add_user_preferred_theme.py
+!alembic/versions/u8v9w0x1y2z3_ensure_behavioral_assignment_unique_key.py
 
 # Logs
 *.log

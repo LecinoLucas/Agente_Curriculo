@@ -6,6 +6,9 @@ import pytest
 import sqlalchemy as sa
 from fastapi import status
 from httpx import AsyncClient
+
+# Fase 30B — Google auth do candidato: cobertura crítica de auth + LGPD.
+pytestmark = pytest.mark.smoke
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.settings import settings

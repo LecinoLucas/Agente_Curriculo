@@ -1,6 +1,10 @@
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { AuthContext } from "../../auth/AuthContext";
 import { HttpError } from "../../../services/http";
@@ -58,7 +62,7 @@ function renderProvider({
   const user = role ? makeUser(role) : null;
 
   return render(
-    <MemoryRouter initialEntries={[route]}>
+    <MemoryRouter future={routerFuture} initialEntries={[route]}>
       <AuthContext.Provider
         value={{
           user,

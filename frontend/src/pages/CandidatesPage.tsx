@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Loader2, Mail, Phone, RefreshCw, Users } from "lucide-react";
 
 import { ActionMenu } from "../components/common/ActionMenu";
-import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
 import { useAuth } from "../features/auth/useAuth";
 import { ArchiveCandidateModal } from "../features/candidates/components/ArchiveCandidateModal";
+import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { DeleteCandidateModal } from "../features/candidates/components/DeleteCandidateModal";
 import { useCandidatesFilters } from "../features/candidates/hooks/useCandidatesFilters";
 import { CandidateAiStatusBadge } from "../features/candidates/components/CandidateAiStatusBadge";
@@ -32,18 +32,16 @@ const PAGE_SIZE = 20;
 
 export function CandidatesPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    openCandidate,
-    closeCandidate,
     notifyCandidatesChanged,
     candidatesSyncTick,
-    selectedCandidateId,
   } = usePipeline();
 
   const [page, setPage] = useState(1);
   const [showNewCandidate, setShowNewCandidate] = useState(false);
-  const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const [previewCandidateId, setPreviewCandidateId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CandidateListSummary | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<CandidateListSummary | null>(null);
   const [linkTarget, setLinkTarget] = useState<CandidateListSummary | null>(null);
@@ -101,30 +99,17 @@ export function CandidatesPage() {
     );
   }, [page, search, resumeFilter, aiFilter, applicationSourceFilter, run, hasActiveFilters]);
 
-  const isWorkspaceOpen = selectedCandidateId !== null;
-
   useEffect(() => {
     fetchCandidates();
   }, [fetchCandidates, candidatesSyncTick]);
-
-  useEffect(() => {
-    if (selectedCandidateId) {
-      setWorkspaceFocused(true);
-      return;
-    }
-    setWorkspaceFocused(false);
-  }, [selectedCandidateId]);
 
   // Open candidate from URL param (sourcing modal context)
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const candidateIdFromUrl = searchParams.get("candidateId");
     if (!candidateIdFromUrl) return;
-    setWorkspaceFocused(true);
-    if (selectedCandidateId !== candidateIdFromUrl) {
-      openCandidate(candidateIdFromUrl);
-    }
-  }, [location.search, selectedCandidateId, openCandidate]);
+    setPreviewCandidateId(candidateIdFromUrl);
+  }, [location.search]);
 
   const candidates = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -134,8 +119,6 @@ export function CandidatesPage() {
   const showActionsColumn = canArchiveCandidates || canDeleteCandidates;
   const isRefreshing = loading && candidates.length > 0;
   const showInitialLoading = loading && candidates.length === 0 && !error;
-  const showCandidatesList = !isWorkspaceOpen || !workspaceFocused;
-  const showWorkspace = isWorkspaceOpen && workspaceFocused;
 
   const handleDeleteCandidate = useCallback(
     async (payload: { reason: string; note?: string; confirmation: string }) => {
@@ -145,9 +128,8 @@ export function CandidatesPage() {
       try {
         await candidatesService.delete(deleteTarget.id, payload);
         toast.success("Candidato excluído com sucesso.");
-        if (selectedCandidateId === deleteTarget.id) {
-          closeCandidate();
-          setWorkspaceFocused(false);
+        if (previewCandidateId === deleteTarget.id) {
+          setPreviewCandidateId(null);
         }
         setDeleteTarget(null);
         notifyCandidatesChanged();
@@ -161,7 +143,7 @@ export function CandidatesPage() {
         setDeleteLoading(false);
       }
     },
-    [closeCandidate, deleteTarget, fetchCandidates, notifyCandidatesChanged, selectedCandidateId],
+    [deleteTarget, fetchCandidates, notifyCandidatesChanged, previewCandidateId],
   );
 
   const handleArchiveCandidate = useCallback(
@@ -172,9 +154,8 @@ export function CandidatesPage() {
       try {
         await candidatesService.archive(archiveTarget.id, payload);
         toast.success("Candidato arquivado com sucesso.");
-        if (selectedCandidateId === archiveTarget.id) {
-          closeCandidate();
-          setWorkspaceFocused(false);
+        if (previewCandidateId === archiveTarget.id) {
+          setPreviewCandidateId(null);
         }
         setArchiveTarget(null);
         notifyCandidatesChanged();
@@ -188,7 +169,7 @@ export function CandidatesPage() {
         setArchiveLoading(false);
       }
     },
-    [archiveTarget, closeCandidate, fetchCandidates, notifyCandidatesChanged, selectedCandidateId],
+    [archiveTarget, fetchCandidates, notifyCandidatesChanged, previewCandidateId],
   );
 
   return (
@@ -251,25 +232,24 @@ export function CandidatesPage() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {showCandidatesList ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="bg-[hsl(var(--surface)/0.3)] px-6 py-4 lg:px-8">
-              <CandidatesFilters
-                searchInput={searchInput}
-                onSearchInputChange={setSearchInput}
-                resumeFilter={resumeFilter}
-                onResumeFilterChange={setResumeFilter}
-                aiFilter={aiFilter}
-                onAiFilterChange={setAiFilter}
-                applicationSourceFilter={applicationSourceFilter}
-                onApplicationSourceFilterChange={setApplicationSourceFilter}
-                hasActiveFilters={hasActiveFilters}
-                onClearFilters={clearFilters}
-              />
-            </div>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="bg-[hsl(var(--surface)/0.3)] px-6 py-4 lg:px-8">
+            <CandidatesFilters
+              searchInput={searchInput}
+              onSearchInputChange={setSearchInput}
+              resumeFilter={resumeFilter}
+              onResumeFilterChange={setResumeFilter}
+              aiFilter={aiFilter}
+              onAiFilterChange={setAiFilter}
+              applicationSourceFilter={applicationSourceFilter}
+              onApplicationSourceFilterChange={setApplicationSourceFilter}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+            />
+          </div>
 
-            {/* Content Area with refined scrollbar and spacing */}
-            <div className="flex-1 overflow-y-auto px-6 pb-10 lg:px-8">
+          {/* Content Area with refined scrollbar and spacing */}
+          <div className="flex-1 overflow-y-auto px-6 pb-10 lg:px-8">
               <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface))] shadow-sm">
                 {showInitialLoading ? (
                   <div className="flex items-center justify-center py-32">
@@ -370,11 +350,8 @@ export function CandidatesPage() {
                             <CandidateRow
                               key={c.id}
                               candidate={c}
-                              isActive={selectedCandidateId === c.id}
-                              onOpen={() => {
-                                setWorkspaceFocused(true);
-                                void openCandidate(c.id);
-                              }}
+                              isActive={previewCandidateId === c.id}
+                              onOpen={() => setPreviewCandidateId(c.id)}
                               canArchive={canArchiveCandidates}
                               canDelete={canDeleteCandidates}
                               onArchive={() => setArchiveTarget(c)}
@@ -402,17 +379,6 @@ export function CandidatesPage() {
               </div>
             </div>
           </div>
-        ) : null}
-
-        {showWorkspace ? (
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white shadow-2xl animate-in slide-in-from-right-4 duration-300">
-            <CandidateDrawer
-              mode="workspace"
-              onBackToList={() => setWorkspaceFocused(false)}
-              backToListLabel="Voltar para a lista"
-            />
-          </div>
-        ) : null}
       </div>
 
       {showNewCandidate ? (
@@ -422,11 +388,15 @@ export function CandidatesPage() {
           onClose={() => setShowNewCandidate(false)}
           onCreated={async (candidateId) => {
             setShowNewCandidate(false);
-            setWorkspaceFocused(true);
-            await openCandidate(candidateId);
+            navigate(`/candidatos/${candidateId}`);
           }}
         />
       ) : null}
+
+      <CandidatePreviewDrawer
+        candidateId={previewCandidateId}
+        onClose={() => setPreviewCandidateId(null)}
+      />
 
       <DeleteCandidateModal
         isOpen={deleteTarget !== null}

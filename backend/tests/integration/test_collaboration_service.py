@@ -424,10 +424,12 @@ async def test_collaboration_does_not_expose_sensitive_data(db_session: AsyncSes
     assert "erp_payload" not in comment
     assert "ai_logs" not in comment
     assert "score_breakdown" not in comment
-    # Only these fields allowed
+    # Only these fields allowed (priority + target_manager_id adicionados pelo
+    # fluxo de Manager Review — não expõem dado sensível, são apenas IDs/priority).
     assert set(comment.keys()) == {
         "id", "author_id", "author_role", "comment_type",
-        "recommendation", "message", "created_at"
+        "recommendation", "message", "created_at",
+        "priority", "target_manager_id",
     }
 
 

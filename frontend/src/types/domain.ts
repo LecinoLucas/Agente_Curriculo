@@ -107,6 +107,8 @@ export type CandidateResumeOverview = {
   current_file_name: string | null;
   extraction_status: string | null;
   updated_at: string;
+  resume_url?: string | null;
+  document_url?: string | null;
 };
 
 export type CandidateLatestAnalysisOverview = {
@@ -172,6 +174,29 @@ export type CandidateActiveJobDecision = {
   next_action: "none" | "wait_analysis" | "review_candidate" | "request_analysis" | "run_repair";
 };
 
+export type CandidateSkillPreview = {
+  matched_skills: string[];
+  attention_points: string[];
+};
+
+export type CandidateLatestNoteOverview = {
+  note_text: string;
+  created_at: string;
+};
+
+export type CandidatePreviewPendencyOverview = {
+  id: string;
+  label: string;
+  tone: "warning" | "info" | string;
+};
+
+export type CandidateLatestMovementOverview = {
+  event_type: string;
+  to_stage: PipelineStage | string | null;
+  actor_name: string | null;
+  moved_at: string;
+};
+
 export type CandidateOverview = {
   candidate: Candidate;
   resumes: CandidateResumeOverview[];
@@ -182,6 +207,29 @@ export type CandidateOverview = {
   active_job: CandidateActiveJobOverview | null;
   pipeline_entries: CandidatePipelineEntryOverview[];
   active_job_decision: CandidateActiveJobDecision | null;
+  active_job_skill_preview: CandidateSkillPreview | null;
+  latest_note: CandidateLatestNoteOverview | null;
+  preview_pendencies: CandidatePreviewPendencyOverview[];
+  latest_movement: CandidateLatestMovementOverview | null;
+};
+
+export type CandidateNoteAuthor = {
+  id: string | null;
+  name: string;
+};
+
+export type CandidateNote = {
+  id: string;
+  candidate_id: string;
+  note_text: string;
+  visibility: "internal" | string;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+  is_edited: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  author: CandidateNoteAuthor;
 };
 
 export type CandidatePipelineEntryOverview = {
@@ -699,6 +747,13 @@ export type Resume = {
   created_at: string;
   updated_at: string;
   versions: ResumeVersion[];
+};
+
+export type CandidateResumeDownloadUrl = {
+  url: string;
+  expires_at: string | null;
+  content_type: string;
+  filename: string;
 };
 
 export type AnalysisGlobalItem = {

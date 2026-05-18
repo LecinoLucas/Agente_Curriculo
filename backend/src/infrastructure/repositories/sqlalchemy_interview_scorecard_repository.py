@@ -52,6 +52,7 @@ class SQLAlchemyInterviewScorecardRepository:
         candidate_id: UUID,
         job_id: UUID,
         interview_id: UUID | None = None,
+        evaluator_id: UUID | None = None,
     ) -> InterviewScorecardModel | None:
         conditions = [
             InterviewScorecardModel.candidate_id == candidate_id,
@@ -61,6 +62,8 @@ class SQLAlchemyInterviewScorecardRepository:
             conditions.append(InterviewScorecardModel.interview_id.is_(None))
         else:
             conditions.append(InterviewScorecardModel.interview_id == interview_id)
+        if evaluator_id is not None:
+            conditions.append(InterviewScorecardModel.evaluator_id == evaluator_id)
 
         return await self._session.scalar(
             sa.select(InterviewScorecardModel)

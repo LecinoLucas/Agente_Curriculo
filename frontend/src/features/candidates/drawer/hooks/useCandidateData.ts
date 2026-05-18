@@ -52,10 +52,9 @@ export function useCandidateData({
       setAnalysisResultLoading(false);
       return;
     }
-    const analysisId = candidateOverview?.latest_analysis?.analysis_id;
-    const status = candidateOverview?.latest_analysis?.status;
-    const analysisJobId = candidateOverview?.latest_analysis?.job_id;
-    if (!analysisId || status !== "completed" || analysisJobId !== candidateActiveJobId) {
+    const analysisId = candidateOverview?.active_job_decision?.current_analysis_id;
+    const status = candidateOverview?.active_job_decision?.analysis_status;
+    if (!analysisId || status !== "completed") {
       setAnalysisResult(null);
       setAnalysisResultLoading(false);
       return;
@@ -99,9 +98,8 @@ export function useCandidateData({
     };
   }, [
     shouldLoadScoreData,
-    candidateOverview?.latest_analysis?.analysis_id,
-    candidateOverview?.latest_analysis?.job_id,
-    candidateOverview?.latest_analysis?.status,
+    candidateOverview?.active_job_decision?.current_analysis_id,
+    candidateOverview?.active_job_decision?.analysis_status,
     rankingSyncTick,
     candidateActiveJobId,
   ]);

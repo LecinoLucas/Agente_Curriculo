@@ -2,6 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 const {
   listJobsMock,
   loadJobsMock,
@@ -14,7 +19,7 @@ vi.mock("../../../services/jobsService", () => ({
   listJobs: listJobsMock,
 }));
 
-vi.mock("../../auth/useAuth", () => ({
+vi.mock("../../../features/auth/useAuth", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
@@ -24,7 +29,7 @@ vi.mock("../../auth/useAuth", () => ({
   }),
 }));
 
-vi.mock("../../candidates/drawer/v2", () => ({
+vi.mock("../../../features/candidates/drawer/v2", () => ({
   CandidateProfileView: ({ children, onTabChange }: any) => (
     <div>
       <div>mock-profile</div>
@@ -38,7 +43,7 @@ vi.mock("../../candidates/drawer/v2", () => ({
   ScoreTabWithAnalysis: () => null,
 }));
 
-vi.mock("../../candidates/drawer/hooks/useCandidateDecision", () => ({
+vi.mock("../../../features/candidates/drawer/hooks/useCandidateDecision", () => ({
   useCandidateDecision: () => ({
     primaryPipelineEntry: {
       candidate_id: "candidate-1",
@@ -63,7 +68,7 @@ vi.mock("../../candidates/drawer/hooks/useCandidateDecision", () => ({
   }),
 }));
 
-vi.mock("../../candidates/drawer/hooks/useCandidateData", () => ({
+vi.mock("../../../features/candidates/drawer/hooks/useCandidateData", () => ({
   useCandidateData: () => ({
     analysisResult: null,
     rankingEntry: null,
@@ -72,7 +77,7 @@ vi.mock("../../candidates/drawer/hooks/useCandidateData", () => ({
   }),
 }));
 
-vi.mock("../../candidates/drawer/hooks/useCandidateDrawerActions", () => ({
+vi.mock("../useCandidateDrawerActions", () => ({
   useCandidateDrawerActions: () => ({
     editModalOpen: false,
     setEditModalOpen: vi.fn(),
@@ -81,27 +86,27 @@ vi.mock("../../candidates/drawer/hooks/useCandidateDrawerActions", () => ({
   }),
 }));
 
-vi.mock("../../candidates/drawer/tabs/DocumentsTab", () => ({
+vi.mock("../../../features/candidates/drawer/tabs/DocumentsTab", () => ({
   DocumentsTab: () => null,
 }));
 
-vi.mock("../../candidates/drawer/tabs/InterviewTab", () => ({
+vi.mock("../../../features/candidates/drawer/tabs/InterviewTab", () => ({
   InterviewTab: () => null,
 }));
 
-vi.mock("../../candidates/drawer/components/CandidateCommunicationsPanel", () => ({
+vi.mock("../../../features/candidates/drawer/components/CandidateCommunicationsPanel", () => ({
   CandidateCommunicationsPanel: () => <div>mock-communications</div>,
 }));
 
-vi.mock("../EditCandidateModal", () => ({
+vi.mock("../../../features/pipeline/EditCandidateModal", () => ({
   EditCandidateModal: () => null,
 }));
 
-vi.mock("../../candidates/components/LinkCandidateJobModal", () => ({
+vi.mock("../../../features/candidates/components/LinkCandidateJobModal", () => ({
   LinkCandidateJobModal: () => null,
 }));
 
-vi.mock("../PipelineContext", () => ({
+vi.mock("../../../features/pipeline/PipelineContext", () => ({
   usePipeline: () => ({
     selectedCandidateId: "candidate-1",
     candidateOverview: {
@@ -174,7 +179,7 @@ vi.mock("../PipelineContext", () => ({
 }));
 
 import { CandidateDrawer } from "../CandidateDrawer";
-import { TransferJobModal } from "../candidate-drawer/TransferJobModal";
+import { TransferJobModal } from "../TransferJobModal";
 
 describe("CandidateDrawer", () => {
   beforeEach(() => {
@@ -184,7 +189,7 @@ describe("CandidateDrawer", () => {
 
   it("não carrega a lista ampla de vagas ao abrir o drawer no overview", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <CandidateDrawer />
       </MemoryRouter>,
     );
@@ -199,7 +204,7 @@ describe("CandidateDrawer", () => {
 
   it("exibe aba Comunicações no drawer", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <CandidateDrawer />
       </MemoryRouter>,
     );

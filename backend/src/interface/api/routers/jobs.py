@@ -138,6 +138,23 @@ def _analysis_service(db: AsyncSession) -> AnalysisService:
     return AnalysisService(SQLAlchemyAnalysisRepository(db), audit_service=AuditService(db))
 
 
+async def _get_current_job_behavioral_assignment(
+    db: AsyncSession,
+    *,
+    job_id: UUID,
+    candidate_id: UUID,
+):
+    job = await SQLAlchemyJobRepository(db).find_active_by_id(job_id)
+    if job is None or job.behavioral_template_id is None:
+        return None
+    repo = SQLAlchemyBehavioralAssignmentRepository(db)
+    return await repo.get_assignment_by_job_candidate(
+        job_id=job_id,
+        candidate_id=candidate_id,
+        template_id=job.behavioral_template_id,
+    )
+
+
 async def _resolve_force_recompute_analysis_id(
     db: AsyncSession,
     *,
@@ -682,6 +699,7 @@ async def trigger_behavioral_assessment_evaluation(
     job_id: UUID,
     candidate_id: UUID,
     current_user: RecruiterOrAdmin,
+    retry_failed: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Trigger IA-assisted evaluation of submitted behavioral assessment.
@@ -693,22 +711,13 @@ async def trigger_behavioral_assessment_evaluation(
     from src.application.services.behavioral_ai_evaluation_service import (
         BehavioralAIEvaluationService,
     )
-    from src.infrastructure.ai.factory import AIServiceFactory
-    from src.core.settings import settings
+    from src.interface.workers.behavioral_ai_dispatcher import enqueue_behavioral_ai_evaluation
 
     try:
-        from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
-            SQLAlchemyBehavioralAssignmentRepository,
-        )
-
-        # Create Gemini service via factory
-        ai_svc = AIServiceFactory.create(settings.AI_PROVIDER, settings.AI_MODEL_ID)
-        service = BehavioralAIEvaluationService(db, ai_svc)
-
-        # First, get the assignment to find its ID
-        repo = SQLAlchemyBehavioralAssignmentRepository(db)
-        assignment = await repo.get_assignment_by_job_candidate(
-            job_id=job_id, candidate_id=candidate_id
+        assignment = await _get_current_job_behavioral_assignment(
+            db,
+            job_id=job_id,
+            candidate_id=candidate_id,
         )
         if not assignment:
             raise HTTPException(
@@ -716,22 +725,34 @@ async def trigger_behavioral_assessment_evaluation(
                 detail="Behavioral assessment not found",
             )
 
-        evaluation = await service.evaluate_assignment(
+        service = BehavioralAIEvaluationService(db)
+        evaluation, should_enqueue = await service.request_evaluation(
             job_id=job_id,
             candidate_id=candidate_id,
             assignment_id=assignment.id,
+            retry_failed=retry_failed,
         )
+        if should_enqueue:
+            await service.mark_enqueued(evaluation)
+            enqueue_behavioral_ai_evaluation(evaluation.id)
 
         await db.commit()
         return {
-            "id": str(evaluation.id),
+            "evaluation_id": str(evaluation.id),
+            "assignment_id": str(evaluation.assignment_id),
             "status": evaluation.status,
-            "message": "Evaluation triggered successfully" if evaluation.status == "processing"
-            else f"Evaluation completed with confidence: {evaluation.confidence}",
+            "message": (
+                "Avaliação enfileirada"
+                if should_enqueue
+                else "Avaliação já existente para este assignment"
+            ),
         }
     except ValidationException as exc:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as exc:
         await db.rollback()
         logger.error(f"Error triggering behavioral evaluation: {exc}")
@@ -755,22 +776,14 @@ async def get_behavioral_assessment_evaluation(
     from src.application.services.behavioral_ai_evaluation_service import (
         BehavioralAIEvaluationService,
     )
-    from src.infrastructure.ai.factory import AIServiceFactory
-    from src.core.settings import settings
 
     try:
-        from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
-            SQLAlchemyBehavioralAssignmentRepository,
-        )
+        service = BehavioralAIEvaluationService(db)
 
-        # Create Gemini service via factory
-        ai_svc = AIServiceFactory.create(settings.AI_PROVIDER, settings.AI_MODEL_ID)
-        service = BehavioralAIEvaluationService(db, ai_svc)
-
-        # Get assignment to find its ID
-        repo = SQLAlchemyBehavioralAssignmentRepository(db)
-        assignment = await repo.get_assignment_by_job_candidate(
-            job_id=job_id, candidate_id=candidate_id
+        assignment = await _get_current_job_behavioral_assignment(
+            db,
+            job_id=job_id,
+            candidate_id=candidate_id,
         )
         if not assignment:
             raise HTTPException(

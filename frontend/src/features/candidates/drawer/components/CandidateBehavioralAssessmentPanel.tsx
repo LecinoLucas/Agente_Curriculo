@@ -223,6 +223,9 @@ export function CandidateBehavioralAssessmentPanel({
                 ? "Aguardando resposta do candidato"
                 : "Candidato está respondendo a avaliação"}
             </p>
+            <p className="mt-1 text-blue-800">
+              Respostas são feitas pelo candidato no Portal do Candidato, em /candidato/portal.
+            </p>
           </div>
         </div>
       )}

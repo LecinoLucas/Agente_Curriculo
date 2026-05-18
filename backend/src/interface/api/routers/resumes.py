@@ -1,7 +1,7 @@
 import math
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.analysis_service import AnalysisService
@@ -16,7 +16,7 @@ from src.application.services.resume_service import (
     ResumeUploadCandidateRequiredError,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
-from src.interface.api.dependencies import CurrentUser, get_db
+from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.resume_schemas import (
     ResumeExtractionStatusResponse,
@@ -79,7 +79,7 @@ def _resume_response(details: ResumeDetails) -> ResumeResponse:
 
 @router.get("", response_model=PaginatedResponse[ResumeSummaryResponse])
 async def list_resumes(
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -112,7 +112,7 @@ async def list_resumes(
 
 @router.post("", response_model=ResumeUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def initiate_resume_upload(
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
     body: ResumeUploadRequest = Body(default_factory=ResumeUploadRequest),
 ) -> ResumeUploadResponse:
@@ -138,7 +138,7 @@ async def initiate_resume_upload(
 @router.get("/{resume_id}", response_model=ResumeResponse)
 async def get_resume(
     resume_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> ResumeResponse:
     try:
@@ -155,7 +155,7 @@ async def get_resume(
 )
 async def upload_resume_pdf(
     resume_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ) -> ResumeFileUploadResponse:
@@ -198,7 +198,7 @@ async def upload_resume_pdf(
 )
 async def get_resume_extraction_status(
     resume_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> ResumeExtractionStatusResponse:
     try:
@@ -221,7 +221,7 @@ async def get_resume_extraction_status(
 async def update_resume(
     resume_id: UUID,
     body: UpdateResumeRequest,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> ResumeResponse:
     try:
@@ -237,7 +237,7 @@ async def update_resume(
 @router.patch("/{resume_id}/archive", response_model=ResumeResponse)
 async def archive_resume(
     resume_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> ResumeResponse:
     return await _set_resume_status(resume_id, "archived", current_user, db)
@@ -246,7 +246,7 @@ async def archive_resume(
 @router.patch("/{resume_id}/activate", response_model=ResumeResponse)
 async def activate_resume(
     resume_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> ResumeResponse:
     return await _set_resume_status(resume_id, "active", current_user, db)
@@ -255,7 +255,7 @@ async def activate_resume(
 @router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_resume(
     resume_id: UUID,
-    current_user: CurrentUser,
+    current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> None:
     try:

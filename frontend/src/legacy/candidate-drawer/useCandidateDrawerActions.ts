@@ -5,7 +5,10 @@ interface UseCandidateDrawerActionsInput {
   selectedCandidateId: string | null;
 }
 
-export function useCandidateDrawerActions({ isDrawerOpen, selectedCandidateId }: UseCandidateDrawerActionsInput) {
+export function useCandidateDrawerActions({
+  isDrawerOpen,
+  selectedCandidateId,
+}: UseCandidateDrawerActionsInput) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [transferJobModalOpen, setTransferJobModalOpen] = useState(false);
   const [dataQualityActionLoading, setDataQualityActionLoading] = useState(false);

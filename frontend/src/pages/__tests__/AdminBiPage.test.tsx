@@ -2,6 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { AdminBiPage } from "../AdminBiPage";
 
@@ -78,7 +82,7 @@ describe("AdminBiPage", () => {
 
   it("renderiza a página e os cards principais", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AdminBiPage />
       </MemoryRouter>,
     );
@@ -90,7 +94,7 @@ describe("AdminBiPage", () => {
 
   it("renderiza gráficos leves com dados mockados", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AdminBiPage />
       </MemoryRouter>,
     );
@@ -140,7 +144,7 @@ describe("AdminBiPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AdminBiPage />
       </MemoryRouter>,
     );
@@ -152,7 +156,7 @@ describe("AdminBiPage", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AdminBiPage />
       </MemoryRouter>,
     );

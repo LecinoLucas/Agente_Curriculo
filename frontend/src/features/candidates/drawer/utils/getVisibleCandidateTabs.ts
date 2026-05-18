@@ -38,13 +38,23 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
   } = input;
 
   const visible: Set<TabKey> = new Set();
+  const canSeeInternalNotes =
+    userRole === "recruiter" ||
+    userRole === "admin" ||
+    userRole === "manager" ||
+    userRole === "hr";
 
   // Resume is always visible
   visible.add("overview");
 
   // If showing all, return all tabs
   if (showAll) {
-    return ["overview", "score", "documents", "interview", "assessment", "communications", "collaboration", "pre_admission"];
+    const allTabs: TabKey[] = ["overview", "score", "documents", "interview", "assessment", "communications", "collaboration", "notes", "pre_admission"];
+    return canSeeInternalNotes ? allTabs : allTabs.filter((tab) => tab !== "notes");
+  }
+
+  if (canSeeInternalNotes) {
+    visible.add("notes");
   }
 
   // If no active job, show minimal tabs
@@ -108,7 +118,7 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
   const maxTabs = 6;
   if (visible.size > maxTabs) {
     // Prioritize tabs: overview > score > interview > collaboration > pre_admission > documents > assessment > communications
-    const priority: TabKey[] = ["overview", "score", "interview", "collaboration", "pre_admission", "documents", "assessment", "communications"];
+    const priority: TabKey[] = ["overview", "score", "notes", "interview", "collaboration", "pre_admission", "documents", "assessment", "communications"];
     const filtered = new Set<TabKey>();
 
     for (const tab of priority) {

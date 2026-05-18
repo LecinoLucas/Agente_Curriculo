@@ -149,7 +149,7 @@ export function BehavioralAssessmentForm({
               const parsed = parseQuestionText(question.question_text);
               return (
                 <div key={question.id} className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                  <label className="block text-sm font-medium text-foreground">
+                  <label htmlFor={question.id} className="block text-sm font-medium text-foreground">
                     {parsed.text}
                     {question.is_required ? <span className="text-destructive"> *</span> : null}
                   </label>
@@ -160,6 +160,7 @@ export function BehavioralAssessmentForm({
 
                   {question.answer_type === "text" ? (
                     <textarea
+                      id={question.id}
                       className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       value={current.answer_text}
                       disabled={isSubmitted}

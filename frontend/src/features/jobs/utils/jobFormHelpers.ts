@@ -56,5 +56,8 @@ export function buildFrontendPublicationBlockers(form: JobFormValues, mandatoryS
   if (!trimToNull(form.seniority_level ?? "")) blockers.push("seniority_level");
   if ((form.minimum_years_experience ?? 0) <= 0) blockers.push("minimum_years_experience");
   if (mandatorySkillsCount < 2) blockers.push("priority_skills");
+  if (form.requires_behavioral_assessment && !trimToNull(form.behavioral_template_id ?? "")) {
+    blockers.push("behavioral_template_id");
+  }
   return blockers;
 }

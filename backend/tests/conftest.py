@@ -14,6 +14,13 @@ from src.infrastructure.database.base import Base
 from src.infrastructure.database.connection import get_db_session
 from src.interface.api.main import app
 
+# SQLite renders sa.UUID columns as "UUID" type, which has NUMERIC affinity.
+# NUMERIC affinity coerces all-decimal UUID hex strings (e.g., SYSTEM_USER_ID's
+# '00000000000000000000000000000001') to INTEGER, breaking the UUID result
+# processor. Patch visit_UUID to render CHAR(32) (TEXT affinity) instead.
+from sqlalchemy.dialects.sqlite.base import SQLiteDialect
+SQLiteDialect.type_compiler_cls.visit_UUID = lambda self, type_, **kw: "CHAR(32)"
+
 
 class FakeRedis:
     def __init__(self) -> None:

@@ -2,6 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { SystemHealthPage } from "../SystemHealthPage";
 
@@ -87,7 +91,7 @@ describe("SystemHealthPage", () => {
 
   it("renderiza a página e as abas", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <SystemHealthPage />
       </MemoryRouter>,
     );
@@ -103,7 +107,7 @@ describe("SystemHealthPage", () => {
     getOverviewMock.mockReturnValue(new Promise(() => {}));
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <SystemHealthPage />
       </MemoryRouter>,
     );
@@ -115,7 +119,7 @@ describe("SystemHealthPage", () => {
     getOverviewMock.mockRejectedValue(new Error("Falha ao consultar health"));
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <SystemHealthPage />
       </MemoryRouter>,
     );
@@ -128,7 +132,7 @@ describe("SystemHealthPage", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <SystemHealthPage />
       </MemoryRouter>,
     );

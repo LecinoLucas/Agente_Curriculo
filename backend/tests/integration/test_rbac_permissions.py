@@ -9,6 +9,9 @@ from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.security.password_service import hash_password
 from datetime import datetime, timezone
 
+# Fase 30B — RBAC core: roles e semântica. Sempre no smoke.
+pytestmark = pytest.mark.smoke
+
 
 async def _create_user(
     db: AsyncSession, role: UserRole, email: str | None = None

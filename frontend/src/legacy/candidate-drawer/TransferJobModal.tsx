@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { formatContextError } from "../../../services/errorMessages";
-import { toast } from "../../../shared/utils/toast";
-import { pipelineService } from "../../../services/pipelineService";
-import { listJobs } from "../../../services/jobsService";
-import { isTransferTargetJob } from "../../../utils/jobStatusRules";
-import type { Job, TransferCandidateJobResponse } from "../../../types/domain";
+import { formatContextError } from "../../services/errorMessages";
+import { toast } from "../../shared/utils/toast";
+import { pipelineService } from "../../services/pipelineService";
+import { listJobs } from "../../services/jobsService";
+import { isTransferTargetJob } from "../../utils/jobStatusRules";
+import type { Job, TransferCandidateJobResponse } from "../../types/domain";
 
 interface TransferJobModalProps {
   isOpen: boolean;

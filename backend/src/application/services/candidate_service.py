@@ -22,13 +22,17 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidateActiveJobResponse,
     CandidateCheckResponse,
     CandidateJobMatchSummaryResponse,
+    CandidateLatestMovementResponse,
+    CandidateLatestNoteResponse,
     CandidateListSummaryResponse,
     CandidateLatestAnalysisPipelineResponse,
     CandidateLatestAnalysisResponse,
     CandidateOverviewResponse,
     CandidatePipelineEntryResponse,
+    CandidatePreviewPendencyResponse,
     CandidateResponse,
     CandidateResumeSummaryResponse,
+    CandidateSkillPreviewResponse,
     CreateCandidateRequest,
     UpdateCandidateRequest,
 )
@@ -38,6 +42,26 @@ logger = structlog.get_logger(__name__)
 APPLICATION_SOURCE_MANUAL = "manual"
 APPLICATION_SOURCE_PUBLIC = "public_application"
 APPLICATION_SOURCE_GOOGLE = "google_oauth"
+
+
+def _unique_limited_strings(*groups: object, limit: int) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        if not isinstance(group, list):
+            continue
+        for item in group:
+            if not isinstance(item, str):
+                continue
+            cleaned = item.strip()
+            key = cleaned.lower()
+            if not cleaned or key in seen:
+                continue
+            values.append(cleaned)
+            seen.add(key)
+            if len(values) >= limit:
+                return values
+    return values
 
 
 class CandidateNotFoundError(Exception):
@@ -328,6 +352,32 @@ class CandidateService:
             warnings=status_result.warnings,
             next_action=status_result.next_action,
         )
+        active_job_skill_preview = None
+        if active_job_id is not None and pipeline_current_analysis_id is not None:
+            active_job_score = await self._repository.find_candidate_job_score_for_analysis(
+                pipeline_current_analysis_id,
+                active_job_id,
+            )
+            active_job_skill_preview = self._build_skill_preview(active_job_score)
+
+        latest_note_row = await self._repository.find_latest_candidate_note_summary(candidate_id)
+        latest_movement_row = (
+            await self._repository.find_latest_pipeline_movement_summary(
+                candidate_id=candidate_id,
+                job_id=active_job_id,
+            )
+            if active_job_id is not None
+            else None
+        )
+        preview_flags = (
+            await self._repository.get_preview_pending_flags(
+                candidate_id=candidate_id,
+                job_id=active_job_id,
+                active_stage=active_pipeline_row["stage"],
+            )
+            if active_pipeline_row is not None and active_job_id is not None
+            else {}
+        )
 
         return CandidateOverviewResponse(
             candidate=CandidateResponse.model_validate(candidate),
@@ -367,7 +417,90 @@ class CandidateService:
                 for row in pipeline_rows
             ],
             active_job_decision=active_job_decision,
+            active_job_skill_preview=active_job_skill_preview,
+            latest_note=(
+                CandidateLatestNoteResponse(**latest_note_row)
+                if latest_note_row is not None
+                else None
+            ),
+            preview_pendencies=self._build_preview_pendencies(
+                has_resume=bool(resume_rows),
+                latest_analysis=latest_analysis,
+                active_stage=active_pipeline_row["stage"] if active_pipeline_row is not None else None,
+                flags=preview_flags,
+            ),
+            latest_movement=(
+                CandidateLatestMovementResponse(**latest_movement_row)
+                if latest_movement_row is not None
+                else None
+            ),
         )
+
+    @staticmethod
+    def _build_skill_preview(score: object | None) -> CandidateSkillPreviewResponse | None:
+        if score is None:
+            return None
+
+        breakdown = getattr(score, "breakdown", None)
+        if not isinstance(breakdown, dict):
+            return None
+
+        matched = _unique_limited_strings(
+            breakdown.get("matched_priority_skills"),
+            breakdown.get("matched_required_skills"),
+            breakdown.get("matched_eliminatory_skills"),
+            breakdown.get("matched_complementary_skills"),
+            limit=3,
+        )
+        attention = _unique_limited_strings(
+            breakdown.get("missing_eliminatory_skills"),
+            breakdown.get("missing_required_skills"),
+            breakdown.get("missing_priority_skills"),
+            breakdown.get("weak_evidence_priority_skills"),
+            breakdown.get("missing_complementary_skills"),
+            limit=3,
+        )
+
+        if not matched and not attention:
+            return None
+
+        return CandidateSkillPreviewResponse(
+            matched_skills=matched,
+            attention_points=attention,
+        )
+
+    @staticmethod
+    def _build_preview_pendencies(
+        *,
+        has_resume: bool,
+        latest_analysis: CandidateLatestAnalysisResponse | None,
+        active_stage: str | None,
+        flags: dict[str, bool],
+    ) -> list[CandidatePreviewPendencyResponse]:
+        pendencies: list[CandidatePreviewPendencyResponse] = []
+
+        def add(id_: str, label: str, tone: str = "info") -> None:
+            if len(pendencies) < 3 and not any(item.id == id_ for item in pendencies):
+                pendencies.append(CandidatePreviewPendencyResponse(id=id_, label=label, tone=tone))
+
+        if flags.get("behavioral_assignment_pending"):
+            add("behavioral_assignment", "Teste comportamental pendente", "warning")
+        if flags.get("behavioral_ai_pending"):
+            add("behavioral_ai", "Pesquisa comportamental pendente", "warning")
+        if active_stage in {"hr_interview", "technical_interview"} and flags.get("interview_not_scheduled"):
+            add("interview", "Entrevista não agendada", "warning")
+        if not has_resume:
+            add("resume", "Currículo ausente", "warning")
+        if has_resume and latest_analysis is None:
+            add("analysis", "Análise pendente", "info")
+        elif latest_analysis is not None and latest_analysis.status in {"pending", "processing", "retry_scheduled"}:
+            add("analysis_processing", "Análise pendente", "info")
+        elif latest_analysis is not None and latest_analysis.status == "failed":
+            add("analysis_failed", "Análise falhou", "warning")
+        if flags.get("document_pending"):
+            add("document", "Documento pendente", "warning")
+
+        return pendencies
 
     async def update(self, candidate_id: UUID, body: UpdateCandidateRequest) -> CandidateModel:
         candidate = await self.get(candidate_id)

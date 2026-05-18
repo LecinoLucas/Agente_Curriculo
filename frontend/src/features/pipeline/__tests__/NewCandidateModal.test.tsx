@@ -124,6 +124,7 @@ describe("NewCandidateModal", () => {
   });
 
   it("deve manter o modal aberto e mostrar erro se a criação falhar", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     (candidatesService.checkDuplicate as any).mockResolvedValue({ exists: false });
     (candidatesService.create as any).mockRejectedValue(new Error("Erro de rede"));
 
@@ -149,6 +150,7 @@ describe("NewCandidateModal", () => {
       expect(mockOnClose).not.toHaveBeenCalled();
       expect(screen.getByText("Erro de rede")).toBeInTheDocument();
     });
+    errorSpy.mockRestore();
   });
 
   it("deve permitir qualquer valor de CPF no cadastro manual", async () => {

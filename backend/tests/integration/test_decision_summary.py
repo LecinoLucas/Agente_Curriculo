@@ -334,6 +334,36 @@ async def test_pending_ai_returns_waiting_behavioral_ai(client: AsyncClient, db_
 
 
 @pytest.mark.asyncio
+async def test_submitted_behavioral_without_ai_requirement_does_not_block(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _recruiter_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    template, questions = await _add_behavioral_template(db_session, job_id)
+    await db_session.execute(
+        sa.update(JobModel)
+        .where(JobModel.id == job_id)
+        .values(requires_behavioral_assessment=True, requires_behavioral_ai_evaluation=False)
+    )
+    await db_session.commit()
+    await _add_behavioral_assignment(
+        db_session,
+        job_id=job_id,
+        candidate_id=candidate_id,
+        template_id=template.id,
+        questions=questions,
+        ai_status=None,
+    )
+    await _add_completed_interview(db_session, job_id=job_id, candidate_id=candidate_id)
+    await _add_submitted_scorecard(db_session, job_id=job_id, candidate_id=candidate_id)
+
+    payload = await _get_summary(client, headers, job_id, candidate_id)
+
+    assert payload["behavioral_assessment"]["assignment_status"] == "submitted"
+    assert payload["behavioral_assessment"]["ai_evaluation_status"] is None
+    assert payload["decision_readiness"]["status"] != "waiting_behavioral_ai"
+    assert payload["decision_readiness"]["status"] == "ready_for_human_decision"
+
+
+@pytest.mark.asyncio
 async def test_pending_scorecard_returns_waiting_interview_scorecard(client: AsyncClient, db_session: AsyncSession) -> None:
     headers = await _recruiter_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
@@ -375,6 +405,29 @@ async def test_completed_inputs_returns_ready_for_human_decision(client: AsyncCl
     assert payload["interview_scorecard"]["average_rating"] == 4.5
     assert payload["behavioral_assessment"]["answered_count"] == 2
     assert payload["behavioral_assessment"]["ai_confidence"] == "medium"
+
+
+@pytest.mark.asyncio
+async def test_decision_summary_advances_after_behavioral_submission(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _recruiter_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    template, questions = await _add_behavioral_template(db_session, job_id)
+
+    before_submission = await _get_summary(client, headers, job_id, candidate_id)
+    assert before_submission["decision_readiness"]["status"] == "waiting_behavioral_assessment"
+
+    await _add_behavioral_assignment(
+        db_session,
+        job_id=job_id,
+        candidate_id=candidate_id,
+        template_id=template.id,
+        questions=questions,
+    )
+    await _add_completed_interview(db_session, job_id=job_id, candidate_id=candidate_id)
+    await _add_submitted_scorecard(db_session, job_id=job_id, candidate_id=candidate_id)
+
+    after_submission = await _get_summary(client, headers, job_id, candidate_id)
+    assert after_submission["decision_readiness"]["status"] == "ready_for_human_decision"
 
 
 @pytest.mark.asyncio

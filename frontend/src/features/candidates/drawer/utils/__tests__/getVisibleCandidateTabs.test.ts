@@ -62,10 +62,22 @@ describe("getVisibleCandidateTabs", () => {
     expect(result).toContain("pre_admission");
   });
 
-  it("should show all tabs when showAll is true", () => {
+  it("should show all tabs except notes for candidate when showAll is true", () => {
     const input = { ...defaultInput, showAll: true };
     const result = getVisibleCandidateTabs(input);
     expect(result).toEqual(["overview", "score", "documents", "interview", "assessment", "communications", "collaboration", "pre_admission"]);
+  });
+
+  it("should include notes for recruiter", () => {
+    const input = { ...defaultInput, userRole: "recruiter" };
+    const result = getVisibleCandidateTabs(input);
+    expect(result).toContain("notes");
+  });
+
+  it("should not include notes for viewer", () => {
+    const input = { ...defaultInput, userRole: "viewer" };
+    const result = getVisibleCandidateTabs(input);
+    expect(result).not.toContain("notes");
   });
 
   it("should not exceed 6 tabs when showAll is false", () => {

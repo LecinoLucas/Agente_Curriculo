@@ -59,6 +59,7 @@ class BehavioralAssignmentSummaryResponse(BaseModel):
     started_at: datetime | None = None
     submitted_at: datetime | None = None
     expires_at: datetime | None = None
+    ai_evaluation_status: str | None = None
     answered_count: int
     question_count: int
 

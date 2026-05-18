@@ -71,7 +71,9 @@ describe("CandidateBehavioralAssessmentPanel", () => {
       expect(screen.getByText("Behavioral Test")).toBeInTheDocument();
       expect(screen.getByText(/Avaliação pendente/i)).toBeInTheDocument();
       expect(screen.getByText(/Aguardando resposta do candidato/i)).toBeInTheDocument();
+      expect(screen.getByText(/Portal do Candidato, em \/candidato\/portal/i)).toBeInTheDocument();
     });
+    expect(screen.queryByRole("button", { name: /Responder avaliação/i })).not.toBeInTheDocument();
   });
 
   it("displays submitted assessment with competencies and answers", async () => {

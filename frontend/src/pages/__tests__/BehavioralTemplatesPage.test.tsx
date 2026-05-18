@@ -5,6 +5,10 @@ import { BehavioralTemplatesPage } from "../BehavioralTemplatesPage";
 import * as behavioralTemplatesService from "../../services/behavioralTemplatesService";
 import * as toast from "../../shared/utils/toast";
 import * as templateImporter from "../../features/behavioral-templates/templateImporter";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 // Mock react-router useNavigate
 const mockNavigate = vi.fn();
@@ -99,7 +103,7 @@ describe("BehavioralTemplatesPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue(mockTemplates);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -117,7 +121,7 @@ describe("BehavioralTemplatesPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([]);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -157,7 +161,7 @@ describe("BehavioralTemplatesPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -211,7 +215,7 @@ describe("BehavioralTemplatesPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -250,7 +254,7 @@ describe("BehavioralTemplatesPage", () => {
     );
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -296,7 +300,7 @@ describe("BehavioralTemplatesPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -316,7 +320,7 @@ describe("BehavioralTemplatesPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([]);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -339,7 +343,7 @@ describe("BehavioralTemplatesPage", () => {
     );
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -380,7 +384,7 @@ describe("BehavioralTemplatesPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue(mockTemplates);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -398,7 +402,7 @@ describe("BehavioralTemplatesPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([]);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -418,7 +422,7 @@ describe("BehavioralTemplatesPage", () => {
     vi.mocked(templateImporter.importTemplateToApi).mockResolvedValue({ id: "imported-1" });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );
@@ -450,7 +454,7 @@ describe("BehavioralTemplatesPage", () => {
     vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockRejectedValue(apiError);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <BehavioralTemplatesPage />
       </MemoryRouter>
     );

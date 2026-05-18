@@ -1,13 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { CandidateEntryPage } from "../CandidateEntryPage";
 
 describe("CandidateEntryPage", () => {
   it("mantém os atalhos para cadastro e portal", () => {
     render(
-      <MemoryRouter initialEntries={["/candidato"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato"]}>
         <CandidateEntryPage />
       </MemoryRouter>
     );

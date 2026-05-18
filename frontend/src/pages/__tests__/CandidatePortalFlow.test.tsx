@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { CandidateEntryPage } from "../CandidateEntryPage";
 import { CandidateLoginPage } from "../CandidateLoginPage";
@@ -55,7 +59,7 @@ describe("Candidate portal flow", () => {
 
   it("renderiza entrada única do candidato com acesso para login e cadastro", () => {
     render(
-      <MemoryRouter initialEntries={["/candidato"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato"]}>
         <CandidateEntryPage />
       </MemoryRouter>
     );
@@ -72,7 +76,7 @@ describe("Candidate portal flow", () => {
 
   it("renderiza login e valida e-mail e senha obrigatórios", async () => {
     render(
-      <MemoryRouter initialEntries={["/candidato/login"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
         <CandidateLoginPage />
       </MemoryRouter>
     );
@@ -95,7 +99,7 @@ describe("Candidate portal flow", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/candidato/login"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
         <Routes>
           <Route path="/candidato/login" element={<CandidateLoginPage />} />
           <Route path="/candidato/portal" element={<div>Portal destino</div>} />
@@ -199,7 +203,7 @@ describe("Candidate portal flow", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/candidato/portal"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
         <Routes>
           <Route path="/candidato/portal" element={<CandidatePortalPage />} />
           <Route path="/candidato/login" element={<div>Login candidato</div>} />
@@ -212,6 +216,10 @@ describe("Candidate portal flow", () => {
     // Verify no internal scores are shown to public candidates
     expect(screen.queryByText(/score de ia/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/internal_notes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Observações")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Essas observações são internas e não ficam visíveis para o candidato."),
+    ).not.toBeInTheDocument();
   });
 
   it("redireciona candidato incompleto para completar cadastro", async () => {
@@ -231,7 +239,7 @@ describe("Candidate portal flow", () => {
     );
 
     render(
-      <MemoryRouter initialEntries={["/candidato/portal"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
         <Routes>
           <Route path="/candidato/portal" element={<CandidatePortalPage />} />
           <Route path="/candidato/cadastro" element={<div>Cadastro candidato</div>} />
@@ -288,6 +296,7 @@ describe("Candidate portal flow", () => {
       started_at: null,
       submitted_at: null,
       expires_at: null,
+      ai_evaluation_status: null,
       answered_count: 0,
       question_count: 3,
     };
@@ -315,7 +324,7 @@ describe("Candidate portal flow", () => {
               id: "question-scale",
               question_text: "De 1 a 5, como você avalia sua comunicação?",
               answer_type: "scale",
-              is_required: true,
+              is_required: false,
               display_order: 2,
               options_json: null,
               answer: null,
@@ -324,7 +333,7 @@ describe("Candidate portal flow", () => {
               id: "question-choice",
               question_text: "Qual estilo combina mais com você?",
               answer_type: "multiple_choice",
-              is_required: true,
+              is_required: false,
               display_order: 3,
               options_json: ["Direto", "Colaborativo"],
               answer: null,
@@ -368,7 +377,7 @@ describe("Candidate portal flow", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/candidato/portal"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
         <Routes>
           <Route path="/candidato/portal" element={<CandidatePortalPage />} />
           <Route path="/candidato/login" element={<div>Login candidato</div>} />
@@ -381,7 +390,28 @@ describe("Candidate portal flow", () => {
       expect(candidatePortalService.listBehavioralAssessments).toHaveBeenCalled();
     });
 
-    // Verify page renders without errors
-    expect(document.body).toBeInTheDocument();
+    expect(screen.getByText(/avaliação comportamental pendente/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /responder avaliação/i }).length).toBeGreaterThan(0);
+
+    // 1. Click redirect button on Home tab to go to "avaliacoes" tab
+    fireEvent.click(screen.getAllByRole("button", { name: /responder avaliação/i })[0]);
+
+    // 2. Wait for the tab to change and render the assessment card button
+    const cardButton = await screen.findByRole("button", { name: /responder avaliação/i });
+
+    // 3. Click the assessment card button to start the assessment
+    fireEvent.click(cardButton);
+
+    await waitFor(() => {
+      expect(candidatePortalService.startBehavioralAssessment).toHaveBeenCalledWith("assignment-1");
+    });
+
+    const textAnswer = screen.getByLabelText(/descreva uma situação de feedback\./i);
+    fireEvent.change(textAnswer, { target: { value: "Eu conduzi um feedback claro." } });
+
+    fireEvent.click(screen.getByRole("button", { name: /enviar avaliação/i }));
+    await waitFor(() => {
+      expect(candidatePortalService.submitBehavioralAssessment).toHaveBeenCalled();
+    });
   });
 });

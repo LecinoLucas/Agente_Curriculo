@@ -10,6 +10,9 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import MAX_FAILED_LOGINS, LOCKOUT_DURATION_MINUTES, User, UserRole
+
+# Fase 30B — anti brute-force (staff + candidato): segurança crítica.
+pytestmark = pytest.mark.smoke
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password

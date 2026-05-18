@@ -23,7 +23,6 @@ import {  getExplainabilityDeltaLine,
   getExplainabilityQuickLine,
   getTopExplainabilityInsights,
 } from "../../utils/explainabilityUi";
-import { getLatestAnalysisForActiveJob } from "../../utils/analysisStatus";
 
 export interface ScoreTabFocusRequest {
   intent: "analysis" | "review";
@@ -119,11 +118,11 @@ export function ScoreTab({
   const { user } = useAuth();
   const canSendMatchingFeedback = user?.role === "admin" || user?.role === "recruiter";
   const compatibilityScore = rankingEntry?.job_fit_score ?? null;
-  const latestActiveAnalysis = getLatestAnalysisForActiveJob(
-    overview.latest_analysis,
-    activeJobId,
-  );
-  // Use prop from parent (CandidateDrawer), only update locally for feedback
+  const activeAnalysisId = overview.active_job_decision?.current_analysis_id ?? null;
+  const activeAnalysisStatus = overview.active_job_decision?.analysis_status ?? null;
+  const currentAnalysisOverview =
+    overview.latest_analysis?.analysis_id === activeAnalysisId ? overview.latest_analysis : null;
+  // Use prop from parent workspace, only update locally for feedback.
   const [scoreExplanation, setScoreExplanation] = useState<ScoreExplanationResponse | null>(initialScoreExplanation);
   const [feedbackSaving, setFeedbackSaving] = useState<"liked" | "rejected" | "hired" | null>(null);
   const [showConfidenceDetails, setShowConfidenceDetails] = useState(false);
@@ -137,7 +136,7 @@ export function ScoreTab({
       reasonCode,
       jobDealBreakers: activeJob?.deal_breakers ?? [],
       candidate: overview.candidate,
-      latestAnalysis: latestActiveAnalysis,
+      latestAnalysis: currentAnalysisOverview,
       analysisResult,
     }),
   );
@@ -187,7 +186,7 @@ export function ScoreTab({
 
   const semantics = deriveScoreSemantics({
     jobFitScore: compatibilityScore,
-    aiStatus: latestActiveAnalysis?.status,
+    aiStatus: activeAnalysisStatus,
     hasActiveJob: Boolean(activeJobId),
     confidenceScore:
       scoreExplanation?.data_confidence_score ??

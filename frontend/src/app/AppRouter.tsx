@@ -21,6 +21,10 @@ const CandidatesPage = lazy(() =>
   import("../pages/CandidatesPage").then((m) => ({ default: m.CandidatesPage }))
 );
 
+const CandidateProfilePage = lazy(() =>
+  import("../pages/CandidateProfilePage").then((m) => ({ default: m.CandidateProfilePage }))
+);
+
 const VagasPage = lazy(() =>
   import("../pages/VagasPage").then((m) => ({ default: m.VagasPage }))
 );
@@ -195,6 +199,11 @@ export function AppRouter() {
         <Route
           path="candidatos"
           element={protectedPage(<CandidatesPage />, STAFF_ROLES)}
+        />
+
+        <Route
+          path="candidatos/:candidateId"
+          element={protectedPage(<CandidateProfilePage />, STAFF_ROLES)}
         />
 
         <Route

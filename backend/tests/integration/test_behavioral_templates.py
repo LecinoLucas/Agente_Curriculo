@@ -169,7 +169,19 @@ class TestBehavioralTemplates:
         await service.archive_template(to_uuid(template.id))
 
         job_id = uuid4()
-        with pytest.raises(ValidationException, match="Cannot link archived template"):
+        with pytest.raises(ValidationException, match="Only active templates can be linked"):
+            await service.link_template_to_job(job_id, to_uuid(template.id))
+
+    async def test_cannot_link_draft_template_to_job(self, db_session: AsyncSession) -> None:
+        """Test that draft templates cannot be linked to jobs."""
+        service = BehavioralTemplateService(SQLAlchemyBehavioralTemplateRepository(db_session))
+
+        template = await service.create_template(
+            BehavioralTemplateCreateRequest(name="Draft Template")
+        )
+
+        job_id = uuid4()
+        with pytest.raises(ValidationException, match="Only active templates can be linked"):
             await service.link_template_to_job(job_id, to_uuid(template.id))
 
     async def test_link_active_template_to_job(self, db_session: AsyncSession) -> None:

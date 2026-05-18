@@ -22,6 +22,7 @@ def mock_repository():
     repo = AsyncMock()
     repo.find_active_by_id = AsyncMock()
     repo.list_required_skill_rows = AsyncMock(return_value=[])
+    repo.get_behavioral_template_summary = AsyncMock(return_value=None)
     return repo
 
 
@@ -158,6 +159,69 @@ async def test_good_vaga_with_all_criteria(service, mock_repository):
     assert result.can_publish
     assert result.quality_score >= 75
     assert len(result.missing_fields) == 0
+
+
+@pytest.mark.asyncio
+async def test_requires_behavioral_without_template_blocks_publication(service, mock_repository):
+    job = _create_job()
+    job.requires_behavioral_assessment = True
+    job.behavioral_template_id = None
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "PostgreSQL", priority_level="priority", weight=1.0),
+    ]
+
+    result = await service.validate(job.id)
+
+    assert result.can_publish is False
+    assert "behavioral_template_id" in result.publication_blockers
+
+
+@pytest.mark.asyncio
+async def test_requires_behavioral_with_inactive_template_blocks_publication(service, mock_repository):
+    job = _create_job()
+    job.requires_behavioral_assessment = True
+    job.behavioral_template_id = uuid4()
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "PostgreSQL", priority_level="priority", weight=1.0),
+    ]
+    mock_repository.get_behavioral_template_summary.return_value = {
+        "id": job.behavioral_template_id,
+        "status": "draft",
+        "competency_count": 1,
+        "question_count": 2,
+    }
+
+    result = await service.validate(job.id)
+
+    assert result.can_publish is False
+    assert "behavioral_template_status" in result.publication_blockers
+
+
+@pytest.mark.asyncio
+async def test_requires_behavioral_with_template_without_questions_blocks_publication(service, mock_repository):
+    job = _create_job()
+    job.requires_behavioral_assessment = True
+    job.behavioral_template_id = uuid4()
+    mock_repository.find_active_by_id.return_value = job
+    mock_repository.list_required_skill_rows.return_value = [
+        _create_skill_row(uuid4(), "Python", priority_level="priority", weight=1.0),
+        _create_skill_row(uuid4(), "PostgreSQL", priority_level="priority", weight=1.0),
+    ]
+    mock_repository.get_behavioral_template_summary.return_value = {
+        "id": job.behavioral_template_id,
+        "status": "active",
+        "competency_count": 1,
+        "question_count": 0,
+    }
+
+    result = await service.validate(job.id)
+
+    assert result.can_publish is False
+    assert "behavioral_template_structure" in result.publication_blockers
 
 
 @pytest.mark.asyncio

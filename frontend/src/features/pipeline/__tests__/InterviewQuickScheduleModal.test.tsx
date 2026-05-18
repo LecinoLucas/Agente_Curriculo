@@ -1,6 +1,10 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { GOOGLE_CALENDAR_OAUTH_RESULT_EVENT } from "../../agenda/googleCalendarOAuth";
 import { InterviewQuickScheduleModal } from "../InterviewQuickScheduleModal";
@@ -27,7 +31,7 @@ describe("InterviewQuickScheduleModal", () => {
       });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <InterviewQuickScheduleModal
           candidateName="Pessoa Teste"
           jobTitle="Vaga Teste"

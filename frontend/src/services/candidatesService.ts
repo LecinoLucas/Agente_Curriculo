@@ -2,6 +2,7 @@ import {
   Candidate,
   CandidateLatestAnalysisOverview,
   CandidateListSummary,
+  CandidateNote,
   CandidateOverview,
   PipelineStage,
 } from "../types/domain";
@@ -30,6 +31,9 @@ export type CreateCandidatePayload = {
 };
 
 export type UpdateCandidatePayload = Partial<CreateCandidatePayload>;
+export type CandidateNotePayload = {
+  note_text: string;
+};
 export type DeleteCandidatePayload = {
   reason: string;
   note?: string;
@@ -126,6 +130,16 @@ function normalizeLatestAnalysisPipeline(
   };
 }
 
+function normalizeSkillPreview(
+  item: Partial<NonNullable<CandidateOverview["active_job_skill_preview"]>> | null | undefined,
+): CandidateOverview["active_job_skill_preview"] {
+  if (!item) return null;
+  return {
+    matched_skills: Array.isArray(item.matched_skills) ? item.matched_skills.filter(Boolean) : [],
+    attention_points: Array.isArray(item.attention_points) ? item.attention_points.filter(Boolean) : [],
+  };
+}
+
 function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candidate?: Partial<Candidate> }): CandidateOverview {
   const normalizedEntries = Array.isArray(item.pipeline_entries)
     ? item.pipeline_entries.map((entry) => ({
@@ -144,7 +158,13 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
 
   return {
     candidate: normalizeCandidate(item.candidate ?? {}),
-    resumes: Array.isArray(item.resumes) ? item.resumes : [],
+    resumes: Array.isArray(item.resumes)
+      ? item.resumes.map((resume) => ({
+          ...resume,
+          resume_url: resume.resume_url ?? null,
+          document_url: resume.document_url ?? null,
+        }))
+      : [],
     latest_analysis: item.latest_analysis ? normalizeLatestAnalysis(item.latest_analysis) : null,
     latest_analysis_pipeline: normalizeLatestAnalysisPipeline(item.latest_analysis_pipeline),
     top_matches: Array.isArray(item.top_matches) ? item.top_matches : [],
@@ -161,6 +181,11 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
           }
         : null,
     pipeline_entries: normalizedEntries,
+    active_job_decision: item.active_job_decision ?? null,
+    active_job_skill_preview: normalizeSkillPreview(item.active_job_skill_preview),
+    latest_note: item.latest_note ?? null,
+    preview_pendencies: Array.isArray(item.preview_pendencies) ? item.preview_pendencies : [],
+    latest_movement: item.latest_movement ?? null,
   };
 }
 
@@ -286,5 +311,33 @@ export const candidatesService = {
       candidate_status: item.candidate_status ?? "Em processo",
       updated_at: item.updated_at ?? new Date(0).toISOString(),
     }));
+  },
+
+  async listNotes(candidateId: string): Promise<CandidateNote[]> {
+    return httpRequest<CandidateNote[]>(`/api/v1/candidates/${candidateId}/notes`);
+  },
+
+  async createNote(candidateId: string, payload: CandidateNotePayload): Promise<CandidateNote> {
+    return httpRequest<CandidateNote>(`/api/v1/candidates/${candidateId}/notes`, {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  async updateNote(
+    candidateId: string,
+    noteId: string,
+    payload: CandidateNotePayload,
+  ): Promise<CandidateNote> {
+    return httpRequest<CandidateNote>(`/api/v1/candidates/${candidateId}/notes/${noteId}`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
+  async deleteNote(candidateId: string, noteId: string): Promise<void> {
+    return httpRequest<void>(`/api/v1/candidates/${candidateId}/notes/${noteId}`, {
+      method: "DELETE",
+    });
   },
 };

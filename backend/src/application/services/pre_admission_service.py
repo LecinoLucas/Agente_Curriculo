@@ -403,6 +403,7 @@ class PreAdmissionService:
         actor_type: str,
         actor_id: UUID | None = None,
         candidate_id: UUID | None = None,
+        actor_role: str | None = None,
     ) -> tuple[PreAdmissionDocumentModel, Path]:
         if actor_type not in {"candidate", "staff"}:
             raise ValidationException("Tipo de ator inválido.")
@@ -415,20 +416,26 @@ class PreAdmissionService:
             case = await self._repository.get_case(document.case_id)
             if case is None or case.status in TERMINAL_CASE_STATUSES:
                 raise NotFoundException("Documento não encontrado.")
-        path = resolve_pre_admission_document_path(document.storage_key)
+        try:
+            path = resolve_pre_admission_document_path(document.storage_key)
+        except (FileNotFoundError, ValueError) as exc:
+            raise NotFoundException("Arquivo não encontrado.") from exc
         if not path.exists():
             raise NotFoundException("Arquivo não encontrado.")
+        payload = {
+            "document_id": str(document.id),
+            "checklist_item_id": str(document.checklist_item_id),
+            "actor_type": actor_type,
+            "mime_type": document.mime_type,
+            "size_bytes": document.size_bytes,
+        }
+        if actor_role is not None:
+            payload["actor_role"] = actor_role
         await self._event(
             case_id=document.case_id,
             event_type="document_downloaded",
             actor_id=actor_id,
-            payload={
-                "document_id": str(document.id),
-                "checklist_item_id": str(document.checklist_item_id),
-                "actor_type": actor_type,
-                "mime_type": document.mime_type,
-                "size_bytes": document.size_bytes,
-            },
+            payload=payload,
         )
         return document, path
 

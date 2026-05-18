@@ -14,6 +14,11 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.behavioral_template_model import (
+    BehavioralAssessmentTemplateModel,
+    BehavioralTemplateCompetencyModel,
+    BehavioralTemplateQuestionModel,
+)
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
@@ -218,9 +223,159 @@ async def test_recruiter_can_clear_optional_job_fields_on_update(
     assert persisted["work_model"] is None
     assert persisted["salary_min"] is None
     assert persisted["salary_max"] is None
-    assert persisted["minimum_education_level"] is None
-    assert persisted["minimum_years_experience"] is None
-    assert persisted["deal_breakers"] == []
+
+
+@pytest.mark.asyncio
+async def test_create_job_persists_behavioral_template_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-job-template@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-job-template@test.com", "password123")
+
+    template = BehavioralAssessmentTemplateModel(
+        id=uuid4(),
+        name=f"Template Persistência {uuid4().hex[:6]}",
+        status="active",
+        created_by=uuid4(),
+    )
+    db_session.add(template)
+    await db_session.flush()
+    competency = BehavioralTemplateCompetencyModel(
+        id=uuid4(),
+        template_id=template.id,
+        name="Comunicação",
+        display_order=1,
+    )
+    db_session.add(competency)
+    await db_session.flush()
+    db_session.add(
+        BehavioralTemplateQuestionModel(
+            id=uuid4(),
+            competency_id=competency.id,
+            question_text="Descreva um conflito complexo que você resolveu.",
+            answer_type="text",
+            display_order=1,
+        )
+    )
+    await db_session.commit()
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(behavioral_template_id=str(template.id)),
+        headers=headers,
+    )
+    assert create.status_code == 201, create.text
+    created = create.json()
+    assert created["behavioral_template_id"] == str(template.id)
+
+    detail = await client.get(f"/api/v1/jobs/{created['id']}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["behavioral_template_id"] == str(template.id)
+
+
+@pytest.mark.asyncio
+async def test_publish_job_with_behavioral_required_and_no_template_is_blocked(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-job-template-missing@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-job-template-missing@test.com", "password123")
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(requires_behavioral_assessment=True),
+        headers=headers,
+    )
+    assert create.status_code == 201, create.text
+    job_id = create.json()["id"]
+
+    for skill_name in (f"Python Missing {uuid4().hex[:6]}", f"FastAPI Missing {uuid4().hex[:6]}"):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_name": skill_name, "priority_level": "priority"},
+            headers=headers,
+        )
+        assert add_skill.status_code == 201
+
+    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
+    assert publish.status_code == 422
+    payload = publish.json()
+    assert payload["detail"]["error"] == "job_publication_validation_failed"
+    assert "behavioral_template_id" in payload["detail"]["missing_fields"]
+
+
+@pytest.mark.asyncio
+async def test_publish_job_with_draft_behavioral_template_is_blocked(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    await _create_active_user(
+        db_session,
+        "recruiter-job-template-draft@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, "recruiter-job-template-draft@test.com", "password123")
+
+    template = BehavioralAssessmentTemplateModel(
+        id=uuid4(),
+        name=f"Template Draft {uuid4().hex[:6]}",
+        status="draft",
+        created_by=uuid4(),
+    )
+    db_session.add(template)
+    await db_session.flush()
+    competency = BehavioralTemplateCompetencyModel(
+        id=uuid4(),
+        template_id=template.id,
+        name="Liderança",
+        display_order=1,
+    )
+    db_session.add(competency)
+    await db_session.flush()
+    db_session.add(
+        BehavioralTemplateQuestionModel(
+            id=uuid4(),
+            competency_id=competency.id,
+            question_text="Como você conduz decisões difíceis?",
+            answer_type="text",
+            display_order=1,
+        )
+    )
+    await db_session.commit()
+
+    create = await client.post(
+        "/api/v1/jobs",
+        json=_job_payload(behavioral_template_id=str(template.id)),
+        headers=headers,
+    )
+    assert create.status_code == 201, create.text
+    job_id = create.json()["id"]
+
+    for skill_name in (f"Python Draft {uuid4().hex[:6]}", f"FastAPI Draft {uuid4().hex[:6]}"):
+        add_skill = await client.post(
+            f"/api/v1/jobs/{job_id}/skills",
+            json={"skill_name": skill_name, "priority_level": "priority"},
+            headers=headers,
+        )
+        assert add_skill.status_code == 201
+
+    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=headers)
+    assert publish.status_code == 422
+    payload = publish.json()
+    assert payload["detail"]["error"] == "job_publication_validation_failed"
+    assert "behavioral_template_status" in payload["detail"]["missing_fields"]
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,10 @@ from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Fase 30B — candidatura pública: caminho crítico end-user. Cobre LGPD,
+# validações obrigatórias e fluxo de criação. Smoke obrigatório.
+pytestmark = pytest.mark.smoke
+
 from src.infrastructure.database.models.analysis_model import AIModelModel, AnalysisModel, PromptTemplateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,

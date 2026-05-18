@@ -23,6 +23,7 @@ from src.infrastructure.database.connection import check_database_health, engine
 from src.interface.api.middlewares.audit_middleware import AuditMiddleware
 from src.interface.api.middlewares.request_id_middleware import RequestIDMiddleware
 from src.interface.api.routers import (
+    admin_behavioral_ai,
     admin_diagnostics,
     admin_bi,
     admin_audit_logs,
@@ -100,6 +101,7 @@ app.include_router(admin_diagnostics.router, prefix=_PREFIX)
 app.include_router(admin_audit_logs.router, prefix=_PREFIX)
 app.include_router(admin_system_health.router, prefix=_PREFIX)
 app.include_router(admin_notifications.router, prefix=_PREFIX)
+app.include_router(admin_behavioral_ai.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(communications.router, prefix=_PREFIX)
 app.include_router(resumes.router, prefix=_PREFIX)

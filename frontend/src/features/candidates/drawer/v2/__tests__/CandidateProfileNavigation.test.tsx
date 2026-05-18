@@ -17,6 +17,16 @@ describe("CandidateProfileNavigation", () => {
     expect(screen.getByText("Resumo")).toBeInTheDocument();
   });
 
+  it("should render observacoes tab for internal drawer", () => {
+    render(<CandidateProfileNavigation {...defaultProps} />);
+    expect(screen.getByText("Observações")).toBeInTheDocument();
+  });
+
+  it("should hide observacoes tab for candidate role", () => {
+    render(<CandidateProfileNavigation {...defaultProps} userRole="candidate" />);
+    expect(screen.queryByText("Observações")).not.toBeInTheDocument();
+  });
+
   it("should show limited tabs when no context provided", () => {
     const { container } = render(
       <CandidateProfileNavigation

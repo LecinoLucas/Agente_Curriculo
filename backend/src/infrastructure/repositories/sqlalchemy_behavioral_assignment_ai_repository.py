@@ -39,6 +39,7 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
             provider="anthropic",
             model=model,
             prompt_version=1,
+            requested_at=datetime.now(UTC),
         )
         self.session.add(evaluation)
         await self.session.flush()
@@ -51,6 +52,16 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
         """Fetch evaluation by assignment ID."""
         stmt = sa.select(BehavioralAssessmentAIEvaluationModel).where(
             BehavioralAssessmentAIEvaluationModel.assignment_id == assignment_id
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_evaluation_by_id(
+        self,
+        evaluation_id: UUID,
+    ) -> Optional[BehavioralAssessmentAIEvaluationModel]:
+        stmt = sa.select(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.id == evaluation_id
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -75,6 +86,33 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
             template_id=template_id,
             model=model,
         )
+
+    async def mark_pending_for_retry(
+        self,
+        evaluation: BehavioralAssessmentAIEvaluationModel,
+    ) -> BehavioralAssessmentAIEvaluationModel:
+        now = datetime.now(UTC)
+        evaluation.status = "pending"
+        evaluation.error_message = None
+        evaluation.completed_at = None
+        evaluation.failed_at = None
+        evaluation.started_at = None
+        evaluation.queued_at = None
+        evaluation.task_id = None
+        evaluation.retry_count = (evaluation.retry_count or 0) + 1
+        evaluation.updated_at = now
+        await self.session.flush()
+        return evaluation
+
+    async def mark_queued(
+        self,
+        evaluation: BehavioralAssessmentAIEvaluationModel,
+    ) -> BehavioralAssessmentAIEvaluationModel:
+        now = datetime.now(UTC)
+        evaluation.queued_at = now
+        evaluation.updated_at = now
+        await self.session.flush()
+        return evaluation
 
     async def update_status(
         self,

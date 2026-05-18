@@ -103,6 +103,7 @@ export interface BehavioralAssignmentSummary {
   started_at: string | null;
   submitted_at: string | null;
   expires_at: string | null;
+  ai_evaluation_status?: "pending" | "processing" | "completed" | "failed" | null;
   answered_count: number;
   question_count: number;
 }

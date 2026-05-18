@@ -24,10 +24,10 @@ from src.infrastructure.database.models.pre_admission_model import (
 from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
 
 from .test_hiring_decisions import (
-    _add_submitted_scorecard,
     _create_decision,
     _recruiter_headers,
     _seed_candidate_job,
+    seed_candidate_ready_for_hire,
 )
 
 
@@ -38,7 +38,7 @@ async def _create_hire_decision(
     job_id: UUID,
     candidate_id: UUID,
 ) -> dict:
-    await _add_submitted_scorecard(db_session, job_id=job_id, candidate_id=candidate_id)
+    await seed_candidate_ready_for_hire(db_session, job_id=job_id, candidate_id=candidate_id)
     return await _create_decision(
         client,
         headers,
@@ -105,6 +105,7 @@ async def _seed_pre_admission_with_item(
 ) -> tuple[dict[str, str], UUID, UUID, dict, dict]:
     headers = await _recruiter_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _complete_candidate_portal_profile(db_session, candidate_id)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     case = await _create_pre_admission(client, headers, job_id, candidate_id)
     item = await _create_checklist_item(client, headers, case["id"])
@@ -121,6 +122,18 @@ def _pdf_upload(filename: str = "cpf.pdf") -> dict:
     }
 
 
+async def _complete_candidate_portal_profile(db_session: AsyncSession, candidate_id: UUID) -> CandidateModel:
+    candidate = await db_session.get(CandidateModel, candidate_id)
+    assert candidate is not None
+    candidate.phone = "11999999999"
+    candidate.cpf = f"{uuid4().int % 10**11:011d}"
+    candidate.salary_expectation = "12000.00"
+    candidate.lgpd_consent_at = datetime.now(UTC)
+    candidate.lgpd_consent_version = "test-v1"
+    await db_session.commit()
+    return candidate
+
+
 async def _create_plain_candidate(db_session: AsyncSession) -> CandidateModel:
     candidate = CandidateModel(
         id=uuid4(),
@@ -128,9 +141,12 @@ async def _create_plain_candidate(db_session: AsyncSession) -> CandidateModel:
         email=f"pre-admission-portal-{uuid4().hex}@example.com",
         cpf=f"{uuid4().int % 10**11:011d}",
         phone="11999999999",
+        salary_expectation="12000.00",
         location_city="São Paulo",
         location_state="SP",
         location_country="BR",
+        lgpd_consent_at=datetime.now(UTC),
+        lgpd_consent_version="test-v1",
         created_by=uuid4(),
         application_source="manual",
     )
@@ -392,7 +408,7 @@ async def test_candidate_cannot_access_other_candidate_pre_admission(
 
     response = await client.get(f"/api/v1/candidate-portal/pre-admission/{case['id']}")
 
-    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
@@ -595,7 +611,7 @@ async def test_pre_admission_document_download_respects_authorization(
 
     assert own_download.status_code == status.HTTP_200_OK
     assert admin_download.status_code == status.HTTP_200_OK
-    assert forbidden.status_code == status.HTTP_404_NOT_FOUND
+    assert forbidden.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio

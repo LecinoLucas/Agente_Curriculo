@@ -23,9 +23,13 @@ import { useCandidateData } from "../useCandidateData";
 const overview = {
   candidate: { id: "candidate-1" },
   latest_analysis: {
-    analysis_id: "analysis-1",
+    analysis_id: "analysis-old",
     status: "completed",
-    job_id: "job-1",
+    job_id: "job-old",
+  },
+  active_job_decision: {
+    current_analysis_id: "analysis-1",
+    analysis_status: "completed",
   },
 } as never;
 

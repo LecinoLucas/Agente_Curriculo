@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from src.core.settings import settings
 from src.observability.logging import configure_structured_logging
@@ -15,6 +16,7 @@ celery_app = Celery(
         "src.interface.workers.matching_tasks",
         "src.interface.workers.document_ai_tasks",
         "src.interface.workers.resume_extraction_tasks",
+        "src.interface.workers.behavioral_ai_tasks",
     ],
 )
 
@@ -64,6 +66,8 @@ celery_app.conf.update(
         "src.interface.workers.matching_tasks.*": {"queue": "matching"},
         "src.interface.workers.document_ai_tasks.*": {"queue": "document_ai"},
         "src.interface.workers.resume_extraction_tasks.*": {"queue": "extraction"},
+        "src.interface.workers.behavioral_ai_tasks.*": {"queue": "behavioral_ai"},
+        "behavioral_ai.detect_stuck_evaluations": {"queue": "behavioral_ai"},
     },
 
     # ─────────────────────────────────────────
@@ -91,6 +95,21 @@ celery_app.conf.update(
         "src.interface.workers.resume_extraction_tasks.process_resume_extraction": {
             "max_retries": 0,
             "time_limit": 180,
+        },
+        "src.interface.workers.behavioral_ai_tasks.process_behavioral_ai_evaluation": {
+            "max_retries": 2,
+            "default_retry_delay": 15,
+            "time_limit": 120,
+        },
+        "behavioral_ai.detect_stuck_evaluations": {
+            "max_retries": 0,
+            "time_limit": 60,
+        },
+    },
+    beat_schedule={
+        "behavioral-ai-stuck-detection-every-15min": {
+            "task": "behavioral_ai.detect_stuck_evaluations",
+            "schedule": crontab(minute="*/15"),
         },
     },
 

@@ -197,6 +197,7 @@ class CreateJobRequest(APISchemaModel):
     behavioral_requirements: list[str] = Field(default_factory=list)
     priority: JOB_PRIORITY = "normal"
     skill_requirements: dict[str, list[str]] | None = None
+    behavioral_template_id: UUID | None = None
     selection_flow_type: SELECTION_FLOW_TYPE | None = None
     requires_behavioral_assessment: bool | None = None
     requires_behavioral_ai_evaluation: bool | None = None

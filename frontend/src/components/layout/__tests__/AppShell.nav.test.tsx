@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 const { mockUseAuth, mockUsePipeline, mockUseTheme } = vi.hoisted(() => ({
   mockUseAuth: vi.fn(),
@@ -32,7 +36,7 @@ function renderShell(role: string) {
   mockUseTheme.mockReturnValue({ theme: "light", toggleTheme: vi.fn() });
 
   return render(
-    <MemoryRouter initialEntries={["/dashboard"]}>
+    <MemoryRouter future={routerFuture} initialEntries={["/dashboard"]}>
       <NotificationsProvider>
         <AppShell />
       </NotificationsProvider>

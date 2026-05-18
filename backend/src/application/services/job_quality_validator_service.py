@@ -98,10 +98,21 @@ class JobQualityValidatorService:
             for row in skill_rows
         ]
 
-        return self._evaluate(job, skills)
+        behavioral_template_summary = None
+        if job.behavioral_template_id is not None:
+            behavioral_template_summary = await self._repository.get_behavioral_template_summary(
+                job.behavioral_template_id
+            )
+
+        return self._evaluate(job, skills, behavioral_template_summary=behavioral_template_summary)
 
     @staticmethod
-    def _evaluate(job: JobModel, skills: list[dict]) -> JobQualityResult:
+    def _evaluate(
+        job: JobModel,
+        skills: list[dict],
+        *,
+        behavioral_template_summary: dict | None = None,
+    ) -> JobQualityResult:
         """Evaluate job quality based on completeness and configuration.
 
         Scoring:
@@ -292,6 +303,36 @@ class JobQualityValidatorService:
             publication_blockers.append("skill_requirements")
             validation_errors.extend(skill_requirements_validation.errors)
             suggestions.extend(skill_requirements_validation.errors)
+
+        if job.requires_behavioral_assessment:
+            if job.behavioral_template_id is None:
+                publication_blockers.append("behavioral_template_id")
+                validation_errors.append(
+                    "A vaga exige avaliação comportamental e precisa de template ativo vinculado."
+                )
+                warnings.append(
+                    "A vaga exige avaliação comportamental, mas não possui template vinculado."
+                )
+                suggestions.append(
+                    "Vincule um template comportamental ativo para liberar avaliações no portal do candidato."
+                )
+            elif behavioral_template_summary is None:
+                publication_blockers.append("behavioral_template_id")
+                validation_errors.append("Template comportamental vinculado não foi encontrado.")
+            else:
+                status = str(behavioral_template_summary.get("status") or "")
+                competency_count = int(behavioral_template_summary.get("competency_count") or 0)
+                question_count = int(behavioral_template_summary.get("question_count") or 0)
+                if status != "active":
+                    publication_blockers.append("behavioral_template_status")
+                    validation_errors.append(
+                        "Template comportamental vinculado precisa estar com status active."
+                    )
+                if competency_count <= 0 or question_count <= 0:
+                    publication_blockers.append("behavioral_template_structure")
+                    validation_errors.append(
+                        "Template comportamental vinculado precisa ter competências e perguntas."
+                    )
 
         # Determine status and can_publish
         status = "weak" if score < 50 else ("acceptable" if score < 75 else "good")

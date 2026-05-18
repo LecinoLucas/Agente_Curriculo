@@ -15,17 +15,19 @@ IA failures are non-blocking.
 """
 
 import json
-import logging
 import re
+from datetime import timedelta
 from datetime import UTC, datetime
 from typing import Optional
 from uuid import UUID
 
 import sqlalchemy as sa
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIService
 from src.core.settings import settings
+from src.core.log_sanitizer import sanitize_log_text
 from src.domain.exceptions import ValidationException
 from src.infrastructure.database.models import (
     BehavioralAssessmentAIEvaluationModel,
@@ -38,7 +40,10 @@ from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_ai_reposit
     SQLAlchemyBehavioralAssignmentAIRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
+
+_BEHAVIORAL_AI_PROCESSING_STUCK_AFTER = timedelta(minutes=30)
+_BEHAVIORAL_AI_PENDING_STALE_AFTER = timedelta(hours=2)
 
 # Prohibited clinical/diagnostic language
 PROHIBITED_TERMS = {
@@ -62,7 +67,7 @@ PROHIBITED_TERMS = {
 class BehavioralAIEvaluationService:
     """Manages IA evaluation of behavioral assessment responses."""
 
-    def __init__(self, session: AsyncSession, ai_service: AIService):
+    def __init__(self, session: AsyncSession, ai_service: AIService | None = None):
         self.session = session
         self.ai_service = ai_service
         self.repository = SQLAlchemyBehavioralAssignmentAIRepository(session)
@@ -88,24 +93,81 @@ class BehavioralAIEvaluationService:
                 f"Cannot evaluate assignment in '{assignment.status}' status. Only 'submitted' assignments can be evaluated."
             )
 
-        # Check for existing completed evaluation
-        existing = await self.repository.get_evaluation(assignment_id)
-        if existing and existing.status == "completed":
-            logger.info(f"Reusing completed evaluation for assignment {assignment_id}")
-            return existing
-
-        # Create or update evaluation record as pending
-        evaluation = await self.repository.get_or_create_evaluation(
-            assignment_id=assignment_id,
-            candidate_id=candidate_id,
-            job_id=job_id,
-            template_id=assignment.template_id,
+        evaluation, should_process = await self._prepare_evaluation_record(
+            assignment=assignment,
+            retry_failed=True,
+            enqueue_mode=False,
         )
 
-        # Trigger IA evaluation async (non-blocking)
-        await self._evaluate_async(evaluation, assignment)
+        if should_process:
+            # Trigger IA evaluation in-process (legacy/service path)
+            await self._evaluate_async(evaluation, assignment)
 
         return evaluation
+
+    async def request_evaluation(
+        self,
+        *,
+        job_id: UUID,
+        candidate_id: UUID,
+        assignment_id: UUID,
+        retry_failed: bool = False,
+    ) -> tuple[BehavioralAssessmentAIEvaluationModel, bool]:
+        """Prepare evaluation record and indicate whether worker enqueue is required."""
+        assignment = await self._fetch_assignment(assignment_id, job_id, candidate_id)
+
+        if assignment.status != "submitted":
+            raise ValidationException(
+                f"Cannot evaluate assignment in '{assignment.status}' status. Only 'submitted' assignments can be evaluated."
+            )
+
+        return await self._prepare_evaluation_record(
+            assignment=assignment,
+            retry_failed=retry_failed,
+            enqueue_mode=True,
+        )
+
+    async def mark_enqueued(
+        self,
+        evaluation: BehavioralAssessmentAIEvaluationModel,
+    ) -> BehavioralAssessmentAIEvaluationModel:
+        return await self.repository.mark_queued(evaluation)
+
+    async def process_evaluation(
+        self,
+        *,
+        evaluation_id: UUID,
+        task_id: str | None = None,
+    ) -> BehavioralAssessmentAIEvaluationModel | None:
+        if self.ai_service is None:
+            raise RuntimeError("AI service is required to process behavioral evaluation")
+
+        evaluation = await self.repository.get_evaluation_by_id(evaluation_id)
+        if evaluation is None:
+            return None
+        if evaluation.status == "completed":
+            return evaluation
+        if evaluation.status == "processing":
+            return evaluation
+
+        assignment = await self._fetch_assignment(
+            assignment_id=evaluation.assignment_id,
+            job_id=evaluation.job_id,
+            candidate_id=evaluation.candidate_id,
+        )
+        if assignment.status != "submitted":
+            await self._save_failed_evaluation(
+                evaluation,
+                "Assignment is not submitted for behavioral AI evaluation.",
+            )
+            return evaluation
+
+        await self._evaluate_async(evaluation, assignment, task_id=task_id)
+        refreshed = await self.repository.get_evaluation_by_id(evaluation_id)
+        return refreshed or evaluation
+
+    async def get_evaluation_by_id(self, evaluation_id: UUID) -> Optional[BehavioralAssessmentAIEvaluationModel]:
+        return await self.repository.get_evaluation_by_id(evaluation_id)
 
     async def get_evaluation(
         self,
@@ -116,7 +178,181 @@ class BehavioralAIEvaluationService:
         """Fetch evaluation record if exists."""
         return await self.repository.get_evaluation(assignment_id)
 
+    async def list_stuck_behavioral_ai_evaluations(
+        self,
+        *,
+        limit: int = 200,
+    ) -> list[BehavioralAssessmentAIEvaluationModel]:
+        now = datetime.now(UTC)
+        processing_threshold = now - _BEHAVIORAL_AI_PROCESSING_STUCK_AFTER
+        pending_threshold = now - _BEHAVIORAL_AI_PENDING_STALE_AFTER
+
+        stmt = (
+            sa.select(BehavioralAssessmentAIEvaluationModel)
+            .where(
+                sa.or_(
+                    sa.and_(
+                        BehavioralAssessmentAIEvaluationModel.status == "processing",
+                        sa.or_(
+                            BehavioralAssessmentAIEvaluationModel.started_at < processing_threshold,
+                            sa.and_(
+                                BehavioralAssessmentAIEvaluationModel.started_at.is_(None),
+                                BehavioralAssessmentAIEvaluationModel.updated_at < processing_threshold,
+                            ),
+                        ),
+                    ),
+                    sa.and_(
+                        BehavioralAssessmentAIEvaluationModel.status == "pending",
+                        BehavioralAssessmentAIEvaluationModel.updated_at < pending_threshold,
+                    ),
+                )
+            )
+            .order_by(BehavioralAssessmentAIEvaluationModel.updated_at.asc())
+            .limit(max(1, min(limit, 1000)))
+        )
+        result = await self.session.execute(stmt)
+        stuck = list(result.scalars().all())
+        for evaluation in stuck:
+            logger.warning(
+                "behavioral_ai.stuck_detected",
+                evaluation_id=str(evaluation.id),
+                assignment_id=str(evaluation.assignment_id),
+                status=evaluation.status,
+                started_at=evaluation.started_at.isoformat() if evaluation.started_at else None,
+                updated_at=evaluation.updated_at.isoformat() if evaluation.updated_at else None,
+            )
+        return stuck
+
+    async def mark_stuck_as_failed(
+        self,
+        *,
+        limit: int = 200,
+        stuck_evaluations: list[BehavioralAssessmentAIEvaluationModel] | None = None,
+    ) -> int:
+        now = datetime.now(UTC)
+        stuck = (
+            stuck_evaluations
+            if stuck_evaluations is not None
+            else await self.list_stuck_behavioral_ai_evaluations(limit=limit)
+        )
+        for evaluation in stuck:
+            reason = (
+                "behavioral_ai_stuck_processing_timeout"
+                if evaluation.status == "processing"
+                else "behavioral_ai_stale_pending_timeout"
+            )
+            evaluation.status = "failed"
+            evaluation.error_message = reason
+            evaluation.failed_at = now
+            evaluation.updated_at = now
+        if stuck:
+            await self.session.flush()
+        return len(stuck)
+
+    async def retry_failed_or_stuck(
+        self,
+        *,
+        evaluation_id: UUID,
+    ) -> tuple[BehavioralAssessmentAIEvaluationModel, bool]:
+        evaluation = await self.repository.get_evaluation_by_id(evaluation_id)
+        if evaluation is None:
+            raise ValidationException("Behavioral AI evaluation not found")
+
+        is_stuck = self._is_stuck(evaluation, now=datetime.now(UTC))
+        if evaluation.status == "completed":
+            raise ValidationException("Completed evaluation cannot be retried")
+        if evaluation.status in {"pending", "processing"} and not is_stuck:
+            logger.info(
+                "behavioral_ai.enqueue_skipped_existing_status",
+                evaluation_id=str(evaluation.id),
+                assignment_id=str(evaluation.assignment_id),
+                status=evaluation.status,
+            )
+            return evaluation, False
+        if evaluation.status not in {"failed", "pending", "processing"} and not is_stuck:
+            raise ValidationException(f"Retry not allowed for status '{evaluation.status}'")
+
+        logger.info(
+            "behavioral_ai.retry_requested",
+            evaluation_id=str(evaluation.id),
+            assignment_id=str(evaluation.assignment_id),
+            status=evaluation.status,
+            stuck=is_stuck,
+        )
+        await self.repository.mark_pending_for_retry(evaluation)
+        return evaluation, True
+
+    async def get_operational_metrics(self) -> dict[str, int]:
+        now = datetime.now(UTC)
+        last_24h = now - timedelta(hours=24)
+
+        pending_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.status == "pending"
+        )
+        processing_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.status == "processing"
+        )
+        completed_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.status == "completed",
+            BehavioralAssessmentAIEvaluationModel.completed_at >= last_24h,
+        )
+        failed_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.status == "failed",
+            sa.func.coalesce(
+                BehavioralAssessmentAIEvaluationModel.failed_at,
+                BehavioralAssessmentAIEvaluationModel.updated_at,
+            )
+            >= last_24h,
+        )
+        stuck_count_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            sa.or_(
+                sa.and_(
+                    BehavioralAssessmentAIEvaluationModel.status == "processing",
+                    sa.or_(
+                        BehavioralAssessmentAIEvaluationModel.started_at
+                        < (now - _BEHAVIORAL_AI_PROCESSING_STUCK_AFTER),
+                        sa.and_(
+                            BehavioralAssessmentAIEvaluationModel.started_at.is_(None),
+                            BehavioralAssessmentAIEvaluationModel.updated_at
+                            < (now - _BEHAVIORAL_AI_PROCESSING_STUCK_AFTER),
+                        ),
+                    ),
+                ),
+                sa.and_(
+                    BehavioralAssessmentAIEvaluationModel.status == "pending",
+                    BehavioralAssessmentAIEvaluationModel.updated_at < (now - _BEHAVIORAL_AI_PENDING_STALE_AFTER),
+                ),
+            )
+        )
+
+        pending = int((await self.session.scalar(pending_stmt)) or 0)
+        processing = int((await self.session.scalar(processing_stmt)) or 0)
+        completed_24h = int((await self.session.scalar(completed_stmt)) or 0)
+        failed_24h = int((await self.session.scalar(failed_stmt)) or 0)
+        stuck = int((await self.session.scalar(stuck_count_stmt)) or 0)
+
+        return {
+            "pending": pending,
+            "processing": processing,
+            "completed_last_24h": completed_24h,
+            "failed_last_24h": failed_24h,
+            "stuck": stuck,
+        }
+
     # Private methods
+
+    @staticmethod
+    def _is_stuck(
+        evaluation: BehavioralAssessmentAIEvaluationModel,
+        *,
+        now: datetime,
+    ) -> bool:
+        if evaluation.status == "processing":
+            reference = evaluation.started_at or evaluation.updated_at
+            return reference < (now - _BEHAVIORAL_AI_PROCESSING_STUCK_AFTER)
+        if evaluation.status == "pending":
+            return evaluation.updated_at < (now - _BEHAVIORAL_AI_PENDING_STALE_AFTER)
+        return False
 
     async def _fetch_assignment(
         self,
@@ -140,16 +376,98 @@ class BehavioralAIEvaluationService:
 
         return assignment
 
+    async def _prepare_evaluation_record(
+        self,
+        *,
+        assignment: BehavioralAssessmentAssignmentModel,
+        retry_failed: bool,
+        enqueue_mode: bool,
+    ) -> tuple[BehavioralAssessmentAIEvaluationModel, bool]:
+        existing = await self.repository.get_evaluation(assignment.id)
+        if existing is not None:
+            if existing.status == "completed":
+                logger.info(
+                    "behavioral_ai.enqueue_skipped_existing_status",
+                    assignment_id=str(assignment.id),
+                    evaluation_id=str(existing.id),
+                    status=existing.status,
+                )
+                return existing, False
+            if existing.status == "processing":
+                logger.info(
+                    "behavioral_ai.enqueue_skipped_existing_status",
+                    assignment_id=str(assignment.id),
+                    evaluation_id=str(existing.id),
+                    status=existing.status,
+                )
+                return existing, False
+            if existing.status == "pending" and enqueue_mode:
+                logger.info(
+                    "behavioral_ai.enqueue_skipped_existing_status",
+                    assignment_id=str(assignment.id),
+                    evaluation_id=str(existing.id),
+                    status=existing.status,
+                )
+                return existing, False
+            if existing.status == "failed":
+                if not retry_failed:
+                    logger.info(
+                        "behavioral_ai.enqueue_skipped_existing_status",
+                        assignment_id=str(assignment.id),
+                        evaluation_id=str(existing.id),
+                        status=existing.status,
+                    )
+                    return existing, False
+                logger.info(
+                    "behavioral_ai.retry_requested",
+                    assignment_id=str(assignment.id),
+                    evaluation_id=str(existing.id),
+                    status=existing.status,
+                )
+                await self.repository.mark_pending_for_retry(existing)
+                return existing, True
+            logger.info(
+                "behavioral_ai.enqueue_skipped_existing_status",
+                assignment_id=str(assignment.id),
+                evaluation_id=str(existing.id),
+                status=existing.status,
+            )
+            return existing, False
+
+        created = await self.repository.create_evaluation(
+            assignment_id=assignment.id,
+            candidate_id=assignment.candidate_id,
+            job_id=assignment.job_id,
+            template_id=assignment.template_id,
+            model=settings.AI_MODEL_ID,
+        )
+        return created, True
+
     async def _evaluate_async(
         self,
         evaluation: BehavioralAssessmentAIEvaluationModel,
         assignment: BehavioralAssessmentAssignmentModel,
+        *,
+        task_id: str | None = None,
     ) -> None:
         """Execute IA evaluation using Gemini (non-blocking)."""
+        if self.ai_service is None:
+            raise RuntimeError("AI service is required to run behavioral evaluation")
         try:
+            now = datetime.now(UTC)
             # Update status to processing
             evaluation.status = "processing"
-            evaluation.updated_at = datetime.now(UTC)
+            evaluation.started_at = evaluation.started_at or now
+            evaluation.failed_at = None
+            evaluation.task_id = task_id or evaluation.task_id
+            evaluation.updated_at = now
+            logger.info(
+                "behavioral_ai.task_started",
+                evaluation_id=str(evaluation.id),
+                assignment_id=str(assignment.id),
+                task_id=evaluation.task_id,
+                retry_count=int(evaluation.retry_count or 0),
+            )
             await self.session.commit()
 
             # Fetch competencies, questions, answers
@@ -192,8 +510,14 @@ class BehavioralAIEvaluationService:
             )
 
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Error evaluating assignment {assignment.id}: {error_msg}")
+            error_msg = sanitize_log_text(str(e)) or type(e).__name__
+            logger.error(
+                "behavioral_ai.task_failed",
+                evaluation_id=str(evaluation.id),
+                assignment_id=str(assignment.id),
+                task_id=task_id or evaluation.task_id,
+                error=error_msg,
+            )
             await self._save_failed_evaluation(evaluation, error_msg)
 
     async def _fetch_competencies(
@@ -373,11 +697,20 @@ Responda com JSON válido neste formato exato:
         evaluation.suggested_interview_questions_json = data.get("suggested_interview_questions", [])
         evaluation.risk_flags_json = data.get("risk_flags", [])
         evaluation.error_message = None
-        evaluation.completed_at = datetime.now(UTC)
-        evaluation.updated_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        evaluation.completed_at = now
+        evaluation.failed_at = None
+        evaluation.updated_at = now
 
         await self.session.commit()
-        logger.info(f"Saved completed evaluation for assignment {evaluation.assignment_id} using {provider}/{model}")
+        logger.info(
+            "behavioral_ai.task_completed",
+            evaluation_id=str(evaluation.id),
+            assignment_id=str(evaluation.assignment_id),
+            status=evaluation.status,
+            provider=provider,
+            model=model or settings.AI_MODEL_ID,
+        )
 
     async def _save_failed_evaluation(
         self,
@@ -385,9 +718,17 @@ Responda com JSON válido neste formato exato:
         error_message: str,
     ) -> None:
         """Save failed evaluation."""
+        now = datetime.now(UTC)
         evaluation.status = "failed"
-        evaluation.error_message = error_message
-        evaluation.updated_at = datetime.now(UTC)
+        evaluation.error_message = (sanitize_log_text(error_message) or "behavioral_ai_failed")[:2000]
+        evaluation.failed_at = now
+        evaluation.updated_at = now
 
         await self.session.commit()
-        logger.error(f"Saved failed evaluation for assignment {evaluation.assignment_id}: {error_message}")
+        logger.error(
+            "behavioral_ai.task_failed",
+            evaluation_id=str(evaluation.id),
+            assignment_id=str(evaluation.assignment_id),
+            status=evaluation.status,
+            error=evaluation.error_message,
+        )

@@ -234,6 +234,24 @@ async def apply(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao processar candidatura",
         )
+    except HTTPException:
+        # Re-raise FastAPI HTTPException sem reescrever para não mascarar status.
+        await db.rollback()
+        raise
+    except Exception as exc:
+        # Catch-all defensivo: qualquer erro inesperado (S3, Celery init, Redis,
+        # encoding, etc.) precisa ser logado com traceback completo e devolvido
+        # como 500 limpo, em vez de propagar uma stacktrace nua para o navegador
+        # ou derrubar a conexão.
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        logger.exception("public_apply.unhandled_error", exc_info=exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro inesperado ao processar candidatura. Tente novamente em instantes.",
+        )
 
 
 @router.post("/candidate-auth/google", response_model=CandidateAuthGoogleResponse)
@@ -337,19 +355,25 @@ async def login_candidate_portal(
         )
 
 
-@router.post("/candidate-auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/candidate-auth/logout")
 async def logout_candidate_portal(
     request: Request,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    """Logout idempotente: sempre responde 204 + limpa cookie, mesmo sem
+    sessão válida ou se a invalidação no banco falhar."""
+    token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
     try:
-        token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
         await CandidatePortalAuthService(db).logout(token)
         await db.commit()
     except Exception:
-        await db.rollback()
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         logger.exception("candidate_portal.logout_failed")
+
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(CANDIDATE_PORTAL_COOKIE_NAME, path="/")
     return response
 

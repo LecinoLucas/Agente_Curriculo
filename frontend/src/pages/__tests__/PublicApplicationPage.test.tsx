@@ -1,10 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { PublicApplicationPage } from "../PublicApplicationPage";
 import { candidateAuthService } from "../../services/candidateAuthService";
 import { publicApplicationService } from "../../features/public-application/services/publicApplicationService";
+import { __resetGoogleIdentityForTests } from "../../services/googleIdentityService";
 
 vi.mock("../../services/candidateAuthService", () => ({
   candidateAuthService: {
@@ -58,11 +63,12 @@ async function advanceToJobResume() {
   fireEvent.change(screen.getByLabelText(/^senha/i), { target: { value: "SenhaSegura123" } });
   fireEvent.change(screen.getByLabelText(/confirmar senha/i), { target: { value: "SenhaSegura123" } });
   fireEvent.click(screen.getByRole("button", { name: /continuar/i }));
+  await screen.findByText(/Nenhuma vaga publicada no momento/i);
 }
 
 function renderPage(initialEntry = "/candidato/cadastro") {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter future={routerFuture} initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/candidato/cadastro" element={<PublicApplicationPage />} />
         <Route path="/candidato/portal" element={<div>Portal destino</div>} />
@@ -75,6 +81,8 @@ describe("PublicApplicationPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    delete window.google;
+    __resetGoogleIdentityForTests();
     vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "frontend-client-id.apps.googleusercontent.com");
     installGoogleMock();
     (publicApplicationService.listPublishedJobs as any).mockResolvedValue([]);

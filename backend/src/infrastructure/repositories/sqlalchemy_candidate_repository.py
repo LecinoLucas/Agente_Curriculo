@@ -14,14 +14,24 @@ from src.infrastructure.database.models.analysis_model import (
     MatchingObservationModel,
 )
 from src.domain.entities.candidate import Candidate as CandidateEntity
+from src.infrastructure.database.models.behavioral_assignment_model import (
+    BehavioralAssessmentAIEvaluationModel,
+    BehavioralAssessmentAssignmentModel,
+)
 from src.infrastructure.database.models.admission_model import Admission, CandidateDocument
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
     CandidateJobPipelineModel,
 )
+from src.infrastructure.database.models.candidate_note_model import CandidateNoteModel
 from src.infrastructure.database.models.document_ai_analysis_model import DocumentAIAnalysisModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.pre_admission_model import (
+    PreAdmissionCaseModel,
+    PreAdmissionChecklistItemModel,
+)
 from src.infrastructure.database.models.profile_analysis_model import (
     CandidateJobMatchModel,
     CandidateProfileAnalysisModel,
@@ -34,6 +44,7 @@ from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreSnapshotModel,
     ScoreModelVersionModel,
 )
+from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.base_soft_delete_repository import BaseSoftDeleteRepository
 
 _ACTIVE_RELATIONSHIP_STATUS = "active"
@@ -1031,6 +1042,119 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             .order_by(CandidateJobPipelineModel.updated_at.desc())
         )
         return [dict(row) for row in result.mappings().all()]
+
+    async def find_latest_candidate_note_summary(self, candidate_id: UUID) -> dict | None:
+        row = await self._session.execute(
+            sa.select(
+                CandidateNoteModel.note_text,
+                CandidateNoteModel.created_at,
+            )
+            .where(
+                CandidateNoteModel.candidate_id == candidate_id,
+                CandidateNoteModel.deleted_at.is_(None),
+            )
+            .order_by(CandidateNoteModel.created_at.desc(), CandidateNoteModel.id.desc())
+            .limit(1)
+        )
+        mapping = row.mappings().first()
+        return dict(mapping) if mapping is not None else None
+
+    async def find_latest_pipeline_movement_summary(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> dict | None:
+        row = await self._session.execute(
+            sa.select(
+                CandidateJobPipelineEventModel.event_type,
+                CandidateJobPipelineEventModel.to_stage,
+                UserModel.full_name.label("actor_name"),
+                CandidateJobPipelineEventModel.created_at.label("moved_at"),
+            )
+            .outerjoin(UserModel, UserModel.id == CandidateJobPipelineEventModel.actor_id)
+            .where(
+                CandidateJobPipelineEventModel.candidate_id == candidate_id,
+                CandidateJobPipelineEventModel.job_id == job_id,
+            )
+            .order_by(
+                CandidateJobPipelineEventModel.created_at.desc(),
+                CandidateJobPipelineEventModel.id.desc(),
+            )
+            .limit(1)
+        )
+        mapping = row.mappings().first()
+        return dict(mapping) if mapping is not None else None
+
+    async def get_preview_pending_flags(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        active_stage: str,
+    ) -> dict[str, bool]:
+        behavioral_assignment_pending = bool(
+            await self._session.scalar(
+                sa.select(sa.literal(True))
+                .select_from(BehavioralAssessmentAssignmentModel)
+                .where(
+                    BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+                    BehavioralAssessmentAssignmentModel.job_id == job_id,
+                    BehavioralAssessmentAssignmentModel.status.in_(("pending", "in_progress")),
+                )
+                .limit(1)
+            )
+        )
+        behavioral_ai_pending = bool(
+            await self._session.scalar(
+                sa.select(sa.literal(True))
+                .select_from(BehavioralAssessmentAIEvaluationModel)
+                .where(
+                    BehavioralAssessmentAIEvaluationModel.candidate_id == candidate_id,
+                    BehavioralAssessmentAIEvaluationModel.job_id == job_id,
+                    BehavioralAssessmentAIEvaluationModel.status.in_(("pending", "processing")),
+                )
+                .limit(1)
+            )
+        )
+        interview_not_scheduled = False
+        if active_stage in {"hr_interview", "technical_interview"}:
+            interview_scheduled = bool(
+                await self._session.scalar(
+                    sa.select(sa.literal(True))
+                    .select_from(InterviewScheduleModel)
+                    .where(
+                        InterviewScheduleModel.candidate_id == candidate_id,
+                        InterviewScheduleModel.job_id == job_id,
+                        InterviewScheduleModel.status.in_(("scheduled", "rescheduled")),
+                    )
+                    .limit(1)
+                )
+            )
+            interview_not_scheduled = not interview_scheduled
+
+        document_pending = bool(
+            await self._session.scalar(
+                sa.select(sa.literal(True))
+                .select_from(PreAdmissionChecklistItemModel)
+                .join(PreAdmissionCaseModel, PreAdmissionCaseModel.id == PreAdmissionChecklistItemModel.case_id)
+                .where(
+                    PreAdmissionCaseModel.candidate_id == candidate_id,
+                    PreAdmissionCaseModel.job_id == job_id,
+                    PreAdmissionCaseModel.status.not_in(("admitted", "cancelled", "offer_declined")),
+                    PreAdmissionChecklistItemModel.required.is_(True),
+                    PreAdmissionChecklistItemModel.status.in_(("pending", "rejected")),
+                )
+                .limit(1)
+            )
+        )
+
+        return {
+            "behavioral_assignment_pending": behavioral_assignment_pending,
+            "behavioral_ai_pending": behavioral_ai_pending,
+            "interview_not_scheduled": interview_not_scheduled,
+            "document_pending": document_pending,
+        }
 
     async def list_pipeline_entries_for_portal(self, candidate_id: UUID) -> list[dict]:
         result = await self._session.execute(

@@ -288,7 +288,8 @@ async def test_bi_overview_does_not_expose_api_keys(
     monkeypatch: pytest.MonkeyPatch,
 ):
     headers = await _admin_headers(client, db_session)
-    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "super-secret-google-key")
+    # GOOGLE_API_KEY foi rotacionado para GOOGLE_API_KEY_1..5 (key rotation).
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY_1", "super-secret-google-key")
 
     response = await client.get("/api/v1/admin/bi/overview", headers=headers)
 

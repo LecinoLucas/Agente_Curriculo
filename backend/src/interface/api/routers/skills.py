@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.interface.api.dependencies import InternalUser, RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import AdminOnly, InternalUser, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.api.schemas.skill_catalog_schemas import (
     ArchiveSkillRequest,
@@ -70,7 +70,7 @@ async def create_skill(
 async def update_skill(
     skill_id: UUID,
     body: UpdateSkillRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: AdminOnly,
     service: SkillCatalogService = Depends(_get_service),
 ) -> SkillCatalogResponse:
     skill = await service.update_skill(
@@ -86,7 +86,7 @@ async def update_skill(
 @router.patch("/{skill_id}/deactivate", response_model=SkillCatalogResponse)
 async def deactivate_skill(
     skill_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AdminOnly,
     service: SkillCatalogService = Depends(_get_service),
 ) -> SkillCatalogResponse:
     skill = await service.deactivate_skill(skill_id=skill_id, updated_by=current_user.id)
@@ -95,7 +95,7 @@ async def deactivate_skill(
 @router.patch("/{skill_id}/activate", response_model=SkillCatalogResponse)
 async def activate_skill(
     skill_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AdminOnly,
     service: SkillCatalogService = Depends(_get_service),
 ) -> SkillCatalogResponse:
     skill = await service.activate_skill(skill_id=skill_id, updated_by=current_user.id)
@@ -105,7 +105,7 @@ async def activate_skill(
 async def archive_skill(
     skill_id: UUID,
     body: ArchiveSkillRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: AdminOnly,
     service: SkillCatalogService = Depends(_get_service),
 ) -> SkillCatalogResponse:
     skill = await service.archive_skill(
@@ -119,7 +119,7 @@ async def archive_skill(
 @router.patch("/{skill_id}/restore", response_model=SkillCatalogResponse)
 async def restore_skill(
     skill_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AdminOnly,
     service: SkillCatalogService = Depends(_get_service),
 ) -> SkillCatalogResponse:
     skill = await service.restore_skill(skill_id=skill_id, updated_by=current_user.id)

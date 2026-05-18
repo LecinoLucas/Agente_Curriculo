@@ -8,6 +8,11 @@ from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 
 from src.core.settings import settings
+
+# Fase 30B — cluster de notificações admin (alertas Redis/Calendar/etc.) é
+# observabilidade, não caminho crítico. Sai do smoke; segue em regression
+# local e CI completo via `-m "not slow"` excluído ou rodar diretamente.
+pytestmark = pytest.mark.slow
 from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.analysis_model import AnalysisModel, AIModelModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel

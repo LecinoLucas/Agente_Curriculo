@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 ApplicationSource = str
 
@@ -114,6 +114,36 @@ class CandidatePipelineEntryResponse(BaseModel):
     updated_at: datetime
 
 
+class CandidateSkillPreviewResponse(BaseModel):
+    matched_skills: list[str] = Field(default_factory=list)
+    attention_points: list[str] = Field(default_factory=list)
+
+
+class CandidateLatestNoteResponse(BaseModel):
+    note_text: str
+    created_at: datetime
+
+
+class CandidatePreviewPendencyResponse(BaseModel):
+    id: str
+    label: str
+    tone: str = "info"
+
+
+class CandidateLatestMovementResponse(BaseModel):
+    event_type: str
+    to_stage: str | None = None
+    actor_name: str | None = None
+    moved_at: datetime
+
+
+class CandidateResumeDownloadUrlResponse(BaseModel):
+    url: str
+    expires_at: datetime | None = None
+    content_type: str
+    filename: str
+
+
 class CandidateActiveJobResponse(BaseModel):
     id: UUID
     title: str
@@ -130,6 +160,10 @@ class CandidateOverviewResponse(BaseModel):
     active_job: CandidateActiveJobResponse | None = None
     pipeline_entries: list[CandidatePipelineEntryResponse] = Field(default_factory=list)
     active_job_decision: CandidateActiveJobDecisionResponse | None = None
+    active_job_skill_preview: CandidateSkillPreviewResponse | None = None
+    latest_note: CandidateLatestNoteResponse | None = None
+    preview_pendencies: list[CandidatePreviewPendencyResponse] = Field(default_factory=list)
+    latest_movement: CandidateLatestMovementResponse | None = None
 
 
 class CandidateListSummaryResponse(BaseModel):
@@ -198,3 +232,54 @@ class DeleteCandidateRequest(BaseModel):
 class ArchiveCandidateRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=1000)
+
+
+class CandidateNoteAuthorResponse(BaseModel):
+    id: UUID | None = None
+    name: str
+
+
+class CandidateNoteResponse(BaseModel):
+    id: UUID
+    candidate_id: UUID
+    note_text: str
+    visibility: str = "internal"
+    is_pinned: bool = False
+    created_at: datetime
+    updated_at: datetime
+    is_edited: bool
+    can_edit: bool = False
+    can_delete: bool = False
+    author: CandidateNoteAuthorResponse
+
+
+class CreateCandidateNoteRequest(BaseModel):
+    note_text: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("note_text", mode="before")
+    @classmethod
+    def _normalize_note_text(cls, value: str) -> str:
+        if value is None:
+            return value
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                raise ValueError("Observação não pode estar vazia.")
+            return normalized
+        return value
+
+
+class UpdateCandidateNoteRequest(BaseModel):
+    note_text: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("note_text", mode="before")
+    @classmethod
+    def _normalize_note_text(cls, value: str) -> str:
+        if value is None:
+            return value
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                raise ValueError("Observação não pode estar vazia.")
+            return normalized
+        return value

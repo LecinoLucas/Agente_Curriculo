@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { AgendaInterviewModal } from "../AgendaInterviewModal";
 import { candidatesService } from "../../../services/candidatesService";
@@ -61,7 +65,7 @@ describe("AgendaInterviewModal", () => {
     );
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AgendaInterviewModal
           isOpen={true}
           isEdit={false}
@@ -114,7 +118,7 @@ describe("AgendaInterviewModal", () => {
     (agendaService.getGoogleCalendarStatus as any).mockResolvedValue({ connected: false });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AgendaInterviewModal
           isOpen={true}
           isEdit={false}

@@ -5,6 +5,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
+
 from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
 from src.infrastructure.database.models.behavioral_assignment_model import (
     BehavioralAssessmentAssignmentModel,
@@ -53,7 +55,43 @@ class BehavioralAssignmentService:
         if existing is not None:
             return existing
 
-        return await self._repository.create_assignment(
+        integrity_error: IntegrityError | None = None
+        try:
+            # Savepoint keeps outer workflow transaction intact on duplicate insert races.
+            async with self._repository._session.begin_nested():
+                return await self._repository.create_assignment(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    template_id=template_id,
+                )
+        except IntegrityError as exc:
+            integrity_error = exc
+
+        recovered = await self._repository.find_assignment(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            template_id=template_id,
+        )
+        if recovered is not None:
+            return recovered
+        if integrity_error is not None:
+            raise integrity_error
+        return None
+
+    async def ensure_behavioral_assignment_for_candidate_job(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        requires_behavioral_assessment: bool,
+        template_id: UUID | None,
+        pipeline_active: bool = True,
+    ) -> BehavioralAssessmentAssignmentModel | None:
+        if not pipeline_active:
+            return None
+        if not requires_behavioral_assessment:
+            return None
+        return await self.ensure_assignment_for_application(
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=template_id,
@@ -383,6 +421,7 @@ class BehavioralAssignmentService:
             started_at=row["started_at"],
             submitted_at=row["submitted_at"],
             expires_at=row["expires_at"],
+            ai_evaluation_status=row.get("ai_evaluation_status"),
             answered_count=int(row["answered_count"] or 0),
             question_count=int(row["question_count"] or 0),
         )

@@ -522,9 +522,10 @@ class PipelineService:
             db_session = self._session or self._repository._session
             await BehavioralAssignmentService(
                 SQLAlchemyBehavioralAssignmentRepository(db_session)
-            ).ensure_assignment_for_application(
+            ).ensure_behavioral_assignment_for_candidate_job(
                 candidate_id=candidate_id,
                 job_id=body.job_id,
+                requires_behavioral_assessment=bool(job.requires_behavioral_assessment),
                 template_id=job.behavioral_template_id,
             )
 
@@ -657,9 +658,10 @@ class PipelineService:
             db_session = self._session or self._repository._session
             await BehavioralAssignmentService(
                 SQLAlchemyBehavioralAssignmentRepository(db_session)
-            ).ensure_assignment_for_application(
+            ).ensure_behavioral_assignment_for_candidate_job(
                 candidate_id=candidate_id,
                 job_id=body.to_job_id,
+                requires_behavioral_assessment=bool(to_job.requires_behavioral_assessment),
                 template_id=to_job.behavioral_template_id,
             )
 
@@ -758,9 +760,10 @@ class PipelineService:
             db_session = self._session or self._repository._session
             await BehavioralAssignmentService(
                 SQLAlchemyBehavioralAssignmentRepository(db_session)
-            ).ensure_assignment_for_application(
+            ).ensure_behavioral_assignment_for_candidate_job(
                 candidate_id=candidate_id,
                 job_id=body.job_id,
+                requires_behavioral_assessment=bool(job.requires_behavioral_assessment),
                 template_id=job.behavioral_template_id,
             )
 

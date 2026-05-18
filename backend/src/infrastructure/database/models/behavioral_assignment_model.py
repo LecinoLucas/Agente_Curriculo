@@ -165,6 +165,14 @@ class BehavioralAssessmentAIEvaluationModel(Base):
     evidence_json: Mapped[dict | None] = mapped_column(JSONB_COMPAT)
     risk_flags_json: Mapped[list | None] = mapped_column(JSONB_COMPAT)
     error_message: Mapped[str | None] = mapped_column(sa.Text)
+    requested_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+    queued_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
@@ -178,6 +186,9 @@ class BehavioralAssessmentAIEvaluationModel(Base):
         server_default=sa.text("NOW()"),
     )
     completed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    retry_count: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="0")
+    task_id: Mapped[str | None] = mapped_column(sa.String(255))
 
     __table_args__ = (
         sa.CheckConstraint(

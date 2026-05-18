@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.database.models.behavioral_assignment_model import (
+    BehavioralAssessmentAIEvaluationModel,
     BehavioralAssessmentAnswerModel,
     BehavioralAssessmentAssignmentModel,
 )
@@ -188,14 +189,24 @@ class SQLAlchemyBehavioralAssignmentRepository:
         *,
         job_id: UUID,
         candidate_id: UUID,
+        template_id: UUID | None = None,
     ) -> BehavioralAssessmentAssignmentModel | None:
-        """Get active assignment for candidate in job."""
-        return await self._session.scalar(
-            sa.select(BehavioralAssessmentAssignmentModel).where(
+        """Get latest assignment for candidate in job, optionally constrained by template."""
+        stmt = (
+            sa.select(BehavioralAssessmentAssignmentModel)
+            .where(
                 BehavioralAssessmentAssignmentModel.job_id == job_id,
                 BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
             )
+            .order_by(
+                BehavioralAssessmentAssignmentModel.assigned_at.desc(),
+                BehavioralAssessmentAssignmentModel.created_at.desc(),
+            )
+            .limit(1)
         )
+        if template_id is not None:
+            stmt = stmt.where(BehavioralAssessmentAssignmentModel.template_id == template_id)
+        return await self._session.scalar(stmt)
 
     @staticmethod
     def _summary_stmt() -> sa.Select:
@@ -240,6 +251,7 @@ class SQLAlchemyBehavioralAssignmentRepository:
                 BehavioralAssessmentAssignmentModel.started_at,
                 BehavioralAssessmentAssignmentModel.submitted_at,
                 BehavioralAssessmentAssignmentModel.expires_at,
+                BehavioralAssessmentAIEvaluationModel.status.label("ai_evaluation_status"),
                 sa.func.coalesce(answer_count_subq.c.answered_count, 0).label("answered_count"),
                 sa.func.coalesce(question_count_subq.c.question_count, 0).label("question_count"),
             )
@@ -250,5 +262,9 @@ class SQLAlchemyBehavioralAssignmentRepository:
             )
             .outerjoin(question_count_subq, question_count_subq.c.assignment_id == BehavioralAssessmentAssignmentModel.id)
             .outerjoin(answer_count_subq, answer_count_subq.c.assignment_id == BehavioralAssessmentAssignmentModel.id)
+            .outerjoin(
+                BehavioralAssessmentAIEvaluationModel,
+                BehavioralAssessmentAIEvaluationModel.assignment_id == BehavioralAssessmentAssignmentModel.id,
+            )
             .order_by(BehavioralAssessmentAssignmentModel.assigned_at.desc())
         )

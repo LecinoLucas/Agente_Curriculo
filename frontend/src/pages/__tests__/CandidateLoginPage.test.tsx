@@ -1,10 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { CandidateLoginPage } from "../CandidateLoginPage";
 import { candidateAuthService } from "../../services/candidateAuthService";
 import { candidatePortalService } from "../../services/candidatePortalService";
+import { __resetGoogleIdentityForTests } from "../../services/googleIdentityService";
 
 vi.mock("../../services/candidatePortalService", () => ({
   candidatePortalService: {
@@ -46,11 +51,13 @@ describe("CandidateLoginPage", () => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     delete window.google;
+    __resetGoogleIdentityForTests();
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
     delete window.google;
+    __resetGoogleIdentityForTests();
   });
 
   it("permite login com Google", async () => {
@@ -76,7 +83,7 @@ describe("CandidateLoginPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/candidato/login"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
         <Routes>
           <Route path="/candidato/login" element={<CandidateLoginPage />} />
           <Route path="/candidato/portal" element={<div>Portal destino</div>} />
@@ -100,7 +107,7 @@ describe("CandidateLoginPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/candidato/login"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
         <Routes>
           <Route path="/candidato/login" element={<CandidateLoginPage />} />
           <Route path="/candidato/portal" element={<div>Portal destino</div>} />
@@ -117,7 +124,7 @@ describe("CandidateLoginPage", () => {
 
   it("usa autocomplete correto nos campos de e-mail e senha", () => {
     render(
-      <MemoryRouter initialEntries={["/candidato/login"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
         <Routes>
           <Route path="/candidato/login" element={<CandidateLoginPage />} />
         </Routes>
@@ -132,7 +139,7 @@ describe("CandidateLoginPage", () => {
     vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "");
 
     render(
-      <MemoryRouter initialEntries={["/candidato/login"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
         <Routes>
           <Route path="/candidato/login" element={<CandidateLoginPage />} />
         </Routes>

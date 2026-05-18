@@ -94,6 +94,10 @@ ManagerOrAdmin = Annotated[User, Depends(require_roles(UserRole.MANAGER, UserRol
 # Compatibility: Temporary dual access (RECRUITER still has pre_admission/admission access)
 RecruiterHrOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.HR, UserRole.ADMIN))]
 ManagerRecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.MANAGER, UserRole.RECRUITER, UserRole.ADMIN))]
+PreAdmissionDocumentDownloadStaff = Annotated[
+    User,
+    Depends(require_roles(UserRole.RECRUITER, UserRole.HR, UserRole.ADMIN)),
+]
 
 # Internal users: all internal roles
 InternalUser = Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.VIEWER, UserRole.HR, UserRole.MANAGER))]

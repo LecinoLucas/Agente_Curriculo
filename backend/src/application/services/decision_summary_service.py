@@ -63,6 +63,7 @@ class DecisionSummaryService:
         )
 
         requires_behavioral = job.requires_behavioral_assessment if job is not None else True
+        requires_behavioral_ai = job.requires_behavioral_ai_evaluation if job is not None else True
         requires_interview = job.requires_interview if job is not None else True
         requires_scorecard = job.requires_scorecard if job is not None else True
         requires_manager_review = job.requires_manager_review if job is not None else False
@@ -82,6 +83,7 @@ class DecisionSummaryService:
             behavioral,
             scorecard,
             interview=interview_model,
+            requires_behavioral_ai_evaluation=requires_behavioral_ai,
             requires_interview=requires_interview,
             requires_scorecard=requires_scorecard,
             requires_manager_review=requires_manager_review,
@@ -191,6 +193,7 @@ class DecisionSummaryService:
         scorecard: DecisionSummaryInterviewScorecardResponse,
         *,
         interview: InterviewScheduleModel | None,
+        requires_behavioral_ai_evaluation: bool,
         requires_interview: bool,
         requires_scorecard: bool,
         requires_manager_review: bool,
@@ -224,7 +227,11 @@ class DecisionSummaryService:
                 next_action="wait_candidate_behavioral_submission",
             )
 
-        if behavioral.template_required and behavioral.ai_evaluation_status != "completed":
+        if (
+            behavioral.template_required
+            and requires_behavioral_ai_evaluation
+            and behavioral.ai_evaluation_status != "completed"
+        ):
             missing_items.append("behavioral_ai_evaluation")
             return DecisionReadinessResponse(
                 status="waiting_behavioral_ai",

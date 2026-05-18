@@ -122,6 +122,7 @@ class JobService:
             responsibilities=self._clean_optional_text(body.responsibilities),
             experience_context=self._clean_optional_text(body.experience_context),
             behavioral_requirements=self._clean_string_list(body.behavioral_requirements),
+            behavioral_template_id=body.behavioral_template_id,
             priority=body.priority,
             skill_requirements=validated_skill_requirements,
             created_by=created_by,

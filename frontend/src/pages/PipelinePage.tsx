@@ -2,7 +2,7 @@ import { ChevronDown, PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Sear
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { CandidateDrawer } from "../features/pipeline/CandidateDrawer";
+import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { CandidateSearchModal } from "../features/pipeline/CandidateSearchModal";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
@@ -111,6 +111,7 @@ export function PipelinePage() {
   const [globalSearchActive, setGlobalSearchActive] = useState(false);
   const [globalSearchResults, setGlobalSearchResults] = useState<CandidateListSummary[]>([]);
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
+  const [previewCandidateId, setPreviewCandidateId] = useState<string | null>(null);
   const filtersPanelRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -119,10 +120,8 @@ export function PipelinePage() {
     boardLoading,
     boardError,
     rankingSyncTick,
-    selectedCandidateId,
     setActiveJob,
     refreshBoard,
-    openCandidate,
   } = usePipeline();
 
   // ── Auto-Refresh & Countdown states ──
@@ -1082,7 +1081,7 @@ export function PipelinePage() {
                         key={col.stage}
                         column={col}
                         colIndex={idx}
-                        onCardClick={openCandidate}
+                        onCardClick={setPreviewCandidateId}
                         disabled={!canUse}
                         showTopMatchHighlight={sortOrder === "score_desc"}
                         totalCount={hasActiveLocalFilters ? col.totalCount : undefined}
@@ -1096,7 +1095,7 @@ export function PipelinePage() {
                         <KanbanColumn
                           column={rejectedCol}
                           colIndex={mainCols.length}
-                          onCardClick={openCandidate}
+                          onCardClick={setPreviewCandidateId}
                           disabled={!canUse}
                           showTopMatchHighlight={sortOrder === "score_desc"}
                           totalCount={hasActiveLocalFilters ? rejectedCol.totalCount : undefined}
@@ -1255,7 +1254,7 @@ export function PipelinePage() {
                 isRefreshing={isRankingRefreshing}
                 error={rankingError}
                 onToggle={() => setShowRanking(false)}
-                onOpenCandidate={openCandidate}
+                onOpenCandidate={setPreviewCandidateId}
                 onRefresh={
                   activeJobId
                     ? () => {
@@ -1300,7 +1299,7 @@ export function PipelinePage() {
         }}
         onOpenCandidate={(candidateId) => {
           setShowSourceCandidates(false);
-          navigate(`/candidatos?candidateId=${candidateId}`);
+          setPreviewCandidateId(candidateId);
         }}
       />
 
@@ -1312,13 +1311,15 @@ export function PipelinePage() {
           onClose={() => setShowNewCandidate(false)}
           onCreated={async (id) => {
             setShowNewCandidate(false);
-            await openCandidate(id, "documents");
+            navigate(`/candidatos/${id}?tab=documents`);
           }}
         />
       )}
 
-      {/* ── Candidate drawer ── */}
-      <CandidateDrawer key={selectedCandidateId ?? "none"} />
+      <CandidatePreviewDrawer
+        candidateId={previewCandidateId}
+        onClose={() => setPreviewCandidateId(null)}
+      />
     </div>
   );
 }
@@ -1343,7 +1344,7 @@ function RankingPanel({
   isRefreshing: boolean;
   error: string | null;
   onToggle: () => void;
-  onOpenCandidate: (candidateId: string) => Promise<void>;
+  onOpenCandidate: (candidateId: string) => void;
   onRefresh?: () => void;
 }) {
   const showInitialLoading = loading && ranking === null;
@@ -1445,7 +1446,7 @@ function RankingCard({
 }: {
   entry: JobRankingEntry;
   job: PipelineJobSummary | null;
-  onOpenCandidate: (candidateId: string) => Promise<void>;
+  onOpenCandidate: (candidateId: string) => void;
 }) {
   const dealBreakerReason = entry.reason_tags.find((reason) => isDealBreakerReasonCode(reason)) ?? null;
   const dealBreakerDisplay = dealBreakerReason
@@ -1468,7 +1469,7 @@ function RankingCard({
   return (
     <button
       type="button"
-      onClick={() => void onOpenCandidate(entry.candidate_id)}
+      onClick={() => onOpenCandidate(entry.candidate_id)}
       className={[
         "w-full rounded-xl border p-3.5 text-left transition-all hover:-translate-y-0.5",
         hasDealBreakerRejection

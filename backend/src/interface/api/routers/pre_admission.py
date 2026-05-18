@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile, status
@@ -13,7 +15,12 @@ from src.application.services.pre_admission_service import (
 )
 from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
 from src.infrastructure.database.models.pre_admission_model import PreAdmissionChecklistItemModel
-from src.interface.api.dependencies import CurrentCompleteCandidateSession, RecruiterHrOrAdmin, get_db
+from src.interface.api.dependencies import (
+    CurrentCompleteCandidateSession,
+    PreAdmissionDocumentDownloadStaff,
+    RecruiterHrOrAdmin,
+    get_db,
+)
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionEnvelopeResponse,
@@ -31,6 +38,17 @@ from src.interface.api.schemas.pre_admission_schemas import (
 )
 
 router = APIRouter(tags=["pre-admission"])
+
+
+def _sanitize_download_filename(name: str) -> str:
+    normalized = unicodedata.normalize("NFKD", name)
+    ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
+    safe = re.sub(r"[^\w .-]", "", ascii_name).strip()
+    safe = re.sub(r"\s+", "_", safe)
+    while ".." in safe:
+        safe = safe.replace("..", ".")
+    safe = safe.lstrip(".")
+    return safe or "documento.pdf"
 
 
 def _service(db: AsyncSession) -> PreAdmissionService:
@@ -231,7 +249,7 @@ async def reject_pre_admission_document(
 @router.get("/pre-admission/documents/{document_id}/download")
 async def download_pre_admission_document(
     document_id: UUID,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionDocumentDownloadStaff,
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
     try:
@@ -239,12 +257,13 @@ async def download_pre_admission_document(
             document_id=document_id,
             actor_type="staff",
             actor_id=current_user.id,
+            actor_role=current_user.role.value,
         )
         await db.commit()
         return FileResponse(
             path,
             media_type=document.mime_type,
-            filename=document.original_filename,
+            filename=_sanitize_download_filename(document.original_filename),
         )
     except Exception:
         await db.rollback()
@@ -322,7 +341,7 @@ async def download_candidate_portal_pre_admission_document(
         return FileResponse(
             path,
             media_type=document.mime_type,
-            filename=document.original_filename,
+            filename=_sanitize_download_filename(document.original_filename),
         )
     except Exception:
         await db.rollback()

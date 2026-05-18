@@ -9,6 +9,11 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel, JobRequiredSkillModel, SkillModel
+from src.infrastructure.database.models.behavioral_template_model import (
+    BehavioralAssessmentTemplateModel,
+    BehavioralTemplateCompetencyModel,
+    BehavioralTemplateQuestionModel,
+)
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.base_soft_delete_repository import BaseSoftDeleteRepository
@@ -289,3 +294,34 @@ class SQLAlchemyJobRepository(BaseSoftDeleteRepository[JobModel]):
             .order_by(JobModel.title.asc())
         )
         return list(result.scalars().all())
+
+    async def get_behavioral_template_summary(self, template_id: UUID) -> dict | None:
+        """Return status + structure counters for a behavioral template."""
+        stmt = (
+            sa.select(
+                BehavioralAssessmentTemplateModel.id.label("id"),
+                BehavioralAssessmentTemplateModel.status.label("status"),
+                sa.func.count(sa.distinct(BehavioralTemplateCompetencyModel.id)).label("competency_count"),
+                sa.func.count(sa.distinct(BehavioralTemplateQuestionModel.id)).label("question_count"),
+            )
+            .outerjoin(
+                BehavioralTemplateCompetencyModel,
+                BehavioralTemplateCompetencyModel.template_id == BehavioralAssessmentTemplateModel.id,
+            )
+            .outerjoin(
+                BehavioralTemplateQuestionModel,
+                BehavioralTemplateQuestionModel.competency_id == BehavioralTemplateCompetencyModel.id,
+            )
+            .where(BehavioralAssessmentTemplateModel.id == template_id)
+            .group_by(BehavioralAssessmentTemplateModel.id, BehavioralAssessmentTemplateModel.status)
+        )
+        result = await self._session.execute(stmt)
+        row = result.mappings().first()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "status": row["status"],
+            "competency_count": int(row["competency_count"] or 0),
+            "question_count": int(row["question_count"] or 0),
+        }

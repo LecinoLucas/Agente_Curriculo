@@ -5,6 +5,8 @@ import type { CandidateActionFeedback } from "../v2/CandidateProfileView";
 import { getExtractionStatusLabel } from "../../../../shared/utils/extractionStatus";
 import { Section, StatusCard, EmptyTab } from "../components/DrawerSectionHelpers";
 import { useDocumentHandlers } from "../hooks/useDocumentHandlers";
+import { resumeService } from "../../../../services/resumeService";
+import { toast } from "../../../../shared/utils/toast";
 
 type AnalysisStatus =
   | "pending"
@@ -38,6 +40,7 @@ type DocumentsTabProps = {
   }) => Promise<void>;
   notifyCandidatesChanged: () => void;
   onActionFeedback?: (feedback: Omit<CandidateActionFeedback, "id">) => void;
+  userRole?: string;
 };
 
 const ANALYSIS_STATUS_LABEL: Record<AnalysisStatus, string> = {
@@ -53,6 +56,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
     overview,
     activeJobId,
     canSpendRealTokens,
+    userRole,
     pollingAnalysisId,
     refreshCandidateOverview,
     startPolling,
@@ -74,6 +78,21 @@ export function DocumentsTab(props: DocumentsTabProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [analyzingResumeId, setAnalyzingResumeId] = useState<string | null>(null);
+  const [downloadingResume, setDownloadingResume] = useState(false);
+
+  const canDownloadResume = userRole === "admin" || userRole === "recruiter";
+
+  const handleDownloadResume = async () => {
+    if (!overview.candidate?.id || downloadingResume) return;
+    setDownloadingResume(true);
+    try {
+      await resumeService.downloadByCandidateId(overview.candidate.id);
+    } catch {
+      toast.error("Não foi possível baixar o currículo. Tente novamente.");
+    } finally {
+      setDownloadingResume(false);
+    }
+  };
 
   const handlers = useDocumentHandlers(
     {
@@ -340,6 +359,21 @@ export function DocumentsTab(props: DocumentsTabProps) {
 
                   {!isEditing ? (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {canDownloadResume && resume.current_version_id ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDownloadResume()}
+                          disabled={downloadingResume}
+                          className="rounded-lg border border-[hsl(var(--primary))]/30 bg-[hsl(var(--accent-soft))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--primary))] transition hover:bg-[hsl(var(--primary))]/10 disabled:opacity-40"
+                        >
+                          {downloadingResume ? "Baixando…" : "Abrir currículo"}
+                        </button>
+                      ) : canDownloadResume && !resume.current_version_id ? (
+                        <span className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+                          Currículo não enviado
+                        </span>
+                      ) : null}
+
                       <button
                         type="button"
                         onClick={() => {

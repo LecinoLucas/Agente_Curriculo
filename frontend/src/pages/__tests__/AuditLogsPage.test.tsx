@@ -2,6 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { AuditLogsPage } from "../AuditLogsPage";
 
@@ -61,7 +65,7 @@ describe("AuditLogsPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AuditLogsPage />
       </MemoryRouter>,
     );
@@ -85,7 +89,7 @@ describe("AuditLogsPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AuditLogsPage />
       </MemoryRouter>,
     );
@@ -120,7 +124,7 @@ describe("AuditLogsPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AuditLogsPage />
       </MemoryRouter>,
     );
@@ -145,7 +149,7 @@ describe("AuditLogsPage", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AuditLogsPage />
       </MemoryRouter>,
     );

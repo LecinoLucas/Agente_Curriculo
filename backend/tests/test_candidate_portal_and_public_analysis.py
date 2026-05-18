@@ -220,8 +220,11 @@ async def test_login_sets_portal_cookie_and_allows_access(
 
     overview_response = await client.get("/api/v1/public/candidate-portal/overview")
     assert overview_response.status_code == status.HTTP_200_OK
-    assert overview_response.json()["candidate"]["id"] == str(candidate.id)
-    assert overview_response.json()["candidate"]["cpf_masked"].endswith("-00")
+    payload = overview_response.json()
+    assert payload["candidate"]["id"] == str(candidate.id)
+    assert payload["candidate"]["cpf_masked"].endswith("-00")
+    assert "notes" not in payload
+    assert "notes" not in payload["candidate"]
 
 
 @pytest.mark.asyncio

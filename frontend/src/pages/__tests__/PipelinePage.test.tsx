@@ -6,6 +6,10 @@ import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { pipelineService } from "../../services/pipelineService";
 import { getJobRanking } from "../../services/jobsService";
 import "@testing-library/jest-dom";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 // Mock the usePipeline hook
 vi.mock("../../features/pipeline/PipelineContext", () => ({
@@ -32,14 +36,14 @@ vi.mock("../../features/pipeline/CandidateSearchModal", () => ({
   CandidateSearchModal: () => <div data-testid="candidate-search-modal" />,
 }));
 
-vi.mock("../../features/pipeline/CandidateDrawer", () => ({
-  CandidateDrawer: () => <div data-testid="candidate-drawer" />,
+vi.mock("../../features/candidates/components/CandidatePreviewDrawer", () => ({
+  CandidatePreviewDrawer: ({ candidateId }: { candidateId: string | null }) =>
+    candidateId ? <div data-testid="candidate-preview-drawer">{candidateId}</div> : null,
 }));
 
 describe("PipelinePage", () => {
   const mockSetActiveJob = vi.fn();
   const mockRefreshBoard = vi.fn();
-  const mockOpenCandidate = vi.fn();
 
   const mockJobs = [
     {
@@ -153,16 +157,14 @@ describe("PipelinePage", () => {
       boardLoading: false,
       boardError: null,
       rankingSyncTick: 0,
-      selectedCandidateId: null,
       setActiveJob: mockSetActiveJob,
       refreshBoard: mockRefreshBoard,
-      openCandidate: mockOpenCandidate,
     });
   });
 
   it("1. Renderiza o título 'Pipeline'", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -176,7 +178,7 @@ describe("PipelinePage", () => {
 
   it("2. Renderiza o breadcrumb 'Recrutamento > Pipeline'", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -191,7 +193,7 @@ describe("PipelinePage", () => {
 
   it("3. Renderiza a barra de buscas e filtros integrados", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -206,7 +208,7 @@ describe("PipelinePage", () => {
 
   it("4. Renderiza os cards de KPI (total, em andamento, entrevistas, contratados)", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -226,7 +228,7 @@ describe("PipelinePage", () => {
 
   it("5. Renderiza a lista horizontal de colunas do Kanban", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -243,7 +245,7 @@ describe("PipelinePage", () => {
 
   it("6. Renderiza os cards dos candidatos com dados reais", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -258,7 +260,7 @@ describe("PipelinePage", () => {
 
   it("7. Coluna vazia exibe a mensagem 'Vazio'", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -272,9 +274,9 @@ describe("PipelinePage", () => {
     });
   });
 
-  it("8. Clicar em um card de candidato chama openCandidate", async () => {
+  it("8. Clicar em um card de candidato abre o preview leve", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -289,12 +291,12 @@ describe("PipelinePage", () => {
     expect(card).toBeInTheDocument();
     fireEvent.click(card!);
 
-    expect(mockOpenCandidate).toHaveBeenCalledWith("c-1");
+    expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1");
   });
 
   it("9. Permite buscar candidatos pelo campo de busca dinâmico", async () => {
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
         </Routes>
@@ -318,7 +320,7 @@ describe("PipelinePage", () => {
     (pipelineService.listPipelineJobs as any).mockRejectedValue(new Error("Erro de rede"));
     
     render(
-      <MemoryRouter initialEntries={["/pipeline/job-1"]}>
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
           <Route path="/pipeline/:jobId" element={<PipelinePage />} />
           <Route path="/pipeline" element={<PipelinePage />} />

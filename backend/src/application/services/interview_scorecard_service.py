@@ -31,6 +31,7 @@ class InterviewScorecardService:
         candidate_id: UUID,
         job_id: UUID,
         interview_id: UUID | None = None,
+        evaluator_id: UUID | None = None,
     ) -> InterviewScorecardEnvelopeResponse:
         await self._assert_active_pipeline(candidate_id=candidate_id, job_id=job_id)
         await self._validate_interview(candidate_id=candidate_id, job_id=job_id, interview_id=interview_id)
@@ -38,6 +39,7 @@ class InterviewScorecardService:
             candidate_id=candidate_id,
             job_id=job_id,
             interview_id=interview_id,
+            evaluator_id=evaluator_id,
         )
         return InterviewScorecardEnvelopeResponse(
             scorecard=self._response(scorecard) if scorecard else None,

@@ -22,3 +22,10 @@ def write_resume_file(s3_key: str, content: bytes) -> Path:
     path.write_bytes(content)
     return path
 
+
+def read_resume_file(s3_key: str) -> bytes:
+    path = resolve_resume_storage_path(s3_key)
+    if not path.exists():
+        raise FileNotFoundError(f"Resume file not found: {s3_key}")
+    return path.read_bytes()
+

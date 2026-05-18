@@ -10,6 +10,10 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import UserRole
+
+# Fase 30B — diagnósticos admin de flow candidate↔job são ferramentas de
+# investigação, não caminho crítico. Sai do smoke.
+pytestmark = pytest.mark.slow
 from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,

@@ -212,9 +212,9 @@ async def test_manual_transfer_candidate_to_job_with_behavioral_template(client:
     assert assignment.status == "pending"
 
 @pytest.mark.asyncio
-async def test_link_template_creates_assignment_for_early_stage_candidate(client: AsyncClient, db_session):
+async def test_link_template_creates_assignment_for_active_candidate(client: AsyncClient, db_session):
     """
-    Candidato em etapa inicial (entry/screening) deve receber assignment
+    Candidato ativo (não terminal) deve receber assignment
     retroativo ao vincular template à vaga.
     """
     auth_data = await _setup_admin_auth(client, db_session)
@@ -278,9 +278,9 @@ async def test_link_template_creates_assignment_for_early_stage_candidate(client
 
 
 @pytest.mark.asyncio
-async def test_link_template_skips_assignment_for_advanced_stage_candidate(client: AsyncClient, db_session):
+async def test_link_template_creates_assignment_for_interview_stage_candidate(client: AsyncClient, db_session):
     """
-    Candidato em etapa avançada (hr_interview+) não deve receber assignment
+    Candidato em etapa avançada, mas ainda ativa (ex.: hr_interview), deve receber assignment
     retroativo ao vincular template à vaga.
     """
     auth_data = await _setup_admin_auth(client, db_session)
@@ -344,7 +344,87 @@ async def test_link_template_skips_assignment_for_advanced_stage_candidate(clien
     )
     assert link_resp.status_code == 200
 
-    # Candidato avançado não deve ter recebido assignment
+    # Candidato avançado ativo deve receber assignment
+    stmt = sa.select(BehavioralAssessmentAssignmentModel).where(
+        BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+        BehavioralAssessmentAssignmentModel.job_id == job_id,
+    )
+    assignment = await db_session.scalar(stmt)
+    assert assignment is not None
+    assert assignment.template_id == template.id
+    assert assignment.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_link_template_skips_assignment_for_terminal_candidate(client: AsyncClient, db_session):
+    """
+    Candidato terminal (relationship_status != active / is_terminal=true) não deve receber assignment retroativo.
+    """
+    auth_data = await _setup_admin_auth(client, db_session)
+    headers = {"Authorization": auth_data["Authorization"]}
+    admin_id = UUID(auth_data["admin_id"])
+
+    from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+
+    job_id = uuid4()
+    job = JobModel(
+        id=job_id,
+        title="Vaga Retroativa Terminal",
+        description="Descrição longa para vaga retroativa terminal para validações de qualidade.",
+        status="published",
+        job_area="Engineering",
+        seniority_level="junior",
+        minimum_years_experience=1,
+        created_by=admin_id,
+    )
+    db_session.add(job)
+    scoring_version = ScoreModelVersionModel(
+        id=uuid4(),
+        version=f"v_{uuid4().hex[:6]}",
+        weights={"experience": 0.3, "skills": 0.7},
+        thresholds={"high": 80, "low": 40},
+        is_active=True
+    )
+    db_session.add(scoring_version)
+    await db_session.commit()
+
+    cand_resp = await client.post("/api/v1/candidates", headers=headers, json={
+        "full_name": "Candidato Terminal Stage",
+        "email": f"terminal_{uuid4().hex[:6]}@example.com",
+        "phone": "999999999"
+    })
+    assert cand_resp.status_code == 201
+    candidate_id = UUID(cand_resp.json()["id"])
+
+    add_resp = await client.post(f"/api/v1/pipeline/{candidate_id}/add-to-job", headers=headers, json={
+        "job_id": str(job_id),
+        "initial_stage": "entry"
+    })
+    assert add_resp.status_code == 200
+
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(
+            relationship_status="rejected",
+            pipeline_status="terminal",
+            is_terminal=True,
+            terminated_at=datetime.now(UTC),
+        )
+    )
+    await db_session.commit()
+
+    template = await _create_active_behavioral_template(db_session, admin_id)
+    link_resp = await client.patch(
+        f"/api/v1/jobs/{job_id}/behavioral-template",
+        headers=headers,
+        json={"behavioral_template_id": str(template.id)},
+    )
+    assert link_resp.status_code == 200
+
     stmt = sa.select(BehavioralAssessmentAssignmentModel).where(
         BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
         BehavioralAssessmentAssignmentModel.job_id == job_id,
@@ -434,3 +514,271 @@ async def test_manual_reconsider_candidate_with_behavioral_template(client: Asyn
     assert assignment is not None
     assert assignment.template_id == template.id
     assert assignment.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_manual_add_does_not_create_assignment_when_behavioral_not_required(client: AsyncClient, db_session):
+    auth_data = await _setup_admin_auth(client, db_session)
+    headers = {"Authorization": auth_data["Authorization"]}
+    admin_id = UUID(auth_data["admin_id"])
+    template = await _create_active_behavioral_template(db_session, admin_id)
+
+    job_id = uuid4()
+    job = JobModel(
+        id=job_id,
+        title="Vaga Manual Sem Obrigatoriedade",
+        description="Descrição longa para vaga sem obrigatoriedade de comportamental.",
+        status="published",
+        job_area="Engineering",
+        seniority_level="senior",
+        minimum_years_experience=5,
+        created_by=admin_id,
+        behavioral_template_id=template.id,
+        requires_behavioral_assessment=False,
+    )
+    db_session.add(job)
+    db_session.add(
+        ScoreModelVersionModel(
+            id=uuid4(),
+            version=f"v_{uuid4().hex[:6]}",
+            weights={"experience": 0.3, "skills": 0.7},
+            thresholds={"high": 80, "low": 40},
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    cand_resp = await client.post(
+        "/api/v1/candidates",
+        headers=headers,
+        json={"full_name": "Candidato No Required", "email": f"norequired_{uuid4().hex[:6]}@example.com", "phone": "999999999"},
+    )
+    assert cand_resp.status_code == 201
+    candidate_id = UUID(cand_resp.json()["id"])
+
+    add_resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        headers=headers,
+        json={"job_id": str(job_id), "initial_stage": "entry"},
+    )
+    assert add_resp.status_code == 200
+
+    stmt = sa.select(BehavioralAssessmentAssignmentModel).where(
+        BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+        BehavioralAssessmentAssignmentModel.job_id == job_id,
+    )
+    assert (await db_session.scalar(stmt)) is None
+
+
+@pytest.mark.asyncio
+async def test_transfer_does_not_create_assignment_when_destination_behavioral_not_required(client: AsyncClient, db_session):
+    auth_data = await _setup_admin_auth(client, db_session)
+    headers = {"Authorization": auth_data["Authorization"]}
+    admin_id = UUID(auth_data["admin_id"])
+    template = await _create_active_behavioral_template(db_session, admin_id)
+
+    job_a_id = uuid4()
+    job_a = JobModel(
+        id=job_a_id,
+        title="Vaga Origem",
+        description="Descrição longa para vaga de origem.",
+        status="published",
+        job_area="Engineering",
+        seniority_level="senior",
+        minimum_years_experience=5,
+        created_by=admin_id,
+    )
+    job_b_id = uuid4()
+    job_b = JobModel(
+        id=job_b_id,
+        title="Vaga Destino Sem Obrigatoriedade",
+        description="Descrição longa para vaga de destino sem obrigatoriedade comportamental.",
+        status="published",
+        job_area="Engineering",
+        seniority_level="senior",
+        minimum_years_experience=5,
+        created_by=admin_id,
+        behavioral_template_id=template.id,
+        requires_behavioral_assessment=False,
+    )
+    db_session.add_all([job_a, job_b])
+    db_session.add(
+        ScoreModelVersionModel(
+            id=uuid4(),
+            version=f"v_{uuid4().hex[:6]}",
+            weights={"experience": 0.3, "skills": 0.7},
+            thresholds={"high": 80, "low": 40},
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    cand_resp = await client.post(
+        "/api/v1/candidates",
+        headers=headers,
+        json={"full_name": "Candidato Transfer Sem Required", "email": f"transfer_no_required_{uuid4().hex[:6]}@example.com", "phone": "999999999"},
+    )
+    assert cand_resp.status_code == 201
+    candidate_id = UUID(cand_resp.json()["id"])
+
+    add_resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        headers=headers,
+        json={"job_id": str(job_a_id), "initial_stage": "entry"},
+    )
+    assert add_resp.status_code == 200
+
+    transfer_resp = await client.patch(
+        f"/api/v1/pipeline/{candidate_id}/transfer-job",
+        headers=headers,
+        json={
+            "from_job_id": str(job_a_id),
+            "to_job_id": str(job_b_id),
+            "reason": "Transferência para vaga sem obrigatoriedade comportamental",
+        },
+    )
+    assert transfer_resp.status_code == 200
+
+    stmt = sa.select(BehavioralAssessmentAssignmentModel).where(
+        BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+        BehavioralAssessmentAssignmentModel.job_id == job_b_id,
+    )
+    assert (await db_session.scalar(stmt)) is None
+
+
+@pytest.mark.asyncio
+async def test_link_template_retroactive_does_not_duplicate_existing_assignment(client: AsyncClient, db_session):
+    from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+    from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
+        SQLAlchemyBehavioralAssignmentRepository,
+    )
+
+    auth_data = await _setup_admin_auth(client, db_session)
+    headers = {"Authorization": auth_data["Authorization"]}
+    admin_id = UUID(auth_data["admin_id"])
+    template = await _create_active_behavioral_template(db_session, admin_id)
+
+    job_id = uuid4()
+    job = JobModel(
+        id=job_id,
+        title="Vaga Retroativa Idempotente",
+        description="Descrição longa para vaga de retroativo idempotente.",
+        status="published",
+        job_area="Engineering",
+        seniority_level="junior",
+        minimum_years_experience=1,
+        created_by=admin_id,
+    )
+    db_session.add(job)
+    db_session.add(
+        ScoreModelVersionModel(
+            id=uuid4(),
+            version=f"v_{uuid4().hex[:6]}",
+            weights={"experience": 0.3, "skills": 0.7},
+            thresholds={"high": 80, "low": 40},
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    cand_resp = await client.post(
+        "/api/v1/candidates",
+        headers=headers,
+        json={"full_name": "Candidato Retroativo Idempotente", "email": f"retro_idem_{uuid4().hex[:6]}@example.com", "phone": "999999999"},
+    )
+    assert cand_resp.status_code == 201
+    candidate_id = UUID(cand_resp.json()["id"])
+
+    add_resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        headers=headers,
+        json={"job_id": str(job_id), "initial_stage": "entry"},
+    )
+    assert add_resp.status_code == 200
+
+    assignment_service = BehavioralAssignmentService(SQLAlchemyBehavioralAssignmentRepository(db_session))
+    preexisting = await assignment_service.ensure_assignment_for_application(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        template_id=template.id,
+    )
+    assert preexisting is not None
+    await db_session.commit()
+
+    link_resp = await client.patch(
+        f"/api/v1/jobs/{job_id}/behavioral-template",
+        headers=headers,
+        json={"behavioral_template_id": str(template.id)},
+    )
+    assert link_resp.status_code == 200
+
+    rows = (
+        await db_session.execute(
+            sa.select(BehavioralAssessmentAssignmentModel).where(
+                BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+                BehavioralAssessmentAssignmentModel.job_id == job_id,
+                BehavioralAssessmentAssignmentModel.template_id == template.id,
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_link_template_retroactive_skips_when_behavioral_not_required(client: AsyncClient, db_session):
+    auth_data = await _setup_admin_auth(client, db_session)
+    headers = {"Authorization": auth_data["Authorization"]}
+    admin_id = UUID(auth_data["admin_id"])
+
+    job_id = uuid4()
+    job = JobModel(
+        id=job_id,
+        title="Vaga Retroativa Sem Obrigatoriedade",
+        description="Descrição longa para vaga de retroativo sem obrigatoriedade.",
+        status="published",
+        job_area="Engineering",
+        seniority_level="junior",
+        minimum_years_experience=1,
+        created_by=admin_id,
+        requires_behavioral_assessment=False,
+    )
+    db_session.add(job)
+    db_session.add(
+        ScoreModelVersionModel(
+            id=uuid4(),
+            version=f"v_{uuid4().hex[:6]}",
+            weights={"experience": 0.3, "skills": 0.7},
+            thresholds={"high": 80, "low": 40},
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    cand_resp = await client.post(
+        "/api/v1/candidates",
+        headers=headers,
+        json={"full_name": "Candidato Retroativo Sem Required", "email": f"retro_no_required_{uuid4().hex[:6]}@example.com", "phone": "999999999"},
+    )
+    assert cand_resp.status_code == 201
+    candidate_id = UUID(cand_resp.json()["id"])
+
+    add_resp = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/add-to-job",
+        headers=headers,
+        json={"job_id": str(job_id), "initial_stage": "entry"},
+    )
+    assert add_resp.status_code == 200
+
+    template = await _create_active_behavioral_template(db_session, admin_id)
+    link_resp = await client.patch(
+        f"/api/v1/jobs/{job_id}/behavioral-template",
+        headers=headers,
+        json={"behavioral_template_id": str(template.id)},
+    )
+    assert link_resp.status_code == 200
+
+    stmt = sa.select(BehavioralAssessmentAssignmentModel).where(
+        BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+        BehavioralAssessmentAssignmentModel.job_id == job_id,
+    )
+    assert (await db_session.scalar(stmt)) is None

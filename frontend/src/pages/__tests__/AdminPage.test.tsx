@@ -1,10 +1,18 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
 
 import { AdminPage } from "../AdminPage";
 
 const statsMock = vi.fn();
+
+vi.mock("../SystemHealthPage", () => ({
+  SystemHealthPage: () => <div>Status geral</div>,
+}));
 
 vi.mock("../../services/usersService", () => ({
   usersService: {
@@ -30,7 +38,7 @@ describe("AdminPage", () => {
 
   it("exibe cards admin e o diagnóstico candidato/vaga ao alternar as abas", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AdminPage />
       </MemoryRouter>,
     );
@@ -58,19 +66,20 @@ describe("AdminPage", () => {
 
   it("alterna para a aba Health do Sistema de forma lazy", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <AdminPage />
       </MemoryRouter>,
     );
 
     // Inicialmente, as informações internas de status detalhado de Health (como chaves Gemini em cooldown, latência etc.) não devem estar no DOM
     expect(screen.queryByText("Status geral")).not.toBeInTheDocument();
+    expect(await screen.findByText("12")).toBeInTheDocument();
 
     // Clicar na aba de Health do Sistema
     const healthTabButton = screen.getByRole("button", { name: "Health do Sistema" });
     fireEvent.click(healthTabButton);
 
-    // Agora que foi montado, o indicador de status deve começar a carregar
-    expect(screen.getByText("Carregando status do sistema...")).toBeInTheDocument();
+    // Agora que foi montado, o conteúdo da aba deve aparecer sem acionar chamadas assíncronas do health real.
+    expect(screen.getByText("Status geral")).toBeInTheDocument();
   });
 });
