@@ -76,6 +76,8 @@ vi.mock("../../services/agendaService", () => ({
 vi.mock("../../services/analysisService", () => ({
   analysisService: {
     result: vi.fn(),
+    request: vi.fn(),
+    status: vi.fn(),
   },
 }));
 
@@ -214,6 +216,7 @@ const overview: CandidateOverview = {
       job_id: "job-1",
       job_title: "Analista Protheus",
       stage: "screening",
+      resume_version_id: "version-1",
       relationship_status: "active",
       is_terminal: false,
       terminated_at: null,

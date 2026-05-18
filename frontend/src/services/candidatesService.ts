@@ -189,6 +189,7 @@ function normalizeCandidateOverview(item: Partial<CandidateOverview> & { candida
         job_id: entry?.job_id ?? "",
         job_title: entry?.job_title ?? "",
         stage: (entry?.stage ?? "entry") as PipelineStage,
+        resume_version_id: entry?.resume_version_id ?? null,
         relationship_status: entry?.relationship_status ?? "active",
         is_terminal: Boolean(entry?.is_terminal),
         terminated_at: entry?.terminated_at ?? null,

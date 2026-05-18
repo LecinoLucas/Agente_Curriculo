@@ -1,4 +1,4 @@
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -36,6 +36,7 @@ import { EditCandidateModal } from "../features/pipeline/EditCandidateModal";
 import { useAuth } from "../features/auth/useAuth";
 import { parseQuestionText } from "../features/behavioral-templates/behavioralTemplateHelper";
 import { agendaService } from "../services/agendaService";
+import { analysisService } from "../services/analysisService";
 import { getBehavioralEvaluation } from "../services/behavioralAIEvaluationService";
 import { getCandidateBehavioralAssessment } from "../services/behavioralAssessmentService";
 import { formatContextError } from "../services/errorMessages";
@@ -46,6 +47,7 @@ import { scoreExplanationService, type ScoreExplanationResponse } from "../servi
 import { toast } from "../shared/utils/toast";
 import type {
   AnalysisResult,
+  AnalysisStatus,
   CandidateOverview,
   CandidatePipelineEntryOverview,
   CandidatePipelineHistory,
@@ -111,6 +113,9 @@ export function CandidateProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [linkJobOpen, setLinkJobOpen] = useState(false);
   const [rankingSyncTick, setRankingSyncTick] = useState(0);
+  const [manualAnalysisRequesting, setManualAnalysisRequesting] = useState(false);
+  const [manualAnalysisStatus, setManualAnalysisStatus] = useState<AnalysisStatus["status"] | null>(null);
+  const manualAnalysisPollingRef = useRef<number | null>(null);
 
   const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId ?? null);
   const activeEntry = useMemo(() => getActivePipelineEntry(overview), [overview]);
@@ -122,6 +127,7 @@ export function CandidateProfilePage() {
     rankingEntry,
     rankingEntryLoading,
     rankingEntryError,
+    rankingEntryScoreNotReady,
     analysisResult,
   } = useCandidateData({
     candidateOverview: overview,
@@ -145,6 +151,119 @@ export function CandidateProfilePage() {
     await reload();
     setRankingSyncTick((current) => current + 1);
   }, [reload]);
+
+  useEffect(() => {
+    setManualAnalysisStatus(null);
+  }, [candidateId, profileJobId]);
+
+  useEffect(() => {
+    return () => {
+      if (manualAnalysisPollingRef.current !== null) {
+        window.clearInterval(manualAnalysisPollingRef.current);
+      }
+    };
+  }, []);
+
+  const startManualAnalysisPolling = useCallback(
+    (analysisId: string) => {
+      if (manualAnalysisPollingRef.current !== null) {
+        window.clearInterval(manualAnalysisPollingRef.current);
+      }
+
+      let attempts = 0;
+      const terminalStatuses = new Set<AnalysisStatus["status"]>([
+        "completed",
+        "failed",
+        "cancelled",
+        "discarded",
+      ]);
+
+      manualAnalysisPollingRef.current = window.setInterval(() => {
+        attempts += 1;
+        void analysisService
+          .status(analysisId)
+          .then(async (payload) => {
+            setManualAnalysisStatus(payload.status);
+            await reloadWorkspace();
+            if (terminalStatuses.has(payload.status) || attempts >= 12) {
+              if (manualAnalysisPollingRef.current !== null) {
+                window.clearInterval(manualAnalysisPollingRef.current);
+                manualAnalysisPollingRef.current = null;
+              }
+            }
+          })
+          .catch(async () => {
+            await reloadWorkspace();
+            if (attempts >= 12 && manualAnalysisPollingRef.current !== null) {
+              window.clearInterval(manualAnalysisPollingRef.current);
+              manualAnalysisPollingRef.current = null;
+            }
+          });
+      }, 5000);
+    },
+    [reloadWorkspace],
+  );
+
+  const getAnalysisResumeVersionId = useCallback(() => {
+    const activeResume = overview?.resumes.find((resume) => resume.status === "active") ?? overview?.resumes[0] ?? null;
+    return activeEntry?.resume_version_id ?? profileEntry?.resume_version_id ?? activeResume?.current_version_id ?? null;
+  }, [activeEntry?.resume_version_id, overview?.resumes, profileEntry?.resume_version_id]);
+
+  const handleRequestActiveJobAnalysis = useCallback(
+    async (options: { force?: boolean } = {}) => {
+      if (!profileJobId || manualAnalysisRequesting) return;
+
+      const effectiveStatus = manualAnalysisStatus ?? overview?.active_job_decision?.analysis_status ?? null;
+      if (effectiveStatus === "pending" || effectiveStatus === "processing" || effectiveStatus === "retry_scheduled") {
+        toast.info("Análise em andamento.");
+        return;
+      }
+
+      const resumeVersionId = getAnalysisResumeVersionId();
+      if (!resumeVersionId) {
+        toast.error("Envie um currículo antes de solicitar a análise.");
+        return;
+      }
+
+      setManualAnalysisRequesting(true);
+      setManualAnalysisStatus("pending");
+      try {
+        const response = await analysisService.request(resumeVersionId, profileJobId, {
+          force: Boolean(options.force),
+        });
+        setManualAnalysisStatus(response.status);
+        toast.success(response.created ? "Análise solicitada." : "Análise já estava na fila.");
+        await reloadWorkspace();
+        if (
+          response.status === "pending" ||
+          response.status === "processing" ||
+          response.status === "retry_scheduled"
+        ) {
+          startManualAnalysisPolling(response.analysis_id);
+        }
+      } catch (err: unknown) {
+        setManualAnalysisStatus(null);
+        toast.error(
+          formatContextError(
+            err,
+            "Não foi possível solicitar a análise.",
+            "Tente novamente em alguns instantes.",
+          ),
+        );
+      } finally {
+        setManualAnalysisRequesting(false);
+      }
+    },
+    [
+      getAnalysisResumeVersionId,
+      manualAnalysisRequesting,
+      manualAnalysisStatus,
+      overview?.active_job_decision?.analysis_status,
+      profileJobId,
+      reloadWorkspace,
+      startManualAnalysisPolling,
+    ],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -343,6 +462,10 @@ export function CandidateProfilePage() {
               analysisResult={analysisResult}
               loading={rankingEntryLoading}
               error={rankingEntryError}
+              scoreNotReady={rankingEntryScoreNotReady}
+              analysisRequesting={manualAnalysisRequesting}
+              manualAnalysisStatus={manualAnalysisStatus}
+              onRequestAnalysis={handleRequestActiveJobAnalysis}
               compatibilityGuidance={compatibilityGuidance}
               scoreExplanation={null}
             />
@@ -834,6 +957,10 @@ function ProfileScoreTab({
   analysisResult,
   loading,
   error,
+  scoreNotReady,
+  analysisRequesting,
+  manualAnalysisStatus,
+  onRequestAnalysis,
   compatibilityGuidance,
 }: {
   overview: CandidateOverview;
@@ -844,6 +971,10 @@ function ProfileScoreTab({
   analysisResult: AnalysisResult | null;
   loading: boolean;
   error: string | null;
+  scoreNotReady: boolean;
+  analysisRequesting: boolean;
+  manualAnalysisStatus: AnalysisStatus["status"] | null;
+  onRequestAnalysis: (options?: { force?: boolean }) => Promise<void>;
   compatibilityGuidance: ReturnType<typeof useCandidateDecision>["compatibilityGuidance"];
 }) {
   const candidateId = overview.candidate.id;
@@ -851,7 +982,7 @@ function ProfileScoreTab({
   const currentAnalysisId = decision?.current_analysis_id ?? null;
   const currentAnalysisOverview =
     overview.latest_analysis?.analysis_id === currentAnalysisId ? overview.latest_analysis : null;
-  const status = decision?.analysis_status ?? null;
+  const status = manualAnalysisStatus ?? decision?.analysis_status ?? null;
   const scoreStatus = decision?.score_status ?? null;
   const isProcessing =
     scoreStatus === "analysis_processing" ||
@@ -906,15 +1037,33 @@ function ProfileScoreTab({
       <EmptyBlock
         title="Análise em andamento."
         description="A análise da vaga ativa ainda está sendo processada."
+        actionLabel="Gerar análise agora"
+        onAction={() => void onRequestAnalysis()}
+        actionDisabled
       />
     );
   }
 
-  if (!currentAnalysisId && !rankingEntry && !loading) {
+  if (status === "failed" || scoreStatus === "analysis_failed") {
     return (
       <EmptyBlock
-        title="Ainda não há análise para a vaga ativa."
-        description="Quando a análise da vaga ativa for concluída, o score detalhado aparecerá aqui."
+        title="Análise falhou."
+        description="A análise da vaga ativa não foi concluída. Solicite uma nova tentativa quando quiser."
+        actionLabel={analysisRequesting ? "Solicitando..." : "Tentar novamente"}
+        onAction={() => void onRequestAnalysis()}
+        actionDisabled={analysisRequesting}
+      />
+    );
+  }
+
+  if ((scoreNotReady || (!currentAnalysisId && !rankingEntry)) && !loading) {
+    return (
+      <EmptyBlock
+        title="Análise ainda não disponível para esta vaga."
+        description="Gere a análise manualmente para calcular o score deste candidato na vaga ativa."
+        actionLabel={analysisRequesting ? "Solicitando..." : "Gerar análise agora"}
+        onAction={() => void onRequestAnalysis()}
+        actionDisabled={analysisRequesting}
       />
     );
   }
@@ -935,6 +1084,22 @@ function ProfileScoreTab({
 
   return (
     <div className="space-y-4">
+      {scoreStatus === "score_stale" ? (
+        <SectionCard title="Score desatualizado">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-[hsl(var(--text-muted))]">
+              O score atual pode não refletir a versão mais recente do currículo ou da vaga.
+            </p>
+            <ActionButton
+              onClick={() => void onRequestAnalysis({ force: true })}
+              disabled={analysisRequesting}
+              primary
+            >
+              {analysisRequesting ? "Atualizando..." : "Atualizar análise"}
+            </ActionButton>
+          </div>
+        </SectionCard>
+      ) : null}
       <SectionCard title="Análise da vaga ativa">
         <DefinitionList
           items={[
@@ -2065,11 +2230,13 @@ function EmptyBlock({
   description,
   actionLabel,
   onAction,
+  actionDisabled = false,
 }: {
   title: string;
   description: string;
   actionLabel?: string;
   onAction?: () => void;
+  actionDisabled?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-10 text-center">
@@ -2080,7 +2247,8 @@ function EmptyBlock({
         <button
           type="button"
           onClick={onAction}
-          className="mt-4 rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-bold text-white"
+          disabled={actionDisabled}
+          className="mt-4 rounded-xl bg-[hsl(var(--primary))] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {actionLabel}
         </button>

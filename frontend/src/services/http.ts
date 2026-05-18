@@ -154,6 +154,12 @@ function resolveError(response: Response, payload: unknown): HttpError {
     const payloadRecord = payload as Record<string, unknown>;
     const detail = payloadRecord.detail;
     if (detail !== undefined) {
+      if (typeof detail === "object" && detail !== null) {
+        const detailRecord = detail as Record<string, unknown>;
+        const detailMessage = typeof detailRecord.message === "string" ? detailRecord.message : statusFallback(status);
+        const detailCode = typeof detailRecord.code === "string" ? detailRecord.code : undefined;
+        return new HttpError(status, detailMessage, detailCode, payload, detail, retryAfterSeconds);
+      }
       const message = typeof detail === "string" && detail.trim() ? detail : statusFallback(status);
       return new HttpError(status, message, undefined, payload, detail, retryAfterSeconds);
     }

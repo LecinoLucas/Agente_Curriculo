@@ -246,6 +246,7 @@ export type CandidatePipelineEntryOverview = {
   job_id: string;
   job_title: string;
   stage: PipelineStage;
+  resume_version_id: string | null;
   relationship_status: string;
   is_terminal: boolean;
   terminated_at: string | null;

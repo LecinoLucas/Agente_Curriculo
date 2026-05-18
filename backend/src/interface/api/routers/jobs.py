@@ -1023,6 +1023,15 @@ async def get_candidate_ranking_entry(
             candidate_id=candidate_id,
         )
         return CandidateRankingEntry(**result)
+    except CandidateNotInActivePipelineError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "candidate_score_not_ready",
+                "message": "Score ainda não disponível para este candidato nesta vaga.",
+                "action": "request_analysis",
+            },
+        )
     except Exception as exc:
         _handle_job_service_error(exc)
         raise

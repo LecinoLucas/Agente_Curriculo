@@ -3,7 +3,19 @@ import type { AnalysisResult, CandidateOverview, JobRankingEntry } from "../../.
 import { analysisService } from "../../../../services/analysisService";
 import { getCandidateRankingEntry } from "../../../../services/jobsService";
 import { formatContextError } from "../../../../services/errorMessages";
+import { HttpError } from "../../../../services/http";
 import type { PanelTab } from "../../../pipeline/PipelineContext";
+
+function isCandidateScoreNotReadyError(error: unknown): boolean {
+  if (!(error instanceof HttpError)) return false;
+  if (error.status !== 409) return false;
+  if (error.code === "candidate_score_not_ready") return true;
+  const detail = error.detail;
+  if (detail && typeof detail === "object") {
+    return (detail as Record<string, unknown>).code === "candidate_score_not_ready";
+  }
+  return false;
+}
 
 interface UseCandidateDataInput {
   candidateOverview: CandidateOverview | null | undefined;
@@ -30,6 +42,7 @@ export function useCandidateData({
   const [rankingEntry, setRankingEntry] = useState<JobRankingEntry | null>(null);
   const [rankingEntryLoading, setRankingEntryLoading] = useState(false);
   const [rankingEntryError, setRankingEntryError] = useState<string | null>(null);
+  const [rankingEntryScoreNotReady, setRankingEntryScoreNotReady] = useState(false);
 
   useEffect(() => {
     analysisResultCacheRef.current.clear();
@@ -38,6 +51,7 @@ export function useCandidateData({
     setAnalysisResultError(null);
     setRankingEntry(null);
     setRankingEntryError(null);
+    setRankingEntryScoreNotReady(false);
   }, [rankingSyncTick, candidateActiveJobId, candidateId]);
 
   useEffect(() => {
@@ -113,6 +127,7 @@ export function useCandidateData({
     if (!candidateActiveJobId || !candidateId) {
       setRankingEntry(null);
       setRankingEntryError(null);
+      setRankingEntryScoreNotReady(false);
       setRankingEntryLoading(false);
       return;
     }
@@ -122,6 +137,7 @@ export function useCandidateData({
     if (cached !== undefined) {
       setRankingEntry(cached);
       setRankingEntryError(null);
+      setRankingEntryScoreNotReady(false);
       setRankingEntryLoading(false);
       return;
     }
@@ -129,16 +145,24 @@ export function useCandidateData({
     const abortController = new AbortController();
     setRankingEntryLoading(true);
     setRankingEntryError(null);
+    setRankingEntryScoreNotReady(false);
 
     void getCandidateRankingEntry(candidateActiveJobId, candidateId)
       .then((entry) => {
         if (abortController.signal.aborted) return;
         rankingEntryCacheRef.current.set(cacheKey, entry);
         setRankingEntry(entry);
+        setRankingEntryScoreNotReady(false);
       })
       .catch((err: unknown) => {
         if (abortController.signal.aborted) return;
         setRankingEntry(null);
+        if (isCandidateScoreNotReadyError(err)) {
+          rankingEntryCacheRef.current.set(cacheKey, null);
+          setRankingEntryScoreNotReady(true);
+          setRankingEntryError(null);
+          return;
+        }
         setRankingEntryError(
           formatContextError(
             err,
@@ -164,6 +188,7 @@ export function useCandidateData({
     rankingEntry,
     rankingEntryLoading,
     rankingEntryError,
+    rankingEntryScoreNotReady,
     rankingEntryCacheRef,
   };
 }
