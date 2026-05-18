@@ -180,6 +180,13 @@ export function CandidateBehavioralAssessmentPanel({
         </div>
       </div>
 
+      {/* IA-Assisted Analysis Panel */}
+      <BehavioralAIEvaluationPanel
+        jobId={jobId}
+        candidateId={candidateId}
+        assignmentStatus={assessment.status}
+      />
+
       {/* Competencies and questions */}
       {assessment.status === "submitted" && assessment.competencies.length > 0 && (
         <div className="space-y-4">
@@ -229,13 +236,6 @@ export function CandidateBehavioralAssessmentPanel({
           </div>
         </div>
       )}
-
-      {/* IA-Assisted Analysis Panel */}
-      <BehavioralAIEvaluationPanel
-        jobId={jobId}
-        candidateId={candidateId}
-        assignmentStatus={assessment.status}
-      />
     </div>
   );
 }

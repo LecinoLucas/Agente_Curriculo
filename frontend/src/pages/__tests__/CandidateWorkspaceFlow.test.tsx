@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import { agendaService } from "../../services/agendaService";
 import { analysisService } from "../../services/analysisService";
 import { getBehavioralEvaluation } from "../../services/behavioralAIEvaluationService";
 import { getCandidateBehavioralAssessment } from "../../services/behavioralAssessmentService";
+import { HttpError } from "../../services/http";
 import { listJobs, getCandidateRankingEntry } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import { resumeService } from "../../services/resumeService";
@@ -458,6 +459,28 @@ describe("Candidate workspace flow", () => {
     });
     vi.mocked(getCandidateRankingEntry).mockResolvedValue(rankingEntry);
     vi.mocked(analysisService.result).mockResolvedValue({} as Awaited<ReturnType<typeof analysisService.result>>);
+    vi.mocked(analysisService.request).mockResolvedValue({
+      analysis_id: "analysis-requested",
+      status: "pending",
+      created: true,
+      blocked: false,
+      reused: false,
+      stuck: false,
+      reason: "analysis_requested",
+    });
+    vi.mocked(analysisService.status).mockResolvedValue({
+      analysis_id: "analysis-requested",
+      status: "pending",
+      retry_count: 0,
+      stuck: false,
+      reason: null,
+      failure_reason: null,
+      next_retry_at: null,
+      started_at: null,
+      completed_at: null,
+      failed_at: null,
+      updated_at: "2026-05-12T10:00:00Z",
+    });
     vi.mocked(scoreExplanationService.get).mockResolvedValue(scoreExplanation);
     vi.mocked(scoreExplanationService.saveFeedback).mockResolvedValue({
       id: "feedback-1",
@@ -695,7 +718,77 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Ainda não há análise para a vaga ativa.")).toBeInTheDocument();
+    expect(await screen.findByText("Análise ainda não disponível para esta vaga.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gerar análise agora/i })).toBeInTheDocument();
+  });
+
+  it("409 no ranking mostra ação manual e solicita análise uma única vez", async () => {
+    const user = userEvent.setup();
+    let resolveRequest: (value: Awaited<ReturnType<typeof analysisService.request>>) => void = () => {};
+    vi.mocked(getCandidateRankingEntry).mockRejectedValue(
+      new HttpError(409, "Score ainda não disponível para este candidato nesta vaga.", "candidate_score_not_ready"),
+    );
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      latest_analysis: null,
+      active_job_decision: {
+        ...overview.active_job_decision!,
+        score_status: "waiting_analysis",
+        analysis_status: null,
+        current_analysis_id: null,
+        match_score: null,
+      },
+    });
+    vi.mocked(analysisService.request).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=score"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Análise ainda não disponível para esta vaga.")).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: /Gerar análise agora/i });
+    await user.click(button);
+    await user.click(button);
+
+    expect(analysisService.request).toHaveBeenCalledTimes(1);
+    expect(analysisService.request).toHaveBeenCalledWith("version-1", "job-1", { force: false });
+    expect(button).toBeDisabled();
+
+    await act(async () => {
+      resolveRequest({
+        analysis_id: "analysis-requested",
+        status: "completed",
+        created: true,
+        blocked: false,
+        reused: false,
+        stuck: false,
+        reason: "analysis_requested",
+      });
+    });
+  });
+
+  it("erro comum no ranking continua aparecendo como erro", async () => {
+    vi.mocked(getCandidateRankingEntry).mockRejectedValue(
+      new HttpError(500, "Falha inesperada no ranking"),
+    );
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=score"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Não foi possível carregar o score detalhado desta vaga/i)).toBeInTheDocument();
   });
 
   it("aba Score e análise mostra loading quando análise está processando", async () => {
@@ -719,6 +812,7 @@ describe("Candidate workspace flow", () => {
     );
 
     expect(await screen.findByText("Análise em andamento.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gerar análise agora/i })).toBeDisabled();
     expect(scoreExplanationService.get).not.toHaveBeenCalled();
   });
 

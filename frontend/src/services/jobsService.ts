@@ -243,6 +243,7 @@ export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
             candidate_status: item.candidate_status,
             job_fit_score: item.job_fit_score != null ? requireNumber(item.job_fit_score, "pipeline.job_fit_score") : null,
             top_skills: Array.isArray(item.top_skills) ? item.top_skills.filter(Boolean) : [],
+            entered_at: item.entered_at ?? null,
             updated_at: item.updated_at,
             ai_status: normalizeAiStatus(item.ai_status),
           }))

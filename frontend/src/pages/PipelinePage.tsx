@@ -1,9 +1,10 @@
 import { ChevronDown, PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Plus, Briefcase, MapPin, Award, Layers } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { CandidateSearchModal } from "../features/pipeline/CandidateSearchModal";
+import { InterviewQuickScheduleModal } from "../features/pipeline/InterviewQuickScheduleModal";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
 import { KanbanColumn } from "../components/kanban/KanbanColumn";
@@ -12,9 +13,10 @@ import { StatusPill } from "../components/common/StatusPill";
 import { EmptyState } from "../components/common/EmptyState";
 import { DataQualityBanner } from "../components/data-quality/DataQualityBanner";
 import { formatContextError } from "../services/errorMessages";
+import { feedback } from "../services/feedback";
 import { getJobRanking } from "../services/jobsService";
 import { pipelineService, type PipelineJobSummary } from "../services/pipelineService";
-import type { JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
+import type { JobCandidate, JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
 import {
   formatJobStatus,
   formatSeniority,
@@ -39,6 +41,12 @@ const MAIN_STAGES: ReadonlyArray<PipelineStage> = [
 ];
 const PIPELINE_SHOW_RANKING_STORAGE_KEY = "pipeline:showRanking";
 const PIPELINE_LAST_SELECTED_JOB_KEY = "pipeline:lastSelectedJobId";
+const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
+const SCHEDULE_TIMEZONE = "America/Sao_Paulo";
+
+function interviewTypeForStage(stage: PipelineStage) {
+  return stage === "technical_interview" ? "technical" : "hr";
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function canUsePipeline(status: string | undefined) {
@@ -81,6 +89,18 @@ export function PipelinePage() {
   const rankingFetchInFlightRef = useRef<Map<string, Promise<JobRanking>>>(new Map());
 
   const [previewCandidateId, setPreviewCandidateId] = useState<string | null>(null);
+  const [draggingCandidate, setDraggingCandidate] = useState<{
+    candidateId: string;
+    candidateName: string;
+    fromStage: PipelineStage;
+  } | null>(null);
+  const [dropTargetStage, setDropTargetStage] = useState<PipelineStage | null>(null);
+  const [interviewCandidate, setInterviewCandidate] = useState<{
+    candidateId: string;
+    candidateName: string;
+    targetStage: PipelineStage;
+  } | null>(null);
+  const [isStageMoveSaving, setIsStageMoveSaving] = useState(false);
 
   const {
     activeJobId,
@@ -89,6 +109,7 @@ export function PipelinePage() {
     boardError,
     rankingSyncTick,
     setActiveJob,
+    moveCandidateStage,
     refreshBoard,
   } = usePipeline();
 
@@ -106,6 +127,7 @@ export function PipelinePage() {
   const boardLoadingRef = useRef(boardLoading);
   const rankingLoadingRef = useRef(rankingLoading);
   const showRankingRef = useRef(showRanking);
+  const triggerRefreshRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     autoRefreshActiveRef.current = autoRefreshActive;
@@ -130,17 +152,6 @@ export function PipelinePage() {
   useEffect(() => {
     showRankingRef.current = showRanking;
   }, [showRanking]);
-
-  // Tab visibility listener
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsTabVisible(document.visibilityState === "visible");
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
 
   // Reset timer on job selection change
   useEffect(() => {
@@ -182,6 +193,26 @@ export function PipelinePage() {
     await Promise.all(promises);
     setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
   };
+  triggerRefreshRef.current = triggerRefresh;
+
+  // Refresh immediately when the user returns to the pipeline.
+  useEffect(() => {
+    const handleVisibleRefresh = () => {
+      const visible = document.visibilityState === "visible";
+      setIsTabVisible(visible);
+
+      if (!visible || !autoRefreshActiveRef.current || !activeJobIdRef.current) return;
+      setSecondsLeft(30);
+      void triggerRefreshRef.current?.();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibleRefresh);
+    window.addEventListener("focus", handleVisibleRefresh);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibleRefresh);
+      window.removeEventListener("focus", handleVisibleRefresh);
+    };
+  }, []);
 
   // Manual refresh handler
   const handleManualRefresh = async () => {
@@ -448,6 +479,136 @@ export function PipelinePage() {
     void loadRanking(activeJobId);
     setShowSourceCandidates(true);
   };
+
+  const resetDragState = useCallback(() => {
+    setDraggingCandidate(null);
+    setDropTargetStage(null);
+  }, []);
+
+  const syncAfterStageMutation = useCallback(async () => {
+    try {
+      await refreshBoard();
+    } catch {
+      // The board already receives an optimistic update; keep the UI usable.
+    }
+    setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
+  }, [refreshBoard]);
+
+  const moveCandidateOnBoard = useCallback(
+    async (candidateId: string, toStage: PipelineStage) => {
+      feedback.moveCandidate.processing();
+      setIsStageMoveSaving(true);
+      try {
+        await moveCandidateStage(candidateId, toStage);
+        await syncAfterStageMutation();
+        feedback.moveCandidate.success();
+      } catch (err: unknown) {
+        feedback.moveCandidate.error(err);
+      } finally {
+        setIsStageMoveSaving(false);
+      }
+    },
+    [moveCandidateStage, syncAfterStageMutation],
+  );
+
+  const handleCardDragStart = useCallback(
+    (candidate: JobCandidate) => {
+      if (!canUse || isStageMoveSaving) return;
+      setDraggingCandidate({
+        candidateId: candidate.candidate_id,
+        candidateName: candidate.candidate_name || "Candidato",
+        fromStage: candidate.stage,
+      });
+    },
+    [canUse, isStageMoveSaving],
+  );
+
+  const handleColumnDragOver = useCallback((stage: PipelineStage) => {
+    if (!draggingCandidate || stage === draggingCandidate.fromStage) {
+      setDropTargetStage(null);
+      return;
+    }
+    setDropTargetStage(stage);
+  }, [draggingCandidate]);
+
+  const handleColumnDragLeave = useCallback((stage: PipelineStage) => {
+    setDropTargetStage((current) => (current === stage ? null : current));
+  }, []);
+
+  const handleColumnDrop = useCallback(
+    async (stage: PipelineStage) => {
+      if (!draggingCandidate || !canUse || isStageMoveSaving) {
+        resetDragState();
+        return;
+      }
+
+      if (stage === draggingCandidate.fromStage) {
+        resetDragState();
+        return;
+      }
+
+      if (INTERVIEW_STAGES.has(stage)) {
+        setInterviewCandidate({
+          candidateId: draggingCandidate.candidateId,
+          candidateName: draggingCandidate.candidateName,
+          targetStage: stage,
+        });
+        resetDragState();
+        return;
+      }
+
+      resetDragState();
+      await moveCandidateOnBoard(draggingCandidate.candidateId, stage);
+    },
+    [canUse, draggingCandidate, isStageMoveSaving, moveCandidateOnBoard, resetDragState],
+  );
+
+  const handleMoveInterviewWithoutScheduling = useCallback(async () => {
+    if (!interviewCandidate) return;
+    const pending = interviewCandidate;
+    setInterviewCandidate(null);
+    await moveCandidateOnBoard(pending.candidateId, pending.targetStage);
+  }, [interviewCandidate, moveCandidateOnBoard]);
+
+  const handleScheduleInterview = useCallback(
+    async (payload: {
+      scheduled_start: string;
+      scheduled_end: string;
+      interview_format: "online" | "presencial" | "telefone";
+      location: string | null;
+      meeting_url: string | null;
+      public_notes: string | null;
+      create_google_event?: boolean;
+      create_google_meet?: boolean;
+    }) => {
+      if (!activeJobId || !interviewCandidate) return;
+
+      feedback.moveCandidate.processing();
+      setIsStageMoveSaving(true);
+      try {
+        await pipelineService.schedulePipelineInterview(activeJobId, interviewCandidate.candidateId, {
+          ...payload,
+          timezone: SCHEDULE_TIMEZONE,
+          title: "Entrevista com candidato",
+          interview_type: interviewTypeForStage(interviewCandidate.targetStage),
+        });
+        setInterviewCandidate(null);
+        await syncAfterStageMutation();
+        feedback.moveCandidate.success();
+      } catch (err: unknown) {
+        feedback.moveCandidate.error(err);
+      } finally {
+        setIsStageMoveSaving(false);
+      }
+    },
+    [activeJobId, interviewCandidate, syncAfterStageMutation],
+  );
+
+  const handleCloseInterviewModal = useCallback(() => {
+    if (!isStageMoveSaving) {
+      setInterviewCandidate(null);
+    }
+  }, [isStageMoveSaving]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -734,7 +895,7 @@ export function PipelinePage() {
           <div className={boardLayoutClass}>
             
             {/* Main Board Area */}
-            <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] min-w-0">
+            <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] dark:border-slate-800 dark:bg-slate-900 xl:p-5">
               
               {/* Header inside Board panel */}
               <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 dark:border-slate-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
@@ -792,8 +953,8 @@ export function PipelinePage() {
 
               {/* Kanban columns scroll */}
               {board && !boardError && (
-                <div className="overflow-x-auto pb-4 min-w-0 w-full">
-                  <div className="flex min-w-max items-stretch gap-6 min-h-[500px] h-[calc(100vh-360px)] max-h-[85vh]">
+                <div className="-mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-6 pt-1">
+                  <div className="flex w-full min-w-max items-stretch gap-3 min-h-[620px] h-[calc(100vh-280px)] max-h-[calc(100vh-220px)] xl:gap-4">
                     {mainCols.map((col, idx) => (
                       <KanbanColumn
                         key={col.stage}
@@ -803,18 +964,34 @@ export function PipelinePage() {
                         disabled={!canUse}
                         showTopMatchHighlight={sortOrder === "score_desc"}
                         onAddCandidate={activeJobAcceptsCandidates ? () => handleOpenSourceCandidates() : undefined}
+                        draggableCards={canUse && !isStageMoveSaving}
+                        draggingCandidateId={draggingCandidate?.candidateId ?? null}
+                        isDropTarget={dropTargetStage === col.stage}
+                        onCardDragStart={handleCardDragStart}
+                        onCardDragEnd={resetDragState}
+                        onColumnDragOver={handleColumnDragOver}
+                        onColumnDragLeave={handleColumnDragLeave}
+                        onColumnDrop={(stage) => void handleColumnDrop(stage)}
                       />
                     ))}
 
                     {rejectedCol && (
                       <>
-                        <div className="mx-1 w-px self-stretch bg-slate-100 dark:bg-slate-800 border-r border-dashed border-slate-200 dark:border-slate-800/80" />
+                        <div className="mx-0.5 w-px self-stretch border-r border-dashed border-slate-200 bg-slate-100 dark:border-slate-800/80 dark:bg-slate-800" />
                         <KanbanColumn
                           column={rejectedCol}
                           colIndex={mainCols.length}
                           onCardClick={setPreviewCandidateId}
                           disabled={!canUse}
                           showTopMatchHighlight={sortOrder === "score_desc"}
+                          draggableCards={canUse && !isStageMoveSaving}
+                          draggingCandidateId={draggingCandidate?.candidateId ?? null}
+                          isDropTarget={dropTargetStage === rejectedCol.stage}
+                          onCardDragStart={handleCardDragStart}
+                          onCardDragEnd={resetDragState}
+                          onColumnDragOver={handleColumnDragOver}
+                          onColumnDragLeave={handleColumnDragLeave}
+                          onColumnDrop={(stage) => void handleColumnDrop(stage)}
                         />
                       </>
                     )}
@@ -931,9 +1108,28 @@ export function PipelinePage() {
         />
       )}
 
+      {interviewCandidate && selectedJob ? (
+        <InterviewQuickScheduleModal
+          candidateName={interviewCandidate.candidateName}
+          jobTitle={selectedJob.title}
+          isSaving={isStageMoveSaving}
+          onClose={handleCloseInterviewModal}
+          onMoveWithoutScheduling={handleMoveInterviewWithoutScheduling}
+          onSchedule={handleScheduleInterview}
+          onOpenFullAgenda={() => {
+            setInterviewCandidate(null);
+            navigate("/agenda");
+          }}
+        />
+      ) : null}
+
       <CandidatePreviewDrawer
         candidateId={previewCandidateId}
         onClose={() => setPreviewCandidateId(null)}
+        onPipelineChanged={async () => {
+          setSecondsLeft(30);
+          await triggerRefresh();
+        }}
       />
     </div>
   );

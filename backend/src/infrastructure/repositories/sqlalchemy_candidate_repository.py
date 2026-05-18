@@ -1081,30 +1081,59 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         job_id: UUID,
         active_stage: str,
     ) -> dict[str, bool]:
-        behavioral_assignment_pending = bool(
-            await self._session.scalar(
-                sa.select(sa.literal(True))
-                .select_from(BehavioralAssessmentAssignmentModel)
+        job_policy = (
+            await self._session.execute(
+                sa.select(
+                    JobModel.requires_behavioral_assessment,
+                    JobModel.requires_behavioral_ai_evaluation,
+                    JobModel.behavioral_template_id,
+                ).where(JobModel.id == job_id, JobModel.deleted_at.is_(None))
+            )
+        ).mappings().one_or_none()
+        requires_behavioral = bool(
+            job_policy
+            and job_policy["requires_behavioral_assessment"]
+            and job_policy["behavioral_template_id"] is not None
+        )
+        requires_behavioral_ai = bool(
+            job_policy
+            and job_policy["requires_behavioral_ai_evaluation"]
+            and job_policy["behavioral_template_id"] is not None
+        )
+
+        assignment = None
+        if requires_behavioral:
+            assignment = await self._session.scalar(
+                sa.select(BehavioralAssessmentAssignmentModel)
                 .where(
                     BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
                     BehavioralAssessmentAssignmentModel.job_id == job_id,
-                    BehavioralAssessmentAssignmentModel.status.in_(("pending", "in_progress")),
+                    BehavioralAssessmentAssignmentModel.template_id == job_policy["behavioral_template_id"],
+                )
+                .order_by(
+                    BehavioralAssessmentAssignmentModel.created_at.desc(),
+                    BehavioralAssessmentAssignmentModel.id.desc(),
                 )
                 .limit(1)
             )
+
+        behavioral_assignment_pending = bool(
+            requires_behavioral and (assignment is None or assignment.status in ("pending", "in_progress"))
         )
-        behavioral_ai_pending = bool(
-            await self._session.scalar(
-                sa.select(sa.literal(True))
-                .select_from(BehavioralAssessmentAIEvaluationModel)
-                .where(
-                    BehavioralAssessmentAIEvaluationModel.candidate_id == candidate_id,
-                    BehavioralAssessmentAIEvaluationModel.job_id == job_id,
-                    BehavioralAssessmentAIEvaluationModel.status.in_(("pending", "processing")),
+        behavioral_ai_pending = False
+        if requires_behavioral_ai and assignment is not None and assignment.status == "submitted":
+            behavioral_ai_completed = bool(
+                await self._session.scalar(
+                    sa.select(sa.literal(True))
+                    .select_from(BehavioralAssessmentAIEvaluationModel)
+                    .where(
+                        BehavioralAssessmentAIEvaluationModel.assignment_id == assignment.id,
+                        BehavioralAssessmentAIEvaluationModel.status == "completed",
+                    )
+                    .limit(1)
                 )
-                .limit(1)
             )
-        )
+            behavioral_ai_pending = not behavioral_ai_completed
         interview_not_scheduled = False
         if active_stage in {"hr_interview", "technical_interview"}:
             interview_scheduled = bool(

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { KanbanColumn } from "../KanbanColumn";
 import type { PipelineColumn } from "../../../types/domain";
 import "@testing-library/jest-dom";
@@ -63,5 +63,34 @@ describe("KanbanColumn", () => {
     );
 
     expect(screen.queryByText("Mais aderente")).not.toBeInTheDocument();
+  });
+
+  it("permite arrastar cards e dropar na coluna", () => {
+    const onCardDragStart = vi.fn();
+    const onColumnDrop = vi.fn();
+    const dataTransfer = {
+      effectAllowed: "move",
+      setData: vi.fn(),
+      dropEffect: "move",
+    };
+
+    render(
+      <KanbanColumn
+        column={mockColumn}
+        colIndex={0}
+        draggableCards={true}
+        draggingCandidateId="1"
+        onCardDragStart={onCardDragStart}
+        onColumnDrop={onColumnDrop}
+      />
+    );
+
+    fireEvent.dragStart(screen.getByTestId("kanban-card-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-entry"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-entry"), { dataTransfer });
+
+    expect(onCardDragStart).toHaveBeenCalled();
+    expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", "1");
+    expect(onColumnDrop).toHaveBeenCalledWith("entry");
   });
 });

@@ -13,6 +13,15 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import User, UserRole
+from src.infrastructure.database.models.behavioral_assignment_model import (
+    BehavioralAssessmentAIEvaluationModel,
+    BehavioralAssessmentAssignmentModel,
+)
+from src.infrastructure.database.models.behavioral_template_model import (
+    BehavioralAssessmentTemplateModel,
+    BehavioralTemplateCompetencyModel,
+    BehavioralTemplateQuestionModel,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
@@ -129,6 +138,61 @@ async def _add_candidate_to_job(
     return resp.json()
 
 
+async def _create_behavioral_template(db_session: AsyncSession) -> UUID:
+    template = BehavioralAssessmentTemplateModel(
+        id=uuid4(),
+        name=f"Template Pipeline {uuid4().hex[:6]}",
+        description="Template para gate de pipeline.",
+        status="active",
+        created_by=uuid4(),
+    )
+    db_session.add(template)
+    await db_session.flush()
+
+    competency = BehavioralTemplateCompetencyModel(
+        id=uuid4(),
+        template_id=template.id,
+        name="Comunicação",
+        weight=1,
+        display_order=1,
+    )
+    db_session.add(competency)
+    await db_session.flush()
+
+    db_session.add(
+        BehavioralTemplateQuestionModel(
+            id=uuid4(),
+            competency_id=competency.id,
+            question_text="Descreva uma situação de comunicação com o time.",
+            answer_type="text",
+            is_required=True,
+            weight=1,
+            display_order=1,
+        )
+    )
+    await db_session.commit()
+    return template.id
+
+
+async def _set_job_behavioral_policy(
+    db_session: AsyncSession,
+    *,
+    job_id: UUID,
+    template_id: UUID,
+    requires_ai: bool,
+) -> None:
+    await db_session.execute(
+        sa.update(JobModel)
+        .where(JobModel.id == job_id)
+        .values(
+            behavioral_template_id=template_id,
+            requires_behavioral_assessment=True,
+            requires_behavioral_ai_evaluation=requires_ai,
+        )
+    )
+    await db_session.commit()
+
+
 @pytest.mark.asyncio
 async def test_patch_pipeline_stage_v2_endpoint(
     client: AsyncClient,
@@ -163,6 +227,198 @@ async def test_patch_pipeline_stage_v2_endpoint(
     result = move_resp.json()
     assert result["stage"] == "screening"
     assert result["candidate_id"] == str(candidate_id)
+
+
+@pytest.mark.asyncio
+async def test_patch_pipeline_stage_hired_blocks_when_behavioral_required_pending(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-hire-gate-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template_id = await _create_behavioral_template(db_session)
+
+    job_id = await _create_job(client, headers, db_session, title="Pipeline Gate Job")
+    await _set_job_behavioral_policy(
+        db_session,
+        job_id=job_id,
+        template_id=template_id,
+        requires_ai=False,
+    )
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        db_session,
+        "Gate Candidate",
+        f"gate-{uuid4().hex[:6]}@test.com",
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="final")
+    )
+    await db_session.commit()
+
+    move_resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "hired", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert move_resp.status_code == 409
+    assert "avaliação comportamental" in move_resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_patch_pipeline_stage_hired_requires_behavioral_ai_when_policy_requires_it(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-hire-ai-gate-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template_id = await _create_behavioral_template(db_session)
+
+    job_id = await _create_job(client, headers, db_session, title="Pipeline Gate AI Job")
+    await _set_job_behavioral_policy(
+        db_session,
+        job_id=job_id,
+        template_id=template_id,
+        requires_ai=True,
+    )
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        db_session,
+        "AI Gate Candidate",
+        f"ai-gate-{uuid4().hex[:6]}@test.com",
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="final")
+    )
+    await db_session.commit()
+
+    now = datetime.now(UTC)
+    assignment = await db_session.scalar(
+        sa.select(BehavioralAssessmentAssignmentModel).where(
+            BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+            BehavioralAssessmentAssignmentModel.job_id == job_id,
+            BehavioralAssessmentAssignmentModel.template_id == template_id,
+        )
+    )
+    assert assignment is not None
+    assignment_id = assignment.id
+    assignment.status = "submitted"
+    assignment.started_at = now
+    assignment.submitted_at = now
+    await db_session.commit()
+
+    blocked = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "hired", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert blocked.status_code == 409
+    assert "IA comportamental" in blocked.json()["detail"]
+
+    db_session.add(
+        BehavioralAssessmentAIEvaluationModel(
+            id=uuid4(),
+            assignment_id=assignment_id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+            template_id=template_id,
+            status="completed",
+            provider="test",
+            model="test-model",
+            prompt_version=1,
+            completed_at=now,
+        )
+    )
+    await db_session.commit()
+
+    allowed = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "hired", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["stage"] == "hired"
+
+
+@pytest.mark.asyncio
+async def test_schedule_pipeline_technical_interview_moves_candidate_to_technical_stage(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-tech-interview-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(client, headers, db_session, title="Pipeline Technical Interview Job")
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        db_session,
+        "Technical Interview Candidate",
+        f"tech-interview-{uuid4().hex[:6]}@test.com",
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="hr_interview")
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/interviews",
+        json={
+            "scheduled_start": "2099-01-01T13:00:00Z",
+            "scheduled_end": "2099-01-01T14:00:00Z",
+            "timezone": "America/Sao_Paulo",
+            "interview_format": "online",
+            "interview_type": "technical",
+            "title": "Entrevista técnica",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["interview_type"] == "technical"
+
+    entry_stage = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.pipeline_stage).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert entry_stage == "technical_interview"
 
 
 @pytest.mark.asyncio

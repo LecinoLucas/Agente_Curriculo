@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     S3_PRESIGNED_URL_EXPIRE_SECONDS: int = 900
 
     # AI
-    AI_PROVIDER: str = "anthropic"
+    AI_PROVIDER: str = "google"
     AI_MODEL_ID: str = "gemini-2.5-flash"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_DEFAULT_MODEL: str = "claude-sonnet-4-6"

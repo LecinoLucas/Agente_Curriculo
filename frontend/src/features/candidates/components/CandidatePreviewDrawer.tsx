@@ -1,9 +1,14 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, X } from "lucide-react";
+import { ClipboardCheck, FileText, LoaderCircle, X } from "lucide-react";
 
 import { CandidateScoreDimensionsCard } from "./CandidateScoreDimensionsCard";
+import { InterviewQuickScheduleModal } from "../../pipeline/InterviewQuickScheduleModal";
 import { useCandidateOverview } from "../hooks/useCandidateOverview";
+import { formatContextError } from "../../../services/errorMessages";
+import { pipelineService } from "../../../services/pipelineService";
+import { toast } from "../../../shared/utils/toast";
+import type { PipelineStage } from "../../../types/domain";
 import {
   ANALYSIS_STATUS_LABEL,
   STAGE_LABEL,
@@ -20,16 +25,43 @@ import {
 export type CandidatePreviewDrawerProps = {
   candidateId: string | null;
   onClose: () => void;
+  onPipelineChanged?: () => Promise<void> | void;
 };
 
-export function CandidatePreviewDrawer({ candidateId, onClose }: CandidatePreviewDrawerProps) {
+export function CandidatePreviewDrawer({ candidateId, onClose, onPipelineChanged }: CandidatePreviewDrawerProps) {
   if (!candidateId) return null;
-  return <DrawerPanel candidateId={candidateId} onClose={onClose} />;
+  return <DrawerPanel candidateId={candidateId} onClose={onClose} onPipelineChanged={onPipelineChanged} />;
 }
 
-function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: () => void }) {
+const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
+  entry: "screening",
+  screening: "hr_interview",
+  hr_interview: "technical_interview",
+  technical_interview: "final",
+  final: "hired",
+  offer: "hired",
+};
+
+const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
+const SCHEDULE_TIMEZONE = "America/Sao_Paulo";
+
+function interviewTypeForStage(stage: PipelineStage) {
+  return stage === "technical_interview" ? "technical" : "hr";
+}
+
+function DrawerPanel({
+  candidateId,
+  onClose,
+  onPipelineChanged,
+}: {
+  candidateId: string;
+  onClose: () => void;
+  onPipelineChanged?: () => Promise<void> | void;
+}) {
   const navigate = useNavigate();
   const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId);
+  const [stageSaving, setStageSaving] = useState(false);
+  const [interviewStageToSchedule, setInterviewStageToSchedule] = useState<PipelineStage | null>(null);
 
   const candidate = overview?.candidate ?? null;
   const activeEntry = getActivePipelineEntry(overview);
@@ -44,6 +76,8 @@ function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: (
   const location = [candidate?.location_city, candidate?.location_state]
     .filter(Boolean)
     .join(", ");
+  const nextStage = activeEntry ? NEXT_PIPELINE_STAGE[activeEntry.stage] ?? null : null;
+  const hasBehavioralPendency = pendencies.some((pendency) => pendency.id.startsWith("behavioral"));
 
   const openFullProfile = () => {
     navigate(`/candidatos/${candidateId}`);
@@ -51,6 +85,116 @@ function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: (
 
   const openResume = () => {
     navigate(`/candidatos/${candidateId}?tab=documents`);
+  };
+
+  const openAssessments = () => {
+    navigate(`/candidatos/${candidateId}?tab=assessments`);
+  };
+
+  const syncAfterPipelineChange = async () => {
+    try {
+      await reload();
+      await onPipelineChanged?.();
+    } catch (err: unknown) {
+      toast.error(
+        formatContextError(
+          err,
+          "Etapa avançada, mas a visualização não foi atualizada.",
+          "Use sincronizar agora para recarregar a pipeline.",
+        ),
+      );
+    }
+  };
+
+  const moveToStage = async (targetStage: PipelineStage) => {
+    if (!activeEntry || stageSaving) return false;
+    setStageSaving(true);
+    try {
+      await pipelineService.moveCandidateStage(activeEntry.job_id, candidateId, {
+        stage: targetStage,
+        notes: null,
+        reason: "Avanço pelo preview da pipeline.",
+      });
+      toast.success(`Candidato movido para ${STAGE_LABEL[targetStage] ?? targetStage}.`);
+    } catch (err: unknown) {
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível avançar a etapa.",
+          "Revise as pendências do candidato e tente novamente.",
+        ),
+      );
+      setStageSaving(false);
+      return false;
+    }
+
+    await syncAfterPipelineChange();
+    setStageSaving(false);
+    return true;
+  };
+
+  const advanceStage = async () => {
+    if (!nextStage || stageSaving) return;
+
+    if (INTERVIEW_STAGES.has(nextStage)) {
+      setInterviewStageToSchedule(nextStage);
+      return;
+    }
+
+    await moveToStage(nextStage);
+  };
+
+  const moveWithoutScheduling = async () => {
+    if (!interviewStageToSchedule) return;
+    const moved = await moveToStage(interviewStageToSchedule);
+    if (moved) setInterviewStageToSchedule(null);
+  };
+
+  const scheduleInterview = async (payload: {
+    scheduled_start: string;
+    scheduled_end: string;
+    interview_format: "online" | "presencial" | "telefone";
+    location: string | null;
+    meeting_url: string | null;
+    public_notes: string | null;
+    create_google_event?: boolean;
+    create_google_meet?: boolean;
+  }) => {
+    if (!activeEntry || !interviewStageToSchedule || stageSaving) return;
+
+    setStageSaving(true);
+    try {
+      await pipelineService.schedulePipelineInterview(activeEntry.job_id, candidateId, {
+        ...payload,
+        timezone: SCHEDULE_TIMEZONE,
+        title: "Entrevista com candidato",
+        interview_type: interviewTypeForStage(interviewStageToSchedule),
+      });
+      toast.success(`Entrevista agendada em ${STAGE_LABEL[interviewStageToSchedule] ?? "entrevista"}.`);
+      setInterviewStageToSchedule(null);
+    } catch (err: unknown) {
+      toast.error(
+        formatContextError(
+          err,
+          "Não foi possível agendar a entrevista.",
+          "Revise os dados do agendamento e tente novamente.",
+        ),
+      );
+      setStageSaving(false);
+      return;
+    }
+
+    await syncAfterPipelineChange();
+    setStageSaving(false);
+  };
+
+  const closeInterviewModal = () => {
+    if (!stageSaving) setInterviewStageToSchedule(null);
+  };
+
+  const openFullAgenda = () => {
+    setInterviewStageToSchedule(null);
+    navigate("/agenda");
   };
 
   return (
@@ -125,16 +269,32 @@ function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: (
               <SectionCard testId="preview-active-job">
                 <SectionLabel>Vaga ativa</SectionLabel>
                 {activeEntry ? (
-                  <div className="mt-1.5 flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-sm font-medium text-[hsl(var(--text))]">
-                      {activeEntry.job_title}
-                    </span>
-                    <span
-                      className="shrink-0 rounded-full bg-[hsl(var(--primary))]/10 px-2 py-0.5 text-xs font-medium text-[hsl(var(--primary))]"
-                      data-testid="preview-stage-badge"
-                    >
-                      {STAGE_LABEL[activeEntry.stage] ?? activeEntry.stage}
-                    </span>
+                  <div className="mt-1.5 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-sm font-medium text-[hsl(var(--text))]">
+                        {activeEntry.job_title}
+                      </span>
+                      <span
+                        className="shrink-0 rounded-full bg-[hsl(var(--primary))]/10 px-2 py-0.5 text-xs font-medium text-[hsl(var(--primary))]"
+                        data-testid="preview-stage-badge"
+                      >
+                        {STAGE_LABEL[activeEntry.stage] ?? activeEntry.stage}
+                      </span>
+                    </div>
+                    {nextStage ? (
+                      <button
+                        type="button"
+                        onClick={() => void advanceStage()}
+                        disabled={stageSaving}
+                        title={`Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
+                        aria-label={`Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
+                        data-testid="preview-advance-stage"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-3 py-2 text-xs font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+                      >
+                        {stageSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        <span>Avançar para fase {STAGE_LABEL[nextStage] ?? nextStage}</span>
+                      </button>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="mt-1 text-sm text-[hsl(var(--text-muted))]" data-testid="preview-no-job">
@@ -211,21 +371,33 @@ function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: (
               <SectionCard testId="preview-pendencies">
                 <SectionLabel>Pendências</SectionLabel>
                 {pendencies.length > 0 ? (
-                  <ul className="mt-1.5 space-y-1">
-                    {pendencies.map((pendency) => (
-                      <li key={pendency.id} className="flex items-center gap-1.5 text-sm">
-                        <span
-                          className={[
-                            "h-1.5 w-1.5 rounded-full",
-                            pendency.tone === "warning"
-                              ? "bg-[hsl(var(--warning))]"
-                              : "bg-[hsl(var(--primary))]",
-                          ].join(" ")}
-                        />
-                        <span className="text-[hsl(var(--text-muted))]">{pendency.label}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <ul className="mt-1.5 space-y-1">
+                      {pendencies.map((pendency) => (
+                        <li key={pendency.id} className="flex items-center gap-1.5 text-sm">
+                          <span
+                            className={[
+                              "h-1.5 w-1.5 rounded-full",
+                              pendency.tone === "warning"
+                                ? "bg-[hsl(var(--warning))]"
+                                : "bg-[hsl(var(--primary))]",
+                            ].join(" ")}
+                          />
+                          <span className="text-[hsl(var(--text-muted))]">{pendency.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {hasBehavioralPendency ? (
+                      <button
+                        type="button"
+                        onClick={openAssessments}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] transition-colors hover:bg-[hsl(var(--surface-muted))]"
+                      >
+                        <ClipboardCheck className="h-3.5 w-3.5" />
+                        Ver avaliações
+                      </button>
+                    ) : null}
+                  </>
                 ) : (
                   <p className="mt-1.5 text-sm text-[hsl(var(--text-muted))]">Nenhuma pendência.</p>
                 )}
@@ -281,6 +453,18 @@ function DrawerPanel({ candidateId, onClose }: { candidateId: string; onClose: (
           </>
         ) : null}
       </div>
+
+      {interviewStageToSchedule && candidate && activeEntry ? (
+        <InterviewQuickScheduleModal
+          candidateName={candidate.full_name}
+          jobTitle={activeEntry.job_title}
+          isSaving={stageSaving}
+          onClose={closeInterviewModal}
+          onMoveWithoutScheduling={moveWithoutScheduling}
+          onSchedule={scheduleInterview}
+          onOpenFullAgenda={openFullAgenda}
+        />
+      ) : null}
     </>
   );
 }

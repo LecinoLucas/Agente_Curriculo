@@ -1,5 +1,5 @@
-import { memo, type CSSProperties } from "react";
-import type { PipelineColumn, PipelineStage } from "../../types/domain";
+import { memo, type CSSProperties, type DragEvent } from "react";
+import type { JobCandidate, PipelineColumn, PipelineStage } from "../../types/domain";
 import { KanbanCard } from "./KanbanCard";
 import { Plus } from "lucide-react";
 
@@ -62,6 +62,14 @@ interface KanbanColumnProps {
   showTopMatchHighlight?: boolean;
   onAddCandidate?: (stage: PipelineStage) => void;
   totalCount?: number;
+  draggableCards?: boolean;
+  draggingCandidateId?: string | null;
+  isDropTarget?: boolean;
+  onCardDragStart?: (candidate: JobCandidate) => void;
+  onCardDragEnd?: () => void;
+  onColumnDragOver?: (stage: PipelineStage) => void;
+  onColumnDragLeave?: (stage: PipelineStage) => void;
+  onColumnDrop?: (stage: PipelineStage) => void;
 }
 
 export const KanbanColumn = memo(function KanbanColumn({
@@ -72,24 +80,56 @@ export const KanbanColumn = memo(function KanbanColumn({
   showTopMatchHighlight = false,
   onAddCandidate,
   totalCount,
+  draggableCards = false,
+  draggingCandidateId = null,
+  isDropTarget = false,
+  onCardDragStart,
+  onCardDragEnd,
+  onColumnDragOver,
+  onColumnDragLeave,
+  onColumnDrop,
 }: KanbanColumnProps) {
   const theme = COL_THEMES[column.stage] || COL_THEMES.entry;
   const disabledCls = disabled ? "opacity-60 pointer-events-none" : "";
   const isFiltered = totalCount !== undefined && totalCount !== column.candidates.length;
 
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (disabled || !draggingCandidateId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    onColumnDragOver?.(column.stage);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      onColumnDragLeave?.(column.stage);
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (disabled || !draggingCandidateId) return;
+    event.preventDefault();
+    onColumnDrop?.(column.stage);
+  };
+
   return (
     <div
       className={[
-        "flex w-[21rem] min-w-[320px] shrink-0 flex-col rounded-2xl border p-4 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.03)]",
+        "flex w-full min-w-[19rem] basis-[clamp(19rem,21vw,24rem)] grow flex-col rounded-2xl border p-4 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.03)] xl:min-w-[20rem] 2xl:min-w-[21rem]",
         "kanban-column-enter",
         theme.border,
         theme.bg,
+        isDropTarget ? "border-[hsl(var(--primary))]/45 bg-[hsl(var(--primary))]/[0.04] shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]" : "",
         disabledCls,
       ]
         .filter(Boolean)
         .join(" ")}
       style={{ "--enter-delay": `${colIndex * 55}ms` } as CSSProperties}
       data-testid={`kanban-column-${column.stage}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      data-drop-target={isDropTarget ? "true" : "false"}
     >
       {/* Column Header */}
       <div className="mb-4 flex flex-col gap-1 border-b border-dashed border-slate-200/60 dark:border-slate-800/80 pb-3 px-1 min-w-0">
@@ -112,7 +152,7 @@ export const KanbanColumn = memo(function KanbanColumn({
       </div>
 
       {/* Candidate Cards list */}
-      <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto pr-0.5 ui-scrollbar min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1 ui-scrollbar">
         {column.candidates.map((c, cardIndex) => {
           const isTopMatch =
             showTopMatchHighlight &&
@@ -128,6 +168,10 @@ export const KanbanColumn = memo(function KanbanColumn({
               isTopMatch={isTopMatch}
               enterDelay={colIndex * 65 + cardIndex * 30}
               onCardClick={onCardClick}
+              draggable={draggableCards && !disabled}
+              isDragging={draggingCandidateId === c.candidate_id}
+              onDragStart={onCardDragStart}
+              onDragEnd={onCardDragEnd}
             />
           );
         })}

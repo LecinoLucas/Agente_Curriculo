@@ -263,6 +263,10 @@ class PipelineInvalidTransitionError(Exception):
     """Raised when stage flow-control rules block the requested transition."""
 
 
+class PipelineDecisionGateBlockedError(Exception):
+    """Raised when a terminal hiring move bypasses required decision gates."""
+
+
 class PipelineConcurrentModificationError(Exception):
     """Raised when a concurrent request changed the candidate's stage before this one committed."""
 
@@ -433,6 +437,9 @@ class PipelineService:
             raise PipelineInvalidTransitionError(
                 f"Cannot move backwards from '{from_stage}' to '{body.stage}'"
             )
+
+        if body.stage == "hired":
+            await self._assert_hiring_decision_gates(candidate_id=candidate_id, job_id=body.job_id)
 
         now = datetime.now(UTC)
         new_status = to_cfg.terminal_status or "active"
@@ -1033,6 +1040,33 @@ class PipelineService:
     async def _ensure_active_candidate(self, candidate_id: UUID) -> None:
         if await self._repository.find_active_candidate(candidate_id) is None:
             raise PipelineCandidateNotFoundError
+
+    async def _assert_hiring_decision_gates(self, *, candidate_id: UUID, job_id: UUID) -> None:
+        job = await self._repository.find_active_job(job_id)
+        if job is None:
+            raise PipelineJobNotFoundError
+
+        if not bool(job.requires_behavioral_assessment) or job.behavioral_template_id is None:
+            return
+
+        assignment = await self._repository.find_latest_behavioral_assignment(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            template_id=job.behavioral_template_id,
+        )
+        if assignment is None or assignment.status != "submitted":
+            raise PipelineDecisionGateBlockedError(
+                "Contratação exige avaliação comportamental submetida conforme política da vaga."
+            )
+
+        if bool(job.requires_behavioral_ai_evaluation):
+            ai_evaluation = await self._repository.find_latest_behavioral_ai_evaluation(
+                assignment_id=assignment.id,
+            )
+            if ai_evaluation is None or ai_evaluation.status != "completed":
+                raise PipelineDecisionGateBlockedError(
+                    "Contratação exige avaliação de IA comportamental concluída conforme política da vaga."
+                )
 
     @staticmethod
     def _row_to_match_response(row: dict) -> JobMatchCandidateResponse:

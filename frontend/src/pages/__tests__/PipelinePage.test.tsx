@@ -20,11 +20,22 @@ vi.mock("../../features/pipeline/PipelineContext", () => ({
 vi.mock("../../services/pipelineService", () => ({
   pipelineService: {
     listPipelineJobs: vi.fn(),
+    schedulePipelineInterview: vi.fn(),
   },
 }));
 
 vi.mock("../../services/jobsService", () => ({
   getJobRanking: vi.fn(),
+}));
+
+vi.mock("../../services/feedback", () => ({
+  feedback: {
+    moveCandidate: {
+      processing: vi.fn(),
+      success: vi.fn(),
+      error: vi.fn(),
+    },
+  },
 }));
 
 // Mock child modals/drawers to keep test output clean and isolated
@@ -44,6 +55,7 @@ vi.mock("../../features/candidates/components/CandidatePreviewDrawer", () => ({
 describe("PipelinePage", () => {
   const mockSetActiveJob = vi.fn();
   const mockRefreshBoard = vi.fn();
+  const mockMoveCandidateStage = vi.fn();
 
   const mockJobs = [
     {
@@ -151,6 +163,11 @@ describe("PipelinePage", () => {
     vi.clearAllMocks();
     (pipelineService.listPipelineJobs as any).mockResolvedValue(mockJobs);
     (getJobRanking as any).mockResolvedValue(mockRanking);
+    mockMoveCandidateStage.mockResolvedValue({
+      candidate_id: "c-1",
+      job_id: "job-1",
+      stage: "screening",
+    });
     (usePipeline as any).mockReturnValue({
       activeJobId: "job-1",
       board: mockBoard,
@@ -158,6 +175,7 @@ describe("PipelinePage", () => {
       boardError: null,
       rankingSyncTick: 0,
       setActiveJob: mockSetActiveJob,
+      moveCandidateStage: mockMoveCandidateStage,
       refreshBoard: mockRefreshBoard,
     });
   });
@@ -328,6 +346,35 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Erro de rede", { exact: false })).toBeInTheDocument();
+    });
+  });
+
+  it("11. Move candidato ao arrastar o card para outra coluna", async () => {
+    const dataTransfer = {
+      effectAllowed: "move",
+      setData: vi.fn(),
+      dropEffect: "move",
+    };
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kanban-card-c-1")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-screening")).toBeInTheDocument();
+    });
+
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
     });
   });
 });

@@ -158,7 +158,6 @@ export function useCandidateData({
         if (abortController.signal.aborted) return;
         setRankingEntry(null);
         if (isCandidateScoreNotReadyError(err)) {
-          rankingEntryCacheRef.current.set(cacheKey, null);
           setRankingEntryScoreNotReady(true);
           setRankingEntryError(null);
           return;

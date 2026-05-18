@@ -546,6 +546,7 @@ export type JobCandidate = {
   seniority_level?: string | null;
   total_experience_years?: number | null;
   top_skills?: string[];
+  entered_at?: string | null;
   updated_at?: string;
   // AI-controlled: processing state of the candidate's latest analysis.
   // null means no analysis has been requested yet. Never affects `stage`.

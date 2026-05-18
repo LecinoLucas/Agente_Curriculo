@@ -1,8 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { candidatesService } from "../../../../services/candidatesService";
+import { pipelineService } from "../../../../services/pipelineService";
 import type { CandidateOverview } from "../../../../types/domain";
 import { CandidatePreviewDrawer } from "../CandidatePreviewDrawer";
 
@@ -14,6 +15,26 @@ const routerFuture = {
 vi.mock("../../../../services/candidatesService", () => ({
   candidatesService: {
     getOverview: vi.fn(),
+  },
+}));
+
+vi.mock("../../../../services/pipelineService", () => ({
+  pipelineService: {
+    moveCandidateStage: vi.fn(),
+    schedulePipelineInterview: vi.fn(),
+  },
+}));
+
+vi.mock("../../../../services/agendaService", () => ({
+  agendaService: {
+    getGoogleCalendarStatus: vi.fn().mockResolvedValue({ connected: false }),
+  },
+}));
+
+vi.mock("../../../../shared/utils/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -149,10 +170,14 @@ function mockOverview(override: Partial<CandidateOverview> = {}) {
   });
 }
 
-function renderDrawer(onClose = vi.fn()) {
+function renderDrawer(onClose = vi.fn(), onPipelineChanged?: () => Promise<void> | void) {
   render(
     <MemoryRouter future={routerFuture}>
-      <CandidatePreviewDrawer candidateId="candidate-1" onClose={onClose} />
+      <CandidatePreviewDrawer
+        candidateId="candidate-1"
+        onClose={onClose}
+        onPipelineChanged={onPipelineChanged}
+      />
       <LocationProbe />
     </MemoryRouter>,
   );
@@ -162,6 +187,45 @@ function renderDrawer(onClose = vi.fn()) {
 describe("CandidatePreviewDrawer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(pipelineService.moveCandidateStage).mockResolvedValue({
+      candidate_id: "candidate-1",
+      job_id: "job-1",
+      stage: "hr_interview",
+      candidate_status: "Em processo",
+      status: "active",
+      transition_id: "transition-1",
+      updated_at: "2026-05-16T10:00:00Z",
+    });
+    vi.mocked(pipelineService.schedulePipelineInterview).mockResolvedValue({
+      id: "interview-1",
+      candidate_id: "candidate-1",
+      candidate_name: "Ana Souza",
+      job_id: "job-1",
+      job_title: "Analista Protheus",
+      title: "Entrevista com candidato",
+      description: null,
+      public_notes: null,
+      internal_notes: null,
+      scheduled_start: "2099-01-01T12:00:00.000Z",
+      scheduled_end: "2099-01-01T13:00:00.000Z",
+      timezone: "America/Sao_Paulo",
+      interview_type: "hr",
+      interview_format: "online",
+      status: "scheduled",
+      location: null,
+      meeting_url: null,
+      interviewer_name: null,
+      interviewer_email: null,
+      cancel_reason: null,
+      calendar_provider: null,
+      calendar_sync_status: "not_synced",
+      calendar_sync_error: null,
+      external_calendar_event_id: null,
+      external_calendar_html_link: null,
+      meeting_provider: null,
+      created_at: "2026-05-16T10:00:00Z",
+      updated_at: "2026-05-16T10:00:00Z",
+    });
   });
 
   it("renderiza bloco Skills da vaga quando há dados", async () => {
@@ -237,6 +301,76 @@ describe("CandidatePreviewDrawer", () => {
     renderDrawer();
 
     expect(await screen.findByRole("button", { name: /Ver currículo/i })).toBeInTheDocument();
+  });
+
+  it("abre agendamento ao avançar para entrevista e permite mover sem agendar", async () => {
+    const user = userEvent.setup();
+    const onPipelineChanged = vi.fn().mockResolvedValue(undefined);
+    mockOverview();
+    renderDrawer(vi.fn(), onPipelineChanged);
+
+    await user.click(await screen.findByRole("button", { name: /Avançar para fase Entrevista RH/i }));
+
+    expect(await screen.findByRole("dialog", { name: /Agendar entrevista/i })).toBeInTheDocument();
+    expect(pipelineService.moveCandidateStage).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Mover sem agendar/i }));
+
+    expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith("job-1", "candidate-1", {
+      stage: "hr_interview",
+      notes: null,
+      reason: "Avanço pelo preview da pipeline.",
+    });
+    await waitFor(() => {
+      expect(onPipelineChanged).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("agenda entrevista pelo preview e sincroniza a pipeline", async () => {
+    const user = userEvent.setup();
+    const onPipelineChanged = vi.fn().mockResolvedValue(undefined);
+    mockOverview();
+    renderDrawer(vi.fn(), onPipelineChanged);
+
+    await user.click(await screen.findByRole("button", { name: /Avançar para fase Entrevista RH/i }));
+    await user.clear(await screen.findByLabelText("Data"));
+    await user.type(screen.getByLabelText("Data"), "2099-01-01");
+    await user.click(screen.getByRole("button", { name: /^Agendar entrevista$/i }));
+
+    expect(pipelineService.schedulePipelineInterview).toHaveBeenCalledWith(
+      "job-1",
+      "candidate-1",
+      expect.objectContaining({
+        interview_type: "hr",
+        timezone: "America/Sao_Paulo",
+        title: "Entrevista com candidato",
+      }),
+    );
+    await waitFor(() => {
+      expect(onPipelineChanged).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("mantém avanço direto para etapa que não é entrevista", async () => {
+    const user = userEvent.setup();
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "technical_interview",
+          candidate_status: "Entrevista Técnica",
+        },
+      ],
+    });
+    renderDrawer();
+
+    await user.click(await screen.findByRole("button", { name: /Avançar para fase Final/i }));
+
+    expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith("job-1", "candidate-1", {
+      stage: "final",
+      notes: null,
+      reason: "Avanço pelo preview da pipeline.",
+    });
   });
 
   it("não mostra botão Ver currículo quando não há currículo", async () => {

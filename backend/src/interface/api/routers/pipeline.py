@@ -14,6 +14,7 @@ from src.application.services.pipeline_service import (
     PipelineCandidateNotFoundError,
     PipelineCandidateWithoutActiveJobError,
     PipelineConcurrentModificationError,
+    PipelineDecisionGateBlockedError,
     PipelineDuplicateEntryError,
     PipelineEntryNotFoundError,
     PipelineInvalidTransitionError,
@@ -141,6 +142,11 @@ def _handle(exc: Exception) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         )
+    if isinstance(exc, PipelineDecisionGateBlockedError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
     if isinstance(exc, PipelineConcurrentModificationError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -264,12 +270,21 @@ async def schedule_pipeline_interview(
         if entry is None:
             raise PipelineEntryNotFoundError
 
-        if entry.pipeline_stage not in {"hr_interview", "technical_interview", "final", "offer"}:
+        target_stage = (
+            "technical_interview"
+            if body.interview_type in {"technical", "manager"}
+            else "hr_interview"
+        )
+        stages_that_do_not_need_move = {"final", "offer", target_stage}
+        if target_stage == "hr_interview":
+            stages_that_do_not_need_move.add("technical_interview")
+
+        if entry.pipeline_stage not in stages_that_do_not_need_move:
             await PipelineService(pipeline_repository, db).move_candidate(
                 candidate_id=candidate_id,
                 body=MoveCandidateRequest(
                     job_id=job_id,
-                    stage="hr_interview",
+                    stage=target_stage,
                     notes="Entrevista agendada pela agenda.",
                     reason=None,
                 ),

@@ -98,6 +98,12 @@ function TabFallback() {
   );
 }
 
+const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
+
+function interviewTypeForStage(stage: PipelineStage | null) {
+  return stage === "technical_interview" ? "technical" : "hr";
+}
+
 interface CandidateDrawerProps {
   mode?: "overlay" | "workspace";
   onClose?: () => void;
@@ -176,6 +182,7 @@ export function CandidateDrawer({
   const [actionFeedback, setActionFeedback] = useState<CandidateActionFeedback | null>(null);
   const [linkJobModalOpen, setLinkJobModalOpen] = useState(false);
   const [quickInterviewOpen, setQuickInterviewOpen] = useState(false);
+  const [quickInterviewStage, setQuickInterviewStage] = useState<PipelineStage | null>(null);
   const [fullAgendaOpen, setFullAgendaOpen] = useState(false);
   const [analysisStarting, setAnalysisStarting] = useState(false);
   const [scoreTabFocusRequest, setScoreTabFocusRequest] = useState<ScoreTabFocusRequest | null>(null);
@@ -385,7 +392,8 @@ export function CandidateDrawer({
 
       const targetCandidateId = selectedCandidateId;
 
-      if (newStage === "hr_interview" && !options?.bypassInterviewModal) {
+      if (INTERVIEW_STAGES.has(newStage) && !options?.bypassInterviewModal) {
+        setQuickInterviewStage(newStage);
         setQuickInterviewOpen(true);
         return;
       }
@@ -462,9 +470,10 @@ export function CandidateDrawer({
   );
 
   const handleMoveToInterviewWithoutScheduling = useCallback(async () => {
-    await handleStageChange("hr_interview", { bypassInterviewModal: true });
+    await handleStageChange(quickInterviewStage ?? "hr_interview", { bypassInterviewModal: true });
     setQuickInterviewOpen(false);
-  }, [handleStageChange]);
+    setQuickInterviewStage(null);
+  }, [handleStageChange, quickInterviewStage]);
 
   const handleScheduleInterview = useCallback(
     async (payload: {
@@ -485,7 +494,7 @@ export function CandidateDrawer({
           ...payload,
           timezone: "America/Recife",
           title: "Entrevista com candidato",
-          interview_type: "hr",
+          interview_type: interviewTypeForStage(quickInterviewStage),
         });
         await Promise.all([
           syncCandidateOverview(targetCandidateId),
@@ -493,6 +502,7 @@ export function CandidateDrawer({
         ]);
         feedback.moveCandidate.success();
         setQuickInterviewOpen(false);
+        setQuickInterviewStage(null);
       } catch (err) {
         feedback.moveCandidate.error(err);
       } finally {
@@ -501,7 +511,7 @@ export function CandidateDrawer({
         );
       }
     },
-    [candidateActiveJobId, refreshBoard, selectedCandidateId, syncCandidateOverview],
+    [candidateActiveJobId, quickInterviewStage, refreshBoard, selectedCandidateId, syncCandidateOverview],
   );
 
   const handleLinkToActiveJob = useCallback(async () => {
@@ -1072,7 +1082,10 @@ export function CandidateDrawer({
             candidateName={candidate.full_name}
             jobTitle={activeJobLabel ?? "vaga ativa"}
             isSaving={stageSaving}
-            onClose={() => setQuickInterviewOpen(false)}
+            onClose={() => {
+              setQuickInterviewOpen(false);
+              setQuickInterviewStage(null);
+            }}
             onMoveWithoutScheduling={handleMoveToInterviewWithoutScheduling}
             onSchedule={handleScheduleInterview}
             onOpenFullAgenda={() => {
@@ -1091,12 +1104,16 @@ export function CandidateDrawer({
             initialCandidateId={candidate?.id ?? null}
             initialJobId={candidateActiveJobId}
             initialPipelineId={null}
-            onClose={() => setFullAgendaOpen(false)}
+            onClose={() => {
+              setFullAgendaOpen(false);
+              setQuickInterviewStage(null);
+            }}
             onSuccess={async () => {
               if (!candidate?.id) return;
-              await handleStageChange("hr_interview", { bypassInterviewModal: true });
+              await handleStageChange(quickInterviewStage ?? "hr_interview", { bypassInterviewModal: true });
               await syncCandidateOverview(candidate.id);
               setFullAgendaOpen(false);
+              setQuickInterviewStage(null);
             }}
           />
         </Suspense>

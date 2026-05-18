@@ -10,6 +10,10 @@ from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
 )
+from src.infrastructure.database.models.behavioral_assignment_model import (
+    BehavioralAssessmentAIEvaluationModel,
+    BehavioralAssessmentAssignmentModel,
+)
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
     CandidateJobPipelineModel,
@@ -148,6 +152,42 @@ class SQLAlchemyPipelineRepository:
                 CandidateModel.id == candidate_id,
                 CandidateModel.deleted_at.is_(None),
             )
+        )
+
+    async def find_latest_behavioral_assignment(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        template_id: UUID,
+    ) -> BehavioralAssessmentAssignmentModel | None:
+        return await self._session.scalar(
+            sa.select(BehavioralAssessmentAssignmentModel)
+            .where(
+                BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+                BehavioralAssessmentAssignmentModel.job_id == job_id,
+                BehavioralAssessmentAssignmentModel.template_id == template_id,
+            )
+            .order_by(
+                BehavioralAssessmentAssignmentModel.created_at.desc(),
+                BehavioralAssessmentAssignmentModel.id.desc(),
+            )
+            .limit(1)
+        )
+
+    async def find_latest_behavioral_ai_evaluation(
+        self,
+        *,
+        assignment_id: UUID,
+    ) -> BehavioralAssessmentAIEvaluationModel | None:
+        return await self._session.scalar(
+            sa.select(BehavioralAssessmentAIEvaluationModel)
+            .where(BehavioralAssessmentAIEvaluationModel.assignment_id == assignment_id)
+            .order_by(
+                BehavioralAssessmentAIEvaluationModel.completed_at.desc().nullslast(),
+                BehavioralAssessmentAIEvaluationModel.created_at.desc(),
+            )
+            .limit(1)
         )
 
     async def find_any_entry(self, candidate_id: UUID, job_id: UUID) -> CandidateJobPipelineModel | None:

@@ -505,8 +505,8 @@ class BehavioralAIEvaluationService:
             await self._save_completed_evaluation(
                 evaluation=evaluation,
                 data=evaluation_data,
-                provider="gemini",
-                model=self.ai_service.__class__.__name__,
+                provider=settings.AI_PROVIDER,
+                model=settings.AI_MODEL_ID,
             )
 
         except Exception as e:
@@ -682,7 +682,7 @@ Responda com JSON válido neste formato exato:
         self,
         evaluation: BehavioralAssessmentAIEvaluationModel,
         data: dict,
-        provider: str = "gemini",
+        provider: str,
         model: str | None = None,
     ) -> None:
         """Save completed evaluation with provider/model info."""

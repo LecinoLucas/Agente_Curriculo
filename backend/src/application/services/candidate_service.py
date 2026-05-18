@@ -573,7 +573,7 @@ class CandidateService:
         if flags.get("behavioral_assignment_pending"):
             add("behavioral_assignment", "Teste comportamental pendente", "warning")
         if flags.get("behavioral_ai_pending"):
-            add("behavioral_ai", "Pesquisa comportamental pendente", "warning")
+            add("behavioral_ai", "IA comportamental pendente", "warning")
         if active_stage in {"hr_interview", "technical_interview"} and flags.get("interview_not_scheduled"):
             add("interview", "Entrevista não agendada", "warning")
         if not has_resume:

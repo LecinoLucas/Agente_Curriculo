@@ -14,6 +14,7 @@ from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.scoring_model import (
@@ -32,6 +33,70 @@ def _contains_forbidden_key(value: object, forbidden_keys: set[str]) -> bool:
     if isinstance(value, list):
         return any(_contains_forbidden_key(item, forbidden_keys) for item in value)
     return False
+
+
+@pytest.mark.asyncio
+async def test_candidate_ranking_entry_without_score_returns_semantic_409(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"ranking-not-ready-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    candidate = CandidateModel(
+        email=f"ranking-not-ready-candidate-{uuid4().hex[:6]}@test.com",
+        full_name="Ranking Not Ready Candidate",
+        created_by=recruiter.id,
+    )
+    job = JobModel(
+        title="Ranking Not Ready Job",
+        description="Pipeline sem score persistido.",
+        requirements="Python",
+        status="published",
+        job_profile_hash=f"ranking-not-ready-{uuid4().hex[:8]}",
+        created_by=recruiter.id,
+    )
+    db_session.add_all([candidate, job])
+    await db_session.flush()
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_id=candidate.id,
+            job_id=job.id,
+            link_status="active",
+            relationship_status="active",
+            pipeline_status="active",
+            pipeline_stage="entry",
+        )
+    )
+    active_version = await db_session.scalar(
+        sa.select(ScoreModelVersionModel).where(ScoreModelVersionModel.is_active.is_(True))
+    )
+    if active_version is None:
+        db_session.add(
+            ScoreModelVersionModel(
+                version=f"ranking-not-ready-{uuid4().hex[:6]}",
+                is_active=True,
+                weights={"skill_match": 0.4},
+                thresholds={"high": 70, "low": 45},
+            )
+        )
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/jobs/{job.id}/ranking/{candidate.id}",
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "candidate_score_not_ready",
+        "message": "Score ainda não disponível para este candidato nesta vaga.",
+        "action": "request_analysis",
+    }
 
 
 @pytest.mark.asyncio

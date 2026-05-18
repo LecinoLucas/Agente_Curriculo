@@ -22,6 +22,7 @@ export function BehavioralAIEvaluationPanel({
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [pollingTimedOut, setPollingTimedOut] = useState(false);
 
   const isMountedRef = useRef(true);
   const isPollingRef = useRef(false);
@@ -57,6 +58,7 @@ export function BehavioralAIEvaluationPanel({
 
     setTriggering(true);
     setError(null);
+    setPollingTimedOut(false);
 
     try {
       const result = await triggerBehavioralAnalysis(jobId, candidateId);
@@ -93,11 +95,12 @@ export function BehavioralAIEvaluationPanel({
 
         pollIntervalRef.current = window.setInterval(poll, 3000);
 
-        // Hard stop after 5 minutes
+        // Hard stop after 5 minutes — show informational message if still in-progress
         window.setTimeout(() => {
           if (pollIntervalRef.current !== null) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
+            if (isMountedRef.current) setPollingTimedOut(true);
           }
         }, 300_000);
       } else {
@@ -171,13 +174,26 @@ export function BehavioralAIEvaluationPanel({
       {!isCollapsed && (
         <div className="space-y-6">
           {/* Loading/Processing State */}
-          {evaluation.status === "processing" && (
+          {(evaluation.status === "processing" || evaluation.status === "pending") && !pollingTimedOut && (
             <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
               <Loader className="h-5 w-5 animate-spin text-blue-600" />
               <div className="text-sm">
                 <p className="font-medium text-blue-900">Análise em processamento</p>
                 <p className="text-xs text-blue-800">
                   Está gerando análise assistida por IA. Isso pode levar alguns minutos.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Polling timeout — informational only, not an error */}
+          {(evaluation.status === "processing" || evaluation.status === "pending") && pollingTimedOut && (
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <Loader className="h-5 w-5 text-amber-600" />
+              <div className="text-sm">
+                <p className="font-medium text-amber-900">A análise ainda está em processamento.</p>
+                <p className="text-xs text-amber-800">
+                  Você pode atualizar o status em instantes.
                 </p>
               </div>
             </div>

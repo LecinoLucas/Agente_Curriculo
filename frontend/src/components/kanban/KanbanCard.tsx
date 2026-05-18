@@ -1,7 +1,11 @@
-import { memo, type CSSProperties } from "react";
+import { memo, type CSSProperties, type DragEvent } from "react";
 import type { JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
-import { Calendar, Mail, FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Calendar, Mail, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  derivePipelineCardBadges,
+  type PipelineCardBadgeTone,
+} from "../../features/pipeline/utils/pipelineCardBadges";
 
 interface KanbanCardProps {
   candidate: JobCandidate;
@@ -10,6 +14,10 @@ interface KanbanCardProps {
   onCardClick?: (candidateId: string) => void;
   isTopMatch?: boolean;
   rank?: number;
+  draggable?: boolean;
+  isDragging?: boolean;
+  onDragStart?: (candidate: JobCandidate) => void;
+  onDragEnd?: () => void;
 }
 
 // Helper to get initials from a name
@@ -36,6 +44,14 @@ function getAvatarStyles(name: string) {
   };
 }
 
+const BADGE_TONE_CLASS: Record<PipelineCardBadgeTone, string> = {
+  danger: "bg-rose-50 text-rose-700 dark:bg-rose-950/35 dark:text-rose-300",
+  warning: "bg-amber-50 text-amber-700 dark:bg-amber-950/35 dark:text-amber-300",
+  progress: "bg-sky-50 text-sky-700 dark:bg-sky-950/35 dark:text-sky-300",
+  success: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300",
+  neutral: "bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300",
+};
+
 export const KanbanCard = memo(function KanbanCard({
   candidate,
   isSaving,
@@ -43,6 +59,10 @@ export const KanbanCard = memo(function KanbanCard({
   onCardClick,
   isTopMatch = false,
   rank,
+  draggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
 }: KanbanCardProps) {
   const name = candidate.candidate_name || "Sem Nome";
   const initials = getInitials(name);
@@ -68,20 +88,37 @@ export const KanbanCard = memo(function KanbanCard({
   const hasScheduledInterview = candidate.stage === "hr_interview" || candidate.stage === "technical_interview";
   const assessmentCompleted = candidate.ai_status === "completed";
   const hasWarning = rawCandidate.candidate_status === "blocked" || rawCandidate.candidate_status === "error";
+  const operationalBadges = derivePipelineCardBadges(candidate);
+
+  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
+    if (!draggable) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", candidate.candidate_id);
+    onDragStart?.(candidate);
+  };
 
   return (
     <div
       onClick={onCardClick ? () => onCardClick(candidate.candidate_id) : undefined}
+      draggable={draggable}
+      onDragStart={handleDragStart}
+      onDragEnd={onDragEnd}
       className={[
-        "group relative select-none rounded-xl border bg-white dark:bg-[hsl(var(--card))] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)]",
+        "group relative w-full select-none rounded-xl border bg-white dark:bg-[hsl(var(--card))] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)]",
         isTopMatch ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/[0.02]" : "border-slate-100 dark:border-slate-800/80",
         isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
+        draggable ? "active:cursor-grabbing" : "",
+        isDragging ? "opacity-55 ring-2 ring-[hsl(var(--primary))]/15" : "",
         "kanban-card-enter",
       ]
         .filter(Boolean)
         .join(" ")}
       style={{ "--enter-delay": `${enterDelay}ms` } as CSSProperties}
       data-testid={`kanban-card-${candidate.candidate_id}`}
+      data-dragging={isDragging ? "true" : "false"}
     >
       {/* Header element: Avatar + Name & Rank */}
       <div className="flex items-start gap-3">
@@ -137,6 +174,24 @@ export const KanbanCard = memo(function KanbanCard({
       )}
 
       {/* Top skills tags */}
+      {operationalBadges.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {operationalBadges.map((badge) => (
+            <span
+              key={badge.label}
+              className={[
+                "inline-flex max-w-full items-center truncate rounded px-1.5 py-0.5 text-[9px] font-black uppercase",
+                BADGE_TONE_CLASS[badge.tone],
+              ].join(" ")}
+              title={badge.reason ?? badge.label}
+              data-testid={`pipeline-card-badge-${badge.label}`}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      )}
+
       {skills.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1">
           {skills.map((skill) => (

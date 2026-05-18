@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -15,6 +16,7 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.application.ports.ai_service import AIAnalysisResponse
@@ -74,6 +76,39 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
     )
     assert login.status_code == 200
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+async def _create_completed_resume_version(
+    db_session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    uploaded_by: UUID,
+    label: str,
+) -> UUID:
+    resume = ResumeModel(
+        candidate_id=candidate_id,
+        title=f"{label} Resume",
+        created_by=uploaded_by,
+    )
+    db_session.add(resume)
+    await db_session.flush()
+
+    version = ResumeVersionModel(
+        resume_id=resume.id,
+        version_number=1,
+        s3_bucket="test-bucket",
+        s3_key=f"resumes/{label}-{uuid4()}.pdf",
+        original_file_name=f"{label}.pdf",
+        file_size_bytes=128,
+        file_hash_sha256=hashlib.sha256(label.encode("utf-8")).hexdigest(),
+        mime_type="application/pdf",
+        extracted_text="Experiência com Python, FastAPI e PostgreSQL.",
+        extraction_status="completed",
+        uploaded_by=uploaded_by,
+    )
+    db_session.add(version)
+    await db_session.flush()
+    return version.id
 
 
 def _job_payload(**overrides) -> dict:
@@ -234,21 +269,21 @@ async def test_analysis_retry_and_failure_state_are_persisted(
         "password123",
         UserRole.CANDIDATE,
     )
-    headers = await _auth_headers(client, "candidate-worker-state@test.com", "password123")
 
-    db_session.add(
-        CandidateModel(
-            user_id=candidate.id,
-            full_name="Candidate Worker State",
-            email="candidate-worker-state@test.com",
-            created_by=candidate.id,
-        )
+    candidate_profile = CandidateModel(
+        user_id=candidate.id,
+        full_name="Candidate Worker State",
+        email="candidate-worker-state@test.com",
+        created_by=candidate.id,
     )
-    await db_session.commit()
-
-    resume_upload = await client.post("/api/v1/resumes", headers=headers)
-    assert resume_upload.status_code == 202
-    resume_version_id = UUID(resume_upload.json()["version_id"])
+    db_session.add(candidate_profile)
+    await db_session.flush()
+    resume_version_id = await _create_completed_resume_version(
+        db_session,
+        candidate_id=candidate_profile.id,
+        uploaded_by=candidate.id,
+        label="worker-state",
+    )
 
     ai_model = AIModelModel(
         provider="anthropic",
@@ -345,30 +380,26 @@ async def test_matching_task_matches_completed_analysis_to_job(
         "password123",
         UserRole.RECRUITER,
     )
-    candidate_headers = await _auth_headers(
-        client,
-        "candidate-worker-match@test.com",
-        "password123",
-    )
     recruiter_headers = await _auth_headers(
         client,
         "recruiter-worker-match@test.com",
         "password123",
     )
 
-    db_session.add(
-        CandidateModel(
-            user_id=candidate.id,
-            full_name="Candidate Worker Match",
-            email="candidate-worker-match@test.com",
-            created_by=candidate.id,
-        )
+    candidate_profile = CandidateModel(
+        user_id=candidate.id,
+        full_name="Candidate Worker Match",
+        email="candidate-worker-match@test.com",
+        created_by=candidate.id,
     )
-    await db_session.commit()
-
-    resume_upload = await client.post("/api/v1/resumes", headers=candidate_headers)
-    assert resume_upload.status_code == 202
-    resume_version_id = UUID(resume_upload.json()["version_id"])
+    db_session.add(candidate_profile)
+    await db_session.flush()
+    resume_version_id = await _create_completed_resume_version(
+        db_session,
+        candidate_id=candidate_profile.id,
+        uploaded_by=candidate.id,
+        label="worker-match",
+    )
 
     skill_name = f"Python Worker Match {uuid4().hex[:8]}"
     secondary_skill_name = f"FastAPI Worker Match {uuid4().hex[:8]}"
@@ -438,8 +469,12 @@ async def test_matching_task_matches_completed_analysis_to_job(
     )
     assert add_secondary_skill.status_code == 201
 
-    publish = await client.patch(f"/api/v1/jobs/{job_id}/publish", headers=recruiter_headers)
-    assert publish.status_code == 200
+    await db_session.execute(
+        sa.update(JobModel)
+        .where(JobModel.id == UUID(job_id))
+        .values(status="published", published_at=datetime.now(UTC))
+    )
+    await db_session.commit()
 
     result = await _match_analysis_to_job_async(str(analysis_id), job_id)
 
