@@ -53,6 +53,16 @@ class JobMatchCandidateResponse(BaseModel):
     ai_status: AIAnalysisStatus | None = None
     # Official job fit score (0-100) if score exists and is fresh. Null if no score yet.
     job_fit_score: Decimal | None = None
+    requires_behavioral_assessment: bool | None = None
+    requires_behavioral_ai_evaluation: bool | None = None
+    requires_interview: bool | None = None
+    requires_scorecard: bool | None = None
+    behavioral_assessment_status: str | None = None
+    behavioral_submitted_at: datetime | None = None
+    behavioral_ai_evaluation_status: str | None = None
+    interview_status: str | None = None
+    interview_scheduled_start: datetime | None = None
+    interview_scorecard_status: str | None = None
 
 
 class PipelineColumnResponse(BaseModel):

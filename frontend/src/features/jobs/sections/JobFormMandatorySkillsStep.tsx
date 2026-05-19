@@ -22,6 +22,7 @@ type JobFormMandatorySkillsStepProps = {
   onUpdateSkill: (skill: JobSkill | PendingJobSkill, patch: Partial<PendingJobSkill>) => Promise<void>;
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
   onSkillCreated: (skill: SkillCatalog) => void;
+  jobContext?: { title?: string; jobArea?: string };
 };
 
 export function JobFormMandatorySkillsStep({
@@ -40,6 +41,7 @@ export function JobFormMandatorySkillsStep({
   onUpdateSkill,
   onRemoveSkill,
   onSkillCreated,
+  jobContext,
 }: JobFormMandatorySkillsStepProps) {
   return (
     <SkillSection
@@ -72,6 +74,7 @@ export function JobFormMandatorySkillsStep({
           ? "Muitas skills essenciais podem deixar o ranking restritivo. Considere mover algumas para diferenciais."
           : null
       }
+      jobContext={jobContext}
     />
   );
 }

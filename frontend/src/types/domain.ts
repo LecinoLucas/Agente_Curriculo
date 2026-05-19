@@ -551,6 +551,16 @@ export type JobCandidate = {
   // AI-controlled: processing state of the candidate's latest analysis.
   // null means no analysis has been requested yet. Never affects `stage`.
   ai_status?: AIAnalysisStatus | null;
+  requires_behavioral_assessment?: boolean | null;
+  requires_behavioral_ai_evaluation?: boolean | null;
+  requires_interview?: boolean | null;
+  requires_scorecard?: boolean | null;
+  behavioral_assessment_status?: string | null;
+  behavioral_submitted_at?: string | null;
+  behavioral_ai_evaluation_status?: string | null;
+  interview_status?: string | null;
+  interview_scheduled_start?: string | null;
+  interview_scorecard_status?: string | null;
 };
 
 export type PipelineStage =
@@ -849,6 +859,7 @@ export type BehavioralAssessmentTemplate = {
   question_count: number;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
   competencies?: BehavioralTemplateCompetency[];
 };
 

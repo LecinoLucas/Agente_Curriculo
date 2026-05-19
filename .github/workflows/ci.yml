@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_ENV: test
+  APP_SECRET_KEY: ci-app-secret-key-minimum-32-chars
+  JWT_SECRET_KEY: ci-jwt-secret-key-minimum-32-chars
+  FIELD_ENCRYPTION_KEY: cuZ9dlSKhIokW-5fid9qSCsFJEoc2swn9iZNupnF06w=
+  RATE_LIMIT_ENABLED: "false"
+  AI_PROVIDER: google
+  AI_MODEL_ID: gemini-2.5-flash
+  ALLOW_AI_TOKEN_SPEND: "false"
+  ENABLE_DEV_MOCK: "false"
+  MAX_UPLOAD_SIZE_MB: "10"
+  FILE_SCAN_ENABLED: "false"
+  FILE_SCAN_FAIL_CLOSED: "true"
+  ALLOWED_RESUME_MIME_TYPES: application/pdf,image/png,image/jpeg
+  ALLOWED_DOCUMENT_MIME_TYPES: application/pdf,image/png,image/jpeg,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/admissao_rh_test
+  REDIS_URL: redis://localhost:6379/0
+  CELERY_BROKER_URL: redis://localhost:6379/1
+  CELERY_RESULT_BACKEND: redis://localhost:6379/2
+  GOOGLE_CLIENT_ID: ci-google-client.apps.googleusercontent.com
+  GOOGLE_CLIENT_SECRET: ci-google-client-secret
+  GOOGLE_REDIRECT_URI: http://localhost:8000/api/v1/integrations/google-calendar/callback
+  CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+  VITE_API_BASE_URL: http://127.0.0.1:8000
+  VITE_GOOGLE_CLIENT_ID: ci-google-client.apps.googleusercontent.com
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: admissao_rh_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d admissao_rh_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pytest pytest-asyncio pytest-cov factory-boy ruff mypy aiosqlite
+
+      - name: Validate backend imports
+        run: |
+          python -m compileall -q src
+          python -c "import src.interface.api.main"
+
+      - name: Check Alembic heads
+        run: |
+          alembic heads
+          test "$(alembic heads | wc -l | tr -d ' ')" = "1"
+
+      - name: Run critical backend tests
+        run: |
+          python -m pytest \
+            tests/integration/test_upload_hardening.py \
+            tests/integration/test_public_application_pipeline.py \
+            tests/integration/test_candidates_overview_public.py \
+            tests/integration/test_r14_candidate_portal_no_internal_leak.py \
+            tests/integration/test_rate_limiting.py \
+            tests/unit/test_ai_pricing.py \
+            tests/integration/test_ai_usage_cost.py \
+            tests/integration/test_admin_system_health_api.py \
+            -v
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run legacy import guard
+        run: npx vitest run src/test/legacy-import-guard.test.ts
+
+      - name: Build frontend
+        run: npm run build

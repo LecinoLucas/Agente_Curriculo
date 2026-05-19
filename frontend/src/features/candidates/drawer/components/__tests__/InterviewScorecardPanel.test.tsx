@@ -4,9 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InterviewScorecardPanel } from "../InterviewScorecardPanel";
 import * as scorecardService from "../../../../../services/interviewScorecardService";
+import { toast } from "../../../../../shared/utils/toast";
 import type { InterviewScorecard } from "../../../../../types/domain";
 
 vi.mock("../../../../../services/interviewScorecardService");
+vi.mock("../../../../../shared/utils/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 const draftScorecard: InterviewScorecard = {
   id: "scorecard-1",
@@ -149,13 +156,14 @@ describe("InterviewScorecardPanel", () => {
 
   it("envia scorecard válido", async () => {
     const user = userEvent.setup();
+    const onSubmitted = vi.fn();
     vi.mocked(scorecardService.createInterviewScorecard).mockResolvedValue({
       ...draftScorecard,
       final_recommendation: "yes",
       items: [{ ...draftScorecard.items[0], rating: 5, evidence: "Evidência suficiente." }],
     });
 
-    render(<InterviewScorecardPanel jobId="job-1" candidateId="candidate-1" />);
+    render(<InterviewScorecardPanel jobId="job-1" candidateId="candidate-1" onSubmitted={onSubmitted} />);
 
     await screen.findByText(/Nenhum scorecard criado/i);
     await user.selectOptions(screen.getByLabelText(/Recomendação final/i), "yes");
@@ -166,6 +174,8 @@ describe("InterviewScorecardPanel", () => {
     await waitFor(() => {
       expect(scorecardService.submitInterviewScorecard).toHaveBeenCalledWith("scorecard-1");
     });
+    expect(toast.success).toHaveBeenCalledWith("Avaliação concluída com sucesso.");
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
   });
 
   it("submitted fica somente leitura", async () => {

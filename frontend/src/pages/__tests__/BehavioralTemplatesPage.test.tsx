@@ -314,6 +314,70 @@ describe("BehavioralTemplatesPage", () => {
     await waitFor(() => {
       expect(behavioralTemplatesService.behavioralTemplatesService.archiveTemplate).toHaveBeenCalledWith("1");
     });
+
+    await waitFor(() => {
+      expect(screen.queryByText("To Archive")).not.toBeInTheDocument();
+    });
+  });
+
+  it("não exibe templates arquivados na listagem principal", async () => {
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([
+      {
+        id: "archived-1",
+        name: "Template Arquivado",
+        description: null,
+        status: "archived",
+        version: 1,
+        competency_count: 1,
+        question_count: 1,
+        created_at: "2026-05-13T00:00:00Z",
+        updated_at: "2026-05-13T00:00:00Z",
+        archived_at: "2026-05-14T00:00:00Z",
+      },
+    ]);
+
+    render(
+      <MemoryRouter future={routerFuture}>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Nenhum template encontrado")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Template Arquivado")).not.toBeInTheDocument();
+  });
+
+  it("orienta onde consultar templates arquivados", async () => {
+    vi.mocked(behavioralTemplatesService.behavioralTemplatesService.listTemplates).mockResolvedValue([
+      {
+        id: "archived-1",
+        name: "Template Arquivado",
+        description: null,
+        status: "archived",
+        version: 1,
+        competency_count: 1,
+        question_count: 1,
+        created_at: "2026-05-13T00:00:00Z",
+        updated_at: "2026-05-13T00:00:00Z",
+        archived_at: "2026-05-14T00:00:00Z",
+      },
+    ]);
+
+    render(
+      <MemoryRouter future={routerFuture}>
+        <BehavioralTemplatesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cadastros > Arquivados > Templates comportamentais/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /abrir cadastros/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/admin/cadastros");
   });
 
   it("bloqueia salvamento quando nome do template está vazio", async () => {

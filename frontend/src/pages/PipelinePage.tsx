@@ -1,15 +1,15 @@
-import { ChevronDown, PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Plus, Briefcase, MapPin, Award, Layers } from "lucide-react";
+import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
+import { JobCombobox } from "../features/pipeline/JobCombobox";
 import { CandidateSearchModal } from "../features/pipeline/CandidateSearchModal";
 import { InterviewQuickScheduleModal } from "../features/pipeline/InterviewQuickScheduleModal";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
 import { KanbanColumn } from "../components/kanban/KanbanColumn";
 import { SkeletonRows } from "../components/common/Skeleton";
-import { StatusPill } from "../components/common/StatusPill";
 import { EmptyState } from "../components/common/EmptyState";
 import { DataQualityBanner } from "../components/data-quality/DataQualityBanner";
 import { formatContextError } from "../services/errorMessages";
@@ -21,7 +21,6 @@ import {
   formatJobStatus,
   formatSeniority,
   formatWorkModel,
-  jobStatusTone,
 } from "../utils/jobFormatters";
 import { isPipelineOperationalJob } from "../utils/jobStatusRules";
 import { sortCandidatesByScore } from "../utils/pipelineSort";
@@ -128,6 +127,11 @@ export function PipelinePage() {
   const rankingLoadingRef = useRef(rankingLoading);
   const showRankingRef = useRef(showRanking);
   const triggerRefreshRef = useRef<(() => Promise<void>) | null>(null);
+  const kanbanScrollRef = useRef<HTMLDivElement | null>(null);
+  const topKanbanScrollRef = useRef<HTMLDivElement | null>(null);
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
+  const [kanbanScrollWidth, setKanbanScrollWidth] = useState(0);
+  const [kanbanHasHorizontalOverflow, setKanbanHasHorizontalOverflow] = useState(false);
 
   useEffect(() => {
     autoRefreshActiveRef.current = autoRefreshActive;
@@ -194,6 +198,35 @@ export function PipelinePage() {
     setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
   };
   triggerRefreshRef.current = triggerRefresh;
+
+  const updateKanbanScrollMetrics = useCallback(() => {
+    const scrollElement = kanbanScrollRef.current;
+    if (!scrollElement) {
+      setKanbanScrollWidth(0);
+      setKanbanHasHorizontalOverflow(false);
+      return;
+    }
+
+    setKanbanScrollWidth(scrollElement.scrollWidth);
+    setKanbanHasHorizontalOverflow(scrollElement.scrollWidth > scrollElement.clientWidth + 1);
+    if (topKanbanScrollRef.current) {
+      topKanbanScrollRef.current.scrollLeft = scrollElement.scrollLeft;
+    }
+  }, []);
+
+  const syncTopKanbanScroll = useCallback(() => {
+    const topScroll = topKanbanScrollRef.current;
+    const kanbanScroll = kanbanScrollRef.current;
+    if (!topScroll || !kanbanScroll) return;
+    kanbanScroll.scrollLeft = topScroll.scrollLeft;
+  }, []);
+
+  const syncMainKanbanScroll = useCallback(() => {
+    const topScroll = topKanbanScrollRef.current;
+    const kanbanScroll = kanbanScrollRef.current;
+    if (!topScroll || !kanbanScroll) return;
+    topScroll.scrollLeft = kanbanScroll.scrollLeft;
+  }, []);
 
   // Refresh immediately when the user returns to the pipeline.
   useEffect(() => {
@@ -423,6 +456,15 @@ export function PipelinePage() {
     };
   }, [board, sortOrder]);
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(updateKanbanScrollMetrics);
+    window.addEventListener("resize", updateKanbanScrollMetrics);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateKanbanScrollMetrics);
+    };
+  }, [board, mainCols.length, rejectedCol?.stage, showRanking, updateKanbanScrollMetrics]);
+
   // Dynamic KPI calculation
   const totalActive = useMemo(() => {
     return mainCols.reduce((n, c) => n + c.candidates.length, 0);
@@ -453,6 +495,17 @@ export function PipelinePage() {
     return col ? col.candidates.length : 0;
   }, [board]);
 
+  const selectedJobMeta = useMemo(() => {
+    if (!selectedJob) return [];
+    return [
+      formatJobStatus(selectedJob.status),
+      selectedJob.seniority_level ? formatSeniority(selectedJob.seniority_level) : null,
+      selectedJob.work_model ? formatWorkModel(selectedJob.work_model) : null,
+      selectedJob.location,
+      `${totalCandidatos} candidato${totalCandidatos === 1 ? "" : "s"}`,
+    ].filter(Boolean);
+  }, [selectedJob, totalCandidatos]);
+
   const isBoardRefreshing = boardLoading && board !== null;
   const showInitialBoardLoading = boardLoading && board === null;
   const isRankingRefreshing = rankingLoading && ranking !== null;
@@ -465,8 +518,8 @@ export function PipelinePage() {
     selectedJob?.status === "published" || selectedJob?.status === "paused";
 
   const boardLayoutClass = showRanking
-    ? "grid grid-cols-1 gap-6 xl:items-start xl:grid-cols-[minmax(0,1fr)_340px] xl:transition-[grid-template-columns] xl:duration-200"
-    : "grid grid-cols-1 gap-6 xl:items-start xl:grid-cols-[minmax(0,1fr)] xl:transition-[grid-template-columns] xl:duration-200";
+    ? "grid grid-cols-1 gap-4 xl:items-start xl:grid-cols-[minmax(0,1fr)_340px] xl:transition-[grid-template-columns] xl:duration-200"
+    : "grid grid-cols-1 gap-4 xl:items-start xl:grid-cols-[minmax(0,1fr)] xl:transition-[grid-template-columns] xl:duration-200";
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   function handleSelectJob(nextJobId: string) {
@@ -488,6 +541,7 @@ export function PipelinePage() {
   const syncAfterStageMutation = useCallback(async () => {
     try {
       await refreshBoard();
+      setPreviewRefreshToken((current) => current + 1);
     } catch {
       // The board already receives an optimistic update; keep the UI usable.
     }
@@ -612,69 +666,36 @@ export function PipelinePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex w-full flex-col gap-6 pb-12 text-slate-800 dark:text-slate-100 min-w-0">
+    <div className="flex w-full min-w-0 flex-col gap-4 pb-8 text-slate-800 dark:text-slate-100">
       
       {/* ── SaaS Breadcrumb and Header Control Area ── */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <nav className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
             <span>Recrutamento</span>
             <span className="text-slate-300 dark:text-slate-700">/</span>
             <span className="text-[hsl(var(--primary))]">Pipeline</span>
           </nav>
-          <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-800 dark:text-slate-100 sm:text-3xl">
+          <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-800 dark:text-slate-100">
             Pipeline
           </h1>
-          <p className="mt-1 text-xs font-semibold text-slate-400 dark:text-slate-500">
+          <p className="mt-0.5 text-[11px] font-medium text-slate-400 dark:text-slate-500">
             Acompanhe o andamento dos candidatos em cada etapa do processo seletivo.
           </p>
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleOpenSourceCandidates}
-            disabled={!canUse}
-            aria-label="Buscar candidatos"
-            title="Use o modal de vinculação para buscar e vincular candidatos"
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
-              canUse
-                ? "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700"
-                : "cursor-not-allowed border-slate-200 dark:border-slate-850 bg-slate-100 dark:bg-slate-950 text-slate-400 dark:text-slate-500"
-            }`}
-          >
-            <Search className="h-4 w-4" />
-          </button>
-
-          {/* Jobs Selector Select */}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          {/* Jobs Selector Combobox */}
           {pipelineJobsError ? (
             <span className="text-xs text-rose-500 font-bold">{pipelineJobsError}</span>
           ) : (
-            <div className="relative">
-              <select
-                id="pipeline-job-select"
-                value={activeJobId ?? ""}
-                onChange={(e) => handleSelectJob(e.target.value)}
-                disabled={pipelineJobsLoading || pipelineJobs.length === 0}
-                className="h-10 appearance-none rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-3.5 pr-8 text-xs font-bold text-slate-600 dark:text-slate-350 shadow-sm outline-none transition focus:border-[hsl(var(--primary))]/40 focus:ring-2 focus:ring-[hsl(var(--primary))]/5 disabled:opacity-50"
-              >
-                {pipelineJobsLoading ? (
-                  <option value="">Carregando vagas…</option>
-                ) : pipelineJobs.length === 0 ? (
-                  <option value="">Nenhuma vaga publicada</option>
-                ) : (
-                  pipelineJobs.map((job) => (
-                    <option key={job.id} value={job.id}>
-                      {job.title}
-                    </option>
-                  ))
-                )}
-              </select>
-              <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <ChevronDown className="h-3.5 w-3.5" />
-              </div>
-            </div>
+            <JobCombobox
+              jobs={pipelineJobs}
+              loading={pipelineJobsLoading}
+              value={activeJobId ?? null}
+              onChange={handleSelectJob}
+            />
           )}
 
           {/* Main Sourcing Red Button */}
@@ -682,27 +703,42 @@ export function PipelinePage() {
             type="button"
             onClick={handleOpenSourceCandidates}
             disabled={!canUse}
-            className={`inline-flex h-10 items-center gap-1.5 rounded-xl px-4 text-xs font-black transition-all ${
+            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
               canUse
-                ? "bg-[hsl(var(--primary))] text-white shadow-[0_4px_12px_rgba(229,57,53,0.2)] hover:bg-[hsl(2,70%,45%)] active:scale-95"
-                : "cursor-not-allowed bg-slate-100 dark:bg-slate-950 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-850"
+                ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))] text-white shadow-sm hover:bg-[hsl(2,70%,45%)] dark:border-[hsl(var(--primary))]/30"
+                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-850 dark:bg-slate-950 dark:text-slate-500"
             }`}
           >
-            <Plus className="h-4 w-4" />
+            <Search className="h-4 w-4" />
             Vincular candidato
           </button>
+          {activeJobId && (
+            <button
+              type="button"
+              onClick={() => setShowRanking((current) => !current)}
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
+                showRanking
+                  ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
+                  : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800"
+              }`}
+              aria-expanded={showRanking}
+            >
+              {showRanking ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+              {showRanking ? "Ocultar Ranking" : "Ver Ranking IA"}
+            </button>
+          )}
         </div>
       </div>
 
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
               Total de Candidatos
             </p>
-            <div className="mt-2.5 flex items-baseline justify-between">
-              <span className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
                 {totalCandidatos}
               </span>
               <span className="rounded bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 dark:text-slate-500">
@@ -711,12 +747,12 @@ export function PipelinePage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
               Em andamento
             </p>
-            <div className="mt-2.5 flex items-baseline justify-between">
-              <span className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
                 {emAndamento}
               </span>
               <span className="rounded bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 px-1.5 py-0.5 text-[9px] font-bold text-indigo-500">
@@ -725,12 +761,12 @@ export function PipelinePage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
               Entrevistas
             </p>
-            <div className="mt-2.5 flex items-baseline justify-between">
-              <span className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
                 {entrevistas}
               </span>
               <span className="rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/60 px-1.5 py-0.5 text-[9px] font-bold text-amber-600">
@@ -739,137 +775,18 @@ export function PipelinePage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
               Contratações
             </p>
-            <div className="mt-2.5 flex items-baseline justify-between">
-              <span className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
                 {contratacoes}
               </span>
               <span className="rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600">
                 Efetivadas
               </span>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Context Card of the Selected Vaga ── */}
-      {selectedJob && (
-        <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-4 shadow-[0_1px_2px_rgba(0,0,0,0.01)] transition-colors hover:border-slate-200">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-y-2 gap-x-4">
-              <div className="flex items-center gap-2">
-                <Briefcase className="h-4 w-4 text-slate-400" />
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{selectedJob.title}</span>
-              </div>
-              <div className="h-3 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-              <div className="flex items-center gap-1.5">
-                <StatusPill
-                  label={formatJobStatus(selectedJob.status)}
-                  tone={jobStatusTone(selectedJob.status)}
-                />
-              </div>
-              {selectedJob.seniority_level && (
-                <>
-                  <div className="h-3 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                    <Award className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{formatSeniority(selectedJob.seniority_level)}</span>
-                  </div>
-                </>
-              )}
-              {selectedJob.work_model && (
-                <>
-                  <div className="h-3 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                    <Layers className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{formatWorkModel(selectedJob.work_model)}</span>
-                  </div>
-                </>
-              )}
-              {selectedJob.location && (
-                <>
-                  <div className="h-3 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                    <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{selectedJob.location}</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Ver Ranking IA Action Toggle */}
-            <div className="flex items-center gap-3">
-              {activeJobId && (
-                <button
-                  type="button"
-                  onClick={() => setShowRanking((current) => !current)}
-                  className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-all ${
-                    showRanking
-                      ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
-                      : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 hover:text-slate-700 dark:hover:text-slate-200"
-                  }`}
-                  aria-expanded={showRanking}
-                >
-                  {showRanking ? (
-                    <>
-                      <PanelRightClose className="h-4 w-4" />
-                      <span>Ocultar Ranking</span>
-                    </>
-                  ) : (
-                    <>
-                      <PanelRightOpen className="h-4 w-4" />
-                      <span>Ver Ranking IA</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {selectedJob && !activeJobAcceptsCandidates && !isDraft && (
-            <div className="mt-3.5 flex items-center gap-2.5 rounded-xl border border-amber-200 dark:border-amber-950/60 bg-amber-50/50 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300">
-              <span className="text-sm">⚠️</span>
-              <p>
-                Esta vaga está em status <span className="font-bold">{formatJobStatus(selectedJob.status)}</span>.
-                Adicionar novos candidatos só é permitido para vagas publicadas ou pausadas.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Countdown and Auto-Refresh Panel */}
-      {activeJobId && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/30 px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">
-          <div className="flex items-center gap-2 font-semibold">
-            <span className={`h-2 w-2 rounded-full ${autoRefreshActive ? "bg-cyan-500 animate-pulse" : "bg-slate-300 dark:bg-slate-700"}`} />
-            <span>Última atualização: <strong className="font-mono">{lastUpdated}</strong></span>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <span className="font-semibold text-slate-400 dark:text-slate-500">
-              Atualização automática em: <strong className="font-mono text-[hsl(var(--primary))]">{autoRefreshActive ? `${secondsLeft}s` : "Pausada"}</strong>
-            </span>
-            <button
-              type="button"
-              onClick={() => setAutoRefreshActive((prev) => !prev)}
-              className="text-[10px] font-black uppercase tracking-wider text-[hsl(var(--primary))] hover:underline"
-            >
-              {autoRefreshActive ? "Pausar" : "Iniciar"}
-            </button>
-            <div className="h-3 w-px bg-slate-200 dark:bg-slate-800" />
-            <button
-              type="button"
-              onClick={() => void handleManualRefresh()}
-              disabled={boardLoading}
-              className="inline-flex items-center gap-1.5 font-bold hover:text-slate-700 dark:hover:text-slate-250 disabled:opacity-50"
-            >
-              <RefreshCw className={["h-3.5 w-3.5", boardLoading ? "animate-spin" : ""].join(" ")} />
-              {boardLoading ? "Sincronizando" : "Sincronizar agora"}
-            </button>
           </div>
         </div>
       )}
@@ -895,22 +812,28 @@ export function PipelinePage() {
           <div className={boardLayoutClass}>
             
             {/* Main Board Area */}
-            <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] dark:border-slate-800 dark:bg-slate-900 xl:p-5">
+            <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:p-4">
               
               {/* Header inside Board panel */}
-              <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 dark:border-slate-800 pb-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
+              <div className="mb-3 flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
+                <div className="min-w-0">
                   <h2 className="text-lg font-black tracking-tight text-slate-800 dark:text-slate-100">
                     {selectedJob ? selectedJob.title : "Candidatos"}
                   </h2>
-                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">
-                    {`Visão de Quadro Kanban • ${totalActive} Candidatos em processo`}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                    <span>{`Kanban · ${totalActive} em processo`}</span>
+                    {selectedJobMeta.map((item) => (
+                      <span key={String(item)} className="inline-flex items-center gap-2">
+                        <span className="text-slate-300 dark:text-slate-700">·</span>
+                        <span>{item}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Filters and Refresh State */}
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-800 p-1">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <div className="flex items-center gap-1 rounded-xl border border-slate-150 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
                     <button
                       onClick={() => setSortOrder("score_desc")}
                       className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-white dark:bg-slate-900 text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800" : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}`}
@@ -925,6 +848,30 @@ export function PipelinePage() {
                     </button>
                   </div>
 
+                  {activeJobId && (
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                      <span className={`h-2 w-2 rounded-full ${autoRefreshActive ? "bg-cyan-500" : "bg-slate-300 dark:bg-slate-700"}`} />
+                      <span>Atualizado às <strong className="font-mono font-semibold">{lastUpdated}</strong></span>
+                      <span>· Auto em <strong className="font-mono text-[hsl(var(--primary))]">{autoRefreshActive ? `${secondsLeft}s` : "Pausada"}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => setAutoRefreshActive((prev) => !prev)}
+                        className="font-bold text-[hsl(var(--primary))] hover:underline"
+                      >
+                        {autoRefreshActive ? "Pausar" : "Iniciar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleManualRefresh()}
+                        disabled={boardLoading}
+                        className="inline-flex items-center gap-1 font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200"
+                      >
+                        <RefreshCw className={["h-3.5 w-3.5", boardLoading ? "animate-spin" : ""].join(" ")} />
+                        {boardLoading ? "Sincronizando" : "Sincronizar"}
+                      </button>
+                    </div>
+                  )}
+
                   {isBoardRefreshing && (
                     <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 animate-pulse">
                       <RefreshCw className="h-3 w-3 animate-spin" />
@@ -933,6 +880,13 @@ export function PipelinePage() {
                   )}
                 </div>
               </div>
+
+              {selectedJob && !activeJobAcceptsCandidates && !isDraft && (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
+                  Esta vaga está em status <span className="font-bold">{formatJobStatus(selectedJob.status)}</span>.
+                  Adicionar novos candidatos só é permitido para vagas publicadas ou pausadas.
+                </div>
+              )}
 
               {/* Error messages */}
               {boardError && (
@@ -953,7 +907,30 @@ export function PipelinePage() {
 
               {/* Kanban columns scroll */}
               {board && !boardError && (
-                <div className="-mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-6 pt-1">
+                <>
+                {kanbanHasHorizontalOverflow ? (
+                  <div className="mb-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+                    <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      <span>Rolagem das etapas</span>
+                      <span>Arraste a barra para navegar pelas colunas</span>
+                    </div>
+                    <div
+                      ref={topKanbanScrollRef}
+                      className="h-4 overflow-x-auto overflow-y-hidden"
+                      onScroll={syncTopKanbanScroll}
+                      data-testid="kanban-top-scroll"
+                    >
+                      <div style={{ width: kanbanScrollWidth, height: 1 }} />
+                    </div>
+                  </div>
+                ) : null}
+
+                <div
+                  ref={kanbanScrollRef}
+                  className="-mx-1 w-[calc(100%+0.5rem)] min-w-0 overflow-x-auto overflow-y-hidden px-1 pb-6 pt-1"
+                  onScroll={syncMainKanbanScroll}
+                  data-testid="kanban-scroll-container"
+                >
                   <div className="flex w-full min-w-max items-stretch gap-3 min-h-[620px] h-[calc(100vh-280px)] max-h-[calc(100vh-220px)] xl:gap-4">
                     {mainCols.map((col, idx) => (
                       <KanbanColumn
@@ -997,6 +974,7 @@ export function PipelinePage() {
                     )}
                   </div>
                 </div>
+                </>
               )}
 
               {/* Empty state: Board empty */}
@@ -1126,6 +1104,7 @@ export function PipelinePage() {
       <CandidatePreviewDrawer
         candidateId={previewCandidateId}
         onClose={() => setPreviewCandidateId(null)}
+        refreshToken={previewRefreshToken}
         onPipelineChanged={async () => {
           setSecondsLeft(30);
           await triggerRefresh();

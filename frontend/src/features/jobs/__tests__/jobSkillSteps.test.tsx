@@ -50,11 +50,11 @@ describe("job skill steps", () => {
       </div>,
     );
 
-    expect(screen.getByText("Essenciais")).toBeInTheDocument();
-    expect(screen.getByText("Diferenciais")).toBeInTheDocument();
-    expect(screen.getByText("Critérios eliminatórios")).toBeInTheDocument();
-    expect(screen.queryByText("Obrigatórias")).not.toBeInTheDocument();
-    expect(screen.queryByText("Desejáveis")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Essenciais" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Diferenciais" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Critérios eliminatórios" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Obrigatórias" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Desejáveis" })).not.toBeInTheDocument();
   });
 
   it("mostra alerta quando existem mais de 5 skills essenciais", () => {
@@ -166,29 +166,215 @@ describe("job skill steps", () => {
     expect(onUpdateSkill).toHaveBeenCalledWith(mandatorySkill, { weight: 2 });
   });
 
-  it("exibe filtros compactos de categoria e tipo na seleção de skills", () => {
-    const onSkillCategoryFilterChange = vi.fn();
-    const onSkillTypeFilterChange = vi.fn();
+  it("renderiza chips de categoria na seleção de skills, incluindo Outros", () => {
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Todas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gestão" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Comportamental" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Técnica" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ferramentas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Diferenciais" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Outros" })).toBeInTheDocument();
+  });
+
+  it("chip selecionado tem aria-pressed=true e os demais aria-pressed=false", () => {
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+      />,
+    );
+
+    const todasBtn = screen.getByRole("button", { name: "Todas" });
+    const tecnicaBtn = screen.getByRole("button", { name: "Técnica" });
+
+    expect(todasBtn).toHaveAttribute("aria-pressed", "true");
+    expect(tecnicaBtn).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(tecnicaBtn);
+
+    expect(todasBtn).toHaveAttribute("aria-pressed", "false");
+    expect(tecnicaBtn).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("chip Técnica filtra apenas skills com catalog_type hard_skill", () => {
+    const hardSkill = {
+      id: "s1", name: "Python", normalized_name: "python",
+      category: "Programação", catalog_type: "hard_skill", description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+    const softSkill = {
+      id: "s2", name: "Comunicação", normalized_name: "comunicacao",
+      category: null, catalog_type: "soft_skill", description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
 
     render(
       <JobFormMandatorySkillsStep
         mandatorySkills={[]}
         {...baseSkillProps}
-        skillCategoryFilter=""
-        onSkillCategoryFilterChange={onSkillCategoryFilterChange}
-        skillTypeFilter=""
-        onSkillTypeFilterChange={onSkillTypeFilterChange}
+        availableSkills={[hardSkill, softSkill]}
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Categoria"), {
-      target: { value: "frontend" },
-    });
-    fireEvent.change(screen.getByLabelText("Tipo"), {
-      target: { value: "tool" },
-    });
+    expect(screen.getByText("Python")).toBeInTheDocument();
+    expect(screen.getByText("Comunicação")).toBeInTheDocument();
 
-    expect(onSkillCategoryFilterChange).toHaveBeenCalledWith("frontend");
-    expect(onSkillTypeFilterChange).toHaveBeenCalledWith("tool");
+    fireEvent.click(screen.getByRole("button", { name: "Técnica" }));
+
+    expect(screen.getByText("Python")).toBeInTheDocument();
+    expect(screen.queryByText("Comunicação")).not.toBeInTheDocument();
+  });
+
+  it("chip Operacional filtra por keywords operacionais, não por exclusão geral", () => {
+    const opSkill = {
+      id: "s1", name: "Controle de Estoque", normalized_name: "controle-estoque",
+      category: null, catalog_type: null, description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+    // skill genérica sem keyword operacional → deve ir para Outros, não Operacional
+    const genericSkill = {
+      id: "s2", name: "Planilha XYZ", normalized_name: "planilha-xyz",
+      category: null, catalog_type: null, description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+        availableSkills={[opSkill, genericSkill]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Operacional" }));
+
+    expect(screen.getByText("Controle de Estoque")).toBeInTheDocument();
+    expect(screen.queryByText("Planilha XYZ")).not.toBeInTheDocument();
+  });
+
+  it("chip Outros exibe apenas skills sem match em nenhuma categoria específica", () => {
+    const genericSkill = {
+      id: "s1", name: "Planilha XYZ", normalized_name: "planilha-xyz",
+      category: null, catalog_type: null, description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+    const hardSkill = {
+      id: "s2", name: "SQL", normalized_name: "sql",
+      category: "Banco de dados", catalog_type: "hard_skill", description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+        availableSkills={[genericSkill, hardSkill]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Outros" }));
+
+    expect(screen.getByText("Planilha XYZ")).toBeInTheDocument();
+    expect(screen.queryByText("SQL")).not.toBeInTheDocument();
+  });
+
+  it("chip Gestão usa keywords fortes, não classifica skills genéricas sem match", () => {
+    const mgmtSkill = {
+      id: "s1", name: "Gestão de Equipe", normalized_name: "gestao-equipe",
+      category: null, catalog_type: null, description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+    const genericSkill = {
+      id: "s2", name: "Planilha Geral", normalized_name: "planilha-geral",
+      category: null, catalog_type: null, description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+        availableSkills={[mgmtSkill, genericSkill]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Gestão" }));
+
+    expect(screen.getByText("Gestão de Equipe")).toBeInTheDocument();
+    expect(screen.queryByText("Planilha Geral")).not.toBeInTheDocument();
+  });
+
+  it("skills sem categoria aparecem após as com categoria na lista", () => {
+    const withCat = {
+      id: "s1", name: "React", normalized_name: "react",
+      category: "Frontend", catalog_type: "hard_skill", description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+    const noCat = {
+      id: "s2", name: "ZSkillSemCategoria", normalized_name: "zskill",
+      category: null, catalog_type: null, description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+        availableSkills={[noCat, withCat]}
+      />,
+    );
+
+    const allText = document.body.textContent ?? "";
+    expect(allText.indexOf("React")).toBeLessThan(allText.indexOf("ZSkillSemCategoria"));
+  });
+
+  it("exibe bloco de sugestões quando o título da vaga sugere gestão", () => {
+    const leadershipSkill = {
+      id: "s1", name: "Liderança", normalized_name: "lideranca",
+      category: "Gestão", catalog_type: "soft_skill", description: null,
+      is_active: true, updated_at: "", archived_at: null, archived_by: null,
+      archive_reason: null, archive_reason_note: null, created_at: "", aliases: [],
+    };
+
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+        availableSkills={[leadershipSkill]}
+        jobContext={{ title: "Gestor de Equipe", jobArea: "Operações" }}
+      />,
+    );
+
+    expect(screen.getByText("Sugestões para esta vaga")).toBeInTheDocument();
+  });
+
+  it("não exibe sugestões quando a vaga não é de gestão", () => {
+    render(
+      <JobFormMandatorySkillsStep
+        mandatorySkills={[]}
+        {...baseSkillProps}
+        availableSkills={[]}
+        jobContext={{ title: "Desenvolvedor Frontend", jobArea: "Tecnologia" }}
+      />,
+    );
+
+    expect(screen.queryByText("Sugestões para esta vaga")).not.toBeInTheDocument();
   });
 });

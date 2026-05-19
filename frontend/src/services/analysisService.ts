@@ -46,6 +46,19 @@ function formatRetryAfter(seconds: number): string {
 
 function rethrowAnalysisRateLimit(error: unknown): never {
   if (error instanceof HttpError && error.status === 429) {
+    // P0.2C: when the backend signals the daily limit was hit (vs. the generic
+    // per-minute throttler), surface a distinct, actionable message and keep
+    // the `code` so the UI can branch on it (admin-only "Aumentar limite" CTA).
+    if (error.code === "ai_daily_limit_exceeded") {
+      throw new HttpError(
+        429,
+        "Limite diário de análises atingido.",
+        error.code,
+        error.data,
+        error.detail,
+        error.retryAfterSeconds,
+      );
+    }
     const base = "🚫 Limite de uso da IA atingido. Aguarde alguns minutos ou troque a chave da API.";
     const withRetryAfter =
       typeof error.retryAfterSeconds === "number" && Number.isFinite(error.retryAfterSeconds)

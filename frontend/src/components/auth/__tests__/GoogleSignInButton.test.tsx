@@ -117,4 +117,29 @@ describe("GoogleSignInButton", () => {
 
     expect(onCredential).toHaveBeenCalledWith("fake-id-token");
   });
+
+  it("inclui origem atual e clientId mascarado quando o Google recusa a origin", async () => {
+    vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "123456789012-abcdefghi1234567.apps.googleusercontent.com");
+    const onError = vi.fn();
+
+    window.google = {
+      accounts: {
+        id: {
+          initialize: vi.fn(),
+          renderButton: vi.fn(() => {
+            throw new Error("The given origin is not allowed for the given client ID.");
+          }),
+          prompt: vi.fn(),
+        },
+      },
+    };
+
+    render(<GoogleSignInButton onCredential={() => {}} onError={onError} />);
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining("Origem atual: http://localhost:3000."));
+    });
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("123456789012...i1234567.apps.googleusercontent.com"));
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining("Web application"));
+  });
 });

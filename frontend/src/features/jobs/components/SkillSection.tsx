@@ -3,8 +3,128 @@ import { Button } from "@/components/ui/button";
 import type { JobSkill } from "../../../types/domain";
 import type { PendingJobSkill } from "../jobFormConfig";
 import type { SkillCatalog } from "../../../services/skillsService";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CreateSkillModal } from "./CreateSkillModal";
+
+// ── UX category chip definitions ─────────────────────────────────────────────
+
+const UI_CATEGORIES = [
+  "Todas",
+  "Gestão",
+  "Comportamental",
+  "Operacional",
+  "Ferramentas",
+  "Técnica",
+  "Diferenciais",
+  "Outros",
+] as const;
+type UiCategory = (typeof UI_CATEGORIES)[number];
+
+// Keywords explícitos de gestão humana — não usam "pega-tudo"
+const MANAGEMENT_SKILL_KEYWORDS = [
+  "gestão de equipe", "gestao de equipe",
+  "gestão de pessoas", "gestao de pessoas",
+  "liderança", "lideranca", "líder", "lider",
+  "supervisor", "coordenador", "gerente",
+  "feedback", "treinamento",
+  "metas", "indicadores", "escala",
+];
+
+// Keywords explícitos de rotina operacional
+const OPERATIONAL_KEYWORDS = [
+  "atendimento", "caixa", "estoque",
+  "conferência", "conferencia",
+  "loja", "posto",
+  "operação", "operacao",
+  "rotina", "abertura", "fechamento",
+  "inventário", "inventario",
+];
+
+const MANAGEMENT_JOB_SIGNALS = [
+  "gestor", "gerente", "coordenador", "coordenadora",
+  "supervisor", "supervisora", "líder", "lider",
+  "manager", "diretor", "diretora", "gerência", "gerencia",
+  "liderança", "lideranca",
+];
+
+const MANAGEMENT_SUGGESTION_SIGNALS = [
+  "gestão de equipe", "gestao de equipe",
+  "liderança", "lideranca",
+  "comunicação", "comunicacao",
+  "conflito",
+  "indicador", "kpi",
+  "treinamento",
+  "decisão", "decisao",
+  "organização", "organizacao",
+  "atendimento",
+  "excel",
+  "feedback",
+  "coaching",
+  "gestão de pessoas", "gestao de pessoas",
+];
+
+// catalog_type tem prioridade sobre keywords — evita ambiguidade
+const CATALOG_TYPE_TO_UX: Record<string, UiCategory> = {
+  hard_skill: "Técnica",
+  soft_skill: "Comportamental",
+  tool: "Ferramentas",
+  platform: "Ferramentas",
+  certification: "Diferenciais",
+};
+
+function getUiCategory(skill: SkillCatalog): UiCategory {
+  const fromType = skill.catalog_type ? CATALOG_TYPE_TO_UX[skill.catalog_type] : undefined;
+  if (fromType) return fromType;
+
+  const name = skill.name.toLowerCase();
+  const cat = (skill.category ?? "").toLowerCase();
+
+  if (MANAGEMENT_SKILL_KEYWORDS.some((kw) => name.includes(kw) || cat.includes(kw)))
+    return "Gestão";
+  if (OPERATIONAL_KEYWORDS.some((kw) => name.includes(kw) || cat.includes(kw)))
+    return "Operacional";
+
+  return "Outros";
+}
+
+function isManagementJob(title?: string, jobArea?: string): boolean {
+  const text = `${title ?? ""} ${jobArea ?? ""}`.toLowerCase();
+  return MANAGEMENT_JOB_SIGNALS.some((kw) => text.includes(kw));
+}
+
+function matchesManagementSuggestion(skill: SkillCatalog): boolean {
+  const name = skill.name.toLowerCase();
+  return MANAGEMENT_SUGGESTION_SIGNALS.some((s) => name.includes(s));
+}
+
+function getUiCategoryPredicate(cat: UiCategory): (skill: SkillCatalog) => boolean {
+  if (cat === "Todas") return () => true;
+  return (s) => getUiCategory(s) === cat;
+}
+
+// ── Catalog type display ──────────────────────────────────────────────────────
+
+function formatSkillType(value: string): string {
+  const labels: Record<string, string> = {
+    skill: "Skill",
+    hard_skill: "Hard skill",
+    soft_skill: "Soft skill",
+    tool: "Ferramenta",
+    platform: "Plataforma",
+    certification: "Certificação",
+  };
+  return labels[value] ?? value.replace(/_/g, " ");
+}
+
+const CATALOG_TYPE_BADGE: Record<string, string> = {
+  hard_skill: "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400",
+  soft_skill: "bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400",
+  tool: "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
+  platform: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400",
+  certification: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400",
+};
+
+// ── Selected skill row ────────────────────────────────────────────────────────
 
 type SkillSectionProps = {
   title: string;
@@ -35,19 +155,8 @@ type SkillSectionProps = {
     targetPriorityLevel: "priority" | "complementary" | "eliminatory";
   };
   warning?: string | null;
+  jobContext?: { title?: string; jobArea?: string };
 };
-
-function formatSkillType(value: string): string {
-  const labels: Record<string, string> = {
-    skill: "Skill",
-    hard_skill: "Hard skill",
-    soft_skill: "Soft skill",
-    tool: "Ferramenta",
-    platform: "Plataforma",
-    certification: "Certificação",
-  };
-  return labels[value] ?? value.replace(/_/g, " ");
-}
 
 type SelectedSkillRowProps = {
   skill: JobSkill | PendingJobSkill;
@@ -88,8 +197,7 @@ function SelectedSkillRow({
     parsedMinimumYears !== null && !Number.isFinite(parsedMinimumYears)
       ? true
       : parsedMinimumYears !== (skill.minimum_years ?? null);
-  const hasUnsavedDetails =
-    hasUnsavedWeight || hasUnsavedMinimumYears;
+  const hasUnsavedDetails = hasUnsavedWeight || hasUnsavedMinimumYears;
   const actionDisabled = isSaving || hasUnsavedDetails;
 
   async function safeUpdate(patch: Partial<PendingJobSkill>) {
@@ -249,6 +357,8 @@ function SelectedSkillRow({
   );
 }
 
+// ── Main SkillSection component ───────────────────────────────────────────────
+
 export function SkillSection({
   title,
   description,
@@ -257,12 +367,6 @@ export function SkillSection({
   linkedSkills,
   search,
   onSearchChange,
-  categoryFilter = "",
-  onCategoryFilterChange,
-  categoryOptions = [],
-  typeFilter = "",
-  onTypeFilterChange,
-  typeOptions = [],
   addLabel,
   addPriorityLevel,
   savingSkillId,
@@ -272,8 +376,31 @@ export function SkillSection({
   onSkillCreated,
   secondaryAction,
   warning,
+  jobContext,
 }: SkillSectionProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [uiCategory, setUiCategory] = useState<UiCategory>("Todas");
+
+  const isManagement = useMemo(
+    () => isManagementJob(jobContext?.title, jobContext?.jobArea),
+    [jobContext?.title, jobContext?.jobArea],
+  );
+
+  const suggestions = useMemo(() => {
+    if (!isManagement) return [];
+    return availableSkills.filter(matchesManagementSuggestion).slice(0, 8);
+  }, [availableSkills, isManagement]);
+
+  const sortedFilteredSkills = useMemo(() => {
+    const predicate = getUiCategoryPredicate(uiCategory);
+    const filtered = availableSkills.filter(predicate);
+    return [...filtered].sort((a, b) => {
+      const aCat = a.category ? 0 : 1;
+      const bCat = b.category ? 0 : 1;
+      return aCat - bCat;
+    });
+  }, [availableSkills, uiCategory]);
+
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6">
@@ -291,48 +418,19 @@ export function SkillSection({
         </div>
 
         <div className="mt-5">
-          <div className="flex flex-col gap-2">
-            <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_160px_auto] lg:items-end">
-              <label className="flex flex-col gap-2 text-sm font-medium text-[hsl(var(--text))] flex-1">
-                Buscar skill
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(event) => onSearchChange(event.target.value)}
-                  placeholder="Digite nome de skill, ferramenta ou certificação"
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
-                />
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-[hsl(var(--text))]">
-                Categoria
-                <select
-                  value={categoryFilter}
-                  onChange={(event) => onCategoryFilterChange?.(event.target.value)}
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
-                >
-                  <option value="">Todas</option>
-                  {categoryOptions.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-2 text-sm font-medium text-[hsl(var(--text))]">
-                Tipo
-                <select
-                  value={typeFilter}
-                  onChange={(event) => onTypeFilterChange?.(event.target.value)}
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
-                >
-                  <option value="">Todos</option>
-                  {typeOptions.map((type) => (
-                    <option key={type} value={type}>
-                      {formatSkillType(type)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          {/* Search + Nova skill */}
+          <div className="flex gap-3">
+            <label className="flex flex-1 flex-col gap-2 text-sm font-medium text-[hsl(var(--text))]">
+              Buscar skill
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder="Digite nome de skill, ferramenta ou certificação"
+                className="ui-input h-11 rounded-xl px-3 text-sm"
+              />
+            </label>
+            <div className="flex items-end">
               <Button
                 type="button"
                 variant="outline"
@@ -345,18 +443,78 @@ export function SkillSection({
             </div>
           </div>
 
+          {/* Category chips */}
+          <div
+            role="group"
+            aria-label="Filtrar por categoria"
+            className="mt-3 flex flex-wrap gap-1.5"
+          >
+            {UI_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                aria-pressed={uiCategory === cat}
+                onClick={() => setUiCategory(cat)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  uiCategory === cat
+                    ? "bg-[hsl(var(--primary))] text-white"
+                    : "border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] hover:border-[hsl(var(--primary))]/30 hover:text-[hsl(var(--primary))]"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Suggestions for management jobs */}
+          {isManagement && suggestions.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-[hsl(var(--primary))]/20 bg-[hsl(var(--accent-soft))] p-4">
+              <p className="mb-2 text-xs font-semibold text-[hsl(var(--primary))]">
+                Sugestões para esta vaga
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.map((skill) => (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    disabled={savingSkillId === skill.id}
+                    onClick={() => void onAddSkill(skill, addPriorityLevel)}
+                    className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--primary))]/25 bg-white px-2.5 py-1 text-xs font-medium text-[hsl(var(--primary))] transition-colors hover:bg-[hsl(var(--primary))]/5 disabled:opacity-50 dark:bg-slate-900"
+                  >
+                    {savingSkillId === skill.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Plus className="h-3 w-3" />
+                    )}
+                    {skill.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Skill grid */}
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {availableSkills.slice(0, 18).map((skill) => (
+            {sortedFilteredSkills.slice(0, 18).map((skill) => (
               <div
                 key={skill.id}
                 className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 p-4"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.name}</p>
-                    <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                      {skill.category || "Sem categoria"}
-                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-[hsl(var(--text-muted))]">
+                        {skill.category || "Sem categoria"}
+                      </span>
+                      {skill.catalog_type && skill.catalog_type !== "skill" && CATALOG_TYPE_BADGE[skill.catalog_type] && (
+                        <span
+                          className={`rounded-full px-1.5 py-px text-[10px] font-medium ${CATALOG_TYPE_BADGE[skill.catalog_type]}`}
+                        >
+                          {formatSkillType(skill.catalog_type)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Button
                     type="button"
@@ -375,15 +533,18 @@ export function SkillSection({
                 </div>
               </div>
             ))}
-            {availableSkills.length === 0 && !search.trim() ? (
+            {sortedFilteredSkills.length === 0 && !search.trim() ? (
               <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] px-4 py-6 text-sm text-[hsl(var(--text-muted))] md:col-span-2 xl:col-span-3">
                 Nenhuma skill disponível para este filtro.
               </div>
             ) : null}
-            {search.trim() && availableSkills.length === 0 ? (
+            {search.trim() && sortedFilteredSkills.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-6 text-center md:col-span-2 xl:col-span-3 flex flex-col items-center gap-3">
                 <div className="text-sm text-[hsl(var(--text-muted))]">
-                  Nenhuma skill encontrada para <span className="font-semibold text-[hsl(var(--text))]">"{search.trim()}"</span>
+                  Nenhuma skill encontrada para{" "}
+                  <span className="font-semibold text-[hsl(var(--text))]">
+                    "{search.trim()}"
+                  </span>
                 </div>
                 <Button
                   type="button"
@@ -429,7 +590,7 @@ export function SkillSection({
           ) : null}
         </div>
       </section>
-      
+
       <CreateSkillModal
         open={isModalOpen}
         initialName={search.trim()}

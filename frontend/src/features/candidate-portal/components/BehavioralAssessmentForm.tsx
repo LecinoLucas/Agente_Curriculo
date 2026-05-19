@@ -1,5 +1,5 @@
 import { Loader2, Save, Send } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import type {
@@ -86,7 +86,10 @@ export function BehavioralAssessmentForm({
 }) {
   const [answers, setAnswers] = useState<Record<string, DraftAnswer>>(() => buildInitialAnswers(assignment));
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const submitLockedRef = useRef(false);
   const isSubmitted = assignment.status === "submitted";
+  const isBusy = Boolean(saving) || submitting;
   const payload = useMemo(() => toPayload(assignment, answers), [assignment, answers]);
 
   const updateAnswer = (questionId: string, patch: Partial<DraftAnswer>) => {
@@ -103,13 +106,24 @@ export function BehavioralAssessmentForm({
   };
 
   const handleSubmit = async () => {
+    if (isSubmitted || isBusy || submitLockedRef.current) return;
+
     if (requiredMissing(assignment, answers)) {
       setValidationMessage("Responda todas as perguntas obrigatórias antes de enviar.");
       return;
-      return;
     }
+
     setValidationMessage(null);
-    await onSubmit(payload);
+    submitLockedRef.current = true;
+    setSubmitting(true);
+    try {
+      await onSubmit(payload);
+    } catch {
+      return;
+    } finally {
+      submitLockedRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -223,13 +237,13 @@ export function BehavioralAssessmentForm({
 
       {!isSubmitted ? (
         <div className="mt-5 flex flex-wrap gap-3">
-          <Button type="button" variant="outline" onClick={() => void onSave(payload)} disabled={saving}>
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          <Button type="button" variant="outline" onClick={() => void onSave(payload)} disabled={isBusy}>
+            {isBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Salvar rascunho
           </Button>
-          <Button type="button" onClick={() => void handleSubmit()} disabled={saving}>
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-            Enviar avaliação
+          <Button type="button" onClick={() => void handleSubmit()} disabled={isBusy}>
+            {isBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+            {submitting ? "Enviando..." : "Enviar avaliação"}
           </Button>
         </div>
       ) : null}

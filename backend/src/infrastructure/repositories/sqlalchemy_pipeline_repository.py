@@ -20,6 +20,8 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
+from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
@@ -289,6 +291,96 @@ class SQLAlchemyPipelineRepository:
             .scalar_subquery()
         )
 
+        latest_behavioral_assignment_id = (
+            sa.select(BehavioralAssessmentAssignmentModel.id)
+            .where(
+                BehavioralAssessmentAssignmentModel.candidate_id == CandidateJobPipelineModel.candidate_id,
+                BehavioralAssessmentAssignmentModel.job_id == CandidateJobPipelineModel.job_id,
+            )
+            .order_by(
+                BehavioralAssessmentAssignmentModel.created_at.desc(),
+                BehavioralAssessmentAssignmentModel.id.desc(),
+            )
+            .limit(1)
+            .correlate(CandidateJobPipelineModel)
+            .scalar_subquery()
+        )
+
+        behavioral_assessment_status = (
+            sa.select(BehavioralAssessmentAssignmentModel.status)
+            .where(BehavioralAssessmentAssignmentModel.id == latest_behavioral_assignment_id)
+            .limit(1)
+            .correlate(CandidateJobPipelineModel)
+            .scalar_subquery()
+        )
+
+        behavioral_submitted_at = (
+            sa.select(BehavioralAssessmentAssignmentModel.submitted_at)
+            .where(BehavioralAssessmentAssignmentModel.id == latest_behavioral_assignment_id)
+            .limit(1)
+            .correlate(CandidateJobPipelineModel)
+            .scalar_subquery()
+        )
+
+        behavioral_ai_evaluation_status = (
+            sa.select(BehavioralAssessmentAIEvaluationModel.status)
+            .where(BehavioralAssessmentAIEvaluationModel.assignment_id == latest_behavioral_assignment_id)
+            .order_by(
+                BehavioralAssessmentAIEvaluationModel.completed_at.desc().nullslast(),
+                BehavioralAssessmentAIEvaluationModel.created_at.desc(),
+            )
+            .limit(1)
+            .correlate(CandidateJobPipelineModel)
+            .scalar_subquery()
+        )
+
+        latest_interview_status = (
+            sa.select(InterviewScheduleModel.status)
+            .where(
+                InterviewScheduleModel.candidate_id == CandidateJobPipelineModel.candidate_id,
+                InterviewScheduleModel.job_id == CandidateJobPipelineModel.job_id,
+            )
+            .order_by(
+                InterviewScheduleModel.scheduled_start.desc().nullslast(),
+                InterviewScheduleModel.updated_at.desc(),
+            )
+            .limit(1)
+            .correlate(CandidateJobPipelineModel)
+            .scalar_subquery()
+        )
+
+        latest_interview_start = (
+            sa.select(InterviewScheduleModel.scheduled_start)
+            .where(
+                InterviewScheduleModel.candidate_id == CandidateJobPipelineModel.candidate_id,
+                InterviewScheduleModel.job_id == CandidateJobPipelineModel.job_id,
+                InterviewScheduleModel.status.in_(("scheduled", "rescheduled")),
+            )
+            .order_by(
+                InterviewScheduleModel.scheduled_start.asc(),
+                InterviewScheduleModel.updated_at.desc(),
+            )
+            .limit(1)
+            .correlate(CandidateJobPipelineModel)
+            .scalar_subquery()
+        )
+
+        latest_scorecard_status = (
+            sa.select(InterviewScorecardModel.status)
+            .where(
+                InterviewScorecardModel.candidate_id == CandidateJobPipelineModel.candidate_id,
+                InterviewScorecardModel.job_id == CandidateJobPipelineModel.job_id,
+            )
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+            .limit(1)
+            .correlate(CandidateJobPipelineModel)
+            .scalar_subquery()
+        )
+
         result = await self._session.execute(
             sa.select(
                 CandidateJobPipelineModel.candidate_id,
@@ -301,8 +393,19 @@ class SQLAlchemyPipelineRepository:
                 latest_keywords.c.top_skills,
                 AnalysisModel.status.label("ai_status"),
                 CandidateJobScoreModel.final_score.label("job_fit_score"),
+                JobModel.requires_behavioral_assessment,
+                JobModel.requires_behavioral_ai_evaluation,
+                JobModel.requires_interview,
+                JobModel.requires_scorecard,
+                behavioral_assessment_status.label("behavioral_assessment_status"),
+                behavioral_submitted_at.label("behavioral_submitted_at"),
+                behavioral_ai_evaluation_status.label("behavioral_ai_evaluation_status"),
+                latest_interview_status.label("interview_status"),
+                latest_interview_start.label("interview_scheduled_start"),
+                latest_scorecard_status.label("interview_scorecard_status"),
             )
             .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .join(
                 latest_keywords,
                 latest_keywords.c.candidate_id == CandidateJobPipelineModel.candidate_id,

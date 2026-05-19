@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.settings import settings
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.security.google_identity_verifier import (
     GoogleIdentityConfigurationError,
     GoogleIdentityVerificationError,
@@ -169,6 +170,52 @@ async def test_google_new_candidate_returns_needs_completion(
     assert satellite_payload["detail"]["redirect_to"] == "/candidato/cadastro"
     assert "salary_expectation" in satellite_payload["detail"]["missing_fields"]
     assert "google_sub" not in satellite_response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("email", "sub"),
+    [
+        ("candidato.gmail@gmail.com", "candidate-gmail-sub"),
+        ("candidato.hotmail@hotmail.com", "candidate-hotmail-sub"),
+        ("candidato.outlook@outlook.com", "candidate-outlook-sub"),
+        ("candidato.marajo@redemarajo.com.br", "candidate-marajo-sub"),
+    ],
+)
+async def test_google_candidate_public_auth_accepts_any_verified_email_domain_without_user_model(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    email: str,
+    sub: str,
+) -> None:
+    monkeypatch.setattr(settings, "GOOGLE_ALLOWED_DOMAIN", "redemarajo.com.br")
+
+    async def _verify(self: GoogleIdentityVerifier, id_token: str):
+        return _identity(email=email.upper(), sub=sub, name="Candidato Público")
+
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "frontend-client-id.apps.googleusercontent.com")
+    monkeypatch.setattr(GoogleIdentityVerifier, "verify", _verify)
+
+    response = await client.post("/api/v1/public/candidate-auth/google", json={"id_token": f"token-{sub}"})
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["status"] == "needs_completion"
+    assert payload["candidate"]["email"] == email
+    assert payload["redirect_to"] == "/candidato/cadastro"
+
+    candidate = await db_session.scalar(
+        sa.select(CandidateModel).where(CandidateModel.email == email)
+    )
+    assert candidate is not None
+    assert candidate.google_sub == sub
+    assert candidate.user_id is None
+
+    internal_user = await db_session.scalar(
+        sa.select(UserModel).where(UserModel.email == email)
+    )
+    assert internal_user is None
 
 
 @pytest.mark.asyncio

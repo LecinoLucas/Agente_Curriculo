@@ -175,9 +175,6 @@ export function PublicApplicationPage() {
           </p>
         </div>
 
-        {/* Intro card */}
-        <ApplicationIntroCard />
-
         {/* Form */}
         <form className="relative overflow-hidden rounded-[2.5rem] border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface)/0.7)] p-8 shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 duration-500" onSubmit={handleFormSubmit} noValidate>
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--primary)/0.02)] to-transparent pointer-events-none" />
@@ -263,6 +260,9 @@ export function PublicApplicationPage() {
             </div>
           )}
         </form>
+
+        {/* Intro card */}
+        <ApplicationIntroCard />
       </div>
     </div>
   );

@@ -200,6 +200,8 @@ export function AgendaInterviewModal({
             meeting_url: schedule.meeting_url || "",
             interviewer_name: schedule.interviewer_name || "",
             interviewer_email: schedule.interviewer_email || "",
+            create_google_event: schedule.calendar_provider === "google",
+            create_google_meet: schedule.meeting_provider === "google_meet",
           });
           setEditSnapshot({
             status: schedule.status,
@@ -238,6 +240,20 @@ export function AgendaInterviewModal({
   const handleFormChange = (updates: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...updates }));
     setValidationError(null);
+  };
+
+  const handleGoogleEventChange = (checked: boolean) => {
+    handleFormChange({
+      create_google_event: checked,
+      create_google_meet: checked ? form.create_google_meet : false,
+    });
+  };
+
+  const handleGoogleMeetChange = (checked: boolean) => {
+    handleFormChange({
+      create_google_event: checked ? true : form.create_google_event,
+      create_google_meet: checked,
+    });
   };
 
   const validateForm = (): boolean => {
@@ -345,8 +361,8 @@ export function AgendaInterviewModal({
           meeting_url: form.meeting_url || null,
           interviewer_name: form.interviewer_name || null,
           interviewer_email: form.interviewer_email || null,
-          sync_google_event: form.create_google_event,
-          create_google_meet: form.create_google_meet,
+          sync_google_event: googleConnected && form.create_google_event,
+          create_google_meet: googleConnected && form.create_google_event && form.create_google_meet,
         };
 
         const result = await agendaService.updateInterview(scheduleId, payload);
@@ -371,8 +387,8 @@ export function AgendaInterviewModal({
           meeting_url: form.meeting_url || null,
           interviewer_name: form.interviewer_name || null,
           interviewer_email: form.interviewer_email || null,
-          create_google_event: form.create_google_event,
-          create_google_meet: form.create_google_meet,
+          create_google_event: googleConnected && form.create_google_event,
+          create_google_meet: googleConnected && form.create_google_event && form.create_google_meet,
         };
 
         const result = await agendaService.createInterview(payload);
@@ -658,34 +674,37 @@ export function AgendaInterviewModal({
             <div className="pt-2">
               <h4 className="text-sm font-medium text-[hsl(var(--text))] mb-2">Sincronização com calendário</h4>
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm text-[hsl(var(--text))]">
+                <div className="flex items-center gap-2 text-sm text-[hsl(var(--text))]">
                   <input
+                    id="agenda-interview-google-calendar"
                     type="checkbox"
                     checked={form.create_google_event}
                     onChange={(e) =>
-                      handleFormChange({ create_google_event: e.target.checked })
+                      handleGoogleEventChange(e.target.checked)
                     }
                     disabled={!googleConnected}
                     className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
                   />
-                  <span>Adicionar ao Google Calendar</span>
-                </label>
+                  <label htmlFor="agenda-interview-google-calendar">Adicionar ao Google Calendar</label>
+                </div>
                 
-                <label className="flex items-center gap-2 text-sm text-[hsl(var(--text))]">
+                <div className="flex items-center gap-2 text-sm text-[hsl(var(--text))]">
                   <input
+                    id="agenda-interview-google-meet"
                     type="checkbox"
                     checked={form.create_google_meet}
                     onChange={(e) =>
-                      handleFormChange({ create_google_meet: e.target.checked })
+                      handleGoogleMeetChange(e.target.checked)
                     }
-                    disabled={!googleConnected || !form.create_google_event}
+                    disabled={!googleConnected}
                     className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
                   />
-                  <span>Criar link do Google Meet</span>
-                </label>
+                  <label htmlFor="agenda-interview-google-meet">Criar link do Google Meet</label>
+                </div>
                 
                 {!googleConnected && (
                   <p className="text-sm text-[hsl(var(--text-muted))]">
+                    Conecte o Google Calendar para criar evento e link do Meet.{" "}
                     <button
                       type="button"
                       onClick={() => void handleConnectGoogle()}
@@ -693,16 +712,21 @@ export function AgendaInterviewModal({
                       className="text-[hsl(var(--primary))] hover:underline"
                     >
                       {connectingGoogle ? "Conectando..." : "Conectar Google Calendar"}
-                    </button>{" "}
-                    para habilitar a sincronização.
+                    </button>
                   </p>
                 )}
                 
                 {googleConnected && (
                   <p className="text-sm text-green-600">
-                    Google Calendar conectado{googleAccountEmail ? `: ${googleAccountEmail}` : ""}.
+                    Google Calendar conectado{googleAccountEmail ? `: ${googleAccountEmail}` : ""}
                   </p>
                 )}
+
+                {googleConnected && !form.create_google_event ? (
+                  <p className="text-sm text-[hsl(var(--text-muted))]">
+                    Marque Google Calendar para criar link do Meet.
+                  </p>
+                ) : null}
               </div>
             </div>
 

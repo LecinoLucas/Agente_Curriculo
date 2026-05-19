@@ -50,4 +50,30 @@ describe("KanbanCard", () => {
 
     expect(screen.getByText("1")).toBeInTheDocument();
   });
+
+  it("mostra IA na fila quando ai_status é pending", () => {
+    render(
+      <KanbanCard
+        candidate={{ ...mockCandidate, ai_status: "pending", job_fit_score: null }}
+        isSaving={false}
+        enterDelay={0}
+      />
+    );
+
+    expect(screen.getByTestId("kanban-ai-status-badge")).toHaveTextContent("IA na fila");
+    expect(screen.getByText("Aguardando IA")).toBeInTheDocument();
+  });
+
+  it("mostra IA analisando quando ai_status é processing", () => {
+    render(
+      <KanbanCard
+        candidate={{ ...mockCandidate, ai_status: "processing", job_fit_score: null }}
+        isSaving={false}
+        enterDelay={0}
+      />
+    );
+
+    expect(screen.getByTestId("kanban-ai-status-badge")).toHaveTextContent("IA analisando");
+    expect(screen.getByText("Aguardando IA")).toBeInTheDocument();
+  });
 });

@@ -42,7 +42,7 @@ function installGoogleMock(credential = "google-credential") {
         renderButton: vi.fn((element: HTMLElement) => {
           const hiddenButton = document.createElement("button");
           hiddenButton.type = "button";
-          hiddenButton.textContent = "Google Hidden";
+          hiddenButton.textContent = "Continuar com Google";
           hiddenButton.onclick = () => callback?.({ credential });
           element.appendChild(hiddenButton);
         }),

@@ -417,7 +417,7 @@ export function CandidatesPage() {
                               Ranking & Match
                             </th>
                             {showActionsColumn ? (
-                              <th className="sticky right-0 bg-[hsl(var(--surface))] px-6 py-4 text-right text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))] shadow-[-12px_0_12px_-4px_rgba(0,0,0,0.02)]">
+                              <th className="sticky right-0 bg-[hsl(var(--surface))]/95 px-6 py-4 text-right text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))] backdrop-blur-sm shadow-[-8px_0_10px_-8px_rgba(15,23,42,0.08)]">
                                 Ações
                               </th>
                             ) : null}
@@ -559,7 +559,7 @@ export function CandidateRow({
             ? "border-rose-200 bg-rose-50 text-rose-700"
         : c.active_job_id
           ? "border-blue-200 bg-blue-50 text-blue-700"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]";
+          : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
   const vacancyLabel =
     c.active_job_stage === "hired" || c.active_job_stage === "rejected"
@@ -589,8 +589,10 @@ export function CandidateRow({
     <tr
       onClick={onOpen}
       className={[
-        "group cursor-pointer transition-all duration-200",
-        isActive ? "bg-[hsl(var(--accent-soft))] ring-1 ring-inset ring-[hsl(var(--primary)/0.2)]" : "hover:bg-[hsl(var(--accent-soft)/0.4)]",
+        "group cursor-pointer border-l-2 border-l-transparent transition-colors duration-150",
+        isActive
+          ? "border-l-[hsl(var(--primary))] bg-red-50/40 dark:bg-red-950/15"
+          : "hover:bg-slate-50 dark:hover:bg-slate-900/35",
       ].join(" ")}
     >
       <td className="px-6 py-5">
@@ -601,17 +603,17 @@ export function CandidateRow({
               {c.tags.slice(0, 2).map((t) => (
                 <span
                   key={t}
-                  className="rounded-md bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]"
+                  className="rounded-full border border-stone-200 bg-stone-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-700 dark:border-stone-700 dark:bg-stone-800/80 dark:text-stone-300"
                 >
                   {t}
                 </span>
               ))}
               {c.tags.length > 2 ? (
-                <span className="text-[10px] font-bold text-[hsl(var(--text-muted)/0.5)]">+{c.tags.length - 2}</span>
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">+{c.tags.length - 2}</span>
               ) : null}
             </div>
           ) : (
-            <div className="text-[10px] italic text-[hsl(var(--text-muted)/0.5)]">Sem tags</div>
+            <div className="text-[10px] italic text-slate-400 dark:text-slate-500">Sem tags</div>
           )}
         </div>
       </td>
@@ -647,7 +649,7 @@ export function CandidateRow({
                 event.stopPropagation();
                 onLinkJob();
               }}
-              className="w-fit rounded-md bg-[hsl(var(--primary)/0.05)] px-2 py-1 text-[10px] font-bold text-[hsl(var(--primary))] transition-all hover:bg-[hsl(var(--primary)/0.1)] active:scale-95"
+              className="w-fit rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/40"
             >
               Vincular à vaga
             </button>
@@ -663,9 +665,11 @@ export function CandidateRow({
       {actionItems.length > 0 ? (
         <td 
           className={[
-            "px-6 py-5 text-right sticky right-0 transition-colors",
-            isActive ? "bg-[hsl(var(--accent-soft))]" : "bg-[hsl(var(--surface))] group-hover:bg-[hsl(var(--accent-soft)/0.4)]",
-            "shadow-[-12px_0_12px_-4px_rgba(0,0,0,0.02)]"
+            "sticky right-0 px-6 py-5 text-right transition-colors",
+            isActive
+              ? "bg-red-50/40 dark:bg-red-950/15"
+              : "bg-[hsl(var(--surface))]/96 group-hover:bg-slate-50 dark:group-hover:bg-slate-900/35",
+            "backdrop-blur-sm shadow-[-8px_0_10px_-8px_rgba(15,23,42,0.08)]"
           ].join(" ")} 
           onClick={(event) => event.stopPropagation()}
         >
@@ -673,6 +677,7 @@ export function CandidateRow({
             buttonLabel={`Ações para ${c.full_name}`}
             items={actionItems}
             direction={direction}
+            buttonClassName="border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
           />
         </td>
       ) : null}

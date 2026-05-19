@@ -63,6 +63,20 @@ export function InterviewQuickScheduleModal({
 
   const endTime = useMemo(() => addMinutes(startTime, Number(duration) || 60), [duration, startTime]);
 
+  const handleGoogleEventChange = (checked: boolean) => {
+    setCreateGoogleEvent(checked);
+    if (!checked) {
+      setCreateGoogleMeet(false);
+    }
+  };
+
+  const handleGoogleMeetChange = (checked: boolean) => {
+    setCreateGoogleMeet(checked);
+    if (checked) {
+      setCreateGoogleEvent(true);
+    }
+  };
+
   const handleSchedule = async () => {
     setError(null);
     if (!date || !startTime) {
@@ -82,8 +96,8 @@ export function InterviewQuickScheduleModal({
       location: interviewFormat === "presencial" ? location.trim() || null : null,
       meeting_url: interviewFormat === "online" ? meetingUrl.trim() || null : null,
       public_notes: publicNotes.trim() || null,
-      create_google_event: createGoogleEvent,
-      create_google_meet: createGoogleMeet,
+      create_google_event: googleConnected && createGoogleEvent,
+      create_google_meet: googleConnected && createGoogleEvent && createGoogleMeet,
     });
   };
 
@@ -155,39 +169,47 @@ export function InterviewQuickScheduleModal({
 
         {/* Sincronização com calendário */}
         <div className="space-y-2 pt-2">
-          <label className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex items-center gap-2 text-sm font-medium">
             <input
+              id="quick-schedule-google-calendar"
               type="checkbox"
               checked={createGoogleEvent}
-              onChange={(e) => setCreateGoogleEvent(e.target.checked)}
+              onChange={(e) => handleGoogleEventChange(e.target.checked)}
               disabled={!googleConnected}
               className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
             />
-            <span>Adicionar ao Google Calendar</span>
-          </label>
+            <label htmlFor="quick-schedule-google-calendar">Adicionar ao Google Calendar</label>
+          </div>
           
-          <label className="flex items-center gap-2 text-sm font-medium">
+          <div className="flex items-center gap-2 text-sm font-medium">
             <input
+              id="quick-schedule-google-meet"
               type="checkbox"
               checked={createGoogleMeet}
-              onChange={(e) => setCreateGoogleMeet(e.target.checked)}
-              disabled={!googleConnected || !createGoogleEvent}
+              onChange={(e) => handleGoogleMeetChange(e.target.checked)}
+              disabled={!googleConnected}
               className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
             />
-            <span>Criar link do Google Meet</span>
-          </label>
+            <label htmlFor="quick-schedule-google-meet">Criar link do Google Meet</label>
+          </div>
           
           {!googleConnected && (
             <p className="text-xs text-[hsl(var(--text-muted))]">
-              Google Calendar não conectado. Conecte na agenda para habilitar.
+              Conecte o Google Calendar para criar evento e link do Meet.
             </p>
           )}
 
           {googleConnected && (
             <p className="text-xs text-emerald-600">
-              Google Calendar conectado{googleAccountEmail ? `: ${googleAccountEmail}` : ""}.
+              Google Calendar conectado{googleAccountEmail ? `: ${googleAccountEmail}` : ""}
             </p>
           )}
+
+          {googleConnected && !createGoogleEvent ? (
+            <p className="text-xs text-[hsl(var(--text-muted))]">
+              Marque Google Calendar para criar link do Meet.
+            </p>
+          ) : null}
         </div>
       </div>
 

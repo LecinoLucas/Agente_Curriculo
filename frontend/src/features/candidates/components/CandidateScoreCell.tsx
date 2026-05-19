@@ -12,7 +12,9 @@ export function CandidateScoreCell({ candidate }: { candidate: CandidateListSumm
   const showProgress = Boolean(candidate.active_job_id) && candidate.ai_status === "completed";
 
   const toneClass =
-    semantics.statusTone === "high"
+    semantics.primaryScore == null
+      ? "text-slate-400 dark:text-slate-500"
+      : semantics.statusTone === "high"
       ? "text-[hsl(var(--success))]"
       : semantics.statusTone === "mid"
         ? "text-[hsl(var(--warning))]"
@@ -48,11 +50,11 @@ export function CandidateScoreCell({ candidate }: { candidate: CandidateListSumm
           />
         </div>
       ) : (
-        <div className="h-1.5 w-full rounded-full bg-[hsl(var(--surface-muted))/0.5] border border-dashed border-[hsl(var(--border))]" />
+        <div className="h-1.5 w-full rounded-full border border-dashed border-slate-200 bg-slate-100/80 dark:border-slate-700 dark:bg-slate-800/70" />
       )}
 
       {semantics.statusLabel ? (
-        <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-[hsl(var(--text-muted)/0.6)]">
+        <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
           {semantics.statusLabel}
         </div>
       ) : null}

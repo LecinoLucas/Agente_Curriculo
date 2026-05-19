@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { BehavioralAssessmentForm } from "../BehavioralAssessmentForm";
@@ -154,6 +154,38 @@ describe("BehavioralAssessmentForm", () => {
         expect.objectContaining({ question_id: "q-scale", answer_value: 3 }),
       ])
     );
+  });
+
+  it("bloqueia duplo clique no envio da avaliação", async () => {
+    const user = userEvent.setup();
+    let resolveSubmit: () => void = () => undefined;
+    const pendingSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSubmit = resolve;
+        }),
+    );
+
+    render(
+      <BehavioralAssessmentForm
+        assignment={makeAssignment()}
+        onSave={onSave}
+        onSubmit={pendingSubmit}
+        onClose={onClose}
+      />
+    );
+
+    await user.type(screen.getByRole("textbox"), "Uso listas de prioridade.");
+    fireEvent.click(screen.getByLabelText("Sempre"));
+    fireEvent.click(screen.getByLabelText("3"));
+
+    await user.dblClick(screen.getByRole("button", { name: /enviar avaliação/i }));
+
+    expect(pendingSubmit).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /enviando/i })).toBeDisabled();
+    await act(async () => {
+      resolveSubmit();
+    });
   });
 
   it("chama onSave ao clicar em Salvar rascunho", async () => {

@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { HttpError } from "../../services/http";
+
 type ExtractionStatus = "pending" | "processing" | "completed" | "failed";
 
 type PollingOptions = {
@@ -20,6 +22,7 @@ type PollingOptions = {
 
 const {
   resumeServiceMock,
+  candidatesServiceMock,
   useExtractionPollingMock,
   linkCandidateJobModalMock,
 } = vi.hoisted(() => ({
@@ -27,12 +30,20 @@ const {
     initiateUpload: vi.fn(),
     uploadPdf: vi.fn(),
   },
+  candidatesServiceMock: {
+    create: vi.fn(),
+    checkDuplicate: vi.fn(),
+  },
   useExtractionPollingMock: vi.fn(),
   linkCandidateJobModalMock: vi.fn(),
 }));
 
 vi.mock("../../services/resumeService", () => ({
   resumeService: resumeServiceMock,
+}));
+
+vi.mock("../../services/candidatesService", () => ({
+  candidatesService: candidatesServiceMock,
 }));
 
 vi.mock("../../shared/hooks/useExtractionPolling", () => ({
@@ -62,10 +73,65 @@ const routerFuture = {
   v7_relativeSplatPath: true,
 } as const;
 
+const baseUploadResponse = {
+  resume_id: "resume-1",
+  candidate_id: "candidate-1",
+  candidate_full_name: "Pessoa Um",
+  version_id: "version-1",
+  analysis_auto_requested: false,
+  analysis_id: null,
+  analysis_status: null,
+  original_file_name: "cv-1.pdf",
+  file_size_bytes: 123,
+  file_hash_sha256: "hash-1",
+  extraction_status: "pending",
+  page_count: null,
+  word_count: null,
+  prefilled_fields: [],
+};
+
+function setupPolling(): { getOptions: () => PollingOptions | null } {
+  let captured: PollingOptions | null = null;
+  useExtractionPollingMock.mockImplementation((options: PollingOptions) => {
+    captured = options;
+    return {
+      statuses: {},
+      isPolling: Boolean(options.enabled),
+      hasPending: Boolean(options.enabled),
+      refresh: vi.fn(),
+      stop: vi.fn(),
+    };
+  });
+  return { getOptions: () => captured };
+}
+
+async function fillFormAndSubmit(
+  user: ReturnType<typeof userEvent.setup>,
+  container: HTMLElement,
+  overrides: { name?: string; email?: string; phone?: string; cpf?: string; file?: File } = {},
+) {
+  const name = overrides.name ?? "Pessoa Um";
+  const email = overrides.email ?? "pessoa.um@example.com";
+  const file =
+    overrides.file ?? new File(["pdf-1"], "cv-1.pdf", { type: "application/pdf" });
+
+  await user.type(screen.getByLabelText(/nome completo/i), name);
+  await user.type(screen.getByLabelText(/e-mail/i), email);
+  if (overrides.phone) await user.type(screen.getByLabelText(/telefone/i), overrides.phone);
+  if (overrides.cpf) await user.type(screen.getByLabelText(/^cpf$/i), overrides.cpf);
+
+  const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+  await user.upload(fileInput, file);
+
+  await user.click(screen.getByRole("button", { name: /cadastrar candidato/i }));
+}
+
 describe("ImportPage", () => {
   beforeEach(() => {
     resumeServiceMock.initiateUpload.mockReset();
     resumeServiceMock.uploadPdf.mockReset();
+    candidatesServiceMock.create.mockReset();
+    candidatesServiceMock.checkDuplicate.mockReset();
     useExtractionPollingMock.mockReset();
     linkCandidateJobModalMock.mockReset();
     useExtractionPollingMock.mockReturnValue({
@@ -77,147 +143,37 @@ describe("ImportPage", () => {
     });
   });
 
-  it("usa o hook compartilhado e atualiza cada arquivo do lote independentemente", async () => {
+  it("não chama /resumes sem candidate_id e exige campos mínimos", async () => {
     const user = userEvent.setup();
-    let pollingOptions: PollingOptions | null = null;
-
-    useExtractionPollingMock.mockImplementation((options: PollingOptions) => {
-      pollingOptions = options;
-      return {
-        statuses: {},
-        isPolling: Boolean(options.enabled),
-        hasPending: Boolean(options.enabled),
-        refresh: vi.fn(),
-        stop: vi.fn(),
-      };
-    });
-
-    resumeServiceMock.initiateUpload
-      .mockResolvedValueOnce({ resume_id: "resume-1" })
-      .mockResolvedValueOnce({ resume_id: "resume-2" });
-
-    resumeServiceMock.uploadPdf
-      .mockResolvedValueOnce({
-        resume_id: "resume-1",
-        candidate_id: "candidate-1",
-        candidate_full_name: "Pessoa Um",
-        version_id: "version-1",
-        analysis_auto_requested: false,
-        analysis_id: null,
-        analysis_status: null,
-        original_file_name: "cv-1.pdf",
-        file_size_bytes: 123,
-        file_hash_sha256: "hash-1",
-        extraction_status: "pending",
-        page_count: null,
-        word_count: null,
-        prefilled_fields: [],
-      })
-      .mockResolvedValueOnce({
-        resume_id: "resume-2",
-        candidate_id: "candidate-2",
-        candidate_full_name: "Pessoa Dois",
-        version_id: "version-2",
-        analysis_auto_requested: false,
-        analysis_id: null,
-        analysis_status: null,
-        original_file_name: "cv-2.pdf",
-        file_size_bytes: 456,
-        file_hash_sha256: "hash-2",
-        extraction_status: "pending",
-        page_count: null,
-        word_count: null,
-        prefilled_fields: [],
-      });
-
-    const { container } = render(
+    render(
       <MemoryRouter future={routerFuture}>
         <ImportPage />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/não cria pipeline automaticamente/i)).toBeInTheDocument();
-    expect(screen.queryByText("Aderência à Vaga")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /cadastrar candidato/i }));
 
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const fileOne = new File(["pdf-1"], "cv-1.pdf", { type: "application/pdf" });
-    const fileTwo = new File(["pdf-2"], "cv-2.pdf", { type: "application/pdf" });
-
-    await user.upload(input, [fileOne, fileTwo]);
-
-    expect(await screen.findByText("cv-1.pdf")).toBeInTheDocument();
-    expect(screen.getByText("cv-2.pdf")).toBeInTheDocument();
-    expect(screen.getAllByText("Aguardando extração")).toHaveLength(2);
-    expect(pollingOptions?.items).toEqual(["resume-1", "resume-2"]);
-    expect(pollingOptions?.enabled).toBe(true);
-
-    await act(async () => {
-      pollingOptions?.onItemUpdate?.("resume-1", {
-        extraction_status: "completed",
-        extraction_error: null,
-      });
-    });
-
-    const rowOne = screen.getByText("cv-1.pdf").closest("tr");
-    const rowTwo = screen.getByText("cv-2.pdf").closest("tr");
-
-    expect(rowOne).not.toBeNull();
-    expect(rowTwo).not.toBeNull();
-
-    expect(within(rowOne!).getByText("Extraído")).toBeInTheDocument();
-    expect(within(rowOne!).getByRole("button", { name: "Adicionar a uma vaga" })).toBeInTheDocument();
-    expect(within(rowTwo!).getByText("Aguardando extração")).toBeInTheDocument();
+    // Form-level validation rejects the submit; nothing is sent to the backend
+    // and a clear inline error is shown to the user.
     expect(
-      within(rowTwo!).queryByRole("button", { name: "Adicionar a uma vaga" }),
-    ).not.toBeInTheDocument();
-
-    await act(async () => {
-      pollingOptions?.onItemUpdate?.("resume-2", {
-        extraction_status: "failed",
-        extraction_error: "Falha no OCR",
-      });
-    });
-
-    expect(within(rowTwo!).getByText("Falha na extração")).toBeInTheDocument();
-    expect(within(rowTwo!).getByText("Falha no OCR")).toBeInTheDocument();
-    expect(
-      within(rowTwo!).getByRole("button", { name: "Reprocessar extração" }),
-    ).toBeDisabled();
-    expect(screen.queryByText("Match da vaga ativa")).not.toBeInTheDocument();
+      await screen.findByText(/informe o nome completo/i),
+    ).toBeInTheDocument();
+    expect(candidatesServiceMock.create).not.toHaveBeenCalled();
+    expect(resumeServiceMock.initiateUpload).not.toHaveBeenCalled();
+    expect(resumeServiceMock.uploadPdf).not.toHaveBeenCalled();
   });
 
-  it("abre o vínculo manual só para itens completed e não cria pipeline automaticamente", async () => {
+  it("cria candidato primeiro e envia currículo com candidate_id", async () => {
     const user = userEvent.setup();
-    let pollingOptions: PollingOptions | null = null;
+    const { getOptions } = setupPolling();
 
-    useExtractionPollingMock.mockImplementation((options: PollingOptions) => {
-      pollingOptions = options;
-      return {
-        statuses: {},
-        isPolling: Boolean(options.enabled),
-        hasPending: Boolean(options.enabled),
-        refresh: vi.fn(),
-        stop: vi.fn(),
-      };
+    candidatesServiceMock.create.mockResolvedValue({
+      id: "candidate-1",
+      full_name: "Pessoa Um",
+      email: "pessoa.um@example.com",
     });
-
     resumeServiceMock.initiateUpload.mockResolvedValue({ resume_id: "resume-1" });
-    resumeServiceMock.uploadPdf.mockResolvedValue({
-      resume_id: "resume-1",
-      candidate_id: "candidate-1",
-      candidate_full_name: "Pessoa Teste",
-      version_id: "version-1",
-      analysis_auto_requested: false,
-      analysis_id: null,
-      analysis_status: null,
-      original_file_name: "cv.pdf",
-      file_size_bytes: 123,
-      file_hash_sha256: "hash",
-      extraction_status: "pending",
-      page_count: null,
-      word_count: null,
-      prefilled_fields: [],
-    });
+    resumeServiceMock.uploadPdf.mockResolvedValue(baseUploadResponse);
 
     const { container } = render(
       <MemoryRouter future={routerFuture}>
@@ -225,37 +181,130 @@ describe("ImportPage", () => {
       </MemoryRouter>,
     );
 
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(["pdf"], "cv.pdf", { type: "application/pdf" });
+    await fillFormAndSubmit(user, container);
 
-    await user.upload(input, file);
+    await waitFor(() => expect(candidatesServiceMock.create).toHaveBeenCalledTimes(1));
+    expect(candidatesServiceMock.create).toHaveBeenCalledWith({
+      full_name: "Pessoa Um",
+      email: "pessoa.um@example.com",
+    });
+    await waitFor(() => expect(resumeServiceMock.initiateUpload).toHaveBeenCalledWith("candidate-1"));
+    expect(resumeServiceMock.uploadPdf).toHaveBeenCalledWith("resume-1", expect.any(File));
 
+    expect(await screen.findByText("cv-1.pdf")).toBeInTheDocument();
+    expect(getOptions()?.items).toEqual(["resume-1"]);
+  });
+
+  it("mostra mensagem amigável quando email já existe (409), mantém formulário e oferece abrir candidato existente", async () => {
+    const user = userEvent.setup();
+    candidatesServiceMock.create.mockRejectedValue(
+      new HttpError(
+        409,
+        "Candidato com este e-mail já existe",
+        undefined,
+        null,
+        "Candidato com este e-mail já existe",
+      ),
+    );
+    candidatesServiceMock.checkDuplicate.mockResolvedValue({
+      exists: true,
+      candidate_id: "existing-candidate-1",
+      full_name: "Pessoa Um",
+    });
+
+    const { container } = render(
+      <MemoryRouter future={routerFuture}>
+        <ImportPage />
+      </MemoryRouter>,
+    );
+    await fillFormAndSubmit(user, container);
+
+    expect(await screen.findByText(/já existe um candidato com este e-mail/i)).toBeInTheDocument();
+    expect(resumeServiceMock.initiateUpload).not.toHaveBeenCalled();
+    // Form values must be preserved
+    expect((screen.getByLabelText(/nome completo/i) as HTMLInputElement).value).toBe("Pessoa Um");
+    expect((screen.getByLabelText(/e-mail/i) as HTMLInputElement).value).toBe("pessoa.um@example.com");
+    // "Abrir candidato existente" CTA appears once the lookup resolved.
+    expect(
+      await screen.findByRole("button", { name: /abrir candidato existente/i }),
+    ).toBeInTheDocument();
+    expect(candidatesServiceMock.checkDuplicate).toHaveBeenCalledWith(
+      "pessoa.um@example.com",
+      undefined,
+    );
+  });
+
+  it("vínculo manual aparece só após extração completed", async () => {
+    const user = userEvent.setup();
+    const { getOptions } = setupPolling();
+    candidatesServiceMock.create.mockResolvedValue({
+      id: "candidate-1",
+      full_name: "Pessoa Um",
+      email: "pessoa.um@example.com",
+    });
+    resumeServiceMock.initiateUpload.mockResolvedValue({ resume_id: "resume-1" });
+    resumeServiceMock.uploadPdf.mockResolvedValue(baseUploadResponse);
+
+    const { container } = render(
+      <MemoryRouter future={routerFuture}>
+        <ImportPage />
+      </MemoryRouter>,
+    );
+
+    await fillFormAndSubmit(user, container);
+
+    expect(await screen.findByText("cv-1.pdf")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adicionar a uma vaga" })).not.toBeInTheDocument();
-    expect(screen.queryByTestId("link-candidate-job-modal")).not.toBeInTheDocument();
 
     await act(async () => {
-      pollingOptions?.onItemUpdate?.("resume-1", {
+      getOptions()?.onItemUpdate?.("resume-1", {
         extraction_status: "completed",
         extraction_error: null,
       });
     });
 
-    const addToJobButton = await screen.findByRole("button", {
-      name: "Adicionar a uma vaga",
-    });
-
+    const addToJobButton = await screen.findByRole("button", { name: "Adicionar a uma vaga" });
     await user.click(addToJobButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("link-candidate-job-modal")).toBeInTheDocument();
-    });
-
+    await waitFor(() => expect(screen.getByTestId("link-candidate-job-modal")).toBeInTheDocument());
     expect(linkCandidateJobModalMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         isOpen: true,
         candidateId: "candidate-1",
-        candidateName: "Pessoa Teste",
+        candidateName: "Pessoa Um",
       }),
     );
   });
+
+  it("falha de upload mantém candidato criado e mostra erro recuperável", async () => {
+    const user = userEvent.setup();
+    setupPolling();
+    candidatesServiceMock.create.mockResolvedValue({
+      id: "candidate-2",
+      full_name: "Pessoa Dois",
+      email: "pessoa.dois@example.com",
+    });
+    resumeServiceMock.initiateUpload.mockResolvedValue({ resume_id: "resume-2" });
+    resumeServiceMock.uploadPdf.mockRejectedValue(
+      new HttpError(413, "Arquivo muito grande", undefined, null, "Arquivo muito grande"),
+    );
+
+    const { container } = render(
+      <MemoryRouter future={routerFuture}>
+        <ImportPage />
+      </MemoryRouter>,
+    );
+    await fillFormAndSubmit(user, container, {
+      name: "Pessoa Dois",
+      email: "pessoa.dois@example.com",
+    });
+
+    await waitFor(() => expect(candidatesServiceMock.create).toHaveBeenCalled());
+    // The recoverable-failure row is what we care about — message + hint that
+    // the candidate has already been created.
+    expect(await screen.findByText(/candidato já foi criado/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/arquivo muito grande/i).length).toBeGreaterThan(0);
+  });
 });
+
+// Hint for the unused import warning when running this file standalone.
+void within;

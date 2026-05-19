@@ -78,6 +78,7 @@ export function JobFormDealBreakersStep({
         onUpdateSkill={onUpdateSkill}
         onRemoveSkill={onRemoveSkill}
         onSkillCreated={onSkillCreated}
+        jobContext={{ title: form.title, jobArea: form.job_area }}
       />
 
       <SectionCard

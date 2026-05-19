@@ -44,6 +44,27 @@ function getAvatarStyles(name: string) {
   };
 }
 
+function getAiProcessingState(candidate: JobCandidate): { label: string; tone: "pending" | "processing" } | null {
+  const rawCandidate = candidate as Record<string, unknown>;
+  const status = String(
+    candidate.ai_status ??
+      rawCandidate.analysis_status ??
+      rawCandidate.latest_analysis_status ??
+      rawCandidate.extraction_status ??
+      "",
+  ).toLowerCase();
+
+  if (status === "pending" || status === "queued" || status === "retry_scheduled") {
+    return { label: "IA na fila", tone: "pending" };
+  }
+
+  if (status === "processing") {
+    return { label: "IA analisando", tone: "processing" };
+  }
+
+  return null;
+}
+
 const BADGE_TONE_CLASS: Record<PipelineCardBadgeTone, string> = {
   danger: "bg-rose-50 text-rose-700 dark:bg-rose-950/35 dark:text-rose-300",
   warning: "bg-amber-50 text-amber-700 dark:bg-amber-950/35 dark:text-amber-300",
@@ -89,6 +110,7 @@ export const KanbanCard = memo(function KanbanCard({
   const assessmentCompleted = candidate.ai_status === "completed";
   const hasWarning = rawCandidate.candidate_status === "blocked" || rawCandidate.candidate_status === "error";
   const operationalBadges = derivePipelineCardBadges(candidate);
+  const aiProcessingState = getAiProcessingState(candidate);
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
     if (!draggable) {
@@ -192,6 +214,23 @@ export const KanbanCard = memo(function KanbanCard({
         </div>
       )}
 
+      {aiProcessingState ? (
+        <div className="mt-3">
+          <span
+            className={[
+              "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase",
+              aiProcessingState.tone === "processing"
+                ? "border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
+                : "border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300",
+            ].join(" ")}
+            data-testid="kanban-ai-status-badge"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+            {aiProcessingState.label}
+          </span>
+        </div>
+      ) : null}
+
       {skills.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1">
           {skills.map((skill) => (
@@ -235,7 +274,7 @@ export const KanbanCard = memo(function KanbanCard({
                   Match
                 </span>
                 <span className="rounded bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 shrink-0">
-                  Pendente
+                  {aiProcessingState ? "Aguardando IA" : "Pendente"}
                 </span>
               </div>
             )}

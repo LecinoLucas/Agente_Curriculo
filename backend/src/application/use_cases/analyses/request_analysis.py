@@ -15,6 +15,7 @@ import structlog
 from sqlalchemy.exc import IntegrityError
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand, RequestAnalysisResult
+from src.application.services.ai_limit_override_service import AILimitOverrideService
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.domain.services.analysis_versioning import AnalysisVersioningService
 from src.infrastructure.database.connection import AsyncSessionFactory
@@ -35,9 +36,14 @@ class RequestAnalysisUseCase:
         self,
         analysis_repo: SQLAlchemyAnalysisRepository,
         resume_repo: SQLAlchemyResumeRepository,
+        limit_service: AILimitOverrideService | None = None,
     ) -> None:
         self._analysis_repo = analysis_repo
         self._resume_repo = resume_repo
+        # Optional so legacy unit tests that don't exercise the daily-limit
+        # path keep compiling. The router always wires it; only construct
+        # without it for tests where the check is irrelevant.
+        self._limit_service = limit_service
 
     async def execute(self, command: RequestAnalysisCommand) -> RequestAnalysisResult:
         if command.force_reanalyze:
@@ -148,6 +154,16 @@ class RequestAnalysisUseCase:
             resume_version_id=str(command.resume_version_id),
             job_id=str(command.job_id),
         )
+
+        # 3.5 P0.2B — enforce daily limits AFTER reuse checks (so cached/idempotent
+        # hits never consume a slot) and BEFORE inserting a new row. Raises
+        # AIDailyLimitExceededError when any scope's effective limit is hit;
+        # the router maps that to HTTP 429.
+        if self._limit_service is not None:
+            await self._limit_service.check_request_allowed(
+                user_id=command.requested_by,
+                job_id=command.job_id,
+            )
 
         # 4. Busca configurações ativas de IA
         active_model = await self._analysis_repo.find_preferred_ai_model()

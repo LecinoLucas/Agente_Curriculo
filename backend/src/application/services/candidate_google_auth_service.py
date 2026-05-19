@@ -87,8 +87,10 @@ class CandidateGoogleAuthService:
         )
 
     async def _find_or_create_candidate(self, identity: GoogleIdentity) -> CandidateModel:
-        candidate_by_google = await self._find_active_by_google_sub(identity.sub)
-        candidate_by_email = await self._candidate_repo.find_active_by_email(identity.email)
+        google_sub = identity.sub.strip()
+        email = identity.email.strip().lower()
+        candidate_by_google = await self._find_active_by_google_sub(google_sub)
+        candidate_by_email = await self._candidate_repo.find_active_by_email(email)
 
         if (
             candidate_by_google is not None
@@ -101,28 +103,28 @@ class CandidateGoogleAuthService:
         if candidate is None:
             candidate = CandidateModel(
                 id=uuid4(),
-                full_name=(identity.name or identity.email).strip(),
-                email=identity.email,
+                full_name=(identity.name or email).strip(),
+                email=email,
                 created_by=SYSTEM_USER_ID,
                 application_source=APPLICATION_SOURCE_GOOGLE,
-                google_sub=identity.sub,
+                google_sub=google_sub,
                 google_picture_url=identity.picture,
             )
             self._db.add(candidate)
             await self._db.flush()
             return candidate
 
-        if candidate.google_sub and candidate.google_sub != identity.sub:
+        if candidate.google_sub and candidate.google_sub != google_sub:
             raise CandidateGoogleAuthConflictError
 
-        candidate.google_sub = identity.sub
+        candidate.google_sub = google_sub
         candidate.google_picture_url = identity.picture
         if not candidate.full_name.strip() and identity.name:
             candidate.full_name = identity.name.strip()
         if not candidate.email:
-            candidate.email = identity.email
-        elif candidate.email.lower().strip() != identity.email:
-            existing_email_owner = await self._candidate_repo.find_active_by_email(identity.email)
+            candidate.email = email
+        elif candidate.email.lower().strip() != email:
+            existing_email_owner = await self._candidate_repo.find_active_by_email(email)
             if existing_email_owner is not None and existing_email_owner.id != candidate.id:
                 raise CandidateGoogleAuthConflictError
 

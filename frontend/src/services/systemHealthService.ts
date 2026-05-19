@@ -129,6 +129,27 @@ function buildQuery(params: Record<string, string | undefined>) {
   return query.toString();
 }
 
+export type AIPricingItem = {
+  provider: string;
+  model: string;
+  input_per_1m_tokens: number | string | null;
+  output_per_1m_tokens: number | string | null;
+  currency: string;
+  source: string | null;
+  last_reviewed_at: string | null;
+  status: "configured" | "not_configured";
+};
+
+export type AIPricingCatalog = {
+  items: AIPricingItem[];
+};
+
+export type AICostBackfillResult = {
+  total_null_rows: number;
+  updated: number;
+  skipped_unpriced: number;
+};
+
 export const systemHealthService = {
   getOverview: () => httpRequest<HealthOverview>("/api/v1/admin/health/overview"),
   getAIUsage: (params: AIUsageParams = {}) => {
@@ -138,4 +159,10 @@ export const systemHealthService = {
   getQueues: () => httpRequest<QueueHealth>("/api/v1/admin/health/queues"),
   getDatabase: () => httpRequest<DatabaseHealth>("/api/v1/admin/health/database"),
   getErrors: () => httpRequest<SystemErrors>("/api/v1/admin/health/errors"),
+  getAIPricingCatalog: () =>
+    httpRequest<AIPricingCatalog>("/api/v1/admin/health/ai-usage/pricing"),
+  backfillAICosts: () =>
+    httpRequest<AICostBackfillResult>("/api/v1/admin/health/ai-usage/backfill-costs", {
+      method: "POST",
+    }),
 };

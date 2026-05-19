@@ -1094,4 +1094,18 @@ class PipelineService:
             updated_at=row["updated_at"],
             ai_status=ai_status,  # type: ignore[arg-type]
             job_fit_score=job_fit_score,
+            requires_behavioral_assessment=bool(row.get("requires_behavioral_assessment"))
+            if row.get("requires_behavioral_assessment") is not None
+            else None,
+            requires_behavioral_ai_evaluation=bool(row.get("requires_behavioral_ai_evaluation"))
+            if row.get("requires_behavioral_ai_evaluation") is not None
+            else None,
+            requires_interview=bool(row.get("requires_interview")) if row.get("requires_interview") is not None else None,
+            requires_scorecard=bool(row.get("requires_scorecard")) if row.get("requires_scorecard") is not None else None,
+            behavioral_assessment_status=row.get("behavioral_assessment_status"),
+            behavioral_submitted_at=row.get("behavioral_submitted_at"),
+            behavioral_ai_evaluation_status=row.get("behavioral_ai_evaluation_status"),
+            interview_status=row.get("interview_status"),
+            interview_scheduled_start=row.get("interview_scheduled_start"),
+            interview_scorecard_status=row.get("interview_scorecard_status"),
         )

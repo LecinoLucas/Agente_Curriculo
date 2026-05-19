@@ -82,6 +82,17 @@ async def _clear_database(session: AsyncSession) -> None:
 
 
 @pytest.fixture(autouse=True)
+def disable_rate_limiting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disable rate limiting for all tests by default.
+
+    Rate limiting tests override this by patching settings.RATE_LIMIT_ENABLED = True
+    within each test function after resetting the storage.
+    """
+    from src.core.settings import settings
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     redis = FakeRedis()
 
@@ -93,6 +104,7 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     monkeypatch.setattr("src.application.use_cases.auth.refresh_token.get_redis", _get_redis)
     monkeypatch.setattr("src.application.use_cases.auth.logout.get_redis", _get_redis)
     monkeypatch.setattr("src.application.services.candidate_portal_auth_service.get_redis", _get_redis)
+    monkeypatch.setattr("src.application.services.staff_google_auth_service.get_redis", _get_redis)
     return redis
 
 

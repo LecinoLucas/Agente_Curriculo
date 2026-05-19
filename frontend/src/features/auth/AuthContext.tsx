@@ -9,6 +9,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUser: (patch: Partial<AuthUser>) => void;
@@ -78,6 +79,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await refreshUser();
   };
 
+  const loginWithGoogle = async (idToken: string) => {
+    const session = await authService.loginWithGoogle(idToken);
+    tokenStorage.set(session.access_token);
+    await refreshUser();
+  };
+
   const logout = async () => {
     setUser(null);
     try {
@@ -94,6 +101,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isAuthenticated: Boolean(user),
       isLoading,
       login,
+      loginWithGoogle,
       logout,
       refreshUser,
       updateUser,

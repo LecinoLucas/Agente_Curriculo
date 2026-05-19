@@ -135,3 +135,24 @@ class SystemErrorsResponse(APISchemaModel):
     ai_errors_by_provider: list[ProviderErrorSummaryResponse]
     recent_failures: list[RecentFailureResponse]
     worker_status: QueueWorkerStatusResponse
+
+
+class AIPricingItemResponse(APISchemaModel):
+    provider: str
+    model: str
+    input_per_1m_tokens: Decimal | None = None
+    output_per_1m_tokens: Decimal | None = None
+    currency: str = "USD"
+    source: str | None = None
+    last_reviewed_at: str | None = None
+    status: Literal["configured", "not_configured"]
+
+
+class AIPricingCatalogResponse(APISchemaModel):
+    items: list[AIPricingItemResponse]
+
+
+class AICostBackfillResponse(APISchemaModel):
+    total_null_rows: int
+    updated: int
+    skipped_unpriced: int

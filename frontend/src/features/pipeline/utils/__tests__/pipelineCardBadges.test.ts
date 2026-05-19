@@ -49,6 +49,34 @@ describe("derivePipelineCardBadges", () => {
     expect(labels(badges)).toContain("Avaliação respondida");
   });
 
+  it("retorna IA comportamental pendente quando a avaliação foi respondida e a vaga exige IA", () => {
+    const badges = derivePipelineCardBadges(
+      candidate({
+        requires_behavioral_ai_evaluation: true,
+        behavioral_assessment_status: "submitted",
+        behavioral_submitted_at: "2026-05-16T10:00:00.000Z",
+        behavioral_ai_evaluation_status: null,
+      }),
+      { now },
+    );
+
+    expect(labels(badges)).toContain("IA comportamental pendente");
+  });
+
+  it("retorna IA comportamental em andamento quando a avaliação assistida está processando", () => {
+    const badges = derivePipelineCardBadges(
+      candidate({
+        requires_behavioral_ai_evaluation: true,
+        behavioral_assessment_status: "submitted",
+        behavioral_submitted_at: "2026-05-16T10:00:00.000Z",
+        behavioral_ai_evaluation_status: "processing",
+      }),
+      { now },
+    );
+
+    expect(labels(badges)).toContain("IA comportamental em andamento");
+  });
+
   it("retorna entrevista pendente quando a entrevista é exigida na etapa de entrevista", () => {
     const badges = derivePipelineCardBadges(
       candidate({
@@ -72,6 +100,24 @@ describe("derivePipelineCardBadges", () => {
     );
 
     expect(labels(badges)).toContain("Pronto para decisão");
+  });
+
+  it("não retorna pronto para decisão quando a IA comportamental obrigatória está pendente", () => {
+    const badges = derivePipelineCardBadges(
+      candidate({
+        stage: "final",
+        ai_status: "completed",
+        job_fit_score: 91,
+        requires_behavioral_ai_evaluation: true,
+        behavioral_assessment_status: "submitted",
+        behavioral_submitted_at: "2026-05-16T10:00:00.000Z",
+        behavioral_ai_evaluation_status: "pending",
+      }),
+      { now },
+    );
+
+    expect(labels(badges)).toContain("IA comportamental pendente");
+    expect(labels(badges)).not.toContain("Pronto para decisão");
   });
 
   it("limita a lista a 3 badges", () => {

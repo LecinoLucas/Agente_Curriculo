@@ -28,6 +28,9 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
 )
 from src.infrastructure.database.models.ai_usage_log_model import AIUsageLogModel
+from src.infrastructure.database.models.ai_daily_limit_override_model import (
+    AIDailyLimitOverrideModel,
+)
 from src.infrastructure.database.models.audit_model import AuditLogModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_auth_token_model import CandidateAuthTokenModel
@@ -112,6 +115,7 @@ __all__ = [
     "AnalysisResultModel",
     "MatchingObservationModel",
     "AIUsageLogModel",
+    "AIDailyLimitOverrideModel",
     "JobModel",
     "JobRequiredSkillModel",
     "SkillModel",

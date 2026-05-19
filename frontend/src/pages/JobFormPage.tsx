@@ -353,6 +353,7 @@ export function JobFormPage() {
             onUpdateSkill={handleUpdateSkill}
             onRemoveSkill={handleRemoveSkill}
             onSkillCreated={onSkillCreated}
+            jobContext={{ title: form.title, jobArea: form.job_area }}
           />
         );
 
@@ -380,6 +381,7 @@ export function JobFormPage() {
             onRemoveSkill={handleRemoveSkill}
             onAddBehavioralRequirement={addBehavioralRequirement}
             onSkillCreated={onSkillCreated}
+            jobContext={{ title: form.title, jobArea: form.job_area }}
           />
         );
 

@@ -396,52 +396,59 @@
 
   :root[data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 — Nova Modernidade (Neo-Holográfico)
+       Visual Theme 3 — Aurora Playground
        -----------------------------------------------------------------------
        Direção:
-       - Fundo ultra-limpo, quase cristalino.
-       - Ação principal em Violeta Digital vibrante.
-       - Navbar em gradiente holográfico ou tom escuro moderno para contraste.
+       - Interface experimental com energia de laboratório criativo.
+       - Base clara aurora, com tinta profunda e acentos cyan/lime/coral.
+       - Evita o roxo SaaS genérico e cria uma assinatura mais memorável.
        ----------------------------------------------------------------------- */
-    --brand:               260 85% 60%;
-    --brand-dark:          260 75% 45%;
-    --brand-soft:          260 85% 96%;
-    --brand-glow:          260 90% 68%;
+    --brand:               188 92% 42%;
+    --brand-dark:          194 92% 24%;
+    --brand-soft:          172 70% 94%;
+    --brand-glow:          84 88% 58%;
 
-    --bg:                  210 50% 98%;
+    --bg:                  186 38% 96%;
     --surface:             0 0% 100%;
-    --surface-muted:       210 30% 94%;
-    --border:              210 20% 85%;
-    --border-strong:       260 40% 70%;
+    --surface-muted:       181 42% 91%;
+    --border:              185 28% 80%;
+    --border-strong:       188 52% 56%;
 
-    --background:          210 50% 98%;
+    --background:          186 38% 96%;
     --card:                0 0% 100%;
     --popover:             0 0% 100%;
-    --secondary:           210 30% 94%;
-    --muted:               210 30% 94%;
+    --secondary:           181 42% 91%;
+    --muted:               181 42% 91%;
 
-    --primary:             260 85% 60%;
+    --text:                202 68% 12%;
+    --text-muted:          199 24% 38%;
+
+    --foreground:          202 68% 12%;
+    --card-foreground:     202 68% 12%;
+    --popover-foreground:  202 68% 12%;
+
+    --primary:             188 92% 42%;
     --primary-foreground:  0 0% 100%;
-    --ring:                260 85% 60%;
+    --ring:                188 92% 42%;
 
-    --accent:              190 90% 92%;
-    --accent-foreground:   190 90% 20%;
-    --accent-soft:         190 90% 92%;
+    --accent:              84 88% 90%;
+    --accent-foreground:   198 82% 16%;
+    --accent-soft:         84 88% 92%;
 
-    --nav-bg:              260 25% 82%;
-    --nav-text:            260 60% 15%;
-    --nav-muted:           260 20% 45%;
-    --nav-active-bg:       260 40% 92%;
-    --nav-border:          260 20% 90%;
+    --nav-bg:              202 68% 12%;
+    --nav-text:            178 58% 93%;
+    --nav-muted:           184 30% 72%;
+    --nav-active-bg:       188 68% 22%;
+    --nav-border:          188 36% 24%;
 
-    --sidebar-accent:      260 85% 60%;
-    --hero-start:          260 85% 60%;
-    --hero-end:            190 90% 50%;
+    --sidebar-accent:      84 88% 58%;
+    --hero-start:          188 92% 42%;
+    --hero-end:            18 92% 62%;
 
-    --page-glow-start:     260 100% 95%;
-    --page-glow-end:       190 100% 95%;
-    --page-gradient-start: 210 50% 98%;
-    --page-gradient-end:   210 30% 95%;
+    --page-glow-start:     84 92% 82%;
+    --page-glow-end:       188 92% 76%;
+    --page-gradient-start: 186 48% 97%;
+    --page-gradient-end:   74 48% 91%;
   }
 
   :root[data-visual-theme="theme-4"] {
@@ -701,58 +708,58 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-3"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 3 Dark — Soft Cyber Violet
+       Visual Theme 3 Dark — Aurora Playground Night
        -----------------------------------------------------------------------
        Direção:
-       - Dark futurista porém suave (baseado em tons Catppuccin Violet).
-       - Fundo violeta acinzentado em 18% de luminosidade.
+       - Noturno com base petróleo, neon cyan/lime e coral como energia.
+       - Mantém contraste sem virar preto puro.
        ----------------------------------------------------------------------- */
-    --brand:               260 35% 65%;
-    --brand-dark:          260 35% 50%;
-    --brand-soft:          260 15% 25%;
-    --brand-glow:          260 35% 75%;
+    --brand:               186 88% 56%;
+    --brand-dark:          190 78% 34%;
+    --brand-soft:          188 35% 18%;
+    --brand-glow:          84 88% 62%;
 
-    --bg:                  260 10% 18%;
-    --surface:             260 10% 24%;
-    --surface-muted:       260 10% 28%;
-    --border:              260 10% 34%;
-    --border-strong:       260 10% 45%;
+    --bg:                  202 48% 8%;
+    --surface:             201 42% 12%;
+    --surface-muted:       198 36% 16%;
+    --border:              190 28% 24%;
+    --border-strong:       186 42% 42%;
 
-    --background:          260 10% 18%;
-    --card:                260 10% 24%;
-    --popover:             260 10% 24%;
-    --secondary:           260 10% 28%;
-    --muted:               260 10% 28%;
+    --background:          202 48% 8%;
+    --card:                201 42% 12%;
+    --popover:             201 42% 12%;
+    --secondary:           198 36% 16%;
+    --muted:               198 36% 16%;
 
-    --text:                260 10% 92%;
-    --text-muted:          260 10% 75%;
+    --text:                178 58% 93%;
+    --text-muted:          184 28% 72%;
 
-    --foreground:          260 10% 92%;
-    --card-foreground:     260 10% 92%;
-    --popover-foreground:  260 10% 92%;
+    --foreground:          178 58% 93%;
+    --card-foreground:     178 58% 93%;
+    --popover-foreground:  178 58% 93%;
 
-    --primary:             260 35% 65%;
-    --primary-foreground:  260 20% 5%;
-    --ring:                260 35% 65%;
+    --primary:             186 88% 56%;
+    --primary-foreground:  202 68% 8%;
+    --ring:                186 88% 56%;
 
-    --accent:              260 15% 30%;
-    --accent-foreground:   260 30% 90%;
-    --accent-soft:         260 15% 30%;
+    --accent:              84 64% 22%;
+    --accent-foreground:   84 88% 88%;
+    --accent-soft:         84 40% 18%;
 
-    --nav-bg:              260 15% 14%;
-    --nav-text:            260 10% 92%;
-    --nav-muted:           260 10% 70%;
-    --nav-active-bg:       260 15% 22%;
-    --nav-border:          260 15% 16%;
+    --nav-bg:              204 54% 7%;
+    --nav-text:            178 58% 93%;
+    --nav-muted:           184 28% 68%;
+    --nav-active-bg:       188 48% 16%;
+    --nav-border:          188 34% 18%;
 
-    --sidebar-accent:      260 35% 65%;
-    --hero-start:          260 35% 65%;
-    --hero-end:            190 35% 60%;
+    --sidebar-accent:      84 88% 62%;
+    --hero-start:          186 88% 56%;
+    --hero-end:            18 92% 62%;
 
-    --page-glow-start:     260 20% 30%;
-    --page-glow-end:       190 20% 25%;
-    --page-gradient-start: 260 10% 18%;
-    --page-gradient-end:   260 10% 14%;
+    --page-glow-start:     84 80% 30%;
+    --page-glow-end:       186 88% 28%;
+    --page-gradient-start: 202 48% 8%;
+    --page-gradient-end:   204 54% 6%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-4"] {
@@ -848,6 +855,23 @@
     text-rendering: optimizeLegibility;
   }
 
+  :root[data-visual-theme="theme-3"] body {
+    background:
+      radial-gradient(circle at 12% 8%, hsl(84 88% 62% / 0.38), transparent 24rem),
+      radial-gradient(circle at 82% 12%, hsl(188 92% 54% / 0.34), transparent 28rem),
+      radial-gradient(circle at 72% 88%, hsl(18 92% 62% / 0.18), transparent 26rem),
+      linear-gradient(90deg, hsl(188 42% 68% / 0.10) 1px, transparent 1px),
+      linear-gradient(180deg, hsl(188 42% 68% / 0.10) 1px, transparent 1px),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    background-size:
+      auto,
+      auto,
+      auto,
+      42px 42px,
+      42px 42px,
+      auto;
+  }
+
   /* --------------------------------------------------------------------------
      Body — tema escuro
      --------------------------------------------------------------------------
@@ -860,6 +884,23 @@
       radial-gradient(circle at top left, hsl(var(--page-glow-start) / 0.28), transparent 34rem),
       radial-gradient(circle at top right, hsl(var(--page-glow-end) / 0.20), transparent 30rem),
       linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    color: hsl(var(--text));
+  }
+  :root[data-theme="dark"][data-visual-theme="theme-3"] body {
+    background:
+      radial-gradient(circle at 10% 8%, hsl(84 88% 62% / 0.18), transparent 26rem),
+      radial-gradient(circle at 84% 12%, hsl(186 88% 56% / 0.22), transparent 30rem),
+      radial-gradient(circle at 70% 86%, hsl(18 92% 62% / 0.16), transparent 28rem),
+      linear-gradient(90deg, hsl(186 88% 56% / 0.08) 1px, transparent 1px),
+      linear-gradient(180deg, hsl(186 88% 56% / 0.07) 1px, transparent 1px),
+      linear-gradient(180deg, hsl(202 48% 8%), hsl(204 54% 6%));
+    background-size:
+      auto,
+      auto,
+      auto,
+      44px 44px,
+      44px 44px,
+      auto;
     color: hsl(var(--text));
   }
   :root[data-theme="dark"][data-visual-theme="theme-1"] body {
@@ -1137,10 +1178,11 @@
     left: 0;
     bottom: calc(100% + 0.75rem);
     z-index: 50;
-    width: 13.5rem;
-    border-radius: 1rem;
-    padding: 0.5rem;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+    width: min(23rem, calc(100vw - 2rem));
+    border-radius: 1.35rem;
+    padding: 0.65rem;
+    overflow: hidden;
+    box-shadow: 0 24px 64px -26px rgba(0, 0, 0, 0.55), 0 8px 18px -12px rgba(0, 0, 0, 0.45);
   }
 
   .visual-theme-popover-header {
@@ -1153,6 +1195,130 @@
     font-size: 0.8rem;
     font-weight: 700;
     letter-spacing: -0.02em;
+  }
+
+  .visual-theme-playground {
+    position: relative;
+    display: grid;
+    gap: 0.7rem;
+    width: 100%;
+    margin-bottom: 0.55rem;
+    overflow: hidden;
+    border: 1px solid hsl(188 92% 42% / 0.28);
+    border-radius: 1.05rem;
+    background:
+      radial-gradient(circle at 18% 14%, hsl(84 88% 62% / 0.38), transparent 8rem),
+      radial-gradient(circle at 84% 18%, hsl(188 92% 54% / 0.34), transparent 9rem),
+      linear-gradient(135deg, hsl(202 68% 12%), hsl(188 74% 18%));
+    padding: 0.85rem;
+    color: hsl(178 58% 94%);
+    text-align: left;
+    isolation: isolate;
+    box-shadow:
+      0 18px 34px -24px hsl(188 92% 24% / 0.70),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
+  }
+
+  .visual-theme-playground:hover {
+    transform: translateY(-1px);
+    border-color: hsl(84 88% 62% / 0.52);
+  }
+
+  .visual-theme-playground.is-active {
+    border-color: hsl(84 88% 62% / 0.72);
+    box-shadow:
+      0 22px 42px -24px hsl(188 92% 24% / 0.86),
+      0 0 0 3px hsl(84 88% 62% / 0.12),
+      inset 0 1px 0 hsl(0 0% 100% / 0.18);
+  }
+
+  .visual-theme-playground-orb {
+    position: absolute;
+    right: -2.4rem;
+    top: -2.8rem;
+    z-index: -1;
+    width: 8rem;
+    height: 8rem;
+    border-radius: 9999px;
+    background: conic-gradient(from 140deg, hsl(84 88% 62%), hsl(188 92% 54%), hsl(18 92% 62%), hsl(84 88% 62%));
+    filter: blur(4px);
+    opacity: 0.54;
+    animation: visual-theme-playground-spin 9s linear infinite;
+  }
+
+  .visual-theme-playground-header {
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .visual-theme-playground-kicker {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 9999px;
+    background: hsl(0 0% 100% / 0.10);
+    padding: 0.22rem 0.48rem;
+    color: hsl(84 88% 82%);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .visual-theme-playground-title {
+    color: hsl(178 58% 96%);
+    font-family: "Sora", "Plus Jakarta Sans", sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+  }
+
+  .visual-theme-playground-canvas {
+    display: grid;
+    grid-template-columns: 1fr 0.74fr;
+    gap: 0.45rem;
+  }
+
+  .visual-theme-playground-card {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    min-height: 2rem;
+    border-radius: 0.75rem;
+    border: 1px solid hsl(0 0% 100% / 0.14);
+    background: hsl(0 0% 100% / 0.10);
+    padding: 0.45rem 0.55rem;
+    color: hsl(178 58% 94%);
+    font-size: 0.72rem;
+    font-weight: 800;
+    backdrop-filter: blur(10px);
+  }
+
+  .visual-theme-playground-card.primary {
+    background: linear-gradient(135deg, hsl(84 88% 62% / 0.22), hsl(188 92% 54% / 0.18));
+  }
+
+  .visual-theme-playground-card.secondary {
+    color: hsl(18 100% 82%);
+  }
+
+  .visual-theme-playground-track {
+    grid-column: 1 / -1;
+    height: 0.45rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: hsl(0 0% 100% / 0.12);
+  }
+
+  .visual-theme-playground-track span {
+    display: block;
+    width: 68%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(84 88% 62%), hsl(188 92% 54%), hsl(18 92% 62%));
+    animation: visual-theme-playground-meter 2.4s ease-in-out infinite;
   }
 
   .visual-theme-options {
@@ -1220,7 +1386,8 @@
 
   .visual-theme-preview-theme-3 {
     background:
-      linear-gradient(135deg, hsl(260 85% 60%), hsl(190 90% 50%));
+      radial-gradient(circle at 28% 26%, hsl(84 88% 62%), transparent 38%),
+      linear-gradient(135deg, hsl(202 68% 12%), hsl(188 92% 42%) 54%, hsl(18 92% 62%));
   }
 
   .visual-theme-preview-theme-4 {
@@ -1270,6 +1437,34 @@
     border-color: hsl(var(--primary) / 0.32);
     background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
+  }
+
+  @keyframes visual-theme-playground-spin {
+    from {
+      transform: rotate(0deg) scale(1);
+    }
+
+    to {
+      transform: rotate(360deg) scale(1.04);
+    }
+  }
+
+  @keyframes visual-theme-playground-meter {
+    0%,
+    100% {
+      transform: translateX(-8%);
+    }
+
+    50% {
+      transform: translateX(18%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .visual-theme-playground-orb,
+    .visual-theme-playground-track span {
+      animation: none;
+    }
   }
 
   .ui-btn-secondary {
@@ -1323,15 +1518,15 @@
      -------------------------------------------------------------------------- */
 
   .ui-badge-info {
-    background-color: hsl(var(--accent-soft));
+    background-color: hsl(var(--primary) / 0.08);
     color: hsl(356 78% 38%);
-    border-color: hsl(var(--primary) / 0.28);
+    border-color: hsl(var(--primary) / 0.18);
   }
 
   :root[data-theme="dark"] .ui-badge-info {
-    background-color: hsl(356 42% 22%);
-    color: hsl(356 88% 76%);
-    border-color: hsl(356 88% 62% / 0.32);
+    background-color: hsl(var(--primary) / 0.10);
+    color: hsl(356 78% 44%);
+    border-color: hsl(var(--primary) / 0.20);
   }
 
   .ui-badge-success {

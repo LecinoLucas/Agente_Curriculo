@@ -104,6 +104,24 @@ function isIncompleteCandidateProfileError(error: unknown): boolean {
   return (error.detail as Record<string, unknown>).code === "candidate_profile_incomplete";
 }
 
+function toCompletedAssessmentSummary(detail: BehavioralAssignmentDetail): BehavioralAssignmentSummary {
+  return {
+    id: detail.id,
+    candidate_id: detail.candidate_id,
+    job_id: detail.job_id,
+    job_title: detail.job_title,
+    template_id: detail.template_id,
+    template_name: detail.template_name,
+    status: "submitted",
+    assigned_at: detail.assigned_at,
+    started_at: detail.started_at,
+    submitted_at: detail.submitted_at ?? new Date().toISOString(),
+    expires_at: detail.expires_at,
+    answered_count: detail.question_count,
+    question_count: detail.question_count,
+  };
+}
+
 function ApplicationCard({
   application,
 }: {
@@ -312,6 +330,7 @@ export function CandidatePortalPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<BehavioralAssignmentDetail | null>(null);
   const [behavioralAssessmentSummaries, setBehavioralAssessmentSummaries] = useState<BehavioralAssignmentSummary[]>([]);
+  const [completedAssessment, setCompletedAssessment] = useState<BehavioralAssignmentSummary | null>(null);
   const [preAdmission, setPreAdmission] = useState<CandidatePortalPreAdmissionEnvelope | null>(null);
   const [assessmentLoadingId, setAssessmentLoadingId] = useState<string | null>(null);
   const [assessmentSaving, setAssessmentSaving] = useState(false);
@@ -489,17 +508,24 @@ export function CandidatePortalPage() {
   };
 
   const handleSubmitAssessment = async (answers: BehavioralAssignmentAnswerPayload[]) => {
-    if (!selectedAssessment) return;
+    if (!selectedAssessment || assessmentSaving) return;
     setAssessmentSaving(true);
     try {
       const detail = await candidatePortalService.submitBehavioralAssessment(selectedAssessment.id, answers);
-      setSelectedAssessment(detail);
+      const completed = toCompletedAssessmentSummary(detail);
+      setSelectedAssessment(null);
+      setCompletedAssessment(completed);
+      setBehavioralAssessmentSummaries((current) =>
+        current.map((item) => (item.id === completed.id ? { ...item, ...completed } : item)),
+      );
+      setCurrentTab("inicio");
       await loadPortalData(true);
-      toast.success("Avaliação enviada.");
+      toast.success("Avaliação concluída com sucesso.");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Não foi possível enviar a avaliação.";
       toast.error(message);
+      throw error;
     } finally {
       setAssessmentSaving(false);
     }
@@ -563,7 +589,11 @@ export function CandidatePortalPage() {
   return (
     <div className="flex min-h-screen bg-[hsl(var(--bg))]">
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 bg-[#5c061a] text-white transition-all duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col ${isSidebarCollapsed ? 'w-64 md:w-[76px]' : 'w-64 md:w-64'}`}>
+      <div
+        onMouseEnter={() => setIsSidebarCollapsed(false)}
+        onMouseLeave={() => setIsSidebarCollapsed(true)}
+        className={`fixed inset-y-0 left-0 z-50 bg-[#5c061a] text-white transition-all duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col ${isSidebarCollapsed ? 'w-64 md:w-[76px]' : 'w-64 md:w-64'}`}
+      >
         <div className={`flex items-center h-16 border-b border-white/10 transition-all duration-300 ${isSidebarCollapsed ? 'px-4 justify-center' : 'px-6 justify-between'}`}>
           {!isSidebarCollapsed ? (
             <div className="flex items-center gap-2.5 animate-in fade-in duration-300 min-w-0">
@@ -759,6 +789,25 @@ export function CandidatePortalPage() {
                     >
                       Responder avaliação
                     </Button>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {completedAssessment ? (
+                <Card className="border-emerald-200 bg-emerald-50 shadow-lg">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base font-bold text-emerald-800">
+                      <CheckCircle2 className="h-5 w-5" />
+                      Avaliação concluída
+                    </CardTitle>
+                    <CardDescription className="text-emerald-700">
+                      {completedAssessment.template_name} foi enviada com sucesso.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <p className="text-sm font-medium text-emerald-900">
+                      {completedAssessment.job_title || "Vaga vinculada"}
+                    </p>
                   </CardContent>
                 </Card>
               ) : null}

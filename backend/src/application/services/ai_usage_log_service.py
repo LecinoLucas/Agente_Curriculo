@@ -8,7 +8,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.core.ai_pricing import estimate_ai_cost_usd
+from src.core.ai_pricing import estimate_ai_cost
 from src.infrastructure.database.models.ai_usage_log_model import AIUsageLogModel
 
 logger = structlog.get_logger(__name__)
@@ -42,7 +42,8 @@ def _build_model(payload: AIUsageLogPayload) -> AIUsageLogModel:
     input_tokens = int(payload.input_tokens or 0)
     output_tokens = int(payload.output_tokens or 0)
     total_tokens = input_tokens + output_tokens
-    estimated_cost = estimate_ai_cost_usd(
+    estimated_cost = estimate_ai_cost(
+        payload.provider,
         payload.model,
         input_tokens=input_tokens,
         output_tokens=output_tokens,

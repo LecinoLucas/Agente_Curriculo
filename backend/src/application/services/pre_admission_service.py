@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import re
-import unicodedata
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+from src.application.services.upload_validation_service import (
+    UploadValidationError,
+    ValidatedUpload,
+    document_upload_policy,
+    sanitize_upload_filename,
+    validate_upload,
+)
 from src.core.settings import settings
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.database.models.pre_admission_model import (
@@ -42,17 +47,7 @@ from src.interface.api.schemas.pre_admission_schemas import (
 
 TERMINAL_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
 DOCUMENT_UPLOAD_BLOCKED_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
-MAX_PRE_ADMISSION_DOCUMENT_BYTES = settings.PRE_ADMISSION_DOCUMENT_MAX_BYTES
-ALLOWED_DOCUMENT_MIME_TYPES = {
-    "application/pdf": ".pdf",
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-}
-ALLOWED_DOCUMENT_EXTENSIONS = {
-    "application/pdf": {".pdf"},
-    "image/jpeg": {".jpg", ".jpeg"},
-    "image/png": {".png"},
-}
+MAX_PRE_ADMISSION_DOCUMENT_BYTES = settings.max_upload_size_bytes
 
 
 class PreAdmissionService:
@@ -271,11 +266,13 @@ class PreAdmissionService:
         if item is None:
             raise NotFoundException("Item de checklist não encontrado.")
 
-        mime_type, extension = self._validate_document_upload(
+        validated_file = self._validate_document_upload(
             file_name=file_name,
             content_type=content_type,
             content=content,
         )
+        file_name = validated_file.file_name
+        content = validated_file.content
         previous_document = await self._repository.active_document_for_item(case_id=case_id, item_id=item_id)
         if previous_document is not None and previous_document.status in {"uploaded", "approved"}:
             raise ValidationException("Este documento já foi enviado e ainda não pode ser substituído.")
@@ -291,17 +288,17 @@ class PreAdmissionService:
             case_id=case_id,
             item_id=item_id,
             document_id=document_id,
-            extension=extension,
+            extension=validated_file.extension,
         )
         document = PreAdmissionDocumentModel(
             id=document_id,
             case_id=case_id,
             checklist_item_id=item_id,
             candidate_id=candidate_id,
-            original_filename=self._sanitize_original_filename(file_name, extension),
+            original_filename=file_name,
             stored_filename=stored_filename,
             storage_key=storage_key,
-            mime_type=mime_type,
+            mime_type=validated_file.mime_type,
             size_bytes=len(content),
             status="uploaded",
             uploaded_at=now,
@@ -478,29 +475,16 @@ class PreAdmissionService:
         return value
 
     @staticmethod
-    def _validate_document_upload(*, file_name: str, content_type: str | None, content: bytes) -> tuple[str, str]:
-        if not content:
-            raise ValidationException("Arquivo vazio.")
-        if len(content) > MAX_PRE_ADMISSION_DOCUMENT_BYTES:
-            limit_mb = MAX_PRE_ADMISSION_DOCUMENT_BYTES // (1024 * 1024)
-            raise ValidationException(f"Arquivo muito grande (máx {limit_mb}MB).")
-
-        normalized_content_type = (content_type or "").split(";")[0].strip().lower()
-        extension = ALLOWED_DOCUMENT_MIME_TYPES.get(normalized_content_type)
-        if extension is None:
-            raise ValidationException("Tipo de arquivo não permitido. Envie PDF, JPG ou PNG.")
-        submitted_extension = PreAdmissionService._submitted_extension(file_name)
-        if submitted_extension not in ALLOWED_DOCUMENT_EXTENSIONS[normalized_content_type]:
-            raise ValidationException("Extensão de arquivo não permitida para o tipo informado.")
-
-        if normalized_content_type == "application/pdf" and not content.startswith(b"%PDF"):
-            raise ValidationException("Conteúdo enviado não parece ser um PDF válido.")
-        if normalized_content_type == "image/png" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
-            raise ValidationException("Conteúdo enviado não parece ser um PNG válido.")
-        if normalized_content_type == "image/jpeg" and not content.startswith(b"\xff\xd8"):
-            raise ValidationException("Conteúdo enviado não parece ser um JPG válido.")
-
-        return normalized_content_type, extension
+    def _validate_document_upload(*, file_name: str, content_type: str | None, content: bytes) -> ValidatedUpload:
+        try:
+            return validate_upload(
+                file_name=file_name,
+                content_type=content_type,
+                content=content,
+                policy=document_upload_policy(),
+            )
+        except UploadValidationError as exc:
+            raise ValidationException(str(exc)) from exc
 
     @staticmethod
     def _submitted_extension(file_name: str) -> str:
@@ -509,14 +493,10 @@ class PreAdmissionService:
 
     @staticmethod
     def _sanitize_original_filename(file_name: str, extension: str) -> str:
-        base_name = file_name.replace("\\", "/").rsplit("/", maxsplit=1)[-1].strip()
-        base_name = unicodedata.normalize("NFKC", base_name)
-        base_name = re.sub(r"[\x00-\x1f\x7f]+", "", base_name)
-        base_name = re.sub(r"[^A-Za-z0-9._ -]+", "_", base_name)
-        base_name = re.sub(r"\s+", " ", base_name).strip(" .")
-        if not base_name:
+        try:
+            return sanitize_upload_filename(file_name)
+        except UploadValidationError:
             return f"documento{extension}"
-        return base_name[:255]
 
     @classmethod
     def _case_response(cls, case: PreAdmissionCaseModel) -> PreAdmissionCaseResponse:

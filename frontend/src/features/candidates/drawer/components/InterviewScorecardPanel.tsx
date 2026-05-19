@@ -1,5 +1,5 @@
 import { ChevronDown, ClipboardCheck, Loader } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   createInterviewScorecard,
@@ -12,21 +12,29 @@ import type {
   InterviewScorecardEnvelope,
   InterviewScorecardPayload,
 } from "../../../../types/domain";
+import { toast } from "../../../../shared/utils/toast";
 import { InterviewScorecardForm } from "./InterviewScorecardForm";
 
 interface InterviewScorecardPanelProps {
   jobId: string | null;
   candidateId: string | null;
   interviewId?: string | null;
+  onSubmitted?: (scorecard: InterviewScorecard) => void | Promise<void>;
 }
 
-export function InterviewScorecardPanel({ jobId, candidateId, interviewId = null }: InterviewScorecardPanelProps) {
+export function InterviewScorecardPanel({
+  jobId,
+  candidateId,
+  interviewId = null,
+  onSubmitted,
+}: InterviewScorecardPanelProps) {
   const [envelope, setEnvelope] = useState<InterviewScorecardEnvelope | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [questionsOpen, setQuestionsOpen] = useState(false);
+  const submitLockedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +91,9 @@ export function InterviewScorecardPanel({ jobId, candidateId, interviewId = null
   };
 
   const handleSubmit = async (scorecardId: string) => {
+    if (submitting || submitLockedRef.current) return;
+
+    submitLockedRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -91,10 +102,13 @@ export function InterviewScorecardPanel({ jobId, candidateId, interviewId = null
         scorecard: submitted,
         suggested_behavioral_questions: current?.suggested_behavioral_questions ?? [],
       }));
+      toast.success("Avaliação concluída com sucesso.");
+      await onSubmitted?.(submitted);
     } catch {
       setError("Não foi possível enviar o scorecard. Verifique recomendação e evidências.");
       throw new Error("submit_failed");
     } finally {
+      submitLockedRef.current = false;
       setSubmitting(false);
     }
   };

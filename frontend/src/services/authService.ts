@@ -9,6 +9,18 @@ export const authService = {
       withAuth: false,
     }),
 
+  loginWithGoogle: (idToken: string) => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug("[google] authService.loginWithGoogle calling POST /api/v1/auth/google");
+    }
+    return httpRequest<LoginResponse>("/api/v1/auth/google", {
+      method: "POST",
+      body: { id_token: idToken },
+      withAuth: false,
+    });
+  },
+
   logout: () =>
     httpRequest<void>("/api/v1/auth/logout", {
       method: "POST",

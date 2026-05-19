@@ -5,6 +5,7 @@ import { CandidatePortalPage } from "../CandidatePortalPage";
 import { candidatePortalService } from "../../services/candidatePortalService";
 import { communicationService } from "../../services/communicationService";
 import { HttpError } from "../../services/http";
+import { toast } from "../../shared/utils/toast";
 
 const routerFuture = {
   v7_startTransition: true,
@@ -114,5 +115,79 @@ describe("CandidatePortalPage.handleLogout", () => {
     await waitFor(() => {
       expect(screen.getByText("Login destino")).toBeInTheDocument();
     });
+  });
+});
+
+describe("CandidatePortalPage.behavioralAssessment", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockBaseOverview();
+  });
+
+  it("ao concluir avaliação volta para Início, mostra card de conclusão e toast", async () => {
+    const summary = {
+      id: "assignment-1",
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      job_title: "Analista",
+      template_id: "template-1",
+      template_name: "Perfil comportamental",
+      status: "pending",
+      assigned_at: "2026-05-01T00:00:00Z",
+      started_at: null,
+      submitted_at: null,
+      expires_at: null,
+      answered_count: 0,
+      question_count: 1,
+    };
+    const detail = {
+      ...summary,
+      status: "in_progress",
+      started_at: "2026-05-01T01:00:00Z",
+      competencies: [
+        {
+          id: "comp-1",
+          name: "Organização",
+          description: null,
+          display_order: 0,
+          questions: [
+            {
+              id: "question-1",
+              question_text: "Como você prioriza suas tarefas?",
+              answer_type: "text",
+              is_required: true,
+              display_order: 0,
+              options_json: null,
+              answer: null,
+            },
+          ],
+        },
+      ],
+    };
+
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([summary]);
+    (candidatePortalService.startBehavioralAssessment as any).mockResolvedValue(detail);
+    (candidatePortalService.submitBehavioralAssessment as any).mockResolvedValue({
+      ...detail,
+      status: "submitted",
+      submitted_at: "2026-05-01T02:00:00Z",
+      answered_count: 1,
+    });
+
+    renderPortal();
+
+    await screen.findByText("Resumo da Situação");
+    fireEvent.click(screen.getByTitle("Avaliações"));
+    fireEvent.click(await screen.findByRole("button", { name: /responder avaliação/i }));
+    fireEvent.change(await screen.findByRole("textbox"), {
+      target: { value: "Uso matriz de prioridade." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar avaliação/i }));
+
+    expect(await screen.findByText("Avaliação concluída")).toBeInTheDocument();
+    expect(screen.getByText(/Perfil comportamental foi enviada com sucesso/i)).toBeInTheDocument();
+    expect(screen.queryByText("Como você prioriza suas tarefas?")).not.toBeInTheDocument();
+    expect(candidatePortalService.submitBehavioralAssessment).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith("Avaliação concluída com sucesso.");
   });
 });

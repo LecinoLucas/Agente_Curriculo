@@ -718,7 +718,8 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Análise ainda não disponível para esta vaga.")).toBeInTheDocument();
+    expect(await screen.findByText("Análise em processamento")).toBeInTheDocument();
+    expect(screen.getByText(/Análise ainda não disponível para esta vaga\./)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Gerar análise agora/i })).toBeInTheDocument();
   });
 
@@ -753,7 +754,7 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Análise ainda não disponível para esta vaga.")).toBeInTheDocument();
+    expect(await screen.findByText("Análise em processamento")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: /Gerar análise agora/i });
     await user.click(button);
     await user.click(button);

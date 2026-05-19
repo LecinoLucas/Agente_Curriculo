@@ -6,6 +6,10 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.ai_limit_override_service import (
+    AIDailyLimitExceededError,
+    AILimitOverrideService,
+)
 from src.application.services.analysis_service import (
     AnalysisDiscardBlockedError,
     AnalysisNotCompletedError,
@@ -30,6 +34,7 @@ from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.interface.api.dependencies import AdminOnly, CurrentUser, InternalUser, RecruiterOrAdmin, get_db
+from src.interface.api.rate_limiting import rate_limit_analysis_request, rate_limit_analysis_retry
 from src.interface.api.schemas.analysis_schemas import (
     AnalysisGlobalItemResponse,
     AnalysisMatchResponse,
@@ -205,6 +210,7 @@ async def request_analysis(
     job_id: UUID | None = Query(default=None),
     force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit_analysis_request),
 ) -> AnalysisRequestResponse:
     if job_id is None:
         raise HTTPException(
@@ -215,6 +221,7 @@ async def request_analysis(
         use_case = RequestAnalysisUseCase(
             SQLAlchemyAnalysisRepository(db),
             SQLAlchemyResumeRepository(db),
+            AILimitOverrideService(db),
         )
         result = await use_case.execute(
             RequestAnalysisCommand(
@@ -259,6 +266,19 @@ async def request_analysis(
             reused=result.reused,
             stuck=result.stuck,
             reason=result.reason,
+        )
+    except AIDailyLimitExceededError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "ai_daily_limit_exceeded",
+                "message": "Limite diário de análises atingido.",
+                "scope": exc.scope,
+                "limit": exc.limit,
+                "used": exc.used,
+                "reset_at": exc.reset_at.isoformat(),
+            },
         )
     except Exception as exc:
         await db.rollback()
@@ -561,6 +581,7 @@ async def retry_analysis(
     analysis_id: UUID,
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit_analysis_retry),
 ) -> AnalysisRequestResponse:
     """Reprocess a failed or stuck analysis.
 

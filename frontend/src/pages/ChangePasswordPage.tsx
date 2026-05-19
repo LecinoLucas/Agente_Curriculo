@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, EyeOff, KeyRound, LogOut, ShieldAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -8,6 +8,11 @@ import { useAuth } from "../features/auth/useAuth";
 import { authService } from "../services/authService";
 import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
 import { toast } from "../shared/utils/toast";
+
+function postPasswordChangeRoute(role?: string | null): string {
+  if (role === "candidate") return "/candidato/portal";
+  return "/dashboard";
+}
 
 function passwordStrengthLabel(password: string): { label: string; tone: string } {
   let score = 0;
@@ -21,7 +26,7 @@ function passwordStrengthLabel(password: string): { label: string; tone: string 
 }
 
 export function ChangePasswordPage() {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -32,9 +37,23 @@ export function ChangePasswordPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const savingRef = useRef(false);
+  const initiallyForcedRef = useRef(Boolean(user?.must_change_password));
 
   const isForced = Boolean(user?.must_change_password);
   const strength = useMemo(() => passwordStrengthLabel(newPassword), [newPassword]);
+
+  useEffect(() => {
+    if (user?.must_change_password) {
+      initiallyForcedRef.current = true;
+    }
+  }, [user?.must_change_password]);
+
+  useEffect(() => {
+    if (initiallyForcedRef.current && user && !user.must_change_password) {
+      navigate(postPasswordChangeRoute(user.role), { replace: true });
+    }
+  }, [navigate, user]);
 
   function toFriendlyText(caught: unknown): string {
     return formatErrorDetails(handleApiError(caught)).join(" ");
@@ -42,6 +61,8 @@ export function ChangePasswordPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (savingRef.current) return;
+
     setError(null);
 
     if (newPassword.length < 8) {
@@ -54,18 +75,20 @@ export function ChangePasswordPage() {
       return;
     }
 
+    savingRef.current = true;
     setSaving(true);
     try {
-      await authService.updateMyPassword({
+      const updatedUser = await authService.updateMyPassword({
         current_password: currentPassword,
         new_password: newPassword,
       });
-      await refreshUser();
-      toast.success("Senha atualizada com sucesso");
-      navigate(user?.role === "candidate" ? "/perfil" : "/pipeline", { replace: true });
+      updateUser({ ...updatedUser, must_change_password: false });
+      toast.success("Senha alterada com sucesso.");
+      navigate(postPasswordChangeRoute(updatedUser.role ?? user?.role), { replace: true });
     } catch (err) {
       setError(toFriendlyText(err) || "Falha ao atualizar senha");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -112,6 +135,7 @@ export function ChangePasswordPage() {
             onChange={setCurrentPassword}
             visible={showCurrent}
             onToggle={() => setShowCurrent((value) => !value)}
+            disabled={saving}
           />
 
           <div className="space-y-2">
@@ -121,6 +145,7 @@ export function ChangePasswordPage() {
               onChange={setNewPassword}
               visible={showNew}
               onToggle={() => setShowNew((value) => !value)}
+              disabled={saving}
             />
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500">Mínimo de 8 caracteres.</span>
@@ -134,6 +159,7 @@ export function ChangePasswordPage() {
             onChange={setConfirmPassword}
             visible={showConfirm}
             onToggle={() => setShowConfirm((value) => !value)}
+            disabled={saving}
           />
 
           {error ? (
@@ -157,12 +183,14 @@ function PasswordInput({
   onChange,
   visible,
   onToggle,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   visible: boolean;
   onToggle: () => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -171,12 +199,14 @@ function PasswordInput({
         <input
           type={visible ? "text" : "password"}
           value={value}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
-          className="h-11 flex-1 bg-transparent text-sm text-slate-900 outline-none"
+          className="h-11 flex-1 bg-transparent text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-70"
         />
         <button
           type="button"
           onClick={onToggle}
+          disabled={disabled}
           className="text-slate-500 transition hover:text-slate-800"
           aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
         >

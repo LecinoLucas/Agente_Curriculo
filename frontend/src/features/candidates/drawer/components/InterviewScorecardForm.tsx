@@ -1,5 +1,5 @@
 import { Plus, Save, Send } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   InterviewFinalRecommendation,
@@ -62,6 +62,7 @@ export function InterviewScorecardForm({
     scorecard?.final_recommendation ?? "",
   );
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const submitLockedRef = useRef(false);
 
   const canSubmit = useMemo(() => Boolean(finalRecommendation), [finalRecommendation]);
 
@@ -85,16 +86,21 @@ export function InterviewScorecardForm({
   };
 
   const handleSubmit = async () => {
+    if (saving || submitting || submitLockedRef.current) return;
+
     if (!canSubmit) {
       setValidationMessage("Selecione a recomendação final antes de enviar.");
       return;
     }
 
+    submitLockedRef.current = true;
     try {
       const savedScorecard = await handleSave();
       await onSubmit(savedScorecard.id);
     } catch {
       return;
+    } finally {
+      submitLockedRef.current = false;
     }
   };
 

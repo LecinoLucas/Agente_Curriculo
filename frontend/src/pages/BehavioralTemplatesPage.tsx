@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { MetricCard } from "@/components/common/MetricCard";
 import {
   Plus,
   Layers,
@@ -51,7 +52,7 @@ export function BehavioralTemplatesPage() {
   // Search/Filters states
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedStatus, setSelectedStatus] = useState("all"); // "all", "active", "draft", "archived"
+  const [selectedStatus, setSelectedStatus] = useState("all"); // "all", "active", "draft"
   const [sortBy, setSortBy] = useState("recent"); // "recent", "name", "questions"
 
   // Modals/Sidebars
@@ -219,7 +220,9 @@ export function BehavioralTemplatesPage() {
   const totalArchived = templates.filter((t) => t.status === "archived").length;
 
   // Search and filter logic
-  const filteredTemplates = templates.filter((template) => {
+  const visibleTemplates = templates.filter((template) => template.status !== "archived");
+
+  const filteredTemplates = visibleTemplates.filter((template) => {
     const parsed = parseTemplateDescription(template.description);
     const category = parsed.category || "Geral";
 
@@ -234,9 +237,7 @@ export function BehavioralTemplatesPage() {
         ? true
         : selectedStatus === "active"
         ? template.status === "active"
-        : selectedStatus === "draft"
-        ? template.status === "draft"
-        : template.status === "archived";
+        : template.status === "draft";
 
     return matchesSearch && matchesCategory && matchesStatus;
   });
@@ -323,38 +324,29 @@ export function BehavioralTemplatesPage() {
         <>
           {/* ── KPI METRICS CARDS ── */}
           <div className="grid gap-4 sm:grid-cols-3">
-            {/* Ativos */}
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
-              <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <ClipboardList className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Ativos em Produção</span>
-                <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalActive}</h3>
-              </div>
-            </div>
-
-            {/* Rascunhos */}
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
-              <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                <FolderGit2 className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Rascunhos Editáveis</span>
-                <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalDrafts}</h3>
-              </div>
-            </div>
-
-            {/* Arquivados */}
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-xs flex items-center gap-4">
-              <div className="h-10 w-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-                <Archive className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-xs text-[hsl(var(--text-muted))] uppercase font-bold tracking-wider">Arquivados</span>
-                <h3 className="text-2xl font-bold text-[hsl(var(--text))] mt-0.5">{totalArchived}</h3>
-              </div>
-            </div>
+            <MetricCard
+              label="Ativos em Produção"
+              value={totalActive}
+              icon={ClipboardList}
+              iconClassName="bg-emerald-50 text-emerald-600"
+            />
+            <MetricCard
+              label="Rascunhos Editáveis"
+              value={totalDrafts}
+              icon={FolderGit2}
+              iconClassName="bg-amber-50 text-amber-600"
+            />
+            <MetricCard
+              label="Arquivados"
+              value={totalArchived}
+              icon={Archive}
+              iconClassName="bg-red-50 text-red-600"
+              description="Para consultar templates arquivados, acesse Cadastros > Arquivados > Templates comportamentais."
+              action={{
+                label: "Abrir Cadastros",
+                onClick: () => navigate("/admin/cadastros"),
+              }}
+            />
           </div>
 
           {/* ── TOOLBAR: SEARCH & FILTERS ── */}
@@ -383,7 +375,6 @@ export function BehavioralTemplatesPage() {
                     <option value="all">Todos os Status</option>
                     <option value="active">Apenas Ativos</option>
                     <option value="draft">Apenas Rascunhos</option>
-                    <option value="archived">Apenas Arquivados</option>
                   </select>
                 </div>
 

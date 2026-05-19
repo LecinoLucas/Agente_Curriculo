@@ -249,6 +249,24 @@ describe("CandidatePreviewDrawer", () => {
     expect(await screen.findByText("Skills ainda não disponíveis.")).toBeInTheDocument();
   });
 
+  it("mostra aviso discreto quando análise IA está em andamento", async () => {
+    mockOverview({
+      active_job_decision: {
+        ...baseOverview.active_job_decision,
+        score_status: "analysis_processing",
+        analysis_status: "processing",
+        match_score: null,
+      },
+      top_matches: [],
+    });
+    renderDrawer();
+
+    expect(await screen.findByTestId("preview-ai-processing-notice")).toHaveTextContent(
+      "Análise IA em andamento. O ranking será atualizado automaticamente.",
+    );
+    expect(screen.getByText("Aguardando IA")).toBeInTheDocument();
+  });
+
   it("renderiza card de Dimensões com percentuais e barras", async () => {
     mockOverview();
     renderDrawer();

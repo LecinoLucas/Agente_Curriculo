@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClipboardCheck, FileText, LoaderCircle, X } from "lucide-react";
 
@@ -8,7 +8,7 @@ import { useCandidateOverview } from "../hooks/useCandidateOverview";
 import { formatContextError } from "../../../services/errorMessages";
 import { pipelineService } from "../../../services/pipelineService";
 import { toast } from "../../../shared/utils/toast";
-import type { PipelineStage } from "../../../types/domain";
+import type { CandidateOverview, PipelineStage } from "../../../types/domain";
 import {
   ANALYSIS_STATUS_LABEL,
   STAGE_LABEL,
@@ -26,11 +26,19 @@ export type CandidatePreviewDrawerProps = {
   candidateId: string | null;
   onClose: () => void;
   onPipelineChanged?: () => Promise<void> | void;
+  refreshToken?: number;
 };
 
-export function CandidatePreviewDrawer({ candidateId, onClose, onPipelineChanged }: CandidatePreviewDrawerProps) {
+export function CandidatePreviewDrawer({ candidateId, onClose, onPipelineChanged, refreshToken = 0 }: CandidatePreviewDrawerProps) {
   if (!candidateId) return null;
-  return <DrawerPanel candidateId={candidateId} onClose={onClose} onPipelineChanged={onPipelineChanged} />;
+  return (
+    <DrawerPanel
+      candidateId={candidateId}
+      onClose={onClose}
+      onPipelineChanged={onPipelineChanged}
+      refreshToken={refreshToken}
+    />
+  );
 }
 
 const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
@@ -49,14 +57,47 @@ function interviewTypeForStage(stage: PipelineStage) {
   return stage === "technical_interview" ? "technical" : "hr";
 }
 
+function getAiProcessingNotice(overview: CandidateOverview | null) {
+  if (!overview) return null;
+
+  const decisionStatus = overview.active_job_decision?.analysis_status ?? null;
+  const scoreStatus = overview.active_job_decision?.score_status ?? null;
+  const latestStatus = overview.latest_analysis?.status ?? null;
+  const extractionStatus = overview.resumes[0]?.extraction_status ?? null;
+  const status = String(
+    [decisionStatus, latestStatus, scoreStatus === "analysis_processing" ? "processing" : null, extractionStatus]
+      .find((value) => value != null && value !== "") ?? "",
+  ).toLowerCase();
+
+  if (status === "pending" || status === "queued" || status === "retry_scheduled") {
+    return "Análise IA na fila.";
+  }
+
+  if (status === "processing" || scoreStatus === "analysis_processing") {
+    return "Análise IA em andamento. O ranking será atualizado automaticamente.";
+  }
+
+  if (extractionStatus === "pending") {
+    return "Análise IA na fila.";
+  }
+
+  if (extractionStatus === "processing") {
+    return "Análise IA em andamento. O ranking será atualizado automaticamente.";
+  }
+
+  return null;
+}
+
 function DrawerPanel({
   candidateId,
   onClose,
   onPipelineChanged,
+  refreshToken,
 }: {
   candidateId: string;
   onClose: () => void;
   onPipelineChanged?: () => Promise<void> | void;
+  refreshToken: number;
 }) {
   const navigate = useNavigate();
   const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId);
@@ -73,6 +114,7 @@ function DrawerPanel({
   const scoreDimensions = overview?.active_job_score_dimensions ?? null;
   const primaryResume = getPrimaryResume(overview);
   const latestMovement = formatLatestMovement(overview);
+  const aiProcessingNotice = getAiProcessingNotice(overview);
   const location = [candidate?.location_city, candidate?.location_state]
     .filter(Boolean)
     .join(", ");
@@ -82,6 +124,14 @@ function DrawerPanel({
   const openFullProfile = () => {
     navigate(`/candidatos/${candidateId}`);
   };
+
+  const lastRefreshTokenRef = useRef(refreshToken);
+
+  useEffect(() => {
+    if (lastRefreshTokenRef.current === refreshToken) return;
+    lastRefreshTokenRef.current = refreshToken;
+    void reload();
+  }, [refreshToken, reload]);
 
   const openResume = () => {
     navigate(`/candidatos/${candidateId}?tab=documents`);
@@ -266,6 +316,15 @@ function DrawerPanel({
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              {aiProcessingNotice ? (
+                <div
+                  className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800"
+                  data-testid="preview-ai-processing-notice"
+                >
+                  {aiProcessingNotice}
+                </div>
+              ) : null}
+
               <SectionCard testId="preview-active-job">
                 <SectionLabel>Vaga ativa</SectionLabel>
                 {activeEntry ? (
@@ -309,6 +368,10 @@ function DrawerPanel({
                   {activeJobScore != null ? (
                     <span className="text-2xl font-bold text-[hsl(var(--text))]" data-testid="preview-score-value">
                       {formatScorePercent(activeJobScore)}
+                    </span>
+                  ) : aiProcessingNotice ? (
+                    <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                      Aguardando IA
                     </span>
                   ) : (
                     <span className="text-sm text-[hsl(var(--text-muted))]">-</span>

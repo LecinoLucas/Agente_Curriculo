@@ -32,9 +32,11 @@ from src.application.services.public_application_service import (
     PublicApplicationService,
     SYSTEM_USER_ID,
 )
+from src.core.settings import settings
 from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.dependencies import CurrentCandidateSession, candidate_profile_incomplete_detail, get_db
+from src.interface.api.rate_limiting import rate_limit_public_apply
 from src.interface.api.schemas.candidate_portal_schemas import (
     CandidateAuthGoogleRequest,
     CandidateAuthGoogleResponse,
@@ -95,6 +97,7 @@ async def apply(
     lgpd_consent: bool = Form(...),
     resume_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit_public_apply),
 ) -> PublicApplyResponse:
     """
     Endpoint público de candidatura.
@@ -132,7 +135,7 @@ async def apply(
             raise ValidationException("Confirmação de senha não confere")
 
         # Ler arquivo
-        file_bytes = await resume_file.read()
+        file_bytes = await resume_file.read(settings.max_upload_size_bytes + 1)
         file_name = resume_file.filename or "resume.pdf"
         file_content_type = resume_file.content_type
 
@@ -425,7 +428,7 @@ async def upload_candidate_portal_resume(
     db: AsyncSession = Depends(get_db),
 ) -> CandidatePortalResumeUploadResponse:
     try:
-        file_bytes = await resume_file.read()
+        file_bytes = await resume_file.read(settings.max_upload_size_bytes + 1)
         service = CandidatePortalService(db)
         result = await service.upload_resume(
             candidate_id=candidate_session.candidate_id,

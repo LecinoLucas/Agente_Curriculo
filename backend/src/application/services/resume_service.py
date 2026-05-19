@@ -3,6 +3,13 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import UUID, uuid4
 
+from src.application.services.upload_validation_service import (
+    UploadValidationError,
+    ValidatedUpload,
+    resume_upload_policy,
+    validate_upload,
+)
+from src.core.settings import settings
 from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -31,7 +38,7 @@ class InvalidResumeFileError(Exception):
     pass
 
 
-MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_PDF_UPLOAD_BYTES = settings.max_upload_size_bytes
 
 
 @dataclass(frozen=True)
@@ -166,7 +173,10 @@ class ResumeService:
         current_user: User,
     ) -> ResumeFileUpload:
         resume = await self._get_authorized_resume(resume_id, current_user)
-        self._validate_pdf_upload(file_name, content_type, content)
+        validated_file = self._validate_pdf_upload(file_name, content_type, content)
+        file_name = validated_file.file_name
+        content = validated_file.content
+        content_type = validated_file.mime_type
 
         version = await self._repository.find_version(resume.id, resume.current_version)
         if version is None:
@@ -179,7 +189,7 @@ class ResumeService:
         version.original_file_name = file_name
         version.file_size_bytes = len(content)
         version.file_hash_sha256 = sha256(content).hexdigest()
-        version.mime_type = "application/pdf"
+        version.mime_type = content_type
         version.extracted_text = None
         version.extraction_status = "pending"
         version.extraction_error = None
@@ -304,17 +314,16 @@ class ResumeService:
         return cleaned
 
     @staticmethod
-    def _validate_pdf_upload(file_name: str, content_type: str | None, content: bytes) -> None:
-        if not content:
-            raise InvalidResumeFileError("Arquivo PDF está vazio")
-        if len(content) > MAX_PDF_UPLOAD_BYTES:
-            raise InvalidResumeFileError("Arquivo PDF excede o limite de 10MB")
-        if content_type not in {"application/pdf", "application/octet-stream", None, ""}:
-            raise InvalidResumeFileError("Arquivo deve ser enviado como PDF")
-        if not file_name.lower().endswith(".pdf"):
-            raise InvalidResumeFileError("Nome do arquivo deve terminar com .pdf")
-        if not content.startswith(b"%PDF"):
-            raise InvalidResumeFileError("Conteúdo enviado não parece ser um PDF válido")
+    def _validate_pdf_upload(file_name: str, content_type: str | None, content: bytes) -> ValidatedUpload:
+        try:
+            return validate_upload(
+                file_name=file_name,
+                content_type=content_type,
+                content=content,
+                policy=resume_upload_policy(),
+            )
+        except UploadValidationError as exc:
+            raise InvalidResumeFileError(str(exc)) from exc
 
     @classmethod
     def _apply_candidate_prefill(cls, candidate: CandidateModel, prefill) -> list[str]:

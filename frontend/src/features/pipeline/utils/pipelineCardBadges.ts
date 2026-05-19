@@ -7,7 +7,7 @@ export type PipelineCardBadge = {
   tone: PipelineCardBadgeTone;
   priority: number;
   reason?: string;
-  icon?: "ai" | "score" | "assessment" | "interview" | "decision" | "aging";
+  icon?: "ai" | "score" | "assessment" | "interview" | "scorecard" | "decision" | "aging";
 };
 
 type BehavioralAssessmentStatus =
@@ -32,9 +32,11 @@ type InterviewStatus =
 
 type PipelineCardBadgeCandidate = JobCandidate & {
   requires_behavioral_assessment?: boolean | null;
+  requires_behavioral_ai_evaluation?: boolean | null;
   behavioral_template_required?: boolean | null;
   behavioral_assessment_status?: BehavioralAssessmentStatus | null;
   behavioral_assignment_status?: BehavioralAssessmentStatus | null;
+  behavioral_ai_evaluation_status?: string | null;
   behavioral_submitted_at?: string | null;
   behavioral_assessment?: {
     template_required?: boolean | null;
@@ -44,9 +46,11 @@ type PipelineCardBadgeCandidate = JobCandidate & {
     question_count?: number | null;
   } | null;
   requires_interview?: boolean | null;
+  requires_scorecard?: boolean | null;
   interview_status?: InterviewStatus | null;
   interview_scheduled_start?: string | null;
   scheduled_interview_start?: string | null;
+  interview_scorecard_status?: string | null;
   interview?: {
     status?: InterviewStatus | null;
     scheduled_start?: string | null;
@@ -95,6 +99,10 @@ function isBehavioralRequired(candidate: PipelineCardBadgeCandidate) {
   );
 }
 
+function getBehavioralAiStatus(candidate: PipelineCardBadgeCandidate) {
+  return normalizeStatus(candidate.behavioral_ai_evaluation_status);
+}
+
 function getInterviewStatus(candidate: PipelineCardBadgeCandidate) {
   return normalizeStatus(candidate.interview?.status ?? candidate.interview_status);
 }
@@ -106,6 +114,10 @@ function getInterviewScheduledStart(candidate: PipelineCardBadgeCandidate) {
     candidate.scheduled_interview_start ??
     null
   );
+}
+
+function getInterviewScorecardStatus(candidate: PipelineCardBadgeCandidate) {
+  return normalizeStatus(candidate.interview_scorecard_status);
 }
 
 function daysSince(isoDate: string | null | undefined, now: Date) {
@@ -166,6 +178,7 @@ export function derivePipelineCardBadges(
   const behavioralStatus = getBehavioralStatus(candidate);
   const behavioralSubmittedAt = getBehavioralSubmittedAt(candidate);
   const behavioralRequired = isBehavioralRequired(candidate);
+  const behavioralAiStatus = getBehavioralAiStatus(candidate);
 
   if (
     behavioralSubmittedAt ||
@@ -184,6 +197,7 @@ export function derivePipelineCardBadges(
     behavioralStatus === "sent" ||
     behavioralStatus === "assigned" ||
     behavioralStatus === "invited" ||
+    behavioralStatus === "in_progress" ||
     behavioralStatus === "pending"
   ) {
     badges.push({
@@ -203,11 +217,43 @@ export function derivePipelineCardBadges(
     });
   }
 
+  const behavioralAnswered = Boolean(
+    behavioralSubmittedAt ||
+      behavioralStatus === "submitted" ||
+      behavioralStatus === "answered" ||
+      behavioralStatus === "completed",
+  );
+
+  if (behavioralAnswered && candidate.requires_behavioral_ai_evaluation) {
+    if (behavioralAiStatus === "processing") {
+      badges.push({
+        label: "IA comportamental em andamento",
+        tone: "progress",
+        priority: 84,
+        reason: "A análise assistida da avaliação comportamental ainda está processando.",
+        icon: "ai",
+      });
+    } else if (behavioralAiStatus !== "completed") {
+      badges.push({
+        label: "IA comportamental pendente",
+        tone: "warning",
+        priority: 86,
+        reason: "A vaga exige análise assistida da avaliação comportamental.",
+        icon: "ai",
+      });
+    }
+  }
+
   const interviewStatus = getInterviewStatus(candidate);
   const interviewScheduledStart = getInterviewScheduledStart(candidate);
   const isInterviewStage = stage ? INTERVIEW_STAGES.has(stage) : false;
 
-  if (interviewScheduledStart || interviewStatus === "scheduled" || interviewStatus === "confirmed") {
+  if (
+    interviewScheduledStart ||
+    interviewStatus === "scheduled" ||
+    interviewStatus === "rescheduled" ||
+    interviewStatus === "confirmed"
+  ) {
     badges.push({
       label: "Entrevista marcada",
       tone: "success",
@@ -226,6 +272,17 @@ export function derivePipelineCardBadges(
       priority: 76,
       reason: "Candidato está aguardando agendamento ou conclusão de entrevista.",
       icon: "interview",
+    });
+  }
+
+  const scorecardStatus = getInterviewScorecardStatus(candidate);
+  if (candidate.requires_scorecard && scorecardStatus !== "submitted" && (stage === "final" || stage === "offer")) {
+    badges.push({
+      label: "Scorecard pendente",
+      tone: "warning",
+      priority: 74,
+      reason: "A vaga exige scorecard antes da decisão final.",
+      icon: "scorecard",
     });
   }
 

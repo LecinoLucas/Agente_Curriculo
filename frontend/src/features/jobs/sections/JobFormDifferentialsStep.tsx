@@ -31,6 +31,7 @@ type JobFormDifferentialsStepProps = {
   onRemoveSkill: (skill: JobSkill | PendingJobSkill) => Promise<void>;
   onAddBehavioralRequirement: () => void;
   onSkillCreated: (skill: SkillCatalog) => void;
+  jobContext?: { title?: string; jobArea?: string };
 };
 
 export function JobFormDifferentialsStep({
@@ -52,6 +53,7 @@ export function JobFormDifferentialsStep({
   onRemoveSkill,
   onAddBehavioralRequirement,
   onSkillCreated,
+  jobContext,
 }: JobFormDifferentialsStepProps) {
   return (
     <div className="space-y-6">
@@ -80,6 +82,7 @@ export function JobFormDifferentialsStep({
           label: "Tornar essencial",
           targetPriorityLevel: "priority",
         }}
+        jobContext={jobContext}
       />
 
       <SectionCard

@@ -3,11 +3,13 @@ import { useLocation, useNavigate, Link } from "react-router-dom";
 import { AlertCircle, CheckCircle, Eye, EyeOff, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { GoogleSignInButton } from "../components/auth/GoogleSignInButton";
 import { useAuth } from "../features/auth/useAuth";
+import { HttpError } from "../services/http";
 import { formatErrorDetails, handleApiError } from "../shared/utils/errorHandler";
 
 export function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, loginWithGoogle, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -36,6 +38,45 @@ export function LoginPage() {
       navigate(from, { replace: true });
     } catch (err) {
       setError(toFriendlyText(err) || "Falha ao autenticar");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug("[google] LoginPage.handleGoogleCredential invoked", {
+        tokenLength: idToken?.length ?? 0,
+      });
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await loginWithGoogle(idToken);
+      navigate(from, { replace: true });
+    } catch (err) {
+      // The backend returns structured 4xx codes; map the ones the UI cares about.
+      if (err instanceof HttpError) {
+        const code = err.code;
+        if (code === "google_domain_not_allowed") {
+          setError("Apenas contas @redemarajo.com.br podem acessar o sistema.");
+          return;
+        }
+        if (code === "google_email_not_verified") {
+          setError("Não foi possível validar sua conta Google.");
+          return;
+        }
+        if (code === "user_inactive") {
+          setError("Conta inativa. Solicite reativação a um administrador.");
+          return;
+        }
+        if (code === "google_login_disabled" || code === "google_login_not_configured") {
+          setError("Login com Google indisponível neste ambiente.");
+          return;
+        }
+      }
+      setError(toFriendlyText(err) || "Falha ao autenticar com Google");
     } finally {
       setLoading(false);
     }
@@ -155,8 +196,20 @@ export function LoginPage() {
               </Button>
             </form>
 
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-gray-200" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">ou</span>
+              <span className="h-px flex-1 bg-gray-200" />
+            </div>
+
+            <GoogleSignInButton
+              disabled={loading}
+              onCredential={handleGoogleCredential}
+              onError={(message) => setError(message)}
+            />
+
             <p className="text-center text-xs text-gray-500">
-              Seu acesso define quais áreas da plataforma estarão disponíveis.
+              Seu acesso define quais áreas da plataforma estarão disponíveis. Apenas contas @redemarajo.com.br podem entrar via Google.
             </p>
           </div>
         </section>

@@ -10,6 +10,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { PageHeader } from "../components/common/PageHeader";
 import { useAsyncState } from "../hooks/useAsyncState";
 import {
+  type AIPricingCatalog,
   type AIUsageSummary,
   type DatabaseHealth,
   type HealthOverview,
@@ -17,6 +18,8 @@ import {
   type SystemErrors,
   systemHealthService,
 } from "../services/systemHealthService";
+import { aiLimitsService, type AILimitsUsage } from "../services/aiLimitsService";
+import { AILimitIncreaseModal } from "../features/admin/AILimitIncreaseModal";
 
 type HealthTab = "overview" | "ai" | "queues" | "database" | "errors";
 
@@ -179,6 +182,13 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
   const { data: queuesData, error: queuesError, loading: queuesLoading, run: runQueues } = useAsyncState<QueueHealth>();
   const { data: databaseData, error: databaseError, loading: databaseLoading, run: runDatabase } = useAsyncState<DatabaseHealth>();
   const { data: errorsData, error: errorsError, loading: errorsLoading, run: runErrors } = useAsyncState<SystemErrors>();
+  const { data: pricingData, run: runPricing } = useAsyncState<AIPricingCatalog>();
+  const [backfillStatus, setBackfillStatus] = useState<
+    { kind: "idle" } | { kind: "running" } | { kind: "done"; updated: number; total: number; skipped: number } | { kind: "error"; message: string }
+  >({ kind: "idle" });
+  const { data: limitsData, run: runLimits } = useAsyncState<AILimitsUsage>();
+  const [increaseModalOpen, setIncreaseModalOpen] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
     try {
@@ -236,12 +246,61 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
     void loadOverview();
   }, [loadOverview]);
 
+  const loadPricing = useCallback(async () => {
+    try {
+      await runPricing(() => systemHealthService.getAIPricingCatalog());
+    } catch {
+      return null;
+    }
+    return null;
+  }, [runPricing]);
+
+  const loadLimits = useCallback(async () => {
+    try {
+      await runLimits(() => aiLimitsService.getUsage());
+    } catch {
+      return null;
+    }
+    return null;
+  }, [runLimits]);
+
+  const handleRevokeOverride = useCallback(async (id: string) => {
+    setRevokingId(id);
+    try {
+      await aiLimitsService.revokeOverride(id);
+      await loadLimits();
+    } finally {
+      setRevokingId(null);
+    }
+  }, [loadLimits]);
+
+  const handleBackfillCosts = useCallback(async () => {
+    setBackfillStatus({ kind: "running" });
+    try {
+      const result = await systemHealthService.backfillAICosts();
+      setBackfillStatus({
+        kind: "done",
+        updated: result.updated,
+        total: result.total_null_rows,
+        skipped: result.skipped_unpriced,
+      });
+      await loadAIUsage();
+    } catch (error) {
+      setBackfillStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Falha ao recalcular custos.",
+      });
+    }
+  }, [loadAIUsage]);
+
   useEffect(() => {
     if (activeTab === "ai" && !aiUsageData && !aiUsageLoading) void loadAIUsage();
+    if (activeTab === "ai" && !pricingData) void loadPricing();
+    if (activeTab === "ai" && !limitsData) void loadLimits();
     if (activeTab === "queues" && !queuesData && !queuesLoading) void loadQueues();
     if (activeTab === "database" && !databaseData && !databaseLoading) void loadDatabase();
     if (activeTab === "errors" && !errorsData && !errorsLoading) void loadErrors();
-  }, [activeTab, aiUsageData, aiUsageLoading, databaseData, databaseLoading, errorsData, errorsLoading, loadAIUsage, loadDatabase, loadErrors, loadQueues, queuesData, queuesLoading]);
+  }, [activeTab, aiUsageData, aiUsageLoading, databaseData, databaseLoading, errorsData, errorsLoading, limitsData, loadAIUsage, loadDatabase, loadErrors, loadLimits, loadPricing, loadQueues, pricingData, queuesData, queuesLoading]);
 
   const aiDailyUsageChartData = useMemo(
     () => (aiUsageData?.daily_usage ?? []).map((item, index) => ({
@@ -425,11 +484,180 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Billing</CardTitle>
+                  <CardTitle>Limites de IA</CardTitle>
                   <CardDescription>
-                    O consumo exibido é calculado a partir das chamadas registradas pelo sistema. Para billing oficial, consulte Google AI Studio ou Google Cloud Billing.
+                    Limite diário de análises IA por usuário, vaga e global. Overrides administrativos têm validade obrigatória e ficam registrados em log estruturado.
                   </CardDescription>
                 </CardHeader>
+                <CardContent className="space-y-4">
+                  {limitsData ? (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
+                          <div className="text-[hsl(var(--text-muted))]">Padrão por usuário</div>
+                          <div className="text-base font-semibold">{limitsData.defaults.per_user}/dia</div>
+                        </div>
+                        <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
+                          <div className="text-[hsl(var(--text-muted))]">Padrão por vaga</div>
+                          <div className="text-base font-semibold">{limitsData.defaults.per_job}/dia</div>
+                        </div>
+                        <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
+                          <div className="text-[hsl(var(--text-muted))]">Padrão global</div>
+                          <div className="text-base font-semibold">{limitsData.defaults.global}/dia</div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
+                        <div className="text-[hsl(var(--text-muted))]">Uso global hoje</div>
+                        <div className="text-base font-semibold">
+                          {limitsData.global_usage.used_today} / {limitsData.global_usage.effective_limit}
+                          {limitsData.global_usage.limit_source === "override" ? (
+                            <Badge className="ml-2" variant="warning">Override ativo</Badge>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="mb-2 text-sm font-semibold">Overrides ativos</div>
+                        {limitsData.active_overrides.length === 0 ? (
+                          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum override ativo no momento.</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-[hsl(var(--border))] text-left text-[hsl(var(--text-muted))]">
+                                  <th className="px-2 py-2">Escopo</th>
+                                  <th className="px-2 py-2">Alvo</th>
+                                  <th className="px-2 py-2">Anterior</th>
+                                  <th className="px-2 py-2">Novo</th>
+                                  <th className="px-2 py-2">Expira em</th>
+                                  <th className="px-2 py-2">Motivo</th>
+                                  <th className="px-2 py-2"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {limitsData.active_overrides.map((ov) => (
+                                  <tr key={ov.id} className="border-b border-[hsl(var(--border))]/60">
+                                    <td className="px-2 py-2">{ov.scope}</td>
+                                    <td className="px-2 py-2 truncate max-w-[10rem]">{ov.scope_id ?? "—"}</td>
+                                    <td className="px-2 py-2">{ov.old_limit}</td>
+                                    <td className="px-2 py-2 font-semibold">{ov.new_limit}</td>
+                                    <td className="px-2 py-2">{formatDateTime(ov.expires_at)}</td>
+                                    <td className="px-2 py-2 truncate max-w-[16rem]">{ov.reason}</td>
+                                    <td className="px-2 py-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={revokingId === ov.id}
+                                        onClick={() => void handleRevokeOverride(ov.id)}
+                                      >
+                                        {revokingId === ov.id ? "Revogando..." : "Revogar"}
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button type="button" onClick={() => setIncreaseModalOpen(true)}>
+                          Aumentar limite
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-[hsl(var(--text-muted))]">Carregando limites...</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {limitsData ? (
+                <AILimitIncreaseModal
+                  open={increaseModalOpen}
+                  onClose={() => setIncreaseModalOpen(false)}
+                  onCreated={() => void loadLimits()}
+                  defaults={limitsData.defaults}
+                />
+              ) : null}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Preços IA</CardTitle>
+                  <CardDescription>
+                    Tabela versionada em <code>backend/src/core/ai_pricing.py</code>. O custo é calculado a partir destes valores; modelos sem entrada aparecem como "Não configurado" e o custo fica nulo até que sejam adicionados.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {pricingData && pricingData.items.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-[hsl(var(--border))] text-left text-[hsl(var(--text-muted))]">
+                            <th className="px-2 py-2">Modelo</th>
+                            <th className="px-2 py-2">Provider</th>
+                            <th className="px-2 py-2">Input (USD/1M)</th>
+                            <th className="px-2 py-2">Output (USD/1M)</th>
+                            <th className="px-2 py-2">Última revisão</th>
+                            <th className="px-2 py-2">Fonte</th>
+                            <th className="px-2 py-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pricingData.items.map((item) => {
+                            const inputPrice = item.input_per_1m_tokens != null ? Number(item.input_per_1m_tokens) : null;
+                            const outputPrice = item.output_per_1m_tokens != null ? Number(item.output_per_1m_tokens) : null;
+                            return (
+                              <tr key={`${item.provider}:${item.model}`} className="border-b border-[hsl(var(--border))]/60">
+                                <td className="px-2 py-2 font-medium">{item.model}</td>
+                                <td className="px-2 py-2">{item.provider}</td>
+                                <td className="px-2 py-2">{inputPrice != null ? formatCurrency(inputPrice) : "—"}</td>
+                                <td className="px-2 py-2">{outputPrice != null ? formatCurrency(outputPrice) : "—"}</td>
+                                <td className="px-2 py-2">{item.last_reviewed_at ?? "—"}</td>
+                                <td className="px-2 py-2 truncate max-w-[14rem]">
+                                  {item.source ? (
+                                    <a href={item.source} target="_blank" rel="noreferrer" className="text-[hsl(var(--primary))] underline">
+                                      link
+                                    </a>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                                <td className="px-2 py-2">
+                                  <Badge variant={item.status === "configured" ? "success" : "warning"}>
+                                    {item.status === "configured" ? "Configurado" : "Não configurado"}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[hsl(var(--text-muted))]">Carregando catálogo de preços...</p>
+                  )}
+
+                  <div className="flex flex-col gap-2 border-t border-[hsl(var(--border))]/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm text-[hsl(var(--text-muted))]">
+                      Recalcula <code>estimated_cost_usd</code> em <code>ai_usage_logs</code> para registros antigos cujo provider/modelo agora tem preço configurado. Não chama provider de IA e não altera tokens.
+                    </div>
+                    <Button type="button" onClick={() => void handleBackfillCosts()} disabled={backfillStatus.kind === "running"}>
+                      {backfillStatus.kind === "running" ? "Recalculando..." : "Recalcular custos históricos"}
+                    </Button>
+                  </div>
+                  {backfillStatus.kind === "done" ? (
+                    <p className="text-sm text-[hsl(var(--success))]">
+                      Atualizados {backfillStatus.updated} de {backfillStatus.total} registros. {backfillStatus.skipped} sem preço configurado foram mantidos como null.
+                    </p>
+                  ) : null}
+                  {backfillStatus.kind === "error" ? (
+                    <p className="text-sm text-[hsl(var(--danger))]">{backfillStatus.message}</p>
+                  ) : null}
+                </CardContent>
               </Card>
 
               <div className="grid gap-4 xl:grid-cols-2">

@@ -1,7 +1,9 @@
+import json
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -81,6 +83,19 @@ class Settings(BaseSettings):
     ERP_INTEGRATION_MODE: str = "dry_run"
     PRE_ADMISSION_DOCUMENT_MAX_BYTES: int = 10 * 1024 * 1024
 
+    # Upload hardening
+    MAX_UPLOAD_SIZE_MB: int = 10
+    FILE_SCAN_ENABLED: bool = False
+    FILE_SCAN_FAIL_CLOSED: bool = True
+    CLAMAV_HOST: str = "127.0.0.1"
+    CLAMAV_PORT: int = 3310
+    ALLOWED_RESUME_MIME_TYPES: Annotated[list[str], NoDecode] = ["application/pdf"]
+    ALLOWED_DOCUMENT_MIME_TYPES: Annotated[list[str], NoDecode] = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+    ]
+
     # Protheus ERP (real adapter for homologation)
     PROTHEUS_BASE_URL: str = ""
     PROTHEUS_AUTH_MODE: str = "basic"  # "basic" or "token"
@@ -98,10 +113,41 @@ class Settings(BaseSettings):
     # Monitoring
     SENTRY_DSN: str = ""
 
+    # Rate limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_LOGIN: str = "5/minute"
+    RATE_LIMIT_PUBLIC_APPLY: str = "10/minute"
+    RATE_LIMIT_ANALYSIS_REQUEST: str = "5/minute"
+    RATE_LIMIT_ANALYSIS_RETRY: str = "3/minute"
+
+    # AI daily analysis limits — baseline values that admin overrides modify.
+    AI_ANALYSIS_DAILY_LIMIT_PER_USER: int = 50
+    AI_ANALYSIS_DAILY_LIMIT_PER_JOB: int = 100
+    AI_ANALYSIS_DAILY_LIMIT_GLOBAL: int = 1000
+    # Maximum allowed window for an admin-issued temporary override (days).
+    AI_LIMIT_OVERRIDE_MAX_DAYS: int = 7
+    # P0.2B enforcement toggle. When False, no daily-limit check runs; useful
+    # for tests and emergency bypass. Per-minute rate limiting (P0.1) is separate.
+    AI_DAILY_LIMITS_ENABLED: bool = True
+
+    # Google staff login (P0.6) — admin/staff sign-in via Google Identity Services.
+    # Only emails on the allowed domain are accepted; new users are created
+    # automatically with the read-only ``VIEWER`` role.
+    GOOGLE_LOGIN_ENABLED: bool = True
+    GOOGLE_ALLOWED_DOMAIN: str = "redemarajo.com.br"
+
+    # Security headers (P0.5)
+    SECURITY_HEADERS_ENABLED: bool = True
+    # HSTS is dangerous on localhost: browsers cache the policy for a year and
+    # then refuse plain-HTTP connections to the host. Keep off in dev/test;
+    # the `hsts_enabled_effective` property forces it on in production.
+    HSTS_ENABLED: bool = False
+    CONTENT_SECURITY_POLICY_ENABLED: bool = True
+
     @field_validator("APP_ENV")
     @classmethod
     def validate_env(cls, v: str) -> str:
-        allowed = {"development", "staging", "production"}
+        allowed = {"development", "test", "staging", "production"}
         if v not in allowed:
             raise ValueError(f"APP_ENV must be one of {allowed}")
         return v
@@ -133,6 +179,23 @@ class Settings(BaseSettings):
             raise ValueError(f"ERP_INTEGRATION_MODE must be one of {allowed}")
         return normalized
 
+    @field_validator("ALLOWED_RESUME_MIME_TYPES", "ALLOWED_DOCUMENT_MIME_TYPES", mode="before")
+    @classmethod
+    def parse_mime_type_list(cls, v: object) -> list[str]:
+        if isinstance(v, list):
+            return [str(item).strip().lower() for item in v if str(item).strip()]
+        if isinstance(v, str):
+            raw = v.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                decoded = json.loads(raw)
+                if not isinstance(decoded, list):
+                    raise ValueError("MIME types must be a list")
+                return [str(item).strip().lower() for item in decoded if str(item).strip()]
+            return [item.strip().lower() for item in raw.split(",") if item.strip()]
+        raise ValueError("MIME types must be a list or comma-separated string")
+
     def model_post_init(self, __context: object) -> None:
         if self.ENABLE_DEV_MOCK and self.APP_ENV == "production":
             raise ValueError("ENABLE_DEV_MOCK must not be enabled in production")
@@ -149,8 +212,17 @@ class Settings(BaseSettings):
         return self.APP_ENV == "production"
 
     @property
+    def hsts_enabled_effective(self) -> bool:
+        """HSTS opt-in for prod; explicit toggle elsewhere. Keep off on localhost."""
+        return self.is_production or self.HSTS_ENABLED
+
+    @property
     def jwt_refresh_expire_seconds(self) -> int:
         return self.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
     @property
     def public_api_base_url(self) -> str:

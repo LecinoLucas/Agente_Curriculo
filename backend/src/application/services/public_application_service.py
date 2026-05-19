@@ -12,6 +12,13 @@ from src.application.services.candidate_service import APPLICATION_SOURCE_PUBLIC
 from src.application.services.candidate_salary_expectation import require_salary_expectation
 from src.application.services.communication_service import CommunicationService
 from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+from src.application.services.upload_validation_service import (
+    UploadValidationError,
+    ValidatedUpload,
+    resume_upload_policy,
+    validate_upload,
+)
+from src.core.settings import settings
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
 from src.domain.exceptions import ValidationException
@@ -44,7 +51,7 @@ logger = structlog.get_logger(__name__)
 # Sentinela para operações administrativas (BehavioralAssignment, Analysis, Notifications)
 # NÃO usar para created_by de candidatos públicos (usar None)
 SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
-MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_PDF_UPLOAD_BYTES = settings.max_upload_size_bytes
 
 
 class PublicApplicationError(Exception):
@@ -93,22 +100,17 @@ class PublicApplicationService:
         return digits
 
     @staticmethod
-    def _validate_pdf_upload(file_name: str, content_type: str | None, content: bytes) -> None:
+    def _validate_pdf_upload(file_name: str, content_type: str | None, content: bytes) -> ValidatedUpload:
         """Valida arquivo PDF."""
-        if not content:
-            raise PublicApplicationFileError("Arquivo vazio")
-
-        if len(content) > MAX_PDF_UPLOAD_BYTES:
-            raise PublicApplicationFileError(f"Arquivo muito grande (máx {MAX_PDF_UPLOAD_BYTES // (1024 * 1024)}MB)")
-
-        if content_type not in {"application/pdf", "application/octet-stream", None, ""}:
-            raise PublicApplicationFileError("Arquivo deve ser enviado como PDF")
-
-        if not file_name.lower().endswith(".pdf"):
-            raise PublicApplicationFileError("Nome do arquivo deve terminar com .pdf")
-
-        if not content.startswith(b"%PDF"):
-            raise PublicApplicationFileError("Conteúdo enviado não parece ser um PDF válido")
+        try:
+            return validate_upload(
+                file_name=file_name,
+                content_type=content_type,
+                content=content,
+                policy=resume_upload_policy(),
+            )
+        except UploadValidationError as exc:
+            raise PublicApplicationFileError(str(exc)) from exc
 
     @staticmethod
     def _validate_password(password: str) -> None:
@@ -209,10 +211,13 @@ class PublicApplicationService:
 
         # 5. Validar arquivo
         try:
-            self._validate_pdf_upload(file_name, file_content_type, file_bytes)
+            validated_file = self._validate_pdf_upload(file_name, file_content_type, file_bytes)
         except PublicApplicationFileError as e:
             logger.warning("invalid_file_upload", reason=str(e), file_name=file_name, file_size=len(file_bytes))
             raise
+        file_name = validated_file.file_name
+        file_bytes = validated_file.content
+        file_content_type = validated_file.mime_type
 
         # 6. Validar vaga (se informada)
         job_model: JobModel | None = None
@@ -318,7 +323,7 @@ class PublicApplicationService:
                     original_file_name=file_name,
                     file_size_bytes=len(file_bytes),
                     file_hash_sha256=sha256(file_bytes).hexdigest(),
-                    mime_type="application/pdf",
+                    mime_type=file_content_type,
                     extraction_status="pending",
                     uploaded_by=None,  # Public application, no system user
                     uploaded_at=datetime.now(UTC),

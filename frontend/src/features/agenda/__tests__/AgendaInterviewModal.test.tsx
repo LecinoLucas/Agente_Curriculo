@@ -135,6 +135,70 @@ describe("AgendaInterviewModal", () => {
 
     expect(syncCheckbox).toBeDisabled();
     expect(meetCheckbox).toBeDisabled();
+    expect(screen.getByText(/Conecte o Google Calendar para criar evento e link do Meet/i)).toBeInTheDocument();
     expect(screen.getByText("Conectar Google Calendar")).toBeInTheDocument();
+  });
+
+  it("sincroniza Calendar e Meet e envia payload correto quando Google está conectado", async () => {
+    (agendaService.getGoogleCalendarStatus as any).mockResolvedValue({
+      connected: true,
+      google_account_email: "recruiter@test.com",
+    });
+    (agendaService.createInterview as any).mockResolvedValue({
+      id: "interview-1",
+    });
+
+    render(
+      <MemoryRouter future={routerFuture}>
+        <AgendaInterviewModal
+          isOpen={true}
+          isEdit={false}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />
+      </MemoryRouter>
+    );
+
+    await screen.findByLabelText("Candidato *");
+
+    const syncCheckbox = screen.getByLabelText("Adicionar ao Google Calendar");
+    const meetCheckbox = screen.getByLabelText("Criar link do Google Meet");
+
+    expect(screen.getByText("Google Calendar conectado: recruiter@test.com")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Criar link do Google Meet"));
+    expect(syncCheckbox).toBeChecked();
+    expect(meetCheckbox).toBeChecked();
+
+    fireEvent.click(screen.getByText("Adicionar ao Google Calendar"));
+    expect(syncCheckbox).not.toBeChecked();
+    expect(meetCheckbox).not.toBeChecked();
+
+    fireEvent.click(screen.getByText("Criar link do Google Meet"));
+    fireEvent.change(screen.getByLabelText("Candidato *"), {
+      target: { value: "candidate-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Título *"), {
+      target: { value: "Entrevista com Meet" },
+    });
+    fireEvent.change(screen.getByLabelText("Data *"), {
+      target: { value: tomorrow },
+    });
+    fireEvent.change(screen.getByLabelText("Início *"), {
+      target: { value: "10:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Fim *"), {
+      target: { value: "11:00" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar" }));
+
+    await waitFor(() => {
+      expect(agendaService.createInterview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create_google_event: true,
+          create_google_meet: true,
+        }),
+      );
+    });
   });
 });

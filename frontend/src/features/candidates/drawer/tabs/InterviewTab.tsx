@@ -8,6 +8,7 @@ import { InterviewScorecardPanel } from "../components/InterviewScorecardPanel";
 interface InterviewTabProps {
   jobId: string | null;
   candidateId: string | null;
+  onScorecardSubmitted?: () => void | Promise<void>;
 }
 
 type FormMode = "create" | "reschedule";
@@ -54,7 +55,7 @@ function formatDateTime(value: string): string {
   }).format(new Date(value));
 }
 
-export function InterviewTab({ jobId, candidateId }: InterviewTabProps) {
+export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: InterviewTabProps) {
   const [items, setItems] = useState<InterviewSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,6 +109,11 @@ export function InterviewTab({ jobId, candidateId }: InterviewTabProps) {
     () => items.find((item) => item.id === scorecardInterviewId) ?? null,
     [items, scorecardInterviewId],
   );
+
+  const handleScorecardSubmitted = async () => {
+    setScorecardInterviewId(null);
+    await onScorecardSubmitted?.();
+  };
 
   const openCreate = () => {
     const start = new Date();
@@ -415,7 +421,12 @@ export function InterviewTab({ jobId, candidateId }: InterviewTabProps) {
               Scorecard vinculado {selectedScorecardInterview ? `- ${formatDateTime(selectedScorecardInterview.scheduled_start)}` : ""}
             </p>
           </div>
-          <InterviewScorecardPanel jobId={jobId} candidateId={candidateId} interviewId={scorecardInterviewId} />
+          <InterviewScorecardPanel
+            jobId={jobId}
+            candidateId={candidateId}
+            interviewId={scorecardInterviewId}
+            onSubmitted={handleScorecardSubmitted}
+          />
         </div>
       ) : null}
     </div>

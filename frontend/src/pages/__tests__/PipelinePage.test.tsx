@@ -48,8 +48,18 @@ vi.mock("../../features/pipeline/CandidateSearchModal", () => ({
 }));
 
 vi.mock("../../features/candidates/components/CandidatePreviewDrawer", () => ({
-  CandidatePreviewDrawer: ({ candidateId }: { candidateId: string | null }) =>
-    candidateId ? <div data-testid="candidate-preview-drawer">{candidateId}</div> : null,
+  CandidatePreviewDrawer: ({
+    candidateId,
+    refreshToken,
+  }: {
+    candidateId: string | null;
+    refreshToken?: number;
+  }) =>
+    candidateId ? (
+      <div data-testid="candidate-preview-drawer">
+        {candidateId}:{refreshToken ?? 0}
+      </div>
+    ) : null,
 }));
 
 describe("PipelinePage", () => {
@@ -221,7 +231,6 @@ describe("PipelinePage", () => {
     await waitFor(() => {
       expect(screen.queryByPlaceholderText(/buscar candidato/i)).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Filtros/i })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Buscar candidatos/i })).toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: /Vincular candidato/i }).length).toBeGreaterThan(0);
     });
   });
@@ -375,6 +384,56 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
+    });
+  });
+
+  it("12. Expõe scroll horizontal superior sincronizado com o Kanban", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const scrollContainer = await screen.findByTestId("kanban-scroll-container");
+    Object.defineProperty(scrollContainer, "scrollWidth", { configurable: true, value: 1600 });
+    Object.defineProperty(scrollContainer, "clientWidth", { configurable: true, value: 800 });
+    fireEvent(window, new Event("resize"));
+
+    const topScroll = await screen.findByTestId("kanban-top-scroll");
+    fireEvent.scroll(topScroll, { target: { scrollLeft: 120 } });
+
+    expect(scrollContainer.scrollLeft).toBe(120);
+  });
+
+  it("13. Mover candidato atualiza Kanban e força refresh do drawer aberto", async () => {
+    const dataTransfer = {
+      effectAllowed: "move",
+      setData: vi.fn(),
+      dropEffect: "move",
+    };
+    mockRefreshBoard.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.click(screen.getByText("Aline Santos"));
+    expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1:0");
+
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(mockRefreshBoard).toHaveBeenCalled();
+      expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1:1");
     });
   });
 });

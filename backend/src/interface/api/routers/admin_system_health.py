@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.system_health_service import AIUsageQuery, SystemHealthService
 from src.interface.api.dependencies import AdminOnly, get_db
 from src.interface.api.schemas.system_health_schemas import (
+    AICostBackfillResponse,
+    AIPricingCatalogResponse,
     AIUsageSummaryResponse,
     DatabaseHealthResponse,
     QueueHealthResponse,
@@ -73,3 +75,24 @@ async def get_system_errors(
     service: SystemHealthService = Depends(_get_service),
 ) -> SystemErrorsResponse:
     return SystemErrorsResponse.model_validate(await service.get_errors())
+
+
+@router.get("/ai-usage/pricing", response_model=AIPricingCatalogResponse)
+async def get_ai_pricing_catalog(
+    _current_user: AdminOnly,
+    service: SystemHealthService = Depends(_get_service),
+) -> AIPricingCatalogResponse:
+    """Return the configured AI pricing catalog plus any observed
+    (provider, model) pairs that have no pricing entry yet."""
+    return AIPricingCatalogResponse.model_validate(await service.get_pricing_catalog())
+
+
+@router.post("/ai-usage/backfill-costs", response_model=AICostBackfillResponse)
+async def backfill_ai_usage_costs(
+    _current_user: AdminOnly,
+    service: SystemHealthService = Depends(_get_service),
+) -> AICostBackfillResponse:
+    """Recompute ``estimated_cost_usd`` for ai_usage_logs rows where it is NULL
+    and a price is configured for ``(provider, model)``. Idempotent; does not
+    call the AI provider or modify tokens/status/analysis flow."""
+    return AICostBackfillResponse.model_validate(await service.backfill_missing_costs())

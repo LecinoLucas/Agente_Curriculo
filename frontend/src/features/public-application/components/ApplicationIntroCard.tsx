@@ -5,7 +5,7 @@ export function ApplicationIntroCard() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="mb-8 overflow-hidden rounded-3xl border border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.03)] backdrop-blur-sm transition-all duration-300">
+    <div className="mt-8 overflow-hidden rounded-3xl border border-[hsl(var(--primary)/0.15)] bg-[hsl(var(--primary)/0.03)] backdrop-blur-sm transition-all duration-300">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center justify-between p-5 text-left font-bold text-[hsl(var(--primary))]"
@@ -30,10 +30,6 @@ export function ApplicationIntroCard() {
           <li className="flex gap-3">
             <span className="text-[hsl(var(--primary))] font-bold">•</span>
             Selecione corretamente a vaga desejada
-          </li>
-          <li className="flex gap-3">
-            <span className="text-[hsl(var(--primary))] font-bold">•</span>
-            Para se candidatar a mais de uma vaga, realize uma nova inscrição
           </li>
           <li className="flex gap-3">
             <span className="text-[hsl(var(--primary))] font-bold">•</span>

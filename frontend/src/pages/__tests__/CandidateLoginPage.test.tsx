@@ -35,6 +35,7 @@ function installGoogleMock() {
         renderButton: vi.fn((element) => {
           const button = document.createElement("button");
           button.type = "button";
+          button.textContent = "Continuar com Google";
           button.addEventListener("click", () => {
             credentialCallback?.({ credential: "google-credential" });
           });
@@ -92,10 +93,14 @@ describe("CandidateLoginPage", () => {
     );
 
     const googleButton = await screen.findByRole("button", { name: /continuar com google/i });
+    expect(screen.queryByText(/apenas contas @redemarajo\.com\.br/i)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(googleButton).toBeEnabled();
     });
     fireEvent.click(googleButton);
+    await waitFor(() => {
+      expect(candidateAuthService.googleLogin).toHaveBeenCalledWith({ id_token: "google-credential" });
+    });
     expect(await screen.findByText("Portal destino")).toBeInTheDocument();
   });
 

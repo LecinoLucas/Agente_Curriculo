@@ -9,6 +9,13 @@ import sqlalchemy as sa
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.upload_validation_service import (
+    UploadValidationError,
+    ValidatedUpload,
+    resume_upload_policy,
+    validate_upload,
+)
+from src.core.settings import settings
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
@@ -36,7 +43,7 @@ from src.application.services.candidate_profile_completion_service import Candid
 
 logger = structlog.get_logger(__name__)
 
-MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_PDF_UPLOAD_BYTES = settings.max_upload_size_bytes
 
 
 class CandidatePortalProfileConflictError(Exception):
@@ -166,7 +173,10 @@ class CandidatePortalService:
         if candidate is None:
             raise CandidatePortalProfileConflictError
 
-        self._validate_pdf_upload(file_name, file_content_type, file_bytes)
+        validated_file = self._validate_pdf_upload(file_name, file_content_type, file_bytes)
+        file_name = validated_file.file_name
+        file_bytes = validated_file.content
+        file_content_type = validated_file.mime_type
 
         resume_id = uuid4()
         resume = await self._resume_repo.create_resume(
@@ -191,7 +201,7 @@ class CandidatePortalService:
                 original_file_name=file_name,
                 file_size_bytes=len(file_bytes),
                 file_hash_sha256=sha256(file_bytes).hexdigest(),
-                mime_type="application/pdf",
+                mime_type=file_content_type,
                 extraction_status="pending",
                 uploaded_by=uploaded_by,
                 uploaded_at=datetime.now(UTC),
@@ -589,17 +599,16 @@ class CandidatePortalService:
         return CandidateProfileCompletionService.find_missing_fields(candidate, has_resume=has_resume)
 
     @staticmethod
-    def _validate_pdf_upload(file_name: str, content_type: str | None, content: bytes) -> None:
-        if not content:
-            raise CandidatePortalInvalidFileError("Arquivo vazio")
-        if len(content) > MAX_PDF_UPLOAD_BYTES:
-            raise CandidatePortalInvalidFileError("Arquivo muito grande (máx 10MB)")
-        if content_type not in {"application/pdf", "application/octet-stream", None, ""}:
-            raise CandidatePortalInvalidFileError("Arquivo deve ser enviado como PDF")
-        if not file_name.lower().endswith(".pdf"):
-            raise CandidatePortalInvalidFileError("Nome do arquivo deve terminar com .pdf")
-        if not content.startswith(b"%PDF"):
-            raise CandidatePortalInvalidFileError("Conteúdo enviado não parece ser um PDF válido")
+    def _validate_pdf_upload(file_name: str, content_type: str | None, content: bytes) -> ValidatedUpload:
+        try:
+            return validate_upload(
+                file_name=file_name,
+                content_type=content_type,
+                content=content,
+                policy=resume_upload_policy(),
+            )
+        except UploadValidationError as exc:
+            raise CandidatePortalInvalidFileError(str(exc)) from exc
 
     async def _get_candidate_row(self, candidate_id: UUID) -> dict | None:
         row = await self._db.execute(

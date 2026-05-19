@@ -13,10 +13,11 @@ import { skillsService, type SkillCatalog } from "../services/skillsService";
 import { jobAreasService, type JobArea } from "../services/jobAreasService";
 import { candidatesService } from "../services/candidatesService";
 import { listJobs } from "../services/jobsService";
+import { behavioralTemplatesService } from "../services/behavioralTemplatesService";
 import { useAsyncState } from "../hooks/useAsyncState";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "../shared/utils/toast";
-import type { Candidate, Job } from "../types/domain";
+import type { BehavioralAssessmentTemplate, Candidate, Job } from "../types/domain";
 
 const CATEGORIES = [
   { value: "", label: "Todas as categorias" },
@@ -50,7 +51,7 @@ const CANDIDATE_ARCHIVE_REASON_LABELS: Record<string, string> = {
 };
 
 type MainTab = "skills" | "areas" | "archived";
-type ArchivedTab = "skills" | "jobs" | "candidates";
+type ArchivedTab = "skills" | "behavioralTemplates" | "jobs" | "candidates";
 type SkillStatusFilter = (typeof SKILL_STATUS_FILTERS)[number]["value"];
 
 function categoryLabel(category: string | null) {
@@ -109,6 +110,7 @@ export function CadastrosPage() {
   const [skillStatusFilter, setSkillStatusFilter] = useState<SkillStatusFilter>("all");
   const [searchArea, setSearchArea] = useState("");
   const [archivedSkillSearch, setArchivedSkillSearch] = useState("");
+  const [archivedTemplateSearch, setArchivedTemplateSearch] = useState("");
   const [archivedCandidateSearch, setArchivedCandidateSearch] = useState("");
   const [archivedJobSearch, setArchivedJobSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -119,6 +121,7 @@ export function CadastrosPage() {
 
   const skillsState = useAsyncState<{ data: SkillCatalog[]; total: number }>();
   const archivedSkillsState = useAsyncState<{ data: SkillCatalog[]; total: number }>();
+  const archivedTemplatesState = useAsyncState<{ data: BehavioralAssessmentTemplate[]; total: number }>();
   const archivedJobsState = useAsyncState<{ data: Job[]; total: number }>();
   const archivedCandidatesState = useAsyncState<{ data: Candidate[]; total: number }>();
   const areasState = useAsyncState<{ data: JobArea[]; total: number }>();
@@ -149,6 +152,26 @@ export function CadastrosPage() {
         page_size: 100,
       }),
     );
+  };
+
+  const loadArchivedTemplates = () => {
+    void archivedTemplatesState.run(async () => {
+      const templates = await behavioralTemplatesService.listTemplates();
+      const searchTerm = archivedTemplateSearch.trim().toLowerCase();
+      const archivedTemplates = templates.filter((template) => {
+        if (template.status !== "archived") return false;
+        if (!searchTerm) return true;
+        return (
+          template.name.toLowerCase().includes(searchTerm) ||
+          (template.description ?? "").toLowerCase().includes(searchTerm)
+        );
+      });
+
+      return {
+        data: archivedTemplates,
+        total: archivedTemplates.length,
+      };
+    });
   };
 
   const loadArchivedJobs = () => {
@@ -199,6 +222,10 @@ export function CadastrosPage() {
       loadArchivedSkills();
       return;
     }
+    if (archivedTab === "behavioralTemplates") {
+      loadArchivedTemplates();
+      return;
+    }
     if (archivedTab === "jobs") {
       loadArchivedJobs();
       return;
@@ -206,10 +233,11 @@ export function CadastrosPage() {
     if (archivedTab === "candidates") {
       loadArchivedCandidates();
     }
-  }, [activeTab, archivedTab, archivedCandidateSearch, archivedSkillSearch, archivedJobSearch]);
+  }, [activeTab, archivedTab, archivedCandidateSearch, archivedSkillSearch, archivedTemplateSearch, archivedJobSearch]);
 
   const skills = skillsState.data?.data ?? [];
   const archivedSkills = archivedSkillsState.data?.data ?? [];
+  const archivedTemplates = archivedTemplatesState.data?.data ?? [];
   const areas = areasState.data?.data ?? [];
   const archivedJobs = archivedJobsState.data?.data ?? [];
   const archivedCandidates = archivedCandidatesState.data?.data ?? [];
@@ -492,6 +520,7 @@ export function CadastrosPage() {
           <div className="flex border-b border-[hsl(var(--border))] mb-4">
             {[
               { key: "skills", label: `Skills (${archivedSkillsState.data?.total ?? 0})` },
+              { key: "behavioralTemplates", label: `Templates comportamentais (${archivedTemplatesState.data?.total ?? 0})` },
               { key: "jobs", label: `Vagas (${archivedJobsState.data?.total ?? 0})` },
               { key: "candidates", label: `Candidatos (${archivedCandidatesState.data?.total ?? 0})` },
             ].map((tab) => (
@@ -558,6 +587,60 @@ export function CadastrosPage() {
                   </tr>
                 )}
                 footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {archivedSkillsState.data?.total ?? 0} skills arquivadas.</div>}
+              />
+            </div>
+          ) : null}
+
+          {archivedTab === "behavioralTemplates" ? (
+            <div className="space-y-4">
+              <div className="relative max-w-xl">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+                <input
+                  type="text"
+                  placeholder="Buscar template comportamental arquivado..."
+                  value={archivedTemplateSearch}
+                  onChange={(e) => setArchivedTemplateSearch(e.target.value)}
+                  className="ui-input w-full pl-10 text-sm"
+                />
+              </div>
+
+              <DataTable<BehavioralAssessmentTemplate>
+                columns={[
+                  { header: "Nome", className: "w-[34%]" },
+                  { header: "Arquivado em", className: "w-[18%]" },
+                  { header: "Estrutura", className: "w-[24%]" },
+                  { header: "Status", className: "w-[12%]" },
+                  { header: "Ações", className: "w-[12%] text-right" },
+                ]}
+                items={archivedTemplates}
+                loading={archivedTemplatesState.loading}
+                error={archivedTemplatesState.error}
+                empty={{
+                  title: "Nenhum template comportamental arquivado",
+                  description: "Templates comportamentais arquivados aparecerão aqui.",
+                }}
+                renderRow={(template) => (
+                  <tr key={template.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]/50">
+                    <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">
+                      <div>{template.name}</div>
+                      {template.description ? (
+                        <div className="mt-1 line-clamp-1 text-xs font-normal text-[hsl(var(--text-muted))]">{template.description}</div>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{formatDate(template.archived_at)}</td>
+                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                      {template.competency_count} {template.competency_count === 1 ? "competência" : "competências"} · {template.question_count}{" "}
+                      {template.question_count === 1 ? "pergunta" : "perguntas"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                      <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-600">
+                        Arquivado
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-[hsl(var(--text-muted))]">Somente leitura</td>
+                  </tr>
+                )}
+                footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {archivedTemplatesState.data?.total ?? 0} templates comportamentais arquivados.</div>}
               />
             </div>
           ) : null}

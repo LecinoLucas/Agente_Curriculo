@@ -33,10 +33,13 @@ import {
   getInitials,
 } from "../features/candidates/utils/profile";
 import { EditCandidateModal } from "../features/pipeline/EditCandidateModal";
+import { AILimitIncreaseModal } from "../features/admin/AILimitIncreaseModal";
 import { useAuth } from "../features/auth/useAuth";
 import { parseQuestionText } from "../features/behavioral-templates/behavioralTemplateHelper";
 import { agendaService } from "../services/agendaService";
 import { analysisService } from "../services/analysisService";
+import { aiLimitsService, type AILimitsUsage } from "../services/aiLimitsService";
+import { HttpError } from "../services/http";
 import { getBehavioralEvaluation } from "../services/behavioralAIEvaluationService";
 import { getCandidateBehavioralAssessment } from "../services/behavioralAssessmentService";
 import { formatContextError } from "../services/errorMessages";
@@ -116,6 +119,8 @@ export function CandidateProfilePage() {
   const [manualAnalysisRequesting, setManualAnalysisRequesting] = useState(false);
   const [manualAnalysisStatus, setManualAnalysisStatus] = useState<AnalysisStatus["status"] | null>(null);
   const manualAnalysisPollingRef = useRef<number | null>(null);
+  const [dailyLimitDialogOpen, setDailyLimitDialogOpen] = useState(false);
+  const [dailyLimitUsage, setDailyLimitUsage] = useState<AILimitsUsage | null>(null);
 
   const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId ?? null);
   const activeEntry = useMemo(() => getActivePipelineEntry(overview), [overview]);
@@ -232,7 +237,7 @@ export function CandidateProfilePage() {
           force: Boolean(options.force),
         });
         setManualAnalysisStatus(response.status);
-        toast.success(response.created ? "Análise solicitada." : "Análise já estava na fila.");
+        toast.info("Análise IA enviada para a fila.");
         await reloadWorkspace();
         if (
           response.status === "pending" ||
@@ -243,13 +248,27 @@ export function CandidateProfilePage() {
         }
       } catch (err: unknown) {
         setManualAnalysisStatus(null);
-        toast.error(
-          formatContextError(
-            err,
-            "Não foi possível solicitar a análise.",
-            "Tente novamente em alguns instantes.",
-          ),
-        );
+        // P0.2C: daily-limit-exceeded gets a distinct message; admins also see
+        // a "Aumentar limite" CTA (the modal lives in Admin > Health > IA/Tokens).
+        if (err instanceof HttpError && err.code === "ai_daily_limit_exceeded") {
+          if (user?.role === "admin") {
+            void aiLimitsService
+              .getUsage()
+              .then((usage) => setDailyLimitUsage(usage))
+              .catch(() => undefined);
+            setDailyLimitDialogOpen(true);
+          } else {
+            toast.error("Limite diário de análises atingido. Solicite liberação a um administrador.");
+          }
+        } else {
+          toast.error(
+            formatContextError(
+              err,
+              "Não foi possível solicitar a análise.",
+              "Tente novamente em alguns instantes.",
+            ),
+          );
+        }
       } finally {
         setManualAnalysisRequesting(false);
       }
@@ -262,6 +281,7 @@ export function CandidateProfilePage() {
       profileJobId,
       reloadWorkspace,
       startManualAnalysisPolling,
+      user?.role,
     ],
   );
 
@@ -502,6 +522,16 @@ export function CandidateProfilePage() {
         onClose={() => setLinkJobOpen(false)}
         onLinked={reloadWorkspace}
       />
+      {dailyLimitUsage ? (
+        <AILimitIncreaseModal
+          open={dailyLimitDialogOpen}
+          onClose={() => setDailyLimitDialogOpen(false)}
+          onCreated={() => {
+            toast.success("Limite aumentado. Você pode solicitar a análise novamente.");
+          }}
+          defaults={dailyLimitUsage.defaults}
+        />
+      ) : null}
     </PageShell>
   );
 }
@@ -1057,13 +1087,33 @@ function ProfileScoreTab({
   }
 
   if ((scoreNotReady || (!currentAnalysisId && !rankingEntry)) && !loading) {
+    // Pick the most informative subtitle based on the *real* in-flight state.
+    // isProcessing/failed are handled in earlier branches, so here we only
+    // disambiguate between resume extraction in progress vs. no analysis yet.
+    const latestExtractionStatus = (
+      overview.resumes.find((r) => r.current_version_id === currentAnalysisOverview?.resume_id)
+        ?.extraction_status ?? overview.resumes[0]?.extraction_status ?? null
+    )?.toLowerCase() ?? null;
+    const extractionInFlight =
+      latestExtractionStatus === "pending" || latestExtractionStatus === "processing";
+
+    let subtitle: string;
+    if (extractionInFlight) {
+      subtitle = "Extração do currículo em andamento.";
+    } else if (currentAnalysisId) {
+      // Analysis exists but no fresh score — matching still pending.
+      subtitle = "Análise IA em andamento.";
+    } else {
+      subtitle = "Análise ainda não disponível para esta vaga.";
+    }
+
     return (
       <EmptyBlock
-        title="Análise ainda não disponível para esta vaga."
-        description="Gere a análise manualmente para calcular o score deste candidato na vaga ativa."
+        title="Análise em processamento"
+        description={`O candidato já está vinculado à vaga. O ranking aparecerá assim que a extração, análise IA e matching forem concluídos. ${subtitle}`}
         actionLabel={analysisRequesting ? "Solicitando..." : "Gerar análise agora"}
         onAction={() => void onRequestAnalysis()}
-        actionDisabled={analysisRequesting}
+        actionDisabled={analysisRequesting || extractionInFlight || Boolean(currentAnalysisId)}
       />
     );
   }

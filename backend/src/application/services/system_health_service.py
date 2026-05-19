@@ -11,6 +11,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.ai_pricing import AI_MODEL_PRICING, estimate_ai_cost
 from src.core.app_metadata import APP_VERSION, PROCESS_STARTED_MONOTONIC
 from src.core.settings import settings
 from src.infrastructure.ai.gemini_adapter import get_gemini_key_health
@@ -407,6 +408,88 @@ class SystemHealthService:
             )
             or 0
         )
+
+    async def get_pricing_catalog(self) -> dict[str, Any]:
+        """List configured pricing entries plus any (provider, model) pairs
+        observed in `ai_usage_logs` that have no pricing yet ("Não configurado").
+
+        Read-only — does not modify any data.
+        """
+        configured: list[dict[str, Any]] = [
+            {
+                "provider": provider,
+                "model": model_id,
+                "input_per_1m_tokens": pricing.input_per_1m_tokens,
+                "output_per_1m_tokens": pricing.output_per_1m_tokens,
+                "currency": pricing.currency,
+                "source": pricing.source or None,
+                "last_reviewed_at": pricing.last_reviewed_at or None,
+                "status": "configured",
+            }
+            for (provider, model_id), pricing in sorted(AI_MODEL_PRICING.items())
+        ]
+
+        observed = await self._session.execute(
+            sa.select(AIUsageLogModel.provider, AIUsageLogModel.model).distinct()
+        )
+        configured_keys = {(entry["provider"], entry["model"]) for entry in configured}
+        missing: list[dict[str, Any]] = []
+        for provider, model_id in observed.all():
+            if (provider, model_id) in configured_keys:
+                continue
+            # Skip if the pricing module aliases this provider to a configured one
+            if estimate_ai_cost(provider, model_id, input_tokens=1, output_tokens=0) is not None:
+                continue
+            missing.append(
+                {
+                    "provider": provider,
+                    "model": model_id,
+                    "input_per_1m_tokens": None,
+                    "output_per_1m_tokens": None,
+                    "currency": "USD",
+                    "source": None,
+                    "last_reviewed_at": None,
+                    "status": "not_configured",
+                }
+            )
+
+        return {"items": configured + missing}
+
+    async def backfill_missing_costs(self) -> dict[str, Any]:
+        """Recompute ``estimated_cost_usd`` for rows where it is NULL but a price
+        is now configured for ``(provider, model)``.
+
+        Does NOT call the AI provider. Does NOT alter tokens, status, score,
+        ranking, pipeline, or the analysis flow. Pure read-from-pricing-table
+        write-to-column operation.
+
+        Returns counts (updated, skipped_unpriced, total_null).
+        """
+        stmt = sa.select(AIUsageLogModel).where(AIUsageLogModel.estimated_cost_usd.is_(None))
+        rows = (await self._session.execute(stmt)).scalars().all()
+
+        updated = 0
+        skipped_unpriced = 0
+        for row in rows:
+            cost = estimate_ai_cost(
+                row.provider,
+                row.model,
+                input_tokens=int(row.input_tokens or 0),
+                output_tokens=int(row.output_tokens or 0),
+            )
+            if cost is None:
+                skipped_unpriced += 1
+                continue
+            row.estimated_cost_usd = cost
+            updated += 1
+
+        if updated:
+            await self._session.commit()
+        return {
+            "total_null_rows": len(rows),
+            "updated": updated,
+            "skipped_unpriced": skipped_unpriced,
+        }
 
     async def _list_ai_usage_rows(self, query: AIUsageQuery) -> list[AIUsageLogModel]:
         stmt = sa.select(AIUsageLogModel).order_by(AIUsageLogModel.created_at.asc())

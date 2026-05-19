@@ -103,7 +103,7 @@ async def test_valid_jpeg_upload_passes(client: AsyncClient, db_session: AsyncSe
         client,
         db_session,
         filename="rg.jpeg",
-        content=b"\xff\xd8jpeg-data",
+        content=b"\xff\xd8\xff\xe0jpeg-data",
         mime_type="image/jpeg",
     )
 
