@@ -2,6 +2,12 @@
 
 Guia rápido para rodar a suíte de testes do backend de forma eficiente.
 
+## Setup
+
+Antes de rodar a suíte, crie o `.venv` conforme
+[`backend_setup.md`](./backend_setup.md). O ambiente local esperado é Python
+`>=3.12,<3.14` com o grupo dev instalado.
+
 ## Markers disponíveis
 
 Definidos em [`pyproject.toml`](../pyproject.toml) (`[tool.pytest.ini_options]`):
