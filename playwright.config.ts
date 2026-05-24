@@ -9,6 +9,7 @@ const API_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? `http://127.0.0.1:${BACKE
 const UNAUTHENTICATED_SPECS = [
   "**/pipeline-login.spec.ts",
   "**/alice-candidate-portal.spec.ts",
+  "**/login-editorial.spec.ts",
 ];
 
 export default defineConfig({

@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Instrument+Serif:ital,wght@0,400..900;1,400..900&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -2483,4 +2483,76 @@
     animation: none;
     opacity: 1;
   }
+}
+
+/* ==========================================================================
+   LoginPage Redesign Utilities (Brazilian Modernist / Editorial)
+   ========================================================================== */
+
+.font-serif-display {
+  font-family: "Instrument Serif", Georgia, "Times New Roman", serif;
+}
+
+.login-page-grid-lines {
+  background-image:
+    linear-gradient(to right, hsl(var(--border) / 0.18) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / 0.18) 1px, transparent 1px);
+  background-size: 3rem 3rem;
+}
+
+.login-page-glow {
+  background:
+    radial-gradient(circle at 15% 85%, hsl(var(--primary) / 0.06) 0%, transparent 60%),
+    radial-gradient(circle at 85% 15%, hsl(var(--primary) / 0.04) 0%, transparent 50%);
+}
+
+.login-input {
+  background-color: hsl(var(--surface)) !important;
+  color: hsl(var(--text)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.5rem !important;
+  transition: border-color 120ms ease, box-shadow 120ms ease !important;
+}
+
+.login-input:focus,
+.login-input:focus-within {
+  border-color: hsl(var(--primary)) !important;
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.08) !important;
+  outline: none !important;
+}
+
+/* Override WebKit default autofill color to match the theme background */
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover, 
+.login-input:-webkit-autofill:focus, 
+.login-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px hsl(var(--bg)) inset !important;
+  -webkit-text-fill-color: hsl(var(--text)) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.login-btn-primary {
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.95) 0%, hsl(var(--primary)) 100%) !important;
+  border: 1px solid hsl(var(--primary) / 0.8) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  box-shadow:
+    0 8px 24px -6px hsl(var(--primary) / 0.35),
+    inset 0 1px 1px hsl(0 0% 100% / 0.25),
+    inset 0 -1px 1px hsl(0 0% 0% / 0.1) !important;
+  transition: all 150ms ease !important;
+  font-weight: 700 !important;
+}
+
+.login-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.05) !important;
+  transform: translateY(-1px) !important;
+  box-shadow:
+    0 12px 28px -6px hsl(var(--primary) / 0.45),
+    inset 0 1px 1px hsl(0 0% 100% / 0.3) !important;
+}
+
+.login-btn-primary:active:not(:disabled) {
+  transform: translateY(0) !important;
+  filter: brightness(0.95) !important;
+  box-shadow: 0 4px 12px -6px hsl(var(--primary) / 0.2) !important;
 }

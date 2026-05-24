@@ -9,6 +9,7 @@ function installGoogleMock() {
   const renderButtonMock = vi.fn((element: HTMLElement) => {
     const button = document.createElement("button");
     button.type = "button";
+    button.textContent = "Continuar com Google";
     element.appendChild(button);
   });
 

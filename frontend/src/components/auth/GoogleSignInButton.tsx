@@ -100,7 +100,14 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
         }
         try {
           initializeGoogleIdentity(clientId);
-          renderGoogleButton(containerRef.current);
+          renderGoogleButton(containerRef.current, {
+            theme: "outline",
+            size: "large",
+            text: "continue_with",
+            shape: "pill",
+            logo_alignment: "left",
+            width: 280,
+          });
           if (import.meta.env.DEV) {
             // eslint-disable-next-line no-console
             console.debug("[google] button rendered");
