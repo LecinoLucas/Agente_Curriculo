@@ -34,7 +34,7 @@ import { getJob, getJobQuality, publishJob, type CreateJobRequestPayload, type U
 import { jobSkillsService } from "../services/jobSkillsService";
 import { skillEquivalencesService } from "../services/skillEquivalencesService";
 import { toast } from "../shared/utils/toast";
-import type { Job, BehavioralAssessmentTemplate } from "../types/domain";
+import type { Job, BehavioralAssessmentTemplate, JobQualityResult } from "../types/domain";
 import {
   formatJobStatus,
   formatSeniority,
@@ -88,12 +88,21 @@ export function JobFormPage() {
   const [selectedTemplateStatus, setSelectedTemplateStatus] =
     useState<BehavioralAssessmentTemplate["status"] | null>(null);
 
-  const refreshQuality = async (jobIdToRefresh: string) => {
+  // Retorna o quality já fresco além de atualizar o estado. O retorno é
+  // necessário porque `setJobQuality` agenda a atualização para a próxima
+  // renderização — se o caller (ex.: handlePublish) ler `jobQuality` do
+  // escopo logo após o `await`, recebe o valor capturado da render atual
+  // (stale) e pode bloquear publicação de uma vaga já válida.
+  const refreshQuality = async (
+    jobIdToRefresh: string,
+  ): Promise<JobQualityResult | null> => {
     try {
       const quality = await getJobQuality(jobIdToRefresh);
       setJobQuality(quality);
+      return quality;
     } catch {
       setJobQuality(null);
+      return null;
     }
   };
 
@@ -271,8 +280,9 @@ export function JobFormPage() {
         silent: true,
       });
 
-      await refreshQuality(saved.id);
-      const quality = jobQuality;
+      // Usa o retorno fresco — NÃO ler `jobQuality` do estado aqui, porque
+      // `setJobQuality` agendado pelo refreshQuality só vale na próxima render.
+      const quality = await refreshQuality(saved.id);
       if (!quality || !quality.can_publish) {
         setActiveStep("review");
         setBackendPublishErrors(

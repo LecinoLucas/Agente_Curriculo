@@ -51,6 +51,51 @@ async function gotoStep(page: Page, label: string) {
   await page.getByRole("button", { name: new RegExp(escaped) }).first().click();
 }
 
+// Clica "Salvar rascunho" e aguarda a resposta do backend, em vez de depender
+// do toast "Rascunho salvo com sucesso". O toast é UI transitória (auto-dismiss
+// em ~3–5s) e sob carga o polling do Playwright pode perder a janela —
+// causando flake sem que o salvamento tenha realmente falhado.
+//
+// O botão dispara POST /api/v1/jobs (1ª vez, vaga nova) ou PATCH /api/v1/jobs/{id}
+// (subsequentes). O regex casa as duas formas mas exclui sub-rotas como
+// /skills, /publish, /pause etc. (que têm um segmento extra após o ID).
+async function clickSaveDraftAndExpectOk(page: Page) {
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (res) => {
+        const url = new URL(res.url()).pathname;
+        const isJobRoute = /^\/api\/v1\/jobs(\/[^/]+)?$/.test(url);
+        const method = res.request().method();
+        return isJobRoute && (method === "POST" || method === "PATCH");
+      },
+      { timeout: 30_000 },
+    ),
+    page.getByRole("button", { name: "Salvar rascunho" }).click(),
+  ]);
+  expect(
+    response.ok(),
+    `Salvar rascunho ${response.request().method()} ${response.url()} -> HTTP ${response.status()}`,
+  ).toBeTruthy();
+  return response;
+}
+
+async function clickPublishAndExpectOk(page: Page) {
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (res) =>
+        /\/api\/v1\/jobs\/[^/]+\/publish(\?|$)/.test(res.url()) &&
+        res.request().method() === "PATCH",
+      { timeout: 30_000 },
+    ),
+    page.getByRole("button", { name: "Publicar" }).click(),
+  ]);
+  expect(
+    response.ok(),
+    `Publicar PATCH ${response.url()} -> HTTP ${response.status()}`,
+  ).toBeTruthy();
+  return response;
+}
+
 test("formulário multi-step de vaga cria, valida e publica uma vaga", async ({ page }) => {
   const jobTitle = `E2E Vaga Multi-step ${Date.now()}`;
 
@@ -67,10 +112,10 @@ test("formulário multi-step de vaga cria, valida e publica uma vaga", async ({ 
   });
 
   await test.step("salvar rascunho persiste a vaga e expõe status Rascunho", async () => {
-    await page.getByRole("button", { name: "Salvar rascunho" }).click();
-    await expect(
-      page.getByRole("alert").filter({ hasText: /Rascunho salvo com sucesso/i }).last(),
-    ).toBeVisible({ timeout: 20_000 });
+    // Prova persistente: HTTP 2xx do backend + navegação para /editar +
+    // badge "Rascunho" visível. Toast removido como assert (era a única
+    // fonte de flake: auto-dismiss antes do polling capturar).
+    await clickSaveDraftAndExpectOk(page);
     await expect(page).toHaveURL(/\/vagas\/[^/]+\/editar/);
     await expect(page.getByText("Rascunho", { exact: true }).first()).toBeVisible();
   });
@@ -96,20 +141,12 @@ test("formulário multi-step de vaga cria, valida e publica uma vaga", async ({ 
       const checkbox = page.getByLabel(gate);
       await expect(checkbox).not.toBeChecked();
     }
-
-    // Persiste antes de publicar para que o cache de qualidade no front
-    // reflita os gates zerados (evita stale `jobQuality` no handlePublish).
-    await page.getByRole("button", { name: "Salvar rascunho" }).click();
-    await expect(
-      page.getByRole("alert").filter({ hasText: /Rascunho salvo com sucesso/i }).last(),
-    ).toBeVisible({ timeout: 20_000 });
   });
 
   await test.step("publica a vaga e valida o status Publicada", async () => {
-    await page.getByRole("button", { name: "Publicar" }).click();
-    await expect(
-      page.getByRole("alert").filter({ hasText: /Vaga publicada com sucesso/i }).last(),
-    ).toBeVisible({ timeout: 30_000 });
+    // Mesma estratégia: aguardar a resposta do PATCH /publish e checar o
+    // badge "Publicada" — efeito persistente, não o toast transitório.
+    await clickPublishAndExpectOk(page);
     await expect(page.getByText("Publicada", { exact: true }).first()).toBeVisible();
   });
 
