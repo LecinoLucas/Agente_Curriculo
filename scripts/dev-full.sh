@@ -160,9 +160,7 @@ extract_port() {
 kill_port() {
   port=$1
 
-  if command -v fuser >/dev/null 2>&1; then
-    fuser -k "$port/tcp" 2>/dev/null || true
-  elif command -v lsof >/dev/null 2>&1; then
+  if command -v lsof >/dev/null 2>&1; then
     pids=$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)
     if [ -n "$pids" ]; then
       kill $pids 2>/dev/null || true
@@ -173,6 +171,8 @@ kill_port() {
         kill -9 $remaining 2>/dev/null || true
       fi
     fi
+  elif [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
+    fuser -k "$port/tcp" 2>/dev/null || true
   fi
 }
 
@@ -185,12 +185,31 @@ kill_matching_processes() {
 
   pids=$(pgrep -f "$pattern" 2>/dev/null || true)
   if [ -n "$pids" ]; then
-    kill $pids 2>/dev/null || true
-    sleep 1
+    target_pids=""
+    for pid in $pids; do
+      if command -v lsof >/dev/null 2>&1; then
+        if lsof -a -d cwd -p "$pid" 2>/dev/null | grep -q "$ROOT_DIR"; then
+          target_pids="$target_pids $pid"
+        fi
+      else
+        target_pids="$target_pids $pid"
+      fi
+    done
 
-    remaining=$(pgrep -f "$pattern" 2>/dev/null || true)
-    if [ -n "$remaining" ]; then
-      kill -9 $remaining 2>/dev/null || true
+    if [ -n "$target_pids" ]; then
+      kill $target_pids 2>/dev/null || true
+      sleep 1
+
+      remaining=""
+      for pid in $target_pids; do
+        if kill -0 "$pid" 2>/dev/null; then
+          remaining="$remaining $pid"
+        fi
+      done
+
+      if [ -n "$remaining" ]; then
+        kill -9 $remaining 2>/dev/null || true
+      fi
     fi
   fi
 }
@@ -201,12 +220,12 @@ wait_for_port_free() {
   elapsed=0
 
   while [ "$elapsed" -lt "$timeout" ]; do
-    if command -v fuser >/dev/null 2>&1; then
-      if ! fuser "$port/tcp" >/dev/null 2>&1; then
+    if command -v lsof >/dev/null 2>&1; then
+      if [ -z "$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)" ]; then
         return 0
       fi
-    elif command -v lsof >/dev/null 2>&1; then
-      if [ -z "$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)" ]; then
+    elif [ "$(uname)" != "Darwin" ] && command -v fuser >/dev/null 2>&1; then
+      if ! fuser "$port/tcp" >/dev/null 2>&1; then
         return 0
       fi
     else
@@ -309,13 +328,11 @@ cleanup() {
     fi
   done
 
-  # 4) Rede de segurança por padrão: pega quem desanexou da árvore
-  #    (ex.: Celery worker que mudou de session ou ficou em zumbi).
-  kill_matching_processes "celery -A src.infrastructure.queue.celery_app"
-  kill_matching_processes "src.interface.api.main:app"
-  kill_matching_processes "vite --host 0.0.0.0"
-
-  # 5) Garantir portas do projeto livres (não toca em portas fora do range).
+  # 4) Garantir portas do projeto livres como rede de segurança restrita.
+  #    Só age sobre BACKEND_PORT/FRONTEND_PORT — nunca toca em processos
+  #    do dev "normal" do usuário em 8000/5173. Pattern matching amplo
+  #    (pkill -f celery/uvicorn) ficaria perigoso porque casaria com
+  #    instâncias do projeto rodando em outras portas.
   if [ -n "${BACKEND_PORT:-}" ]; then
     kill_port "$BACKEND_PORT"
   fi
@@ -381,6 +398,8 @@ export FRONTEND_PORT
 export BACKEND_PORT
 export HOST="0.0.0.0"
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-$EXPECTED_API_URL}"
+DEV_FULL_FAIL_ON_WORKER_EXIT="${DEV_FULL_FAIL_ON_WORKER_EXIT:-false}"
+export DEV_FULL_FAIL_ON_WORKER_EXIT
 
 # EXIT garante limpeza em qualquer saída (inclusive set -e ou wait
 # retornando porque algum filho morreu). HUP cobre o caso do terminal
@@ -389,6 +408,11 @@ trap cleanup EXIT INT TERM HUP
 
 print_section "Servicos"
 print_info "Subindo frontend, backend e worker Celery"
+if [ "$DEV_FULL_FAIL_ON_WORKER_EXIT" = "true" ]; then
+  print_info "Worker Celery esta configurado como CRITICO (falha no worker derruba o ambiente)."
+else
+  print_info "Worker Celery esta configurado como AUXILIAR (falha no worker NAO derruba o ambiente)."
+fi
 
 cd "$BACKEND_DIR"
 .venv/bin/celery -A src.infrastructure.queue.celery_app worker \
@@ -405,13 +429,22 @@ NPM_PID=$!
 CHILD_PIDS="$CHILD_PIDS $NPM_PID"
 print_ok "Frontend e backend iniciados (PID $NPM_PID)"
 
-# Loop de monitoramento: dispara cleanup assim que QUALQUER filho rastreado
-# morrer, em vez de `wait` em ambos (que só retorna quando todos saem).
-# Sem isso, se Celery cai mas npm continua vivo, o script fica parado e
-# webServer do Playwright timeouta sem limpeza — fonte clássica de órfãos.
+# Loop de monitoramento: frontend/backend são críticos; Celery é auxiliar por
+# padrão para que falhas operacionais da fila de IA não derrubem o dev-full.
 while true; do
   for pid in $CHILD_PIDS; do
     if ! kill -0 "$pid" 2>/dev/null; then
+      if [ "$pid" = "$CELERY_PID" ] && [ "$DEV_FULL_FAIL_ON_WORKER_EXIT" != "true" ]; then
+        print_error "Worker Celery PID $pid encerrou; frontend/backend continuam ativos."
+        new_child_pids=""
+        for other_pid in $CHILD_PIDS; do
+          if [ "$other_pid" != "$pid" ]; then
+            new_child_pids="$new_child_pids $other_pid"
+          fi
+        done
+        CHILD_PIDS="$new_child_pids"
+        continue
+      fi
       print_error "Filho PID $pid encerrou prematuramente; iniciando shutdown."
       exit 1
     fi
