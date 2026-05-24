@@ -27,17 +27,13 @@ app/
 *.swp
 
 # Alembic
-alembic/versions/*.py
-!alembic/versions/.gitkeep
-!alembic/versions/2d0c3f6a1b10_create_candidate_job_pipeline_canonical.py
-!alembic/versions/7e0b4c9d2f21_drop_candidate_job_legacy_tables.py
-!alembic/versions/6f8d9c1b2a34_add_ranking_freshness_to_candidate_job_scores.py
-!alembic/versions/4b6f1d2a9c03_drop_skill_alias_and_equivalence_tables.py
-!alembic/versions/5c7e2a1b9d04_drop_legacy_skill_columns.py
-!alembic/versions/h0d1e2f3a4b5_drop_legacy_assessment_tables.py
-!alembic/versions/i1e2f3a4b5c6_add_behavioral_assessment_assignments.py
-!alembic/versions/s7t8u9v0w1x2_add_user_preferred_theme.py
-!alembic/versions/u8v9w0x1y2z3_ensure_behavioral_assignment_unique_key.py
+# Todas as migrations sob alembic/versions/ devem ser versionadas.
+# (As migrations antigas/redundantes vivem em alembic/archived_versions/.)
+
+# Database backups / dumps locais
+*.dump
+*.sql.gz
+*.pgsql
 
 # Logs
 *.log
