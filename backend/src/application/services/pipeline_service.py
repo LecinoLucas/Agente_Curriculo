@@ -1075,7 +1075,7 @@ class PipelineService:
         top_skills = [str(skill) for skill in parsed_skills if str(skill).strip()][:5]
         stage = str(require_key(row, "stage"))
 
-        # ai_status comes from the latest analysis for this candidate (any status).
+        # ai_status comes from the analysis linked by the active pipeline row.
         # It is read-only here — stage moves never touch it.
         raw_ai_status = row.get("ai_status")
         ai_status = str(raw_ai_status) if raw_ai_status is not None else None

@@ -68,16 +68,22 @@ async def _make_pipeline(
     stage: str = "entry",
     relationship_status: str = "active",
     is_terminal: bool = False,
+    pipeline_status: str | None = None,
+    link_status: str | None = None,
     current_analysis_id=None,
 ) -> CandidateJobPipelineModel:
     terminated_at = _now() if is_terminal else None
-    link_status = relationship_status if is_terminal else "active"
+    resolved_link_status = link_status or (
+        relationship_status
+        if is_terminal and relationship_status in {"hired", "rejected"}
+        else "active"
+    )
     p = CandidateJobPipelineModel(
         candidate_id=candidate_id,
         job_id=job_id,
         pipeline_stage=stage,
-        link_status=link_status,
-        pipeline_status="terminal" if is_terminal else "active",
+        link_status=resolved_link_status,
+        pipeline_status=pipeline_status or ("terminal" if is_terminal else "active"),
         relationship_status=relationship_status,
         is_terminal=is_terminal,
         terminated_at=terminated_at,
@@ -239,6 +245,82 @@ async def test_excludes_terminal_pipeline_entries(db_session: AsyncSession) -> N
 
 
 @pytest.mark.asyncio
+async def test_excludes_pipeline_entries_with_terminated_at(db_session: AsyncSession) -> None:
+    """Terminated pipeline rows are not shown on the board."""
+    repo = SQLAlchemyPipelineRepository(db_session)
+    job = await _make_job(db_session)
+    active = await _make_candidate(db_session, "termactive")
+    withdrawn = await _make_candidate(db_session, "termdate")
+
+    await _make_pipeline(db_session, active.id, job.id)
+    await _make_pipeline(
+        db_session,
+        withdrawn.id,
+        job.id,
+        relationship_status="withdrawn",
+        is_terminal=True,
+        link_status="removed",
+    )
+    await db_session.commit()
+
+    rows = await repo.list_job_matches(job.id)
+    ids = {r["candidate_id"] for r in rows}
+
+    assert active.id in ids
+    assert withdrawn.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_excludes_non_active_relationship_status(db_session: AsyncSession) -> None:
+    """Only relationship_status='active' pipeline rows are shown on the board."""
+    repo = SQLAlchemyPipelineRepository(db_session)
+    job = await _make_job(db_session)
+    active = await _make_candidate(db_session, "relactive")
+    archived = await _make_candidate(db_session, "relarchived")
+
+    await _make_pipeline(db_session, active.id, job.id)
+    await _make_pipeline(
+        db_session,
+        archived.id,
+        job.id,
+        relationship_status="archived",
+        is_terminal=True,
+        link_status="removed",
+    )
+    await db_session.commit()
+
+    rows = await repo.list_job_matches(job.id)
+    ids = {r["candidate_id"] for r in rows}
+
+    assert active.id in ids
+    assert archived.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_excludes_non_active_pipeline_status(db_session: AsyncSession) -> None:
+    """Only pipeline_status='active' pipeline rows are shown on the board."""
+    repo = SQLAlchemyPipelineRepository(db_session)
+    job = await _make_job(db_session)
+    active = await _make_candidate(db_session, "pipeactive")
+    terminal_status = await _make_candidate(db_session, "pipeterminal")
+
+    await _make_pipeline(db_session, active.id, job.id)
+    await _make_pipeline(
+        db_session,
+        terminal_status.id,
+        job.id,
+        pipeline_status="terminal",
+    )
+    await db_session.commit()
+
+    rows = await repo.list_job_matches(job.id)
+    ids = {r["candidate_id"] for r in rows}
+
+    assert active.id in ids
+    assert terminal_status.id not in ids
+
+
+@pytest.mark.asyncio
 async def test_stage_field_preserved(db_session: AsyncSession) -> None:
     """pipeline_stage is returned as the 'stage' key in the result dict."""
     repo = SQLAlchemyPipelineRepository(db_session)
@@ -261,7 +343,12 @@ async def test_ai_status_from_current_analysis(db_session: AsyncSession) -> None
     job = await _make_job(db_session)
     c = await _make_candidate(db_session, "ai")
 
-    _, _, analysis = await _make_resume_with_analysis(db_session, c.id, status="completed")
+    _, _, analysis = await _make_resume_with_analysis(
+        db_session,
+        c.id,
+        job_id=job.id,
+        status="completed",
+    )
     await _make_pipeline(db_session, c.id, job.id, current_analysis_id=analysis.id)
     await db_session.commit()
 

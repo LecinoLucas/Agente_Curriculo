@@ -237,53 +237,6 @@ class SQLAlchemyPipelineRepository:
         return entry
 
     async def list_job_matches(self, job_id: UUID) -> list[dict]:
-        # Scope the analysis scan to only the candidates active in this job.
-        # Avoids a full scan of all completed analyses (can be very large)
-        # when the job has few active candidates.
-        _active_candidates_for_job = (
-            sa.select(CandidateJobPipelineModel.candidate_id)
-            .where(
-                CandidateJobPipelineModel.job_id == job_id,
-                CandidateJobPipelineModel.relationship_status == "active",
-                CandidateJobPipelineModel.is_terminal.is_(False),
-            )
-        )
-
-        latest_completed = (
-            sa.select(
-                ResumeModel.candidate_id.label("candidate_id"),
-                AnalysisModel.id.label("analysis_id"),
-                sa.func.row_number()
-                .over(
-                    partition_by=ResumeModel.candidate_id,
-                    order_by=AnalysisModel.updated_at.desc(),
-                )
-                .label("rn"),
-            )
-            .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
-            .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
-            .where(
-                AnalysisModel.status == "completed",
-                ResumeModel.deleted_at.is_(None),
-                ResumeModel.candidate_id.in_(_active_candidates_for_job),
-            )
-            .subquery()
-        )
-
-        latest_keywords = (
-            sa.select(
-                latest_completed.c.candidate_id,
-                AnalysisResultModel.keywords.label("top_skills"),
-            )
-            .join(
-                AnalysisResultModel,
-                AnalysisResultModel.analysis_id == latest_completed.c.analysis_id,
-                isouter=True,
-            )
-            .where(latest_completed.c.rn == 1)
-            .subquery()
-        )
-
         active_score_version = (
             sa.select(ScoreModelVersionModel.id)
             .where(ScoreModelVersionModel.is_active.is_(True))
@@ -390,7 +343,7 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.link_status.label("status"),
                 CandidateJobPipelineModel.entered_at,
                 CandidateJobPipelineModel.updated_at,
-                latest_keywords.c.top_skills,
+                AnalysisResultModel.keywords.label("top_skills"),
                 AnalysisModel.status.label("ai_status"),
                 CandidateJobScoreModel.final_score.label("job_fit_score"),
                 JobModel.requires_behavioral_assessment,
@@ -406,14 +359,16 @@ class SQLAlchemyPipelineRepository:
             )
             .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
-            .join(
-                latest_keywords,
-                latest_keywords.c.candidate_id == CandidateJobPipelineModel.candidate_id,
-                isouter=True,
-            )
             .outerjoin(
                 AnalysisModel,
-                AnalysisModel.id == CandidateJobPipelineModel.current_analysis_id,
+                sa.and_(
+                    AnalysisModel.id == CandidateJobPipelineModel.current_analysis_id,
+                    AnalysisModel.job_id == CandidateJobPipelineModel.job_id,
+                ),
+            )
+            .outerjoin(
+                AnalysisResultModel,
+                AnalysisResultModel.analysis_id == AnalysisModel.id,
             )
             .outerjoin(
                 CandidateJobScoreModel,
@@ -421,6 +376,8 @@ class SQLAlchemyPipelineRepository:
                     CandidateJobScoreModel.candidate_id == CandidateJobPipelineModel.candidate_id,
                     CandidateJobScoreModel.job_id == CandidateJobPipelineModel.job_id,
                     CandidateJobScoreModel.version_id == active_score_version,
+                    CandidateJobScoreModel.source_analysis_id
+                    == CandidateJobPipelineModel.current_analysis_id,
                     CandidateJobScoreModel.freshness_status == "fresh",
                 ),
             )
@@ -428,6 +385,7 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
                 CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.pipeline_status == "active",
                 CandidateJobPipelineModel.is_terminal.is_(False),
                 CandidateJobPipelineModel.terminated_at.is_(None),
             )

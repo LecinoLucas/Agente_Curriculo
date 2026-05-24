@@ -703,7 +703,7 @@ export function PipelinePage() {
             type="button"
             onClick={handleOpenSourceCandidates}
             disabled={!canUse}
-            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
+            className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
               canUse
                 ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))] text-white shadow-sm hover:opacity-90 dark:border-[hsl(var(--primary))]/30"
                 : "cursor-not-allowed border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] dark:border-slate-800 dark:bg-slate-900"
@@ -716,7 +716,7 @@ export function PipelinePage() {
             <button
               type="button"
               onClick={() => setShowRanking((current) => !current)}
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
+              className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
                 showRanking
                   ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
                   : "border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800"
@@ -732,7 +732,7 @@ export function PipelinePage() {
 
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
             <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
               Total de Candidatos
@@ -833,23 +833,23 @@ export function PipelinePage() {
  
                 {/* Filters and Refresh State */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                  <div className="flex items-center gap-1 rounded-xl border border-[hsl(var(--border))]/55 bg-[hsl(var(--surface-muted))] p-1 dark:border-slate-800 dark:bg-slate-950">
+                  <div className="flex w-full sm:w-auto items-center gap-1 rounded-xl border border-[hsl(var(--border))]/55 bg-[hsl(var(--surface-muted))] p-1 dark:border-slate-800 dark:bg-slate-950">
                     <button
                       onClick={() => setSortOrder("score_desc")}
-                      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
+                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
                     >
                       Top Match IA
                     </button>
                     <button
                       onClick={() => setSortOrder("name_az")}
-                      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "name_az" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
+                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "name_az" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
                     >
                       Ordem A-Z
                     </button>
                   </div>
 
                   {activeJobId && (
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                    <div className="flex w-full sm:w-auto flex-wrap items-center justify-between sm:justify-start gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
                       <span className={`h-2 w-2 rounded-full ${autoRefreshActive ? "bg-cyan-500" : "bg-slate-300 dark:bg-slate-700"}`} />
                       <span>Atualizado às <strong className="font-mono font-semibold">{lastUpdated}</strong></span>
                       <span>· Auto em <strong className="font-mono text-[hsl(var(--primary))]">{autoRefreshActive ? `${secondsLeft}s` : "Pausada"}</strong></span>
