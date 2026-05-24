@@ -51,8 +51,9 @@ class SQLAlchemyInterviewScheduleRepository:
         if job_id:
             filters.append(InterviewScheduleModel.job_id == job_id)
 
-        if interviewer:
-            normalized = f"%{interviewer.strip().lower()}%"
+        normalized_interviewer = interviewer.strip().lower() if interviewer is not None else ""
+        if normalized_interviewer:
+            normalized = f"%{normalized_interviewer}%"
             filters.append(
                 sa.or_(
                     sa.func.lower(sa.func.coalesce(InterviewScheduleModel.interviewer_name, "")).like(normalized),
@@ -60,8 +61,9 @@ class SQLAlchemyInterviewScheduleRepository:
                 )
             )
 
-        if search:
-            normalized = f"%{search.strip().lower()}%"
+        normalized_search = search.strip().lower() if search is not None else ""
+        if normalized_search:
+            normalized = f"%{normalized_search}%"
             filters.append(
                 sa.or_(
                     sa.func.lower(CandidateModel.full_name).like(normalized),
@@ -283,32 +285,26 @@ class SQLAlchemyInterviewScheduleRepository:
 
         kpi_result = (await self._session.execute(kpi_stmt)).mappings().one()
 
-        # Count unique interviewers: email first, fallback to name
+        normalized_interviewer_email = sa.func.nullif(
+            sa.func.lower(sa.func.trim(sa.func.coalesce(InterviewScheduleModel.interviewer_email, ""))),
+            "",
+        )
+        normalized_interviewer_name = sa.func.nullif(
+            sa.func.lower(sa.func.trim(sa.func.coalesce(InterviewScheduleModel.interviewer_name, ""))),
+            "",
+        )
+        interviewer_identity = sa.func.coalesce(normalized_interviewer_email, normalized_interviewer_name)
+
+        # Count unique interviewers using normalized email first, then normalized name.
         unique_interviewers_stmt = (
-            sa.select(
-                sa.func.count(sa.func.distinct(InterviewScheduleModel.interviewer_email)).label("email_count"),
-                sa.func.count(
-                    sa.distinct(
-                        sa.case(
-                            (InterviewScheduleModel.interviewer_email.is_(None), InterviewScheduleModel.interviewer_name),
-                        )
-                    )
-                ).label("name_count"),
-            )
+            sa.select(sa.func.count(sa.distinct(interviewer_identity)).label("unique_count"))
             .select_from(self._build_base_from())
             .where(*filters)
-            .where(
-                sa.or_(
-                    InterviewScheduleModel.interviewer_email.isnot(None),
-                    InterviewScheduleModel.interviewer_name.isnot(None),
-                )
-            )
+            .where(interviewer_identity.isnot(None))
         )
 
         unique_result = (await self._session.execute(unique_interviewers_stmt)).mappings().one()
-
-        # Calculate unique interviewers: distinct emails + names that don't have emails
-        unique_interviewers = self._to_int(unique_result["email_count"]) + self._to_int(unique_result["name_count"])
+        unique_interviewers = self._to_int(unique_result["unique_count"])
 
         return {
             "total_scheduled": self._to_int(kpi_result["total_scheduled"]),

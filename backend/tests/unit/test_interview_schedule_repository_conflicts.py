@@ -467,7 +467,7 @@ class TestInterviewScheduleRepositoryConflicts:
             assert items[0]["candidate_name"] == candidate_name
             assert items[0]["job_title"] == job_title
 
-    def test_whitespace_only_search_generates_match_all_like_current_behavior(self):
+    def test_whitespace_only_search_is_ignored(self):
         repo = SQLAlchemyInterviewScheduleRepository(None)
         filters = repo._build_filters(search="   ")
         stmt = (
@@ -482,10 +482,10 @@ class TestInterviewScheduleRepositoryConflicts:
             )
         )
 
-        assert "lower(candidates.full_name) LIKE '%%%%'" in compiled
-        assert "lower(coalesce(jobs.title, '')) LIKE '%%%%'" in compiled
+        assert filters == []
+        assert "LIKE" not in compiled
 
-    def test_whitespace_only_interviewer_generates_match_all_like_current_behavior(self):
+    def test_whitespace_only_interviewer_is_ignored(self):
         repo = SQLAlchemyInterviewScheduleRepository(None)
         filters = repo._build_filters(interviewer="   ")
         stmt = (
@@ -500,11 +500,72 @@ class TestInterviewScheduleRepositoryConflicts:
             )
         )
 
-        assert "lower(coalesce(interview_schedules.interviewer_name, '')) LIKE '%%%%'" in compiled
-        assert "lower(coalesce(interview_schedules.interviewer_email, '')) LIKE '%%%%'" in compiled
+        assert filters == []
+        assert "LIKE" not in compiled
 
     @pytest.mark.asyncio
-    async def test_unique_interviewers_count_is_not_normalized_for_name_variants_current_behavior(self, test_db):
+    async def test_search_trims_real_term_before_matching(self, test_db):
+        async with test_db() as session:
+            candidate, job = await seed_candidate_and_job(session, "Alice Trimmed")
+            other_candidate, other_job = await seed_candidate_and_job(session, "Other Candidate")
+            start = datetime.now(timezone.utc) + timedelta(days=1)
+            session.add_all(
+                [
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start,
+                        end=start + timedelta(hours=1),
+                    ),
+                    build_schedule(
+                        candidate_id=other_candidate.id,
+                        job_id=other_job.id,
+                        start=start + timedelta(hours=2),
+                        end=start + timedelta(hours=3),
+                    ),
+                ]
+            )
+            await session.flush()
+
+            repo = SQLAlchemyInterviewScheduleRepository(session)
+            items, total = await repo.list_schedules(page=1, page_size=20, search=" Alice ")
+
+            assert total == 1
+            assert items[0]["candidate_name"] == "Alice Trimmed"
+
+    @pytest.mark.asyncio
+    async def test_interviewer_trims_real_term_before_matching(self, test_db):
+        async with test_db() as session:
+            candidate, job = await seed_candidate_and_job(session, "Candidate A")
+            start = datetime.now(timezone.utc) + timedelta(days=1)
+            session.add_all(
+                [
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start,
+                        end=start + timedelta(hours=1),
+                        interviewer_name="Maria Silva",
+                    ),
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start + timedelta(hours=2),
+                        end=start + timedelta(hours=3),
+                        interviewer_name="Joao Santos",
+                    ),
+                ]
+            )
+            await session.flush()
+
+            repo = SQLAlchemyInterviewScheduleRepository(session)
+            items, total = await repo.list_schedules(page=1, page_size=20, interviewer=" Maria ")
+
+            assert total == 1
+            assert items[0]["interviewer_name"] == "Maria Silva"
+
+    @pytest.mark.asyncio
+    async def test_unique_interviewers_count_normalizes_name_variants_without_email(self, test_db):
         async with test_db() as session:
             candidate, job = await seed_candidate_and_job(session, "Same Interviewer")
             start = datetime.now(timezone.utc) + timedelta(days=1)
@@ -538,10 +599,10 @@ class TestInterviewScheduleRepositoryConflicts:
             repo = SQLAlchemyInterviewScheduleRepository(session)
             kpis = await repo.get_kpis()
 
-            assert kpis["unique_interviewers_count"] == 3
+            assert kpis["unique_interviewers_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_unique_interviewers_count_is_not_normalized_for_email_variants_current_behavior(self, test_db):
+    async def test_unique_interviewers_count_normalizes_email_variants(self, test_db):
         async with test_db() as session:
             candidate, job = await seed_candidate_and_job(session, "Same Interviewer")
             start = datetime.now(timezone.utc) + timedelta(days=1)
@@ -578,4 +639,84 @@ class TestInterviewScheduleRepositoryConflicts:
             repo = SQLAlchemyInterviewScheduleRepository(session)
             kpis = await repo.get_kpis()
 
-            assert kpis["unique_interviewers_count"] == 2
+            assert kpis["unique_interviewers_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_unique_interviewers_count_ignores_blank_interviewer_values(self, test_db):
+        async with test_db() as session:
+            candidate, job = await seed_candidate_and_job(session, "Blank Interviewer")
+            start = datetime.now(timezone.utc) + timedelta(days=1)
+            session.add_all(
+                [
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start,
+                        end=start + timedelta(hours=1),
+                        interviewer_name="Ana Lima",
+                    ),
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start + timedelta(hours=2),
+                        end=start + timedelta(hours=3),
+                    ),
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start + timedelta(hours=4),
+                        end=start + timedelta(hours=5),
+                        interviewer_name="   ",
+                    ),
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start + timedelta(hours=6),
+                        end=start + timedelta(hours=7),
+                        interviewer_email="   ",
+                    ),
+                ]
+            )
+            await session.flush()
+
+            repo = SQLAlchemyInterviewScheduleRepository(session)
+            kpis = await repo.get_kpis()
+
+            assert kpis["total_scheduled"] == 4
+            assert kpis["unique_interviewers_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_unique_interviewers_count_respects_kpi_filters(self, test_db):
+        async with test_db() as session:
+            candidate, job = await seed_candidate_and_job(session, "Filtered Interviewer")
+            start = datetime.now(timezone.utc) + timedelta(days=1)
+            session.add_all(
+                [
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start,
+                        end=start + timedelta(hours=1),
+                        interviewer_email="maria@example.com",
+                        status="scheduled",
+                    ),
+                    build_schedule(
+                        candidate_id=candidate.id,
+                        job_id=job.id,
+                        start=start + timedelta(hours=2),
+                        end=start + timedelta(hours=3),
+                        interviewer_email="joao@example.com",
+                        status="completed",
+                    ),
+                ]
+            )
+            await session.flush()
+
+            repo = SQLAlchemyInterviewScheduleRepository(session)
+            all_kpis = await repo.get_kpis()
+            scheduled_kpis = await repo.get_kpis(status="scheduled")
+
+            assert all_kpis["total_scheduled"] == 2
+            assert all_kpis["unique_interviewers_count"] == 2
+            assert scheduled_kpis["total_scheduled"] == 1
+            assert scheduled_kpis["unique_interviewers_count"] == 1
