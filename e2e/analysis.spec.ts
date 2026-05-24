@@ -139,14 +139,21 @@ async function uploadResume(page: Page, candidateId: string, candidateName: stri
   ).toBeVisible({ timeout: 20_000 });
 }
 
+// Extração do currículo é assíncrona (Celery worker). Sob carga em paralelo,
+// 45s não basta: o worker fica contendido. Elevamos para 120s, mantemos
+// fail-fast em status=failed para não esticar testes que realmente quebraram.
+const RESUME_EXTRACTION_TIMEOUT_MS = 120_000;
+const RESUME_EXTRACTION_POLL_INTERVAL_MS = 1500;
+
 async function waitForExtractedResumeVersion(
   request: APIRequestContext,
   token: string,
   candidateId: string,
 ): Promise<string> {
   const auth = { Authorization: `Bearer ${token}` };
-  const deadline = Date.now() + 45_000;
+  const deadline = Date.now() + RESUME_EXTRACTION_TIMEOUT_MS;
   let lastStatus = "(none)";
+  let lastLoggedStatus: string | null = null;
   while (Date.now() < deadline) {
     const res = await request.get(`${API_BASE_URL}/api/v1/candidates/${candidateId}/overview`, {
       headers: auth,
@@ -165,10 +172,16 @@ async function waitForExtractedResumeVersion(
     if (status === "failed") {
       throw new Error(`extração do currículo falhou (extraction_status=${status})`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Log discreto a cada transição de status (sem PII) para diagnóstico.
+    if (status !== lastLoggedStatus) {
+      // eslint-disable-next-line no-console
+      console.log(`[analysis.spec] extraction_status=${lastStatus || "?"}`);
+      lastLoggedStatus = status;
+    }
+    await new Promise((resolve) => setTimeout(resolve, RESUME_EXTRACTION_POLL_INTERVAL_MS));
   }
   throw new Error(
-    `timeout esperando extraction_status=completed do currículo (último=${lastStatus})`,
+    `timeout esperando extraction_status=completed (último=${lastStatus}, budget=${RESUME_EXTRACTION_TIMEOUT_MS}ms)`,
   );
 }
 

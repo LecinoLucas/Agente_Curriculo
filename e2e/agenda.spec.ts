@@ -77,6 +77,30 @@ async function fetchCandidateInterviews(page: Page, candidateId: string) {
   );
 }
 
+// Filtra a Agenda em modo "Todos" e busca pelo nome único do candidato.
+// Só o filtro "Todos" lista todas as entrevistas encontradas
+// independente do dia selecionado na strip semanal (ver AgendaPage:
+// `todayIvs = filterPeriod === 'all' ? interviews : byDay(selected)`).
+// Para "today"/"week"/"month" o teste precisaria clicar no dia exato da
+// entrevista, mas a strip mostra apenas a semana de `selected`, o que
+// quebra quando a entrevista cai no início da próxima semana (ex.: teste
+// roda no domingo e agenda para amanhã/segunda).
+// "Todos" envia date_from=1970..date_to=2100; após o fix de cartesian
+// product em /agenda/interviews (joins explícitos em count/KPIs), esse
+// range continua performático mesmo com volume acumulado de E2E.
+async function waitForAgendaRow(page: Page, candidateName: string) {
+  // O select de período é o único que contém a opção "today" — locator
+  // semântico para evitar `.first()` por ordem de DOM.
+  const periodSelect = page.locator("select").filter({
+    has: page.locator('option[value="today"]'),
+  });
+  await periodSelect.selectOption("all");
+  await page.getByPlaceholder("Buscar candidato, vaga, avaliador...").fill(candidateName);
+  await expect(page.getByText(candidateName, { exact: true }).first()).toBeVisible({
+    timeout: 45_000,
+  });
+}
+
 async function openActionMenuForCandidate(page: Page, candidateName: string) {
   const row = page.locator('[data-testid="agenda-interview-row"]').filter({ hasText: candidateName }).first();
   await expect(row).toBeVisible();
@@ -139,10 +163,7 @@ test("E2E: Agenda de entrevistas cobre criar, conflitar, remarcar e cancelar", a
   await page.getByRole("button", { name: "Criar" }).click();
 
   await expect(page.getByRole("dialog", { name: "Nova entrevista" })).toHaveCount(0);
-  await page.locator('select').first().selectOption('all');
-  await page.getByPlaceholder("Buscar candidato, vaga, avaliador...").fill(primaryCandidateName);
-  await page.waitForTimeout(500);
-  await expect(page.getByText(primaryCandidateName, { exact: true }).first()).toBeVisible();
+  await waitForAgendaRow(page, primaryCandidateName);
   await expect(page.getByText("Agendada").first()).toBeVisible();
 
   await page.getByRole("button", { name: "+ Novo agendamento" }).click();
@@ -232,10 +253,7 @@ test("E2E: Agenda - conflito 409 ao remarcar para horário ocupado mantém modal
   await page.getByRole("button", { name: "Criar" }).click();
 
   await expect(page.getByRole("dialog", { name: "Nova entrevista" })).toHaveCount(0);
-  await page.locator('select').first().selectOption('all');
-  await page.getByPlaceholder("Buscar candidato, vaga, avaliador...").fill(candidateName);
-  await page.waitForTimeout(500);
-  await expect(page.getByText(candidateName, { exact: true }).first()).toBeVisible();
+  await waitForAgendaRow(page, candidateName);
 
   // Create second interview at 14:00-15:00 today (no conflict)
   await page.getByRole("button", { name: "+ Novo agendamento" }).click();
@@ -335,10 +353,7 @@ test("E2E: Agenda - remarcação bem-sucedida após liberar horário", async ({ 
   await page.getByRole("button", { name: "Criar" }).click();
 
   await expect(page.getByRole("dialog", { name: "Nova entrevista" })).toHaveCount(0);
-  await page.locator('select').first().selectOption('all');
-  await page.getByPlaceholder("Buscar candidato, vaga, avaliador...").fill(candidateName);
-  await page.waitForTimeout(500);
-  await expect(page.getByText(candidateName, { exact: true }).first()).toBeVisible();
+  await waitForAgendaRow(page, candidateName);
 
   // Create second interview at 14:00-15:00 today (no conflict)
   await page.getByRole("button", { name: "+ Novo agendamento" }).click();
@@ -435,10 +450,7 @@ test("E2E: Agenda - conflito por candidato ao agendar no mesmo horário", async 
   await page.getByRole("button", { name: "Criar" }).click();
 
   await expect(page.getByRole("dialog", { name: "Nova entrevista" })).toHaveCount(0);
-  await page.locator('select').first().selectOption('all');
-  await page.getByPlaceholder("Buscar candidato, vaga, avaliador...").fill(candidateName);
-  await page.waitForTimeout(500);
-  await expect(page.getByText(candidateName, { exact: true }).first()).toBeVisible();
+  await waitForAgendaRow(page, candidateName);
 
   // Try to create second interview at 10:30-11:30 for the SAME CANDIDATE but DIFFERENT AVALIADOR
   await page.getByRole("button", { name: "+ Novo agendamento" }).click();
