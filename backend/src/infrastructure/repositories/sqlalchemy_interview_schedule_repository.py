@@ -74,6 +74,25 @@ class SQLAlchemyInterviewScheduleRepository:
 
         return filters
 
+    def _build_base_from(self):
+        # FROM compartilhado por list/count/KPIs: garante joins explícitos para
+        # candidates e jobs antes de aplicar filtros. Sem isso, filtros do `search`
+        # que referenciam CandidateModel.full_name / JobModel.title transformam
+        # essas tabelas em FROMs soltos e o planner cai em produto cartesiano
+        # (SAWarning: SELECT statement has a cartesian product), o que sob volume
+        # realista (~20k+ entrevistas acumuladas) estoura o tempo de resposta.
+        return (
+            sa.join(
+                InterviewScheduleModel,
+                CandidateModel,
+                InterviewScheduleModel.candidate_id == CandidateModel.id,
+            ).join(
+                JobModel,
+                InterviewScheduleModel.job_id == JobModel.id,
+                isouter=True,
+            )
+        )
+
     async def find_active_pipeline_id(self, candidate_id: UUID, job_id: UUID) -> UUID | None:
         result = await self._session.execute(
             sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id)
@@ -124,8 +143,7 @@ class SQLAlchemyInterviewScheduleRepository:
                 InterviewScheduleModel.external_calendar_html_link,
                 InterviewScheduleModel.external_calendar_event_id,
             )
-            .join(CandidateModel, InterviewScheduleModel.candidate_id == CandidateModel.id)
-            .outerjoin(JobModel, InterviewScheduleModel.job_id == JobModel.id)
+            .select_from(self._build_base_from())
         )
 
     async def list_schedules(
@@ -151,11 +169,15 @@ class SQLAlchemyInterviewScheduleRepository:
             search=search,
         )
 
-        # Count total
+        # Count total — usa o mesmo FROM com joins explícitos (ver _build_base_from)
+        # para que filtros que referenciam candidates/jobs no `search` não acionem
+        # cartesian product.
         total = int(
             (
                 await self._session.scalar(
-                    sa.select(sa.func.count()).select_from(InterviewScheduleModel).where(*filters)
+                    sa.select(sa.func.count(InterviewScheduleModel.id))
+                    .select_from(self._build_base_from())
+                    .where(*filters)
                 )
             )
             or 0
@@ -166,7 +188,10 @@ class SQLAlchemyInterviewScheduleRepository:
         stmt = (
             self._build_detail_select()
             .where(*filters)
-            .order_by(InterviewScheduleModel.scheduled_start.asc())
+            .order_by(
+                InterviewScheduleModel.scheduled_start.asc(),
+                InterviewScheduleModel.id.asc(),
+            )
             .offset(offset)
             .limit(page_size)
         )
@@ -208,45 +233,51 @@ class SQLAlchemyInterviewScheduleRepository:
         today_end = today_end_local.astimezone(timezone.utc)
         now = datetime.now(timezone.utc)
 
-        kpi_stmt = sa.select(
-            sa.func.count(InterviewScheduleModel.id).label("total_scheduled"),
-            sa.func.sum(
-                sa.case(
-                    (
-                        sa.and_(
-                            InterviewScheduleModel.scheduled_start >= today_start,
-                            InterviewScheduleModel.scheduled_start <= today_end,
+        # KPIs usam o mesmo FROM joined (ver _build_base_from) para evitar
+        # cartesian product quando `search` referencia candidates/jobs.
+        kpi_stmt = (
+            sa.select(
+                sa.func.count(InterviewScheduleModel.id).label("total_scheduled"),
+                sa.func.sum(
+                    sa.case(
+                        (
+                            sa.and_(
+                                InterviewScheduleModel.scheduled_start >= today_start,
+                                InterviewScheduleModel.scheduled_start <= today_end,
+                            ),
+                            1,
                         ),
-                        1,
-                    ),
-                    else_=0,
-                )
-            ).label("today_count"),
-            sa.func.sum(
-                sa.case(
-                    (
-                        sa.and_(
-                            InterviewScheduleModel.scheduled_start > now,
-                            InterviewScheduleModel.status == "scheduled",
+                        else_=0,
+                    )
+                ).label("today_count"),
+                sa.func.sum(
+                    sa.case(
+                        (
+                            sa.and_(
+                                InterviewScheduleModel.scheduled_start > now,
+                                InterviewScheduleModel.status == "scheduled",
+                            ),
+                            1,
                         ),
-                        1,
-                    ),
-                    else_=0,
-                )
-            ).label("upcoming_count"),
-            sa.func.sum(
-                sa.case(
-                    (InterviewScheduleModel.status == "completed", 1),
-                    else_=0,
-                )
-            ).label("completed_count"),
-            sa.func.sum(
-                sa.case(
-                    (InterviewScheduleModel.status == "cancelled", 1),
-                    else_=0,
-                )
-            ).label("cancelled_count"),
-        ).where(*filters)
+                        else_=0,
+                    )
+                ).label("upcoming_count"),
+                sa.func.sum(
+                    sa.case(
+                        (InterviewScheduleModel.status == "completed", 1),
+                        else_=0,
+                    )
+                ).label("completed_count"),
+                sa.func.sum(
+                    sa.case(
+                        (InterviewScheduleModel.status == "cancelled", 1),
+                        else_=0,
+                    )
+                ).label("cancelled_count"),
+            )
+            .select_from(self._build_base_from())
+            .where(*filters)
+        )
 
         kpi_result = (await self._session.execute(kpi_stmt)).mappings().one()
 
@@ -262,6 +293,7 @@ class SQLAlchemyInterviewScheduleRepository:
                     )
                 ).label("name_count"),
             )
+            .select_from(self._build_base_from())
             .where(*filters)
             .where(
                 sa.or_(

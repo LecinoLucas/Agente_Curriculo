@@ -255,3 +255,101 @@ class TestInterviewScheduleRepositoryConflicts:
             assert len(items) == 2
             assert kpis["total_scheduled"] == 2
             assert kpis["cancelled_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_search_filter_does_not_trigger_cartesian_product(self, test_db):
+        # Regressão: o filtro `search` referencia CandidateModel.full_name e
+        # JobModel.title. Antes do fix, count() e get_kpis() não tinham join
+        # explícito com candidates/jobs e SQLAlchemy emitia
+        # "SELECT statement has a cartesian product". Sob volume realista isso
+        # estoura o tempo de resposta do endpoint /agenda/interviews.
+        import warnings as _warnings
+
+        from sqlalchemy.exc import SAWarning
+
+        async with test_db() as session:
+            cand_a, job_a = await seed_candidate_and_job(session, "Alice Alpha")
+            cand_b, job_b = await seed_candidate_and_job(session, "Bruno Beta")
+            cand_c, job_c = await seed_candidate_and_job(session, "Carla Gama")
+
+            start = datetime.now(timezone.utc) + timedelta(days=1)
+            session.add_all(
+                [
+                    build_schedule(
+                        candidate_id=cand_a.id,
+                        job_id=job_a.id,
+                        start=start,
+                        end=start + timedelta(hours=1),
+                        interviewer_email="a@empresa.com",
+                    ),
+                    build_schedule(
+                        candidate_id=cand_b.id,
+                        job_id=job_b.id,
+                        start=start + timedelta(hours=2),
+                        end=start + timedelta(hours=3),
+                        interviewer_email="b@empresa.com",
+                    ),
+                    build_schedule(
+                        candidate_id=cand_c.id,
+                        job_id=job_c.id,
+                        start=start + timedelta(hours=4),
+                        end=start + timedelta(hours=5),
+                        interviewer_email="c@empresa.com",
+                    ),
+                ]
+            )
+            await session.flush()
+
+            repo = SQLAlchemyInterviewScheduleRepository(session)
+
+            with _warnings.catch_warnings(record=True) as captured:
+                _warnings.simplefilter("always")
+
+                items, total = await repo.list_schedules(
+                    page=1, page_size=20, search="Alice"
+                )
+                kpis = await repo.get_kpis(search="Alice")
+
+                cartesian = [
+                    str(w.message)
+                    for w in captured
+                    if issubclass(w.category, SAWarning)
+                    and "cartesian product" in str(w.message)
+                ]
+                assert cartesian == [], (
+                    "list_schedules/get_kpis devem usar joins explícitos para "
+                    "candidates/jobs quando `search` é aplicado. SAWarnings "
+                    f"capturados: {cartesian}"
+                )
+
+            assert total == 1
+            assert len(items) == 1
+            assert items[0]["candidate_name"] == "Alice Alpha"
+            assert kpis["total_scheduled"] == 1
+            assert kpis["unique_interviewers_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_list_schedules_is_deterministic_within_same_start(self, test_db):
+        # Ordenação primária por scheduled_start ASC + secundária por id ASC
+        # garante paginação estável quando há entrevistas no mesmo instante
+        # (cenário comum em volume de testes E2E acumulado).
+        async with test_db() as session:
+            cand, job = await seed_candidate_and_job(session, "Same Slot")
+            start = datetime.now(timezone.utc) + timedelta(days=2)
+            schedules = [
+                build_schedule(
+                    candidate_id=cand.id,
+                    job_id=job.id,
+                    start=start,
+                    end=start + timedelta(hours=1),
+                    interviewer_email=f"e{i}@empresa.com",
+                )
+                for i in range(5)
+            ]
+            session.add_all(schedules)
+            await session.flush()
+
+            repo = SQLAlchemyInterviewScheduleRepository(session)
+            first, _ = await repo.list_schedules(page=1, page_size=20)
+            second, _ = await repo.list_schedules(page=1, page_size=20)
+            assert [r["id"] for r in first] == [r["id"] for r in second]
