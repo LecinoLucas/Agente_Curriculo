@@ -161,10 +161,13 @@ export function LoginPage() {
                 />
               </label>
 
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-gray-900">Senha</span>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="password" className="text-sm font-medium text-gray-900">
+                  Senha
+                </label>
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 focus-within:ring-2 focus-within:ring-blue-500/20">
                   <input
+                    id="password"
                     type={showPassword ? "text" : "password"}
                     required
                     autoComplete="current-password"
@@ -182,7 +185,7 @@ export function LoginPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-              </label>
+              </div>
 
               {error ? (
                 <Alert variant="destructive">

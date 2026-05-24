@@ -705,8 +705,8 @@ export function PipelinePage() {
             disabled={!canUse}
             className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
               canUse
-                ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))] text-white shadow-sm hover:bg-[hsl(2,70%,45%)] dark:border-[hsl(var(--primary))]/30"
-                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-850 dark:bg-slate-950 dark:text-slate-500"
+                ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))] text-white shadow-sm hover:opacity-90 dark:border-[hsl(var(--primary))]/30"
+                : "cursor-not-allowed border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] dark:border-slate-800 dark:bg-slate-900"
             }`}
           >
             <Search className="h-4 w-4" />
@@ -719,7 +719,7 @@ export function PipelinePage() {
               className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
                 showRanking
                   ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
-                  : "border-slate-200 bg-white text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800"
+                  : "border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800"
               }`}
               aria-expanded={showRanking}
             >
@@ -733,57 +733,57 @@ export function PipelinePage() {
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
               Total de Candidatos
             </p>
             <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
                 {totalCandidatos}
               </span>
-              <span className="rounded bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 dark:text-slate-500">
+              <span className="rounded bg-[hsl(var(--surface-muted))] dark:bg-slate-800 border border-[hsl(var(--border))]/40 dark:border-slate-700 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--text-muted))]">
                 Inscritos
               </span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
               Em andamento
             </p>
             <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
                 {emAndamento}
               </span>
-              <span className="rounded bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 px-1.5 py-0.5 text-[9px] font-bold text-indigo-500">
+              <span className="rounded bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent-soft))]/85 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--accent-foreground))]">
                 {totalCandidatos > 0 ? `${Math.round((emAndamento / totalCandidatos) * 100)}%` : "0%"}
               </span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
               Entrevistas
             </p>
             <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
                 {entrevistas}
               </span>
-              <span className="rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/60 px-1.5 py-0.5 text-[9px] font-bold text-amber-600">
+              <span className="rounded bg-[hsl(var(--warning-soft))] border border-[hsl(var(--warning-soft))]/85 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--warning))]">
                 Agendadas
               </span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
               Contratações
             </p>
             <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
                 {contratacoes}
               </span>
-              <span className="rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600">
+              <span className="rounded bg-[hsl(var(--success-soft))] border border-[hsl(var(--success-soft))]/85 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--success))]">
                 Efetivadas
               </span>
             </div>
@@ -812,37 +812,37 @@ export function PipelinePage() {
           <div className={boardLayoutClass}>
             
             {/* Main Board Area */}
-            <div className="min-w-0 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:p-4">
+            <div className="min-w-0 rounded-2xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:p-4">
               
               {/* Header inside Board panel */}
-              <div className="mb-3 flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
+              <div className="mb-3 flex flex-col gap-3 border-b border-[hsl(var(--border))]/40 pb-3 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
                 <div className="min-w-0">
-                  <h2 className="text-lg font-black tracking-tight text-slate-800 dark:text-slate-100">
+                  <h2 className="text-lg font-black tracking-tight text-[hsl(var(--text))] dark:text-slate-100">
                     {selectedJob ? selectedJob.title : "Candidatos"}
                   </h2>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[hsl(var(--text-muted))]">
                     <span>{`Kanban · ${totalActive} em processo`}</span>
                     {selectedJobMeta.map((item) => (
                       <span key={String(item)} className="inline-flex items-center gap-2">
-                        <span className="text-slate-300 dark:text-slate-700">·</span>
+                        <span className="text-[hsl(var(--border))]/80">·</span>
                         <span>{item}</span>
                       </span>
                     ))}
                   </div>
                 </div>
-
+ 
                 {/* Filters and Refresh State */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                  <div className="flex items-center gap-1 rounded-xl border border-slate-150 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
+                  <div className="flex items-center gap-1 rounded-xl border border-[hsl(var(--border))]/55 bg-[hsl(var(--surface-muted))] p-1 dark:border-slate-800 dark:bg-slate-950">
                     <button
                       onClick={() => setSortOrder("score_desc")}
-                      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-white dark:bg-slate-900 text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800" : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
                     >
                       Top Match IA
                     </button>
                     <button
                       onClick={() => setSortOrder("name_az")}
-                      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "name_az" ? "bg-white dark:bg-slate-900 text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800" : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                      className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "name_az" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
                     >
                       Ordem A-Z
                     </button>
@@ -1142,14 +1142,14 @@ function RankingPanel({
   return (
     <aside
       id="pipeline-ranking-panel"
-      className="sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
+      className="sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-[hsl(var(--border))]/40 dark:border-slate-800 bg-[hsl(var(--surface))] p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+      <div className="flex items-start justify-between gap-3 border-b border-[hsl(var(--border))]/40 dark:border-slate-800 pb-4">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-wider text-[hsl(var(--primary))]">
             Ranking IA Marajó
           </p>
-          <h3 className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 truncate" title={jobTitle}>{jobTitle}</h3>
+          <h3 className="mt-1 text-sm font-bold text-[hsl(var(--text))] dark:text-slate-100 truncate" title={jobTitle}>{jobTitle}</h3>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {onRefresh && (
@@ -1263,8 +1263,8 @@ function RankingCard({
       className={[
         "w-full rounded-xl border p-3.5 text-left transition-all hover:-translate-y-0.5",
         hasDealBreakerRejection
-          ? "border-rose-200 dark:border-rose-900 bg-rose-50/40 dark:bg-rose-950/20 hover:border-rose-350 hover:shadow-sm"
-          : "border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.01)] hover:border-slate-350 dark:hover:border-slate-700 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]",
+          ? "border-[hsl(var(--danger-soft))]/60 dark:border-rose-900 bg-[hsl(var(--danger-soft))]/20 hover:border-rose-350 hover:shadow-sm"
+          : "border-[hsl(var(--border))]/40 dark:border-slate-800 bg-[hsl(var(--surface))] shadow-[0_1px_2px_rgba(0,0,0,0.01)] hover:border-slate-350 dark:hover:border-slate-700 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-3">

@@ -7,11 +7,14 @@ import sys
 from pathlib import Path
 
 import sqlalchemy as sa
+from dotenv import load_dotenv
 from sqlalchemy import text
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+
+load_dotenv(ROOT_DIR / ".env")
 
 from src.domain.entities.user import User, UserRole
 from src.infrastructure.ai.prompts.job_profiler import NAME as JOB_PROFILER_NAME
@@ -35,7 +38,7 @@ from src.infrastructure.database.connection import AsyncSessionFactory, engine
 from src.infrastructure.repositories.sqlalchemy_user_repository import (
     SQLAlchemyUserRepository,
 )
-from src.infrastructure.security.password_service import hash_password
+from src.infrastructure.security.password_service import hash_password, verify_password
 
 
 DEFAULT_ADMIN_EMAIL = os.getenv("DEV_ADMIN_EMAIL", "admin@resume.ai")
@@ -91,6 +94,16 @@ async def _ensure_dev_admin(session) -> tuple[object, str | None]:
 
     if existing_user is not None:
         print(f"Admin de desenvolvimento já existe: {DEFAULT_ADMIN_EMAIL}")
+        if DEFAULT_ADMIN_PASSWORD and not verify_password(
+            DEFAULT_ADMIN_PASSWORD, existing_user.password_hash
+        ):
+            existing_user.set_password(
+                hash_password(DEFAULT_ADMIN_PASSWORD),
+                must_change_password=False,
+            )
+            await repository.save(existing_user)
+            await session.flush()
+            print("Senha do admin reconciliada com DEV_ADMIN_PASSWORD.")
         return existing_user.id, None
 
     password, generated = _resolve_admin_password()

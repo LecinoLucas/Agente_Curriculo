@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk vitest *)",
+      "Bash(pnpm test *)",
+      "Bash(NODE_OPTIONS=--experimental-vm-modules rtk vitest src/features/pipeline/__tests__/OtherCandidateRow.test.tsx)",
+      "Bash(./node_modules/.bin/vitest run *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node --experimental-vm-modules node_modules/.bin/vitest run src/pages/__tests__/CandidatesPageRow.test.tsx)",
+      "Bash(nvm list *)",
+      "Bash(python3 -)",
+      "Bash(rtk proxy *)",
+      "Bash(rtk psql *)",
+      "Bash(psql postgresql://LecinoLucas:020219@localhost:5432/resume_ai -c ' *)",
+      "Bash(mv /Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/versions/*.py /Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/archived_versions/ 2>&1 && echo \"Arquivos movidos\")",
+      "Bash(.venv/bin/python -m alembic heads)",
+      "Bash(.venv/bin/python -m alembic stamp 20260523_checkpoint)",
+      "Bash(.venv/bin/python -m alembic current)",
+      "Bash(.venv/bin/python -m alembic stamp --purge 20260523_checkpoint)",
+      "Bash(.venv/bin/python -m alembic upgrade head)",
+      "Bash(dropdb agente_curriculo_bootstrap_test --if-exists)",
+      "Bash(createdb agente_curriculo_bootstrap_test)",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://LecinoLucas:020219@localhost:5432/agente_curriculo_bootstrap_test\" .venv/bin/python -m alembic revision --autogenerate -m \"baseline_schema\")",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://LecinoLucas:020219@localhost:5432/agente_curriculo_bootstrap_test\" .venv/bin/python -m alembic upgrade head)",
+      "Bash(chmod +x /Users/lecinolucas/Developer/Agente_Curriculo/backend/scripts/reset_dev_db.sh)",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://lecinolucas@localhost:5432/agente_curriculo_bootstrap_test\" .venv/bin/python -m alembic upgrade head)",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://lecinolucas@localhost:5432/agente_curriculo_bootstrap_test\" .venv/bin/python scripts/validate_baseline_schema.py)",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://lecinolucas@localhost:5432/agente_curriculo_bootstrap_test\" .venv/bin/python scripts/bootstrap_dev.py)",
+      "Bash(dropdb agente_curriculo_bootstrap_test)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,v\\) for k,v in {**d.get\\('dependencies',{}\\),**d.get\\('devDependencies',{}\\)}.items\\(\\) if any\\(x in k for x in ['tailwind','radix','lucide','framer','shadcn','motion','react','vite','vitest']\\)]\")",
+      "Bash(rtk npx *)",
+      "Bash(pnpm build *)",
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(rtk curl *)",
+      "Bash(PLAYWRIGHT_FRONTEND_PORT=5173 PLAYWRIGHT_BACKEND_PORT=8000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 rtk playwright test --reporter=line)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(p\\) for p in d.get\\('paths',{}\\).keys\\(\\) if 'login' in p.lower\\(\\) or 'auth' in p.lower\\(\\)]\")",
+      "Bash(.venv/bin/python -c ' *)"
+    ],
+    "additionalDirectories": [
+      "/Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/versions"
+    ]
+  }
+}

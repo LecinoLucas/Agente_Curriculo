@@ -1,9 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
+import { ADMIN_STORAGE_STATE } from "./e2e/auth";
 
 const FRONTEND_PORT = process.env.PLAYWRIGHT_FRONTEND_PORT ?? "4173";
 const BACKEND_PORT = process.env.PLAYWRIGHT_BACKEND_PORT ?? "8100";
 const FRONTEND_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${FRONTEND_PORT}`;
 const API_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? `http://127.0.0.1:${BACKEND_PORT}`;
+
+const UNAUTHENTICATED_SPECS = [
+  "**/pipeline-login.spec.ts",
+  "**/alice-candidate-portal.spec.ts",
+];
 
 export default defineConfig({
   testDir: "./e2e",
@@ -13,6 +19,7 @@ export default defineConfig({
   expect: {
     timeout: 20_000,
   },
+  globalSetup: require.resolve("./e2e/global-setup"),
   use: {
     baseURL: FRONTEND_URL,
     trace: "on-first-retry",
@@ -33,9 +40,18 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
+      name: "unauthenticated",
+      testMatch: UNAUTHENTICATED_SPECS,
       use: {
         ...devices["Desktop Chrome"],
+      },
+    },
+    {
+      name: "authenticated",
+      testIgnore: UNAUTHENTICATED_SPECS,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: ADMIN_STORAGE_STATE,
       },
     },
   ],

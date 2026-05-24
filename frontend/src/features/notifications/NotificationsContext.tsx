@@ -80,6 +80,19 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 const DISMISSED_KEY = "ats-notifications-dismissed-ids";
 const INTERNAL_NOTIFICATION_ROLES = new Set(["admin", "recruiter", "manager", "hr"]);
 
+function mergeMockNotifications(currentReadStates: Record<string, boolean>, dismissedIds: string[]): Notification[] {
+  return MOCK_NOTIFICATIONS.filter((n) => !dismissedIds.includes(n.id)).map(
+    (n): Notification => ({
+      ...n,
+      read: currentReadStates[n.id] ?? n.read,
+    })
+  );
+}
+
+function isTransientNotificationError(error: unknown): boolean {
+  return error instanceof HttpError && [0, 504].includes(error.status);
+}
+
 function isPublicNotificationRoute(pathname: string, isAuthenticated: boolean): boolean {
   if (pathname === "/login" || pathname === "/candidato/login" || pathname === "/candidato/cadastro") {
     return true;
@@ -150,13 +163,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         }));
 
       if (merged.length === 0 && isDev) {
-        const mockMerged = MOCK_NOTIFICATIONS.filter((n) => !dismissedIds.includes(n.id)).map(
-          (n): Notification => ({
-            ...n,
-            read: currentReadStates[n.id] ?? n.read,
-          })
-        );
-        setNotifications(mockMerged);
+        setNotifications(mergeMockNotifications(currentReadStates, dismissedIds));
         return;
       }
 
@@ -165,6 +172,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       if (error instanceof HttpError && error.status === 401) {
         setIsPollingStoppedByUnauthorized(true);
         setNotifications([]);
+        return;
+      }
+
+      if (isDev && isTransientNotificationError(error)) {
+        setNotifications(mergeMockNotifications(currentReadStates, dismissedIds));
         return;
       }
 

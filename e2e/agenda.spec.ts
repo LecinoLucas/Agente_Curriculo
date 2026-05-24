@@ -1,15 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const E2E_EMAIL = process.env.E2E_USER_EMAIL ?? "admin@resume.ai";
-const E2E_PASSWORD = process.env.E2E_USER_PASSWORD ?? "Admin123!";
+const E2E_PASSWORD = process.env.E2E_USER_PASSWORD ?? "Smoke123!";
 const API_BASE_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://127.0.0.1:8100";
 
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("E-mail").fill(E2E_EMAIL);
-  await page.locator('input[type="password"]').first().fill(E2E_PASSWORD);
-  await page.getByRole("button", { name: "Entrar no painel" }).click();
-  await page.waitForURL(/\/pipeline/);
+  await page.goto("/pipeline");
+  if (new URL(page.url()).pathname.startsWith("/login")) {
+    await page.getByLabel("E-mail").fill(E2E_EMAIL);
+    await page.locator('input[type="password"]').first().fill(E2E_PASSWORD);
+    await page.getByRole("button", { name: "Entrar no painel" }).click();
+    await page.waitForURL(/\/pipeline/);
+  }
 }
 
 async function createCandidate(page: Page, fullName: string, email: string) {

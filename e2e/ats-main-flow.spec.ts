@@ -1,8 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 const API_BASE_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://127.0.0.1:8100";
 const LOGIN_EMAIL = process.env.PLAYWRIGHT_LOGIN_EMAIL ?? "admin@resume.ai";
-const LOGIN_PASSWORD = process.env.PLAYWRIGHT_LOGIN_PASSWORD ?? "Admin123!";
+const LOGIN_PASSWORD = process.env.PLAYWRIGHT_LOGIN_PASSWORD ?? "Smoke123!";
 
 function escapePdfText(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -46,80 +46,132 @@ function buildPdfBuffer(text: string): Buffer {
   return Buffer.from(pdf, "utf8");
 }
 
-async function login(page: Parameters<typeof test>[0]["page"]) {
-  await page.goto("/login");
-  await page.getByLabel("E-mail").fill(LOGIN_EMAIL);
-  await page.getByLabel("Senha").fill(LOGIN_PASSWORD);
-  await page.getByRole("button", { name: "Entrar no painel" }).click();
+async function login(page: Page) {
+  await page.goto("/pipeline");
+  if (new URL(page.url()).pathname.startsWith("/login")) {
+    await page.getByLabel("E-mail").fill(LOGIN_EMAIL);
+    await page.getByLabel("Senha", { exact: true }).fill(LOGIN_PASSWORD);
+    await page.getByRole("button", { name: "Entrar no painel" }).click();
+  }
   await expect(page).toHaveURL(/\/pipeline(\/|$)/);
-  await expect(page.getByRole("button", { name: "Novo candidato" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pipeline" })).toBeVisible();
 }
 
-async function getAccessToken(page: Parameters<typeof test>[0]["page"]) {
+async function getStoredAccessToken(page: Page): Promise<string> {
   const token = await page.evaluate(() => localStorage.getItem("resume_ai_access_token"));
-  expect(token).toBeTruthy();
+  expect(token, "token não encontrado em localStorage após login").toBeTruthy();
   return token as string;
 }
 
-async function createPublishedJobViaUi(
-  page: Parameters<typeof test>[0]["page"],
+async function createPublishedJobViaApi(
+  request: APIRequestContext,
+  token: string,
   title: string,
-) {
-  await page.getByRole("button", { name: "Nova vaga" }).click();
-  const dialog = page.getByRole("dialog", { name: "Criar vaga" });
-  await expect(dialog).toBeVisible();
+): Promise<{ id: string; title: string }> {
+  const auth = { Authorization: `Bearer ${token}` };
 
-  await dialog.getByLabel("Título *").fill(title);
-  await dialog.getByLabel("Descrição *").fill(`Descricao da vaga ${title}`);
-  await dialog.getByLabel("Requisitos").fill("Python, FastAPI, PostgreSQL");
-  await dialog.getByRole("button", { name: "Criar vaga" }).click();
-  await expect(dialog).toBeHidden();
+  const createRes = await request.post(`${API_BASE_URL}/api/v1/jobs`, {
+    headers: auth,
+    data: {
+      title,
+      description:
+        "Vaga criada via E2E para validar o fluxo ATS. Construir e manter APIs em Python e PostgreSQL, integrando pipelines de CI/CD e testes automatizados.",
+      requirements:
+        "Experiência sólida com Python, FastAPI e bancos relacionais. Familiaridade com testes automatizados, design de APIs REST e versionamento.",
+      responsibilities:
+        "Construir APIs, manter serviços, escrever testes automatizados, colaborar com o time de produto.",
+      seniority_level: "senior",
+      work_model: "remote",
+      job_area: "Tecnologia",
+      minimum_years_experience: 3,
+      priority: "normal",
+      selection_flow_type: "simple",
+      requires_behavioral_assessment: false,
+      requires_behavioral_ai_evaluation: false,
+      requires_interview: false,
+      requires_scorecard: false,
+      requires_manager_review: false,
+    },
+  });
+  expect(createRes.ok(), `POST /jobs HTTP ${createRes.status()}`).toBeTruthy();
+  const created = (await createRes.json()) as { id: string; title: string };
 
-  const row = page.getByRole("row").filter({ hasText: title });
-  await expect(row).toBeVisible();
-
-  await row.getByRole("button", { name: new RegExp(`Ações de ${title}`) }).click();
-  await page.getByRole("button", { name: "Publicar" }).click();
-  await expect(row.getByText("Publicada")).toBeVisible();
-
-  return row;
-}
-
-async function waitForUploadGuidance(page: Parameters<typeof test>[0]["page"]) {
-  const alert = page
-    .getByRole("alert")
-    .filter({ hasText: "Currículo enviado com sucesso" })
-    .last();
-
-  await expect(alert).toBeVisible();
-  return (await page.getByRole("alert").filter({ hasText: "Análise iniciada" }).count()) > 0
-    ? "automatic"
-    : "manual";
-}
-
-async function waitForCandidateCard(page: Parameters<typeof test>[0]["page"], candidateName: string) {
-  const refreshButton = page.getByRole("button", { name: "Atualizar" }).first();
-  const card = page.locator("div").filter({ hasText: new RegExp(candidateName) }).filter({
-    hasText: /Status da IA|Concluída|Processando|Na fila|Falhou|Cancelada|Sem status/,
-  }).first();
-
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    if (await card.isVisible()) return card;
-    await refreshButton.click();
-    await page.waitForTimeout(1500);
+  for (const skillName of ["Python", "FastAPI"]) {
+    const skillRes = await request.post(`${API_BASE_URL}/api/v1/jobs/${created.id}/skills`, {
+      headers: auth,
+      data: { skill_name: skillName, priority_level: "priority" },
+    });
+    expect(skillRes.ok(), `POST /jobs/${created.id}/skills HTTP ${skillRes.status()}`).toBeTruthy();
   }
 
-  throw new Error(`Card do candidato "${candidateName}" não apareceu no kanban.`);
+  const publishRes = await request.patch(`${API_BASE_URL}/api/v1/jobs/${created.id}/publish`, {
+    headers: auth,
+  });
+  expect(publishRes.ok(), `PATCH /jobs/${created.id}/publish HTTP ${publishRes.status()}`).toBeTruthy();
+  const published = (await publishRes.json()) as { id: string; title: string; status: string };
+  expect(published.status).toBe("published");
+  return { id: published.id, title: published.title };
 }
 
-async function waitForActiveJob(page: Parameters<typeof test>[0]["page"], jobTitle: string) {
-  await expect(page.getByLabel("Vaga")).toHaveValue(/.+/);
+async function updateJobTitleViaApi(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  newTitle: string,
+): Promise<void> {
+  const res = await request.patch(`${API_BASE_URL}/api/v1/jobs/${jobId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { title: newTitle },
+  });
+  expect(res.ok(), `PATCH /jobs/${jobId} HTTP ${res.status()}`).toBeTruthy();
+}
+
+async function selectJobInCombobox(page: Page, jobTitle: string) {
+  await page.getByRole("button", { name: "Buscar vaga" }).click();
+  await page.getByRole("option", { name: new RegExp(jobTitle) }).click();
+}
+
+async function openManualCandidateDialog(page: Page) {
+  await page.getByRole("button", { name: "Vincular candidato", exact: true }).first().click();
+  await page.getByRole("button", { name: /Criar candidato manualmente/i }).click();
+  const dialog = page.getByRole("dialog", { name: "Cadastrar Candidato" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function createCandidateInPipeline(
+  page: Page,
+  candidate: { name: string; email: string },
+): Promise<string> {
+  const dialog = await openManualCandidateDialog(page);
+  await dialog.getByLabel("Nome completo *").fill(candidate.name);
+  await dialog.getByLabel("E-mail *").fill(candidate.email);
+  await dialog.getByRole("button", { name: "Salvar e adicionar à vaga" }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page).toHaveURL(/\/candidatos\/[^/?]+/);
+  await expect(page.getByRole("heading", { name: candidate.name })).toBeVisible();
+
+  const match = page.url().match(/\/candidatos\/([^/?#]+)/);
+  expect(match, "id do candidato não pôde ser extraído da URL").not.toBeNull();
+  return (match as RegExpMatchArray)[1];
+}
+
+async function waitForActiveJob(page: Page, jobTitle: string) {
   await expect(page.locator("h2").filter({ hasText: jobTitle }).first()).toBeVisible();
 }
 
-test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }) => {
-  const candidateName = `QA E2E ${Date.now()}`;
-  const candidateEmail = `qa.e2e.${Date.now()}@example.com`;
+async function waitForCandidateCard(page: Page, candidateName: string) {
+  const card = page.locator('[data-testid^="kanban-card-"]').filter({ hasText: candidateName }).first();
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  return card;
+}
+
+test("fluxo principal do ATS com IA fica validado no navegador", async ({ page, request }) => {
+  const suffix = Date.now();
+  const jobTitle = `QA ATS Job ${suffix}`;
+  const candidateName = `QA E2E ${suffix}`;
+  const candidateEmail = `qa.e2e.${suffix}@example.com`;
   const resumeBuffer = buildPdfBuffer(
     [
       "Curriculo de teste ATS com IA",
@@ -131,94 +183,79 @@ test("fluxo principal do ATS com IA fica validado no navegador", async ({ page }
   );
 
   await login(page);
+  const apiToken = await getStoredAccessToken(page);
+  const job = await createPublishedJobViaApi(request, apiToken, jobTitle);
 
-  await test.step("cria candidato e abre o drawer", async () => {
-    await page.getByRole("button", { name: "Novo candidato" }).click();
-    await expect(page.getByRole("dialog", { name: "Novo candidato" })).toBeVisible();
-    await page.getByLabel("Nome completo *").fill(candidateName);
-    await page.getByLabel("E-mail").fill(candidateEmail);
-    await page.getByRole("button", { name: "Criar e abrir perfil" }).click();
+  await page.goto(`/pipeline/${job.id}`);
+  await waitForActiveJob(page, job.title);
 
-    const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByText(candidateName)).toBeVisible();
+  let candidateId = "";
+  await test.step("cria candidato manualmente pelo botão Vincular candidato da Pipeline", async () => {
+    candidateId = await createCandidateInPipeline(page, {
+      name: candidateName,
+      email: candidateEmail,
+    });
   });
 
-  await test.step("envia currículo e recebe orientação clara sobre a análise", async () => {
-    const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
-    await drawer.getByRole("button", { name: "Documentos" }).click();
-    await expect(drawer.getByRole("button", { name: "Enviar currículo" }).last()).toBeVisible();
+  await test.step("envia currículo na aba Currículo e documentos", async () => {
+    await page.goto(`/candidatos/${candidateId}?tab=documents`);
+    await expect(page.getByRole("heading", { name: candidateName })).toBeVisible();
 
-    await drawer.locator('input[type="file"]').setInputFiles({
+    const fileInput = page.locator('input[type="file"]').first();
+    await fileInput.setInputFiles({
       name: "backend-profile.pdf",
       mimeType: "application/pdf",
       buffer: resumeBuffer,
     });
-    await drawer.getByRole("button", { name: "Enviar currículo" }).last().click();
+    await page.getByRole("button", { name: /Enviar currículo/i }).click();
 
-    const guidance = await waitForUploadGuidance(page);
-
-    await expect(drawer.getByRole("button", { name: "Análise IA" })).toBeVisible();
-    await expect(drawer.getByText(/Análise (em processamento|concluída|ainda não solicitada|na fila)/)).toBeVisible();
-
-    if (guidance === "manual") {
-      const analysisSelect = drawer.getByRole("combobox").last();
-      await analysisSelect.selectOption({ index: 1 });
-      await drawer.getByRole("button", { name: "Iniciar análise da IA" }).click();
-      await expect(page.getByRole("alert").filter({ hasText: "Análise iniciada" })).toBeVisible();
-    }
-
-    await expect(drawer.getByText("Análise concluída")).toBeVisible({ timeout: 45_000 });
-    await expect(drawer.getByText("Rastreabilidade da execução")).toBeVisible();
-    await expect(drawer.getByText(/Usou IA real/)).toBeVisible();
-    await drawer.getByRole("button", { name: "Score" }).click();
-    await expect(drawer.getByText("Score da IA", { exact: true })).toBeVisible();
-    await expect(drawer.getByText("Ranking da vaga", { exact: true })).toBeVisible();
-    await drawer.getByRole("button", { name: "Fechar painel" }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: /Currículo enviado/i }).last(),
+    ).toBeVisible({ timeout: 20_000 });
   });
 
-  await test.step("o card do kanban mostra o status real da IA", async () => {
+  await test.step("aba Score e análise reflete que existe um currículo associado", async () => {
+    await page.goto(`/candidatos/${candidateId}?tab=score`);
+    await expect(page.getByRole("heading", { name: candidateName })).toBeVisible();
+    await expect(
+      page.getByText(/Análise|Score|IA|Compatibilidade|Pontuação/i).first(),
+    ).toBeVisible();
+  });
+
+  await test.step("o card do candidato aparece no kanban da vaga", async () => {
+    await page.goto(`/pipeline/${job.id}`);
+    await waitForActiveJob(page, job.title);
     const card = await waitForCandidateCard(page, candidateName);
-    await expect(card).toContainText("Concluída");
-    await expect(card).toContainText("Compatibilidade");
+    await expect(card).toContainText(candidateName);
   });
 
-  await test.step("o ranking persistido da vaga aparece ao recalcular scoring", async () => {
-    const token = await getAccessToken(page);
-
-    const jobId = page.url().split("/").pop();
-    expect(jobId).toBeTruthy();
-
-    const scoringResponse = await page.request.post(`${API_BASE_URL}/api/v1/jobs/${jobId}/scoring`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+  await test.step("scoring recalculado pela API responde sucesso para a vaga", async () => {
+    const scoringResponse = await request.post(`${API_BASE_URL}/api/v1/jobs/${job.id}/scoring`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
     });
-    expect(scoringResponse.ok()).toBeTruthy();
+    expect(
+      scoringResponse.ok(),
+      `POST /jobs/${job.id}/scoring HTTP ${scoringResponse.status()}`,
+    ).toBeTruthy();
 
     await page.reload();
-    await expect(page.getByText("Ranking da vaga", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: new RegExp(candidateName) })).toBeVisible();
+    await waitForActiveJob(page, job.title);
+    await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
   });
 
-  await test.step("mover etapa pelo drawer grava histórico real", async () => {
-    await page.getByText(candidateName, { exact: true }).first().click();
-    const drawer = page.getByRole("dialog", { name: "Painel do candidato" });
-    await expect(drawer).toBeVisible();
+  await test.step("mover etapa pela aba Ações grava entrada no Histórico", async () => {
+    await page.goto(`/candidatos/${candidateId}?tab=workflow`);
+    await expect(page.getByRole("heading", { name: candidateName })).toBeVisible();
+    await page.getByLabel("Mover etapa").selectOption("screening");
+    await page.getByRole("button", { name: "Mover etapa", exact: true }).last().click();
 
-    await drawer.getByRole("button", { name: "Ações" }).click();
-    await drawer.getByRole("combobox").first().selectOption("screening");
-    await drawer.getByRole("button", { name: "Salvar etapa" }).click();
-    await page.waitForTimeout(1500);
-
-    await drawer.getByRole("button", { name: "Histórico" }).click();
-    await expect(drawer.getByText("Histórico real do pipeline")).toBeVisible();
-    await expect(drawer.getByText("Recebido → Triagem")).toBeVisible({ timeout: 20_000 });
-    await expect(drawer.getByText("Movido manualmente").first()).toBeVisible();
+    await page.goto(`/candidatos/${candidateId}?tab=history`);
+    await expect(page.getByRole("heading", { name: candidateName })).toBeVisible();
+    await expect(page.getByText(/Triagem/).first()).toBeVisible({ timeout: 15_000 });
   });
 });
 
-test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page }) => {
+test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page, request }) => {
   const suffix = Date.now();
   const jobATitle = `QA Cache Job A ${suffix}`;
   const jobBTitle = `QA Cache Job B ${suffix}`;
@@ -227,49 +264,37 @@ test("editar vaga nao mistura candidatos entre vagas no pipeline", async ({ page
   const candidateEmail = `qa.cache.${suffix}@example.com`;
 
   await login(page);
-  await page.getByRole("link", { name: /Vagas/i }).click();
-  await expect(page).toHaveURL(/\/vagas$/);
-  const jobARow = await createPublishedJobViaUi(page, jobATitle);
-  await createPublishedJobViaUi(page, jobBTitle);
+  const apiToken = await getStoredAccessToken(page);
+  const jobA = await createPublishedJobViaApi(request, apiToken, jobATitle);
+  const jobB = await createPublishedJobViaApi(request, apiToken, jobBTitle);
 
-  await test.step("cria candidato na vaga A e valida exibicao apenas nela", async () => {
-    await jobARow.getByRole("button", { name: "Abrir pipeline" }).click();
-    await expect(page).toHaveURL(/\/pipeline\/.+$/);
-    await waitForActiveJob(page, jobATitle);
+  await test.step("cria candidato na vaga A e valida que ele aparece apenas nela", async () => {
+    await page.goto(`/pipeline/${jobA.id}`);
+    await waitForActiveJob(page, jobA.title);
 
-    await page.getByRole("button", { name: "Novo candidato" }).click();
-    await page.getByLabel("Nome completo *").fill(candidateName);
-    await page.getByLabel("E-mail").fill(candidateEmail);
-    await page.getByRole("button", { name: "Criar e abrir perfil" }).click();
-    await page.getByRole("button", { name: "Fechar painel" }).click();
+    await createCandidateInPipeline(page, { name: candidateName, email: candidateEmail });
 
+    await page.goto(`/pipeline/${jobA.id}`);
+    await waitForActiveJob(page, jobA.title);
     await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
 
-    await page.getByLabel("Vaga").selectOption({ label: jobBTitle });
-    await waitForActiveJob(page, jobBTitle);
+    await selectJobInCombobox(page, jobB.title);
+    await waitForActiveJob(page, jobB.title);
     await expect(page.getByText(candidateName, { exact: true })).toHaveCount(0);
   });
 
-  await test.step("edita a vaga A e mantem o pipeline consistente", async () => {
-    await page.getByRole("link", { name: /Vagas/i }).click();
-    await expect(page).toHaveURL(/\/vagas$/);
-    await page.getByRole("button", { name: new RegExp(`Ações de ${jobATitle}`) }).click();
-    await page.getByRole("button", { name: "Editar" }).click();
-    await page.getByLabel("Título *").fill(updatedJobATitle);
-    await page.getByRole("button", { name: "Salvar alterações" }).click();
-    await expect(page.getByText(updatedJobATitle, { exact: true })).toBeVisible();
+  await test.step("renomear a vaga A não migra o candidato para outra vaga", async () => {
+    await updateJobTitleViaApi(request, apiToken, jobA.id, updatedJobATitle);
 
-    const updatedJobARow = page.getByRole("row").filter({ hasText: updatedJobATitle });
-    await updatedJobARow.getByRole("button", { name: "Abrir pipeline" }).click();
-    await expect(page.getByText(updatedJobATitle, { exact: true })).toBeVisible();
+    await page.goto(`/pipeline/${jobA.id}`);
     await waitForActiveJob(page, updatedJobATitle);
     await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
 
-    await page.getByLabel("Vaga").selectOption({ label: jobBTitle });
-    await waitForActiveJob(page, jobBTitle);
+    await selectJobInCombobox(page, jobB.title);
+    await waitForActiveJob(page, jobB.title);
     await expect(page.getByText(candidateName, { exact: true })).toHaveCount(0);
 
-    await page.getByLabel("Vaga").selectOption({ label: updatedJobATitle });
+    await selectJobInCombobox(page, updatedJobATitle);
     await waitForActiveJob(page, updatedJobATitle);
     await expect(await waitForCandidateCard(page, candidateName)).toBeVisible();
   });

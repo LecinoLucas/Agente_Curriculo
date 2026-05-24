@@ -1,120 +1,253 @@
-import { test, expect } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-const E2E_EMAIL = process.env.E2E_USER_EMAIL ?? 'admin@resume.ai';
-const E2E_PASSWORD = process.env.E2E_USER_PASSWORD ?? 'Admin123!';
+const API_BASE_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://127.0.0.1:8100";
 
-test('E2E: Análise de candidatos - Hiago Dantos e Christian Prado', async ({ page }) => {
-  // Acessar a página inicial
-  await page.goto('http://127.0.0.1:5173/');
-  await page.waitForLoadState('networkidle');
+// ─── helpers (PDF, auth token, API job/candidate setup, UI building blocks) ─────
 
-  console.log('✅ Página inicial carregada');
+function escapePdfText(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
 
-  // Fazer login se necessário
-  const loginForm = page.locator('input[type="email"]').first();
-  const passwordInput = page.locator('input[type="password"]').first();
+function buildPdfBuffer(text: string): Buffer {
+  const lines = text.split("\n").map(escapePdfText);
+  const content = [
+    "BT",
+    "/F1 12 Tf",
+    "72 720 Td",
+    "14 TL",
+    ...lines.flatMap((line, index) => (index === 0 ? [`(${line}) Tj`] : ["T*", `(${line}) Tj`])),
+    "ET",
+  ].join("\n");
 
-  const needsLogin = await loginForm.isVisible().catch(() => false);
-  if (needsLogin) {
-    console.log('🔐 Fazendo login...');
-    await loginForm.fill(E2E_EMAIL);
-    await passwordInput.fill(E2E_PASSWORD);
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    `5 0 obj\n<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream\nendobj\n`,
+  ];
 
-    const loginBtn = page.locator('button:has-text("Entrar no painel")').first();
-    await loginBtn.click();
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(2000);
-    console.log('✅ Login realizado');
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf, "utf8"));
+    pdf += object;
+  }
+  const xrefOffset = Buffer.byteLength(pdf, "utf8");
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, "utf8");
+}
+
+async function getStoredAccessToken(page: Page): Promise<string> {
+  const token = await page.evaluate(() => localStorage.getItem("resume_ai_access_token"));
+  expect(token, "token não encontrado em localStorage após login").toBeTruthy();
+  return token as string;
+}
+
+async function createPublishedJobViaApi(
+  request: APIRequestContext,
+  token: string,
+  title: string,
+): Promise<{ id: string; title: string }> {
+  const auth = { Authorization: `Bearer ${token}` };
+
+  const createRes = await request.post(`${API_BASE_URL}/api/v1/jobs`, {
+    headers: auth,
+    data: {
+      title,
+      description:
+        "Vaga criada via E2E para validar a UI de Análises IA. Buscamos desenvolvedor backend em Python com FastAPI, PostgreSQL e testes automatizados.",
+      requirements:
+        "Experiência sólida com Python, FastAPI e bancos relacionais. Familiaridade com design de APIs REST, testes e versionamento.",
+      responsibilities:
+        "Construir e manter APIs, escrever testes automatizados, colaborar com o time de produto.",
+      seniority_level: "senior",
+      work_model: "remote",
+      job_area: "Tecnologia",
+      minimum_years_experience: 3,
+      priority: "normal",
+      selection_flow_type: "simple",
+      requires_behavioral_assessment: false,
+      requires_behavioral_ai_evaluation: false,
+      requires_interview: false,
+      requires_scorecard: false,
+      requires_manager_review: false,
+    },
+  });
+  expect(createRes.ok(), `POST /jobs HTTP ${createRes.status()}`).toBeTruthy();
+  const created = (await createRes.json()) as { id: string; title: string };
+
+  for (const skillName of ["Python", "FastAPI"]) {
+    const skillRes = await request.post(`${API_BASE_URL}/api/v1/jobs/${created.id}/skills`, {
+      headers: auth,
+      data: { skill_name: skillName, priority_level: "priority" },
+    });
+    expect(skillRes.ok(), `POST /jobs/${created.id}/skills HTTP ${skillRes.status()}`).toBeTruthy();
   }
 
-  await page.screenshot({ path: '/tmp/01-after-login.png' });
-  
-  // Verificar se tem um link para candidatos na navegação
-  const candidatesNav = page.locator('a[href*="candidatos"], [data-testid="nav-candidates"]').first();
-  const candidatesText = page.locator('button:has-text("Candidatos"), a:has-text("Candidatos")').first();
-  
-  let hasNavigation = await candidatesNav.isVisible().catch(() => false);
-  if (!hasNavigation) {
-    hasNavigation = await candidatesText.isVisible().catch(() => false);
-  }
-  
-  if (hasNavigation) {
-    await candidatesNav.or(candidatesText).first().click();
-    await page.waitForLoadState('networkidle');
-    console.log('✅ Navegando para Candidatos');
-  }
-  
-  await page.screenshot({ path: '/tmp/02-candidates-page.png' });
-  console.log(`📍 URL atual: ${page.url()}`);
-  
-  // Esperar pelos candidatos carregarem
-  await page.waitForTimeout(2000);
-  
-  // Procurar por "Hiago Dantos"
-  const hiagoCandidateText = page.locator('text=/Hiago Dantos/i');
-  const hiagoCandidateButton = page.locator('button:has-text("Hiago Dantos"), a:has-text("Hiago Dantos"), [data-testid*="hiago"], div:has-text("Hiago Dantos")').first();
-  
-  const hiagos = await hiagoCandidateText.all();
-  const hiagoFound = hiagos.length > 0;
-  
-  console.log(`🔍 Procurando Hiago Dantos... ${hiagoFound ? '✅ Encontrado' : '❌ Não encontrado'}`);
-  
-  if (hiagoFound) {
-    await hiagoCandidateText.first().click({ force: true });
-    await page.waitForLoadState('networkidle');
-    console.log('✅ Abrindo perfil do Hiago Dantos');
-    await page.screenshot({ path: '/tmp/03-hiago-profile.png' });
-  }
-  
-  // Procurar pela vaga "Desenvolver Full Stack"
-  const vagaSelect = page.locator('select, [role="combobox"], [placeholder*="vaga"], label:has-text("Vaga")');
-  const vagaOption = page.locator('text=/Desenvolver Full Stack/i, button:has-text("Desenvolver Full Stack")');
-  
-  const vagaFound = await vagaOption.isVisible().catch(() => false);
-  console.log(`🔍 Procurando vaga "Desenvolver Full Stack"... ${vagaFound ? '✅ Encontrada' : '❌ Não encontrada'}`);
-  
-  if (vagaFound) {
-    await vagaOption.first().click();
-    await page.waitForLoadState('networkidle');
-    console.log('✅ Vaga selecionada');
-    await page.screenshot({ path: '/tmp/04-vaga-selected.png' });
-  }
-  
-  // Procurar por botão de análise
-  const analyzeBtn = page.locator('button:has-text("Analisar"), button:has-text("Analise"), button:has-text("Executar")').first();
-  const analyzeBtnExists = await analyzeBtn.isVisible().catch(() => false);
-  
-  if (analyzeBtnExists) {
-    console.log('✅ Botão de análise encontrado');
-    await analyzeBtn.click();
-    console.log('⏳ Executando análise...');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(3000);
-    console.log('✅ Análise concluída');
-    await page.screenshot({ path: '/tmp/05-analysis-result.png' });
-  }
-  
-  // Verificar score
-  const scoreElements = page.locator('[data-testid*="score"]');
-  const scores = await scoreElements.all();
-  console.log(`📊 Scores encontrados: ${scores.length}`);
+  const publishRes = await request.patch(`${API_BASE_URL}/api/v1/jobs/${created.id}/publish`, {
+    headers: auth,
+  });
+  expect(publishRes.ok(), `PATCH /jobs/${created.id}/publish HTTP ${publishRes.status()}`).toBeTruthy();
+  const published = (await publishRes.json()) as { id: string; title: string; status: string };
+  expect(published.status).toBe("published");
+  return { id: published.id, title: published.title };
+}
 
-  // Procurar por texto de score
-  const scoreTexts = page.locator('text=/Score|Pontuação|Nota/i');
-  const scoreTextsCount = (await scoreTexts.all()).length;
-  console.log(`📊 Textos de score encontrados: ${scoreTextsCount}`);
-  
-  // Procurar por modal ou painel de decisão
-  const decisionPanel = page.locator('[data-testid*="decision"], [role="dialog"], .modal, [class*="Modal"]').first();
-  const decisionPanelVisible = await decisionPanel.isVisible().catch(() => false);
-  
-  if (decisionPanelVisible) {
-    console.log('✅ Painel de decisão/modal encontrado');
-    const modalScore = page.locator('[data-testid*="score"]').first();
-    const modalScoreVisible = await modalScore.isVisible().catch(() => false);
-    console.log(`📊 Score visível na modal: ${modalScoreVisible ? '✅ Sim' : '❌ Não'}`);
-    await page.screenshot({ path: '/tmp/06-decision-panel.png' });
+async function openManualCandidateDialog(page: Page) {
+  await page.getByRole("button", { name: "Vincular candidato", exact: true }).first().click();
+  await page.getByRole("button", { name: /Criar candidato manualmente/i }).click();
+  const dialog = page.getByRole("dialog", { name: "Cadastrar Candidato" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function createCandidateInPipeline(
+  page: Page,
+  candidate: { name: string; email: string },
+): Promise<string> {
+  const dialog = await openManualCandidateDialog(page);
+  await dialog.getByLabel("Nome completo *").fill(candidate.name);
+  await dialog.getByLabel("E-mail *").fill(candidate.email);
+  await dialog.getByRole("button", { name: "Salvar e adicionar à vaga" }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page).toHaveURL(/\/candidatos\/[^/?]+/);
+  const match = page.url().match(/\/candidatos\/([^/?#]+)/);
+  expect(match, "id do candidato não pôde ser extraído da URL").not.toBeNull();
+  return (match as RegExpMatchArray)[1];
+}
+
+async function uploadResume(page: Page, candidateId: string, candidateName: string, pdf: Buffer) {
+  await page.goto(`/candidatos/${candidateId}?tab=documents`);
+  await expect(page.getByRole("heading", { name: candidateName })).toBeVisible();
+
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: "analysis-spec.pdf",
+    mimeType: "application/pdf",
+    buffer: pdf,
+  });
+  await page.getByRole("button", { name: /Enviar currículo/i }).click();
+
+  await expect(
+    page.getByRole("alert").filter({ hasText: /Currículo enviado/i }).last(),
+  ).toBeVisible({ timeout: 20_000 });
+}
+
+async function waitForExtractedResumeVersion(
+  request: APIRequestContext,
+  token: string,
+  candidateId: string,
+): Promise<string> {
+  const auth = { Authorization: `Bearer ${token}` };
+  const deadline = Date.now() + 45_000;
+  let lastStatus = "(none)";
+  while (Date.now() < deadline) {
+    const res = await request.get(`${API_BASE_URL}/api/v1/candidates/${candidateId}/overview`, {
+      headers: auth,
+    });
+    expect(res.ok(), `GET /candidates/${candidateId}/overview HTTP ${res.status()}`).toBeTruthy();
+    const body = (await res.json()) as {
+      resumes?: Array<{ current_version_id?: string | null; extraction_status?: string | null }>;
+    };
+    const resume = body.resumes?.[0];
+    const versionId = resume?.current_version_id;
+    const status = (resume?.extraction_status ?? "").toLowerCase();
+    lastStatus = status || "(empty)";
+    if (versionId && (status === "completed" || status === "ready" || status === "success")) {
+      return versionId;
+    }
+    if (status === "failed") {
+      throw new Error(`extração do currículo falhou (extraction_status=${status})`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
   }
-  
-  console.log('\n✅ Teste E2E concluído!');
+  throw new Error(
+    `timeout esperando extraction_status=completed do currículo (último=${lastStatus})`,
+  );
+}
+
+async function requestAnalysis(
+  request: APIRequestContext,
+  token: string,
+  resumeVersionId: string,
+  jobId: string,
+): Promise<void> {
+  const res = await request.post(`${API_BASE_URL}/api/v1/analyses`, {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { resume_version_id: resumeVersionId, job_id: jobId, force: "true" },
+  });
+  expect(res.ok(), `POST /analyses HTTP ${res.status()} body=${await res.text()}`).toBeTruthy();
+}
+
+// ─── test ───────────────────────────────────────────────────────────────────────
+
+test("Análises IA lista a análise gerada após upload de currículo", async ({ page, request }) => {
+  const suffix = Date.now();
+  const jobTitle = `QA Analise Job ${suffix}`;
+  const candidateName = `QA Analise Candidate ${suffix}`;
+  const candidateEmail = `qa.analise.${suffix}@example.com`;
+  const resumeBuffer = buildPdfBuffer(
+    [
+      "Curriculo Análise E2E",
+      `Nome: ${candidateName}`,
+      "Resumo: Engenheiro backend com Python, FastAPI e PostgreSQL.",
+      "Skills: Python, FastAPI, SQL, API, Backend, testes automatizados.",
+      "Experiencia: 6 anos em servicos backend.",
+    ].join("\n"),
+  );
+
+  // ── setup: garantir uma vaga publicada via API (sem depender do banco) ──
+  await page.goto("/pipeline");
+  await expect(page).toHaveURL(/\/pipeline/);
+  const apiToken = await getStoredAccessToken(page);
+  const job = await createPublishedJobViaApi(request, apiToken, jobTitle);
+
+  // ── cria candidato manual pela Pipeline da vaga ──
+  await page.goto(`/pipeline/${job.id}`);
+  await expect(page.locator("h2").filter({ hasText: job.title }).first()).toBeVisible();
+
+  const candidateId = await createCandidateInPipeline(page, {
+    name: candidateName,
+    email: candidateEmail,
+  });
+
+  // ── envia currículo (UI) ──
+  await uploadResume(page, candidateId, candidateName, resumeBuffer);
+
+  // ── dispara análise via API (a UI exige clique manual em "Gerar análise agora";
+  //     usamos o endpoint para tornar o teste determinístico, sem depender de
+  //     extração e botão habilitar a tempo) ──
+  const resumeVersionId = await waitForExtractedResumeVersion(request, apiToken, candidateId);
+  await requestAnalysis(request, apiToken, resumeVersionId, job.id);
+
+  // ── valida que /analises-ia exibe a análise gerada para esse candidato ──
+  await test.step("Análises IA mostra a análise do candidato recém-criado", async () => {
+    await page.goto("/analises-ia");
+    await expect(page.getByRole("heading", { name: "Análises IA" })).toBeVisible();
+
+    await page.getByPlaceholder(/Buscar por candidato/i).fill(candidateName);
+
+    const row = page.getByRole("row").filter({ hasText: candidateName });
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(row).toContainText(candidateName);
+    await expect(row).toContainText(candidateEmail);
+    await expect(row).toContainText(
+      /Aguardando|Processando|Concluída|Falhou|Retry|Cancelado|Descartada/,
+    );
+  });
+
+  // ── valida que a página do candidato expõe a aba Score e análise ──
+  await test.step("aba Score e análise do candidato é navegável após upload", async () => {
+    await page.goto(`/candidatos/${candidateId}?tab=score`);
+    await expect(page.getByRole("heading", { name: candidateName })).toBeVisible();
+    await expect(
+      page.getByText(/Análise|Score|Compatibilidade|Pontuação/i).first(),
+    ).toBeVisible();
+  });
 });

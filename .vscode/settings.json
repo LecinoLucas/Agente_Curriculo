@@ -1,0 +1,45 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/coverage/**": true,
+    "**/htmlcov/**": true,
+    "**/private_uploads/**": true,
+    "**/uploads/**": true,
+    "**/reports/**": true,
+    "**/.coverage*": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/coverage": true,
+    "**/htmlcov": true,
+    "**/private_uploads": true,
+    "**/uploads": true,
+    "**/reports": true,
+    "**/.coverage*": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/.coverage*": true
+  },
+  "typescript.tsserver.maxTsServerMemory": 4096
+}
+

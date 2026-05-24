@@ -157,4 +157,23 @@ describe("NotificationsContext", () => {
     expect(notificationService.getNotifications).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("total-count")).toHaveTextContent("0");
   });
+
+  it("usa fallback mock sem console.error quando notificações falham por conexão no dev", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(notificationService.getNotifications).mockRejectedValue(
+      new HttpError(0, "Sem conexão com o servidor. Verifique sua internet."),
+    );
+
+    renderProvider({ role: "admin", route: "/dashboard" });
+
+    await waitFor(() => {
+      expect(notificationService.getNotifications).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("total-count")).toHaveTextContent("5");
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
 });
