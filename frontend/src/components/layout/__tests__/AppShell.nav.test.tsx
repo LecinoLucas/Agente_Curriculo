@@ -98,6 +98,9 @@ describe("AppShell — TopNavbar", () => {
         "IA & Automação",
         "Adm",
       ]);
+
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Adm" }));
+      expect(screen.getByRole("menuitem", { name: /Credenciais IA/ })).toBeInTheDocument();
     });
 
     it("renderiza a TopNavbar para recruiter sem áreas de gestor/admin", () => {

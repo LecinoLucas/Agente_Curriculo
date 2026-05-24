@@ -100,6 +100,29 @@ async def test_non_admin_cannot_manage_ai_provider_credentials(
 
 
 @pytest.mark.asyncio
+async def test_invalid_payload_error_does_not_echo_api_key(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers = await _admin_headers(client, db_session)
+    raw_key = "validation-secret-ABCD"
+
+    response = await client.post(
+        "/api/v1/admin/ai-provider-credentials",
+        headers=headers,
+        json={
+            "provider": "unknown-provider",
+            "label": "Inválida",
+            "api_key": raw_key,
+        },
+    )
+
+    assert response.status_code == 422
+    assert raw_key not in response.text
+    assert "api_key" not in response.text
+
+
+@pytest.mark.asyncio
 async def test_rotate_disable_enable_do_not_return_secret_and_update_status(
     client: AsyncClient,
     db_session: AsyncSession,

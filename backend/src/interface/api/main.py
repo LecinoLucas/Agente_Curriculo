@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, status
+from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -208,7 +209,7 @@ async def handle_request_validation(request: Request, exc: RequestValidationErro
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             request,
         )
-    return _error_response("VALIDATION_ERROR", "Dados inválidos", status.HTTP_422_UNPROCESSABLE_ENTITY, request)
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.exception_handler(DomainException)

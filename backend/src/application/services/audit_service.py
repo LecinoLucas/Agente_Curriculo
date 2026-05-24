@@ -18,7 +18,7 @@ class AuditService:
         action: str,
         resource_type: str,
         resource_id: UUID,
-        user_id: UUID,
+        user_id: UUID | None,
         metadata: dict[str, Any] | None = None,
         before_state: dict[str, Any] | None = None,
         after_state: dict[str, Any] | None = None,
