@@ -5,51 +5,51 @@ import { Plus } from "lucide-react";
 
 const COL_THEMES: Record<PipelineStage, { border: string; bg: string; accent: string; desc: string }> = {
   entry: {
-    border: "border-slate-200 dark:border-slate-800/80",
-    bg: "bg-slate-50/50 dark:bg-slate-900/40",
-    accent: "bg-slate-500 text-white",
+    border: "border-[hsl(var(--border))]/55",
+    bg: "bg-[hsl(var(--surface-muted))]/45",
+    accent: "border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
     desc: "Triagem inicial de perfil",
   },
   screening: {
-    border: "border-purple-200 dark:border-purple-900/30",
-    bg: "bg-purple-50/45 dark:bg-purple-950/20",
-    accent: "bg-purple-500 text-white",
+    border: "border-[hsl(var(--border))]/55",
+    bg: "bg-[hsl(var(--surface-muted))]/45",
+    accent: "border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
     desc: "Triagem por telefone",
   },
   hr_interview: {
-    border: "border-indigo-200 dark:border-indigo-900/30",
-    bg: "bg-indigo-50/45 dark:bg-indigo-950/20",
-    accent: "bg-indigo-500 text-white",
+    border: "border-[hsl(var(--border))]/55",
+    bg: "bg-[hsl(var(--surface-muted))]/45",
+    accent: "border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
     desc: "Entrevista comportamental",
   },
   technical_interview: {
-    border: "border-amber-200 dark:border-amber-900/30",
-    bg: "bg-amber-50/45 dark:bg-amber-950/15",
-    accent: "bg-amber-500 text-white",
+    border: "border-[hsl(var(--border))]/55",
+    bg: "bg-[hsl(var(--surface-muted))]/45",
+    accent: "border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
     desc: "Entrevista com Gestor",
   },
   final: {
-    border: "border-pink-200 dark:border-pink-900/30",
-    bg: "bg-pink-50/45 dark:bg-pink-950/20",
-    accent: "bg-pink-500 text-white",
+    border: "border-[hsl(var(--border))]/55",
+    bg: "bg-[hsl(var(--surface-muted))]/45",
+    accent: "border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
     desc: "Avaliação final",
   },
   offer: {
-    border: "border-teal-200 dark:border-teal-900/30",
-    bg: "bg-teal-50/45 dark:bg-teal-950/20",
-    accent: "bg-teal-500 text-white",
+    border: "border-[hsl(var(--border))]/55",
+    bg: "bg-[hsl(var(--surface-muted))]/45",
+    accent: "border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
     desc: "Proposta e negociação",
   },
   hired: {
-    border: "border-emerald-200 dark:border-emerald-900/30",
-    bg: "bg-emerald-50/50 dark:bg-emerald-950/20",
-    accent: "bg-emerald-600 text-white",
+    border: "border-[hsl(var(--success))]/35",
+    bg: "bg-[hsl(var(--success-soft))]/45",
+    accent: "bg-[hsl(var(--success))] text-white",
     desc: "Contratado",
   },
   rejected: {
-    border: "border-rose-200 dark:border-rose-900/30",
-    bg: "bg-rose-50/30 dark:bg-rose-950/20",
-    accent: "bg-rose-500 text-white",
+    border: "border-[hsl(var(--danger))]/35",
+    bg: "bg-[hsl(var(--danger-soft))]/45",
+    accent: "bg-[hsl(var(--danger))] text-white",
     desc: "Desclassificado",
   },
 };
@@ -132,9 +132,9 @@ export const KanbanColumn = memo(function KanbanColumn({
       data-drop-target={isDropTarget ? "true" : "false"}
     >
       {/* Column Header */}
-      <div className="mb-4 flex flex-col gap-1 border-b border-dashed border-slate-200/60 dark:border-slate-800/80 pb-3 px-1 min-w-0">
+      <div className="mb-4 flex flex-col gap-1 border-b border-dashed border-[hsl(var(--border))]/55 pb-3 px-1 min-w-0">
         <div className="flex items-center justify-between gap-2 min-w-0">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 truncate min-w-0" title={column.label}>
+          <span className="text-xs font-black uppercase tracking-wider text-[hsl(var(--text))] truncate min-w-0" title={column.label}>
             {column.label}
           </span>
           <span
@@ -146,7 +146,7 @@ export const KanbanColumn = memo(function KanbanColumn({
             {isFiltered ? `${column.candidates.length}/${totalCount}` : column.candidates.length}
           </span>
         </div>
-        <p className="text-[10px] font-medium text-slate-400 truncate" title={theme.desc}>
+        <p className="text-[10px] font-medium text-[hsl(var(--text-muted))] truncate" title={theme.desc}>
           {theme.desc}
         </p>
       </div>
@@ -178,11 +178,11 @@ export const KanbanColumn = memo(function KanbanColumn({
 
         {column.candidates.length === 0 ? (
           <div
-            className="flex flex-1 min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/20 text-xs font-semibold text-slate-400 dark:text-slate-500 shadow-sm px-4 py-6 text-center animate-in fade-in duration-200"
+            className="flex flex-1 min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))]/55 text-xs font-semibold text-[hsl(var(--text-muted))] shadow-sm px-4 py-6 text-center animate-in fade-in duration-200"
           >
             <span className="text-2xl mb-1.5 opacity-55">📭</span>
-            <span className="font-extrabold tracking-tight text-slate-400 dark:text-slate-400/85">Vazio</span>
-            <span className="text-[10px] text-slate-400/70 dark:text-slate-500 mt-1 leading-tight max-w-[150px]">Nenhum candidato nesta fase</span>
+            <span className="font-extrabold tracking-tight text-[hsl(var(--text-muted))]">Vazio</span>
+            <span className="text-[10px] text-[hsl(var(--text-muted))]/75 mt-1 leading-tight max-w-[150px]">Nenhum candidato nesta fase</span>
           </div>
         ) : null}
       </div>
@@ -192,7 +192,7 @@ export const KanbanColumn = memo(function KanbanColumn({
         <button
           type="button"
           onClick={() => onAddCandidate(column.stage)}
-          className="mt-3 flex items-center justify-center gap-1.5 w-full rounded-xl border border-dashed border-slate-200 dark:border-slate-800/85 bg-white/60 dark:bg-slate-900/20 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 transition-all hover:border-[hsl(var(--primary))]/30 hover:bg-white dark:hover:bg-slate-850 hover:text-[hsl(var(--primary))] dark:hover:text-[hsl(var(--primary))] hover:shadow-[0_2px_4px_rgba(0,0,0,0.02)]"
+          className="mt-3 flex items-center justify-center gap-1.5 w-full rounded-xl border border-dashed border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))]/60 py-2.5 text-xs font-bold text-[hsl(var(--text-muted))] transition-all hover:border-[hsl(var(--primary))]/30 hover:bg-[hsl(var(--surface-muted))]/80 hover:text-[hsl(var(--primary))] hover:shadow-[0_2px_4px_rgba(0,0,0,0.02)]"
         >
           <Plus className="h-3.5 w-3.5" />
           Vincular candidato

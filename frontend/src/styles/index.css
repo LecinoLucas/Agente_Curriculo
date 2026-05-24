@@ -105,11 +105,11 @@
        A cor precisa conversar com a logo sem virar vermelho berrante.
        ----------------------------------------------------------------------- */
 
-    --nav-bg:         38 12% 18%;
-    --nav-text:       42 62% 92%;
-    --nav-muted:      42 42% 72%;
-    --nav-active-bg:  42 48% 28%;
-    --nav-border:     42 28% 34%;
+    --nav-bg:         356 60% 12%;
+    --nav-text:       356 30% 94%;
+    --nav-muted:      356 20% 70%;
+    --nav-active-bg:  356 45% 20%;
+    --nav-border:     356 35% 16%;
 
     /* -----------------------------------------------------------------------
        shadcn/radix token contract
@@ -288,110 +288,144 @@
 
   :root[data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 — Enterprise Slate & Cyan/Teal (Light)
+       Visual Theme 1 — Vermelho Marajó
        -----------------------------------------------------------------------
        Direção:
-       - Estética premium, limpa e moderna.
-       - Base em Warm Light Gray (fundo luminoso e confortável).
-       - Navbar em Dark Navy elegante para contraste corporativo sofisticado.
-       - Primary em Cyan/Teal vibrante e inovador.
+       - Forte, corporativo e firme.
+       - Vermelho Marajó fechado para ação e foco.
+       - Base off-white/palha discreta com texto grafite quente.
+       - Navbar vinho profundo para presença institucional.
        ----------------------------------------------------------------------- */
 
-    --brand:               188 95% 38%;
-    --brand-dark:          188 95% 30%;
-    --brand-soft:          188 80% 96%;
-    --brand-glow:          188 80% 88%;
+    --brand:               356 78% 42%;
+    --brand-dark:          356 64% 24%;
+    --brand-soft:          356 80% 94%;
+    --brand-glow:          356 82% 56%;
 
-    --bg:                  210 20% 98%;
-    --surface:             0 0% 100%;
-    --surface-muted:       210 12% 95%;
-    --border:              210 12% 88%;
-    --border-strong:       210 12% 76%;
+    --bg:                  38 36% 94%;
+    --surface:             40 38% 98%;
+    --surface-muted:       36 25% 90%;
+    --border:              35 22% 82%;
+    --border-strong:       32 18% 72%;
 
-    --background:          210 20% 98%;
-    --card:                0 0% 100%;
-    --popover:             0 0% 100%;
-    --secondary:           210 12% 95%;
-    --muted:               210 12% 95%;
+    --background:          38 36% 94%;
+    --foreground:          22 28% 12%;
+    --card:                40 38% 98%;
+    --card-foreground:     22 28% 12%;
+    --popover:             40 38% 98%;
+    --popover-foreground:  22 28% 12%;
+    --secondary:           36 25% 90%;
+    --secondary-foreground:22 28% 12%;
+    --muted:               36 25% 90%;
+    --muted-foreground:    24 14% 42%;
 
-    --text:                215 30% 14%;
-    --text-muted:          215 14% 42%;
+    --text:                22 28% 12%;
+    --text-muted:          24 14% 42%;
 
-    --primary:             188 95% 38%;
+    --primary:             356 76% 42%;
+    --primary-hover:       356 68% 34%;
+    --primary-soft:        356 80% 94%;
     --primary-foreground:  0 0% 100%;
-    --ring:                188 95% 38%;
+    --ring:                356 76% 42%;
 
-    --accent:              188 80% 95%;
-    --accent-foreground:   188 90% 22%;
-    --accent-soft:         188 80% 95%;
+    --accent:              356 80% 94%;
+    --accent-foreground:   356 62% 28%;
+    --accent-soft:         356 80% 94%;
+    --accent-contrast:     22 28% 12%;
 
-    --nav-bg:              215 45% 15%;
-    --nav-text:            210 40% 98%;
-    --nav-muted:           210 20% 70%;
-    --nav-active-bg:       188 95% 38%;
-    --nav-border:          215 40% 20%;
+    --danger:              344 68% 36%;
+    --danger-soft:         344 58% 94%;
+    --destructive:         344 68% 36%;
+    --destructive-foreground: 0 0% 100%;
 
-    --sidebar-accent:      188 80% 95%;
-    --hero-start:          215 45% 15%;
-    --hero-end:            215 40% 22%;
+    --input:               35 22% 82%;
 
-    --page-glow-start:     188 95% 96%;
-    --page-glow-end:       258 90% 96%;
-    --page-gradient-start: 210 20% 98%;
-    --page-gradient-end:   210 15% 97%;
+    --nav-bg:              356 54% 16%;
+    --nav-text:            36 35% 94%;
+    --nav-muted:           34 18% 74%;
+    --nav-active-bg:       356 72% 28%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          356 45% 22%;
+
+    --sidebar-accent:      356 76% 42%;
+    --hero-start:          356 76% 42%;
+    --hero-end:            356 64% 24%;
+
+    --page-glow-start:     356 80% 94%;
+    --page-glow-end:       28 54% 92%;
+    --page-gradient-start: 38 36% 94%;
+    --page-gradient-end:   36 25% 90%;
   }
 
   :root[data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 — Aurora Mineral
+       Visual Theme 2 — Azul Industrial
        -----------------------------------------------------------------------
        Direção:
-       - Tema surpresa com cara mais moderna e menos óbvia.
-       - Base clara mineral: areia, névoa verde e creme quente.
-       - Primary em coral/tomate sofisticado para ainda conversar com vermelho.
-       - Teal profundo na navbar para dar contraste premium.
-       - Pistache/mint aparece só como apoio vivo, sem virar tema infantil.
+       - Azul aço/industrial com presença corporativa.
+       - Base cinza fria azulada, texto slate e cards branco frio.
+       - Vermelho fica restrito a erro/destructive, não a primary.
+       - Navbar azul escuro forte para diferenciar o shell.
        ----------------------------------------------------------------------- */
 
-    --brand:               142 70% 45%;
-    --brand-dark:          142 70% 35%;
-    --brand-soft:          142 70% 95%;
-    --brand-glow:          142 70% 55%;
+    --brand:               207 78% 36%;
+    --brand-dark:          212 64% 22%;
+    --brand-soft:          207 72% 94%;
+    --brand-glow:          207 76% 58%;
 
-    --bg:                  50 44% 94%;
-    --surface:             46 52% 98%;
-    --surface-muted:       86 28% 90%;
-    --border:              64 20% 74%;
-    --border-strong:       142 18% 48%;
+    --bg:                  210 24% 96%;
+    --surface:             210 22% 99%;
+    --surface-muted:       214 18% 91%;
+    --border:              214 18% 82%;
+    --border-strong:       215 16% 70%;
 
-    --background:          50 44% 94%;
-    --card:                46 52% 98%;
-    --popover:             46 52% 98%;
-    --secondary:           86 28% 90%;
-    --muted:               86 28% 90%;
+    --background:          210 24% 96%;
+    --foreground:          218 28% 13%;
+    --card:                210 22% 99%;
+    --card-foreground:     218 28% 13%;
+    --popover:             210 22% 99%;
+    --popover-foreground:  218 28% 13%;
+    --secondary:           214 18% 91%;
+    --secondary-foreground:218 28% 13%;
+    --muted:               214 18% 91%;
+    --muted-foreground:    215 14% 42%;
 
-    --primary:             142 70% 45%;
+    --text:                218 28% 13%;
+    --text-muted:          215 14% 42%;
+
+    --primary:             207 76% 38%;
+    --primary-hover:       207 70% 30%;
+    --primary-soft:        207 72% 94%;
     --primary-foreground:  0 0% 100%;
-    --ring:                142 70% 45%;
+    --ring:                207 76% 38%;
 
-    --accent:              142 44% 90%;
-    --accent-foreground:   142 50% 22%;
-    --accent-soft:         142 44% 90%;
+    --accent:              207 72% 94%;
+    --accent-foreground:   207 68% 27%;
+    --accent-soft:         207 72% 94%;
+    --accent-contrast:     218 28% 13%;
 
-    --nav-bg:              142 25% 82%;
-    --nav-text:            142 60% 15%;
-    --nav-muted:           142 20% 45%;
-    --nav-active-bg:       142 40% 92%;
-    --nav-border:          142 20% 90%;
+    --danger:              344 62% 38%;
+    --danger-soft:         344 52% 94%;
+    --destructive:         344 62% 38%;
+    --destructive-foreground: 0 0% 100%;
 
-    --sidebar-accent:      142 70% 45%;
-    --hero-start:          142 70% 20%;
-    --hero-end:            142 70% 45%;
+    --input:               214 18% 82%;
 
-    --page-glow-start:     142 56% 88%;
-    --page-glow-end:       142 88% 92%;
-    --page-gradient-start: 50 48% 95%;
-    --page-gradient-end:   82 28% 88%;
+    --nav-bg:              215 42% 18%;
+    --nav-text:            210 35% 96%;
+    --nav-muted:           213 18% 74%;
+    --nav-active-bg:       207 72% 34%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          215 34% 25%;
+
+    --sidebar-accent:      207 76% 38%;
+    --hero-start:          207 76% 38%;
+    --hero-end:            212 64% 22%;
+
+    --page-glow-start:     207 72% 94%;
+    --page-glow-end:       214 36% 90%;
+    --page-gradient-start: 210 24% 96%;
+    --page-gradient-end:   214 18% 91%;
   }
 
   :root[data-visual-theme="theme-3"] {
@@ -466,35 +500,35 @@
     --brand-soft:          0 100% 97%;
     --brand-glow:          0 80% 65%;
 
-    --bg:                  210 15% 98%;
+    --bg:                  40 30% 93%;
     --surface:             0 0% 100%;
-    --surface-muted:       210 10% 94%;
-    --border:              210 10% 88%;
-    --border-strong:       0 0% 20%;
+    --surface-muted:       39 30% 88%;
+    --border:              34 20% 82%;
+    --border-strong:       356 75% 42%;
 
-    --background:          210 15% 98%;
+    --background:          40 30% 93%;
     --card:                0 0% 100%;
     --popover:             0 0% 100%;
-    --secondary:           210 10% 94%;
-    --muted:               210 10% 94%;
+    --secondary:           39 30% 88%;
+    --muted:               39 30% 88%;
 
-    --primary:             0 75% 45%;
+    --primary:             356 86% 45%;
     --primary-foreground:  0 0% 100%;
-    --ring:                0 75% 45%;
+    --ring:                356 86% 45%;
 
-    --accent:              0 0% 12%;
-    --accent-foreground:   0 0% 100%;
-    --accent-soft:         0 0% 12%;
+    --accent:              356 88% 95%;
+    --accent-foreground:   356 78% 38%;
+    --accent-soft:         356 88% 95%;
 
-    --nav-bg:              220 20% 12%;
-    --nav-text:            0 0% 100%;
-    --nav-muted:           0 0% 70%;
-    --nav-active-bg:       0 75% 45%;
-    --nav-border:          0 0% 25%;
+    --nav-bg:              356 60% 12%;
+    --nav-text:            356 30% 94%;
+    --nav-muted:           356 20% 70%;
+    --nav-active-bg:       356 45% 20%;
+    --nav-border:          356 35% 16%;
 
-    --sidebar-accent:      0 75% 45%;
-    --hero-start:          0 75% 45%;
-    --hero-end:            0 50% 35%;
+    --sidebar-accent:      356 86% 45%;
+    --hero-start:          356 86% 45%;
+    --hero-end:            356 78% 38%;
 
     --page-glow-start:     0 80% 95%;
     --page-glow-end:       220 20% 95%;
@@ -504,65 +538,76 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-1"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 1 Dark — Enterprise SaaS Navy & Cyan/Teal (Dark)
+       Visual Theme 1 Dark — Marajó Institucional
        -----------------------------------------------------------------------
        Direção:
-       - Escuro profundo e moderno, estilo dashboard SaaS premium.
-       - Base em Dark Navy/Graphite (#050B14, #07111F, #0B1626).
-       - Destaque em Cyan/Teal com cores semânticas controladas.
+       - Carbono/vinho institucional.
+       - Fundos escuros quentes, sem preto puro.
+       - Vermelho Marajó luminoso para ação e foco.
        ----------------------------------------------------------------------- */
 
-    --brand:               188 95% 43%;
-    --brand-dark:          188 95% 34%;
-    --brand-soft:          188 40% 16%;
-    --brand-glow:          188 95% 55%;
+    --brand:               356 82% 58%;
+    --brand-dark:          356 66% 40%;
+    --brand-soft:          356 26% 20%;
+    --brand-glow:          356 84% 64%;
 
-    --bg:                  216 60% 5%;
-    --surface:             216 55% 10%;
-    --surface-muted:       214 48% 12%;
-    --border:              216 40% 16%;
-    --border-strong:       188 86% 40%;
+    --bg:                  350 18% 9%;
+    --surface:             350 16% 14%;
+    --surface-muted:       350 14% 18%;
+    --border:              350 12% 26%;
+    --border-strong:       356 48% 42%;
 
-    --background:          216 60% 5%;
-    --card:                213 51% 12%;
-    --popover:             216 55% 10%;
-    --secondary:           214 48% 12%;
-    --muted:               214 48% 12%;
+    --background:          350 18% 9%;
+    --card:                350 16% 14%;
+    --popover:             350 16% 14%;
+    --secondary:           350 14% 18%;
+    --muted:               350 14% 18%;
 
-    --text:                210 40% 98%;
-    --text-muted:          214 32% 84%;
+    --text:                34 28% 92%;
+    --text-muted:          28 16% 72%;
 
-    --primary:             188 95% 43%;
+    --primary:             356 82% 60%;
+    --primary-hover:       356 74% 52%;
+    --primary-soft:        356 26% 20%;
     --primary-foreground:  0 0% 100%;
-    --ring:                188 95% 43%;
+    --ring:                356 82% 60%;
 
-    --foreground:          210 40% 98%;
-    --card-foreground:     210 40% 98%;
-    --popover-foreground:  210 40% 98%;
+    --foreground:          34 28% 92%;
+    --card-foreground:     34 28% 92%;
+    --popover-foreground:  34 28% 92%;
 
-    --accent:              188 40% 16%;
-    --accent-foreground:   210 40% 98%;
-    --accent-soft:         188 40% 16%;
+    --accent:              356 28% 20%;
+    --accent-foreground:   34 28% 92%;
+    --accent-soft:         356 28% 20%;
+    --accent-contrast:     34 28% 92%;
 
-    --nav-bg:              215 63% 7%;
-    --nav-text:            210 40% 98%;
-    --nav-muted:           214 32% 84%;
-    --nav-active-bg:       188 95% 43%;
-    --nav-border:          216 40% 16%;
+    --danger:              344 72% 58%;
+    --danger-soft:         344 30% 20%;
+    --destructive:         344 72% 58%;
+    --destructive-foreground: 0 0% 100%;
 
-    --sidebar-accent:      188 95% 43%;
-    --hero-start:          215 63% 7%;
-    --hero-end:            216 60% 5%;
+    --input:               350 12% 26%;
 
-    --page-glow-start:     188 95% 43%;
-    --page-glow-end:       258 90% 66%;
-    --page-gradient-start: 216 60% 5%;
-    --page-gradient-end:   215 63% 7%;
+    --nav-bg:              350 30% 10%;
+    --nav-text:            34 28% 94%;
+    --nav-muted:           28 16% 74%;
+    --nav-active-bg:       356 62% 28%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          350 20% 18%;
+
+    --sidebar-accent:      356 82% 60%;
+    --hero-start:          356 82% 60%;
+    --hero-end:            350 30% 10%;
+
+    --page-glow-start:     356 70% 32%;
+    --page-glow-end:       24 34% 24%;
+    --page-gradient-start: 350 18% 9%;
+    --page-gradient-end:   350 24% 7%;
   }
 
   /* --------------------------------------------------------------------------
-     Visual Theme 1 Overrides — Corporate Moonstone
-     Enforces border-radius, removes glows and glass effects on PipelinePage.
+     Visual Theme 1 Overrides — Marajó Institucional
+     Enforces border-radius and keeps surfaces restrained.
      -------------------------------------------------------------------------- */
 
   :root[data-visual-theme="theme-1"] {
@@ -570,7 +615,7 @@
     & .ui-card {
       border-radius: 1rem !important;
       background: rgba(255, 255, 255, 0.75) !important;
-      border: 1px solid rgba(210, 215, 222, 0.4) !important;
+      border: 1px solid hsl(var(--border) / 0.62) !important;
       box-shadow:
         0 18px 45px rgba(0, 0, 0, 0.03),
         0 1px 2px rgba(0, 0, 0, 0.01) !important;
@@ -597,11 +642,11 @@
   :root[data-theme="dark"][data-visual-theme="theme-1"] {
     & .glass,
     & .ui-card {
-      background: rgba(15, 29, 46, 0.82) !important;
-      border: 1px solid rgba(148, 163, 184, 0.12) !important;
+      background: hsl(var(--surface) / 0.82) !important;
+      border: 1px solid hsl(var(--border) / 0.42) !important;
       box-shadow:
         0 18px 45px rgba(0, 0, 0, 0.28),
-        0 0 32px rgba(6, 182, 212, 0.04) !important;
+        0 0 32px hsl(var(--primary) / 0.05) !important;
       backdrop-filter: blur(16px) !important;
       -webkit-backdrop-filter: blur(16px) !important;
     }
@@ -651,59 +696,70 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 Dark — Soft Mineral Abyss
+       Visual Theme 2 Dark — Azul Industrial
        -----------------------------------------------------------------------
        Direção:
-       - Dark suave inspirado no Nord e Catppuccin (verde acinzentado).
-       - Fundo confortável em 18% de luminosidade.
-       - Acentos em verde mineral desaturado.
+       - Azul industrial escuro com cinza aço.
+       - Primary azul; vermelho preservado apenas para danger/destructive.
+       - Mantém contraste em áreas densas como kanban, tabelas e admin.
        ----------------------------------------------------------------------- */
-    --brand:               142 35% 60%;
-    --brand-dark:          142 35% 45%;
-    --brand-soft:          142 15% 22%;
-    --brand-glow:          142 35% 70%;
+    --brand:               207 76% 58%;
+    --brand-dark:          212 58% 34%;
+    --brand-soft:          207 34% 18%;
+    --brand-glow:          207 82% 66%;
 
-    --bg:                  142 12% 18%;
-    --surface:             142 10% 24%;
-    --surface-muted:       142 10% 28%;
-    --border:              142 10% 34%;
-    --border-strong:       142 10% 45%;
+    --bg:                  218 34% 9%;
+    --surface:             216 30% 14%;
+    --surface-muted:       215 24% 19%;
+    --border:              214 18% 28%;
+    --border-strong:       207 40% 46%;
 
-    --background:          142 12% 18%;
-    --card:                142 10% 24%;
-    --popover:             142 10% 24%;
-    --secondary:           142 10% 28%;
-    --muted:               142 10% 28%;
+    --background:          218 34% 9%;
+    --card:                216 30% 14%;
+    --popover:             216 30% 14%;
+    --secondary:           215 24% 19%;
+    --muted:               215 24% 19%;
 
-    --text:                142 10% 92%;
-    --text-muted:          142 10% 75%;
+    --text:                210 35% 93%;
+    --text-muted:          214 20% 72%;
 
-    --foreground:          142 10% 92%;
-    --card-foreground:     142 10% 92%;
-    --popover-foreground:  142 10% 92%;
+    --foreground:          210 35% 93%;
+    --card-foreground:     210 35% 93%;
+    --popover-foreground:  210 35% 93%;
 
-    --primary:             142 35% 60%;
-    --primary-foreground:  142 20% 5%;
-    --ring:                142 35% 60%;
+    --primary:             207 76% 58%;
+    --primary-hover:       207 70% 50%;
+    --primary-soft:        207 34% 18%;
+    --primary-foreground:  0 0% 100%;
+    --ring:                207 76% 58%;
 
-    --accent:              142 15% 30%;
-    --accent-foreground:   142 30% 90%;
-    --accent-soft:         142 15% 30%;
+    --accent:              207 34% 20%;
+    --accent-foreground:   210 35% 93%;
+    --accent-soft:         207 34% 20%;
+    --accent-contrast:     210 35% 93%;
 
-    --nav-bg:              142 15% 14%;
-    --nav-text:            142 10% 92%;
-    --nav-muted:           142 10% 70%;
-    --nav-active-bg:       142 20% 22%;
-    --nav-border:          142 15% 18%;
+    --danger:              344 68% 58%;
+    --danger-soft:         344 28% 20%;
+    --destructive:         344 68% 58%;
+    --destructive-foreground: 0 0% 100%;
 
-    --sidebar-accent:      142 35% 60%;
-    --hero-start:          142 35% 55%;
-    --hero-end:            10 35% 60%;
+    --input:               214 18% 28%;
 
-    --page-glow-start:     142 30% 30%;
-    --page-glow-end:       10 30% 45%;
-    --page-gradient-start: 142 10% 18%;
-    --page-gradient-end:   142 10% 14%;
+    --nav-bg:              218 48% 10%;
+    --nav-text:            210 35% 96%;
+    --nav-muted:           214 20% 74%;
+    --nav-active-bg:       207 62% 30%;
+    --nav-active-text:     0 0% 100%;
+    --nav-border:          215 32% 22%;
+
+    --sidebar-accent:      207 76% 58%;
+    --hero-start:          207 76% 58%;
+    --hero-end:            212 58% 34%;
+
+    --page-glow-start:     207 46% 28%;
+    --page-glow-end:       218 42% 24%;
+    --page-gradient-start: 218 34% 9%;
+    --page-gradient-end:   216 42% 7%;
   }
 
   :root[data-theme="dark"][data-visual-theme="theme-3"] {
@@ -905,18 +961,16 @@
   }
   :root[data-theme="dark"][data-visual-theme="theme-1"] body {
     background:
-      radial-gradient(circle at 12% 12%, hsl(188 95% 43% / 0.12), transparent 32rem),
-      radial-gradient(circle at 88% 15%, hsl(258 90% 66% / 0.08), transparent 30rem),
-      linear-gradient(180deg, #050B14, #07111F) !important;
+      radial-gradient(circle at 12% 12%, hsl(var(--page-glow-start) / 0.14), transparent 32rem),
+      radial-gradient(circle at 88% 15%, hsl(var(--page-glow-end) / 0.12), transparent 30rem),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end))) !important;
     color: hsl(var(--text));
   }
   :root[data-theme="dark"][data-visual-theme="theme-2"] body {
     background:
-      radial-gradient(circle at 10% 10%, hsl(166 84% 42% / 0.26), transparent 28rem),
-      radial-gradient(circle at 88% 14%, hsl(10 90% 52% / 0.24), transparent 30rem),
-      radial-gradient(circle at 72% 86%, hsl(268 80% 48% / 0.16), transparent 28rem),
-      radial-gradient(circle at 18% 92%, hsl(198 88% 45% / 0.14), transparent 24rem),
-      linear-gradient(180deg, hsl(196 44% 7%), hsl(226 42% 7%));
+      radial-gradient(circle at 10% 10%, hsl(var(--page-glow-start) / 0.16), transparent 28rem),
+      radial-gradient(circle at 88% 14%, hsl(var(--page-glow-end) / 0.14), transparent 30rem),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
     color: hsl(var(--text));
   }
   :root[data-theme="dark"][data-visual-theme="theme-4"] body {
@@ -1076,6 +1130,67 @@
     font-weight: 600 !important;
   }
 
+  /* TopNavbar usa tokens de surface no JSX. Escopar o header para nav-* dá
+     presença ao shell sem tocar no componente. */
+  :root[data-visual-theme="theme-1"] header.sticky,
+  :root[data-visual-theme="theme-2"] header.sticky {
+    --surface: var(--nav-bg);
+    --surface-muted: var(--nav-active-bg);
+    --border: var(--nav-border);
+    --text: var(--nav-text);
+    --text-muted: var(--nav-muted);
+    background-color: hsl(var(--nav-bg) / 0.96) !important;
+    border-color: hsl(var(--nav-border)) !important;
+    color: hsl(var(--nav-text));
+    box-shadow: 0 16px 36px -28px hsl(var(--nav-bg) / 0.75);
+  }
+
+  :root[data-visual-theme="theme-1"] header.sticky [aria-current="page"],
+  :root[data-visual-theme="theme-2"] header.sticky [aria-current="page"] {
+    background-color: hsl(var(--nav-active-bg)) !important;
+    color: hsl(var(--nav-active-text)) !important;
+  }
+
+  :root[data-visual-theme="theme-1"] header.sticky [role="menu"],
+  :root[data-visual-theme="theme-1"] header.sticky .visual-theme-popover {
+    --surface: 40 38% 98%;
+    --surface-muted: 36 25% 90%;
+    --border: 35 22% 82%;
+    --text: 22 28% 12%;
+    --text-muted: 24 14% 42%;
+    --accent-soft: 356 80% 94%;
+  }
+
+  :root[data-visual-theme="theme-2"] header.sticky [role="menu"],
+  :root[data-visual-theme="theme-2"] header.sticky .visual-theme-popover {
+    --surface: 210 22% 99%;
+    --surface-muted: 214 18% 91%;
+    --border: 214 18% 82%;
+    --text: 218 28% 13%;
+    --text-muted: 215 14% 42%;
+    --accent-soft: 207 72% 94%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-1"] header.sticky [role="menu"],
+  :root[data-theme="dark"][data-visual-theme="theme-1"] header.sticky .visual-theme-popover {
+    --surface: 350 16% 14%;
+    --surface-muted: 350 14% 18%;
+    --border: 350 12% 26%;
+    --text: 34 28% 92%;
+    --text-muted: 28 16% 72%;
+    --accent-soft: 356 28% 20%;
+  }
+
+  :root[data-theme="dark"][data-visual-theme="theme-2"] header.sticky [role="menu"],
+  :root[data-theme="dark"][data-visual-theme="theme-2"] header.sticky .visual-theme-popover {
+    --surface: 216 30% 14%;
+    --surface-muted: 215 24% 19%;
+    --border: 214 18% 28%;
+    --text: 210 35% 93%;
+    --text-muted: 214 20% 72%;
+    --accent-soft: 207 34% 20%;
+  }
+
   /* --------------------------------------------------------------------------
      Inputs
      -------------------------------------------------------------------------- */
@@ -1183,6 +1298,13 @@
     padding: 0.65rem;
     overflow: hidden;
     box-shadow: 0 24px 64px -26px rgba(0, 0, 0, 0.55), 0 8px 18px -12px rgba(0, 0, 0, 0.45);
+  }
+
+  header .visual-theme-popover {
+    top: calc(100% + 0.75rem);
+    right: 0;
+    bottom: auto;
+    left: auto;
   }
 
   .visual-theme-popover-header {
@@ -1374,14 +1496,12 @@
 
   .visual-theme-preview-theme-1 {
     background:
-      linear-gradient(135deg, hsl(38 12% 18%), hsl(42 48% 28%)),
-      linear-gradient(135deg, hsl(356 86% 55%), hsl(32 72% 48%));
+      linear-gradient(135deg, hsl(356 54% 16%) 0 34%, hsl(356 76% 42%) 34% 68%, hsl(38 36% 94%) 68% 100%);
   }
 
   .visual-theme-preview-theme-2 {
     background:
-      linear-gradient(135deg, hsl(176 54% 30%), hsl(8 82% 54%)),
-      linear-gradient(180deg, hsl(50 48% 95%), hsl(166 56% 88%));
+      linear-gradient(135deg, hsl(215 42% 18%) 0 34%, hsl(207 76% 38%) 34% 68%, hsl(210 24% 96%) 68% 100%);
   }
 
   .visual-theme-preview-theme-3 {

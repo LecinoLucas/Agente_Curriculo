@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, Check, Palette, Sparkles, Zap } from "lucide-react";
+import { Check, Palette } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useVisualTheme } from "../../hooks/useVisualTheme";
@@ -13,22 +13,12 @@ const THEMES: Array<{
   {
     value: "theme-1",
     label: "Tema 1",
-    description: "Marajó clássico",
+    description: "Vermelho Marajó",
   },
   {
     value: "theme-2",
     label: "Tema 2",
-    description: "Marajó suave",
-  },
-  {
-    value: "theme-3",
-    label: "Tema 3",
-    description: "Aurora playground",
-  },
-  {
-    value: "theme-4",
-    label: "Tema 4",
-    description: "Vermelho corporativo",
+    description: "Azul Industrial",
   },
 ];
 
@@ -66,38 +56,6 @@ export function VisualThemeSwitcher() {
             <div className="visual-theme-popover-header">
               <p className="visual-theme-popover-title">Escolher tema</p>
             </div>
-
-            <button
-              type="button"
-              className={cn(
-                "visual-theme-playground",
-                visualTheme === "theme-3" && "is-active",
-              )}
-              onClick={() => setVisualTheme("theme-3")}
-            >
-              <span className="visual-theme-playground-orb" aria-hidden="true" />
-              <span className="visual-theme-playground-header">
-                <span className="visual-theme-playground-kicker">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Tema 3 Playground
-                </span>
-                <span className="visual-theme-playground-title">Aurora Studio</span>
-              </span>
-
-              <span className="visual-theme-playground-canvas" aria-hidden="true">
-                <span className="visual-theme-playground-card primary">
-                  <Activity className="h-3.5 w-3.5" />
-                  87%
-                </span>
-                <span className="visual-theme-playground-card secondary">
-                  <Zap className="h-3.5 w-3.5" />
-                  live
-                </span>
-                <span className="visual-theme-playground-track">
-                  <span />
-                </span>
-              </span>
-            </button>
 
             <div className="visual-theme-options">
               {THEMES.map((themeOption) => {
