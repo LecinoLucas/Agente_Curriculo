@@ -121,6 +121,58 @@ Essa baseline tem `down_revision = None` e representa o schema atual completo.
 Migrations antigas ficam arquivadas em `alembic/archived_versions/` apenas para
 referência histórica.
 
+## Reconciliando Bancos Antigos com 20260523_checkpoint
+
+Alguns bancos locais antigos podem ter `alembic_version.version_num` marcado como
+`20260523_checkpoint`, uma revision transitória que não existe mais no diretório
+ativo de migrations. Nesses casos, `python -m alembic upgrade head` falha antes
+de aplicar migrations incrementais.
+
+Use este procedimento somente quando o schema base já existir no banco. Nunca use
+em banco vazio e nunca use para esconder erro real de schema.
+
+1. Faça backup antes de alterar o ponteiro Alembic:
+
+```bash
+pg_dump -Fc NOME_DO_BANCO > backup_antes_reconcile_$(date +%Y%m%d_%H%M).dump
+```
+
+2. Confirme que o banco tem as tabelas base e dados esperados:
+
+```bash
+psql NOME_DO_BANCO -c "select * from alembic_version;"
+psql NOME_DO_BANCO -c "select count(*) from jobs;"
+psql NOME_DO_BANCO -c "select count(*) from candidates;"
+psql NOME_DO_BANCO -c "select count(*) from candidate_job_pipeline;"
+```
+
+3. Se `alembic_version` estiver em `20260523_checkpoint` e a baseline oficial
+ativa for `dad2597b8478`, reconcilie o ponteiro:
+
+```bash
+python -m alembic stamp dad2597b8478
+```
+
+Se o comando acima falhar porque o Alembic não consegue resolver a revision
+antiga, use a forma equivalente com purge:
+
+```bash
+python -m alembic stamp --purge dad2597b8478
+```
+
+`stamp` altera somente a tabela `alembic_version`: não cria tabelas, não remove
+tabelas e não altera dados de negócio. Depois dele, aplique novas alterações
+somente por migration incremental:
+
+```bash
+python -m alembic upgrade head
+python -m alembic current
+python scripts/validate_baseline_schema.py
+```
+
+Não rode `scripts/reset_dev_db.sh`, `dropdb`, `Base.metadata.create_all` ou SQL
+manual de `CREATE TABLE` em bancos com dados úteis.
+
 ## Adicionando ou Alterando Models
 
 Sempre que um model SQLAlchemy com `__tablename__` for criado ou removido:
