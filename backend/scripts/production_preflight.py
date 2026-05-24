@@ -1,15 +1,8 @@
-"""production_preflight.py
+"""Read-only production preflight checks.
 
-Validações de pré-voo para ambiente de produção.
-Deve ser executado APÓS `alembic upgrade head` e ANTES de subir a aplicação.
-
-NÃO executa seeds de dados de desenvolvimento.
-NÃO modifica o banco — apenas lê e valida.
-
-Uso:
-    python scripts/production_preflight.py
-
-Sai com código 0 se tudo OK, 1 se encontrar problema crítico.
+Run after ``alembic upgrade head`` and before starting the application.
+This script intentionally does not import the application engine/settings, create
+tables, run seeds, create users, or insert demo data.
 """
 from __future__ import annotations
 
@@ -18,11 +11,14 @@ import os
 import sys
 from pathlib import Path
 
+import sqlalchemy as sa
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import NullPool
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
-
-import sqlalchemy as sa
 
 SECTION = "=" * 60
 _ERRORS: list[str] = []
@@ -43,26 +39,36 @@ def _ok(msg: str) -> None:
     print(f"  [OK]   {msg}")
 
 
-# ── 1. DATABASE_URL configurada ──────────────────────────────────────────────
+def _render_safe_url(url: str) -> str:
+    try:
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:
+        return "<DATABASE_URL inválida>"
+
+
+def create_readonly_engine(url: str) -> AsyncEngine:
+    return create_async_engine(
+        url,
+        poolclass=NullPool,
+        connect_args={"server_settings": {"default_transaction_read_only": "on"}},
+    )
+
 
 def check_database_url() -> str | None:
     url = os.getenv("DATABASE_URL")
     if not url:
-        try:
-            from src.core.settings import settings
-            url = settings.DATABASE_URL
-        except Exception:
-            pass
-
-    if not url:
-        _fail("DATABASE_URL não encontrada nas variáveis de ambiente nem em settings.")
+        _fail("DATABASE_URL não encontrada nas variáveis de ambiente.")
         return None
 
-    _ok(f"DATABASE_URL configurada: {url[:30]}…")
+    try:
+        make_url(url)
+    except Exception as exc:
+        _fail(f"DATABASE_URL inválida: {exc}")
+        return None
+
+    _ok(f"DATABASE_URL configurada: {_render_safe_url(url)}")
     return url
 
-
-# ── 2. Detecta ambiente de produção ─────────────────────────────────────────
 
 def check_not_dev_seed_safe(url: str) -> None:
     dev_patterns = ["localhost", "127.0.0.1", "dev", "test", "local"]
@@ -76,9 +82,7 @@ def check_not_dev_seed_safe(url: str) -> None:
         _ok("DATABASE_URL não contém padrões de desenvolvimento.")
 
 
-# ── 3. Banco acessível ───────────────────────────────────────────────────────
-
-async def check_db_connectivity(engine: sa.ext.asyncio.AsyncEngine) -> bool:
+async def check_db_connectivity(engine: AsyncEngine) -> bool:
     try:
         async with engine.connect() as conn:
             await conn.execute(sa.text("SELECT 1"))
@@ -89,15 +93,25 @@ async def check_db_connectivity(engine: sa.ext.asyncio.AsyncEngine) -> bool:
         return False
 
 
-# ── 4. Extensões necessárias ─────────────────────────────────────────────────
-
-REQUIRED_EXTENSIONS = ["uuid-ossp", "pg_trgm"]
-
-async def check_extensions(engine: sa.ext.asyncio.AsyncEngine) -> None:
+async def check_readonly_guard(engine: AsyncEngine) -> None:
     async with engine.connect() as conn:
         result = await conn.execute(
-            sa.text("SELECT extname FROM pg_extension")
+            sa.text("SELECT current_setting('default_transaction_read_only')")
         )
+        value = result.scalar_one()
+
+    if value == "on":
+        _ok("Sessões do preflight estão em modo read-only.")
+    else:
+        _fail("Sessões do preflight não estão em modo read-only.")
+
+
+REQUIRED_EXTENSIONS = ["uuid-ossp", "pg_trgm", "pgcrypto", "unaccent"]
+
+
+async def check_extensions(engine: AsyncEngine) -> None:
+    async with engine.connect() as conn:
+        result = await conn.execute(sa.text("SELECT extname FROM pg_extension"))
         installed = {row[0] for row in result.fetchall()}
 
     for ext in REQUIRED_EXTENSIONS:
@@ -106,32 +120,26 @@ async def check_extensions(engine: sa.ext.asyncio.AsyncEngine) -> None:
         else:
             _fail(
                 f"Extensão '{ext}' NÃO instalada. "
-                "Execute no psql como superusuário: "
-                f"CREATE EXTENSION IF NOT EXISTS \"{ext}\";"
+                "Ela deve ser criada pelo Alembic em `alembic upgrade head`."
             )
 
 
-# ── 5. Alembic está no head ──────────────────────────────────────────────────
-
-async def check_alembic_head(engine: sa.ext.asyncio.AsyncEngine) -> None:
+async def check_alembic_head(engine: AsyncEngine) -> None:
     try:
         from alembic.config import Config
         from alembic.runtime.migration import MigrationContext
         from alembic.script import ScriptDirectory
 
         alembic_cfg = Config(str(ROOT_DIR / "alembic.ini"))
-        alembic_cfg.set_main_option(
-            "sqlalchemy.url",
-            str(engine.url).replace("postgresql+asyncpg", "postgresql+psycopg2"),
-        )
         script = ScriptDirectory.from_config(alembic_cfg)
         heads = set(script.get_heads())
 
         async with engine.connect() as conn:
-            ctx = await conn.run_sync(
-                lambda sync_conn: MigrationContext.configure(sync_conn)
+            current = await conn.run_sync(
+                lambda sync_conn: set(
+                    MigrationContext.configure(sync_conn).get_current_heads()
+                )
             )
-            current = set(ctx.get_current_heads())
 
         if current == heads:
             _ok(f"Alembic está no head: {heads}")
@@ -139,22 +147,31 @@ async def check_alembic_head(engine: sa.ext.asyncio.AsyncEngine) -> None:
             _fail(
                 f"Alembic NÃO está no head. "
                 f"Atual: {current}, Head esperado: {heads}. "
-                "Execute: alembic upgrade head"
+                "Execute: python -m alembic upgrade head"
             )
     except Exception as exc:
-        _warn(f"Não foi possível verificar alembic heads: {exc}")
+        _fail(f"Não foi possível verificar alembic heads: {exc}")
 
 
-# ── 6. Tabelas críticas presentes ────────────────────────────────────────────
-
-CRITICAL_TABLES = [
-    "users", "candidates", "jobs", "job_areas",
-    "resumes", "analyses", "analysis_results",
-    "candidate_job_pipeline", "candidate_job_scores",
-    "ai_models", "score_model_versions", "audit_logs",
+REQUIRED_TABLES = [
+    "ai_models",
+    "analyses",
+    "analysis_results",
+    "audit_logs",
+    "candidate_job_match",
+    "candidate_job_pipeline",
+    "candidate_job_scores",
+    "candidates",
+    "job_areas",
+    "jobs",
+    "pipeline_stage_transitions",
+    "resumes",
+    "score_model_versions",
+    "users",
 ]
 
-async def check_critical_tables(engine: sa.ext.asyncio.AsyncEngine) -> None:
+
+async def check_required_tables(engine: AsyncEngine) -> None:
     async with engine.connect() as conn:
         result = await conn.execute(
             sa.text(
@@ -164,27 +181,22 @@ async def check_critical_tables(engine: sa.ext.asyncio.AsyncEngine) -> None:
         )
         existing = {row[0] for row in result.fetchall()}
 
-    missing = [t for t in CRITICAL_TABLES if t not in existing]
+    missing = [t for t in REQUIRED_TABLES if t not in existing]
     if missing:
-        _fail(f"Tabelas críticas faltando: {missing}")
+        _fail(f"Tabelas obrigatórias faltando: {missing}")
     else:
-        _ok(f"{len(CRITICAL_TABLES)} tabelas críticas presentes.")
+        _ok(f"{len(REQUIRED_TABLES)} tabelas obrigatórias presentes.")
 
-
-# ── 7. Alerta sobre admin dev ─────────────────────────────────────────────────
 
 def check_no_dev_seed_in_prod() -> None:
     print(
-        "\n  [INFO] Para criar o primeiro admin em produção, use:\n"
-        "         python scripts/seed_dev_admin.py  (APENAS em dev)\n"
-        "\n"
-        "         Em produção, crie o admin manualmente via psql ou via endpoint\n"
-        "         /admin/bootstrap (se disponível e protegido por BOOTSTRAP_SECRET).\n"
+        "\n  [INFO] Este preflight não roda bootstrap_dev.py, seed_dev_admin.py,\n"
+        "         seed_jobs.py nem qualquer seed/demo de desenvolvimento.\n"
+        "         A criação do primeiro admin de produção deve seguir um processo\n"
+        "         operacional separado e auditável.\n"
         "         Nunca use seeds de dev em produção."
     )
 
-
-# ── Main ─────────────────────────────────────────────────────────────────────
 
 async def main() -> int:
     print(SECTION)
@@ -199,25 +211,29 @@ async def main() -> int:
     print("\n[2] Ambiente")
     check_not_dev_seed_safe(url)
 
-    from src.infrastructure.database.connection import engine
-    print("\n[3] Conectividade")
-    ok = await check_db_connectivity(engine)
-    if not ok:
-        return 1
+    engine = create_readonly_engine(url)
+    try:
+        print("\n[3] Conectividade")
+        ok = await check_db_connectivity(engine)
+        if not ok:
+            return 1
 
-    print("\n[4] Extensões PostgreSQL")
-    await check_extensions(engine)
+        print("\n[4] Read-only")
+        await check_readonly_guard(engine)
 
-    print("\n[5] Alembic head")
-    await check_alembic_head(engine)
+        print("\n[5] Extensões PostgreSQL")
+        await check_extensions(engine)
 
-    print("\n[6] Tabelas críticas")
-    await check_critical_tables(engine)
+        print("\n[6] Alembic head")
+        await check_alembic_head(engine)
 
-    print("\n[7] Aviso sobre seeds de produção")
-    check_no_dev_seed_in_prod()
+        print("\n[7] Tabelas obrigatórias")
+        await check_required_tables(engine)
 
-    await engine.dispose()
+        print("\n[8] Aviso sobre seeds de produção")
+        check_no_dev_seed_in_prod()
+    finally:
+        await engine.dispose()
 
     print(f"\n{SECTION}")
     if _ERRORS:

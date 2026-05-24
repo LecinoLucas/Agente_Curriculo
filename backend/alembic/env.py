@@ -28,6 +28,14 @@ config.set_main_option(
 
 target_metadata = Base.metadata
 
+IGNORED_AUTOGENERATE_TABLES = {"audit_logs_default"}
+
+
+def include_object(object_, name, type_, reflected, compare_to):
+    if type_ == "table" and name in IGNORED_AUTOGENERATE_TABLES:
+        return False
+    return True
+
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -36,6 +44,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -53,6 +62,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

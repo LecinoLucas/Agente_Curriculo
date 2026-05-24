@@ -107,6 +107,7 @@ __all__ = [
     "CandidateModel",
     "CandidateAuthTokenModel",
     "GoogleCalendarConnectionModel",
+    "CalendarSyncEventModel",
     "CandidateJobPipelineModel",
     "CandidateJobPipelineEventModel",
     "ResumeModel",
