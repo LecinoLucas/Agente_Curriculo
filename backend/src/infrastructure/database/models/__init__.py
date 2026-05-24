@@ -94,6 +94,11 @@ from src.infrastructure.database.models.collaboration_comments_model import (
 from src.infrastructure.database.models.candidate_note_model import (
     CandidateNoteModel,
 )
+from src.infrastructure.database.models.job_area_model import JobAreaModel
+from src.infrastructure.database.models.candidate_pipeline_model import (
+    CandidatePipelineModel,
+    PipelineStageTransitionModel,
+)
 
 __all__ = [
     "UserModel",
@@ -153,4 +158,7 @@ __all__ = [
     "CommunicationDeliveryAttemptModel",
     "CollaborationCommentModel",
     "CandidateNoteModel",
+    "JobAreaModel",
+    "CandidatePipelineModel",
+    "PipelineStageTransitionModel",
 ]

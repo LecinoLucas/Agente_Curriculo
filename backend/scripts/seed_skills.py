@@ -61,27 +61,21 @@ async def main() -> None:
             await engine.dispose()
             return
 
-        print("Inserindo skills de exemplo...")
+        print("Inserindo skills legadas...")
 
         insert_sql = text(
             """
-            INSERT INTO skills (name, normalized_name, category, aliases, is_verified)
-            VALUES (:name, :normalized_name, :category, :aliases::jsonb, true)
-            ON CONFLICT (normalized_name) DO NOTHING
+            INSERT INTO skills (name, normalized_name)
+            VALUES (:name, :normalized_name)
+            ON CONFLICT (normalized_name) WHERE deleted_at IS NULL DO NOTHING
             """
         )
 
-        import json
         count = 0
         for s in SKILLS:
             await session.execute(
                 insert_sql,
-                {
-                    "name": s["name"],
-                    "normalized_name": s["normalized_name"],
-                    "category": s["category"],
-                    "aliases": json.dumps(s["aliases"]),
-                },
+                {"name": s["name"], "normalized_name": s["normalized_name"]},
             )
             count += 1
 
