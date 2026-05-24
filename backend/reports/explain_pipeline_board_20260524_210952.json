@@ -1,0 +1,121 @@
+{
+  "created_at": "2026-05-24T21:09:52.651829+00:00",
+  "mode": "dry_run",
+  "safety": {
+    "yes": false,
+    "analyze": false,
+    "ddl_available": false,
+    "production_hosts_env": "PIPELINE_BOARD_EXPLAIN_PRODUCTION_HOSTS"
+  },
+  "database": {
+    "database": "resume_ai",
+    "user": "LecinoLucas",
+    "host": "::1/128",
+    "port": 5432,
+    "version": "PostgreSQL 18.3 (Homebrew) on aarch64-apple-darwin25.2.0, compiled by Apple clang version 17.0.0 (clang-1700.6.3.2), 64-bit",
+    "url": "postgresql+asyncpg://LecinoLucas:***@localhost:5432/resume_ai",
+    "app_env": "development",
+    "environment": null,
+    "env": null
+  },
+  "volumes": {
+    "candidate_job_pipeline": 101,
+    "candidates": 438,
+    "analyses": 82,
+    "analysis_results": 67,
+    "candidate_job_scores": 45,
+    "behavioral_assessment_assignments": 3,
+    "behavioral_assessment_ai_evaluations": 0,
+    "interview_schedules": 362,
+    "interview_scorecards": 1
+  },
+  "top_jobs_by_active_pipeline_rows": [
+    {
+      "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+      "active_pipeline_rows": 17
+    },
+    {
+      "job_id": "d45cd0aa-d800-4765-b068-1e73bbd4184e",
+      "active_pipeline_rows": 7
+    },
+    {
+      "job_id": "51f5dc29-d95d-4f2d-8947-a1c506c653c4",
+      "active_pipeline_rows": 3
+    },
+    {
+      "job_id": "bb6aa5f2-a040-461a-adef-c79a5ef88872",
+      "active_pipeline_rows": 2
+    },
+    {
+      "job_id": "ed4aad2a-4a72-41e0-8728-571ad2bbd7bd",
+      "active_pipeline_rows": 2
+    },
+    {
+      "job_id": "d7798d96-7d5e-4a47-aaae-e177fab3b6f4",
+      "active_pipeline_rows": 2
+    },
+    {
+      "job_id": "ab9831d3-f0ee-411a-b9ff-c28189613165",
+      "active_pipeline_rows": 1
+    },
+    {
+      "job_id": "6522ec31-a4c2-4086-9bfc-433486c198ce",
+      "active_pipeline_rows": 1
+    },
+    {
+      "job_id": "09b5c2be-8092-45db-b81d-0b43d711f49b",
+      "active_pipeline_rows": 1
+    },
+    {
+      "job_id": "3a56667e-4728-49fb-be99-a2347ce37a8f",
+      "active_pipeline_rows": 1
+    }
+  ],
+  "target": {
+    "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b",
+    "active_pipeline_rows": 17
+  },
+  "representativeness_warning": "Target board has fewer than 100 active pipeline rows. Use this as a smoke check only, not production performance evidence.",
+  "statements": [
+    {
+      "name": "pipeline_board_list_job_matches",
+      "kind": "board",
+      "sql": "SELECT\n  p.candidate_id,\n  c.full_name AS candidate_name,\n  p.job_id,\n  p.pipeline_stage AS stage,\n  p.link_status AS status,\n  p.entered_at,\n  p.updated_at,\n  ar.keywords AS top_skills,\n  a.status AS ai_status,\n  s.final_score AS job_fit_score,\n  j.requires_behavioral_assessment,\n  j.requires_behavioral_ai_evaluation,\n  j.requires_interview,\n  j.requires_scorecard,\n  (\n    SELECT baa.status\n    FROM behavioral_assessment_assignments baa\n    WHERE baa.id = (\n      SELECT baa2.id\n      FROM behavioral_assessment_assignments baa2\n      WHERE baa2.candidate_id = p.candidate_id\n        AND baa2.job_id = p.job_id\n      ORDER BY baa2.created_at DESC, baa2.id DESC\n      LIMIT 1\n    )\n    LIMIT 1\n  ) AS behavioral_assessment_status,\n  (\n    SELECT baa.submitted_at\n    FROM behavioral_assessment_assignments baa\n    WHERE baa.id = (\n      SELECT baa2.id\n      FROM behavioral_assessment_assignments baa2\n      WHERE baa2.candidate_id = p.candidate_id\n        AND baa2.job_id = p.job_id\n      ORDER BY baa2.created_at DESC, baa2.id DESC\n      LIMIT 1\n    )\n    LIMIT 1\n  ) AS behavioral_submitted_at,\n  (\n    SELECT bae.status\n    FROM behavioral_assessment_ai_evaluations bae\n    WHERE bae.assignment_id = (\n      SELECT baa2.id\n      FROM behavioral_assessment_assignments baa2\n      WHERE baa2.candidate_id = p.candidate_id\n        AND baa2.job_id = p.job_id\n      ORDER BY baa2.created_at DESC, baa2.id DESC\n      LIMIT 1\n    )\n    ORDER BY bae.completed_at DESC NULLS LAST, bae.created_at DESC\n    LIMIT 1\n  ) AS behavioral_ai_evaluation_status,\n  (\n    SELECT i.status\n    FROM interview_schedules i\n    WHERE i.candidate_id = p.candidate_id\n      AND i.job_id = p.job_id\n    ORDER BY i.scheduled_start DESC NULLS LAST, i.updated_at DESC\n    LIMIT 1\n  ) AS interview_status,\n  (\n    SELECT i.scheduled_start\n    FROM interview_schedules i\n    WHERE i.candidate_id = p.candidate_id\n      AND i.job_id = p.job_id\n      AND i.status IN ('scheduled', 'rescheduled')\n    ORDER BY i.scheduled_start ASC, i.updated_at DESC\n    LIMIT 1\n  ) AS interview_scheduled_start,\n  (\n    SELECT sc.status\n    FROM interview_scorecards sc\n    WHERE sc.candidate_id = p.candidate_id\n      AND sc.job_id = p.job_id\n    ORDER BY sc.submitted_at DESC NULLS LAST, sc.updated_at DESC, sc.created_at DESC\n    LIMIT 1\n  ) AS interview_scorecard_status\nFROM candidate_job_pipeline p\nJOIN candidates c ON c.id = p.candidate_id\nJOIN jobs j ON j.id = p.job_id\nLEFT JOIN analyses a\n  ON a.id = p.current_analysis_id\n AND a.job_id = p.job_id\nLEFT JOIN analysis_results ar\n  ON ar.analysis_id = a.id\nLEFT JOIN candidate_job_scores s\n  ON s.candidate_id = p.candidate_id\n AND s.job_id = p.job_id\n AND s.version_id = (\n   SELECT smv.id\n   FROM score_model_versions smv\n   WHERE smv.is_active IS true\n   LIMIT 1\n )\n AND s.source_analysis_id = p.current_analysis_id\n AND s.freshness_status = 'fresh'\nWHERE p.job_id = :job_id\n  AND c.deleted_at IS NULL\n  AND p.relationship_status = 'active'\n  AND p.pipeline_status = 'active'\n  AND p.is_terminal IS false\n  AND p.terminated_at IS NULL\nORDER BY p.updated_at DESC",
+      "params": {
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b"
+      }
+    },
+    {
+      "name": "behavioral_assignment_isolated",
+      "kind": "behavioral_assignment",
+      "sql": "SELECT p.candidate_id, latest_assignment.id, latest_assignment.status,\n       latest_assignment.submitted_at\nFROM candidate_job_pipeline p\nLEFT JOIN LATERAL (\n  SELECT baa.id, baa.status, baa.submitted_at\n  FROM behavioral_assessment_assignments baa\n  WHERE baa.candidate_id = p.candidate_id\n    AND baa.job_id = p.job_id\n  ORDER BY baa.created_at DESC, baa.id DESC\n  LIMIT 1\n) latest_assignment ON true\nWHERE p.job_id = :job_id\n  AND p.relationship_status = 'active'\n  AND p.pipeline_status = 'active'\n  AND p.is_terminal IS false\n  AND p.terminated_at IS NULL",
+      "params": {
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b"
+      }
+    },
+    {
+      "name": "interview_status_isolated",
+      "kind": "interview_status",
+      "sql": "SELECT p.candidate_id, latest_interview.status, latest_interview.scheduled_start\nFROM candidate_job_pipeline p\nLEFT JOIN LATERAL (\n  SELECT i.status, i.scheduled_start\n  FROM interview_schedules i\n  WHERE i.candidate_id = p.candidate_id\n    AND i.job_id = p.job_id\n  ORDER BY i.scheduled_start DESC NULLS LAST, i.updated_at DESC\n  LIMIT 1\n) latest_interview ON true\nWHERE p.job_id = :job_id\n  AND p.relationship_status = 'active'\n  AND p.pipeline_status = 'active'\n  AND p.is_terminal IS false\n  AND p.terminated_at IS NULL",
+      "params": {
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b"
+      }
+    },
+    {
+      "name": "interview_next_scheduled_isolated",
+      "kind": "interview_next",
+      "sql": "SELECT p.candidate_id, next_interview.scheduled_start\nFROM candidate_job_pipeline p\nLEFT JOIN LATERAL (\n  SELECT i.scheduled_start\n  FROM interview_schedules i\n  WHERE i.candidate_id = p.candidate_id\n    AND i.job_id = p.job_id\n    AND i.status IN ('scheduled', 'rescheduled')\n  ORDER BY i.scheduled_start ASC, i.updated_at DESC\n  LIMIT 1\n) next_interview ON true\nWHERE p.job_id = :job_id\n  AND p.relationship_status = 'active'\n  AND p.pipeline_status = 'active'\n  AND p.is_terminal IS false\n  AND p.terminated_at IS NULL",
+      "params": {
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b"
+      }
+    },
+    {
+      "name": "scorecard_isolated",
+      "kind": "scorecard",
+      "sql": "SELECT p.candidate_id, latest_scorecard.status\nFROM candidate_job_pipeline p\nLEFT JOIN LATERAL (\n  SELECT sc.status\n  FROM interview_scorecards sc\n  WHERE sc.candidate_id = p.candidate_id\n    AND sc.job_id = p.job_id\n  ORDER BY sc.submitted_at DESC NULLS LAST, sc.updated_at DESC, sc.created_at DESC\n  LIMIT 1\n) latest_scorecard ON true\nWHERE p.job_id = :job_id\n  AND p.relationship_status = 'active'\n  AND p.pipeline_status = 'active'\n  AND p.is_terminal IS false\n  AND p.terminated_at IS NULL",
+      "params": {
+        "job_id": "d53b04a9-6a64-48cc-a27e-a621152b537b"
+      }
+    }
+  ]
+}
