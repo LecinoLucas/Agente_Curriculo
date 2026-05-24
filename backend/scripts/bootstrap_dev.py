@@ -234,12 +234,16 @@ async def _run_seed_step(step: SeedStep, verbose: bool) -> None:
         _fail(f"{step.file_name} não expõe uma função main() executável.")
 
     _debug(verbose, f"Executando seed: {step.module_name}.main()")
+    previous_argv = sys.argv[:]
+    sys.argv = [str(script_path)]
     try:
         result = seed_main()
         if asyncio.iscoroutine(result):
             await result
     except Exception as exc:
         _fail(f"Falha ao executar {step.file_name}: {exc}")
+    finally:
+        sys.argv = previous_argv
 
 
 async def _run_seeds(*, skip_jobs: bool, verbose: bool) -> None:
@@ -271,35 +275,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def _async_main(args: argparse.Namespace) -> None:
-    _, database_url = _load_runtime_config(args.verbose)
-    alembic_cfg = _alembic_config(database_url)
-
-    _print(SECTION)
-    _print("Bootstrap Dev Seguro — backend")
-    _print(SECTION)
-    _print(f"APP_ENV........: {(os.getenv('APP_ENV') or 'development').strip().lower()}")
-    _print(f"DATABASE_URL...: {_safe_database_url(database_url)}")
-    _print("Modo...........: preserva dados, não dropa banco, não apaga registros")
-
-    _print("\n[1/5] Aplicando migrations (alembic upgrade head)...")
-    _run_alembic_upgrade(alembic_cfg, args.verbose)
-
-    _print("\n[2/5] Validando schema crítico...")
-    await _check_required_tables()
-    _print("[OK] Tabelas críticas presentes.")
-
-    _print("\n[3/5] Garantindo diretórios locais...")
-    _ensure_directories(args.verbose)
-    _print("[OK] uploads, private_uploads e reports disponíveis.")
-
-    _print("\n[4/5] Revisão Alembic aplicada...")
-    _show_alembic_current(alembic_cfg, args.verbose)
-
-    _print("\n[5/5] Rodando seeds de desenvolvimento...")
-    await _run_seeds(skip_jobs=args.skip_jobs, verbose=args.verbose)
-
-
 async def _dispose_engine() -> None:
     try:
         engine = _get_engine()
@@ -308,11 +283,40 @@ async def _dispose_engine() -> None:
         pass
 
 
+async def _run_async_steps(*, skip_jobs: bool, verbose: bool) -> None:
+    _print("\n[2/5] Validando schema crítico...")
+    await _check_required_tables()
+    _print("[OK] Tabelas críticas presentes.")
+
+    _print("\n[3/5] Garantindo diretórios locais...")
+    _ensure_directories(verbose)
+    _print("[OK] uploads, private_uploads e reports disponíveis.")
+
+    _print("\n[4/5] Rodando seeds de desenvolvimento...")
+    await _run_seeds(skip_jobs=skip_jobs, verbose=verbose)
+
+
 def main() -> None:
     args = _parse_args()
 
     try:
-        asyncio.run(_async_main(args))
+        _, database_url = _load_runtime_config(args.verbose)
+        alembic_cfg = _alembic_config(database_url)
+
+        _print(SECTION)
+        _print("Bootstrap Dev Seguro — backend")
+        _print(SECTION)
+        _print(f"APP_ENV........: {(os.getenv('APP_ENV') or 'development').strip().lower()}")
+        _print(f"DATABASE_URL...: {_safe_database_url(database_url)}")
+        _print("Modo...........: preserva dados, não dropa banco, não apaga registros")
+
+        _print("\n[1/5] Aplicando migrations (alembic upgrade head)...")
+        _run_alembic_upgrade(alembic_cfg, args.verbose)
+
+        asyncio.run(_run_async_steps(skip_jobs=args.skip_jobs, verbose=args.verbose))
+
+        _print("\n[5/5] Revisão Alembic aplicada...")
+        _show_alembic_current(alembic_cfg, args.verbose)
     except BootstrapError as exc:
         print(f"\n[ERRO] {exc}", file=sys.stderr)
         if args.verbose:

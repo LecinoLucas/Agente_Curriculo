@@ -42,3 +42,44 @@ cd backend
 ```
 
 Para rodar com coverage, omita `--no-cov`.
+
+## Preparar uma base nova de desenvolvimento
+
+Use o bootstrap do backend para preparar uma base vazia ou recém-criada sem
+resetar dados nem dropar o banco. O script:
+
+- bloqueia execução fora de `development`/`test`;
+- valida `DATABASE_URL`;
+- roda `alembic upgrade head`;
+- cria `uploads/`, `private_uploads/` e `reports/`;
+- exibe `alembic current`;
+- roda os seeds de desenvolvimento já existentes;
+- preserva dados existentes por padrão.
+
+Exemplo:
+
+```bash
+cd backend
+./.venv/bin/python scripts/bootstrap_dev.py
+```
+
+Para diagnóstico mais detalhado:
+
+```bash
+cd backend
+./.venv/bin/python scripts/bootstrap_dev.py --verbose
+```
+
+Para pular as vagas demo:
+
+```bash
+cd backend
+./.venv/bin/python scripts/bootstrap_dev.py --skip-jobs
+```
+
+Pré-requisitos mínimos no `.env`:
+
+- `APP_ENV=development` ou `APP_ENV=test`
+- `DATABASE_URL` apontando para PostgreSQL
+
+O script não cria migration, não apaga dados e não executa `dropdb`.
