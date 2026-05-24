@@ -41,6 +41,7 @@ load_dotenv(ROOT_DIR / ".env", override=False)
 
 SECTION = "=" * 60
 SAFE_APP_ENVS = {"development", "test"}
+SAFE_DEV_HOSTS = {"localhost", "127.0.0.1", "::1", "postgres"}
 BLOCKED_NAME_TOKENS = (
     "prod",
     "production",
@@ -109,9 +110,16 @@ def _fail(message: str) -> None:
 
 def _safe_database_url(url: str) -> str:
     try:
-        return make_url(url).render_as_string(hide_password=True)
+        parsed = make_url(url)
     except Exception:
         return "<DATABASE_URL inválida>"
+
+    authority = "***"
+    if parsed.port:
+        authority = f"{authority}:{parsed.port}"
+    database = "***" if parsed.database else ""
+    suffix = f"/{database}" if parsed.database else ""
+    return f"{parsed.drivername}://{authority}{suffix}"
 
 
 def _load_runtime_config(verbose: bool) -> tuple[str, str]:
@@ -144,6 +152,11 @@ def _load_runtime_config(verbose: bool) -> tuple[str, str]:
     host = (parsed_url.host or "").strip().lower()
     database_name = (parsed_url.database or "").strip().lower()
 
+    if host not in SAFE_DEV_HOSTS:
+        _fail(
+            "Bootstrap dev bloqueado: DATABASE_URL deve apontar para host local seguro."
+        )
+
     for value_name, value in (("host", host), ("database", database_name)):
         for token in BLOCKED_NAME_TOKENS:
             if token in value:
@@ -153,7 +166,7 @@ def _load_runtime_config(verbose: bool) -> tuple[str, str]:
                 )
 
     _debug(verbose, f"APP_ENV={app_env}")
-    _debug(verbose, f"DATABASE_URL={parsed_url.render_as_string(hide_password=True)}")
+    _debug(verbose, f"DATABASE_URL={_safe_database_url(database_url)}")
     return app_env, database_url
 
 
