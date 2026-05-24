@@ -444,6 +444,9 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
         >
           {aiUsageData ? (
             <div className="space-y-6">
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 p-4 text-sm text-[hsl(var(--text-muted))]">
+                O consumo exibido é calculado a partir das chamadas registradas pelo sistema. Para billing oficial, consulte Google AI Studio ou Google Cloud Billing.
+              </div>
               <Card>
                 <CardHeader>
                   <CardTitle>Filtros</CardTitle>
