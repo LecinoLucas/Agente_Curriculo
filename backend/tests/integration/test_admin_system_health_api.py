@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.settings import settings
 from src.domain.entities.user import UserRole
+from src.infrastructure.database.models.ai_provider_health_model import AIProviderHealthModel
 from src.infrastructure.database.models.ai_usage_log_model import AIUsageLogModel
 from src.infrastructure.database.models.analysis_model import AIModelModel, AnalysisModel, PromptTemplateModel
 
@@ -162,3 +163,51 @@ async def test_health_endpoints_do_not_expose_api_keys(
     assert response.status_code == 200
     assert "super-secret-google-key" not in response.text
     assert response.json()["ai_provider"]["configured_provider"] == settings.AI_PROVIDER
+
+
+@pytest.mark.asyncio
+async def test_admin_can_access_ai_provider_health_without_sensitive_data(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    headers = await _admin_headers(client, db_session)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY_1", "super-secret-google-key")
+    db_session.add(
+        AIProviderHealthModel(
+            provider="google",
+            model_id="gemini-2.5-flash",
+            status="rate_limited",
+            configured_key_count=2,
+            available_key_count=0,
+            cooldown_until=datetime.now(UTC) + timedelta(minutes=5),
+            last_error_type="rate_limited",
+            last_status_code=429,
+            last_error_at=datetime.now(UTC),
+            consecutive_rate_limit_count=3,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/api/v1/admin/ai-provider-health", headers=headers)
+
+    assert response.status_code == 200
+    assert "super-secret-google-key" not in response.text
+    body = response.json()
+    assert body[0]["provider"] == "google"
+    assert body[0]["status"] == "rate_limited"
+    assert body[0]["last_error_type"] == "rate_limited"
+    assert "api_key" not in response.text.lower()
+    assert "prompt" not in response.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_non_admin_cannot_access_ai_provider_health(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _recruiter_headers(client, db_session)
+
+    response = await client.get("/api/v1/admin/ai-provider-health", headers=headers)
+
+    assert response.status_code == 403

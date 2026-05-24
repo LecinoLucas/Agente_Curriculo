@@ -4,6 +4,7 @@ import json
 import random
 import re
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -11,6 +12,10 @@ import httpx
 import structlog
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIAnalysisResponse, AIService
+from src.application.services.ai_provider_credential_service import (
+    AIRuntimeCredential,
+    AIProviderCredentialService,
+)
 from src.core.log_sanitizer import sanitize_log_text, sanitize_url
 from src.core.settings import settings
 from src.infrastructure.cache.redis_client import get_redis
@@ -48,6 +53,31 @@ class GeminiResponseFormatError(RuntimeError):
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.processing_time_ms = processing_time_ms
+
+
+class AIProviderRateLimitedError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str,
+        model_id: str,
+        retry_after_seconds: float,
+        cooldown_until: datetime,
+        status_code: int = 429,
+        provider_error_type: str = "rate_limited",
+        configured_key_count: int | None = None,
+        available_key_count: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.model_id = model_id
+        self.retry_after_seconds = retry_after_seconds
+        self.cooldown_until = cooldown_until
+        self.status_code = status_code
+        self.provider_error_type = provider_error_type
+        self.configured_key_count = configured_key_count
+        self.available_key_count = available_key_count
 
 
 def _safe_float_setting(value: Any, default: float) -> float:
@@ -146,8 +176,66 @@ def _get_google_api_keys() -> list[str]:
     return list(settings.google_api_keys)
 
 
+async def _get_google_runtime_credentials(model_id: str) -> tuple[list[AIRuntimeCredential], int]:
+    try:
+        credentials = await AIProviderCredentialService.load_available_runtime_credentials(
+            provider="google",
+            model_id=model_id,
+        )
+        configured_count = await AIProviderCredentialService.count_runtime_matching_credentials(
+            provider="google",
+            model_id=model_id,
+        )
+    except Exception as exc:
+        if settings.is_production:
+            raise
+        logger.warning(
+            "gemini.credentials_db_unavailable_falling_back_to_env",
+            model=model_id,
+            error_type=type(exc).__name__,
+        )
+        credentials = []
+        configured_count = 0
+
+    if credentials or configured_count > 0:
+        return credentials, configured_count
+
+    if settings.APP_ENV == "development":
+        env_credentials = [
+            AIRuntimeCredential(
+                id=None,
+                provider="google",
+                model_id=model_id,
+                label=_key_label(index),
+                api_key=api_key,
+                key_last4=api_key[-4:],
+                is_persisted=False,
+            )
+            for index, api_key in enumerate(_get_google_api_keys())
+        ]
+        return env_credentials, len(env_credentials)
+
+    return [], 0
+
+
 def _key_label(index: int) -> str:
     return f"key_{index + 1}"
+
+
+def _runtime_api_key(credential: str | AIRuntimeCredential) -> str:
+    return credential if isinstance(credential, str) else credential.api_key
+
+
+def _runtime_key_label(credential: str | AIRuntimeCredential, index: int) -> str:
+    return _key_label(index) if isinstance(credential, str) else credential.label
+
+
+def _runtime_credential_id(credential: str | AIRuntimeCredential):
+    return None if isinstance(credential, str) else credential.id
+
+
+def _runtime_is_persisted(credential: str | AIRuntimeCredential) -> bool:
+    return not isinstance(credential, str) and credential.is_persisted and credential.id is not None
 
 
 def _build_gemini_url(model_id: str, api_key: str) -> str:
@@ -231,6 +319,27 @@ def _build_all_keys_rate_limited_error(model_id: str, retry_after_seconds: float
     )
 
 
+def _build_provider_rate_limited_error(
+    *,
+    model_id: str,
+    retry_after_seconds: float,
+    configured_key_count: int,
+    available_key_count: int = 0,
+) -> AIProviderRateLimitedError:
+    retry_seconds = max(1.0, float(retry_after_seconds))
+    return AIProviderRateLimitedError(
+        "All configured Gemini API keys are in rate-limit cooldown.",
+        provider="google",
+        model_id=model_id,
+        retry_after_seconds=retry_seconds,
+        cooldown_until=datetime.now(UTC) + timedelta(seconds=retry_seconds),
+        status_code=429,
+        provider_error_type="rate_limited",
+        configured_key_count=configured_key_count,
+        available_key_count=available_key_count,
+    )
+
+
 def _build_all_keys_invalid_error(model_id: str) -> httpx.HTTPStatusError:
     sanitized_url = sanitize_url(_build_gemini_url(model_id, "[REDACTED]"))
     response = httpx.Response(
@@ -259,9 +368,16 @@ class GeminiAdapter(AIService):
         )
 
     async def analyze(self, request: AIAnalysisRequest) -> AIAnalysisResponse:
-        api_keys = _get_google_api_keys()
-        if not api_keys:
-            raise RuntimeError("GOOGLE_API_KEYS or GOOGLE_API_KEY is not configured")
+        credentials, configured_key_count = await _get_google_runtime_credentials(self._model_id)
+        if not credentials:
+            if configured_key_count > 0:
+                raise _build_provider_rate_limited_error(
+                    model_id=self._model_id,
+                    retry_after_seconds=float(settings.AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS),
+                    configured_key_count=configured_key_count,
+                    available_key_count=0,
+                )
+            raise RuntimeError("No Gemini credentials configured")
 
         start_ms = int(time.monotonic() * 1000)
         queue_name = request.queue_name or "unknown"
@@ -291,7 +407,8 @@ class GeminiAdapter(AIService):
                 queue_name=queue_name,
                 run_call=lambda: asyncio.wait_for(
                     self._analyze_with_key_failover(
-                        api_keys=api_keys,
+                        api_keys=credentials,
+                        configured_key_count=configured_key_count,
                         payload=payload,
                         start_ms=start_ms,
                         queue_name=queue_name,
@@ -353,32 +470,37 @@ class GeminiAdapter(AIService):
     async def _analyze_with_key_failover(
         self,
         *,
-        api_keys: list[str],
+        api_keys: list[str | AIRuntimeCredential],
         payload: dict[str, Any],
         start_ms: int,
         queue_name: str,
+        configured_key_count: int | None = None,
     ) -> AIAnalysisResponse:
         last_rate_limit_error: httpx.HTTPStatusError | None = None
         last_invalid_key_error: httpx.HTTPStatusError | None = None
         skipped_cooldowns: list[float] = []
 
-        for index, api_key in enumerate(api_keys):
-            if index in _GEMINI_INVALID_KEYS:
+        effective_configured_count = configured_key_count if configured_key_count is not None else len(api_keys)
+
+        for index, credential in enumerate(api_keys):
+            credential_id = _runtime_credential_id(credential)
+            key_label = _runtime_key_label(credential, index)
+            if not _runtime_is_persisted(credential) and index in _GEMINI_INVALID_KEYS:
                 logger.error(
                     "gemini.key_skipped_invalid",
                     model=self._model_id,
-                    key_label=_key_label(index),
+                    key_label=key_label,
                     queue_name=queue_name,
                 )
                 continue
 
-            remaining_cooldown = _cooldown_seconds_for_key(index)
+            remaining_cooldown = 0.0 if _runtime_is_persisted(credential) else _cooldown_seconds_for_key(index)
             if remaining_cooldown > 0:
                 skipped_cooldowns.append(remaining_cooldown)
                 logger.warning(
                     "gemini.key_skipped_cooldown",
                     model=self._model_id,
-                    key_label=_key_label(index),
+                    key_label=key_label,
                     retry_after_seconds=int(remaining_cooldown + 0.999),
                     queue_name=queue_name,
                 )
@@ -386,17 +508,19 @@ class GeminiAdapter(AIService):
 
             try:
                 response = await self._analyze_with_retries(
-                    url=_build_gemini_url(self._model_id, api_key),
+                    url=_build_gemini_url(self._model_id, _runtime_api_key(credential)),
                     payload=payload,
                     start_ms=start_ms,
                     queue_name=queue_name,
-                    key_label=_key_label(index),
+                    key_label=key_label,
                 )
+                if credential_id is not None:
+                    await self._mark_credential_used(credential_id)
                 if index > 0:
                     logger.warning(
                         "gemini.key_failover_success",
                         model=self._model_id,
-                        key_label=_key_label(index),
+                        key_label=key_label,
                         queue_name=queue_name,
                     )
                 return response
@@ -410,23 +534,34 @@ class GeminiAdapter(AIService):
                         if retry_after_seconds is not None
                         else float(settings.AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS)
                     )
-                    _GEMINI_KEY_COOLDOWNS[index] = time.monotonic() + cooldown_seconds
+                    cooldown_until = datetime.now(UTC) + timedelta(seconds=max(1.0, float(cooldown_seconds)))
+                    if credential_id is not None:
+                        await self._mark_credential_rate_limited(
+                            credential_id,
+                            cooldown_until=cooldown_until,
+                        )
+                    else:
+                        _GEMINI_KEY_COOLDOWNS[index] = time.monotonic() + cooldown_seconds
                     logger.warning(
-                        "gemini.key_rate_limited",
+                        "ai_provider.key_rate_limited",
+                        provider="google",
                         model=self._model_id,
-                        key_label=_key_label(index),
+                        key_label=key_label,
                         retry_after_seconds=retry_after_seconds,
                         cooldown_seconds=int(cooldown_seconds + 0.999),
                         fallback_available=index + 1 < len(api_keys),
                         queue_name=queue_name,
                     )
                 elif _is_invalid_key_error(exc):
-                    _GEMINI_INVALID_KEYS.add(index)
+                    if credential_id is not None:
+                        await self._mark_credential_invalid(credential_id)
+                    else:
+                        _GEMINI_INVALID_KEYS.add(index)
                     last_invalid_key_error = exc
                     logger.error(
                         "gemini.key_invalid",
                         model=self._model_id,
-                        key_label=_key_label(index),
+                        key_label=key_label,
                         fallback_available=index + 1 < len(api_keys),
                         queue_name=queue_name,
                     )
@@ -437,29 +572,84 @@ class GeminiAdapter(AIService):
             logger.error(
                 "gemini.keys_exhausted_invalid",
                 model=self._model_id,
-                configured_key_count=len(api_keys),
+                configured_key_count=effective_configured_count,
                 queue_name=queue_name,
             )
             raise _build_all_keys_invalid_error(self._model_id)
 
         if last_rate_limit_error is not None:
+            retry_after_seconds = self._extract_retry_after_seconds(last_rate_limit_error.response)
+            if retry_after_seconds is None and skipped_cooldowns:
+                retry_after_seconds = min(skipped_cooldowns)
+            if retry_after_seconds is None:
+                retry_after_seconds = float(settings.AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS)
             logger.error(
                 "gemini.keys_exhausted_rate_limited",
                 model=self._model_id,
-                configured_key_count=len(api_keys),
+                configured_key_count=effective_configured_count,
+                available_key_count=0,
+                retry_after_seconds=int(float(retry_after_seconds) + 0.999),
                 queue_name=queue_name,
             )
-            raise last_rate_limit_error
+            raise _build_provider_rate_limited_error(
+                model_id=self._model_id,
+                retry_after_seconds=float(retry_after_seconds),
+                configured_key_count=effective_configured_count,
+                available_key_count=0,
+            ) from last_rate_limit_error
 
         next_retry_seconds = min(skipped_cooldowns) if skipped_cooldowns else float(settings.AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS)
         logger.error(
-            "gemini.keys_all_in_cooldown",
+            "ai_provider.all_keys_in_cooldown",
+            provider="google",
             model=self._model_id,
-            configured_key_count=len(api_keys),
+            configured_key_count=effective_configured_count,
             retry_after_seconds=int(next_retry_seconds + 0.999),
             queue_name=queue_name,
         )
-        raise _build_all_keys_rate_limited_error(self._model_id, next_retry_seconds)
+        raise _build_provider_rate_limited_error(
+            model_id=self._model_id,
+            retry_after_seconds=next_retry_seconds,
+            configured_key_count=effective_configured_count,
+            available_key_count=0,
+        )
+
+    async def _mark_credential_rate_limited(self, credential_id, *, cooldown_until: datetime) -> None:
+        try:
+            await AIProviderCredentialService.mark_runtime_rate_limited(
+                credential_id,
+                cooldown_until=cooldown_until,
+                error_type="rate_limited",
+            )
+        except Exception as exc:
+            logger.warning(
+                "gemini.credential_rate_limit_persist_skipped",
+                model=self._model_id,
+                error_type=type(exc).__name__,
+            )
+
+    async def _mark_credential_invalid(self, credential_id) -> None:
+        try:
+            await AIProviderCredentialService.mark_runtime_invalid(
+                credential_id,
+                error_type="invalid_api_key",
+            )
+        except Exception as exc:
+            logger.warning(
+                "gemini.credential_invalid_persist_skipped",
+                model=self._model_id,
+                error_type=type(exc).__name__,
+            )
+
+    async def _mark_credential_used(self, credential_id) -> None:
+        try:
+            await AIProviderCredentialService.mark_runtime_used(credential_id)
+        except Exception as exc:
+            logger.warning(
+                "gemini.credential_used_persist_skipped",
+                model=self._model_id,
+                error_type=type(exc).__name__,
+            )
 
     async def _analyze_with_retries(
         self,
@@ -597,7 +787,6 @@ class GeminiAdapter(AIService):
             logger.error(
                 "gemini.invalid_api_json",
                 model=self._model_id,
-                response_text=(sanitize_log_text(response.text) or "")[:2000],
                 response_chars=len(response.text or ""),
             )
             raise RuntimeError("Gemini API returned invalid JSON body") from e
@@ -886,9 +1075,8 @@ class GeminiAdapter(AIService):
         content: str,
         cleaned: str,
         finish_reason: str | None,
-    ) -> None:
+        ) -> None:
         log_fields = self._get_content_log_fields(content)
-        cleaned_log_fields = self._get_content_log_fields(cleaned)
 
         logger.error(
             "gemini.json_decode_failed_raw_content",
@@ -897,15 +1085,11 @@ class GeminiAdapter(AIService):
             **log_fields,
             content_length=len(content),
             cleaned_content_length=len(cleaned),
-            cleaned_preview=cleaned_log_fields.get("content_preview"),
-            cleaned_full=cleaned_log_fields.get("content_full"),
+            cleaned_content_chars=len(cleaned),
         )
 
     def _get_content_log_fields(self, content: str) -> dict[str, str]:
-        if settings.GEMINI_DEBUG_LOG_FULL_CONTENT:
-            return {"content_full": content}
-
-        return {"content_preview": content[:1000]}
+        return {"content_chars": str(len(content or ""))}
 
     def _get_finish_reason(self, body: dict[str, Any]) -> str | None:
         candidates = body.get("candidates") or []
@@ -1132,5 +1316,5 @@ class GeminiAdapter(AIService):
                 "gemini.api_error_no_details",
                 model=self._model_id,
                 status_code=response.status_code,
-                response_preview=(sanitize_log_text(response.text) or "")[:500],
+                response_chars=len(response.text or ""),
             )

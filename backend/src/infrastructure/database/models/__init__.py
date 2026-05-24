@@ -28,6 +28,8 @@ from src.infrastructure.database.models.analysis_model import (
     PromptTemplateModel,
 )
 from src.infrastructure.database.models.ai_usage_log_model import AIUsageLogModel
+from src.infrastructure.database.models.ai_provider_health_model import AIProviderHealthModel
+from src.infrastructure.database.models.ai_provider_credential_model import AIProviderCredentialModel
 from src.infrastructure.database.models.ai_daily_limit_override_model import (
     AIDailyLimitOverrideModel,
 )
@@ -121,6 +123,8 @@ __all__ = [
     "AnalysisResultModel",
     "MatchingObservationModel",
     "AIUsageLogModel",
+    "AIProviderHealthModel",
+    "AIProviderCredentialModel",
     "AIDailyLimitOverrideModel",
     "JobModel",
     "JobRequiredSkillModel",

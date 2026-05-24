@@ -22,7 +22,8 @@ import {
   BarChart3,
   Activity,
   User,
-  GraduationCap
+  GraduationCap,
+  KeyRound,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -118,6 +119,7 @@ const NAVIGATION_CONFIG: NavGroup[] = [
       { to: "/admin/cadastros", label: "Cadastros", caption: "Skills e Áreas", roles: ["admin"] },
       { to: "/admin/auditoria", label: "Auditoria", caption: "Eventos administrativos", roles: ["admin"] },
       { to: "/admin/health", label: "Saúde do sistema", caption: "Diagnósticos e Logs", roles: ["admin"] },
+      { to: "/admin/ai-provider-credentials", label: "Credenciais IA", caption: "Chaves Gemini e Claude", roles: ["admin"] },
       { to: "/admin/bi", label: "BI", caption: "Indicadores e gráficos", roles: ["admin"] },
       { to: "/candidato/portal", label: "Preview Portal do Candidato", caption: "Visualização do candidato", roles: ["admin"] },
     ],
@@ -150,6 +152,7 @@ const ICON_MAP: Record<string, any> = {
   "/admin/auditoria": ShieldCheck,
   "/admin/bi": BarChart3,
   "/admin/health": Activity,
+  "/admin/ai-provider-credentials": KeyRound,
   "/candidato/portal": User,
   "Dashboard": LayoutDashboard,
   "Recrutamento": Briefcase,

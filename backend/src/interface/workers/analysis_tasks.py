@@ -16,6 +16,7 @@ from src.application.services.ai_usage_log_service import (
 )
 from src.core.log_sanitizer import sanitize_log_text
 from src.core.settings import settings
+from src.infrastructure.ai.gemini_adapter import AIProviderRateLimitedError
 from src.infrastructure.queue.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -75,6 +76,9 @@ class AnalysisErrorClassification:
     is_temporary: bool
     status_code: int | None = None
     retry_after_seconds: float | None = None
+    cooldown_until: datetime | None = None
+    configured_key_count: int | None = None
+    available_key_count: int | None = None
 
 
 class AnalysisExecutionError(RuntimeError):
@@ -134,6 +138,17 @@ def _classify_analysis_exception(exc: Exception) -> AnalysisErrorClassification:
         )
 
     for current in _iter_exception_chain(exc):
+        if isinstance(current, AIProviderRateLimitedError):
+            return AnalysisErrorClassification(
+                provider_error_type=current.provider_error_type,
+                is_temporary=True,
+                status_code=current.status_code,
+                retry_after_seconds=current.retry_after_seconds,
+                cooldown_until=current.cooldown_until,
+                configured_key_count=current.configured_key_count,
+                available_key_count=current.available_key_count,
+            )
+
         if isinstance(current, httpx.HTTPStatusError):
             status_code = int(current.response.status_code)
             retry_after_seconds = _extract_retry_after_from_http_error(current)
@@ -298,6 +313,20 @@ def _provider_api_key_is_configured(provider: str) -> bool:
         return bool(settings.google_api_keys)
 
     raise RuntimeError(f"Unsupported AI provider configured for analysis: {provider}")
+
+
+async def _provider_has_db_credentials(provider: str, model_id: str | None, sessionmaker) -> bool:
+    from src.application.services.ai_provider_credential_service import AIProviderCredentialService
+
+    try:
+        async with sessionmaker() as session:
+            count = await AIProviderCredentialService(session).count_matching_credentials(
+                provider=provider,
+                model_id=model_id,
+            )
+            return count > 0
+    except Exception:
+        return False
 
 
 def _provider_api_key_hint(provider: str) -> str:
@@ -499,7 +528,6 @@ def _validate_prompt_before_ai(*, prompt: str, resume_chars: int, job_chars: int
         prompt_chars_total=total_chars,
         resume_chars=resume_chars,
         job_chars=job_chars,
-        preview=prompt[:300],
     )
 
     if reasons:
@@ -509,7 +537,6 @@ def _validate_prompt_before_ai(*, prompt: str, resume_chars: int, job_chars: int
             prompt_chars_total=total_chars,
             resume_chars=resume_chars,
             job_chars=job_chars,
-            preview=prompt[:300],
         )
         raise RuntimeError(f"Prompt blocked before AI call: {','.join(reasons)}")
 
@@ -616,6 +643,10 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
         failure_details = _extract_failure_details(exc)
         classification = _classify_analysis_exception(exc)
         attempt = self.request.retries + 1
+        task_max_retries = max(
+            int(getattr(self, "max_retries", MAX_ANALYSIS_RETRIES) or MAX_ANALYSIS_RETRIES),
+            MAX_ANALYSIS_RETRIES,
+        )
 
         logger.exception(
             "analysis.task_failed",
@@ -656,7 +687,7 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
 
         retry_count = self.request.retries + 1
 
-        if retry_count > self.max_retries:
+        if retry_count > task_max_retries and classification.provider_error_type != "rate_limited":
             _run_async(_mark_analysis_failed_async(
                 analysis_id=analysis_id,
                 task_id=task_id,
@@ -669,8 +700,9 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
             ))
             raise
 
+        persisted_retry_count = min(retry_count, task_max_retries)
         countdown = _build_retry_delay_seconds(
-            retry_count,
+            persisted_retry_count,
             retry_after_seconds=classification.retry_after_seconds,
         )
 
@@ -686,17 +718,30 @@ def process_analysis(self, analysis_id: str) -> dict:  # type: ignore[override]
             provider_error_type=classification.provider_error_type,
         )
 
-        _run_async(_mark_analysis_retry_scheduled_async(
+        retry_state_persisted = _run_async(_mark_analysis_retry_scheduled_async(
             analysis_id=analysis_id,
             task_id=task_id,
             error=error_str,
-            retry_count=retry_count,
+            retry_count=persisted_retry_count,
             countdown_seconds=countdown,
             attempts=attempt,
             classification=classification,
             failure_details=failure_details,
             expected_worker_claim_id=task_id,
         ))
+
+        if classification.provider_error_type == "rate_limited" and retry_state_persisted:
+            process_analysis.apply_async(
+                args=[analysis_id],
+                countdown=countdown,
+                queue=ANALYSIS_QUEUE,
+            )
+            return {
+                "analysis_id": analysis_id,
+                "status": "retry_scheduled",
+                "provider_error_type": "rate_limited",
+                "retry_in_seconds": countdown,
+            }
 
         raise self.retry(exc=exc, countdown=countdown) from exc
 
@@ -851,9 +896,13 @@ async def _process_analysis_with_session(
         job_id=str(job_id) if job_id else None,
     )
 
-    if not _provider_api_key_is_configured(provider):
+    if not _provider_api_key_is_configured(provider) and not await _provider_has_db_credentials(
+        provider,
+        model_id,
+        sessionmaker,
+    ):
         raise RuntimeError(
-            f"{_provider_api_key_hint(provider)} is not configured."
+            f"{_provider_api_key_hint(provider)} or database AI credential is not configured."
         )
 
     elif not _real_ai_calls_allowed():
@@ -920,6 +969,12 @@ async def _process_analysis_with_session(
         )
         return {"analysis_id": str(analysis_uuid), "status": "claim_lost"}
 
+    await _record_ai_provider_available(
+        provider=provider,
+        model_id=model_id,
+        sessionmaker=sessionmaker,
+    )
+
     if job_id is not None:
         from src.interface.workers.matching_tasks import match_analysis_to_job
 
@@ -944,6 +999,29 @@ async def _process_analysis_with_session(
     )
 
     return {"analysis_id": str(analysis_uuid), "status": "completed"}
+
+
+async def _record_ai_provider_available(
+    *,
+    provider: str,
+    model_id: str,
+    sessionmaker,
+) -> None:
+    from src.application.services.ai_provider_health_service import AIProviderHealthService
+
+    try:
+        async with sessionmaker() as session:
+            await AIProviderHealthService(session).record_available(
+                provider=provider,
+                model_id=model_id,
+            )
+            await session.commit()
+    except Exception:
+        logger.warning(
+            "ai_provider.health_available_persist_skipped",
+            provider=provider,
+            model_id=model_id,
+        )
 
 
 async def _claim_analysis_for_processing(
@@ -1186,8 +1264,8 @@ async def _run_real_ai_analysis(
         logger.exception(
             "analysis.parse_failed",
             analysis_id=analysis_id,
-            response_preview=(ai_response.content or "")[:500],
-            error=sanitize_log_text(str(exc)),
+            response_size_chars=len(ai_response.content or ""),
+            parser_error_type=type(exc).__name__,
         )
         raise AnalysisExecutionError(
             "Failed to parse AI response",
@@ -1450,6 +1528,23 @@ async def _mark_analysis_retry_scheduled(
             analysis.stale_at = None
             analysis.updated_at = now
 
+            if (
+                classification.provider_error_type == "rate_limited"
+                and failure_details is not None
+                and failure_details.model_id
+            ):
+                from src.application.services.ai_provider_health_service import AIProviderHealthService
+
+                await AIProviderHealthService(session).record_rate_limited(
+                    provider=failure_details.provider,
+                    model_id=failure_details.model_id,
+                    retry_after_seconds=classification.retry_after_seconds,
+                    cooldown_until=classification.cooldown_until,
+                    status_code=classification.status_code,
+                    configured_key_count=classification.configured_key_count,
+                    available_key_count=classification.available_key_count,
+                )
+
             await session.commit()
             return True
     except (RuntimeError, sa.exc.SQLAlchemyError):
@@ -1646,13 +1741,13 @@ async def _mark_analysis_retry_scheduled_async(
     classification: AnalysisErrorClassification,
     failure_details: AnalysisFailureDetails | None = None,
     expected_worker_claim_id: str | None = None,
-) -> None:
+) -> bool:
     from src.infrastructure.database.connection import create_celery_async_sessionmaker
 
     celery_engine, celery_sessionmaker = await create_celery_async_sessionmaker()
 
     try:
-        await _mark_analysis_retry_scheduled(
+        return await _mark_analysis_retry_scheduled(
             analysis_id=analysis_id,
             task_id=task_id,
             error=error,

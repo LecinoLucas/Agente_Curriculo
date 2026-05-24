@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.cache.redis_client import get_redis
@@ -42,7 +43,20 @@ class AdminNotificationService:
                 "actionLabel": "Ver Diagnósticos",
             })
 
-        # 3. Check Google Calendar Sync Failures
+        # 3. Check AI provider operational state
+        ai_rate_limit = await self._get_ai_provider_rate_limit()
+        if ai_rate_limit is not None:
+            notifications.append({
+                "id": f"ai-provider-rate-limited-{ai_rate_limit['provider']}-{ai_rate_limit['model_id']}",
+                "title": "IA temporariamente limitada",
+                "description": "As análises automáticas estão pausadas por limite do provedor Gemini. O sistema continua funcionando e tentará novamente automaticamente.",
+                "type": "warning",
+                "category": "ai_provider",
+                "actionUrl": "/admin",
+                "actionLabel": "Ver Diagnósticos",
+            })
+
+        # 4. Check Google Calendar Sync Failures
         failed_calendar_syncs = await self._get_failed_calendar_syncs()
         for schedule_id, title, err in failed_calendar_syncs:
             safe_err = self._sanitize_error_message(err)
@@ -100,6 +114,25 @@ class AdminNotificationService:
             )
             or 0
         )
+
+    async def _get_ai_provider_rate_limit(self) -> dict | None:
+        from src.infrastructure.database.models.ai_provider_health_model import AIProviderHealthModel
+
+        row = await self._db.scalar(
+            sa.select(AIProviderHealthModel)
+            .where(
+                AIProviderHealthModel.status == "rate_limited",
+                sa.or_(
+                    AIProviderHealthModel.cooldown_until.is_(None),
+                    AIProviderHealthModel.cooldown_until > datetime.now(UTC),
+                ),
+            )
+            .order_by(AIProviderHealthModel.updated_at.desc())
+            .limit(1)
+        )
+        if row is None:
+            return None
+        return {"provider": row.provider, "model_id": row.model_id}
 
     async def _get_failed_calendar_syncs(self) -> list[tuple]:
         from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel

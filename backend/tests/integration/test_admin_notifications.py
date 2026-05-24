@@ -15,6 +15,7 @@ from src.core.settings import settings
 pytestmark = pytest.mark.slow
 from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.analysis_model import AnalysisModel, AIModelModel
+from src.infrastructure.database.models.ai_provider_health_model import AIProviderHealthModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.application.services.admin_notification_service import AdminNotificationService
 
@@ -97,6 +98,39 @@ async def test_pending_queue_without_workers_generates_critical_alert(
     assert queue_alert["type"] == "error"
     assert queue_alert["category"] == "queue"
     assert "Fila de IA sem Workers ativos" in queue_alert["title"]
+
+
+@pytest.mark.asyncio
+async def test_ai_provider_rate_limit_generates_admin_warning(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _admin_headers(client, db_session)
+    db_session.add(
+        AIProviderHealthModel(
+            provider="google",
+            model_id="gemini-2.5-flash",
+            status="rate_limited",
+            configured_key_count=2,
+            available_key_count=0,
+            cooldown_until=datetime.now(timezone.utc) + timedelta(minutes=5),
+            last_error_type="rate_limited",
+            last_status_code=429,
+            last_error_at=datetime.now(timezone.utc),
+            consecutive_rate_limit_count=1,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/api/v1/admin/notifications", headers=headers)
+
+    assert response.status_code == 200
+    notifications = response.json()
+    ai_alert = next((n for n in notifications if n["category"] == "ai_provider"), None)
+    assert ai_alert is not None
+    assert ai_alert["type"] == "warning"
+    assert ai_alert["title"] == "IA temporariamente limitada"
+    assert "pausadas por limite do provedor Gemini" in ai_alert["description"]
 
 
 @pytest.mark.asyncio

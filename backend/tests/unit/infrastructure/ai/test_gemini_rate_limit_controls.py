@@ -5,7 +5,14 @@ import httpx
 import pytest
 
 from src.application.ports.ai_service import AIAnalysisResponse
-from src.infrastructure.ai.gemini_adapter import GeminiAdapter, _GEMINI_KEY_COOLDOWNS, _GEMINI_INVALID_KEYS
+from src.application.ports.ai_service import AIAnalysisRequest
+from src.application.services.ai_provider_credential_service import AIRuntimeCredential
+from src.infrastructure.ai.gemini_adapter import (
+    AIProviderRateLimitedError,
+    GeminiAdapter,
+    _GEMINI_INVALID_KEYS,
+    _GEMINI_KEY_COOLDOWNS,
+)
 
 
 def _make_success_response(request_url: str) -> httpx.Response:
@@ -173,6 +180,89 @@ async def test_key_failover_uses_second_key_after_first_key_rate_limit() -> None
 
 
 @pytest.mark.asyncio
+async def test_gemini_analyze_uses_database_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = GeminiAdapter("gemini-2.5-flash")
+    credential = AIRuntimeCredential(
+        id=None,
+        provider="google",
+        model_id="gemini-2.5-flash",
+        label="db-gemini",
+        api_key="db-key-1234",
+        key_last4="1234",
+        is_persisted=True,
+    )
+
+    async def fake_load(cls, **kwargs):
+        return [credential]
+
+    async def fake_count(cls, **kwargs):
+        return 1
+
+    monkeypatch.setattr(
+        "src.infrastructure.ai.gemini_adapter.AIProviderCredentialService.load_available_runtime_credentials",
+        classmethod(fake_load),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.ai.gemini_adapter.AIProviderCredentialService.count_runtime_matching_credentials",
+        classmethod(fake_count),
+    )
+
+    async def fake_post(url: str, **kwargs):
+        assert "key=db-key-1234" in url
+        return _make_success_response(url)
+
+    with patch.object(adapter._client, "post", new_callable=AsyncMock, side_effect=fake_post):
+        response = await adapter.analyze(
+            AIAnalysisRequest(
+                resume_text="",
+                system_prompt="sistema",
+                prompt_template="{}",
+                max_tokens=100,
+                temperature=0.1,
+            )
+        )
+
+    assert response.content == '{"ok": true}'
+
+
+@pytest.mark.asyncio
+async def test_gemini_all_database_credentials_in_cooldown_raises_controlled_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = GeminiAdapter("gemini-2.5-flash")
+
+    async def fake_load(cls, **kwargs):
+        return []
+
+    async def fake_count(cls, **kwargs):
+        return 2
+
+    monkeypatch.setattr(
+        "src.infrastructure.ai.gemini_adapter.AIProviderCredentialService.load_available_runtime_credentials",
+        classmethod(fake_load),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.ai.gemini_adapter.AIProviderCredentialService.count_runtime_matching_credentials",
+        classmethod(fake_count),
+    )
+
+    with pytest.raises(AIProviderRateLimitedError) as exc_info:
+        await adapter.analyze(
+            AIAnalysisRequest(
+                resume_text="",
+                system_prompt="sistema",
+                prompt_template="{}",
+                max_tokens=100,
+                temperature=0.1,
+            )
+        )
+
+    assert exc_info.value.provider == "google"
+    assert exc_info.value.configured_key_count == 2
+    assert exc_info.value.available_key_count == 0
+
+
+@pytest.mark.asyncio
 async def test_key_failover_raises_rate_limit_when_all_keys_are_limited() -> None:
     adapter = GeminiAdapter("gemini-2.5-flash")
 
@@ -185,7 +275,7 @@ async def test_key_failover_raises_rate_limit_when_all_keys_are_limited() -> Non
         )
 
     with patch.object(adapter._client, "post", new_callable=AsyncMock, side_effect=fake_post):
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(AIProviderRateLimitedError) as exc_info:
             await adapter._analyze_with_key_failover(
                 api_keys=["AIzaFIRSTSECRET123456789012345", "AIzaSECONDSECRET12345678901234"],
                 payload={},
@@ -193,7 +283,11 @@ async def test_key_failover_raises_rate_limit_when_all_keys_are_limited() -> Non
                 queue_name="analysis.default",
             )
 
-    assert exc_info.value.response.status_code == 429
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.provider_error_type == "rate_limited"
+    assert exc_info.value.retry_after_seconds == 12
+    assert exc_info.value.configured_key_count == 2
+    assert exc_info.value.available_key_count == 0
     assert "AIza" not in str(exc_info.value)
     assert len(_GEMINI_KEY_COOLDOWNS) == 2
 

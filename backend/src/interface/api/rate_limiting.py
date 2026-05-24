@@ -55,6 +55,7 @@ _login_item = parse_limit(settings.RATE_LIMIT_AUTH_LOGIN)
 _apply_item = parse_limit(settings.RATE_LIMIT_PUBLIC_APPLY)
 _analysis_item = parse_limit(settings.RATE_LIMIT_ANALYSIS_REQUEST)
 _retry_item = parse_limit(settings.RATE_LIMIT_ANALYSIS_RETRY)
+_admin_ai_credentials_item = parse_limit(settings.RATE_LIMIT_ADMIN_AI_CREDENTIALS)
 
 
 async def _check(item, *keys: str, message: str) -> None:
@@ -127,6 +128,20 @@ async def rate_limit_analysis_retry(
         key,
         "analyses:retry",
         message="Limite de reprocessamentos atingido. Aguarde 1 minuto e tente novamente.",
+    )
+
+
+async def rate_limit_admin_ai_credentials(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Admin AI credentials: user-keyed throttle for secret-management endpoints."""
+    key = str(current_user.id) if current_user is not None else _ip(request)
+    await _check(
+        _admin_ai_credentials_item,
+        key,
+        "admin:ai-provider-credentials",
+        message="Muitas operações de credenciais IA. Aguarde 1 minuto e tente novamente.",
     )
 
 

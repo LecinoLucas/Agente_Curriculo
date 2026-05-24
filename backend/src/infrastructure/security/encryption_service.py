@@ -5,8 +5,8 @@ from src.core.settings import settings
 class EncryptionService:
     """Serviço para criptografia de campos sensíveis (como tokens)."""
 
-    def __init__(self):
-        key = settings.FIELD_ENCRYPTION_KEY
+    def __init__(self, key: str | None = None):
+        key = key or settings.FIELD_ENCRYPTION_KEY
         if not key:
             raise ValueError("FIELD_ENCRYPTION_KEY não configurada")
         self.fernet = Fernet(key.encode())
@@ -25,3 +25,24 @@ class EncryptionService:
             return self.fernet.decrypt(value.encode()).decode()
         except Exception as e:
             raise ValueError("Falha ao descriptografar valor") from e
+
+
+class AICredentialEncryptionService(EncryptionService):
+    """Criptografia de chaves de provedores IA.
+
+    Usa AI_CREDENTIALS_ENCRYPTION_KEY quando configurada; caso contrário,
+    reaproveita FIELD_ENCRYPTION_KEY para preservar o padrão existente.
+    """
+
+    def __init__(self):
+        super().__init__(settings.AI_CREDENTIALS_ENCRYPTION_KEY)
+
+
+def validate_ai_credentials_encryption_key() -> None:
+    try:
+        AICredentialEncryptionService()
+    except Exception as exc:
+        raise ValueError(
+            "AI_CREDENTIALS_ENCRYPTION_KEY inválida ou ausente. "
+            "Configure uma chave Fernet válida ou FIELD_ENCRYPTION_KEY conforme a política do projeto."
+        ) from exc

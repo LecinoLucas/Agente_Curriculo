@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_SECRET_KEY: str
     FIELD_ENCRYPTION_KEY: str = ""
+    AI_CREDENTIALS_ENCRYPTION_KEY: str = ""
     APP_DEBUG: bool = False
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
@@ -73,6 +74,9 @@ class Settings(BaseSettings):
     AI_ANALYSIS_MAX_RESUME_CHARS: int = 4500
     AI_ANALYSIS_MAX_JOB_CHARS: int = 1800
     AI_ANALYSIS_RATE_LIMIT_COOLDOWN_SECONDS: int = 300
+    AI_RATE_LIMIT_ADMIN_ALERT_COOLDOWN_SECONDS: int = 900
+    AI_RATE_LIMIT_ADMIN_ALERT_MIN_COOLDOWN_SECONDS: int = 300
+    AI_RATE_LIMIT_ADMIN_ALERT_CONSECUTIVE_THRESHOLD: int = 3
     GEMINI_DEBUG_LOG_FULL_CONTENT: bool = False
     GEMINI_MAX_CONCURRENT_REQUESTS: int = 2
     GEMINI_CONCURRENCY_WAIT_TIMEOUT_SECONDS: float = 30.0
@@ -119,6 +123,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PUBLIC_APPLY: str = "10/minute"
     RATE_LIMIT_ANALYSIS_REQUEST: str = "5/minute"
     RATE_LIMIT_ANALYSIS_RETRY: str = "3/minute"
+    RATE_LIMIT_ADMIN_AI_CREDENTIALS: str = "20/minute"
 
     # AI daily analysis limits — baseline values that admin overrides modify.
     AI_ANALYSIS_DAILY_LIMIT_PER_USER: int = 50
@@ -206,6 +211,12 @@ class Settings(BaseSettings):
         if not self.FIELD_ENCRYPTION_KEY and self.APP_ENV != "production":
             # Fallback para dev/test (chave estática válida para Fernet)
             self.FIELD_ENCRYPTION_KEY = "cuZ9dlSKhIokW-5fid9qSCsFJEoc2swn9iZNupnF06w="
+
+        if not self.AI_CREDENTIALS_ENCRYPTION_KEY:
+            # Mantém compatibilidade com o padrão consolidado do projeto.
+            # Produção já exige FIELD_ENCRYPTION_KEY; ambientes novos podem
+            # separar a rotação usando AI_CREDENTIALS_ENCRYPTION_KEY.
+            self.AI_CREDENTIALS_ENCRYPTION_KEY = self.FIELD_ENCRYPTION_KEY
 
     @property
     def is_production(self) -> bool:

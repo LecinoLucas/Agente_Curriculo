@@ -54,6 +54,12 @@ const SystemHealthPage = lazy(() =>
   import("../pages/SystemHealthPage").then((m) => ({ default: m.SystemHealthPage }))
 );
 
+const AdminAiProviderCredentialsPage = lazy(() =>
+  import("../pages/AdminAiProviderCredentialsPage").then((m) => ({
+    default: m.AdminAiProviderCredentialsPage,
+  }))
+);
+
 const AdminBiPage = lazy(() =>
   import("../pages/AdminBiPage").then((m) => ({ default: m.AdminBiPage }))
 );
@@ -279,6 +285,11 @@ export function AppRouter() {
         <Route
           path="admin/health"
           element={protectedPage(<SystemHealthPage />, ADMIN_ROLES)}
+        />
+
+        <Route
+          path="admin/ai-provider-credentials"
+          element={protectedPage(<AdminAiProviderCredentialsPage />, ADMIN_ROLES)}
         />
 
         <Route

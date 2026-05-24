@@ -6,6 +6,7 @@ import httpx
 import pytest
 from celery.exceptions import Retry
 
+from src.infrastructure.ai.gemini_adapter import AIProviderRateLimitedError
 from src.interface.workers.analysis_tasks import (
     AnalysisErrorClassification,
     AnalysisExecutionError,
@@ -70,6 +71,33 @@ class TestRetryClassification:
         assert classified.provider_error_type == "rate_limited"
         assert classified.status_code == 429
         assert classified.retry_after_seconds == 30.0
+
+    def test_classifies_provider_rate_limited_error(self) -> None:
+        cooldown_until = datetime.now(UTC) + timedelta(seconds=90)
+        with pytest.raises(AnalysisExecutionError) as exc_info:
+            _raise_analysis_error(
+                AIProviderRateLimitedError(
+                    "All configured Gemini API keys are in rate-limit cooldown.",
+                    provider="google",
+                    model_id="gemini-2.5-flash",
+                    retry_after_seconds=90,
+                    cooldown_until=cooldown_until,
+                    configured_key_count=2,
+                    available_key_count=0,
+                ),
+                provider="google",
+                model_id="gemini-2.5-flash",
+            )
+
+        classified = _classify_analysis_exception(exc_info.value)
+
+        assert classified.is_temporary is True
+        assert classified.provider_error_type == "rate_limited"
+        assert classified.status_code == 429
+        assert classified.retry_after_seconds == 90
+        assert classified.cooldown_until == cooldown_until
+        assert classified.configured_key_count == 2
+        assert classified.available_key_count == 0
 
     def test_classifies_503_as_temporary(self) -> None:
         with pytest.raises(AnalysisExecutionError) as exc_info:
@@ -233,6 +261,53 @@ class TestRetryPersistence:
 
 
 class TestCeleryRetryBehavior:
+    def test_process_analysis_acknowledges_rate_limit_after_manual_retry_schedule(self) -> None:
+        rate_limit_exc = None
+        try:
+            _raise_analysis_error(
+                AIProviderRateLimitedError(
+                    "All configured Gemini API keys are in rate-limit cooldown.",
+                    provider="google",
+                    model_id="gemini-2.5-flash",
+                    retry_after_seconds=60,
+                    cooldown_until=datetime.now(UTC) + timedelta(seconds=60),
+                    configured_key_count=2,
+                    available_key_count=0,
+                ),
+                provider="google",
+                model_id="gemini-2.5-flash",
+            )
+        except AnalysisExecutionError as exc:
+            rate_limit_exc = exc
+
+        assert rate_limit_exc is not None
+
+        process_analysis.request.id = "task-123"
+        process_analysis.request.retries = 4
+
+        outcomes = iter([rate_limit_exc, True])
+
+        def fake_run_async(coro):
+            coro.close()
+            outcome = next(outcomes)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        with (
+            patch("src.interface.workers.analysis_tasks._run_async", side_effect=fake_run_async),
+            patch.object(process_analysis, "apply_async") as apply_async_mock,
+            patch.object(process_analysis, "retry") as retry_mock,
+            patch("src.interface.workers.analysis_tasks.random.randint", return_value=0),
+        ):
+            result = process_analysis.run("analysis-123")
+
+        assert result["status"] == "retry_scheduled"
+        assert result["provider_error_type"] == "rate_limited"
+        apply_async_mock.assert_called_once()
+        assert apply_async_mock.call_args.kwargs["countdown"] == 300
+        retry_mock.assert_not_called()
+
     def test_process_analysis_uses_celery_retry_for_temporary_error(self) -> None:
         temp_exc = None
         try:

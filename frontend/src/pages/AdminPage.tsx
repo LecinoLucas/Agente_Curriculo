@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, HeartPulse, ShieldCheck, Tags, Users } from "lucide-react";
+import { Activity, BarChart3, CheckCircle2, ClipboardList, FileSearch, HeartPulse, KeyRound, ShieldCheck, Tags, Users } from "lucide-react";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { usersService, UserStats } from "../services/usersService";
@@ -109,6 +109,15 @@ export function AdminPage() {
               description="Monitore backend, filas, banco e uso de IA."
               buttonLabel="Ver health"
               onButtonClick={() => setActiveTab("health")}
+              variant="default"
+            />
+
+            <AdminQuickAction
+              icon={<KeyRound className="h-4 w-4 text-emerald-600" />}
+              title="Credenciais de IA"
+              description="Cadastre e rotacione chaves Gemini e Claude sem exibir segredos após salvar."
+              buttonLabel="Gerenciar chaves IA"
+              onButtonClick={() => navigate("/admin/ai-provider-credentials")}
               variant="default"
             />
 

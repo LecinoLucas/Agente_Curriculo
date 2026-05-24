@@ -25,6 +25,7 @@ export const SCREENS: { label: string; path: string; roles: Role[] }[] = [
   { label: "Cadastros Gerais", path: "/admin/cadastros", roles: ["admin"] },
   { label: "Auditoria",       path: "/admin/auditoria", roles: ["admin"] },
   { label: "System Health",   path: "/admin/health",    roles: ["admin"] },
+  { label: "Credenciais IA",  path: "/admin/ai-provider-credentials", roles: ["admin"] },
   { label: "BI & Métricas",   path: "/admin/bi",        roles: ["admin"] },
   { label: "Templates IA",    path: "/admin/behavioral-templates", roles: ["admin", "recruiter"] },
 ];

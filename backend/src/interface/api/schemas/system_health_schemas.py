@@ -11,6 +11,7 @@ from src.interface.api.schemas.common import APISchemaModel
 
 
 HealthStatus = Literal["ok", "degraded", "down", "unknown"]
+AIProviderOperationalStatus = Literal["available", "degraded", "rate_limited", "unavailable"]
 
 
 class ComponentStatusResponse(APISchemaModel):
@@ -26,6 +27,20 @@ class AIProviderHealthResponse(APISchemaModel):
     available_key_count: int | None = None
     cooldown_key_count: int | None = None
     cooldowns: list[dict[str, object]] = Field(default_factory=list)
+
+
+class AIProviderOperationalHealthResponse(APISchemaModel):
+    provider: str
+    model_id: str
+    status: AIProviderOperationalStatus
+    cooldown_until: datetime | None = None
+    retry_after_seconds: int | None = None
+    configured_key_count: int
+    available_key_count: int | None = None
+    last_error_type: str | None = None
+    last_status_code: int | None = None
+    last_error_at: datetime | None = None
+    consecutive_rate_limit_count: int = 0
 
 
 class SystemHealthOverviewResponse(APISchemaModel):

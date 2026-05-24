@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,11 +21,14 @@ from src.domain.exceptions import (
 )
 from src.infrastructure.cache.redis_client import close_redis
 from src.infrastructure.database.connection import check_database_health, engine
+from src.infrastructure.security.encryption_service import validate_ai_credentials_encryption_key
 from src.interface.api.middlewares.audit_middleware import AuditMiddleware
 from src.interface.api.middlewares.request_id_middleware import RequestIDMiddleware
 from src.interface.api.middlewares.security_headers_middleware import SecurityHeadersMiddleware
 from src.interface.api.routers import (
     admin_ai_limits,
+    admin_ai_provider_credentials,
+    admin_ai_provider_health,
     admin_behavioral_ai,
     admin_diagnostics,
     admin_bi,
@@ -66,6 +70,7 @@ from src.observability.logging import configure_structured_logging
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     configure_structured_logging()
+    validate_ai_credentials_encryption_key()
     yield
     await close_redis()
     await engine.dispose()
@@ -108,6 +113,8 @@ app.include_router(admin_audit_logs.router, prefix=_PREFIX)
 app.include_router(admin_system_health.router, prefix=_PREFIX)
 app.include_router(admin_notifications.router, prefix=_PREFIX)
 app.include_router(admin_ai_limits.router, prefix=_PREFIX)
+app.include_router(admin_ai_provider_credentials.router, prefix=_PREFIX)
+app.include_router(admin_ai_provider_health.router, prefix=_PREFIX)
 app.include_router(admin_behavioral_ai.router, prefix=_PREFIX)
 app.include_router(candidates.router, prefix=_PREFIX)
 app.include_router(communications.router, prefix=_PREFIX)
@@ -190,6 +197,18 @@ async def handle_conflict(request: Request, exc: ConflictException) -> JSONRespo
 @app.exception_handler(ValidationException)
 async def handle_validation(request: Request, exc: ValidationException) -> JSONResponse:
     return _error_response("VALIDATION_ERROR", exc.message, status.HTTP_422_UNPROCESSABLE_ENTITY, request)
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_request_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
+    if request.url.path.startswith("/api/v1/admin/ai-provider-credentials"):
+        return _error_response(
+            "VALIDATION_ERROR",
+            "Dados inválidos para credencial IA",
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            request,
+        )
+    return _error_response("VALIDATION_ERROR", "Dados inválidos", status.HTTP_422_UNPROCESSABLE_ENTITY, request)
 
 
 @app.exception_handler(DomainException)
