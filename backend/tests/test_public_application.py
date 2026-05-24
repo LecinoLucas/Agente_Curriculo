@@ -910,3 +910,39 @@ async def test_apply_blocks_existing_candidate_with_active_pipeline(
     )
     assert len(active_rows) == 1
     assert active_rows[0]["job_id"] == str(other_job_id)
+
+
+@pytest.mark.asyncio
+async def test_check_candidate_exists_endpoint(
+    db_session: AsyncSession,
+    client: AsyncClient,
+) -> None:
+    # 1. Initially check an email/cpf that doesn't exist
+    response = await client.get("/api/v1/public/candidates/check-exists?email=naoexiste@example.com&cpf=00000000000")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["email_exists"] is False
+    assert data["cpf_exists"] is False
+
+    # 2. Seed a candidate
+    candidate = CandidateModel(
+        id=uuid4(),
+        full_name="Candidate Test",
+        email="exists@example.com",
+        cpf="11122233344",
+        phone="11999999999",
+        location_city="Sao Paulo",
+        location_state="SP",
+        location_country="BR",
+        application_source="public_application",
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+
+    # 3. Check again
+    response = await client.get("/api/v1/public/candidates/check-exists?email=exists@example.com&cpf=11122233344")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["email_exists"] is True
+    assert data["cpf_exists"] is True
+

@@ -21,6 +21,7 @@ vi.mock("../../features/public-application/services/publicApplicationService", (
   publicApplicationService: {
     listPublishedJobs: vi.fn(),
     submitApplication: vi.fn(),
+    checkExists: vi.fn(() => Promise.resolve({ email_exists: false, cpf_exists: false })),
   },
 }));
 
@@ -184,6 +185,42 @@ describe("PublicApplicationPage", () => {
     expect(screen.getByRole("button", { name: /continuar/i })).toBeInTheDocument();
   });
 
+  it("valida automaticamente e-mail pré-preenchido pelo Google ao abrir dados pessoais", async () => {
+    (candidateAuthService.googleLogin as any).mockResolvedValue({
+      status: "needs_completion",
+      message: "Complete os dados restantes para finalizar sua candidatura.",
+      redirect_to: "/candidato/cadastro",
+      session_expires_at: "2026-05-17T14:00:00Z",
+      candidate: {
+        id: "candidate-1",
+        full_name: "Maria Google",
+        email: "maria.google@example.com",
+        phone: null,
+        cpf: null,
+        salary_expectation: null,
+        has_resume: false,
+        picture_url: null,
+        email_locked: true,
+      },
+      missing_fields: ["phone", "salary_expectation", "resume", "lgpd_consent", "cpf"],
+    });
+    (publicApplicationService.checkExists as any).mockResolvedValue({
+      email_exists: true,
+      cpf_exists: false,
+    });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /continuar com google/i }));
+
+    expect(await screen.findByDisplayValue("maria.google@example.com")).toBeDisabled();
+    await waitFor(() => {
+      expect(publicApplicationService.checkExists).toHaveBeenCalledWith({
+        email: "maria.google@example.com",
+      });
+    });
+    expect(await screen.findByText("Este e-mail já está cadastrado. Faça login para continuar.")).toBeInTheDocument();
+  });
+
   it("google authenticated redireciona para o portal", async () => {
     (candidateAuthService.googleLogin as any).mockResolvedValue({
       status: "authenticated",
@@ -217,5 +254,33 @@ describe("PublicApplicationPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /continuar com google/i }));
 
     expect(await screen.findByText("Google indisponível.")).toBeInTheDocument();
+  });
+
+  it("exibe erro se e-mail ou CPF já estiver cadastrado", async () => {
+    (publicApplicationService.checkExists as any).mockResolvedValue({
+      email_exists: true,
+      cpf_exists: true,
+    });
+
+    renderPage();
+    
+    // Avançar para dados pessoais
+    fireEvent.click(screen.getByRole("button", { name: /preencher manualmente/i }));
+
+    // Preencher campos
+    fireEvent.change(screen.getByLabelText(/nome completo/i), { target: { value: "Maria Silva" } });
+    fireEvent.change(screen.getByLabelText(/^cpf/i), { target: { value: "12345678909" } });
+    fireEvent.change(screen.getByLabelText(/e-mail/i), { target: { value: "maria@example.com" } });
+    fireEvent.change(screen.getByLabelText(/telefone \/ whatsapp/i), { target: { value: "11987654321" } });
+    fireEvent.change(screen.getByLabelText(/cidade/i), { target: { value: "São Paulo" } });
+    fireEvent.change(screen.getByLabelText(/^senha/i), { target: { value: "SenhaSegura123" } });
+    fireEvent.change(screen.getByLabelText(/confirmar senha/i), { target: { value: "SenhaSegura123" } });
+    
+    // Tentar avançar
+    fireEvent.click(screen.getByRole("button", { name: /continuar/i }));
+
+    // Deve exibir erros na tela e não avançar
+    expect(await screen.findByText("Este e-mail já está cadastrado. Faça login para continuar.")).toBeInTheDocument();
+    expect(screen.getByText("Já existe um cadastro com este CPF. Faça login para continuar.")).toBeInTheDocument();
   });
 });

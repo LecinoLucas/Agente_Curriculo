@@ -191,13 +191,18 @@ class PublicApplicationService:
                 raise PublicApplicationExistingAccountError(
                     "Já existe um cadastro com este e-mail ou CPF. Faça login para continuar sua candidatura."
                 )
-            if existing_by_cpf or existing_by_email:
-                existing_candidate = existing_by_cpf or existing_by_email
-                assert existing_candidate is not None
-                if not existing_candidate.password_hash or not verify_password(password, existing_candidate.password_hash):
+            if existing_by_cpf:
+                if not existing_by_cpf.password_hash or not verify_password(password, existing_by_cpf.password_hash):
                     raise PublicApplicationExistingAccountError(
-                        "Já existe um cadastro com este e-mail ou CPF. Faça login para continuar sua candidatura."
+                        "Já existe um cadastro com este CPF. Faça login para continuar sua candidatura."
                     )
+                existing_candidate = existing_by_cpf
+            elif existing_by_email:
+                if not existing_by_email.password_hash or not verify_password(password, existing_by_email.password_hash):
+                    raise PublicApplicationExistingAccountError(
+                        "Já existe um cadastro com este e-mail. Faça login para continuar sua candidatura."
+                    )
+                existing_candidate = existing_by_email
 
         if existing_candidate is not None:
             existing_active = await self._pipeline_repo.find_active_entry_by_candidate(existing_candidate.id)

@@ -158,10 +158,33 @@ export function useApplicationForm() {
     setCurrentStep("personal-data");
   }, []);
 
+  const clearGoogleData = useCallback(() => {
+    setForm((prev) => {
+      if (prev.authMethod === "google") {
+        return {
+          ...prev,
+          authMethod: "manual",
+          emailLocked: false,
+          googlePictureUrl: null,
+          fullName: "",
+          email: "",
+          phone: "",
+          cpf: "",
+          salaryExpectation: "",
+          password: "",
+          confirmPassword: "",
+        };
+      }
+      return prev;
+    });
+    setErrors({});
+  }, []);
+
   return {
     currentStep,
     form,
     errors,
+    setErrors,
     isSubmitting,
     setIsSubmitting,
     updateForm,
@@ -170,6 +193,7 @@ export function useApplicationForm() {
     reset,
     validateStep,
     applyGoogleCandidate,
+    clearGoogleData,
     setCurrentStep,
   };
 }

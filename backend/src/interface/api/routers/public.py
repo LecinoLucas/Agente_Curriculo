@@ -78,6 +78,49 @@ async def list_public_jobs(
     ]
 
 
+@router.get("/candidates/check-exists")
+async def check_candidate_exists(
+    request: Request,
+    email: str | None = None,
+    cpf: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verifica se um candidato com o email ou CPF especificado já está cadastrado.
+    """
+    from src.infrastructure.repositories.sqlalchemy_candidate_repository import SQLAlchemyCandidateRepository
+    from src.application.services.candidate_portal_auth_service import CANDIDATE_PORTAL_COOKIE_NAME, CandidatePortalAuthService
+    
+    token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
+    current_candidate_id = None
+    if token:
+        try:
+            session = await CandidatePortalAuthService(db).authenticate(token)
+            current_candidate_id = session.candidate_id
+        except Exception:
+            pass
+
+    email_exists = False
+    cpf_exists = False
+    
+    if email:
+        email_clean = email.lower().strip()
+        candidate = await SQLAlchemyCandidateRepository(db).find_active_by_email(email_clean)
+        if candidate and candidate.id != current_candidate_id:
+            email_exists = True
+            
+    if cpf:
+        cpf_clean = cpf.strip()
+        candidate = await SQLAlchemyCandidateRepository(db).find_active_by_cpf(cpf_clean)
+        if candidate and candidate.id != current_candidate_id:
+            cpf_exists = True
+            
+    return {
+        "email_exists": email_exists,
+        "cpf_exists": cpf_exists,
+    }
+
+
 @router.post("/candidates/apply", response_model=PublicApplyResponse, status_code=status.HTTP_201_CREATED)
 async def apply(
     request: Request,
