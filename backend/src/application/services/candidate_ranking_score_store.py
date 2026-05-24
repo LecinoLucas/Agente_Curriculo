@@ -87,7 +87,7 @@ class CandidateRankingScoreStore:
             )
         return column.isnot(None)
 
-    async def fetch_persisted_scores(self, job_id: UUID, version_id: UUID) -> list[dict[str, Any]]:
+    def _persisted_scores_query(self, job_id: UUID, version_id: UUID) -> sa.Select:
         latest_match = (
             sa.select(
                 CandidateJobMatchModel.candidate_id,
@@ -124,6 +124,7 @@ class CandidateRankingScoreStore:
                 JobProfileAnalysisModel.id == CandidateJobMatchModel.job_profile_analysis_id,
             )
             .where(
+                CandidateJobMatchModel.job_id == job_id,
                 CandidateJobMatchModel.freshness_status == "fresh",
                 CandidateJobMatchModel.job_signature_hash == JobModel.job_profile_hash,
                 JobProfileAnalysisModel.is_active.is_(True),
@@ -135,7 +136,7 @@ class CandidateRankingScoreStore:
             )
             .subquery("latest_match")
         )
-        result = await self._session.execute(
+        return (
             sa.select(
                 CandidateJobScoreModel.candidate_id,
                 CandidateJobScoreModel.final_score,
@@ -200,7 +201,37 @@ class CandidateRankingScoreStore:
                 CandidateJobScoreModel.candidate_id.asc(),
             )
         )
+
+    async def fetch_persisted_scores(
+        self,
+        job_id: UUID,
+        version_id: UUID,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[dict[str, Any]]:
+        query = self._persisted_scores_query(job_id, version_id)
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self._session.execute(query)
         return [dict(row) for row in result.mappings().all()]
+
+    async def count_persisted_scores(self, job_id: UUID, version_id: UUID) -> int:
+        ranked_scores = (
+            self._persisted_scores_query(job_id, version_id)
+            .order_by(None)
+            .subquery("ranked_scores")
+        )
+        return int(
+            (
+                await self._session.scalar(
+                    sa.select(sa.func.count()).select_from(ranked_scores)
+                )
+            )
+            or 0
+        )
 
     async def calculate_data_quality_stats(self, job_id: UUID) -> dict[str, int]:
         result = await self._session.execute(

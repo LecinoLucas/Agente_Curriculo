@@ -1,12 +1,14 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
+
+import pytest
+from sqlalchemy.dialects import postgresql
 
 from src.application.services import candidate_ranking_service as ranking_service_module
 from src.application.services import strict_payload as strict_payload_module
-from sqlalchemy.dialects import postgresql
-
 from src.application.services.candidate_ranking_service import (
     CandidateRankingService,
     _apply_eliminatory_skill_guardrails,
@@ -20,6 +22,7 @@ from src.application.services.candidate_ranking_service import (
     _render_score_explanation,
     _serialize_breakdown,
 )
+from src.application.services.candidate_ranking_score_store import CandidateRankingScoreStore
 from src.infrastructure.database.models.profile_analysis_model import CandidateJobMatchModel
 
 
@@ -131,6 +134,82 @@ def test_postgres_skill_evidence_filter_checks_json_object_and_required_key():
     assert "jsonb_typeof" in shape_sql
     assert "?" in key_sql
     assert "->>" in key_sql
+
+
+def _score_store_for_sql(session: object) -> CandidateRankingScoreStore:
+    return CandidateRankingScoreStore(
+        session,  # type: ignore[arg-type]
+        explainability_version="v1",
+        validate_score_factors=lambda factors: None,
+        summarize_score_factors=lambda factors: {},
+        derive_delta_summary=lambda **kwargs: {},
+        render_score_explanation=lambda **kwargs: "",
+        empty_delta_summary=lambda **kwargs: {},
+        coerce_utc_datetime=lambda value: value,
+        logger=Mock(),
+    )
+
+
+def test_persisted_scores_latest_match_filters_job_inside_subquery() -> None:
+    session = SimpleNamespace(bind=SimpleNamespace(dialect=postgresql.dialect()))
+    store = _score_store_for_sql(session)
+
+    sql = str(
+        store._persisted_scores_query(uuid4(), uuid4()).compile(
+            dialect=postgresql.dialect(),
+        )
+    )
+    latest_match_sql = sql.split("AS latest_match", 1)[0]
+
+    assert "candidate_job_match.job_id =" in latest_match_sql
+
+
+@pytest.mark.asyncio
+async def test_get_ranking_is_read_only_by_default_and_paginates_at_store() -> None:
+    service = CandidateRankingService(SimpleNamespace(bind=None))  # type: ignore[arg-type]
+    version = SimpleNamespace(id=uuid4(), version="v-test", thresholds={"high": 70, "low": 45})
+    service._context_loader = SimpleNamespace(
+        assert_job_exists=AsyncMock(),
+        load_active_version=AsyncMock(return_value=version),
+    )
+    service.repair_missing_current_scores = AsyncMock()  # type: ignore[method-assign]
+    service._score_store = SimpleNamespace(
+        fetch_persisted_scores=AsyncMock(
+            return_value=[
+                {
+                    "candidate_id": uuid4(),
+                    "final_score": Decimal("88.00"),
+                    "breakdown": {},
+                    "reason_codes": [],
+                    "computed_at": datetime.now(UTC),
+                    "match_updated_at": datetime.now(UTC),
+                }
+            ]
+        ),
+        calculate_data_quality_stats=AsyncMock(return_value=None),
+        count_persisted_scores=AsyncMock(return_value=3),
+    )
+    service._public_builder = SimpleNamespace(
+        build_entry=lambda *, row, rank, version: {
+            "rank": rank,
+            "candidate_id": row["candidate_id"],
+        },
+        build_ranking_response=lambda **kwargs: kwargs,
+    )
+
+    job_id = uuid4()
+    result = await service.get_ranking(job_id, page=2, page_size=1)
+
+    service.repair_missing_current_scores.assert_not_awaited()
+    service._score_store.fetch_persisted_scores.assert_awaited_once_with(
+        job_id,
+        version.id,
+        limit=1,
+        offset=1,
+    )
+    service._score_store.count_persisted_scores.assert_awaited_once_with(job_id, version.id)
+    assert result["entries"][0]["rank"] == 2
+    assert result["total_pages"] == 3
 
 
 def test_missing_eliminatory_skill_caps_final_score() -> None:

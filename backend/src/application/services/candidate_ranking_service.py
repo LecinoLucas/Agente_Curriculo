@@ -312,33 +312,40 @@ class CandidateRankingService:
         job_id: UUID,
         page: int = 1,
         page_size: int = 20,
+        *,
+        repair_before_read: bool = False,
     ) -> dict[str, Any]:
         """Return the ranking for this job from persisted candidate_job_scores.
 
-        Applies a lightweight consistency auto-repair before reading:
+        By default this is a read-only path. Callers that need the historical
+        consistency repair must opt in explicitly with repair_before_read=True.
+        That repair can write stale flags and recompute missing scores:
         - stale fresh scores not tied to current_analysis_id
         - stale fresh matches tied to inactive job_profile_analysis
         - recompute missing current scores for completed analyses
 
-        Stats and auto-repair operate on full dataset. Pagination is applied
-        after building entries. Only scores computed with the currently active
-        version are returned. Raises RankingJobNotFoundError / NoActiveScoreVersionError as needed.
+        Only scores computed with the currently active version are returned.
+        Raises RankingJobNotFoundError / NoActiveScoreVersionError as needed.
         """
         _t0 = perf_counter()
         await self._context_loader.assert_job_exists(job_id)
         version = await self._context_loader.load_active_version()
         threshold_high, threshold_low = _resolve_thresholds(version)
-        await self._auto_repair_missing_current_scores(
-            job_id=job_id,
-            version_id=version.id,
-        )
+        if repair_before_read:
+            await self.repair_missing_current_scores(job_id=job_id, version_id=version.id)
 
         _t_fetch = perf_counter()
-        rows = await self._score_store.fetch_persisted_scores(job_id, version.id)
+        start_idx = (page - 1) * page_size
+        rows = await self._score_store.fetch_persisted_scores(
+            job_id,
+            version.id,
+            limit=page_size,
+            offset=start_idx,
+        )
         _fetch_ms = (perf_counter() - _t_fetch) * 1000
 
         entries = []
-        for row in rows:
+        for offset, row in enumerate(rows):
             if not _has_valid_persisted_ranking_row(row):
                 logger.info(
                     "ranking.skip_invalid_persisted_score",
@@ -349,7 +356,7 @@ class CandidateRankingService:
             entries.append(
                 self._public_builder.build_entry(
                     row=row,
-                    rank=len(entries) + 1,
+                    rank=start_idx + offset + 1,
                     version=version,
                 )
             )
@@ -357,23 +364,19 @@ class CandidateRankingService:
         # Get accurate stats directly from database (not from already-filtered entries)
         stats = await self._score_store.calculate_data_quality_stats(job_id)
 
-        # Apply pagination after building full entries list
-        total_candidates = len(entries)
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_entries = entries[start_idx:end_idx]
-
-        # Recalculate ranks for paginated slice
-        for i, entry in enumerate(paginated_entries):
-            entry["rank"] = start_idx + i + 1
-
-        total_pages = (total_candidates + page_size - 1) // page_size if total_candidates > 0 else 1
+        total_matching_scores = await self._score_store.count_persisted_scores(job_id, version.id)
+        total_pages = (
+            (total_matching_scores + page_size - 1) // page_size
+            if total_matching_scores > 0
+            else 1
+        )
 
         _duration_ms = (perf_counter() - _t0) * 1000
         logger.debug(
             "pipeline.ranking.query_timing",
             job_id=str(job_id),
-            candidate_count=total_candidates,
+            candidate_count=len(entries),
+            total_matching_scores=total_matching_scores,
             page=page,
             page_size=page_size,
             fetch_ms=round(_fetch_ms, 2),
@@ -382,7 +385,7 @@ class CandidateRankingService:
 
         return self._public_builder.build_ranking_response(
             job_id=job_id,
-            entries=paginated_entries,
+            entries=entries,
             threshold_high=threshold_high,
             threshold_low=threshold_low,
             version=version,
@@ -396,20 +399,20 @@ class CandidateRankingService:
         self,
         job_id: UUID,
         candidate_id: UUID,
+        *,
+        repair_before_read: bool = False,
     ) -> dict[str, Any]:
         """Return the ranking entry for a specific candidate in this job.
 
-        Applies same consistency auto-repair as get_ranking before reading.
+        Read-only by default. Callers may opt into the historical consistency
+        repair with repair_before_read=True.
         Returns the single entry with full rank position in the full ranking.
         Raises RankingJobNotFoundError / NoActiveScoreVersionError / CandidateNotInActivePipelineError as needed.
         """
         await self._context_loader.assert_job_exists(job_id)
         version = await self._context_loader.load_active_version()
-        threshold_high, threshold_low = _resolve_thresholds(version)
-        await self._auto_repair_missing_current_scores(
-            job_id=job_id,
-            version_id=version.id,
-        )
+        if repair_before_read:
+            await self.repair_missing_current_scores(job_id=job_id, version_id=version.id)
 
         rows = await self._score_store.fetch_persisted_scores(job_id, version.id)
 
@@ -433,6 +436,22 @@ class CandidateRankingService:
             )
 
         return found_entry
+
+    async def repair_missing_current_scores(
+        self,
+        *,
+        job_id: UUID,
+        version_id: UUID | None = None,
+        limit: int = 25,
+    ) -> None:
+        if version_id is None:
+            version = await self._context_loader.load_active_version()
+            version_id = version.id
+        await self._auto_repair_missing_current_scores(
+            job_id=job_id,
+            version_id=version_id,
+            limit=limit,
+        )
 
     async def _auto_repair_missing_current_scores(
         self,

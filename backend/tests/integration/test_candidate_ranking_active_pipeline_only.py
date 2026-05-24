@@ -136,7 +136,7 @@ async def test_ranking_uses_only_active_pipeline_for_active_job(db_session: Asyn
 
 
 @pytest.mark.asyncio
-async def test_ranking_stales_score_when_source_analysis_is_not_current(db_session: AsyncSession) -> None:
+async def test_ranking_read_does_not_stale_score_when_source_analysis_is_not_current(db_session: AsyncSession) -> None:
     recruiter = await _create_active_user(
         db_session,
         f"ranking-stale-{uuid4().hex[:6]}@test.com",
@@ -230,6 +230,11 @@ async def test_ranking_stales_score_when_source_analysis_is_not_current(db_sessi
         )
     )
     assert persisted_score is not None
+    assert persisted_score.freshness_status == "fresh"
+
+    await ranking_service.repair_missing_current_scores(job_id=job_id, version_id=version.id)
+    await db_session.commit()
+    await db_session.refresh(persisted_score)
     assert persisted_score.freshness_status == "stale"
 
 
@@ -272,6 +277,8 @@ async def test_ranking_auto_repairs_completed_analysis_missing_score(db_session:
     await db_session.commit()
 
     ranking_service = CandidateRankingService(db_session)
+    await ranking_service.repair_missing_current_scores(job_id=job_id)
+    await db_session.commit()
     ranking = await ranking_service.get_ranking(job_id)
 
     assert ranking["total_candidates"] == 1

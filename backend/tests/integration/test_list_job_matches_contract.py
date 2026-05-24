@@ -5,20 +5,27 @@ All tests run on SQLite in-memory via the shared db_session fixture.
 SQLite does not enforce FK constraints, so dummy UUIDs are used for
 created_by / uploaded_by / ai_model_id / prompt_template_id fields.
 """
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
+from src.infrastructure.database.models.analysis_model import AnalysisModel, AnalysisResultModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
-from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
-from src.infrastructure.database.models.analysis_model import AnalysisModel, AnalysisResultModel
-from src.infrastructure.database.models.scoring_model import ScoreModelVersionModel, CandidateJobScoreModel
+from src.infrastructure.database.models.scoring_model import (
+    CandidateJobScoreModel,
+    ScoreModelVersionModel,
+)
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
+    SQLAlchemyPipelineRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -89,6 +96,8 @@ async def _make_resume_with_analysis(
     *,
     keywords: list | None = None,
     status: str = "completed",
+    job_id=None,
+    updated_at: datetime | None = None,
 ) -> tuple[ResumeModel, ResumeVersionModel, AnalysisModel]:
     resume = ResumeModel(
         candidate_id=candidate_id,
@@ -113,10 +122,14 @@ async def _make_resume_with_analysis(
 
     analysis = AnalysisModel(
         resume_version_id=rv.id,
+        job_id=job_id,
         ai_model_id=uuid4(),      # FK not enforced by SQLite
         prompt_template_id=uuid4(),  # FK not enforced by SQLite
         status=status,
         requested_by=_DUMMY_USER,
+        created_at=updated_at or _now(),
+        updated_at=updated_at or _now(),
+        completed_at=updated_at if status == "completed" else None,
     )
     session.add(analysis)
     await session.flush()
@@ -151,12 +164,15 @@ async def _make_score(
     version_id,
     *,
     final_score: float = 75.0,
+    source_analysis_id=None,
 ) -> CandidateJobScoreModel:
     now = _now()
     s = CandidateJobScoreModel(
         candidate_id=candidate_id,
         job_id=job_id,
         version_id=version_id,
+        source_analysis_id=source_analysis_id,
+        source_analysis_created_at=now if source_analysis_id is not None else None,
         final_score=Decimal(str(final_score)),
         decision_suggestion="approved",
         breakdown={"job_fit_score": final_score},
@@ -272,34 +288,92 @@ async def test_ai_status_none_without_analysis(db_session: AsyncSession) -> None
 
 
 @pytest.mark.asyncio
-async def test_top_skills_from_latest_completed_analysis(db_session: AsyncSession) -> None:
-    """top_skills is populated from the AnalysisResult keywords of the latest completed analysis."""
+async def test_top_skills_from_current_analysis_id_not_latest_completed(
+    db_session: AsyncSession,
+) -> None:
+    """top_skills must follow the pipeline's current_analysis_id, not latest completed."""
     repo = SQLAlchemyPipelineRepository(db_session)
     job = await _make_job(db_session)
     c = await _make_candidate(db_session, "sk")
+    older = _now() - timedelta(days=2)
+    newer = _now()
 
-    _, _, analysis = await _make_resume_with_analysis(
-        db_session, c.id, keywords=["Python", "FastAPI", "PostgreSQL"],
+    _, _, analysis_current = await _make_resume_with_analysis(
+        db_session,
+        c.id,
+        job_id=job.id,
+        keywords=["Python", "FastAPI", "PostgreSQL"],
+        updated_at=older,
     )
-    await _make_pipeline(db_session, c.id, job.id, current_analysis_id=analysis.id)
+    await _make_resume_with_analysis(
+        db_session,
+        c.id,
+        job_id=job.id,
+        keywords=["React", "Next.js", "Tailwind"],
+        updated_at=newer,
+    )
+    await _make_pipeline(db_session, c.id, job.id, current_analysis_id=analysis_current.id)
     await db_session.commit()
 
     rows = await repo.list_job_matches(job.id)
 
     assert len(rows) == 1
-    assert rows[0]["top_skills"] is not None
+    assert rows[0]["top_skills"] == ["Python", "FastAPI", "PostgreSQL"]
+
+
+@pytest.mark.asyncio
+async def test_top_skills_do_not_leak_from_latest_completed_analysis_of_other_job(
+    db_session: AsyncSession,
+) -> None:
+    """The board for job A must not use keywords from a newer analysis for job B."""
+    repo = SQLAlchemyPipelineRepository(db_session)
+    job_a = await _make_job(db_session)
+    job_b = await _make_job(db_session)
+    c = await _make_candidate(db_session, "crossjob")
+    older = _now() - timedelta(days=2)
+    newer = _now()
+
+    _, _, analysis_current = await _make_resume_with_analysis(
+        db_session,
+        c.id,
+        job_id=job_a.id,
+        keywords=["Python", "FastAPI", "PostgreSQL"],
+        updated_at=older,
+    )
+    await _make_resume_with_analysis(
+        db_session,
+        c.id,
+        job_id=job_b.id,
+        keywords=["SAP", "ABAP", "HANA"],
+        updated_at=newer,
+    )
+    await _make_pipeline(db_session, c.id, job_a.id, current_analysis_id=analysis_current.id)
+    await db_session.commit()
+
+    rows = await repo.list_job_matches(job_a.id)
+
+    assert len(rows) == 1
+    assert rows[0]["top_skills"] == ["Python", "FastAPI", "PostgreSQL"]
 
 
 @pytest.mark.asyncio
 async def test_job_fit_score_from_fresh_score(db_session: AsyncSession) -> None:
-    """job_fit_score is returned from a CandidateJobScore with freshness_status='fresh'."""
+    """job_fit_score is returned when the fresh score belongs to current_analysis_id."""
     repo = SQLAlchemyPipelineRepository(db_session)
     job = await _make_job(db_session)
     c = await _make_candidate(db_session, "sc")
     version = await _make_score_version(db_session)
+    _, _, analysis = await _make_resume_with_analysis(db_session, c.id, job_id=job.id)
 
-    await _make_pipeline(db_session, c.id, job.id)
-    await _make_score(db_session, c.id, job.id, version.id, final_score=82.5)
+    await _make_pipeline(db_session, c.id, job.id, current_analysis_id=analysis.id)
+    await _make_score(
+        db_session,
+        c.id,
+        job.id,
+        version.id,
+        final_score=82.5,
+        source_analysis_id=analysis.id,
+    )
     await db_session.commit()
 
     rows = await repo.list_job_matches(job.id)
@@ -307,6 +381,35 @@ async def test_job_fit_score_from_fresh_score(db_session: AsyncSession) -> None:
     assert len(rows) == 1
     assert rows[0]["job_fit_score"] is not None
     assert float(rows[0]["job_fit_score"]) == pytest.approx(82.5)
+
+
+@pytest.mark.asyncio
+async def test_job_fit_score_ignores_fresh_score_from_non_current_analysis(
+    db_session: AsyncSession,
+) -> None:
+    """Fresh scores must not appear when source_analysis_id differs from current_analysis_id."""
+    repo = SQLAlchemyPipelineRepository(db_session)
+    job = await _make_job(db_session)
+    c = await _make_candidate(db_session, "wrongscore")
+    version = await _make_score_version(db_session)
+    _, _, analysis_current = await _make_resume_with_analysis(db_session, c.id, job_id=job.id)
+    _, _, analysis_other = await _make_resume_with_analysis(db_session, c.id, job_id=job.id)
+
+    await _make_pipeline(db_session, c.id, job.id, current_analysis_id=analysis_current.id)
+    await _make_score(
+        db_session,
+        c.id,
+        job.id,
+        version.id,
+        final_score=91.0,
+        source_analysis_id=analysis_other.id,
+    )
+    await db_session.commit()
+
+    rows = await repo.list_job_matches(job.id)
+
+    assert len(rows) == 1
+    assert rows[0]["job_fit_score"] is None
 
 
 @pytest.mark.asyncio
