@@ -52,14 +52,14 @@ type StepId =
   | "assessment-policy"
   | "review";
 
-const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
+export const STEPS: Array<{ id: StepId; label: string; hint: string }> = [
   { id: "basic", label: "Dados básicos", hint: "Contexto e resumo da vaga" },
   { id: "requirements", label: "Requisitos mínimos", hint: "Base obrigatória do matching" },
   { id: "mandatory-skills", label: "Essenciais", hint: "Use para as 3–5 competências centrais da vaga" },
   { id: "differentials", label: "Diferenciais", hint: "Bônus controlado para ferramentas e extras" },
   { id: "deal-breakers", label: "Critérios eliminatórios", hint: "Regras de bloqueio explícitas" },
-  { id: "behavioral", label: "Avaliação comportamental", hint: "Selecione o template comportamental oficial" },
   { id: "assessment-policy", label: "Fluxo de avaliação", hint: "Configure os gates obrigatórios da decisão final" },
+  { id: "behavioral", label: "Avaliação comportamental", hint: "Selecione o template comportamental oficial" },
   { id: "review", label: "Revisão e publicação", hint: "Checklist final e mensagens do backend" },
 ];
 

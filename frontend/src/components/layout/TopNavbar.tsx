@@ -46,7 +46,7 @@ export function TopNavbar({
           aria-label={mobileMenuOpen ? "Fechar menu de navegação" : "Abrir menu de navegação"}
           aria-expanded={mobileMenuOpen}
           onClick={onToggleMobileMenu}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--text))] outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] lg:hidden"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--text))] outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] xl:hidden"
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
@@ -72,7 +72,7 @@ export function TopNavbar({
 
         <nav
           aria-label="Navegação principal"
-          className="hidden min-w-0 flex-1 items-center justify-start gap-1 overflow-visible lg:flex"
+          className="hidden min-w-0 flex-1 items-center justify-start gap-1 overflow-visible xl:flex"
         >
           {groups.map((group) => {
             if (!group.isDropdown) {

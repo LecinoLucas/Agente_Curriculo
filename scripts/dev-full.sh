@@ -244,12 +244,86 @@ check_redis() {
   exit 1
 }
 
+CHILD_PIDS=""
+CLEANUP_DONE=0
+
+# Mata o PID + descendentes recursivamente. Bottom-up: filhos primeiro,
+# depois o pai. Sinal configurável (TERM ou KILL).
+kill_tree() {
+  signal=$1
+  root=$2
+
+  if ! kill -0 "$root" 2>/dev/null; then
+    return 0
+  fi
+
+  if command -v pgrep >/dev/null 2>&1; then
+    descendants=$(pgrep -P "$root" 2>/dev/null || true)
+    for child in $descendants; do
+      kill_tree "$signal" "$child"
+    done
+  fi
+  kill -"$signal" "$root" 2>/dev/null || true
+}
+
 cleanup() {
+  # Idempotente: trap pode disparar várias vezes (EXIT depois de INT, etc.).
+  if [ "$CLEANUP_DONE" -eq 1 ]; then
+    return 0
+  fi
+  CLEANUP_DONE=1
+
   print_info "Encerrando servicos..."
-  kill_matching_processes "src.interface.api.main:app"
+
+  # 1) SIGTERM nos filhos rastreados + descendentes (Celery prefork,
+  #    concurrently → vite/uvicorn). Targeting por PID é mais confiável que
+  #    pattern matching: cobre workers cujo cmdline não inclui "-A ...".
+  for pid in $CHILD_PIDS; do
+    if kill -0 "$pid" 2>/dev/null; then
+      printf '[..] SIGTERM em PID %s e descendentes\n' "$pid"
+      kill_tree TERM "$pid"
+    fi
+  done
+
+  # 2) Aguarda até 5s pelo encerramento gracioso.
+  elapsed=0
+  while [ "$elapsed" -lt 5 ]; do
+    still_alive=""
+    for pid in $CHILD_PIDS; do
+      if kill -0 "$pid" 2>/dev/null; then
+        still_alive="$still_alive $pid"
+      fi
+    done
+    if [ -z "$still_alive" ]; then
+      break
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  # 3) SIGKILL fallback nos remanescentes (PIDs rastreados).
+  for pid in $CHILD_PIDS; do
+    if kill -0 "$pid" 2>/dev/null; then
+      printf '[!!] SIGKILL fallback em PID %s\n' "$pid"
+      kill_tree KILL "$pid"
+    fi
+  done
+
+  # 4) Rede de segurança por padrão: pega quem desanexou da árvore
+  #    (ex.: Celery worker que mudou de session ou ficou em zumbi).
   kill_matching_processes "celery -A src.infrastructure.queue.celery_app"
+  kill_matching_processes "src.interface.api.main:app"
   kill_matching_processes "vite --host 0.0.0.0"
-  exit 0
+
+  # 5) Garantir portas do projeto livres (não toca em portas fora do range).
+  if [ -n "${BACKEND_PORT:-}" ]; then
+    kill_port "$BACKEND_PORT"
+  fi
+  if [ -n "${FRONTEND_PORT:-}" ]; then
+    kill_port_range "$FRONTEND_PORT" "$((FRONTEND_PORT + 4))"
+  fi
+
+  print_ok "Shutdown concluido."
 }
 
 # ─────────────────────────────────────────
@@ -308,7 +382,10 @@ export BACKEND_PORT
 export HOST="0.0.0.0"
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-$EXPECTED_API_URL}"
 
-trap cleanup INT TERM
+# EXIT garante limpeza em qualquer saída (inclusive set -e ou wait
+# retornando porque algum filho morreu). HUP cobre o caso do terminal
+# fechar sem propagar TERM via concurrently.
+trap cleanup EXIT INT TERM HUP
 
 print_section "Servicos"
 print_info "Subindo frontend, backend e worker Celery"
@@ -319,11 +396,25 @@ cd "$BACKEND_DIR"
   --loglevel=warning \
   --concurrency=2 &
 CELERY_PID=$!
+CHILD_PIDS="$CHILD_PIDS $CELERY_PID"
 print_ok "Worker Celery iniciado (PID $CELERY_PID)"
 
 cd "$ROOT_DIR"
 npm run --silent dev &
 NPM_PID=$!
+CHILD_PIDS="$CHILD_PIDS $NPM_PID"
 print_ok "Frontend e backend iniciados (PID $NPM_PID)"
 
-wait $CELERY_PID $NPM_PID
+# Loop de monitoramento: dispara cleanup assim que QUALQUER filho rastreado
+# morrer, em vez de `wait` em ambos (que só retorna quando todos saem).
+# Sem isso, se Celery cai mas npm continua vivo, o script fica parado e
+# webServer do Playwright timeouta sem limpeza — fonte clássica de órfãos.
+while true; do
+  for pid in $CHILD_PIDS; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      print_error "Filho PID $pid encerrou prematuramente; iniciando shutdown."
+      exit 1
+    fi
+  done
+  sleep 1
+done

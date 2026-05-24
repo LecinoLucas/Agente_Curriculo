@@ -82,6 +82,7 @@ class InterviewScheduleService:
         date_to: Optional[datetime] = None,
         status: Optional[str] = None,
         search: Optional[str] = None,
+        candidate_id: Optional[UUID] = None,
         job_id: Optional[UUID] = None,
         interviewer: Optional[str] = None,
     ) -> AgendaKpiResponse:
@@ -93,6 +94,7 @@ class InterviewScheduleService:
             date_to=date_to,
             status=status,
             search=search,
+            candidate_id=candidate_id,
             job_id=job_id,
             interviewer=interviewer,
         )

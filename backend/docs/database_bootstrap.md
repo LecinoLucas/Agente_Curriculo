@@ -63,10 +63,20 @@ O caminho oficial é Alembic primeiro, preflight depois:
 
 ```bash
 DATABASE_URL="postgresql+asyncpg://user:password@host:5432/agente_curriculo_prod" \
+APP_ENV=production \
+APP_SECRET_KEY="..." \
+JWT_SECRET_KEY="..." \
+FIELD_ENCRYPTION_KEY="..." \
+REDIS_URL="redis://host:6379/0" \
   python -m alembic upgrade head
 
 DATABASE_URL="postgresql+asyncpg://user:password@host:5432/agente_curriculo_prod" \
-  python scripts/production_preflight.py
+APP_ENV=production \
+APP_SECRET_KEY="..." \
+JWT_SECRET_KEY="..." \
+FIELD_ENCRYPTION_KEY="..." \
+REDIS_URL="redis://host:6379/0" \
+  python scripts/production_preflight.py --verbose
 ```
 
 A baseline ativa cria no começo:
@@ -85,6 +95,12 @@ pelo Alembic; não existe script paralelo de `CREATE TABLE` para produção.
 
 `scripts/production_preflight.py` é read-only e valida:
 
+- `APP_ENV`, `ENVIRONMENT` ou `ENV` compatível com produção/homologação.
+- `DATABASE_URL` PostgreSQL, sem aceitar SQLite.
+- `APP_SECRET_KEY`, `JWT_SECRET_KEY` e `FIELD_ENCRYPTION_KEY` sem imprimir valores.
+- `REDIS_URL`, salvo quando `--skip-redis` for informado explicitamente.
+- Diretórios locais obrigatórios: `uploads/`, `private_uploads/`, `reports/` e
+  `logs/`.
 - Conexão com o banco.
 - Sessão do preflight em modo read-only.
 - Revisão atual do Alembic igual ao `head`.
@@ -145,3 +161,7 @@ psql agente_curriculo_bootstrap_test -c "\dt pipeline_stage_transitions"
 | `scripts/bootstrap_dev.py` | Seeds e dados auxiliares de desenvolvimento |
 | `scripts/reset_dev_db.sh` | Reset local protegido |
 | `scripts/production_preflight.py` | Validação read-only pós-migration para produção/homologação |
+
+`production_preflight.py` aceita `--verbose` para diagnóstico adicional sem
+expor secrets. Use `--skip-redis` apenas quando Redis não fizer parte do deploy
+validado ou quando a conectividade for checada por outro processo operacional.

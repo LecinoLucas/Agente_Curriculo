@@ -214,6 +214,7 @@ async def get_kpis(
     date_to: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    candidate_id: Optional[UUID] = Query(None),
     job_id: Optional[UUID] = Query(None),
     interviewer: Optional[str] = Query(None),
     service: InterviewScheduleService = Depends(_get_service),
@@ -232,6 +233,7 @@ async def get_kpis(
         date_to=date_to_dt,
         status=status,
         search=search,
+        candidate_id=candidate_id,
         job_id=job_id,
         interviewer=interviewer,
     )

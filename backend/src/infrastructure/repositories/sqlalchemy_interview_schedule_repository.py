@@ -209,6 +209,7 @@ class SQLAlchemyInterviewScheduleRepository:
         date_to: Optional[datetime] = None,
         status: Optional[str] = None,
         search: Optional[str] = None,
+        candidate_id: Optional[UUID] = None,
         job_id: Optional[UUID] = None,
         interviewer: Optional[str] = None,
     ) -> dict:
@@ -216,6 +217,7 @@ class SQLAlchemyInterviewScheduleRepository:
             date_from=date_from,
             date_to=date_to,
             status=status,
+            candidate_id=candidate_id,
             job_id=job_id,
             interviewer=interviewer,
             search=search,

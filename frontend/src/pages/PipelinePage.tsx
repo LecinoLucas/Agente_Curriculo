@@ -669,7 +669,7 @@ export function PipelinePage() {
     <div className="flex w-full min-w-0 flex-col gap-4 pb-8 text-slate-800 dark:text-slate-100">
       
       {/* ── SaaS Breadcrumb and Header Control Area ── */}
-      <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
         <div>
           <nav className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
             <span>Recrutamento</span>
@@ -698,41 +698,44 @@ export function PipelinePage() {
             />
           )}
 
-          {/* Main Sourcing Red Button */}
-          <button
-            type="button"
-            onClick={handleOpenSourceCandidates}
-            disabled={!canUse}
-            className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
-              canUse
-                ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))] text-white shadow-sm hover:opacity-90 dark:border-[hsl(var(--primary))]/30"
-                : "cursor-not-allowed border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] dark:border-slate-800 dark:bg-slate-900"
-            }`}
-          >
-            <Search className="h-4 w-4" />
-            Vincular candidato
-          </button>
-          {activeJobId && (
+          {/* Action Buttons Group */}
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            {/* Main Sourcing Red Button */}
             <button
               type="button"
-              onClick={() => setShowRanking((current) => !current)}
+              onClick={handleOpenSourceCandidates}
+              disabled={!canUse}
               className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
-                showRanking
-                  ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
-                  : "border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800"
+                canUse
+                  ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))] text-white shadow-sm hover:opacity-90 dark:border-[hsl(var(--primary))]/30"
+                  : "cursor-not-allowed border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] dark:border-slate-800 dark:bg-slate-900"
               }`}
-              aria-expanded={showRanking}
             >
-              {showRanking ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-              {showRanking ? "Ocultar Ranking" : "Ver Ranking IA"}
+              <Search className="h-4 w-4" />
+              Vincular candidato
             </button>
-          )}
+            {activeJobId && (
+              <button
+                type="button"
+                onClick={() => setShowRanking((current) => !current)}
+                className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
+                  showRanking
+                    ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
+                    : "border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800"
+                }`}
+                aria-expanded={showRanking}
+              >
+                {showRanking ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+                {showRanking ? "Ocultar Ranking" : "Ver Ranking IA"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
           <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
             <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
               Total de Candidatos
@@ -815,9 +818,9 @@ export function PipelinePage() {
             <div className="min-w-0 rounded-2xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:p-4">
               
               {/* Header inside Board panel */}
-              <div className="mb-3 flex flex-col gap-3 border-b border-[hsl(var(--border))]/40 pb-3 dark:border-slate-800 xl:flex-row xl:items-center xl:justify-between">
-                <div className="min-w-0">
-                  <h2 className="text-lg font-black tracking-tight text-[hsl(var(--text))] dark:text-slate-100">
+              <div className="mb-3 flex flex-col gap-3 border-b border-[hsl(var(--border))]/40 pb-3 dark:border-slate-800 xl:flex-row xl:flex-wrap xl:items-center xl:justify-between">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-lg font-black tracking-tight text-[hsl(var(--text))] dark:text-slate-100 truncate">
                     {selectedJob ? selectedJob.title : "Candidatos"}
                   </h2>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[hsl(var(--text-muted))]">

@@ -278,7 +278,7 @@ export function AppShell() {
         {/* ── Mobile Drawer Navigation (Lateral Sliding Panel) ── */}
         <div
           className={cn(
-            "fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out",
+            "fixed inset-0 z-50 xl:hidden transition-all duration-300 ease-in-out",
             mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
           )}
         >

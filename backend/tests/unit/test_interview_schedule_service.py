@@ -158,6 +158,7 @@ class TestGetKpis:
 
     @pytest.mark.asyncio
     async def test_get_kpis_with_filters(self, service, mock_repository):
+        candidate_id = uuid4()
         mock_repository.get_kpis.return_value = {
             "total_scheduled": 5,
             "today_count": 0,
@@ -167,11 +168,12 @@ class TestGetKpis:
             "unique_interviewers_count": 2,
         }
 
-        kpis = await service.get_kpis(status="scheduled")
+        kpis = await service.get_kpis(status="scheduled", candidate_id=candidate_id)
 
         assert kpis.total_scheduled == 5
         call_kwargs = mock_repository.get_kpis.call_args[1]
         assert call_kwargs["status"] == "scheduled"
+        assert call_kwargs["candidate_id"] == candidate_id
 
     @pytest.mark.asyncio
     async def test_get_kpis_invalid_date_range(self, service, mock_repository):

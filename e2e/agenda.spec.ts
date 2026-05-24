@@ -213,9 +213,32 @@ test("E2E: Agenda de entrevistas cobre criar, conflitar, remarcar e cancelar", a
   await expect(page.getByRole("dialog", { name: "Cancelar entrevista" })).toBeVisible();
 
   await page.getByLabel("Motivo do cancelamento *").fill("Cancelamento validado no E2E");
-  await page.getByRole("button", { name: "Cancelar" }).last().click();
 
-  await expect(page.getByRole("dialog", { name: "Cancelar entrevista" })).toHaveCount(0);
+  // O submit do modal dispara PATCH /agenda/interviews/{id}/cancel e,
+  // após a resposta, o componente chama onSuccess → loadData (que recarrega
+  // a lista inteira da Agenda + KPIs) e só ENTÃO onClose. Sob volume
+  // acumulado do banco dev a recarga pode somar segundos com o PATCH,
+  // estourando o expect timeout padrão. Aguardamos o PATCH explicitamente
+  // e damos budget local para o close (modal só fecha após a recarga).
+  // Também usamos `exact: true` para não casar com qualquer outro botão
+  // cujo nome contenha "Cancelar" (defesa contra ambiguidade futura — hoje
+  // o dismiss do modal é "Fechar", então só o submit casa).
+  const cancelDialog = page.getByRole("dialog", { name: "Cancelar entrevista" });
+  const [cancelResponse] = await Promise.all([
+    page.waitForResponse(
+      (res) =>
+        /\/api\/v1\/agenda\/interviews\/[^/]+\/cancel(\?|$)/.test(res.url()) &&
+        res.request().method() === "PATCH",
+      { timeout: 30_000 },
+    ),
+    cancelDialog.getByRole("button", { name: "Cancelar", exact: true }).click(),
+  ]);
+  expect(
+    cancelResponse.ok(),
+    `PATCH cancel HTTP ${cancelResponse.status()} body=${await cancelResponse.text()}`,
+  ).toBeTruthy();
+
+  await expect(cancelDialog).toBeHidden({ timeout: 30_000 });
   const cancelledRow = page
     .getByText(primaryCandidateName, { exact: true })
     .first()

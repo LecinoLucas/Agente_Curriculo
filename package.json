@@ -9,7 +9,7 @@
 
     "frontend": "sh -c 'VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-8000}} npm --silent --prefix frontend run dev -- --host 0.0.0.0 --port ${FRONTEND_PORT:-5173} --strictPort'",
 
-    "backend:bootstrap": "cd backend && .venv/bin/python scripts/bootstrap_dev_db.py",
+    "backend:bootstrap": "cd backend && .venv/bin/python scripts/bootstrap_dev.py",
     "backend:seed-admin": "cd backend && .venv/bin/python scripts/seed_dev_admin.py",
     "backend:seed-jobs": "cd backend && .venv/bin/python scripts/seed_jobs.py",
     "backend:seed-scoring": "cd backend && .venv/bin/python scripts/seed_scoring_version.py",

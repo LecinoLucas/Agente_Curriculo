@@ -33,7 +33,12 @@ export default defineConfig({
   },
   webServer: {
     command: `FRONTEND_PORT=${FRONTEND_PORT} BACKEND_PORT=${BACKEND_PORT} VITE_API_BASE_URL=${API_URL} npm run dev:full`,
-    url: `${FRONTEND_URL}/login`,
+    // Aguarda o backend ficar pronto (não só o frontend). `dev:full` sobe
+    // frontend + backend + celery em paralelo; o frontend (Vite) costuma
+    // estar pronto em ~2s, mas uvicorn pode demorar mais. Apontar para
+    // /health do backend evita que `globalSetup` (e os specs) tentem falar
+    // com a API antes do uvicorn vincular a porta.
+    url: `${API_URL}/health`,
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",
     stderr: "pipe",
