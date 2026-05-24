@@ -352,7 +352,7 @@ describe("mapScoreStatusToUiState", () => {
     const state = mapScoreStatusToUiState("waiting_analysis");
 
     expect(state.state).toBe("ready");
-    expect(state.title).toBe("Aguardando análise");
+    expect(state.title).toBe("Análise ainda não gerada");
     expect(state.severity).toBe("info");
   });
 
@@ -362,6 +362,14 @@ describe("mapScoreStatusToUiState", () => {
     expect(state.state).toBe("processing");
     expect(state.title).toBe("Análise em andamento");
     expect(state.inProgress).toBe(true);
+  });
+
+  it("mapeia matching_pending para matching/ranking pendente", () => {
+    const state = mapScoreStatusToUiState("matching_pending");
+
+    expect(state.state).toBe("processing");
+    expect(state.title).toBe("Atualizando aderência");
+    expect(state.description).toMatch(/matching e ranking/i);
   });
 
   it("mapeia analysis_failed para estado failed", () => {

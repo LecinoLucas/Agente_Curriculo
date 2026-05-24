@@ -38,7 +38,7 @@ def derive_candidate_score_status(
     4. Analysis is failed/cancelled → analysis_failed
     5. Analysis is completed + has_fresh_score + valid analysis → score_ready
     6. Analysis is completed + has_fresh_score + invalid analysis → score_stale
-    7. Analysis is completed + no fresh score → analysis_processing (ranker running)
+    7. Analysis is completed + no fresh score → matching_pending (ranker running)
     8. Anything else → needs_repair
 
     Warnings:
@@ -124,7 +124,7 @@ def derive_candidate_score_status(
             )
 
         return CandidateScoreStatusResult(
-            score_status="analysis_processing",
+            score_status="matching_pending",
             analysis_status="completed",
             current_analysis_id=pipeline_current_analysis_id,
             match_score=None,

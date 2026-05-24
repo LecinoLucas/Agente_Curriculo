@@ -483,6 +483,20 @@ class CandidateJobAnalysisDispatcher:
             return True
         except Exception as exc:  # pragma: no cover - defensive branch
             await self._db.rollback()
+            failed = await self._db.scalar(
+                sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+            )
+            if failed is not None:
+                now = datetime.now(UTC)
+                failed.status = "failed"
+                failed.failure_reason = "analysis_enqueue_failed"
+                failed.failed_at = now
+                failed.next_retry_at = None
+                failed.worker_claim_id = None
+                failed.claimed_at = None
+                failed.stale_at = None
+                failed.updated_at = now
+                await self._db.commit()
             logger.error(
                 "analysis.enqueue.failed",
                 analysis_id=str(analysis_id),

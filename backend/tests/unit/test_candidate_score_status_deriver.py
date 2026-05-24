@@ -210,8 +210,8 @@ class TestDeriveScoreStatus:
         assert "analysis_from_different_job" in result.warnings
         assert result.next_action == "wait_analysis"
 
-    def test_analysis_processing_completed_no_fresh_score(self):
-        """Analysis is valid, completed, but no fresh score yet: analysis_processing."""
+    def test_matching_pending_completed_no_fresh_score(self):
+        """Analysis is valid, completed, but no fresh score yet: matching_pending."""
         active_job_id = uuid4()
         analysis_id = uuid4()
         result = derive_candidate_score_status(
@@ -223,14 +223,14 @@ class TestDeriveScoreStatus:
             has_fresh_score=False,  # Ranker still running
             match_score=None,
         )
-        assert result.score_status == "analysis_processing"
+        assert result.score_status == "matching_pending"
         assert result.analysis_status == "completed"
         assert result.match_score is None
         assert result.warnings == []
         assert result.next_action == "wait_analysis"
 
-    def test_analysis_processing_completed_invalid_no_score(self):
-        """Analysis is invalid and has no score: analysis_processing."""
+    def test_matching_pending_completed_invalid_no_score(self):
+        """Analysis is invalid and has no score: matching_pending."""
         active_job_id = uuid4()
         other_job_id = uuid4()
         analysis_id = uuid4()
@@ -243,7 +243,7 @@ class TestDeriveScoreStatus:
             has_fresh_score=False,
             match_score=None,
         )
-        assert result.score_status == "analysis_processing"
+        assert result.score_status == "matching_pending"
         assert result.analysis_status == "completed"
         assert "analysis_from_different_job" in result.warnings
 

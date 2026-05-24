@@ -958,21 +958,44 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         candidate_id: UUID,
         analysis_id: UUID,
     ) -> dict | None:
+        total_tokens = (
+            sa.func.coalesce(AnalysisResultModel.input_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.output_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.cache_read_tokens, 0)
+            + sa.func.coalesce(AnalysisResultModel.cache_write_tokens, 0)
+        )
         row = await self._session.execute(
             sa.select(
                 AnalysisModel.id.label("analysis_id"),
                 AnalysisModel.job_id.label("job_id"),
+                ResumeModel.id.label("resume_id"),
+                ResumeModel.title.label("resume_title"),
                 AnalysisModel.resume_version_id.label("resume_version_id"),
                 AnalysisModel.status,
+                AnalysisModel.started_at,
                 AnalysisModel.created_at,
                 AnalysisModel.updated_at,
                 AnalysisModel.completed_at,
                 AnalysisModel.failed_at,
                 AnalysisModel.failure_reason,
+                AnalysisModel.task_id,
+                AnalysisModel.worker_id,
+                sa.case(
+                    (AnalysisResultModel.id.is_(None), None),
+                    (total_tokens > 0, True),
+                    else_=False,
+                ).label("used_real_ai"),
+                AnalysisResultModel.seniority_level,
+                AnalysisResultModel.total_experience_years,
                 ResumeVersionModel.original_file_name.label("resume_file_name"),
             )
             .join(ResumeVersionModel, ResumeVersionModel.id == AnalysisModel.resume_version_id)
             .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+            .join(
+                AnalysisResultModel,
+                AnalysisResultModel.analysis_id == AnalysisModel.id,
+                isouter=True,
+            )
             .where(
                 AnalysisModel.id == analysis_id,
                 AnalysisModel.status != "discarded",

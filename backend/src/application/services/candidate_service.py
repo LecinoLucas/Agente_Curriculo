@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
+import sqlalchemy as sa
 import structlog
 
 from src.application.ports.file_storage import FileStorageService
@@ -15,6 +16,7 @@ from src.application.services.candidate_score_status_deriver import (
 )
 from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.analysis_model import AnalysisModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     CandidateDeleteSummary,
     SQLAlchemyCandidateRepository,
@@ -41,6 +43,8 @@ from src.interface.api.schemas.candidate_schemas import (
 )
 
 logger = structlog.get_logger(__name__)
+_ANALYSIS_PENDING_STALE_AFTER = timedelta(hours=2)
+_ANALYSIS_PROCESSING_STALE_AFTER = timedelta(minutes=30)
 
 APPLICATION_SOURCE_MANUAL = "manual"
 APPLICATION_SOURCE_PUBLIC = "public_application"
@@ -293,6 +297,57 @@ class CandidateService:
             raise CandidateNotFoundError
         return candidate
 
+    async def _mark_stale_current_analysis_as_failed(self, analysis_id: UUID) -> None:
+        session = self._repository._session
+        analysis = await session.scalar(
+            sa.select(AnalysisModel).where(
+                AnalysisModel.id == analysis_id,
+                sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing"]),
+            )
+        )
+        if analysis is None:
+            return
+
+        now = datetime.now(UTC)
+        reason: str | None = None
+        if (
+            analysis.status == "pending"
+            and analysis.created_at is not None
+            and analysis.created_at < now - _ANALYSIS_PENDING_STALE_AFTER
+            and analysis.next_retry_at is None
+        ):
+            reason = "analysis_stuck_pending_timeout"
+        elif analysis.status == "processing" and (
+            (analysis.stale_at is not None and analysis.stale_at < now)
+            or (
+                analysis.started_at is not None
+                and analysis.started_at < now - _ANALYSIS_PROCESSING_STALE_AFTER
+            )
+            or (
+                analysis.started_at is None
+                and analysis.updated_at is not None
+                and analysis.updated_at < now - _ANALYSIS_PROCESSING_STALE_AFTER
+            )
+        ):
+            reason = (
+                "analysis_worker_claim_expired"
+                if analysis.stale_at is not None and analysis.stale_at < now
+                else "analysis_stuck_processing_timeout"
+            )
+
+        if reason is None:
+            return
+
+        analysis.status = "failed"
+        analysis.failure_reason = reason
+        analysis.failed_at = now
+        analysis.next_retry_at = None
+        analysis.worker_claim_id = None
+        analysis.claimed_at = None
+        analysis.stale_at = None
+        analysis.updated_at = now
+        await session.flush()
+
     async def get_overview(self, candidate_id: UUID) -> CandidateOverviewResponse:
         candidate = await self.get(candidate_id)
         resume_rows = await self._repository.list_resume_summaries(candidate_id)
@@ -303,12 +358,20 @@ class CandidateService:
             None,
         )
         active_job_id = active_pipeline_row["job_id"] if active_pipeline_row is not None else None
+        pipeline_current_analysis_id = (
+            active_pipeline_row.get("current_analysis_id")
+            if active_pipeline_row is not None
+            else None
+        )
+
+        if pipeline_current_analysis_id is not None:
+            await self._mark_stale_current_analysis_as_failed(pipeline_current_analysis_id)
 
         latest_analysis_row = None
-        if active_job_id is not None:
-            latest_analysis_row = await self._repository.find_latest_analysis_summary_for_job(
-                candidate_id,
-                active_job_id,
+        if pipeline_current_analysis_id is not None:
+            latest_analysis_row = await self._repository.find_analysis_summary_by_id_for_candidate(
+                candidate_id=candidate_id,
+                analysis_id=pipeline_current_analysis_id,
             )
 
         latest_analysis = (
@@ -354,11 +417,6 @@ class CandidateService:
                 pending_jobs_count=pending_jobs_count,
             )
 
-        pipeline_current_analysis_id = (
-            active_pipeline_row.get("current_analysis_id")
-            if active_pipeline_row is not None
-            else None
-        )
         current_match_score = None
         if active_job_id is not None:
             top_match_for_active_job = next(

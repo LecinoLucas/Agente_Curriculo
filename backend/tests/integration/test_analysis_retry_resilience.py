@@ -2,11 +2,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+import sqlalchemy as sa
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dtos.analysis_dtos import RequestAnalysisCommand
 from src.application.services.analysis_service import AnalysisService
 from src.application.use_cases.analyses.request_analysis import RequestAnalysisUseCase
+from src.interface.api.routers.analyses import request_analysis
 from src.infrastructure.database.models.analysis_model import AIModelModel, AnalysisModel, PromptTemplateModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
@@ -161,6 +164,79 @@ async def test_request_analysis_reuses_retry_scheduled_analysis(db_session: Asyn
     assert result.analysis_id == analysis.id
     assert str(result.status) == "retry_scheduled"
     assert result.enqueue_required is False
+
+
+@pytest.mark.asyncio
+async def test_force_request_requeues_stale_pending_analysis(db_session: AsyncSession) -> None:
+    user, version, job, analysis = await _seed_retry_scheduled_analysis(db_session)
+    old = datetime.now(UTC) - timedelta(hours=3)
+    analysis.status = "pending"
+    analysis.created_at = old
+    analysis.updated_at = old
+    analysis.next_retry_at = None
+    analysis.failure_reason = None
+    analysis.task_id = None
+    await db_session.commit()
+
+    use_case = RequestAnalysisUseCase(
+        SQLAlchemyAnalysisRepository(db_session),
+        SQLAlchemyResumeRepository(db_session),
+    )
+
+    result = await use_case.execute(
+        RequestAnalysisCommand(
+            resume_version_id=version.id,
+            requested_by=user.id,
+            job_id=job.id,
+            force_reanalyze=True,
+        )
+    )
+
+    assert result.analysis_id == analysis.id
+    assert str(result.status) == "pending"
+    assert result.enqueue_required is True
+    assert result.stuck is True
+    assert result.reason == "analysis_stale_requeued"
+
+
+@pytest.mark.asyncio
+async def test_request_analysis_enqueue_failure_marks_analysis_failed(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, version, job, analysis = await _seed_retry_scheduled_analysis(db_session)
+    analysis.status = "completed"
+    analysis.completed_at = datetime.now(UTC)
+    analysis.next_retry_at = None
+    await db_session.commit()
+
+    def _raise_enqueue(_analysis_id):
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr("src.interface.api.routers.analyses.enqueue_analysis", _raise_enqueue)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await request_analysis(
+            resume_version_id=version.id,
+            current_user=user,
+            job_id=job.id,
+            force=True,
+            db=db_session,
+            _rl=None,
+        )
+
+    assert exc_info.value.status_code == 503
+    failed = await db_session.scalar(
+        sa.select(AnalysisModel)
+        .where(
+            AnalysisModel.resume_version_id == version.id,
+            AnalysisModel.job_id == job.id,
+            AnalysisModel.status == "failed",
+        )
+        .order_by(AnalysisModel.created_at.desc())
+    )
+    assert failed is not None
+    assert failed.failure_reason == "analysis_enqueue_failed"
 
 
 @pytest.mark.asyncio

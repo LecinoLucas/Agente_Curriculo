@@ -49,6 +49,7 @@ from src.interface.api.schemas.analysis_schemas import (
 )
 from src.interface.api.schemas.common import PaginatedResponse
 from src.interface.workers.analysis_dispatcher import enqueue_analysis
+from src.interface.workers.analysis_dispatcher import ANALYSIS_QUEUE
 
 router = APIRouter(prefix="/analyses", tags=["analyses"])
 
@@ -59,6 +60,59 @@ _STUCK_ANALYSIS_REASONS = {
     "analysis_stuck_processing_timeout",
     "analysis_worker_claim_expired",
 }
+
+
+async def _mark_analysis_enqueue_failed(
+    db: AsyncSession,
+    analysis_id: UUID,
+    *,
+    reason: str = "analysis_enqueue_failed",
+) -> None:
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+
+    now = datetime.now(UTC)
+    analysis = await db.scalar(sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id))
+    if analysis is None:
+        return
+    analysis.status = "failed"
+    analysis.failure_reason = reason
+    analysis.failed_at = now
+    analysis.next_retry_at = None
+    analysis.worker_claim_id = None
+    analysis.claimed_at = None
+    analysis.stale_at = None
+    analysis.updated_at = now
+    await db.commit()
+
+
+async def _enqueue_requested_analysis(db: AsyncSession, analysis_id: UUID) -> None:
+    from src.infrastructure.database.models.analysis_model import AnalysisModel
+
+    analysis = await db.scalar(sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id))
+    if not analysis:
+        logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(analysis_id))
+        return
+
+    now = datetime.now(UTC)
+    analysis.task_id = f"analysis:{analysis.id}"
+    analysis.queue_name = ANALYSIS_QUEUE
+    analysis.failure_reason = None
+    analysis.updated_at = now
+    await db.commit()
+
+    try:
+        enqueue_analysis(analysis_id)
+    except Exception as exc:
+        await db.rollback()
+        logger.error("analysis.enqueue_failed", analysis_id=str(analysis_id), error=str(exc))
+        await _mark_analysis_enqueue_failed(db, analysis_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "analysis_enqueue_failed",
+                "message": "Não foi possível enfileirar a análise. Tente novamente.",
+            },
+        ) from exc
 
 
 def _analysis_service(db: AsyncSession) -> AnalysisService:
@@ -248,16 +302,10 @@ async def request_analysis(
                     updated_at=datetime.now(UTC),
                 )
 
-        await db.commit()
         if result.enqueue_required and str(result.status) == "pending":
-            from src.infrastructure.database.models.analysis_model import AnalysisModel
-            analysis = await db.scalar(
-                sa.select(AnalysisModel).where(AnalysisModel.id == result.analysis_id)
-            )
-            if not analysis:
-                logger.warning("analysis.enqueue_skipped_not_found", analysis_id=str(result.analysis_id))
-            else:
-                enqueue_analysis(result.analysis_id)
+            await _enqueue_requested_analysis(db, result.analysis_id)
+        else:
+            await db.commit()
         return AnalysisRequestResponse(
             analysis_id=result.analysis_id,
             status=result.status,

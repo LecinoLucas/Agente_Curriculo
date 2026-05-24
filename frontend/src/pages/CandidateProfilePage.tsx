@@ -234,7 +234,7 @@ export function CandidateProfilePage() {
       setManualAnalysisStatus("pending");
       try {
         const response = await analysisService.request(resumeVersionId, profileJobId, {
-          force: Boolean(options.force),
+          force: options.force ?? true,
         });
         setManualAnalysisStatus(response.status);
         toast.info("Análise IA enviada para a fila.");
@@ -1087,33 +1087,40 @@ function ProfileScoreTab({
   }
 
   if ((scoreNotReady || (!currentAnalysisId && !rankingEntry)) && !loading) {
-    // Pick the most informative subtitle based on the *real* in-flight state.
-    // isProcessing/failed are handled in earlier branches, so here we only
-    // disambiguate between resume extraction in progress vs. no analysis yet.
+    const activeResumeVersionId = activePipelineEntry?.resume_version_id ?? overview.resumes[0]?.current_version_id ?? null;
     const latestExtractionStatus = (
-      overview.resumes.find((r) => r.current_version_id === currentAnalysisOverview?.resume_id)
+      overview.resumes.find((r) => r.current_version_id === activeResumeVersionId)
         ?.extraction_status ?? overview.resumes[0]?.extraction_status ?? null
     )?.toLowerCase() ?? null;
     const extractionInFlight =
       latestExtractionStatus === "pending" || latestExtractionStatus === "processing";
 
-    let subtitle: string;
+    let title = "Análise ainda não gerada";
+    let subtitle = "O candidato está vinculado à vaga ativa, mas ainda não existe análise IA canônica para este vínculo.";
+    let actionLabel = analysisRequesting ? "Solicitando..." : "Gerar análise agora";
+    let actionDisabled = analysisRequesting;
+
     if (extractionInFlight) {
+      title = "Extração de currículo em andamento";
       subtitle = "Extração do currículo em andamento.";
+      actionDisabled = true;
+    } else if (currentAnalysisId && status === "completed") {
+      title = "Matching pendente";
+      subtitle = "A análise IA foi concluída, mas o matching/ranking da vaga ativa ainda não foi atualizado.";
+      actionLabel = analysisRequesting ? "Solicitando..." : "Reprocessar análise";
     } else if (currentAnalysisId) {
-      // Analysis exists but no fresh score — matching still pending.
-      subtitle = "Análise IA em andamento.";
-    } else {
-      subtitle = "Análise ainda não disponível para esta vaga.";
+      title = "Análise interrompida";
+      subtitle = "Existe uma análise canônica para a vaga ativa, mas ela não está em processamento válido.";
+      actionLabel = analysisRequesting ? "Solicitando..." : "Reprocessar análise";
     }
 
     return (
       <EmptyBlock
-        title="Análise em processamento"
-        description={`O candidato já está vinculado à vaga. O ranking aparecerá assim que a extração, análise IA e matching forem concluídos. ${subtitle}`}
-        actionLabel={analysisRequesting ? "Solicitando..." : "Gerar análise agora"}
-        onAction={() => void onRequestAnalysis()}
-        actionDisabled={analysisRequesting || extractionInFlight || Boolean(currentAnalysisId)}
+        title={title}
+        description={subtitle}
+        actionLabel={actionLabel}
+        onAction={() => void onRequestAnalysis({ force: true })}
+        actionDisabled={actionDisabled}
       />
     );
   }

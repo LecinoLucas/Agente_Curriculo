@@ -20,9 +20,11 @@ export function CandidateDecisionSummaryCard({
       case "no_active_job":
         return "Candidato ainda não está vinculado a uma vaga ativa";
       case "waiting_analysis":
-        return "Aguardando análise da vaga ativa";
+        return "Análise ainda não gerada para a vaga ativa";
       case "analysis_processing":
         return "Análise em andamento";
+      case "matching_pending":
+        return "Análise concluída; matching pendente";
       case "score_ready":
         return "Aderência calculada e pronta para revisão";
       case "score_stale":
@@ -75,6 +77,8 @@ export function CandidateDecisionSummaryCard({
         return "bg-blue-50 border-blue-200 text-blue-900";
       case "analysis_processing":
         return "bg-amber-50 border-amber-200 text-amber-900";
+      case "matching_pending":
+        return "bg-blue-50 border-blue-200 text-blue-900";
       case "score_ready":
         return "bg-green-50 border-green-200 text-green-900";
       case "score_stale":

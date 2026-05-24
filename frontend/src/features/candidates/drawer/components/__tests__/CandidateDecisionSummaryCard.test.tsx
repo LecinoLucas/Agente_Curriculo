@@ -58,7 +58,7 @@ describe("CandidateDecisionSummaryCard", () => {
     );
 
     expect(
-      screen.getByText("Aguardando análise da vaga ativa"),
+      screen.getByText("Análise ainda não gerada para a vaga ativa"),
     ).toBeInTheDocument();
   });
 

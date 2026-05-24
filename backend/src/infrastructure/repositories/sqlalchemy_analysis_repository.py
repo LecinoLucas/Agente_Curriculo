@@ -123,6 +123,10 @@ class SQLAlchemyAnalysisRepository:
         """Alias for create() for backwards compatibility."""
         return await self.create(analysis)
 
+    async def save_existing(self, analysis: AnalysisModel) -> AnalysisModel:
+        await self._session.flush()
+        return analysis
+
     async def cancel_in_progress_for_resume_version(self, resume_version_id: UUID) -> int:
         candidate_id_subquery = (
             sa.select(ResumeModel.candidate_id)

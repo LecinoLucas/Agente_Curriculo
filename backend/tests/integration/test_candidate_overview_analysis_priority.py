@@ -276,6 +276,10 @@ async def test_candidate_overview_allows_top_match_without_current_analysis_id(
     assert response.status_code == 200, response.text
 
     payload = response.json()
+    assert payload["latest_analysis"] is None
+    assert payload["active_job_decision"]["score_status"] == "waiting_analysis"
+    assert payload["active_job_decision"]["analysis_status"] is None
+    assert payload["active_job_decision"]["current_analysis_id"] is None
     assert payload["top_matches"]
     assert payload["top_matches"][0]["job_id"] == str(active_job_id)
     assert payload["top_matches"][0]["analysis_id"] is None

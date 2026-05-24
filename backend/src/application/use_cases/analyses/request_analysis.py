@@ -11,6 +11,8 @@ Fluxo completo de requisição de análise:
   7. Retorna analysis_id e status imediatamente (fluxo assíncrono)
 """
 
+from datetime import UTC, datetime, timedelta
+
 import structlog
 from sqlalchemy.exc import IntegrityError
 
@@ -29,6 +31,42 @@ from src.infrastructure.repositories.sqlalchemy_resume_repository import (
 logger = structlog.get_logger(__name__)
 
 _ESTIMATED_WAIT_SECONDS_PER_POSITION = 45  # estimativa conservadora por posição na fila
+_PENDING_STALE_AFTER = timedelta(hours=2)
+_PROCESSING_STALE_AFTER = timedelta(minutes=30)
+
+
+def _is_stale_in_flight_analysis(analysis) -> bool:
+    now = datetime.now(UTC)
+    status = str(analysis.status)
+    if status == "pending":
+        return analysis.created_at is not None and analysis.created_at < now - _PENDING_STALE_AFTER
+    if status == "processing":
+        if analysis.stale_at is not None and analysis.stale_at < now:
+            return True
+        if analysis.started_at is not None:
+            return analysis.started_at < now - _PROCESSING_STALE_AFTER
+        return analysis.updated_at is not None and analysis.updated_at < now - _PROCESSING_STALE_AFTER
+    if status == "retry_scheduled":
+        return analysis.next_retry_at is not None and analysis.next_retry_at <= now
+    return False
+
+
+def _reset_stale_analysis_for_reenqueue(analysis) -> None:
+    now = datetime.now(UTC)
+    analysis.status = "pending"
+    analysis.failure_reason = None
+    analysis.failed_at = None
+    analysis.started_at = None
+    analysis.completed_at = None
+    analysis.worker_claim_id = None
+    analysis.claimed_at = None
+    analysis.stale_at = None
+    analysis.worker_id = None
+    analysis.task_id = None
+    analysis.next_retry_at = None
+    analysis.provider_error_type = None
+    analysis.provider_status_code = None
+    analysis.updated_at = now
 
 
 class RequestAnalysisUseCase:
@@ -107,6 +145,21 @@ class RequestAnalysisUseCase:
             )
 
         if existing and command.force_reanalyze:
+            if str(existing.status) in {"pending", "processing", "retry_scheduled"} and _is_stale_in_flight_analysis(existing):
+                _reset_stale_analysis_for_reenqueue(existing)
+                await self._analysis_repo.save_existing(existing)
+                queue_length = await self._analysis_repo.count_pending()
+                estimated_wait = max(1, queue_length) * _ESTIMATED_WAIT_SECONDS_PER_POSITION
+                return RequestAnalysisResult(
+                    analysis_id=existing.id,
+                    status=existing.status,
+                    estimated_wait_seconds=estimated_wait,
+                    enqueue_required=True,
+                    created=False,
+                    reused=True,
+                    stuck=True,
+                    reason="analysis_stale_requeued",
+                )
             allowed, reason = AnalysisVersioningService.validate_reanalysis_allowed(
                 existing_status=str(existing.status),
                 force=command.force_reanalyze,

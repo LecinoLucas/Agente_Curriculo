@@ -218,7 +218,29 @@ async def _process_resume_extraction_async(
             await session.commit()
 
             for analysis_id in pending_analysis_ids:
-                enqueue_analysis(analysis_id)
+                try:
+                    enqueue_analysis(analysis_id)
+                except Exception as exc:
+                    async with celery_sessionmaker() as failure_session:
+                        failed = await failure_session.scalar(
+                            sa.select(AnalysisModel).where(AnalysisModel.id == analysis_id)
+                        )
+                        if failed is not None:
+                            failed.status = "failed"
+                            failed.failure_reason = "analysis_enqueue_failed"
+                            failed.failed_at = now
+                            failed.next_retry_at = None
+                            failed.worker_claim_id = None
+                            failed.claimed_at = None
+                            failed.stale_at = None
+                            failed.updated_at = now
+                            await failure_session.commit()
+                    logger.error(
+                        "resume_extraction.analysis_enqueue_failed",
+                        resume_version_id=str(parsed_resume_version_id),
+                        analysis_id=str(analysis_id),
+                        error=str(exc),
+                    )
 
             logger.info(
                 "resume_extraction.completed",

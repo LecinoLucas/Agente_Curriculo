@@ -54,9 +54,9 @@ export function mapScoreStatusToUiState(
     case "waiting_analysis":
       return {
         state: "ready",
-        title: "Aguardando análise",
-        description: "Análise foi agendada. Aguarde o processamento.",
-        primaryAction: "Acompanhar análise",
+        title: "Análise ainda não gerada",
+        description: "O candidato está vinculado à vaga, mas a análise IA ainda não foi iniciada.",
+        primaryAction: "Gerar análise agora",
         severity: "info",
         inProgress: false,
       };
@@ -66,6 +66,15 @@ export function mapScoreStatusToUiState(
         title: "Análise em andamento",
         description: "Analisando currículo com IA...",
         primaryAction: "Acompanhar análise",
+        severity: "info",
+        inProgress: true,
+      };
+    case "matching_pending":
+      return {
+        state: "processing",
+        title: "Atualizando aderência",
+        description: "Análise IA concluída. Finalizando o cálculo de matching e ranking.",
+        primaryAction: "Acompanhar ranking",
         severity: "info",
         inProgress: true,
       };

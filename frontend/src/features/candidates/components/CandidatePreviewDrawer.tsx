@@ -78,11 +78,11 @@ function getAiProcessingNotice(overview: CandidateOverview | null) {
   }
 
   if (extractionStatus === "pending") {
-    return "Análise IA na fila.";
+    return "Extração do currículo na fila.";
   }
 
   if (extractionStatus === "processing") {
-    return "Análise IA em andamento. O ranking será atualizado automaticamente.";
+    return "Extração do currículo em andamento.";
   }
 
   return null;

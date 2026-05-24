@@ -163,6 +163,7 @@ export type CandidateActiveJobDecision = {
     | "no_active_job"
     | "waiting_analysis"
     | "analysis_processing"
+    | "matching_pending"
     | "score_ready"
     | "score_stale"
     | "analysis_failed"
