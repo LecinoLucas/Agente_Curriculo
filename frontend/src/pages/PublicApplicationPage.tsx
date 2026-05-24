@@ -110,6 +110,14 @@ export function PublicApplicationPage() {
     [navigate, setIsSubmitting, syncGoogleState]
   );
 
+  const handleCancelGoogleFlow = useCallback(() => {
+    if (window.confirm("Deseja realmente cancelar seu cadastro via Google?")) {
+      sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
+      reset();
+      navigate("/candidato", { replace: true, state: {} });
+    }
+  }, [navigate, reset]);
+
   const handleFieldBlur = useCallback(async (field: "email" | "cpf", value: string) => {
     const trimmedValue = value.trim();
     if (!trimmedValue || !isReadyForDuplicateCheck(field, trimmedValue)) return;
@@ -369,15 +377,27 @@ export function PublicApplicationPage() {
           {/* Navigation */}
           {currentStep !== "method" && (
             <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={prevStep}
-                disabled={isSubmitting}
-                className="flex items-center gap-2"
-              >
-                <ChevronLeft className="h-4 w-4" /> Voltar
-              </Button>
+              {currentStep === "personal-data" && form.authMethod === "google" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCancelGoogleFlow}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                >
+                  Cancelar cadastro
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={prevStep}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2"
+                >
+                  <ChevronLeft className="h-4 w-4" /> Voltar
+                </Button>
+              )}
 
               {currentStep === "review" ? (
                 <Button
