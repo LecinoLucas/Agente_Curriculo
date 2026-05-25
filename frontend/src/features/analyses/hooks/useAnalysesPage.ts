@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAsyncState } from "../../../hooks/useAsyncState";
 import { analysisService } from "../../../services/analysisService";
+import { listBehavioralAIQueue, retryBehavioralAI } from "../../../services/behavioralAIEvaluationService";
 import { formatContextError } from "../../../services/errorMessages";
 import { AnalysisGlobalItem } from "../../../types/domain";
 import { Paginated } from "../../../types/api";
@@ -18,6 +19,7 @@ export type StatusFilter =
   | "cancelled"
   | "discarded";
 export type AiFilter = "all" | "real" | "mock";
+export type AnalysisTypeFilter = "resume" | "behavioral_ai";
 
 const PAGE_SIZE = 20;
 
@@ -29,6 +31,9 @@ export function useAnalysesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [aiFilter, setAiFilter] = useState<AiFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<AnalysisTypeFilter>("resume");
+  const [providerFilter, setProviderFilter] = useState("all");
+  const [modelFilter, setModelFilter] = useState("all");
   const [actionId, setActionId] = useState<string | null>(null);
   const [discardTarget, setDiscardTarget] = useState<AnalysisGlobalItem | null>(null);
 
@@ -44,31 +49,44 @@ export function useAnalysesPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const hasActiveFilters = search || statusFilter !== "all" || aiFilter !== "all";
+  const hasActiveFilters =
+    Boolean(search) ||
+    statusFilter !== "all" ||
+    aiFilter !== "all" ||
+    typeFilter !== "resume" ||
+    providerFilter !== "all" ||
+    modelFilter !== "all";
 
   const fetchData = useCallback(() => {
     const usedRealAi = aiFilter === "real" ? true : aiFilter === "mock" ? false : undefined;
 
-    void run(() =>
-      analysisService
-        .listGlobal(
-          page,
-          PAGE_SIZE,
-          statusFilter === "all" ? undefined : statusFilter,
-          search || undefined,
-          usedRealAi,
-        )
-        .catch((err: unknown) => {
-          throw new Error(
-            formatContextError(
-              err,
-              "Não foi possível carregar as análises.",
-              hasActiveFilters ? "Revise os filtros ou tente novamente." : "Tente novamente.",
-            ),
-          );
-        }),
-    );
-  }, [page, search, statusFilter, aiFilter, run, hasActiveFilters]);
+    void run(() => {
+      const request =
+        typeFilter === "behavioral_ai"
+          ? listBehavioralAIQueue(
+              page,
+              PAGE_SIZE,
+              statusFilter === "all" ? undefined : statusFilter,
+              search || undefined,
+            )
+          : analysisService.listGlobal(
+              page,
+              PAGE_SIZE,
+              statusFilter === "all" ? undefined : statusFilter,
+              search || undefined,
+              usedRealAi,
+            );
+      return request.catch((err: unknown) => {
+        throw new Error(
+          formatContextError(
+            err,
+            "Não foi possível carregar as análises.",
+            hasActiveFilters ? "Revise os filtros ou tente novamente." : "Tente novamente.",
+          ),
+        );
+      });
+    });
+  }, [page, search, statusFilter, aiFilter, typeFilter, run, hasActiveFilters]);
 
   useEffect(() => {
     loadingRef.current = loading;
@@ -88,28 +106,57 @@ export function useAnalysesPage() {
     setPage(1);
   }
 
+  function handleTypeFilter(v: AnalysisTypeFilter) {
+    setTypeFilter(v);
+    setProviderFilter("all");
+    setModelFilter("all");
+    setPage(1);
+  }
+
+  function handleProviderFilter(v: string) {
+    setProviderFilter(v);
+    setPage(1);
+  }
+
+  function handleModelFilter(v: string) {
+    setModelFilter(v);
+    setPage(1);
+  }
+
   function clearFilters() {
     setSearchInput("");
     setStatusFilter("all");
     setAiFilter("all");
+    setTypeFilter("resume");
+    setProviderFilter("all");
+    setModelFilter("all");
   }
 
   async function handleRetry(item: AnalysisGlobalItem) {
     setActionId(item.id);
     feedback.reprocessAnalysis.processing();
     try {
-      const response = await analysisService.retry(item.id);
+      const response =
+        item.type === "behavioral_ai"
+          ? await retryBehavioralAI(item.id)
+          : await analysisService.retry(item.id);
       if (item.candidate_id) {
-        await syncAnalysisStart({
-          candidateId: item.candidate_id,
-          analysisId: response.analysis_id,
-          status: "pending",
-          jobId: item.job_id,
-        });
+        if (item.type !== "behavioral_ai") {
+          await syncAnalysisStart({
+            candidateId: item.candidate_id,
+            analysisId: response.analysis_id,
+            status: "pending",
+            jobId: item.job_id,
+          });
+        }
       } else {
         fetchData();
       }
-      startPolling(response.analysis_id, item.candidate_id, "pending", item.job_id);
+      if (item.type !== "behavioral_ai") {
+        startPolling(response.analysis_id, item.candidate_id, "pending", item.job_id);
+      } else {
+        fetchData();
+      }
       feedback.reprocessAnalysis.success();
     } catch (err) {
       feedback.reprocessAnalysis.error(err);
@@ -153,7 +200,22 @@ export function useAnalysesPage() {
     }
   }
 
-  const items = data?.data ?? [];
+  const rawItems = data?.data ?? [];
+  const providerOptions = Array.from(
+    new Set(rawItems.map((item) => item.provider).filter((value): value is string => Boolean(value))),
+  ).sort();
+  const modelOptions = Array.from(
+    new Set(rawItems.map((item) => item.model).filter((value): value is string => Boolean(value))),
+  ).sort();
+  const hasLocalOperationalFilter =
+    typeFilter === "behavioral_ai" && (providerFilter !== "all" || modelFilter !== "all");
+  const items = hasLocalOperationalFilter
+    ? rawItems.filter((item) => {
+        const providerMatches = providerFilter === "all" || item.provider === providerFilter;
+        const modelMatches = modelFilter === "all" || item.model === modelFilter;
+        return providerMatches && modelMatches;
+      })
+    : rawItems;
   const hasInFlightAnalyses = items.some(
     (item) =>
       item.status === "pending" ||
@@ -183,8 +245,8 @@ export function useAnalysesPage() {
     };
   }, [fetchData, hasInFlightAnalyses]);
 
-  const total = data?.total ?? 0;
-  const totalPages = data?.total_pages ?? 1;
+  const total = hasLocalOperationalFilter ? items.length : (data?.total ?? 0);
+  const totalPages = hasLocalOperationalFilter ? 1 : (data?.total_pages ?? 1);
   const isRefreshing = loading && items.length > 0;
   const showInitialLoading = loading && items.length === 0 && !error;
 
@@ -198,6 +260,14 @@ export function useAnalysesPage() {
     handleStatusFilter,
     aiFilter,
     handleAiFilter,
+    typeFilter,
+    handleTypeFilter,
+    providerFilter,
+    handleProviderFilter,
+    modelFilter,
+    handleModelFilter,
+    providerOptions,
+    modelOptions,
     actionId,
     discardTarget,
     setDiscardTarget,

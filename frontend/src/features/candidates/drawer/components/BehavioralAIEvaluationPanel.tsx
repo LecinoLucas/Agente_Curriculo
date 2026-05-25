@@ -167,6 +167,7 @@ export function BehavioralAIEvaluationPanel({
             {evaluation.status === "completed" && `Confiança: ${evaluation.confidence?.toUpperCase()}`}
             {evaluation.status === "failed" && "Análise falhou"}
             {evaluation.status === "pending" && "Aguardando processamento"}
+            {evaluation.status === "retry_scheduled" && "Nova tentativa agendada"}
           </p>
         </div>
       )}
@@ -174,11 +175,17 @@ export function BehavioralAIEvaluationPanel({
       {!isCollapsed && (
         <div className="space-y-6">
           {/* Loading/Processing State */}
-          {(evaluation.status === "processing" || evaluation.status === "pending") && !pollingTimedOut && (
+          {(evaluation.status === "processing" || evaluation.status === "pending" || evaluation.status === "retry_scheduled") && !pollingTimedOut && (
             <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
               <Loader className="h-5 w-5 animate-spin text-blue-600" />
               <div className="text-sm">
-                <p className="font-medium text-blue-900">Análise em processamento</p>
+                <p className="font-medium text-blue-900">
+                  {evaluation.status === "pending"
+                    ? "Análise na fila"
+                    : evaluation.status === "retry_scheduled"
+                      ? "Nova tentativa agendada"
+                      : "Análise em processamento"}
+                </p>
                 <p className="text-xs text-blue-800">
                   Está gerando análise assistida por IA. Isso pode levar alguns minutos.
                 </p>
@@ -187,7 +194,7 @@ export function BehavioralAIEvaluationPanel({
           )}
 
           {/* Polling timeout — informational only, not an error */}
-          {(evaluation.status === "processing" || evaluation.status === "pending") && pollingTimedOut && (
+          {(evaluation.status === "processing" || evaluation.status === "pending" || evaluation.status === "retry_scheduled") && pollingTimedOut && (
             <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
               <Loader className="h-5 w-5 text-amber-600" />
               <div className="text-sm">

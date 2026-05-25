@@ -780,12 +780,14 @@ export type CandidateResumeDownloadUrl = {
 
 export type AnalysisGlobalItem = {
   id: string;
+  type?: "resume" | "behavioral_ai";
   job_id: string | null;
+  job_title?: string | null;
   candidate_id: string | null;
   candidate_name: string | null;
   candidate_email: string | null;
   resume_file_name: string | null;
-  resume_version_id: string;
+  resume_version_id: string | null;
   status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
   failure_reason: string | null;
   discarded_at?: string | null;
@@ -797,9 +799,12 @@ export type AnalysisGlobalItem = {
   next_retry_at: string | null;
   provider_error_type: string | null;
   provider_status_code: number | null;
+  provider?: string | null;
+  model?: string | null;
   stuck: boolean;
   reason: string | null;
   created_at: string;
+  updated_at?: string | null;
   started_at: string | null;
   completed_at: string | null;
   failed_at: string | null;
@@ -929,7 +934,7 @@ export type BehavioralRiskFlag = {
 export type BehavioralAIEvaluationResponse = {
   id: string;
   assignment_id: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed";
   confidence?: "low" | "medium" | "high" | null;
   summary?: string | null;
   strengths?: string[] | null;
@@ -938,6 +943,14 @@ export type BehavioralAIEvaluationResponse = {
   suggested_interview_questions?: string[] | null;
   risk_flags?: BehavioralRiskFlag[] | null;
   error_message?: string | null;
+  queued_at?: string | null;
+  started_at?: string | null;
+  failed_at?: string | null;
+  next_retry_at?: string | null;
+  retry_count?: number | null;
+  provider?: string | null;
+  model?: string | null;
+  provider_error_type?: string | null;
   created_at: string;
   updated_at: string;
   completed_at?: string | null;

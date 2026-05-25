@@ -55,6 +55,8 @@ describe("BehavioralAIEvaluationPanel", () => {
     vi.clearAllMocks();
     vi.mocked(aiEvaluationService.getBehavioralEvaluation).mockResolvedValue(null);
     vi.mocked(aiEvaluationService.triggerBehavioralAnalysis).mockResolvedValue({
+      evaluation_id: "evaluation-queued",
+      assignment_id: "assignment-1",
       status: "processing",
       message: "Analise iniciada.",
     });

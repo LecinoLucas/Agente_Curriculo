@@ -1,4 +1,4 @@
-import type { StatusFilter, AiFilter } from "../hooks/useAnalysesPage";
+import type { StatusFilter, AiFilter, AnalysisTypeFilter } from "../hooks/useAnalysesPage";
 
 interface AnalysisFiltersProps {
   searchInput: string;
@@ -7,6 +7,14 @@ interface AnalysisFiltersProps {
   onStatusChange: (value: StatusFilter) => void;
   aiFilter: AiFilter;
   onAiChange: (value: AiFilter) => void;
+  typeFilter: AnalysisTypeFilter;
+  onTypeChange: (value: AnalysisTypeFilter) => void;
+  providerFilter: string;
+  onProviderChange: (value: string) => void;
+  modelFilter: string;
+  onModelChange: (value: string) => void;
+  providerOptions: string[];
+  modelOptions: string[];
   hasActiveFilters: boolean;
   onClearFilters: () => void;
 }
@@ -18,6 +26,14 @@ export function AnalysisFilters({
   onStatusChange,
   aiFilter,
   onAiChange,
+  typeFilter,
+  onTypeChange,
+  providerFilter,
+  onProviderChange,
+  modelFilter,
+  onModelChange,
+  providerOptions,
+  modelOptions,
   hasActiveFilters,
   onClearFilters,
 }: AnalysisFiltersProps) {
@@ -44,6 +60,15 @@ export function AnalysisFilters({
       </div>
 
       <select
+        value={typeFilter}
+        onChange={(e) => onTypeChange(e.target.value as AnalysisTypeFilter)}
+        className="ui-input h-9 rounded-lg px-3 text-sm"
+      >
+        <option value="resume">Currículo</option>
+        <option value="behavioral_ai">Comportamental</option>
+      </select>
+
+      <select
         value={statusFilter}
         onChange={(e) => onStatusChange(e.target.value as StatusFilter)}
         className="ui-input h-9 rounded-lg px-3 text-sm"
@@ -61,12 +86,43 @@ export function AnalysisFilters({
       <select
         value={aiFilter}
         onChange={(e) => onAiChange(e.target.value as AiFilter)}
-        className="ui-input h-9 rounded-lg px-3 text-sm"
+        disabled={typeFilter === "behavioral_ai"}
+        className="ui-input h-9 rounded-lg px-3 text-sm disabled:opacity-50"
       >
         <option value="all">IA real e mock</option>
         <option value="real">Somente IA real</option>
         <option value="mock">Somente mock</option>
       </select>
+
+      {typeFilter === "behavioral_ai" ? (
+        <>
+          <select
+            value={providerFilter}
+            onChange={(e) => onProviderChange(e.target.value)}
+            className="ui-input h-9 rounded-lg px-3 text-sm"
+          >
+            <option value="all">Todos os providers</option>
+            {providerOptions.map((provider) => (
+              <option key={provider} value={provider}>
+                {provider}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={modelFilter}
+            onChange={(e) => onModelChange(e.target.value)}
+            className="ui-input h-9 rounded-lg px-3 text-sm"
+          >
+            <option value="all">Todos os modelos</option>
+            {modelOptions.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+        </>
+      ) : null}
 
       {hasActiveFilters ? (
         <button

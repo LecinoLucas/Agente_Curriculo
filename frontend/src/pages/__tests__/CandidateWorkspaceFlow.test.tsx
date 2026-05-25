@@ -10,8 +10,9 @@ import { CandidateProfilePage } from "../CandidateProfilePage";
 import { candidatesService } from "../../services/candidatesService";
 import { agendaService } from "../../services/agendaService";
 import { analysisService } from "../../services/analysisService";
-import { getBehavioralEvaluation } from "../../services/behavioralAIEvaluationService";
+import { getBehavioralEvaluation, triggerBehavioralAnalysis } from "../../services/behavioralAIEvaluationService";
 import { getCandidateBehavioralAssessment } from "../../services/behavioralAssessmentService";
+import { communicationService } from "../../services/communicationService";
 import { HttpError } from "../../services/http";
 import { listJobs, getCandidateRankingEntry } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
@@ -88,6 +89,15 @@ vi.mock("../../services/behavioralAssessmentService", () => ({
 
 vi.mock("../../services/behavioralAIEvaluationService", () => ({
   getBehavioralEvaluation: vi.fn(),
+  triggerBehavioralAnalysis: vi.fn(),
+}));
+
+vi.mock("../../services/communicationService", () => ({
+  communicationService: {
+    getRecruiterCommunications: vi.fn(),
+    sendCustomMessage: vi.fn(),
+    retryCommunication: vi.fn(),
+  },
 }));
 
 vi.mock("../../services/jobsService", () => ({
@@ -517,6 +527,17 @@ describe("Candidate workspace flow", () => {
       updated_at: "2026-05-15T10:32:00Z",
       completed_at: "2026-05-15T10:32:00Z",
     });
+    vi.mocked(triggerBehavioralAnalysis).mockResolvedValue({
+      evaluation_id: "evaluation-requested",
+      assignment_id: "assignment-1",
+      status: "pending",
+      message: "Avaliação enfileirada",
+    });
+    vi.mocked(communicationService.getRecruiterCommunications).mockResolvedValue({
+      communications: [],
+    });
+    vi.mocked(communicationService.sendCustomMessage).mockResolvedValue({} as Awaited<ReturnType<typeof communicationService.sendCustomMessage>>);
+    vi.mocked(communicationService.retryCommunication).mockResolvedValue({ message: "ok" });
     vi.mocked(resumeService.get).mockResolvedValue(detailedResume);
     vi.mocked(resumeService.downloadCandidateResume).mockResolvedValue();
     vi.mocked(resumeService.fetchCandidateResumeFile).mockResolvedValue({
@@ -854,6 +875,189 @@ describe("Candidate workspace flow", () => {
 
     expect(screen.getByText("Como você resolve conflitos?")).toBeInTheDocument();
     expect(screen.getByText("Converso com clareza e busco acordo.")).toBeInTheDocument();
+  });
+
+  it("aba Avaliações mostra ação de IA comportamental pendente e solicita pelo endpoint oficial", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBehavioralEvaluation)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "evaluation-requested",
+        assignment_id: "assignment-1",
+        status: "pending",
+        confidence: null,
+        summary: null,
+        strengths: null,
+        concerns: null,
+        competency_signals: null,
+        suggested_interview_questions: null,
+        risk_flags: null,
+        error_message: null,
+        created_at: "2026-05-15T10:35:00Z",
+        updated_at: "2026-05-15T10:35:00Z",
+        completed_at: null,
+      });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=assessments"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("IA comportamental pendente")).toBeInTheDocument();
+    expect(screen.getByText("O candidato concluiu o teste comportamental. Gere a análise com IA para apoiar a decisão.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Gerar análise IA comportamental/i }));
+
+    await waitFor(() => {
+      expect(triggerBehavioralAnalysis).toHaveBeenCalledWith("job-1", "candidate-1", {
+        retryFailed: false,
+      });
+    });
+    await waitFor(() => expect(candidatesService.getOverview).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("IA comportamental na fila")).toBeInTheDocument();
+  });
+
+  it("loading da IA comportamental evita duplo clique", async () => {
+    const user = userEvent.setup();
+    let resolveTrigger: (value: Awaited<ReturnType<typeof triggerBehavioralAnalysis>>) => void = () => {};
+    vi.mocked(getBehavioralEvaluation).mockResolvedValue(null);
+    vi.mocked(triggerBehavioralAnalysis).mockReturnValue(
+      new Promise((resolve) => {
+        resolveTrigger = resolve;
+      }),
+    );
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=assessments"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const button = await screen.findByRole("button", { name: /Gerar análise IA comportamental/i });
+    await user.click(button);
+    await user.click(button);
+
+    expect(triggerBehavioralAnalysis).toHaveBeenCalledTimes(1);
+    expect(button).toBeDisabled();
+
+    await act(async () => {
+      resolveTrigger({
+        evaluation_id: "evaluation-requested",
+        assignment_id: "assignment-1",
+        status: "pending",
+        message: "Avaliação enfileirada",
+      });
+    });
+  });
+
+  it("erro ao gerar IA comportamental mantém tela estável e permite tentar novamente", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBehavioralEvaluation).mockResolvedValue(null);
+    vi.mocked(triggerBehavioralAnalysis).mockRejectedValue(new Error("Fila indisponível"));
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=assessments"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Gerar análise IA comportamental/i }));
+
+    expect(await screen.findByText(/Fila indisponível/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gerar análise IA comportamental/i })).toBeEnabled();
+  });
+
+  it("IA comportamental falhou e reprocessa com retry_failed", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBehavioralEvaluation).mockResolvedValue({
+      id: "evaluation-failed",
+      assignment_id: "assignment-1",
+      status: "failed",
+      confidence: null,
+      summary: null,
+      strengths: null,
+      concerns: null,
+      competency_signals: null,
+      suggested_interview_questions: null,
+      risk_flags: null,
+      error_message: "Falha ao processar análise comportamental.",
+      created_at: "2026-05-15T10:31:00Z",
+      updated_at: "2026-05-15T10:32:00Z",
+      completed_at: null,
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=assessments"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("IA comportamental falhou")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Tentar novamente/i }));
+
+    await waitFor(() => {
+      expect(triggerBehavioralAnalysis).toHaveBeenCalledWith("job-1", "candidate-1", {
+        retryFailed: true,
+      });
+    });
+  });
+
+  it("Abrir ação prioriza Avaliações quando a pendência é IA comportamental", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      preview_pendencies: [
+        { id: "behavioral_ai", label: "IA comportamental pendente", tone: "warning" },
+      ],
+    });
+    vi.mocked(getBehavioralEvaluation).mockResolvedValue(null);
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Gerar IA comportamental")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Abrir ação/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("IA comportamental pendente").length).toBeGreaterThan(1);
+    });
+    expect(screen.getByRole("button", { name: /Gerar análise IA comportamental/i })).toBeInTheDocument();
+  });
+
+  it("aba Comunicação aparece separada de Observações internas", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: "Ana Souza" });
+    await user.click(screen.getByRole("button", { name: /Comunicação/i }));
+
+    expect(await screen.findByText("Nenhuma comunicação registrada")).toBeInTheDocument();
+    expect(communicationService.getRecruiterCommunications).toHaveBeenCalledWith("job-1", "candidate-1");
+    expect(screen.queryByTestId("profile-notes-tab")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Observações$/i }));
+    expect(await screen.findByTestId("profile-notes-tab")).toHaveTextContent("Observações candidate-1");
   });
 
   it("aba Avaliações mostra pesquisa comportamental pendente", async () => {

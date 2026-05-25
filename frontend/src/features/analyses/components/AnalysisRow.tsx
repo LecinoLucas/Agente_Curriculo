@@ -1,6 +1,6 @@
 import { ActionMenu } from "../../../components/common/ActionMenu";
 import { AnalysisGlobalItem } from "../../../types/domain";
-import { STATUS_CONFIG, fmtDate, fmtDuration } from "../utils/analysisFormatters";
+import { STATUS_CONFIG, fmtDate, fmtDuration, formatSafeFailureReason } from "../utils/analysisFormatters";
 
 interface AnalysisRowProps {
   item: AnalysisGlobalItem;
@@ -33,6 +33,14 @@ function AiBadge({ used }: { used: boolean | null }) {
   );
 }
 
+function TypeBadge({ type }: { type?: AnalysisGlobalItem["type"] }) {
+  return (
+    <span className="ui-badge-neutral inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium">
+      {type === "behavioral_ai" ? "Comportamental" : "Currículo"}
+    </span>
+  );
+}
+
 export function AnalysisRow({
   item,
   actionInFlight,
@@ -42,8 +50,10 @@ export function AnalysisRow({
   onDiscard,
 }: AnalysisRowProps) {
   const isFailed = item.status === "failed";
+  const isBehavioral = item.type === "behavioral_ai";
   const isRetryScheduled = item.status === "retry_scheduled";
   const nextRetryLabel = item.next_retry_at ? fmtDate(item.next_retry_at) : null;
+  const retryDue = item.next_retry_at ? new Date(item.next_retry_at).getTime() <= Date.now() : false;
   const isStuck =
     item.status === "pending" || item.status === "processing" || isRetryScheduled;
   const isDiscarded = item.status === "discarded";
@@ -54,7 +64,9 @@ export function AnalysisRow({
   const pendingStuck = item.status === "pending" && pendingForMs > 2 * 60 * 60 * 1000;
   const processingStuck = item.status === "processing" && processingForMs > 30 * 60 * 1000;
   const likelyStuck = item.stuck || pendingStuck || processingStuck;
+  const safeFailureReason = formatSafeFailureReason(item.provider_error_type, item.failure_reason);
   const hasCandidate = Boolean(item.candidate_id);
+  const canRetryBehavioral = isBehavioral && (isFailed || likelyStuck || (isRetryScheduled && retryDue));
   const actionItems = [
     hasCandidate
       ? {
@@ -62,7 +74,7 @@ export function AnalysisRow({
           onClick: onOpen,
         }
       : null,
-    isStuck
+    isStuck && !isBehavioral
       ? {
           label: actionInFlight ? "Encerrando..." : "Encerrar",
           onClick: onForceFail,
@@ -70,14 +82,14 @@ export function AnalysisRow({
           disabled: actionInFlight,
         }
       : null,
-    isFailed
+    (isFailed || canRetryBehavioral)
       ? {
-          label: actionInFlight ? "Reprocessando..." : "Reprocessar",
+          label: actionInFlight ? "Reprocessando..." : isBehavioral ? "Tentar novamente" : "Reprocessar",
           onClick: onRetry,
           disabled: actionInFlight,
         }
       : null,
-    !isDiscarded
+    !isDiscarded && !isBehavioral
       ? {
           label: actionInFlight ? "Descartando..." : "Descartar análise",
           onClick: onDiscard,
@@ -115,16 +127,23 @@ export function AnalysisRow({
 
       {/* Arquivo */}
       <td className="px-4 py-4">
-        {item.resume_file_name ? (
-          <span
-            className="block max-w-[180px] truncate text-xs text-[hsl(var(--text-muted))]"
-            title={item.resume_file_name}
-          >
-            {item.resume_file_name}
-          </span>
-        ) : (
-          <span className="ui-text-muted text-xs">—</span>
-        )}
+        <div className="flex flex-col gap-1">
+          <TypeBadge type={item.type} />
+          {item.type === "behavioral_ai" ? (
+            <span className="block max-w-[180px] truncate text-xs text-[hsl(var(--text-muted))]" title={item.job_title ?? undefined}>
+              {item.job_title ?? "Avaliação comportamental"}
+            </span>
+          ) : item.resume_file_name ? (
+            <span
+              className="block max-w-[180px] truncate text-xs text-[hsl(var(--text-muted))]"
+              title={item.resume_file_name}
+            >
+              {item.resume_file_name}
+            </span>
+          ) : (
+            <span className="ui-text-muted text-xs">—</span>
+          )}
+        </div>
       </td>
 
       {/* Status + erro */}
@@ -142,9 +161,9 @@ export function AnalysisRow({
               A análise está demorando mais que o esperado. Verifique o worker ou tente reprocessar.
             </span>
           ) : null}
-          {isFailed && item.failure_reason && !item.stuck ? (
-            <span className="max-w-[200px] truncate text-xs text-[hsl(var(--danger))]" title={item.failure_reason}>
-              {item.failure_reason}
+          {safeFailureReason && (isFailed || isRetryScheduled) ? (
+            <span className="max-w-[240px] truncate text-xs text-[hsl(var(--danger))]" title={safeFailureReason}>
+              {safeFailureReason}
             </span>
           ) : null}
           {item.retry_count > 0 ? (
@@ -157,11 +176,33 @@ export function AnalysisRow({
 
       {/* IA real */}
       <td className="px-4 py-4">
-        <AiBadge used={item.used_real_ai} />
+        {item.type === "behavioral_ai" ? (
+          <div className="flex flex-col gap-1">
+            <span className="ui-badge-info inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-medium">
+              {item.provider ?? "IA"}
+            </span>
+            <span className="max-w-[160px] truncate text-xs text-[hsl(var(--text-muted))]" title={item.model ?? undefined}>
+              {item.model ?? "Modelo não informado"}
+            </span>
+            {item.provider_error_type ? (
+              <span className="max-w-[160px] truncate text-xs text-[hsl(var(--text-muted))]">
+                {item.provider_error_type}
+                {item.provider_status_code ? ` · HTTP ${item.provider_status_code}` : ""}
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <AiBadge used={item.used_real_ai} />
+        )}
       </td>
 
       {/* Criado em */}
-      <td className="ui-text-muted px-4 py-4 text-xs">{fmtDate(item.created_at)}</td>
+      <td className="ui-text-muted px-4 py-4 text-xs">
+        <div className="flex flex-col gap-1">
+          <span>{fmtDate(item.created_at)}</span>
+          {item.updated_at ? <span>Atualizada: {fmtDate(item.updated_at)}</span> : null}
+        </div>
+      </td>
 
       {/* Duração */}
       <td className="ui-text-muted px-4 py-4 text-xs">

@@ -74,13 +74,13 @@ export function AnalysesTable({
                 Candidato
               </th>
               <th className="ui-text-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
-                Arquivo
+                Tipo / origem
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Status da IA
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Uso de IA
+                Provedor / modelo
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Criado em

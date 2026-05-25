@@ -180,6 +180,7 @@ export function formatLatestMovement(overview: CandidateOverview | null): string
 export type NextActionSuggestion = {
   label: string;
   hint: string;
+  targetTab?: string;
 };
 
 export function deriveNextAction(
@@ -205,6 +206,17 @@ export function deriveNextAction(
     return {
       label: "Aguardar currículo",
       hint: "Candidato ainda não enviou currículo",
+    };
+  }
+
+  const behavioralAiPendency = overview?.preview_pendencies?.some(
+    (pendency) => pendency.id === "behavioral_ai",
+  );
+  if (behavioralAiPendency) {
+    return {
+      label: "Gerar IA comportamental",
+      hint: "A vaga exige avaliação IA comportamental concluída",
+      targetTab: "assessments",
     };
   }
 

@@ -7,16 +7,19 @@ import {
   Calendar,
   Edit3,
   FileText,
+  Loader,
   Mail,
   MapPin,
   NotebookPen,
   Phone,
   RefreshCcw,
+  Sparkles,
   UserRound,
 } from "lucide-react";
 
 import { Tabs, type Tab } from "../components/common/Tabs";
 import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
+import { CandidateCommunicationsPanel } from "../features/candidates/drawer/components/CandidateCommunicationsPanel";
 import { CandidateNotesTab } from "../features/candidates/drawer/components/CandidateNotesTab";
 import { useCandidateData } from "../features/candidates/drawer/hooks/useCandidateData";
 import { useCandidateDecision } from "../features/candidates/drawer/hooks/useCandidateDecision";
@@ -40,7 +43,7 @@ import { agendaService } from "../services/agendaService";
 import { analysisService } from "../services/analysisService";
 import { aiLimitsService, type AILimitsUsage } from "../services/aiLimitsService";
 import { HttpError } from "../services/http";
-import { getBehavioralEvaluation } from "../services/behavioralAIEvaluationService";
+import { getBehavioralEvaluation, triggerBehavioralAnalysis } from "../services/behavioralAIEvaluationService";
 import { getCandidateBehavioralAssessment } from "../services/behavioralAssessmentService";
 import { formatContextError } from "../services/errorMessages";
 import { listJobs } from "../services/jobsService";
@@ -72,6 +75,7 @@ type CandidateProfileTabKey =
   | "documents"
   | "interviews"
   | "assessments"
+  | "communications"
   | "notes"
   | "history";
 
@@ -82,6 +86,7 @@ const PROFILE_TABS: Tab[] = [
   { key: "documents", label: "Currículo e documentos" },
   { key: "interviews", label: "Entrevistas" },
   { key: "assessments", label: "Avaliações" },
+  { key: "communications", label: "Comunicação" },
   { key: "notes", label: "Observações" },
   { key: "history", label: "Histórico" },
 ];
@@ -94,6 +99,7 @@ function resolveInitialTab(search: string): CandidateProfileTabKey {
     tab === "documents" ||
     tab === "interviews" ||
     tab === "assessments" ||
+    tab === "communications" ||
     tab === "notes" ||
     tab === "history"
   ) {
@@ -119,6 +125,7 @@ export function CandidateProfilePage() {
   const [manualAnalysisRequesting, setManualAnalysisRequesting] = useState(false);
   const [manualAnalysisStatus, setManualAnalysisStatus] = useState<AnalysisStatus["status"] | null>(null);
   const manualAnalysisPollingRef = useRef<number | null>(null);
+  const [assessmentFocusTick, setAssessmentFocusTick] = useState(0);
   const [dailyLimitDialogOpen, setDailyLimitDialogOpen] = useState(false);
   const [dailyLimitUsage, setDailyLimitUsage] = useState<AILimitsUsage | null>(null);
 
@@ -440,7 +447,14 @@ export function CandidateProfilePage() {
         overview={overview}
         activeEntry={activeEntry}
         activeScore={activeScore}
-        onPrimaryAction={() => setActiveTab(activeEntry ? "interviews" : "workflow")}
+        onPrimaryAction={(targetTab) => {
+          if (targetTab === "assessments") {
+            setActiveTab("assessments");
+            setAssessmentFocusTick((current) => current + 1);
+            return;
+          }
+          setActiveTab(activeEntry ? "interviews" : "workflow");
+        }}
       />
 
       <section className="mt-8 overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] shadow-sm">
@@ -501,7 +515,13 @@ export function CandidateProfilePage() {
               jobId={profileJobId}
               candidateId={candidateId}
               required={activeJob?.requires_behavioral_assessment ?? false}
+              requiresAI={activeJob?.requires_behavioral_ai_evaluation ?? false}
+              focusToken={assessmentFocusTick}
+              onAfterBehavioralAIRequest={reloadWorkspace}
             />
+          ) : null}
+          {activeTab === "communications" ? (
+            <CandidateCommunicationsPanel jobId={profileJobId} candidateId={candidateId} />
           ) : null}
           {activeTab === "notes" ? <CandidateNotesTab candidateId={candidateId} /> : null}
           {activeTab === "history" ? <HistoryTab overview={overview} activeJobId={profileJobId} /> : null}
@@ -650,7 +670,7 @@ function DecisionCards({
   overview: CandidateOverview;
   activeEntry: CandidatePipelineEntryOverview | null;
   activeScore: number | null;
-  onPrimaryAction: () => void;
+  onPrimaryAction: (targetTab?: string) => void;
 }) {
   const pendencies = derivePendencies(overview);
   const next = deriveNextAction(overview, activeEntry);
@@ -696,7 +716,7 @@ function DecisionCards({
         <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{next.hint}</p>
         <button
           type="button"
-          onClick={onPrimaryAction}
+          onClick={() => onPrimaryAction(next.targetTab)}
           className="mt-3 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
         >
           Abrir ação
@@ -1908,62 +1928,173 @@ function renderBehavioralAnswer(answer: BehavioralAssignmentAnswer | null) {
   return <span className="text-[hsl(var(--text-muted))]">Não respondida</span>;
 }
 
+function getBehavioralAIStatusLabel(
+  assignmentStatus: BehavioralAssignmentDetailResponse["status"],
+  evaluation: BehavioralAIEvaluationResponse | null,
+) {
+  if (assignmentStatus !== "submitted") return "Aguardando teste";
+  if (!evaluation) return "Pendente";
+  if (evaluation.status === "pending") return "Na fila";
+  if (evaluation.status === "processing") return "Processando";
+  if (evaluation.status === "retry_scheduled") return "Retry agendado";
+  if (evaluation.status === "completed") return "Concluída";
+  if (evaluation.status === "failed") return "Falhou";
+  return evaluation.status;
+}
+
+function getBehavioralAIStatusTone(
+  assignmentStatus: BehavioralAssignmentDetailResponse["status"],
+  evaluation: BehavioralAIEvaluationResponse | null,
+): "success" | "neutral" | "info" | "primary" | "danger" {
+  if (assignmentStatus !== "submitted") return "neutral";
+  if (!evaluation) return "info";
+  if (evaluation.status === "completed") return "success";
+  if (evaluation.status === "failed") return "danger";
+  if (evaluation.status === "pending" || evaluation.status === "processing" || evaluation.status === "retry_scheduled") return "info";
+  return "neutral";
+}
+
 function ProfileBehavioralAssessmentsTab({
   jobId,
   candidateId,
   required,
+  requiresAI,
+  focusToken,
+  onAfterBehavioralAIRequest,
 }: {
   jobId: string | null;
   candidateId: string | null;
   required: boolean;
+  requiresAI: boolean;
+  focusToken: number;
+  onAfterBehavioralAIRequest: () => Promise<void>;
 }) {
   const [assessment, setAssessment] = useState<BehavioralAssignmentDetailResponse | null>(null);
   const [evaluation, setEvaluation] = useState<BehavioralAIEvaluationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiRequesting, setAiRequesting] = useState(false);
+  const [aiActionError, setAiActionError] = useState<string | null>(null);
+  const aiActionRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  const loadBehavioralAssessment = useCallback(async () => {
     if (!jobId || !candidateId) {
       setAssessment(null);
       setEvaluation(null);
       return;
     }
 
-    let cancelled = false;
     setLoading(true);
     setError(null);
+    setAiActionError(null);
 
-    void getCandidateBehavioralAssessment(jobId, candidateId)
-      .then(async (payload) => {
-        if (cancelled) return;
-        setAssessment(payload?.template_name ? payload : null);
+    try {
+      const payload = await getCandidateBehavioralAssessment(jobId, candidateId);
+      setAssessment(payload?.template_name ? payload : null);
 
-        if (payload?.status === "submitted") {
-          const summary = await getBehavioralEvaluation(jobId, candidateId);
-          if (!cancelled) setEvaluation(summary);
-        } else {
-          setEvaluation(null);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(
-            formatContextError(
-              err,
-              "Não foi possível carregar avaliações comportamentais.",
-              "Tente novamente em alguns instantes.",
-            ),
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      if (payload?.status === "submitted") {
+        const summary = await getBehavioralEvaluation(jobId, candidateId);
+        setEvaluation(summary);
+      } else {
+        setEvaluation(null);
+      }
+    } catch (err: unknown) {
+      setError(
+        formatContextError(
+          err,
+          "Não foi possível carregar avaliações comportamentais.",
+          "Tente novamente em alguns instantes.",
+        ),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [candidateId, jobId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void loadBehavioralAssessment().then(() => {
+      if (cancelled) return;
+    });
     return () => {
       cancelled = true;
     };
-  }, [candidateId, jobId]);
+  }, [loadBehavioralAssessment]);
+
+  useEffect(() => {
+    if (
+      evaluation?.status !== "pending" &&
+      evaluation?.status !== "processing" &&
+      evaluation?.status !== "retry_scheduled"
+    ) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        void loadBehavioralAssessment();
+      }
+    }, 4000);
+
+    return () => window.clearInterval(intervalId);
+  }, [evaluation?.status, loadBehavioralAssessment]);
+
+  useEffect(() => {
+    if (focusToken <= 0) return;
+    window.setTimeout(() => {
+      if (typeof aiActionRef.current?.scrollIntoView === "function") {
+        aiActionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      aiActionRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }, [focusToken]);
+
+  const handleGenerateBehavioralAI = useCallback(async () => {
+    if (!jobId || !candidateId || aiRequesting) return;
+
+    setAiRequesting(true);
+    setAiActionError(null);
+    try {
+      const response = await triggerBehavioralAnalysis(jobId, candidateId, {
+        retryFailed: evaluation?.status === "failed",
+      });
+      setEvaluation({
+        id: response.evaluation_id,
+        assignment_id: response.assignment_id || assessment?.id || "",
+        status: response.status,
+        confidence: null,
+        summary: null,
+        strengths: null,
+        concerns: null,
+        competency_signals: null,
+        suggested_interview_questions: null,
+        risk_flags: null,
+        error_message: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        completed_at: null,
+      });
+      await Promise.all([loadBehavioralAssessment(), onAfterBehavioralAIRequest()]);
+    } catch (err: unknown) {
+      setAiActionError(
+        formatContextError(
+          err,
+          "Não foi possível solicitar a IA comportamental.",
+          "Tente novamente em alguns instantes.",
+        ),
+      );
+    } finally {
+      setAiRequesting(false);
+    }
+  }, [
+    aiRequesting,
+    assessment?.id,
+    candidateId,
+    evaluation?.status,
+    jobId,
+    loadBehavioralAssessment,
+    onAfterBehavioralAIRequest,
+  ]);
 
   if (!jobId || !candidateId) {
     return (
@@ -1997,6 +2128,10 @@ function ProfileBehavioralAssessmentsTab({
 
   const answeredLabel = `${assessment.answered_count} de ${assessment.question_count} respostas`;
   const kindLabel = behavioralKindLabel(assessment, required);
+  const showAIStatus = requiresAI || evaluation !== null || assessment.status === "submitted";
+  const aiStatusLabel = getBehavioralAIStatusLabel(assessment.status, evaluation);
+  const aiStatusTone = getBehavioralAIStatusTone(assessment.status, evaluation);
+  const canRequestAI = assessment.status === "submitted" && (!evaluation || evaluation.status === "failed");
 
   return (
     <div className="space-y-4">
@@ -2019,6 +2154,8 @@ function ProfileBehavioralAssessmentsTab({
             items={[
               ["Obrigatório", required ? "Sim" : "Não"],
               ["Status", BEHAVIORAL_STATUS_LABEL[assessment.status] ?? assessment.status],
+              ["Respostas", answeredLabel],
+              ["IA comportamental", showAIStatus ? <Badge tone={aiStatusTone}>{aiStatusLabel}</Badge> : "-"],
               ["Início", assessment.started_at ? formatDateTime(assessment.started_at) : "-"],
               ["Conclusão", assessment.submitted_at ? formatDateTime(assessment.submitted_at) : "-"],
             ]}
@@ -2026,11 +2163,83 @@ function ProfileBehavioralAssessmentsTab({
         </div>
       </SectionCard>
 
-      {evaluation?.summary ? (
-        <SectionCard title="Resumo">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-[hsl(var(--text))]">
-            {evaluation.summary}
-          </p>
+      {showAIStatus ? (
+        <SectionCard title="IA comportamental">
+          <div
+            ref={aiActionRef}
+            tabIndex={-1}
+            className={[
+              "rounded-xl border p-4 outline-none transition",
+              canRequestAI
+                ? "border-amber-200 bg-amber-50"
+                : "border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))]",
+              focusToken > 0 && canRequestAI ? "ring-2 ring-amber-300 ring-offset-2" : "",
+            ].join(" ")}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-[hsl(var(--text))]">
+                  {evaluation?.status === "failed"
+                    ? "IA comportamental falhou"
+                    : evaluation?.status === "pending"
+                      ? "IA comportamental na fila"
+                      : evaluation?.status === "processing"
+                        ? "IA comportamental em processamento"
+                        : evaluation?.status === "retry_scheduled"
+                          ? "IA comportamental com retry agendado"
+                      : evaluation?.status === "completed"
+                        ? "IA comportamental concluída"
+                        : "IA comportamental pendente"}
+                </p>
+                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                  {!evaluation
+                    ? "O candidato concluiu o teste comportamental. Gere a análise com IA para apoiar a decisão."
+                    : evaluation.status === "failed"
+                      ? "A análise com IA não foi concluída. Tente novamente para gerar uma nova avaliação assistiva."
+                      : evaluation.status === "pending"
+                        ? "A solicitação foi enviada para a fila de IA comportamental."
+                        : evaluation.status === "processing"
+                        ? "A solicitação foi enviada e o processamento será atualizado assim que a IA concluir."
+                        : evaluation.status === "retry_scheduled"
+                          ? `A IA atingiu um limite temporário. Nova tentativa automática${evaluation.next_retry_at ? ` em ${formatDateTime(evaluation.next_retry_at)}` : " agendada"}.`
+                        : "A análise assistiva está disponível para apoiar a leitura das respostas comportamentais."}
+                </p>
+              </div>
+              <Badge tone={aiStatusTone}>{aiStatusLabel}</Badge>
+            </div>
+
+            {canRequestAI ? (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <ActionButton
+                  onClick={() => void handleGenerateBehavioralAI()}
+                  disabled={aiRequesting}
+                  primary
+                >
+                  {aiRequesting ? <Loader className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {aiRequesting
+                    ? "Solicitando..."
+                    : evaluation?.status === "failed"
+                      ? "Tentar novamente"
+                      : "Gerar análise IA comportamental"}
+                </ActionButton>
+                <span className="text-xs text-[hsl(var(--text-muted))]">
+                  Esta análise não altera score, ranking ou etapa do pipeline.
+                </span>
+              </div>
+            ) : null}
+
+            {aiActionError ? (
+              <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {aiActionError}
+              </p>
+            ) : null}
+
+            {evaluation?.summary ? (
+              <p className="mt-4 whitespace-pre-wrap rounded-lg border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface))] p-3 text-sm leading-6 text-[hsl(var(--text))]">
+                {evaluation.summary}
+              </p>
+            ) : null}
+          </div>
         </SectionCard>
       ) : null}
 

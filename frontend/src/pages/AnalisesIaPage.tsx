@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, RefreshCw } from "lucide-react";
 import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { PageHeader } from "../components/common/PageHeader";
 import { AnalysisFilters } from "../features/analyses/components/AnalysisFilters";
@@ -19,6 +19,14 @@ export function AnalisesIaPage() {
     handleStatusFilter,
     aiFilter,
     handleAiFilter,
+    typeFilter,
+    handleTypeFilter,
+    providerFilter,
+    handleProviderFilter,
+    modelFilter,
+    handleModelFilter,
+    providerOptions,
+    modelOptions,
     actionId,
     discardTarget,
     setDiscardTarget,
@@ -36,6 +44,13 @@ export function AnalisesIaPage() {
     handleForceFail,
     handleDiscard,
   } = useAnalysesPage();
+
+  const summary = {
+    pending: items.filter((item) => item.status === "pending").length,
+    processing: items.filter((item) => item.status === "processing").length,
+    completed: items.filter((item) => item.status === "completed").length,
+    issues: items.filter((item) => item.status === "failed" || item.status === "retry_scheduled").length,
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -76,9 +91,42 @@ export function AnalisesIaPage() {
             onStatusChange={handleStatusFilter}
             aiFilter={aiFilter}
             onAiChange={handleAiFilter}
+            typeFilter={typeFilter}
+            onTypeChange={handleTypeFilter}
+            providerFilter={providerFilter}
+            onProviderChange={handleProviderFilter}
+            modelFilter={modelFilter}
+            onModelChange={handleModelFilter}
+            providerOptions={providerOptions}
+            modelOptions={modelOptions}
             hasActiveFilters={hasActiveFilters}
             onClearFilters={clearFilters}
           />
+
+          <div className="grid gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: "Pendentes", value: summary.pending, icon: Clock3, tone: "text-[hsl(var(--text-muted))]" },
+              { label: "Processando", value: summary.processing, icon: Activity, tone: "text-[hsl(var(--primary))]" },
+              { label: "Concluídas", value: summary.completed, icon: CheckCircle2, tone: "text-[hsl(var(--success))]" },
+              { label: "Falhas / retry", value: summary.issues, icon: AlertTriangle, tone: "text-[hsl(var(--warning))]" },
+            ].map(({ label, value, icon: Icon, tone }) => (
+              <div
+                key={label}
+                className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    {label}
+                  </p>
+                  <Icon className={`h-4 w-4 ${tone}`} />
+                </div>
+                <p className="mt-2 text-2xl font-semibold text-[hsl(var(--text))]">{value}</p>
+                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                  {typeFilter === "behavioral_ai" ? "IA comportamental" : "Currículos"}
+                </p>
+              </div>
+            ))}
+          </div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
