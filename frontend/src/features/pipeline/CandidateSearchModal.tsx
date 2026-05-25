@@ -17,7 +17,7 @@ interface CandidateSearchModalProps {
   onClose: () => void;
   onAdded: () => Promise<void>;
   onCreateNew: () => void;
-  onOpenCandidate?: (candidateId: string) => void;
+  onOpenCandidate?: (candidateId: string, targetUrl?: string) => void;
 }
 
 export function CandidateSearchModal({
@@ -208,7 +208,10 @@ export function CandidateSearchModal({
                 type="button"
                 className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
                 onClick={() => {
-                  onOpenCandidate?.(previousProcessPrompt.candidateId);
+                  onOpenCandidate?.(
+                    previousProcessPrompt.candidateId,
+                    `/candidatos/${previousProcessPrompt.candidateId}?tab=history&job_id=${activeJobId}`,
+                  );
                   setPreviousProcessPrompt(null);
                 }}
               >

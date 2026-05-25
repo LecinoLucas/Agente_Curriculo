@@ -4,6 +4,8 @@ import type {
   CandidateResumeOverview,
   PipelineStage,
 } from "../../../types/domain";
+import { POST_HIRING_ACTIVE_STAGES as POST_HIRING_ACTIVE_STAGE_SET } from "../../../types/domain";
+import { SUCCESS_TERMINAL_STAGES as SUCCESS_TERMINAL_STAGE_SET } from "../../../types/domain";
 
 export const STAGE_LABEL: Record<PipelineStage, string> = {
   entry: "Recebido",
@@ -13,6 +15,9 @@ export const STAGE_LABEL: Record<PipelineStage, string> = {
   final: "Final",
   offer: "Proposta",
   hired: "Contratado",
+  pre_admission: "Pré-admissão",
+  protheus: "Protheus",
+  admitted: "Admitido",
   rejected: "Reprovado",
 };
 
@@ -25,6 +30,14 @@ export const ANALYSIS_STATUS_LABEL: Record<string, string> = {
   cancelled: "Análise cancelada",
   discarded: "Análise descartada",
 };
+
+export function isPostHiringActiveStage(stage: string | null | undefined): stage is PipelineStage {
+  return typeof stage === "string" && POST_HIRING_ACTIVE_STAGE_SET.has(stage as PipelineStage);
+}
+
+export function isSuccessTerminalStage(stage: string | null | undefined): stage is PipelineStage {
+  return typeof stage === "string" && SUCCESS_TERMINAL_STAGE_SET.has(stage as PipelineStage);
+}
 
 export function getInitials(fullName: string): string {
   const parts = fullName
@@ -49,9 +62,28 @@ export function getActivePipelineEntry(
   if (activeJobId) {
     const activeByJob = entries.find((entry) => entry.job_id === activeJobId && !entry.is_terminal);
     if (activeByJob) return activeByJob;
+
+    const postHiringByJob = entries.find(
+      (entry) =>
+        entry.job_id === activeJobId &&
+        (isPostHiringActiveStage(entry.stage) ||
+          isSuccessTerminalStage(entry.stage) ||
+          entry.relationship_status === "hired"),
+    );
+    if (postHiringByJob) return postHiringByJob;
   }
 
-  return entries.find((entry) => entry.relationship_status === "active" && !entry.is_terminal) ?? null;
+  const activeEntry = entries.find((entry) => entry.relationship_status === "active" && !entry.is_terminal);
+  if (activeEntry) return activeEntry;
+
+  return (
+    entries.find(
+      (entry) =>
+        isSuccessTerminalStage(entry.stage) ||
+        isPostHiringActiveStage(entry.stage) ||
+        entry.relationship_status === "hired",
+    ) ?? null
+  );
 }
 
 export function getActiveJobScore(
@@ -69,7 +101,7 @@ export function getActiveJobScore(
 }
 
 export function isTerminalStatus(status: string | null | undefined): boolean {
-  return status === "hired" || status === "rejected";
+  return status === "rejected";
 }
 
 export function formatScorePercent(score: number | null | undefined): string {
@@ -88,6 +120,11 @@ export type CandidatePendency = {
 
 export function derivePendencies(overview: CandidateOverview | null): CandidatePendency[] {
   if (!overview) return [];
+
+  const activeEntry = getActivePipelineEntry(overview);
+  if (activeEntry && isSuccessTerminalStage(activeEntry.stage)) {
+    return [];
+  }
 
   // Gate-based pendencies (tone === "block") come from PipelineGateEvaluator on
   // the backend and are authoritative — they are the same gates that block stage
@@ -215,7 +252,8 @@ export type NextActionSuggestion = {
 };
 
 const _ACTION_CODE_LABEL: Record<string, string> = {
-  open_decision: "Registrar decisão",
+  open_pre_admission: "Abrir pré-admissão",
+  open_decision: "Registrar decisão de contratação",
   open_behavioral_ai: "Avaliação IA comportamental",
   open_behavioral_assessment: "Avaliação comportamental",
   open_scorecard: "Registrar scorecard",
@@ -224,7 +262,8 @@ const _ACTION_CODE_LABEL: Record<string, string> = {
 };
 
 const _ACTION_CODE_TAB: Record<string, string> = {
-  open_decision: "workflow",
+  open_pre_admission: "pre_admission",
+  open_decision: "workflow:hiring_decision",
   open_behavioral_ai: "assessments:behavioral_ai",
   open_behavioral_assessment: "assessments",
   open_scorecard: "interviews",
@@ -239,10 +278,20 @@ export function deriveNextAction(
     return { label: "Adicionar a uma vaga", hint: "Candidato sem vaga ativa" };
   }
 
+  if (isSuccessTerminalStage(activeEntry.stage)) {
+    return { label: "Sem ação pendente", hint: "Candidato admitido" };
+  }
+
   if (
     isTerminalStatus(activeEntry.relationship_status) ||
     isTerminalStatus(activeEntry.candidate_status)
   ) {
+    if (activeEntry.stage === "admitted") {
+      return { label: "Sem ação pendente", hint: "Candidato admitido" };
+    }
+    if (isPostHiringActiveStage(activeEntry.stage) || activeEntry.relationship_status === "hired") {
+      return { label: "Sem ação pendente", hint: "Contratado nesta vaga" };
+    }
     return { label: "Sem ação pendente", hint: "Processo encerrado" };
   }
 
@@ -258,10 +307,23 @@ export function deriveNextAction(
   );
   if (firstGatePendency?.action) {
     const code = firstGatePendency.action;
+    let targetTab = _ACTION_CODE_TAB[code];
+    let label = _ACTION_CODE_LABEL[code] ?? firstGatePendency.label;
+    let hint = firstGatePendency.description ?? firstGatePendency.label;
+
+    if (
+      firstGatePendency.id === "technical_interview_not_completed" ||
+      (code === "open_interview" && firstGatePendency.action_payload?.interview_type === "technical")
+    ) {
+      targetTab = "interviews:schedule_technical";
+      label = "Agendar entrevista técnica";
+      hint = "Agende e conclua a entrevista técnica antes de avançar.";
+    }
+
     return {
-      label: _ACTION_CODE_LABEL[code] ?? firstGatePendency.label,
-      hint: firstGatePendency.description ?? firstGatePendency.label,
-      targetTab: _ACTION_CODE_TAB[code],
+      label,
+      hint,
+      targetTab,
     };
   }
 
@@ -286,7 +348,15 @@ export function deriveNextAction(
     case "final":
       return { label: "Avançar para proposta", hint: "Etapa final" };
     case "offer":
-      return { label: "Registrar decisão de contratação", hint: "Submeta uma decisão hire para liberar contratação", targetTab: "workflow" };
+      return { label: "Mover para Contratado", hint: "Finalize a etapa na pipeline", targetTab: "workflow" };
+    case "hired":
+      return { label: "Mover para Pré-admissão", hint: "Inicie a preparação admissional", targetTab: "workflow" };
+    case "pre_admission":
+      return { label: "Mover para Protheus", hint: "Avance após concluir a pré-admissão", targetTab: "workflow" };
+    case "protheus":
+      return { label: "Mover para Admitido", hint: "Finalize a integração no ERP", targetTab: "workflow" };
+    case "admitted":
+      return { label: "Sem ação pendente", hint: "Candidato admitido" };
     default:
       return { label: "Revisar próximas etapas", hint: "Acompanhar pipeline" };
   }

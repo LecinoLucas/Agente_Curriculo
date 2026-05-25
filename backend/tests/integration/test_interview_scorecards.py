@@ -292,6 +292,12 @@ async def test_submit_does_not_change_pipeline_or_ranking(client: AsyncClient, d
 async def test_get_includes_behavioral_ai_questions_as_support_only(client: AsyncClient, db_session: AsyncSession) -> None:
     headers, _evaluator_id = await _recruiter_headers(client, db_session)
     job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
 
     template = BehavioralAssessmentTemplateModel(
         id=uuid4(),
@@ -305,6 +311,7 @@ async def test_get_includes_behavioral_ai_questions_as_support_only(client: Asyn
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         template_id=template.id,
         status="submitted",
         assigned_at=datetime.now(UTC),
@@ -583,6 +590,12 @@ async def test_submitted_manager_scorecard_satisfies_has_manager_feedback_gate(
     await client.post(f"/api/v1/interview-scorecards/{scorecard_id}/submit", headers=mgr_headers)
 
     repo = SQLAlchemyHiringDecisionRepository(db_session)
-    result = await repo.has_manager_feedback(candidate_id=candidate_id, job_id=job_id)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    result = await repo.has_manager_feedback(candidate_id=candidate_id, job_id=job_id, pipeline_id=pipeline_id)
 
     assert result is True

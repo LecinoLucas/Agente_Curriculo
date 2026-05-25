@@ -113,6 +113,7 @@ class InterviewScheduleResponse(ORMAPISchemaModel):
     candidate_name: str
     job_id: Optional[UUID]
     job_title: Optional[str]
+    pipeline_id: Optional[UUID] = None
     title: str
     description: Optional[str]
     public_notes: Optional[str] = None
@@ -138,6 +139,11 @@ class InterviewScheduleResponse(ORMAPISchemaModel):
     meeting_provider: Optional[str] = None
     external_calendar_html_link: Optional[str] = None
     external_calendar_event_id: Optional[str] = None
+    scorecard_id: Optional[UUID] = None
+    scorecard_status: Optional[str] = None
+    scorecard_final_recommendation: Optional[str] = None
+    scorecard_submitted_at: Optional[datetime] = None
+    counts_for_current_gate: bool = False
 
 
 class AgendaKpiResponse(APISchemaModel):

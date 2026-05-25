@@ -1,6 +1,7 @@
 import {
   Calendar,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   Users,
   Video,
@@ -9,8 +10,10 @@ import {
   MoreVertical,
   Edit2,
   X,
+  UserX,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/common/PageHeader";
 import { useGoogleCalendarConnection } from "../features/agenda/useGoogleCalendarConnection";
@@ -20,6 +23,12 @@ import { toast } from "../shared/utils/toast";
 import { InterviewSchedule, AgendaKpis, AgendaListParams } from "../types/agenda";
 import { AgendaInterviewModal } from "../features/agenda/AgendaInterviewModal";
 import { CancelInterviewModal } from "../features/agenda/CancelInterviewModal";
+import {
+  interviewStatusLabel,
+  interviewTypeLabel,
+  scorecardActionLabel,
+  scorecardStatusLabel,
+} from "../features/agenda/interviewDisplay";
 
 function dayStart(d: Date) {
   const c = new Date(d);
@@ -37,17 +46,10 @@ function weekDays(base: Date): Date[] {
   });
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  scheduled: "Agendada",
-  completed: "Concluída",
-  cancelled: "Cancelada",
-  rescheduled: "Remarcada",
-  no_show: "Não compareceu",
-};
-
 const STATUS_COLORS: Record<string, string> = {
   scheduled: "text-blue-600",
   completed: "text-emerald-600",
+  awaiting_feedback: "text-amber-600",
   cancelled: "text-rose-400",
   rescheduled: "text-amber-600",
   no_show: "text-amber-600",
@@ -57,9 +59,12 @@ interface InterviewRowProps {
   iv: InterviewSchedule;
   onEdit?: (id: string) => void;
   onCancel?: (id: string, name: string) => void;
+  onComplete?: (iv: InterviewSchedule) => void;
+  onNoShow?: (iv: InterviewSchedule) => void;
+  onScorecard?: (iv: InterviewSchedule) => void;
 }
 
-function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
+function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard }: InterviewRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const startDate = new Date(iv.scheduled_start);
@@ -73,7 +78,7 @@ function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
   const durationMinutes = Math.round(durationMs / 60000);
 
   const statusColor = STATUS_COLORS[iv.status] || "text-gray-600";
-  const statusLabel = STATUS_LABELS[iv.status] || iv.status;
+  const statusLabel = interviewStatusLabel(iv.status);
 
   const initials = iv.candidate_name
     .split(" ")
@@ -83,6 +88,9 @@ function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
     .slice(0, 2);
 
   const isCancelled = iv.status === "cancelled";
+  const canComplete = iv.status === "scheduled" || iv.status === "rescheduled";
+  const canScorecard = iv.status === "completed" || iv.status === "awaiting_feedback";
+  const canNoShow = iv.status === "scheduled" || iv.status === "rescheduled";
 
   return (
     <div
@@ -114,7 +122,7 @@ function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
           {iv.candidate_name}
         </p>
         <p className="truncate text-xs text-[hsl(var(--text-muted))]">
-          {iv.job_title || "-"} · {iv.interview_type}
+          {iv.job_title || "-"} · {interviewTypeLabel(iv.interview_type)} · Scorecard: {scorecardStatusLabel(iv)}
         </p>
       </div>
 
@@ -163,7 +171,7 @@ function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
       </span>
 
       {/* Actions menu */}
-      {!isCancelled && (onEdit || onCancel) && (
+      {(onEdit || onCancel || onComplete || onNoShow || onScorecard) && (
         <div className="relative">
           <button
             data-testid="agenda-actions-button"
@@ -176,7 +184,7 @@ function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 mt-1 w-40 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-lg z-10">
+            <div className="absolute right-0 mt-1 w-56 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-lg z-10">
               {onEdit && (
                 <button
                   data-testid="agenda-edit-action"
@@ -188,11 +196,53 @@ function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
                   className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition first:rounded-t-lg"
                 >
                   <Edit2 className="h-4 w-4" />
-                  Editar
+                  {isCancelled || iv.status === "no_show" ? "Reagendar" : "Reagendar/editar"}
                 </button>
               )}
 
-              {onCancel && (
+              {canComplete && onComplete ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onComplete(iv);
+                    setMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Marcar como concluída
+                </button>
+              ) : null}
+
+              {canNoShow && onNoShow ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNoShow(iv);
+                    setMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition"
+                >
+                  <UserX className="h-4 w-4" />
+                  Não compareceu
+                </button>
+              ) : null}
+
+              {canScorecard && onScorecard ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onScorecard(iv);
+                    setMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition"
+                >
+                  <ClipboardCheck className="h-4 w-4" />
+                  {scorecardActionLabel(iv)}
+                </button>
+              ) : null}
+
+              {!isCancelled && onCancel && (
                 <button
                   data-testid="agenda-cancel-action"
                   type="button"
@@ -217,6 +267,7 @@ function InterviewRow({ iv, onEdit, onCancel }: InterviewRowProps) {
 const TODAY = new Date();
 
 export function AgendaPage() {
+  const navigate = useNavigate();
   const [selected, setSelected] = useState(dayStart(TODAY));
   const [interviews, setInterviews] = useState<InterviewSchedule[]>([]);
   const [kpis, setKpis] = useState<AgendaKpis | null>(null);
@@ -329,6 +380,30 @@ export function AgendaPage() {
     setCancelScheduleId(scheduleId);
     setCancelScheduleName(candidateName);
     setIsCancelModalOpen(true);
+  };
+
+  const handleCompleteClick = async (interview: InterviewSchedule) => {
+    try {
+      await agendaService.completeInterview(interview.id);
+      toast.success("Entrevista marcada como concluída.");
+      await loadData();
+    } catch {
+      toast.error("Não foi possível concluir a entrevista.");
+    }
+  };
+
+  const handleNoShowClick = async (interview: InterviewSchedule) => {
+    try {
+      await agendaService.markNoShow(interview.id, { reason: "Candidato não compareceu." });
+      toast.success("Entrevista marcada como não comparecimento.");
+      await loadData();
+    } catch {
+      toast.error("Não foi possível registrar o não comparecimento.");
+    }
+  };
+
+  const handleScorecardClick = (interview: InterviewSchedule) => {
+    navigate(`/candidatos/${interview.candidate_id}?tab=interviews&focus=scorecard&interview_id=${interview.id}`);
   };
 
   const handleModalSuccess = async () => {
@@ -509,8 +584,9 @@ export function AgendaPage() {
             <option value="all">Todos os status</option>
             <option value="scheduled">Agendada</option>
             <option value="completed">Concluída</option>
+            <option value="awaiting_feedback">Aguardando feedback</option>
             <option value="cancelled">Cancelada</option>
-            <option value="rescheduled">Remarcada</option>
+            <option value="rescheduled">Reagendada</option>
             <option value="no_show">Não compareceu</option>
           </select>
         </div>
@@ -592,6 +668,9 @@ export function AgendaPage() {
                 iv={iv}
                 onEdit={handleEditClick}
                 onCancel={handleCancelClick}
+                onComplete={(iv) => void handleCompleteClick(iv)}
+                onNoShow={(iv) => void handleNoShowClick(iv)}
+                onScorecard={handleScorecardClick}
               />
             ))}
           </div>
@@ -636,6 +715,9 @@ export function AgendaPage() {
                           iv={iv}
                           onEdit={handleEditClick}
                           onCancel={handleCancelClick}
+                          onComplete={(iv) => void handleCompleteClick(iv)}
+                          onNoShow={(iv) => void handleNoShowClick(iv)}
+                          onScorecard={handleScorecardClick}
                         />
                       ))}
                   </div>

@@ -925,21 +925,10 @@ async def test_portal_overview_returns_talent_pool_when_candidate_has_no_active_
     payload = response.json()
     candidate_id = UUID(payload["candidate_id"])
 
-    now = datetime.now(UTC)
     await db_session.execute(
-        sa.update(CandidateJobPipelineModel)
-        .where(
+        sa.delete(CandidateJobPipelineModel).where(
             CandidateJobPipelineModel.candidate_id == candidate_id,
             CandidateJobPipelineModel.job_id == published_job.id,
-        )
-        .values(
-            link_status="removed",
-            relationship_status="withdrawn",
-            pipeline_status="terminal",
-            is_terminal=True,
-            terminated_at=now,
-            termination_reason="candidate_removed",
-            updated_at=now,
         )
     )
     await db_session.commit()
@@ -957,6 +946,119 @@ async def test_portal_overview_returns_talent_pool_when_candidate_has_no_active_
     assert overview_payload["is_process_closed"] is False
     assert overview_payload["status_public"] == "Você está em nosso banco de talentos"
     assert overview_payload["closed_reason_public_label"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stage", "expected_status"),
+    [
+        ("hired", "Contratado"),
+        ("pre_admission", "Pré-admissão"),
+        ("protheus", "Protheus"),
+    ],
+)
+async def test_portal_overview_keeps_post_hiring_stages_active(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    stage: str,
+    expected_status: str,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name=f"Candidato {stage}",
+        email=f"portal-{stage}-{uuid4().hex[:6]}@example.com",
+        cpf=f"{uuid4().int % 10**11:011d}",
+    )
+    job = await _create_published_job(db_session, title=f"Vaga {expected_status}")
+    now = datetime.now(UTC)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=uuid4(),
+            candidate_id=candidate.id,
+            job_id=job.id,
+            pipeline_stage=stage,
+            link_status="active",
+            relationship_status="active",
+            pipeline_status="active",
+            is_terminal=False,
+            terminated_at=None,
+            termination_reason=None,
+            entered_at=now - timedelta(days=2),
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    await _create_portal_session(db_session, candidate.id, f"portal-token-{stage}")
+    client.cookies.set("candidate_portal_token", f"portal-token-{stage}")
+
+    overview_response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert overview_response.status_code == status.HTTP_200_OK
+    payload = overview_response.json()
+
+    assert payload["active_application"] is not None
+    assert payload["active_application"]["job_id"] == str(job.id)
+    assert payload["active_application"]["pipeline_stage"] == stage
+    assert payload["active_application"]["status_public"] == expected_status
+    assert payload["application_status"] == "active"
+    assert payload["status_public"] == expected_status
+    assert payload["current_process_status_label"] == expected_status
+    assert payload["is_process_closed"] is False
+    assert payload["closed_reason_public_label"] is None
+    assert payload["talent_pool"] is False
+    assert payload["public_timeline"]["current_step_key"] == "result"
+    assert payload["public_timeline"]["steps"][-1]["label"] == "Aprovado"
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_shows_admitted_as_closed_success_not_talent_pool(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Candidato Admitido",
+        email=f"portal-admitted-{uuid4().hex[:6]}@example.com",
+        cpf=f"{uuid4().int % 10**11:011d}",
+    )
+    job = await _create_published_job(db_session, title="Vaga Admitido")
+    now = datetime.now(UTC)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=uuid4(),
+            candidate_id=candidate.id,
+            job_id=job.id,
+            pipeline_stage="admitted",
+            link_status="hired",
+            relationship_status="hired",
+            pipeline_status="terminal",
+            is_terminal=True,
+            terminated_at=now,
+            termination_reason=None,
+            entered_at=now - timedelta(days=2),
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-admitted")
+    client.cookies.set("candidate_portal_token", "portal-token-admitted")
+
+    overview_response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert overview_response.status_code == status.HTTP_200_OK
+    payload = overview_response.json()
+
+    assert payload["active_application"] is None
+    assert payload["application_status"] == "admitted"
+    assert payload["status_public"] == "Admitido"
+    assert payload["current_process_status_label"] == "Admitido"
+    assert payload["is_process_closed"] is True
+    assert payload["closed_reason_public_label"] == "Admissão concluída."
+    assert payload["talent_pool"] is False
+    assert payload["application_history"][0]["job_id"] == str(job.id)
+    assert payload["application_history"][0]["status"] == "admitted"
+    assert payload["public_timeline"]["current_step_key"] == "result"
+    assert payload["public_timeline"]["steps"][-1]["label"] == "Admitido"
 
 
 @pytest.mark.asyncio
@@ -1010,6 +1112,53 @@ async def test_portal_overview_returns_rejected_status_without_internal_reason(
     assert payload["public_timeline"]["current_step_key"] == "result"
     assert payload["public_timeline"]["steps"][-1]["label"] == "Processo encerrado"
     assert "motivo interno sensível" not in str(payload)
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_returns_closed_status_for_withdrawn_pipeline(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Paula Desistiu",
+        email="paula.desistiu@example.com",
+        cpf="76814494000",
+    )
+    job = await _create_published_job(db_session, title="Analista Withdrawn")
+    now = datetime.now(UTC)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=uuid4(),
+            candidate_id=candidate.id,
+            job_id=job.id,
+            pipeline_stage="screening",
+            link_status="removed",
+            relationship_status="withdrawn",
+            pipeline_status="terminal",
+            is_terminal=True,
+            terminated_at=now,
+            termination_reason="candidate_removed",
+            entered_at=now - timedelta(days=3),
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-withdrawn")
+    client.cookies.set("candidate_portal_token", "portal-token-withdrawn")
+
+    overview_response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert overview_response.status_code == status.HTTP_200_OK
+    payload = overview_response.json()
+
+    assert payload["active_application"] is None
+    assert payload["application_status"] == "rejected"
+    assert payload["status_public"] == "Processo encerrado"
+    assert payload["current_process_status_label"] == "Processo encerrado"
+    assert payload["is_process_closed"] is True
+    assert payload["closed_reason_public_label"] == "Você não foi selecionado para esta vaga no momento."
+    assert payload["public_timeline"]["current_step_key"] == "result"
 
 
 @pytest.mark.asyncio

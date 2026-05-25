@@ -13,6 +13,7 @@ Cobre:
 from uuid import UUID, uuid4
 
 import pytest
+import sqlalchemy as sa
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,9 +62,16 @@ async def _create_scorecard_in_db(
     job_id: UUID,
     evaluator_id: UUID,
 ) -> InterviewScorecardModel:
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
     scorecard = InterviewScorecardModel(
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         evaluator_id=evaluator_id,
         status="draft",
     )

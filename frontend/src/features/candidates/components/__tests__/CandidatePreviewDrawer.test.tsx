@@ -17,6 +17,7 @@ const routerFuture = {
 vi.mock("../../../../services/candidatesService", () => ({
   candidatesService: {
     getOverview: vi.fn(),
+    getProcessHistory: vi.fn(),
   },
 }));
 

@@ -25,6 +25,7 @@ from src.infrastructure.database.models.behavioral_template_model import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
 from src.infrastructure.security.password_service import hash_password
 
@@ -230,6 +231,173 @@ async def test_patch_pipeline_stage_v2_endpoint(
 
 
 @pytest.mark.asyncio
+async def test_hired_candidate_stays_on_pipeline_and_can_advance_to_pre_admission_protheus_and_admitted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-post-hire-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(
+        client,
+        headers,
+        db_session,
+        title="Analista de Suporte N1",
+        requires_interview=False,
+        requires_scorecard=False,
+        requires_behavioral_assessment=False,
+        requires_behavioral_ai_evaluation=False,
+    )
+    candidate_id = await _create_candidate(
+        client,
+        headers,
+        db_session,
+        "Pedro Miguel",
+        f"pedro-miguel-{uuid4().hex[:6]}@test.com",
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id)
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="offer")
+    )
+    await db_session.commit()
+
+    hired = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "hired", "notes": "", "reason": "Contratação aprovada."},
+        headers=headers,
+    )
+    assert hired.status_code == 200, hired.text
+
+    pipeline = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert pipeline is not None
+    assert pipeline.pipeline_stage == "hired"
+    assert pipeline.relationship_status == "active"
+    assert pipeline.pipeline_status == "active"
+    assert pipeline.is_terminal is False
+    assert pipeline.terminated_at is None
+
+    board = await client.get(f"/api/v1/pipeline/{job_id}", headers=headers)
+    assert board.status_code == 200, board.text
+    hired_column = next(column for column in board.json()["columns"] if column["stage"] == "hired")
+    assert str(candidate_id) in {candidate["candidate_id"] for candidate in hired_column["candidates"]}
+
+    pre_admission = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Iniciar pré-admissão."},
+        headers=headers,
+    )
+    assert pre_admission.status_code == 200, pre_admission.text
+    assert pre_admission.json()["stage"] == "pre_admission"
+
+    decision = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/hiring-decision",
+        json={
+            "decision_outcome": "hire",
+            "reason_code": "strong_fit",
+            "notes": "Candidato aprovado para admissão.",
+            "submit": True,
+            "pipeline_action": {"enabled": False},
+        },
+        headers=headers,
+    )
+    assert decision.status_code == 201, decision.text
+
+    pre_admission_case = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
+        json={
+            "salary_offer": "8500.00",
+            "start_date": "2026-06-15",
+            "work_model": "Remoto",
+            "notes": "Fluxo criado para liberação Protheus.",
+        },
+        headers=headers,
+    )
+    assert pre_admission_case.status_code == 201, pre_admission_case.text
+    case_id = pre_admission_case.json()["id"]
+
+    checklist_item = await client.post(
+        f"/api/v1/pre-admission/{case_id}/checklist-items",
+        json={
+            "item_type": "cpf",
+            "title": "CPF",
+            "required": True,
+        },
+        headers=headers,
+    )
+    assert checklist_item.status_code == 201, checklist_item.text
+    item_id = checklist_item.json()["id"]
+
+    updated_item = await client.patch(
+        f"/api/v1/pre-admission/{case_id}/checklist-items/{item_id}",
+        json={"status": "approved"},
+        headers=headers,
+    )
+    assert updated_item.status_code == 200, updated_item.text
+
+    ready_case = await client.patch(
+        f"/api/v1/pre-admission/{case_id}",
+        json={"status": "ready_for_admission"},
+        headers=headers,
+    )
+    assert ready_case.status_code == 200, ready_case.text
+
+    protheus = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "protheus", "notes": "", "reason": "Enviar ao Protheus."},
+        headers=headers,
+    )
+    assert protheus.status_code == 200, protheus.text
+    assert protheus.json()["stage"] == "protheus"
+
+    admitted = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "admitted", "notes": "", "reason": "Admissão concluída."},
+        headers=headers,
+    )
+    assert admitted.status_code == 200, admitted.text
+    assert admitted.json()["stage"] == "admitted"
+
+    await db_session.refresh(pipeline)
+    assert pipeline.pipeline_stage == "admitted"
+    assert pipeline.relationship_status == "hired"
+    assert pipeline.pipeline_status == "terminal"
+    assert pipeline.is_terminal is True
+    assert pipeline.terminated_at is not None
+    synced_case = await db_session.scalar(
+        sa.select(PreAdmissionCaseModel).where(PreAdmissionCaseModel.id == UUID(case_id))
+    )
+    assert synced_case is not None
+    assert synced_case.status == "admitted"
+    assert synced_case.closed_at is not None
+
+    board = await client.get(f"/api/v1/pipeline/{job_id}", headers=headers)
+    assert board.status_code == 200, board.text
+    admitted_column = next(column for column in board.json()["columns"] if column["stage"] == "admitted")
+    assert str(candidate_id) in {candidate["candidate_id"] for candidate in admitted_column["candidates"]}
+
+    blocked_after_admitted = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Tentativa após admissão."},
+        headers=headers,
+    )
+    assert blocked_after_admitted.status_code == 404, blocked_after_admitted.text
+
+
+@pytest.mark.asyncio
 async def test_patch_pipeline_stage_hired_blocks_when_behavioral_required_pending(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -358,21 +526,6 @@ async def test_patch_pipeline_stage_hired_requires_behavioral_ai_when_policy_req
             model="test-model",
             prompt_version=1,
             completed_at=now,
-        )
-    )
-    # Final decision gate ('hired' requires a submitted decision with outcome 'hire').
-    from src.infrastructure.database.models.hiring_decision_model import (
-        CandidateJobHiringDecisionModel,
-    )
-    db_session.add(
-        CandidateJobHiringDecisionModel(
-            id=uuid4(),
-            candidate_id=candidate_id,
-            job_id=job_id,
-            decision_status="submitted",
-            decision_outcome="hire",
-            reason_code="strong_fit",
-            submitted_at=now,
         )
     )
     await db_session.commit()

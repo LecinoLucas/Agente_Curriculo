@@ -374,11 +374,15 @@ async def test_download_returns_controlled_404_when_storage_raises_file_not_foun
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case_status", ["cancelled", "admitted"])
-async def test_terminal_case_document_is_downloadable_only_by_staff(
+@pytest.mark.parametrize(
+    ("case_status", "expected_candidate_status"),
+    [("cancelled", status.HTTP_404_NOT_FOUND), ("admitted", status.HTTP_200_OK)],
+)
+async def test_terminal_case_document_download_policy(
     client: AsyncClient,
     db_session: AsyncSession,
     case_status: str,
+    expected_candidate_status: int,
 ) -> None:
     headers, _job_id, _candidate_id, case, _item, document = await _upload_for_seed(
         client,
@@ -396,7 +400,7 @@ async def test_terminal_case_document_is_downloadable_only_by_staff(
     client.cookies.clear()
     staff_response = await client.get(f"/api/v1/pre-admission/documents/{document['id']}/download", headers=headers)
 
-    assert candidate_response.status_code == status.HTTP_404_NOT_FOUND
+    assert candidate_response.status_code == expected_candidate_status
     assert staff_response.status_code == status.HTTP_200_OK
 
 

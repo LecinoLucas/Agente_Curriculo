@@ -34,10 +34,20 @@ function getRecommendation(
 } {
   const normalizedScore = normalizeScorePercent(score);
 
-  if (currentStage === "hired") {
+  if (currentStage === "admitted") {
     return {
       type: "advance",
-      label: "Aprovado",
+      label: "Admitido",
+      color: "text-emerald-950",
+      bgColor: "border-emerald-200 bg-emerald-50/85",
+      icon: CheckCircle2,
+    };
+  }
+
+  if (currentStage === "hired" || currentStage === "pre_admission" || currentStage === "protheus") {
+    return {
+      type: "advance",
+      label: currentStage === "hired" ? "Contratado" : currentStage === "pre_admission" ? "Pré-admissão" : "Protheus",
       color: "text-emerald-950",
       bgColor: "border-emerald-200 bg-emerald-50/85",
       icon: CheckCircle2,
@@ -197,13 +207,19 @@ export function CandidateDecisionPanel({
   const hasInsights = strengths.length > 0 || risks.length > 0;
   const explainabilityLine = getExplainabilityQuickLine(scoreExplanation);
   const contextText =
-    currentStage === "hired"
-      ? "Ação aplicada. O candidato foi aprovado para a vaga ativa."
+    currentStage === "admitted"
+      ? "Candidato admitido. O vínculo final permanece no histórico da vaga."
+      : currentStage === "hired"
+      ? "Candidato contratado. Próxima etapa: pré-admissão."
+      : currentStage === "pre_admission"
+        ? "Candidato em pré-admissão. Próxima etapa: Protheus."
+        : currentStage === "protheus"
+          ? "Candidato em Protheus. Próxima etapa: admissão."
       : currentStage === "rejected"
         ? "Ação aplicada. O candidato foi marcado como reprovado para esta vaga."
         : semantics.contextLine;
   const detailText =
-    currentStage === "hired" || currentStage === "rejected"
+    currentStage === "rejected"
       ? semantics.secondaryDisplay
         ? "O score geral IA continua disponível apenas como contexto desta decisão."
         : null

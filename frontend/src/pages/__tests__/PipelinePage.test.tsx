@@ -147,6 +147,21 @@ describe("PipelinePage", () => {
         candidates: [],
       },
       {
+        stage: "pre_admission",
+        label: "Pré-admissão",
+        candidates: [],
+      },
+      {
+        stage: "protheus",
+        label: "Protheus",
+        candidates: [],
+      },
+      {
+        stage: "admitted",
+        label: "Admitido",
+        candidates: [],
+      },
+      {
         stage: "rejected",
         label: "Desclassificado",
         candidates: [],

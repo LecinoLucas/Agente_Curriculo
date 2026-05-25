@@ -25,14 +25,14 @@ const itemStatusLabels: Record<PreAdmissionChecklistItemStatus, string> = {
   pending: "Pendente",
   received: "Recebido",
   approved: "Aprovado",
-  rejected: "Rejeitado",
+  rejected: "Correção solicitada",
   waived: "Dispensado",
 };
 
 const documentStatusLabels: Record<string, string> = {
-  uploaded: "Enviado",
+  uploaded: "Enviado para análise",
   approved: "Aprovado",
-  rejected: "Rejeitado",
+  rejected: "Correção solicitada",
   replaced: "Substituído",
 };
 
@@ -110,7 +110,9 @@ export function PreAdmissionChecklist({
       ) : (
         <div className="mt-4 space-y-3">
           {items.map((item) => {
-            const itemDocuments = documents.filter((document) => document.checklist_item_id === item.id);
+            const itemDocuments = documents.filter(
+              (document) => document.checklist_item_id === item.id && document.status !== "replaced",
+            );
             return (
                 <div
                   key={item.id}
@@ -131,7 +133,7 @@ export function PreAdmissionChecklist({
                           <div key={document.id} className="rounded-lg border border-[hsl(var(--border))] bg-white p-3">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <div>
-                                <p className="text-sm font-medium text-[hsl(var(--text))]">
+                                <p className="break-all text-sm font-medium text-[hsl(var(--text))]">
                                   {document.original_filename}
                                 </p>
                                 <p className="text-xs text-[hsl(var(--text-muted))]">
@@ -165,14 +167,14 @@ export function PreAdmissionChecklist({
                                     onClick={() => setRejectingDocumentId(document.id)}
                                     className="rounded-md bg-red-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
                                   >
-                                    Rejeitar
+                                    Solicitar correção
                                   </button>
                                 ) : null}
                               </div>
                             </div>
                             {document.review_notes ? (
                               <p className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs text-red-900">
-                                {document.review_notes}
+                                <span className="font-semibold">Observação:</span> {document.review_notes}
                               </p>
                             ) : null}
                             {rejectingDocumentId === document.id ? (
@@ -190,7 +192,7 @@ export function PreAdmissionChecklist({
                                     onClick={() => void handleReject(document.id)}
                                     className="rounded-md bg-red-600 px-2 py-1 text-xs font-semibold text-white"
                                   >
-                                    Confirmar rejeição
+                                    Confirmar correção
                                   </button>
                                   <button
                                     type="button"

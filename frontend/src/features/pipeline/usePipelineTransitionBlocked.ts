@@ -143,7 +143,7 @@ export function usePipelineTransitionBlockedHandler(): UsePipelineTransitionBloc
  * - open_interview / open_scorecard       → /candidatos/:id?tab=interviews
  * - open_behavioral_assessment            → /candidatos/:id?tab=assessments
  * - open_behavioral_ai                    → /candidatos/:id?tab=assessments&focus=behavioral_ai
- * - open_decision                         → /candidatos/:id?tab=workflow
+ * - open_decision                         → /candidatos/:id?tab=workflow&focus=hiring_decision
  * - add_reason (when onAddReason given)   → calls onAddReason(candidateId) instead of navigating
  * - add_reason (no onAddReason)           → /candidatos/:id?tab=workflow
  * - open_profile or any unknown action    → handled by the modal's fallback
@@ -189,6 +189,9 @@ export function usePipelineGateActionResolver(
       const params = new URLSearchParams({ tab });
       if (action.action === "open_behavioral_ai") {
         params.set("focus", "behavioral_ai");
+      }
+      if (action.action === "open_decision") {
+        params.set("focus", "hiring_decision");
       }
       navigate(`/candidatos/${action.candidateId}?${params.toString()}`);
       onAfterNavigate?.();

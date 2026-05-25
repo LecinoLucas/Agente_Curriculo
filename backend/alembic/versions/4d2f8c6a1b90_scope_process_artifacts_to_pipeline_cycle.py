@@ -33,10 +33,12 @@ def upgrade() -> None:
         "interview_scorecards",
         sa.Column("pipeline_id", sa.UUID(as_uuid=True), nullable=True),
     )
-    op.drop_constraint(
-        "candidate_job_hiring_decisions_pipeline_id_fkey",
-        "candidate_job_hiring_decisions",
-        type_="foreignkey",
+    op.execute(
+        """
+        ALTER TABLE candidate_job_hiring_decisions
+        DROP CONSTRAINT IF EXISTS fk_hiring_decision_pipeline,
+        DROP CONSTRAINT IF EXISTS candidate_job_hiring_decisions_pipeline_id_fkey
+        """
     )
 
     op.execute(

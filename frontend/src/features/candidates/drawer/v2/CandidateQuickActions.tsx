@@ -17,6 +17,9 @@ const NEXT_STAGE_LABEL: Partial<Record<PipelineStage, string>> = {
   technical_interview: "Avançar para Final",
   final: "Contratar",
   offer: "Contratar",
+  hired: "Avançar para Pré-admissão",
+  pre_admission: "Avançar para Protheus",
+  protheus: "Mover para Admitido",
 };
 
 export function CandidateQuickActions({

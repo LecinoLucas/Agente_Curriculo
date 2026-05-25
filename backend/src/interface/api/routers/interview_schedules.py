@@ -261,6 +261,7 @@ async def list_candidate_job_interviews(
         page_size=page_size,
         candidate_id=candidate_id,
         job_id=job_id,
+        active_pipeline_only=True,
     )
     return PaginatedResponse(
         data=[InterviewScheduleResponse(**item) for item in items],

@@ -19,6 +19,7 @@ interface InterviewScorecardPanelProps {
   jobId: string | null;
   candidateId: string | null;
   interviewId?: string | null;
+  onChanged?: (scorecard: InterviewScorecard) => void | Promise<void>;
   onSubmitted?: (scorecard: InterviewScorecard) => void | Promise<void>;
 }
 
@@ -26,6 +27,7 @@ export function InterviewScorecardPanel({
   jobId,
   candidateId,
   interviewId = null,
+  onChanged,
   onSubmitted,
 }: InterviewScorecardPanelProps) {
   const [envelope, setEnvelope] = useState<InterviewScorecardEnvelope | null>(null);
@@ -81,6 +83,7 @@ export function InterviewScorecardPanel({
         scorecard: saved,
         suggested_behavioral_questions: current?.suggested_behavioral_questions ?? [],
       }));
+      await onChanged?.(saved);
       return saved;
     } catch {
       setError("Não foi possível salvar o rascunho.");

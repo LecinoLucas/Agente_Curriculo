@@ -216,9 +216,9 @@ describe("CandidatePreAdmissionPanel", () => {
     render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
 
     await screen.findByText("cpf.pdf");
-    await user.click(screen.getByRole("button", { name: /^Rejeitar$/i }));
+    await user.click(screen.getByRole("button", { name: /Solicitar correção/i }));
     await user.type(screen.getByPlaceholderText(/Motivo da rejeição/i), "Documento ilegível.");
-    await user.click(screen.getByRole("button", { name: /Confirmar rejeição/i }));
+    await user.click(screen.getByRole("button", { name: /Confirmar correção/i }));
 
     await waitFor(() => {
       expect(preAdmissionService.rejectPreAdmissionDocument).toHaveBeenCalledWith(
@@ -252,5 +252,44 @@ describe("CandidatePreAdmissionPanel", () => {
     vi.mocked(preAdmissionService.getPreAdmission).mockRejectedValueOnce(new Error("fail"));
     render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
     expect(await screen.findByText(/Não foi possível carregar a pré-admissão/i)).toBeInTheDocument();
+  });
+
+  it("habilita envio para Protheus apenas quando checklist obrigatório está pronto", async () => {
+    const onSendToProtheus = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: {
+        ...preAdmissionCase,
+        checklist_items: [{ ...preAdmissionCase.checklist_items[0], status: "approved" }],
+      },
+      hiring_decision_outcome: "hire",
+      can_create: false,
+    });
+    vi.mocked(preAdmissionService.updatePreAdmission).mockResolvedValue({
+      ...preAdmissionCase,
+      status: "ready_for_admission",
+      checklist_items: [{ ...preAdmissionCase.checklist_items[0], status: "approved" }],
+    });
+    const user = userEvent.setup();
+
+    render(
+      <CandidatePreAdmissionPanel
+        jobId="job-1"
+        candidateId="candidate-1"
+        currentStage="pre_admission"
+        onSendToProtheus={onSendToProtheus}
+      />,
+    );
+
+    const button = await screen.findByRole("button", { name: /Enviar para Protheus/i });
+    expect(button).toBeEnabled();
+
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(preAdmissionService.updatePreAdmission).toHaveBeenCalledWith("case-1", {
+        status: "ready_for_admission",
+      });
+      expect(onSendToProtheus).toHaveBeenCalled();
+    });
   });
 });

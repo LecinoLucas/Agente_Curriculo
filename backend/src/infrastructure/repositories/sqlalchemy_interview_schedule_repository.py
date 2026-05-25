@@ -111,7 +111,73 @@ class SQLAlchemyInterviewScheduleRepository:
         )
         return result.scalar_one_or_none()
 
+    def _active_pipeline_id_subquery(self):
+        return (
+            sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == InterviewScheduleModel.candidate_id,
+                CandidateJobPipelineModel.job_id == InterviewScheduleModel.job_id,
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.link_status == "active",
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+            )
+            .correlate(InterviewScheduleModel)
+            .scalar_subquery()
+        )
+
     def _build_detail_select(self) -> sa.Select:
+        active_pipeline_id = self._active_pipeline_id_subquery()
+        scorecard_id = (
+            sa.select(InterviewScorecardModel.id)
+            .where(InterviewScorecardModel.interview_id == InterviewScheduleModel.id)
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+            .correlate(InterviewScheduleModel)
+            .limit(1)
+            .scalar_subquery()
+        )
+        scorecard_status = (
+            sa.select(InterviewScorecardModel.status)
+            .where(InterviewScorecardModel.interview_id == InterviewScheduleModel.id)
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+            .correlate(InterviewScheduleModel)
+            .limit(1)
+            .scalar_subquery()
+        )
+        scorecard_final_recommendation = (
+            sa.select(InterviewScorecardModel.final_recommendation)
+            .where(InterviewScorecardModel.interview_id == InterviewScheduleModel.id)
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+            .correlate(InterviewScheduleModel)
+            .limit(1)
+            .scalar_subquery()
+        )
+        scorecard_submitted_at = (
+            sa.select(InterviewScorecardModel.submitted_at)
+            .where(InterviewScorecardModel.interview_id == InterviewScheduleModel.id)
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+            .correlate(InterviewScheduleModel)
+            .limit(1)
+            .scalar_subquery()
+        )
+
         return (
             sa.select(
                 InterviewScheduleModel.id,
@@ -119,6 +185,7 @@ class SQLAlchemyInterviewScheduleRepository:
                 CandidateModel.full_name.label("candidate_name"),
                 InterviewScheduleModel.job_id,
                 JobModel.title.label("job_title"),
+                InterviewScheduleModel.pipeline_id,
                 InterviewScheduleModel.title,
                 InterviewScheduleModel.description,
                 InterviewScheduleModel.public_notes,
@@ -144,6 +211,21 @@ class SQLAlchemyInterviewScheduleRepository:
                 InterviewScheduleModel.meeting_provider,
                 InterviewScheduleModel.external_calendar_html_link,
                 InterviewScheduleModel.external_calendar_event_id,
+                scorecard_id.label("scorecard_id"),
+                scorecard_status.label("scorecard_status"),
+                scorecard_final_recommendation.label("scorecard_final_recommendation"),
+                scorecard_submitted_at.label("scorecard_submitted_at"),
+                sa.case(
+                    (
+                        sa.and_(
+                            active_pipeline_id.is_not(None),
+                            InterviewScheduleModel.pipeline_id == active_pipeline_id,
+                            InterviewScheduleModel.interview_type == "technical",
+                        ),
+                        True,
+                    ),
+                    else_=False,
+                ).label("counts_for_current_gate"),
             )
             .select_from(self._build_base_from())
         )
@@ -160,6 +242,7 @@ class SQLAlchemyInterviewScheduleRepository:
         job_id: Optional[UUID] = None,
         interviewer: Optional[str] = None,
         search: Optional[str] = None,
+        active_pipeline_only: bool = False,
     ) -> tuple[list[dict], int]:
         filters = self._build_filters(
             date_from=date_from,
@@ -170,6 +253,10 @@ class SQLAlchemyInterviewScheduleRepository:
             interviewer=interviewer,
             search=search,
         )
+        if active_pipeline_only:
+            active_pipeline_id = self._active_pipeline_id_subquery()
+            filters.append(active_pipeline_id.is_not(None))
+            filters.append(InterviewScheduleModel.pipeline_id == active_pipeline_id)
 
         # Count total — usa o mesmo FROM com joins explícitos (ver _build_base_from)
         # para que filtros que referenciam candidates/jobs no `search` não acionem

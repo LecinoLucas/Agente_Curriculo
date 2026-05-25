@@ -28,8 +28,10 @@ import {
 import { Tabs, type Tab } from "../components/common/Tabs";
 import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
 import { CandidateCommunicationsPanel } from "../features/candidates/drawer/components/CandidateCommunicationsPanel";
+import { CandidateHiringDecisionPanel } from "../features/candidates/drawer/components/CandidateHiringDecisionPanel";
 import { InterviewScorecardPanel } from "../features/candidates/drawer/components/InterviewScorecardPanel";
 import { CandidateNotesTab } from "../features/candidates/drawer/components/CandidateNotesTab";
+import { CandidatePreAdmissionPanel } from "../features/candidates/drawer/components/CandidatePreAdmissionPanel";
 import { useCandidateData } from "../features/candidates/drawer/hooks/useCandidateData";
 import { useCandidateDecision } from "../features/candidates/drawer/hooks/useCandidateDecision";
 import { ScoreTab as CandidateScoreDetailsTab } from "../features/candidates/drawer/tabs/ScoreTab";
@@ -43,6 +45,8 @@ import {
   getActiveJobScore,
   getActivePipelineEntry,
   getInitials,
+  isPostHiringActiveStage,
+  isSuccessTerminalStage,
 } from "../features/candidates/utils/profile";
 import { EditCandidateModal } from "../features/pipeline/EditCandidateModal";
 import {
@@ -98,6 +102,7 @@ import type { InterviewFormat, InterviewSchedule, InterviewType } from "../types
 type CandidateProfileTabKey =
   | "overview"
   | "workflow"
+  | "pre_admission"
   | "score"
   | "documents"
   | "interviews"
@@ -109,6 +114,7 @@ type CandidateProfileTabKey =
 const PROFILE_TABS: Tab[] = [
   { key: "overview", label: "Visão geral" },
   { key: "workflow", label: "Ações" },
+  { key: "pre_admission", label: "Pré-admissão" },
   { key: "score", label: "Score e análise" },
   { key: "documents", label: "Currículo e documentos" },
   { key: "interviews", label: "Entrevistas" },
@@ -122,6 +128,7 @@ function resolveInitialTab(search: string): CandidateProfileTabKey {
   const tab = new URLSearchParams(search).get("tab");
   if (
     tab === "workflow" ||
+    tab === "pre_admission" ||
     tab === "score" ||
     tab === "documents" ||
     tab === "interviews" ||
@@ -135,12 +142,14 @@ function resolveInitialTab(search: string): CandidateProfileTabKey {
   return "overview";
 }
 
-type CandidateProfileFocus = "behavioral_ai" | "scorecard";
+type CandidateProfileFocus = "behavioral_ai" | "scorecard" | "hiring_decision" | "manager_review";
 
 function resolveInitialFocus(search: string): CandidateProfileFocus | null {
   const focus = new URLSearchParams(search).get("focus");
   if (focus === "behavioral_ai") return focus;
   if (focus === "scorecard") return focus;
+  if (focus === "hiring_decision") return focus;
+  if (focus === "manager_review") return focus;
   return null;
 }
 
@@ -163,6 +172,8 @@ export function CandidateProfilePage() {
   const manualAnalysisPollingRef = useRef<number | null>(null);
   const [assessmentFocusTick, setAssessmentFocusTick] = useState(0);
   const [scorecardFocusTick, setScorecardFocusTick] = useState(0);
+  const [scheduleTechnicalFocusTick, setScheduleTechnicalFocusTick] = useState(0);
+  const [hiringDecisionFocusTick, setHiringDecisionFocusTick] = useState(0);
   const [scorecardFocusInterviewId, setScorecardFocusInterviewId] = useState<string | null>(null);
   const [dailyLimitDialogOpen, setDailyLimitDialogOpen] = useState(false);
   const [dailyLimitUsage, setDailyLimitUsage] = useState<AILimitsUsage | null>(null);
@@ -192,6 +203,9 @@ export function CandidateProfilePage() {
     if (tab === "interviews" && focus === "scorecard") {
       setScorecardFocusInterviewId(new URLSearchParams(location.search).get("interview_id"));
       setScorecardFocusTick((current) => current + 1);
+    }
+    if (tab === "workflow" && (focus === "hiring_decision" || focus === "manager_review")) {
+      setHiringDecisionFocusTick((current) => current + 1);
     }
   }, [location.search]);
 
@@ -482,8 +496,8 @@ export function CandidateProfilePage() {
         <EmptyBlock
           title="Candidato não encontrado"
           description="Esse candidato pode ter sido removido ou você não tem acesso."
-          actionLabel="Voltar para candidatos"
-          onAction={() => navigate("/candidatos")}
+          actionLabel="Voltar para pipeline"
+          onAction={() => navigate("/pipeline")}
         />
       </PageShell>
     );
@@ -547,8 +561,20 @@ export function CandidateProfilePage() {
             setActiveTab("workflow");
             return;
           }
-          if (targetTab === "interviews") {
+          if (targetTab === "pre_admission") {
+            setActiveTab("pre_admission");
+            return;
+          }
+          if (targetTab === "workflow:hiring_decision") {
+            setActiveTab("workflow");
+            setHiringDecisionFocusTick((current) => current + 1);
+            return;
+          }
+          if (targetTab === "interviews" || targetTab === "interviews:schedule_technical") {
             setActiveTab("interviews");
+            if (targetTab === "interviews:schedule_technical") {
+              setScheduleTechnicalFocusTick((current) => current + 1);
+            }
             return;
           }
           setActiveTab(activeEntry ? "interviews" : "workflow");
@@ -582,8 +608,20 @@ export function CandidateProfilePage() {
               onTransfer={handleTransfer}
               onLinkJob={() => setLinkJobOpen(true)}
               onEdit={() => setEditOpen(true)}
+              onOpenPreAdmission={() => setActiveTab("pre_admission")}
               onOpenNotes={() => setActiveTab("notes")}
               onOpenHistory={() => setActiveTab("history")}
+              hiringDecisionFocusToken={hiringDecisionFocusTick}
+              onDecisionSubmitted={reloadWorkspace}
+            />
+          ) : null}
+          {activeTab === "pre_admission" ? (
+            <CandidatePreAdmissionPanel
+              jobId={profileJobId}
+              candidateId={candidateId}
+              currentStage={profileEntry?.stage ?? null}
+              sendingToProtheus={workflowSaving && profileEntry?.stage === "pre_admission"}
+              onSendToProtheus={() => handleMoveStage("protheus", "Pré-admissão concluída.")}
             />
           ) : null}
           {activeTab === "score" ? (
@@ -612,7 +650,9 @@ export function CandidateProfilePage() {
               jobId={profileJobId}
               candidateId={candidateId}
               previewPendencies={overview?.preview_pendencies ?? []}
+              hasTechnicalInterviewPendency={overview?.preview_pendencies?.some(p => p.id === "technical_interview_not_completed") ?? false}
               focusToken={scorecardFocusTick}
+              scheduleTechnicalFocusToken={scheduleTechnicalFocusTick}
               focusInterviewId={scorecardFocusInterviewId}
               onAfterInterviewChange={reloadWorkspace}
               onOpenHistory={() => setActiveTab("history")}
@@ -697,6 +737,7 @@ export function CandidateProfilePage() {
             }
             if (action.action === "open_decision") {
               setActiveTab("workflow");
+              setHiringDecisionFocusTick((current) => current + 1);
               closeBlocked();
               return true;
             }
@@ -778,6 +819,13 @@ function ProfileHeader({
 }) {
   const { candidate } = overview;
   const location = [candidate.location_city, candidate.location_state].filter(Boolean).join(", ");
+  const postHiringActive =
+    isPostHiringActiveStage(activeEntry?.stage) || activeEntry?.relationship_status === "hired";
+  const primaryStatusLabel = activeEntry
+    ? postHiringActive
+      ? STAGE_LABEL[activeEntry.stage]
+      : "Vaga ativa"
+    : "Aguardando vaga";
 
   return (
     <section className="rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] p-5 shadow-sm lg:p-6">
@@ -817,9 +865,11 @@ function ProfileHeader({
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Badge tone={activeEntry ? "success" : "neutral"}>
-                {activeEntry ? "Vaga ativa" : "Aguardando vaga"}
+                {primaryStatusLabel}
               </Badge>
-              {activeEntry ? <Badge tone="info">{STAGE_LABEL[activeEntry.stage]}</Badge> : null}
+              {activeEntry && !postHiringActive ? (
+                <Badge tone="info">{STAGE_LABEL[activeEntry.stage]}</Badge>
+              ) : null}
               {activeScore != null ? (
                 <Badge tone="primary">Aderência {formatScorePercent(activeScore)}</Badge>
               ) : null}
@@ -984,6 +1034,9 @@ const STAGE_OPTIONS: Array<{ value: PipelineStage; label: string }> = [
   { value: "final", label: "Final" },
   { value: "offer", label: "Proposta" },
   { value: "hired", label: "Contratado" },
+  { value: "pre_admission", label: "Pré-admissão" },
+  { value: "protheus", label: "Protheus" },
+  { value: "admitted", label: "Admitido" },
   { value: "rejected", label: "Reprovado" },
 ];
 
@@ -1000,8 +1053,11 @@ function WorkflowTab({
   onTransfer,
   onLinkJob,
   onEdit,
+  onOpenPreAdmission,
   onOpenNotes,
   onOpenHistory,
+  hiringDecisionFocusToken,
+  onDecisionSubmitted,
 }: {
   overview: CandidateOverview;
   activeEntry: CandidatePipelineEntryOverview | null;
@@ -1015,14 +1071,40 @@ function WorkflowTab({
   onTransfer: (toJobId: string, reason: string) => Promise<void>;
   onLinkJob: () => void;
   onEdit: () => void;
+  onOpenPreAdmission: () => void;
   onOpenNotes: () => void;
   onOpenHistory: () => void;
+  hiringDecisionFocusToken: number;
+  onDecisionSubmitted: () => Promise<void>;
 }) {
   const [stage, setStage] = useState<PipelineStage>(activeEntry?.stage ?? "entry");
   const [reason, setReason] = useState("");
   const [targetJobId, setTargetJobId] = useState("");
   const [transferReason, setTransferReason] = useState("");
-  const terminal = activeEntry?.stage === "rejected" || activeEntry?.relationship_status === "rejected";
+  const [decisionHighlighted, setDecisionHighlighted] = useState(false);
+  const hiringDecisionRef = useRef<HTMLDivElement | null>(null);
+  const postHiringActive =
+    isPostHiringActiveStage(activeEntry?.stage) || activeEntry?.relationship_status === "hired";
+  const admitted = isSuccessTerminalStage(activeEntry?.stage);
+  const rejected = activeEntry?.stage === "rejected" || activeEntry?.relationship_status === "rejected";
+  const terminal = rejected || admitted;
+  const canMoveToHired = activeEntry?.stage === "offer" && !terminal;
+  const canMoveToPreAdmission = activeEntry?.stage === "hired" && !terminal;
+  const canMoveToProtheus = activeEntry?.stage === "pre_admission" && !terminal;
+  const canMoveToAdmitted = activeEntry?.stage === "protheus" && !terminal;
+  const preAdmissionNeedsAction = (overview.preview_pendencies ?? []).some(
+    (pendency) => pendency.action === "open_pre_admission",
+  );
+  const hasPrimaryStageShortcut = canMoveToHired || canMoveToPreAdmission || canMoveToProtheus || canMoveToAdmitted;
+  const decisionPendency = (overview.preview_pendencies ?? []).find((pendency) =>
+    pendency.id === "final_decision_not_submitted" ||
+    pendency.id === "manager_decision_missing" ||
+    pendency.action === "open_decision"
+  );
+  const decisionDescription =
+    decisionPendency?.id === "manager_decision_missing"
+      ? "Esta vaga exige revisão do gestor antes de avançar."
+      : "Registro opcional para auditoria. A contratação acontece ao mover a pipeline para Contratado.";
 
   useEffect(() => {
     setStage(activeEntry?.stage ?? "entry");
@@ -1035,6 +1117,16 @@ function WorkflowTab({
       return transferJobs[0]?.id ?? "";
     });
   }, [transferJobs]);
+
+  useEffect(() => {
+    if (hiringDecisionFocusToken <= 0) return;
+    setDecisionHighlighted(true);
+    window.setTimeout(() => {
+      hiringDecisionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+    const timeout = window.setTimeout(() => setDecisionHighlighted(false), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [hiringDecisionFocusToken]);
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -1054,7 +1146,7 @@ function WorkflowTab({
             ]}
           />
 
-          {activeEntry ? (
+          {activeEntry && !terminal ? (
             <div className="space-y-3">
               <label className="block text-sm">
                 <span className="font-semibold text-[hsl(var(--text))]">Mover etapa</span>
@@ -1083,10 +1175,50 @@ function WorkflowTab({
                 />
               </label>
               <div className="flex flex-wrap gap-2">
+                {canMoveToHired ? (
+                  <ActionButton
+                    onClick={() => void onMoveStage("hired", reason || "Contratação concluída.")}
+                    disabled={saving}
+                    primary
+                  >
+                    Mover para Contratado
+                  </ActionButton>
+                ) : null}
+                {canMoveToPreAdmission ? (
+                  <ActionButton
+                    onClick={() => void onMoveStage("pre_admission", reason || "Pré-admissão iniciada.")}
+                    disabled={saving}
+                    primary
+                  >
+                    Mover para Pré-admissão
+                  </ActionButton>
+                ) : null}
+                {canMoveToProtheus ? (
+                  <ActionButton
+                    onClick={() =>
+                      preAdmissionNeedsAction
+                        ? onOpenPreAdmission()
+                        : void onMoveStage("protheus", reason || "Pré-admissão concluída.")
+                    }
+                    disabled={saving}
+                    primary
+                  >
+                    {preAdmissionNeedsAction ? "Abrir pré-admissão" : "Mover para Protheus"}
+                  </ActionButton>
+                ) : null}
+                {canMoveToAdmitted ? (
+                  <ActionButton
+                    onClick={() => void onMoveStage("admitted", reason || "Admissão concluída.")}
+                    disabled={saving}
+                    primary
+                  >
+                    Mover para Admitido
+                  </ActionButton>
+                ) : null}
                 <ActionButton
                   onClick={() => void onMoveStage(stage, reason)}
                   disabled={saving || stage === activeEntry.stage}
-                  primary
+                  primary={!hasPrimaryStageShortcut}
                 >
                   Mover etapa
                 </ActionButton>
@@ -1096,16 +1228,26 @@ function WorkflowTab({
                 >
                   Reprovar candidato
                 </ActionButton>
-                {terminal ? (
-                  <ActionButton
-                    onClick={() => void onMoveStage("screening", reason || "Candidato reconsiderado.")}
-                    disabled={saving}
-                  >
-                    <RefreshCcw className="h-4 w-4" />
-                    Reconsiderar
-                  </ActionButton>
-                ) : null}
               </div>
+            </div>
+          ) : activeEntry ? (
+            <div className="space-y-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 p-4 text-sm text-[hsl(var(--text-muted))]">
+              <p>
+                {admitted
+                  ? "Candidato admitido nesta vaga. O vínculo final permanece disponível no histórico da pipeline."
+                  : postHiringActive
+                  ? "Candidato contratado nesta vaga. O vínculo e o histórico da pipeline permanecem disponíveis."
+                  : "Processo encerrado para esta vaga."}
+              </p>
+              {rejected ? (
+                <ActionButton
+                  onClick={() => void onMoveStage("screening", reason || "Candidato reconsiderado.")}
+                  disabled={saving}
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                  Reconsiderar
+                </ActionButton>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -1129,6 +1271,27 @@ function WorkflowTab({
           </div>
         </div>
       </SectionCard>
+
+      {activeEntry ? (
+        <div
+          ref={hiringDecisionRef}
+          data-testid="hiring-decision-action-block"
+          data-highlighted={decisionHighlighted ? "true" : "false"}
+          className={`xl:col-span-2 rounded-xl transition ${
+            decisionHighlighted
+              ? "ring-2 ring-[hsl(var(--primary))] ring-offset-2 ring-offset-[hsl(var(--bg))]"
+              : ""
+          }`}
+        >
+          <CandidateHiringDecisionPanel
+            jobId={activeEntry.job_id}
+            candidateId={overview.candidate.id}
+            title="Decisão de contratação"
+            description={decisionDescription}
+            onDecisionSubmitted={onDecisionSubmitted}
+          />
+        </div>
+      ) : null}
 
       <SectionCard title="Transferir candidato">
         <div className="space-y-3">
@@ -1860,7 +2023,9 @@ function ProfileInterviewsTab({
   jobId,
   candidateId,
   previewPendencies,
+  hasTechnicalInterviewPendency,
   focusToken,
+  scheduleTechnicalFocusToken,
   focusInterviewId,
   onAfterInterviewChange,
   onOpenHistory,
@@ -1868,7 +2033,9 @@ function ProfileInterviewsTab({
   jobId: string | null;
   candidateId: string | null;
   previewPendencies: CandidatePreviewPendencyOverview[];
+  hasTechnicalInterviewPendency?: boolean;
   focusToken: number;
+  scheduleTechnicalFocusToken?: number;
   focusInterviewId: string | null;
   onAfterInterviewChange: () => void | Promise<void>;
   onOpenHistory: () => void;
@@ -1880,6 +2047,8 @@ function ProfileInterviewsTab({
   const [formMode, setFormMode] = useState<"create" | "reschedule" | null>(null);
   const [editing, setEditing] = useState<InterviewSchedule | null>(null);
   const [scorecardInterviewId, setScorecardInterviewId] = useState<string | null>(null);
+  const [feedbackInterviewId, setFeedbackInterviewId] = useState<string | null>(null);
+  const [feedbackDraft, setFeedbackDraft] = useState("");
   const [detailsInterviewId, setDetailsInterviewId] = useState<string | null>(null);
   const [highlightedInterviewId, setHighlightedInterviewId] = useState<string | null>(null);
   const interviewRefs = useRef<Record<string, HTMLLIElement | null>>({});
@@ -1969,7 +2138,13 @@ function ProfileInterviewsTab({
     setScorecardInterviewId(target.id);
   }, [items, scorecardGateInterviewId]);
 
-  const openForm = () => {
+  useEffect(() => {
+    if (scheduleTechnicalFocusToken && scheduleTechnicalFocusToken > 0) {
+      openForm("technical");
+    }
+  }, [scheduleTechnicalFocusToken]);
+
+  const openForm = (initialType: InterviewType = "hr") => {
     const start = new Date();
     start.setDate(start.getDate() + 1);
     start.setMinutes(0, 0, 0);
@@ -1977,8 +2152,8 @@ function ProfileInterviewsTab({
     end.setHours(end.getHours() + 1);
 
     setForm({
-      title: "Entrevista com candidato",
-      interview_type: "hr",
+      title: initialType === "technical" ? "Agendar entrevista técnica" : "Entrevista com candidato",
+      interview_type: initialType,
       interview_format: "online",
       scheduled_start: toDatetimeLocal(start.toISOString()),
       scheduled_end: toDatetimeLocal(end.toISOString()),
@@ -2005,6 +2180,18 @@ function ProfileInterviewsTab({
       meeting_url: interview.meeting_url ?? "",
     });
     setFormMode("reschedule");
+  };
+
+  const openFeedback = (interview: InterviewSchedule) => {
+    setScorecardInterviewId(null);
+    setFeedbackInterviewId((current) => {
+      if (current === interview.id) {
+        setFeedbackDraft("");
+        return null;
+      }
+      setFeedbackDraft(interview.internal_notes ?? "");
+      return interview.id;
+    });
   };
 
   const submit = async () => {
@@ -2086,6 +2273,36 @@ function ProfileInterviewsTab({
     await onAfterInterviewChange();
   };
 
+  const handleScorecardChanged = async () => {
+    await load();
+    await onAfterInterviewChange();
+  };
+
+  const saveFeedback = async (interview: InterviewSchedule) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await agendaService.completeInterview(interview.id, {
+        internal_notes: feedbackDraft.trim() || null,
+      });
+      toast.success("Feedback da entrevista salvo.");
+      setFeedbackInterviewId(null);
+      setFeedbackDraft("");
+      await load();
+      await onAfterInterviewChange();
+    } catch (err: unknown) {
+      setError(
+        formatContextError(
+          err,
+          "Não foi possível registrar o feedback.",
+          "Tente novamente ou revise o status atual da entrevista.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (!canUseFlow) {
     return (
       <EmptyBlock
@@ -2107,7 +2324,7 @@ function ProfileInterviewsTab({
           <p className="text-sm text-[hsl(var(--text-muted))]">
             Agenda operacional do processo atual nesta vaga. Entrevistas de ciclos anteriores ficam no histórico.
           </p>
-          <ActionButton onClick={openForm} primary>
+          <ActionButton onClick={() => openForm()} primary>
             <CalendarPlus className="h-4 w-4" />
             Agendar entrevista
           </ActionButton>
@@ -2122,8 +2339,18 @@ function ProfileInterviewsTab({
         {formMode ? (
           <div className="mt-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-4">
             <p className="mb-3 text-sm font-bold text-[hsl(var(--text))]">
-              {formMode === "reschedule" ? "Reagendar entrevista" : "Agendar entrevista"}
+              {formMode === "reschedule" ? "Reagendar entrevista" : form.title}
             </p>
+            {hasTechnicalInterviewPendency && formMode === "create" && (
+              <p className="mb-4 text-sm font-semibold text-[hsl(var(--primary))]">
+                Esta entrevista é necessária para avançar o candidato.
+              </p>
+            )}
+            {hasTechnicalInterviewPendency && formMode === "create" && form.interview_type !== "technical" && (
+              <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+                Atenção: uma entrevista de RH não resolverá a pendência técnica.
+              </div>
+            )}
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-sm">
                 <span className="font-semibold text-[hsl(var(--text))]">Título</span>
@@ -2269,6 +2496,7 @@ function ProfileInterviewsTab({
               const needsScorecardForGate =
                 isScorecardGateInterview && item.scorecard_status !== "submitted";
               const scorecardOpen = scorecardInterviewId === item.id;
+              const feedbackOpen = feedbackInterviewId === item.id;
               return (
                 <li
                   key={item.id}
@@ -2372,17 +2600,21 @@ function ProfileInterviewsTab({
                       {canScorecard ? (
                         <>
                           <ActionButton
-                            onClick={() => setScorecardInterviewId((current) => (current === item.id ? null : item.id))}
+                            onClick={() => openFeedback(item)}
                             disabled={saving}
                           >
                             <NotebookPen className="h-4 w-4" />
                             Registrar feedback
                           </ActionButton>
-                          <ActionButton
-                            onClick={() => setScorecardInterviewId((current) => (current === item.id ? null : item.id))}
-                            disabled={saving}
-                            primary
-                          >
+	                          <ActionButton
+	                            onClick={() => {
+	                              setFeedbackInterviewId(null);
+	                              setFeedbackDraft("");
+	                              setScorecardInterviewId((current) => (current === item.id ? null : item.id));
+	                            }}
+	                            disabled={saving}
+	                            primary
+	                          >
                             <ClipboardCheck className="h-4 w-4" />
                             {scorecardActionLabel(item)}
                           </ActionButton>
@@ -2414,6 +2646,36 @@ function ProfileInterviewsTab({
                     </div>
                   ) : null}
 
+                  {feedbackOpen ? (
+                    <div className="mt-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+                      <label className="block text-sm">
+                        <span className="font-semibold text-[hsl(var(--text))]">Feedback da entrevista</span>
+                        <textarea
+                          value={feedbackDraft}
+                          onChange={(event) => setFeedbackDraft(event.target.value)}
+                          rows={4}
+                          className="mt-2 w-full resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))]"
+                        />
+                      </label>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <ActionButton onClick={() => void saveFeedback(item)} disabled={saving} primary>
+                          {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          Salvar feedback
+                        </ActionButton>
+                        <ActionButton
+                          onClick={() => {
+                            setFeedbackInterviewId(null);
+                            setFeedbackDraft("");
+                          }}
+                          disabled={saving}
+                        >
+                          <X className="h-4 w-4" />
+                          Cancelar
+                        </ActionButton>
+                      </div>
+                    </div>
+                  ) : null}
+
                   {scorecardOpen && canScorecard ? (
                     <div className="mt-4 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))] px-4 py-3">
@@ -2430,12 +2692,13 @@ function ProfileInterviewsTab({
                           Fechar
                         </ActionButton>
                       </div>
-                      <InterviewScorecardPanel
-                        jobId={jobId}
-                        candidateId={candidateId}
-                        interviewId={item.id}
-                        onSubmitted={handleScorecardSubmitted}
-                      />
+	                      <InterviewScorecardPanel
+	                        jobId={jobId}
+	                        candidateId={candidateId}
+	                        interviewId={item.id}
+	                        onChanged={handleScorecardChanged}
+	                        onSubmitted={handleScorecardSubmitted}
+	                      />
                     </div>
                   ) : null}
                 </li>

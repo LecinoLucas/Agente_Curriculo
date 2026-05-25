@@ -22,9 +22,9 @@ const statusLabels: Record<string, string> = {
 };
 
 const documentStatusLabels: Record<string, string> = {
-  uploaded: "Enviado",
+  uploaded: "Enviado para análise",
   approved: "Aprovado",
-  rejected: "Rejeitado",
+  rejected: "Correção solicitada",
   replaced: "Substituído",
 };
 
@@ -44,6 +44,7 @@ export function CandidatePortalPreAdmissionCard({
   onUploaded,
 }: CandidatePortalPreAdmissionCardProps) {
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
+  const [downloadingDocumentId, setDownloadingDocumentId] = useState<string | null>(null);
 
   const handleUpload = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -66,6 +67,26 @@ export function CandidatePortalPreAdmissionCard({
       toast.error(message);
     } finally {
       setUploadingItemId(null);
+    }
+  };
+
+  const handleDownload = async (documentId: string, filename: string) => {
+    setDownloadingDocumentId(documentId);
+    try {
+      const blob = await candidatePortalService.downloadPreAdmissionDocument(documentId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível baixar o documento.";
+      toast.error(message);
+    } finally {
+      setDownloadingDocumentId(null);
     }
   };
 
@@ -92,6 +113,15 @@ export function CandidatePortalPreAdmissionCard({
   }
 
   const process = preAdmission.case;
+  const requiredItems = process.checklist_items.filter((item) => item.required);
+  const pendingRequiredCount = requiredItems.filter((item) => {
+    const document = latestDocument(item.documents ?? []);
+    return !document || !["approved"].includes(document.status);
+  }).length;
+  const uploadsLocked =
+    process.status === "admitted" ||
+    process.status === "cancelled" ||
+    process.status === "offer_declined";
 
   return (
     <div className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white p-6 shadow-xl">
@@ -107,6 +137,21 @@ export function CandidatePortalPreAdmissionCard({
         </span>
       </div>
 
+      {process.checklist_items.length > 0 ? (
+        <div
+          className={[
+            "mt-5 rounded-xl border px-4 py-3 text-sm",
+            pendingRequiredCount > 0
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900",
+          ].join(" ")}
+        >
+          {pendingRequiredCount > 0
+            ? `${pendingRequiredCount} documento(s) obrigatório(s) ainda precisam de ação antes da conclusão da pré-admissão.`
+            : "Todos os documentos obrigatórios atuais já foram resolvidos."}
+        </div>
+      ) : null}
+
       {process.checklist_items.length === 0 ? (
         <p className="mt-5 rounded-xl border border-dashed border-[hsl(var(--border))] p-4 text-sm text-[hsl(var(--text-muted))]">
           Nenhuma pendência documental registrada.
@@ -115,7 +160,7 @@ export function CandidatePortalPreAdmissionCard({
         <div className="mt-5 space-y-3">
           {process.checklist_items.map((item) => {
             const document = latestDocument(item.documents ?? []);
-            const canUpload = !document || document.status === "rejected";
+            const canUpload = !uploadsLocked && (!document || document.status === "rejected");
             return (
               <div
                 key={item.id}
@@ -139,31 +184,51 @@ export function CandidatePortalPreAdmissionCard({
                         <span className="font-medium text-[hsl(var(--text))]">
                           {documentStatusLabels[document.status] ?? document.status}
                         </span>
-                        <span className="text-[hsl(var(--text-muted))]">{document.original_filename}</span>
+                        <span className="break-all text-[hsl(var(--text-muted))]">{document.original_filename}</span>
                       </div>
                     ) : (
                       <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">Pendente</p>
                     )}
                     {document?.status === "rejected" && document.review_notes ? (
                       <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-                        {document.review_notes}
+                        <span className="font-semibold">Observação do RH:</span> {document.review_notes}
+                      </p>
+                    ) : null}
+                    {uploadsLocked && process.status === "admitted" ? (
+                      <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        Admissão concluída. Novos uploads estão bloqueados, mas os documentos já enviados continuam disponíveis para download.
                       </p>
                     ) : null}
                   </div>
-                  {canUpload ? (
-                    <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-sm font-semibold text-white hover:opacity-90">
-                      {uploadingItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-                      {document?.status === "rejected" ? "Reenviar" : "Enviar documento"}
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                        className="hidden"
-                        aria-label={`Enviar documento para ${item.title}`}
-                        disabled={uploadingItemId !== null}
-                        onChange={(event) => void handleUpload(event, process.id, item.id)}
-                      />
-                    </label>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {document ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleDownload(document.id, document.original_filename)}
+                        disabled={downloadingDocumentId !== null}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-white px-3 py-2 text-sm font-semibold text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/50 disabled:opacity-60"
+                      >
+                        {downloadingDocumentId === document.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : null}
+                        Baixar
+                      </button>
+                    ) : null}
+                    {canUpload ? (
+                      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-sm font-semibold text-white hover:opacity-90">
+                        {uploadingItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+                        {document?.status === "rejected" ? "Reenviar" : "Enviar documento"}
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                          className="hidden"
+                          aria-label={`Enviar documento para ${item.title}`}
+                          disabled={uploadingItemId !== null}
+                          onChange={(event) => void handleUpload(event, process.id, item.id)}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             );

@@ -47,6 +47,7 @@ from src.interface.api.schemas.pre_admission_schemas import (
 
 TERMINAL_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
 DOCUMENT_UPLOAD_BLOCKED_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
+CANDIDATE_DOWNLOAD_BLOCKED_CASE_STATUSES = {"cancelled", "offer_declined"}
 MAX_PRE_ADMISSION_DOCUMENT_BYTES = settings.max_upload_size_bytes
 
 
@@ -411,7 +412,7 @@ class PreAdmissionService:
             if document is None:
                 raise NotFoundException("Documento não encontrado.")
             case = await self._repository.get_case(document.case_id)
-            if case is None or case.status in TERMINAL_CASE_STATUSES:
+            if case is None or case.status in CANDIDATE_DOWNLOAD_BLOCKED_CASE_STATUSES:
                 raise NotFoundException("Documento não encontrado.")
         try:
             path = resolve_pre_admission_document_path(document.storage_key)

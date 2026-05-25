@@ -9,6 +9,9 @@ const STAGE_LABEL: Record<string, string> = {
   final: "Final",
   offer: "Proposta",
   hired: "Contratado",
+  pre_admission: "Pré-admissão",
+  protheus: "Protheus",
+  admitted: "Admitido",
   rejected: "Reprovado",
 };
 
@@ -20,10 +23,13 @@ const STAGE_OPTIONS: { value: PipelineStage; label: string }[] = [
   { value: "final", label: "Final" },
   { value: "offer", label: "Proposta" },
   { value: "hired", label: "Contratado" },
+  { value: "pre_admission", label: "Pré-admissão" },
+  { value: "protheus", label: "Protheus" },
+  { value: "admitted", label: "Admitido" },
   { value: "rejected", label: "Reprovado" },
 ];
 
-const TERMINAL_STAGES: PipelineStage[] = ["hired", "rejected"];
+const TERMINAL_STAGES: PipelineStage[] = ["admitted", "rejected"];
 
 interface CandidateQuickJobActionsProps {
   currentStage: PipelineStage | null;
@@ -51,6 +57,7 @@ export function CandidateQuickJobActions({
   onOpenTransferJob,
 }: CandidateQuickJobActionsProps) {
   const hasActivePipeline = currentStage !== null;
+  const terminalStage = currentStage === "admitted" || currentStage === "rejected";
   const [selectedStage, setSelectedStage] = useState<PipelineStage>(currentStage ?? "entry");
   const [confirmTerminal, setConfirmTerminal] = useState<PipelineStage | null>(null);
 
@@ -89,7 +96,7 @@ export function CandidateQuickJobActions({
       )}
 
       {/* Stage selector: only when candidate is in pipeline */}
-      {hasActivePipeline && (
+      {hasActivePipeline && !terminalStage && (
         <div className="flex items-center gap-2">
           <select
             value={selectedStage}
@@ -152,7 +159,7 @@ export function CandidateQuickJobActions({
           ↔ Transferir
         </button>
       ) : (
-        currentStage !== null && currentStage !== "hired" && currentStage !== "rejected" && (
+        currentStage !== null && currentStage !== "rejected" && currentStage !== "admitted" && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5">
             <p className="text-xs font-semibold text-amber-900">Transferência bloqueada</p>
             <p className="mt-1 text-xs text-amber-700">

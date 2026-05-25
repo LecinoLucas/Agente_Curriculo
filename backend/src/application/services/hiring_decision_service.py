@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from src.application.services.decision_summary_service import DecisionSummaryService
-from src.application.services.pipeline_service import PipelineService
 from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
 from src.infrastructure.repositories.sqlalchemy_decision_summary_repository import SQLAlchemyDecisionSummaryRepository
@@ -17,7 +16,6 @@ from src.interface.api.schemas.hiring_decision_schemas import (
     HiringDecisionPatchRequest,
     HiringDecisionResponse,
 )
-from src.interface.api.schemas.pipeline_schemas import MoveCandidateRequest
 
 
 class HiringDecisionService:
@@ -29,7 +27,6 @@ class HiringDecisionService:
     ) -> None:
         self._repository = repository
         self._summary_service = DecisionSummaryService(decision_summary_repository)
-        self._pipeline_service = PipelineService(pipeline_repository, pipeline_repository._session)
 
     async def get_current(self, *, candidate_id: UUID, job_id: UUID) -> HiringDecisionEnvelopeResponse:
         decision = await self._repository.get_current(candidate_id=candidate_id, job_id=job_id)
@@ -86,25 +83,9 @@ class HiringDecisionService:
         )
         await self._repository.add(decision)
 
-        transition_id = None
-        if body.pipeline_action and body.pipeline_action.enabled:
-            if body.pipeline_action.target_stage is None:
-                raise ValidationException("target_stage é obrigatório quando pipeline_action.enabled=true.")
-            if decided_by is None:
-                raise ValidationException("Usuário decisor é obrigatório para mover pipeline.")
-            move = await self._pipeline_service.move_candidate(
-                candidate_id=candidate_id,
-                body=MoveCandidateRequest(
-                    job_id=job_id,
-                    stage=body.pipeline_action.target_stage,
-                    notes=notes,
-                    reason=body.pipeline_action.reason or "Decisão final humana registrada.",
-                ),
-                moved_by=decided_by,
-            )
-            transition_id = move.transition_id
-
-        return self._response(decision, pipeline_transition_id=transition_id)
+        # Hiring decisions are audit records. Pipeline movement, including
+        # hiring, must go through PipelineService.move_candidate explicitly.
+        return self._response(decision, pipeline_transition_id=None)
 
     async def patch(
         self,

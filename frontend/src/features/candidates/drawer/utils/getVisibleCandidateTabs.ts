@@ -92,7 +92,13 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     }
 
     visible.add("communications");
-  } else if (pipelineStage === "offer" || pipelineStage === "hired") {
+  } else if (
+    pipelineStage === "offer" ||
+    pipelineStage === "hired" ||
+    pipelineStage === "pre_admission" ||
+    pipelineStage === "protheus" ||
+    pipelineStage === "admitted"
+  ) {
     // Pre-admission/Contratado stage
     if (hasHiringDecision || hasPreAdmission || hasAdmissionPackage) {
       visible.add("pre_admission");

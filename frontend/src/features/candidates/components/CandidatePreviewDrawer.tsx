@@ -54,6 +54,9 @@ const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> = {
   technical_interview: "final",
   final: "hired",
   offer: "hired",
+  hired: "pre_admission",
+  pre_admission: "protheus",
+  protheus: "admitted",
 };
 
 const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);

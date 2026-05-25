@@ -15,6 +15,7 @@ import {
   getLinkableJobs,
   isLinkableJobStatus,
 } from "../utils/jobLinking";
+import { formatWorkModel } from "../../../utils/jobFormatters";
 
 interface LinkCandidateJobModalProps {
   isOpen: boolean;
@@ -23,6 +24,15 @@ interface LinkCandidateJobModalProps {
   linkedJobIds?: string[];
   onClose: () => void;
   onLinked?: (jobId: string) => Promise<void> | void;
+}
+
+function normalizeSearch(value: string | null | undefined): string {
+  if (!value) return "";
+  return value
+    .trim()
+    .toLocaleLowerCase("pt-BR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 export function LinkCandidateJobModal({
@@ -81,19 +91,21 @@ export function LinkCandidateJobModal({
   );
 
   const availableJobs = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase("pt-BR");
+    const normalizedSearch = normalizeSearch(search);
     return linkableJobs.filter((job) => {
       if (!normalizedSearch) return true;
 
       const haystack = [
         job.title,
-        job.job_area,
+        formatJobArea(job.job_area),
         job.seniority_level,
+        formatWorkModel(job.work_model),
         job.location,
+        getJobStatusLabel(job.status),
       ]
         .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("pt-BR");
+        .map(normalizeSearch)
+        .join(" ");
 
       return haystack.includes(normalizedSearch);
     });
@@ -234,7 +246,7 @@ export function LinkCandidateJobModal({
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-[hsl(var(--text-muted))]">
                         <span>Área: {formatJobArea(job.job_area)}</span>
                         <span>Senioridade: {job.seniority_level ?? "—"}</span>
-                        <span>Modelo: {job.work_model ?? "—"}</span>
+                        <span>Modelo: {job.work_model ? formatWorkModel(job.work_model) : "—"}</span>
                       </div>
                     </div>
 

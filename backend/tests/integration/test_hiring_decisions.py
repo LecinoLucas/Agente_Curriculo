@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
-    CandidateJobPipelineEventModel,
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
@@ -354,10 +353,18 @@ async def test_pipeline_action_false_does_not_move_pipeline(client: AsyncClient,
 
 
 @pytest.mark.asyncio
-async def test_pipeline_action_true_moves_pipeline_with_event(client: AsyncClient, db_session: AsyncSession) -> None:
+async def test_pipeline_action_true_is_ignored_by_hiring_decision(client: AsyncClient, db_session: AsyncSession) -> None:
     headers = await _recruiter_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await seed_candidate_ready_for_hire(db_session, job_id=job_id, candidate_id=candidate_id)
+    pipeline = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert pipeline is not None
+    before_stage = pipeline.pipeline_stage
 
     payload = await _create_decision(
         client,
@@ -374,23 +381,12 @@ async def test_pipeline_action_true_moves_pipeline_with_event(client: AsyncClien
         },
     )
 
-    pipeline = await db_session.scalar(
-        sa.select(CandidateJobPipelineModel).where(
-            CandidateJobPipelineModel.candidate_id == candidate_id,
-            CandidateJobPipelineModel.job_id == job_id,
-        )
-    )
-    event = await db_session.scalar(
-        sa.select(CandidateJobPipelineEventModel).where(
-            CandidateJobPipelineEventModel.id == UUID(payload["pipeline_transition_id"])
-        )
-    )
-    assert pipeline is not None
-    assert pipeline.pipeline_stage == "hired"
-    assert pipeline.relationship_status == "hired"
-    assert event is not None
-    assert event.event_type == "stage_moved"
-    assert event.to_stage == "hired"
+    await db_session.refresh(pipeline)
+    assert payload["pipeline_transition_id"] is None
+    assert pipeline.pipeline_stage == before_stage
+    assert pipeline.relationship_status == "active"
+    assert pipeline.is_terminal is False
+    assert pipeline.terminated_at is None
 
 
 @pytest.mark.asyncio

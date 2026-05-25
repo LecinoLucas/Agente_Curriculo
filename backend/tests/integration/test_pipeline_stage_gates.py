@@ -542,7 +542,8 @@ async def test_reconsidered_candidate_starts_clean_cycle_for_operational_gates(
     )
     assert hired_resp.status_code == 409, hired_resp.text
     hired_codes = {gate["code"] for gate in hired_resp.json()["missing_gates"]}
-    assert "final_decision_not_submitted" in hired_codes
+    assert "behavioral_assessment_pending" in hired_codes
+    assert "final_decision_not_submitted" not in hired_codes
 
 
 @pytest.mark.asyncio
@@ -613,6 +614,173 @@ async def test_blocks_move_to_final_when_technical_interview_awaiting_feedback(
     body = resp.json()
     codes = {g["code"] for g in body["missing_gates"]}
     # awaiting_feedback != completed → gate must still block.
+    assert "technical_interview_not_completed" in codes
+    tech_gate = next(g for g in body["missing_gates"] if g["code"] == "technical_interview_not_completed")
+    assert tech_gate["label"] == "Feedback da entrevista pendente"
+
+
+@pytest.mark.asyncio
+async def test_scorecard_gate_points_to_completed_technical_interview_without_scorecard(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "C2B", f"c2b-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    interview = await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="completed",
+    )
+    interview_id = interview.id
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "final", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 409
+    codes = {g["code"] for g in resp.json()["missing_gates"]}
+    assert "technical_interview_not_completed" not in codes
+    scorecard_gate = next(g for g in resp.json()["missing_gates"] if g["code"] == "scorecard_not_submitted")
+    assert scorecard_gate["action"] == "open_scorecard"
+    assert scorecard_gate["action_payload"] == {
+        "interview_id": str(interview_id),
+        "scorecard_id": None,
+        "scorecard_status": None,
+        "interview_type": "technical",
+    }
+
+
+@pytest.mark.asyncio
+async def test_scorecard_gate_points_to_draft_scorecard_for_relevant_interview(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "C2C", f"c2c-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    interview = await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="completed",
+    )
+    interview_id = interview.id
+    scorecard = await _add_scorecard(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_id=interview_id,
+        status="draft",
+        final_recommendation=None,
+    )
+    scorecard_id = scorecard.id
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "final", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 409
+    scorecard_gate = next(g for g in resp.json()["missing_gates"] if g["code"] == "scorecard_not_submitted")
+    assert scorecard_gate["action_payload"] == {
+        "interview_id": str(interview_id),
+        "scorecard_id": str(scorecard_id),
+        "scorecard_status": "draft",
+        "interview_type": "technical",
+    }
+
+
+@pytest.mark.asyncio
+async def test_blocks_move_to_final_when_submitted_scorecard_has_no_final_recommendation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "C2D", f"c2d-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    interview = await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="completed",
+    )
+    scorecard = await _add_scorecard(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_id=interview.id,
+        status="submitted",
+        final_recommendation=None,
+    )
+    interview_id = interview.id
+    scorecard_id = scorecard.id
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "final", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 409
+    codes = {g["code"] for g in resp.json()["missing_gates"]}
+    assert "technical_interview_not_completed" not in codes
+    scorecard_gate = next(g for g in resp.json()["missing_gates"] if g["code"] == "scorecard_not_submitted")
+    assert scorecard_gate["action_payload"] == {
+        "interview_id": str(interview_id),
+        "scorecard_id": str(scorecard_id),
+        "scorecard_status": "submitted",
+        "interview_type": "technical",
+    }
+
+
+@pytest.mark.asyncio
+async def test_hr_interview_scorecard_does_not_satisfy_technical_gate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "C2E", f"c2e-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    interview = await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="hr",
+        status="completed",
+    )
+    await _add_scorecard(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_id=interview.id,
+        status="submitted",
+        final_recommendation="yes",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "final", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 409
+    codes = {g["code"] for g in resp.json()["missing_gates"]}
     assert "technical_interview_not_completed" in codes
 
 
@@ -791,7 +959,7 @@ async def test_allows_move_to_offer_when_all_offer_gates_satisfied(
 
 
 @pytest.mark.asyncio
-async def test_blocks_move_to_hired_without_submitted_hire_decision(
+async def test_allows_move_to_hired_without_submitted_hire_decision_and_keeps_job_link(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
@@ -809,7 +977,7 @@ async def test_blocks_move_to_hired_without_submitted_hire_decision(
     await _add_to_job(client, headers, candidate_id, job_id)
     await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="offer")
 
-    # draft / advance must still block.
+    # A draft hiring decision is audit data only; hiring is a pipeline move.
     await _add_hiring_decision(
         db_session,
         candidate_id=candidate_id,
@@ -824,9 +992,18 @@ async def test_blocks_move_to_hired_without_submitted_hire_decision(
         headers=headers,
     )
 
-    assert resp.status_code == 409
-    codes = {g["code"] for g in resp.json()["missing_gates"]}
-    assert "final_decision_not_submitted" in codes
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["stage"] == "hired"
+
+    overview = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert overview.status_code == 200, overview.text
+    data = overview.json()
+    assert data["active_job_id"] == str(job_id)
+    assert data["active_job"]["id"] == str(job_id)
+    hired_entry = next(entry for entry in data["pipeline_entries"] if entry["job_id"] == str(job_id))
+    assert hired_entry["stage"] == "hired"
+    assert hired_entry["relationship_status"] == "active"
+    assert hired_entry["is_terminal"] is False
 
 
 @pytest.mark.asyncio
@@ -1299,8 +1476,8 @@ async def test_force_does_not_bypass_terminal_stage_block(
             CandidateJobPipelineModel.job_id == job_id,
         )
         .values(
-            pipeline_stage="hired",
-            relationship_status="hired",
+            pipeline_stage="rejected",
+            relationship_status="rejected",
             is_terminal=True,
             terminated_at=datetime.now(UTC),
         )
@@ -1321,7 +1498,7 @@ async def test_force_does_not_bypass_terminal_stage_block(
     # Terminal stage is a structural rule, not a forceable gate. The active
     # entry lookup already excludes terminal entries, so the API returns 404
     # ("Candidato não está no pipeline desta vaga"). Force cannot reactivate
-    # a hired/rejected entry from here.
+    # a rejected entry from here.
     assert resp.status_code == 404, resp.text
 
 

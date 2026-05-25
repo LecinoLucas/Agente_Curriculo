@@ -24,8 +24,12 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
+from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import (
+    SQLAlchemyPreAdmissionRepository,
+)
 from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
 from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
+from src.application.services.pre_admission_service import PreAdmissionService
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
     SQLAlchemyBehavioralAssignmentRepository,
 )
@@ -49,6 +53,7 @@ from src.interface.api.schemas.pipeline_schemas import (
     UpdateCandidateStageRequest,
     UpdateCandidateStageResponse,
 )
+from src.interface.api.schemas.pre_admission_schemas import PreAdmissionUpdateRequest
 
 TRANSFER_ALLOWED_STAGES: list[str] = ["entry", "screening"]
 
@@ -60,6 +65,9 @@ KANBAN_STAGES: list[str] = [
     "final",
     "offer",
     "hired",
+    "pre_admission",
+    "protheus",
+    "admitted",
     "rejected",
 ]
 
@@ -71,6 +79,9 @@ STAGE_LABELS: dict[str, str] = {
     "final": "Final",
     "offer": "Oferta",
     "hired": "Contratado",
+    "pre_admission": "Pré-admissão",
+    "protheus": "Protheus",
+    "admitted": "Admitido",
     "rejected": "Reprovado",
 }
 
@@ -81,17 +92,17 @@ STAGE_TO_CANDIDATE_STATUS: dict[str, str] = {
     "technical_interview": "Em processo",
     "final": "Etapa final",
     "offer": "Aprovado",
-    "hired": "Aprovado",
+    "hired": "Contratado",
+    "pre_admission": "Pré-admissão",
+    "protheus": "Protheus",
+    "admitted": "Admitido",
     "rejected": "Reprovado",
 }
 
-_TERMINAL_STAGES: frozenset[str] = frozenset({"hired", "rejected"})
+_TERMINAL_STAGES: frozenset[str] = frozenset({"admitted", "rejected"})
 
 # Stages that resolve to a terminal outcome status.
-_STAGE_TO_OUTCOME: dict[str, str] = {
-    "hired": "hired",
-    "rejected": "rejected",
-}
+_STAGE_TO_OUTCOME: dict[str, str] = {"admitted": "hired", "rejected": "rejected"}
 
 logger = structlog.get_logger(__name__)
 
@@ -226,7 +237,7 @@ class _StageConfig:
 
 
 # Single source of truth for all stage metadata.
-# 'rejected' shares order 6 with 'hired' — it's always reachable from any non-terminal stage.
+# 'rejected' is terminal and always reachable from any non-terminal stage.
 STAGE_CONFIG: dict[str, _StageConfig] = {
     "entry":                _StageConfig(order=0),
     "screening":            _StageConfig(order=1),
@@ -234,8 +245,11 @@ STAGE_CONFIG: dict[str, _StageConfig] = {
     "technical_interview":  _StageConfig(order=3, allow_backwards=True),
     "final":                _StageConfig(order=4, allow_backwards=True),
     "offer":                _StageConfig(order=5, allow_backwards=True),
-    "hired":                _StageConfig(order=6, is_terminal=True, terminal_status="hired"),
-    "rejected":             _StageConfig(order=6, is_terminal=True, terminal_status="rejected"),
+    "hired":                _StageConfig(order=6, allow_backwards=True),
+    "pre_admission":        _StageConfig(order=7, allow_backwards=True),
+    "protheus":             _StageConfig(order=8, allow_backwards=True),
+    "admitted":             _StageConfig(order=9, is_terminal=True, terminal_status="hired"),
+    "rejected":             _StageConfig(order=10, is_terminal=True, terminal_status="rejected"),
 }
 
 
@@ -257,7 +271,7 @@ class PipelineEntryNotFoundError(Exception):
 
 
 class PipelineTerminalStageError(Exception):
-    """Raised when a move is attempted from a terminal stage (hired/rejected)."""
+    """Raised when a move is attempted from a terminal stage."""
 
 
 class PipelineSameStageError(Exception):
@@ -643,6 +657,12 @@ class PipelineService:
             moved_at=now,
             reason=body.reason,
         ))
+        await self._sync_pre_admission_case_for_stage(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            target_stage=body.stage,
+            actor_id=moved_by,
+        )
 
         return MoveCandidateResponse(
             candidate_id=saved_row["candidate_id"],
@@ -652,6 +672,29 @@ class PipelineService:
             status=saved_row["status"],  # type: ignore[arg-type]
             transition_id=saved_transition.id,
             updated_at=saved_row["updated_at"],
+        )
+
+    async def _sync_pre_admission_case_for_stage(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        target_stage: str,
+        actor_id: UUID,
+    ) -> None:
+        if target_stage != "admitted":
+            return
+
+        db_session = self._session or self._repository._session
+        repository = SQLAlchemyPreAdmissionRepository(db_session)
+        active_case = await repository.get_active_case(candidate_id=candidate_id, job_id=job_id)
+        if active_case is None or active_case.status == "admitted":
+            return
+
+        await PreAdmissionService(repository).update(
+            case_id=active_case.id,
+            actor_id=actor_id,
+            body=PreAdmissionUpdateRequest(status="admitted"),
         )
 
     async def add_candidate_to_job(

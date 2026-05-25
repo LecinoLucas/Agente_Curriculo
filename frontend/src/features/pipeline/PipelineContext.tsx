@@ -151,6 +151,9 @@ const PIPELINE_STAGE_STATUS_LABEL: Record<PipelineStage, string> = {
   final: "Final",
   offer: "Proposta",
   hired: "Contratado",
+  pre_admission: "Pré-admissão",
+  protheus: "Protheus",
+  admitted: "Admitido",
   rejected: "Reprovado",
 };
 
@@ -562,7 +565,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       if (!cached) return;
 
       const now = new Date().toISOString();
-      const isTerminalStage = payload.stage === "hired" || payload.stage === "rejected";
+      const isTerminalStage = payload.stage === "rejected";
       let changed = false;
       const nextEntries = cached.pipeline_entries.map((entry) => {
         if (entry.job_id !== payload.jobId) return entry;

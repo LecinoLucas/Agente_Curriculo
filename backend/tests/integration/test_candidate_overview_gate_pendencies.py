@@ -6,6 +6,7 @@ so the "Pendências" card and the blocked-transition modal are consistent.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -105,6 +106,22 @@ async def _force_stage(
     await db_session.commit()
 
 
+async def _get_pipeline_id(
+    db_session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+) -> UUID:
+    result = await db_session.execute(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    row = result.scalar_one()
+    return row
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -162,11 +179,11 @@ async def test_overview_shows_no_gate_pendencies_for_entry_stage(
 
 
 @pytest.mark.asyncio
-async def test_overview_shows_final_decision_pending_when_candidate_in_offer(
+async def test_overview_does_not_require_hiring_decision_when_candidate_in_offer(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Candidate in offer with no hire decision → final_decision_not_submitted in overview."""
+    """Candidate in offer can be hired by pipeline movement; decision is optional audit data."""
     recruiter = await _create_active_user(
         db_session,
         f"recruiter-offer-{uuid4().hex[:6]}@test.com",
@@ -185,22 +202,16 @@ async def test_overview_shows_final_decision_pending_when_candidate_in_offer(
     data = resp.json()
 
     gate_ids = [p["id"] for p in data["preview_pendencies"]]
-    assert "final_decision_not_submitted" in gate_ids, (
-        f"Expected final_decision_not_submitted in gate_ids, got: {gate_ids}"
-    )
-
-    gate = next(p for p in data["preview_pendencies"] if p["id"] == "final_decision_not_submitted")
-    assert gate["tone"] == "block"
-    assert gate["action"] == "open_decision"
-    assert gate["description"] is not None
+    assert "final_decision_not_submitted" not in gate_ids
+    assert data["active_job_id"] == str(job_id)
 
 
 @pytest.mark.asyncio
-async def test_overview_gate_pendency_removed_when_hire_decision_submitted(
+async def test_overview_keeps_offer_unblocked_when_optional_hire_decision_submitted(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """After submitting a hire decision, final_decision_not_submitted must disappear."""
+    """Submitting a hire decision records audit data without controlling the gate."""
     recruiter = await _create_active_user(
         db_session,
         f"recruiter-hire-{uuid4().hex[:6]}@test.com",
@@ -213,6 +224,7 @@ async def test_overview_gate_pendency_removed_when_hire_decision_submitted(
     candidate_id = await _create_candidate(client, headers, "Candidato Hire Decision")
     await _add_to_job(client, headers, candidate_id, job_id)
     await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="offer")
+    pipeline_id = await _get_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
 
     # Insert a submitted hire decision directly
     db_session.add(
@@ -220,6 +232,7 @@ async def test_overview_gate_pendency_removed_when_hire_decision_submitted(
             id=uuid4(),
             candidate_id=candidate_id,
             job_id=job_id,
+            pipeline_id=pipeline_id,
             decision_status="submitted",
             decision_outcome="hire",
             reason_code="strong_fit",
@@ -233,9 +246,48 @@ async def test_overview_gate_pendency_removed_when_hire_decision_submitted(
     data = resp.json()
 
     gate_ids = [p["id"] for p in data["preview_pendencies"]]
-    assert "final_decision_not_submitted" not in gate_ids, (
-        f"hire decision submitted should remove gate, still got: {gate_ids}"
+    assert "final_decision_not_submitted" not in gate_ids
+    assert data["active_job_id"] == str(job_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stage", "expected_status"),
+    [
+        ("hired", "Contratado"),
+        ("pre_admission", "Pré-admissão"),
+        ("protheus", "Protheus"),
+    ],
+)
+async def test_overview_keeps_post_hiring_stages_linked_to_active_job(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    stage: str,
+    expected_status: str,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-post-hiring-{stage}-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
     )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(db_session, recruiter.id)
+    await db_session.commit()
+    candidate_id = await _create_candidate(client, headers, f"Candidato {stage}")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage=stage)
+
+    resp = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["active_job_id"] == str(job_id)
+    assert data["active_job"]["id"] == str(job_id)
+    assert data["pipeline_entries"][0]["stage"] == stage
+    assert data["pipeline_entries"][0]["relationship_status"] == "active"
+    assert data["pipeline_entries"][0]["is_terminal"] is False
+    assert data["pipeline_entries"][0]["candidate_status"] == expected_status
 
 
 @pytest.mark.asyncio
@@ -288,12 +340,14 @@ async def test_overview_manager_decision_resolved_when_advance_submitted(
     candidate_id = await _create_candidate(client, headers, "Candidato Advance Decision")
     await _add_to_job(client, headers, candidate_id, job_id)
     await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="final")
+    pipeline_id = await _get_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
 
     db_session.add(
         CandidateJobHiringDecisionModel(
             id=uuid4(),
             candidate_id=candidate_id,
             job_id=job_id,
+            pipeline_id=pipeline_id,
             decision_status="submitted",
             decision_outcome="advance",
             reason_code="strong_fit",
@@ -448,6 +502,178 @@ async def test_overview_gate_codes_match_pipeline_move_blocked_codes(
     assert overview_gate_ids == move_gate_ids, (
         f"overview gates {overview_gate_ids!r} do not match pipeline gates {move_gate_ids!r}"
     )
+
+
+@pytest.mark.asyncio
+async def test_overview_scorecard_pendency_includes_relevant_interview_payload(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-scorecard-payload-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(
+        db_session,
+        recruiter.id,
+        requires_interview=True,
+        requires_scorecard=True,
+    )
+    await db_session.commit()
+    candidate_id = await _create_candidate(client, headers, "Candidato Scorecard Payload")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    pipeline_id = await _get_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
+    interview = InterviewScheduleModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        pipeline_id=pipeline_id,
+        title="Entrevista técnica",
+        interview_type="technical",
+        interview_format="online",
+        status="completed",
+        scheduled_start=datetime(2026, 5, 24, 10, 0, tzinfo=UTC),
+        scheduled_end=datetime(2026, 5, 24, 11, 0, tzinfo=UTC),
+        timezone="America/Sao_Paulo",
+    )
+    db_session.add(interview)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    scorecard_gate = next(p for p in resp.json()["preview_pendencies"] if p["id"] == "scorecard_not_submitted")
+    assert scorecard_gate["action"] == "open_scorecard"
+    assert scorecard_gate["action_payload"] == {
+        "interview_id": str(interview.id),
+        "scorecard_id": None,
+        "scorecard_status": None,
+        "interview_type": "technical",
+    }
+
+
+@pytest.mark.asyncio
+async def test_overview_clears_interview_pendencies_when_technical_scorecard_is_submitted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-scorecard-cleared-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(
+        db_session,
+        recruiter.id,
+        requires_interview=True,
+        requires_scorecard=True,
+    )
+    await db_session.commit()
+    candidate_id = await _create_candidate(client, headers, "Candidato Scorecard Resolvido")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    pipeline_id = await _get_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
+    interview = InterviewScheduleModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        pipeline_id=pipeline_id,
+        title="Entrevista técnica",
+        interview_type="technical",
+        interview_format="online",
+        status="completed",
+        scheduled_start=datetime(2026, 5, 24, 10, 0, tzinfo=UTC),
+        scheduled_end=datetime(2026, 5, 24, 11, 0, tzinfo=UTC),
+        timezone="America/Sao_Paulo",
+    )
+    db_session.add(interview)
+    db_session.add(
+        InterviewScorecardModel(
+            id=uuid4(),
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=pipeline_id,
+            interview_id=interview.id,
+            status="submitted",
+            final_recommendation="yes",
+            submitted_at=datetime(2026, 5, 24, 12, 0, tzinfo=UTC),
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    pendencies = resp.json()["preview_pendencies"]
+    gate_ids = {p["id"] for p in pendencies if p.get("tone") == "block"}
+    labels = {p["label"] for p in pendencies}
+    assert "technical_interview_not_completed" not in gate_ids
+    assert "scorecard_not_submitted" not in gate_ids
+    assert "Entrevista não agendada" not in labels
+
+
+@pytest.mark.asyncio
+async def test_overview_keeps_scorecard_pendency_without_final_recommendation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-scorecard-no-rec-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(
+        db_session,
+        recruiter.id,
+        requires_interview=True,
+        requires_scorecard=True,
+    )
+    await db_session.commit()
+    candidate_id = await _create_candidate(client, headers, "Candidato Scorecard Sem Recomendacao")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    pipeline_id = await _get_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
+    interview = InterviewScheduleModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        pipeline_id=pipeline_id,
+        title="Entrevista técnica",
+        interview_type="technical",
+        interview_format="online",
+        status="completed",
+        scheduled_start=datetime(2026, 5, 24, 10, 0, tzinfo=UTC),
+        scheduled_end=datetime(2026, 5, 24, 11, 0, tzinfo=UTC),
+        timezone="America/Sao_Paulo",
+    )
+    scorecard = InterviewScorecardModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        pipeline_id=pipeline_id,
+        interview_id=interview.id,
+        status="submitted",
+        final_recommendation=None,
+        submitted_at=datetime(2026, 5, 24, 12, 0, tzinfo=UTC),
+    )
+    db_session.add_all([interview, scorecard])
+    await db_session.commit()
+
+    resp = await client.get(f"/api/v1/candidates/{candidate_id}/overview", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    gate = next(p for p in resp.json()["preview_pendencies"] if p["id"] == "scorecard_not_submitted")
+    assert gate["label"] == "Scorecard da entrevista pendente"
+    assert gate["action_payload"]["scorecard_id"] == str(scorecard.id)
+    assert gate["action_payload"]["scorecard_status"] == "submitted"
 
 
 @pytest.mark.asyncio

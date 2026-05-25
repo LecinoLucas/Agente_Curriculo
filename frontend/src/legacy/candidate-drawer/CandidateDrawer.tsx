@@ -941,6 +941,15 @@ export function CandidateDrawer({
                 <CandidatePreAdmissionPanel
                   jobId={candidateActiveJobId}
                   candidateId={candidate?.id ?? null}
+                  currentStage={currentStage}
+                  sendingToProtheus={stageSaving && currentStage === "pre_admission"}
+                  onSendToProtheus={
+                    currentStage === "pre_admission"
+                      ? async () => {
+                          await handleStageChange("protheus");
+                        }
+                      : undefined
+                  }
                 />
               </Suspense>
             ) : null}

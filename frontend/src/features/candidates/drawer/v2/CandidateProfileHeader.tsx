@@ -57,7 +57,7 @@ export function CandidateProfileHeader({
           : "text-[hsl(var(--text-muted))]";
 
   const stageBadgeClass =
-    currentStage === "hired"
+    currentStage === "hired" || currentStage === "pre_admission" || currentStage === "protheus" || currentStage === "admitted"
       ? "border-emerald-200 bg-emerald-50 text-emerald-900"
       : currentStage === "rejected"
         ? "border-rose-200 bg-rose-50 text-rose-900"
@@ -158,5 +158,8 @@ const STAGE_LABEL: Record<string, string> = {
   final: "Final",
   offer: "Proposta",
   hired: "Contratado",
+  pre_admission: "Pré-admissão",
+  protheus: "Protheus",
+  admitted: "Admitido",
   rejected: "Reprovado",
 };

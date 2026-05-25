@@ -14,11 +14,14 @@ import { getBehavioralEvaluation, triggerBehavioralAnalysis } from "../../servic
 import { getCandidateBehavioralAssessment } from "../../services/behavioralAssessmentService";
 import { communicationService } from "../../services/communicationService";
 import { HttpError } from "../../services/http";
+import * as hiringDecisionService from "../../services/hiringDecisionService";
+import * as scorecardService from "../../services/interviewScorecardService";
 import { listJobs, getCandidateRankingEntry } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
 import { resumeService } from "../../services/resumeService";
 import { scoreExplanationService, type ScoreExplanationResponse } from "../../services/scoreExplanationService";
-import type { BehavioralAssignmentDetailResponse, CandidateOverview, CandidateListSummary, Job, JobRankingEntry } from "../../types/domain";
+import type { InterviewSchedule } from "../../types/agenda";
+import type { BehavioralAssignmentDetailResponse, CandidateOverview, CandidateListSummary, HiringDecision, Job, JobRankingEntry } from "../../types/domain";
 
 const routerFuture = {
   v7_startTransition: true,
@@ -60,6 +63,7 @@ vi.mock("../../features/candidates/drawer/components/CandidateNotesTab", () => (
 vi.mock("../../services/candidatesService", () => ({
   candidatesService: {
     getOverview: vi.fn(),
+    getProcessHistory: vi.fn(),
     listSummaries: vi.fn(),
     checkDuplicate: vi.fn(),
     update: vi.fn(),
@@ -72,6 +76,10 @@ vi.mock("../../services/agendaService", () => ({
   agendaService: {
     listCandidateJobInterviews: vi.fn(),
     createCandidateJobInterview: vi.fn(),
+    completeInterview: vi.fn(),
+    rescheduleInterview: vi.fn(),
+    cancelInterviewOperational: vi.fn(),
+    markNoShow: vi.fn(),
   },
 }));
 
@@ -98,6 +106,19 @@ vi.mock("../../services/communicationService", () => ({
     sendCustomMessage: vi.fn(),
     retryCommunication: vi.fn(),
   },
+}));
+
+vi.mock("../../services/interviewScorecardService", () => ({
+  getInterviewScorecard: vi.fn(),
+  createInterviewScorecard: vi.fn(),
+  updateInterviewScorecard: vi.fn(),
+  submitInterviewScorecard: vi.fn(),
+}));
+
+vi.mock("../../services/hiringDecisionService", () => ({
+  getHiringDecision: vi.fn(),
+  getHiringDecisionHistory: vi.fn(),
+  createHiringDecision: vi.fn(),
 }));
 
 vi.mock("../../services/jobsService", () => ({
@@ -248,6 +269,59 @@ const overview: CandidateOverview = {
   latest_note: null,
   preview_pendencies: [],
   latest_movement: null,
+};
+
+const buildTechnicalInterview = (
+  overrides: Partial<InterviewSchedule> = {},
+): InterviewSchedule => ({
+  id: "interview-technical",
+  candidate_id: "candidate-1",
+  candidate_name: "Ana Souza",
+  job_id: "job-1",
+  job_title: "Analista Protheus",
+  pipeline_id: "pipeline-current",
+  title: "Entrevista técnica",
+  description: null,
+  public_notes: null,
+  internal_notes: null,
+  scheduled_start: "2026-05-24T10:00:00Z",
+  scheduled_end: "2026-05-24T11:00:00Z",
+  timezone: "America/Sao_Paulo",
+  interview_type: "technical",
+  interview_format: "online",
+  status: "completed",
+  location: null,
+  meeting_url: null,
+  interviewer_name: "Carlos",
+  interviewer_email: null,
+  cancel_reason: null,
+  created_at: "2026-05-20T10:00:00Z",
+  updated_at: "2026-05-24T11:00:00Z",
+  scorecard_id: null,
+  scorecard_status: null,
+  scorecard_final_recommendation: null,
+  scorecard_submitted_at: null,
+  counts_for_current_gate: true,
+  ...overrides,
+});
+
+const submittedHireDecision: HiringDecision = {
+  id: "decision-1",
+  candidate_id: "candidate-1",
+  job_id: "job-1",
+  pipeline_id: "pipeline-current",
+  decided_by: "user-1",
+  decision_status: "submitted",
+  decision_outcome: "hire",
+  reason_code: "strong_fit",
+  notes: "Contratação aprovada por pessoa autorizada.",
+  based_on_decision_summary_snapshot: null,
+  based_on_scorecard_id: null,
+  based_on_behavioral_assignment_id: null,
+  based_on_behavioral_ai_evaluation_id: null,
+  created_at: "2026-05-24T14:00:00Z",
+  updated_at: "2026-05-24T14:00:00Z",
+  submitted_at: "2026-05-24T14:00:00Z",
 };
 
 const candidateSummary: CandidateListSummary = {
@@ -452,7 +526,12 @@ const detailedResume = {
 describe("Candidate workspace flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
     vi.mocked(candidatesService.getOverview).mockResolvedValue(overview);
+    vi.mocked(candidatesService.getProcessHistory).mockResolvedValue({
+      candidate_id: "candidate-1",
+      processes: [],
+    });
     vi.mocked(candidatesService.listSummaries).mockResolvedValue({
       data: [candidateSummary],
       total: 1,
@@ -510,6 +589,60 @@ describe("Candidate workspace flow", () => {
       page_size: 20,
       total_pages: 1,
     });
+    vi.mocked(agendaService.completeInterview).mockResolvedValue(buildTechnicalInterview());
+    vi.mocked(agendaService.createCandidateJobInterview).mockResolvedValue(buildTechnicalInterview({ status: "scheduled" }));
+    vi.mocked(agendaService.rescheduleInterview).mockResolvedValue(buildTechnicalInterview({ status: "rescheduled" }));
+    vi.mocked(agendaService.cancelInterviewOperational).mockResolvedValue(buildTechnicalInterview({ status: "cancelled" }));
+    vi.mocked(agendaService.markNoShow).mockResolvedValue(buildTechnicalInterview({ status: "no_show" }));
+    vi.mocked(scorecardService.getInterviewScorecard).mockResolvedValue({
+      scorecard: null,
+      suggested_behavioral_questions: [],
+    });
+    vi.mocked(scorecardService.createInterviewScorecard).mockResolvedValue({
+      id: "scorecard-1",
+      candidate_id: "candidate-1",
+      job_id: "job-1",
+      interview_id: "interview-technical",
+      evaluator_id: "user-1",
+      status: "draft",
+      final_recommendation: "yes",
+      overall_notes: "Bom resultado.",
+      submitted_at: null,
+      created_at: "2026-05-24T12:00:00Z",
+      updated_at: "2026-05-24T12:00:00Z",
+      items: [],
+    });
+    vi.mocked(scorecardService.updateInterviewScorecard).mockResolvedValue({
+      id: "scorecard-1",
+      candidate_id: "candidate-1",
+      job_id: "job-1",
+      interview_id: "interview-technical",
+      evaluator_id: "user-1",
+      status: "draft",
+      final_recommendation: "yes",
+      overall_notes: "Bom resultado.",
+      submitted_at: null,
+      created_at: "2026-05-24T12:00:00Z",
+      updated_at: "2026-05-24T12:00:00Z",
+      items: [],
+    });
+    vi.mocked(scorecardService.submitInterviewScorecard).mockResolvedValue({
+      id: "scorecard-1",
+      candidate_id: "candidate-1",
+      job_id: "job-1",
+      interview_id: "interview-technical",
+      evaluator_id: "user-1",
+      status: "submitted",
+      final_recommendation: "yes",
+      overall_notes: "Bom resultado.",
+      submitted_at: "2026-05-24T12:05:00Z",
+      created_at: "2026-05-24T12:00:00Z",
+      updated_at: "2026-05-24T12:05:00Z",
+      items: [],
+    });
+    vi.mocked(hiringDecisionService.getHiringDecision).mockResolvedValue({ decision: null });
+    vi.mocked(hiringDecisionService.getHiringDecisionHistory).mockResolvedValue({ decisions: [] });
+    vi.mocked(hiringDecisionService.createHiringDecision).mockResolvedValue(submittedHireDecision);
     vi.mocked(getCandidateBehavioralAssessment).mockResolvedValue(behavioralAssignment);
     vi.mocked(getBehavioralEvaluation).mockResolvedValue({
       id: "evaluation-1",
@@ -630,9 +763,425 @@ describe("Candidate workspace flow", () => {
     expect(await screen.findByText("Análise da vaga ativa")).toBeInTheDocument();
     expect(screen.getByText("Explicação resumida da vaga ativa com boa aderência técnica.")).toBeInTheDocument();
 
+    vi.mocked(candidatesService.getProcessHistory).mockResolvedValue({
+      candidate_id: "candidate-1",
+      processes: [
+        {
+          pipeline_id: "pipeline-current",
+          job_id: "job-1",
+          job_title: "Engenheiro Backend",
+          is_current: true,
+          started_at: "2026-05-20T10:00:00Z",
+          closed_at: null,
+          current_or_final_stage: "screening",
+          result_label: "Em andamento",
+          closure_reason: null,
+          events_count: 1,
+          interviews: [],
+          scorecards: [],
+          behavioral_assessment: null,
+          hiring_decision: null,
+        },
+        {
+          pipeline_id: "pipeline-old",
+          job_id: "job-1",
+          job_title: "Engenheiro Backend",
+          is_current: false,
+          started_at: "2026-05-10T10:00:00Z",
+          closed_at: "2026-05-12T10:00:00Z",
+          current_or_final_stage: "rejected",
+          result_label: "Não selecionado",
+          closure_reason: "Perfil fora do momento.",
+          events_count: 4,
+          interviews: [
+            {
+              id: "interview-old",
+              type: "technical",
+              status: "completed",
+              scheduled_at: "2026-05-11T10:00:00Z",
+              scorecard_status: "submitted",
+              final_recommendation: "yes",
+            },
+          ],
+          scorecards: [
+            {
+              id: "scorecard-old",
+              interview_id: "interview-old",
+              status: "submitted",
+              final_recommendation: "yes",
+              submitted_at: "2026-05-11T11:00:00Z",
+            },
+          ],
+          behavioral_assessment: {
+            assignment_id: "assignment-old",
+            status: "submitted",
+            submitted_at: "2026-05-11T12:00:00Z",
+            ai_status: "completed",
+            ai_completed_at: "2026-05-11T13:00:00Z",
+          },
+          hiring_decision: {
+            id: "decision-old",
+            status: "submitted",
+            outcome: "reject",
+            submitted_at: "2026-05-12T09:00:00Z",
+          },
+        },
+      ],
+    });
     await user.click(screen.getByRole("button", { name: /Histórico/i }));
-    await waitFor(() => expect(pipelineService.getCandidateHistory).toHaveBeenCalledWith("job-1", "candidate-1"));
-    expect(await screen.findByText(/Triagem aprovada/i)).toBeInTheDocument();
+    await waitFor(() => expect(candidatesService.getProcessHistory).toHaveBeenCalledWith("candidate-1"));
+    expect(await screen.findByText("Processo atual")).toBeInTheDocument();
+    expect(screen.getByText("Processos anteriores")).toBeInTheDocument();
+    expect(screen.getByText(/Resultado: Não selecionado/i)).toBeInTheDocument();
+  });
+
+  it("aba Entrevistas mostra scorecard inline na entrevista técnica indicada pelo gate", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "technical_interview",
+      })),
+      preview_pendencies: [
+        {
+          id: "scorecard_not_submitted",
+          label: "Scorecard da entrevista pendente",
+          tone: "block",
+          action: "open_scorecard",
+          description: "Preencha e submeta o scorecard da entrevista técnica para continuar.",
+          action_payload: {
+            interview_id: "interview-technical",
+            scorecard_id: null,
+            scorecard_status: null,
+            interview_type: "technical",
+          },
+        },
+      ],
+    });
+    vi.mocked(agendaService.listCandidateJobInterviews).mockResolvedValue({
+      data: [
+        {
+          id: "interview-technical",
+          candidate_id: "candidate-1",
+          candidate_name: "Ana Souza",
+          job_id: "job-1",
+          job_title: "Analista Protheus",
+          pipeline_id: "pipeline-current",
+          title: "Entrevista técnica",
+          description: null,
+          public_notes: null,
+          internal_notes: null,
+          scheduled_start: "2026-05-24T10:00:00Z",
+          scheduled_end: "2026-05-24T11:00:00Z",
+          timezone: "America/Sao_Paulo",
+          interview_type: "technical",
+          interview_format: "online",
+          status: "completed",
+          location: null,
+          meeting_url: null,
+          interviewer_name: "Carlos",
+          interviewer_email: null,
+          cancel_reason: null,
+          created_at: "2026-05-20T10:00:00Z",
+          updated_at: "2026-05-24T11:00:00Z",
+          scorecard_id: null,
+          scorecard_status: null,
+          scorecard_final_recommendation: null,
+          scorecard_submitted_at: null,
+          counts_for_current_gate: true,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=interviews&focus=scorecard"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Entrevista técnica")).toBeInTheDocument();
+    expect(screen.getByText("Técnica")).toBeInTheDocument();
+    expect(screen.getByText("Concluída")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Preencher scorecard/i })).toBeInTheDocument();
+    expect(screen.getByText("Esta entrevista precisa de scorecard para avançar.")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum scorecard criado para esta entrevista.")).toBeInTheDocument();
+    expect(scorecardService.getInterviewScorecard).toHaveBeenCalledWith(
+      "job-1",
+      "candidate-1",
+      "interview-technical",
+    );
+  });
+
+  it("botões Registrar feedback e Ver scorecard abrem fluxos diferentes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "technical_interview",
+      })),
+      preview_pendencies: [],
+    });
+    vi.mocked(agendaService.listCandidateJobInterviews).mockResolvedValue({
+      data: [
+        buildTechnicalInterview({
+          scorecard_id: "scorecard-1",
+          scorecard_status: "submitted",
+          scorecard_final_recommendation: "yes",
+          scorecard_submitted_at: "2026-05-24T12:00:00Z",
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+    vi.mocked(scorecardService.getInterviewScorecard).mockResolvedValue({
+      scorecard: {
+        id: "scorecard-1",
+        candidate_id: "candidate-1",
+        job_id: "job-1",
+        interview_id: "interview-technical",
+        evaluator_id: "user-1",
+        status: "submitted",
+        final_recommendation: "yes",
+        overall_notes: "Bom resultado.",
+        submitted_at: "2026-05-24T12:00:00Z",
+        created_at: "2026-05-24T11:30:00Z",
+        updated_at: "2026-05-24T12:00:00Z",
+        items: [],
+      },
+      suggested_behavioral_questions: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=interviews"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Entrevista técnica")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Registrar feedback/i }));
+
+    expect(screen.getByLabelText(/Feedback da entrevista/i)).toBeInTheDocument();
+    expect(scorecardService.getInterviewScorecard).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Ver scorecard/i }));
+
+    expect(await screen.findByText("Scorecard enviado. Esta fase não permite edição após envio.")).toBeInTheDocument();
+    expect(scorecardService.getInterviewScorecard).toHaveBeenCalledWith(
+      "job-1",
+      "candidate-1",
+      "interview-technical",
+    );
+  });
+
+  it("após concluir entrevista técnica recarrega o overview", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "technical_interview",
+      })),
+      preview_pendencies: [
+        {
+          id: "technical_interview_not_completed",
+          label: "Entrevista técnica ainda não concluída",
+          tone: "block",
+          action: "open_interview",
+          description: "Conclua a entrevista técnica antes de avançar.",
+          action_payload: { interview_id: "interview-technical" },
+        },
+      ],
+    });
+    vi.mocked(agendaService.listCandidateJobInterviews).mockResolvedValue({
+      data: [buildTechnicalInterview({ status: "scheduled" })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+    vi.mocked(agendaService.completeInterview).mockResolvedValue(
+      buildTechnicalInterview({ status: "awaiting_feedback" }),
+    );
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=interviews"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Marcar como concluída/i }));
+
+    await waitFor(() => expect(agendaService.completeInterview).toHaveBeenCalledWith("interview-technical"));
+    await waitFor(() => expect(vi.mocked(candidatesService.getOverview).mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("após enviar scorecard recarrega entrevistas e overview", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "technical_interview",
+      })),
+      preview_pendencies: [
+        {
+          id: "scorecard_not_submitted",
+          label: "Scorecard da entrevista pendente",
+          tone: "block",
+          action: "open_scorecard",
+          description: "Preencha e submeta o scorecard da entrevista técnica para continuar.",
+          action_payload: {
+            interview_id: "interview-technical",
+            scorecard_id: "scorecard-1",
+            scorecard_status: "draft",
+            interview_type: "technical",
+          },
+        },
+      ],
+    });
+    vi.mocked(agendaService.listCandidateJobInterviews).mockResolvedValue({
+      data: [
+        buildTechnicalInterview({
+          scorecard_id: "scorecard-1",
+          scorecard_status: "draft",
+          scorecard_final_recommendation: "yes",
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+    vi.mocked(scorecardService.getInterviewScorecard).mockResolvedValue({
+      scorecard: {
+        id: "scorecard-1",
+        candidate_id: "candidate-1",
+        job_id: "job-1",
+        interview_id: "interview-technical",
+        evaluator_id: "user-1",
+        status: "draft",
+        final_recommendation: "yes",
+        overall_notes: "Bom resultado.",
+        submitted_at: null,
+        created_at: "2026-05-24T11:30:00Z",
+        updated_at: "2026-05-24T11:30:00Z",
+        items: [],
+      },
+      suggested_behavioral_questions: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=interviews"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Enviar scorecard/i }));
+
+    await waitFor(() => expect(scorecardService.submitInterviewScorecard).toHaveBeenCalledWith("scorecard-1"));
+    await waitFor(() => expect(vi.mocked(agendaService.listCandidateJobInterviews).mock.calls.length).toBeGreaterThanOrEqual(3));
+    await waitFor(() => expect(vi.mocked(candidatesService.getOverview).mock.calls.length).toBeGreaterThanOrEqual(3));
+  });
+
+  it("aba Entrevistas não abre scorecard para entrevista ainda agendada", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "technical_interview",
+      })),
+      preview_pendencies: [
+        {
+          id: "technical_interview_not_completed",
+          label: "Entrevista técnica ainda não concluída",
+          tone: "block",
+          action: "open_interview",
+          description: "Agende e conclua a entrevista técnica antes de avançar.",
+          action_payload: { interview_id: "interview-scheduled" },
+        },
+        {
+          id: "scorecard_not_submitted",
+          label: "Scorecard da entrevista pendente",
+          tone: "block",
+          action: "open_scorecard",
+          description: "Preencha e submeta o scorecard da entrevista técnica para continuar.",
+          action_payload: {
+            interview_id: "interview-scheduled",
+            scorecard_id: null,
+            scorecard_status: null,
+            interview_type: "technical",
+          },
+        },
+      ],
+    });
+    vi.mocked(agendaService.listCandidateJobInterviews).mockResolvedValue({
+      data: [
+        {
+          id: "interview-scheduled",
+          candidate_id: "candidate-1",
+          candidate_name: "Ana Souza",
+          job_id: "job-1",
+          job_title: "Analista Protheus",
+          pipeline_id: "pipeline-current",
+          title: "Entrevista técnica",
+          description: null,
+          public_notes: null,
+          internal_notes: null,
+          scheduled_start: "2026-05-24T10:00:00Z",
+          scheduled_end: "2026-05-24T11:00:00Z",
+          timezone: "America/Sao_Paulo",
+          interview_type: "technical",
+          interview_format: "online",
+          status: "scheduled",
+          location: null,
+          meeting_url: null,
+          interviewer_name: "Carlos",
+          interviewer_email: null,
+          cancel_reason: null,
+          created_at: "2026-05-20T10:00:00Z",
+          updated_at: "2026-05-20T10:00:00Z",
+          scorecard_id: null,
+          scorecard_status: null,
+          scorecard_final_recommendation: null,
+          scorecard_submitted_at: null,
+          counts_for_current_gate: true,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=interviews&focus=scorecard"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Entrevista técnica")).toBeInTheDocument();
+    expect(screen.getByText("Agendada")).toBeInTheDocument();
+    expect(screen.getByText("A entrevista precisa ser concluída antes do scorecard.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Marcar como concluída/i })).toBeInTheDocument();
+    expect(screen.queryByText("Nenhum scorecard criado para esta entrevista.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Enviar scorecard/i })).not.toBeInTheDocument();
   });
 
   it("ações portadas não aparecem no CandidatePreviewDrawer", async () => {
@@ -1138,6 +1687,189 @@ describe("Candidate workspace flow", () => {
     );
 
     expect(await screen.findByText("Nenhuma avaliação comportamental")).toBeInTheDocument();
+  });
+
+  it("aba Ações renderiza decisão de contratação quando existe vaga ativa", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=workflow"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Decisão de contratação")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Registrar decisão$/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Pipeline").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Transferir candidato").length).toBeGreaterThan(1);
+  });
+
+  it("candidato em proposta mostra CTA para mover para contratado", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "offer",
+          candidate_status: "Proposta",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Mover para Contratado")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Abrir ação/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Pipeline").length).toBeGreaterThan(1);
+    });
+    await user.click(screen.getByRole("button", { name: /^Mover para Contratado$/i }));
+
+    await waitFor(() => {
+      expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith(
+        "job-1",
+        "candidate-1",
+        expect.objectContaining({ stage: "hired" }),
+      );
+    });
+  });
+
+  it.each([
+    ["hired", "Contratado", "active", false],
+    ["pre_admission", "Pré-admissão", "active", false],
+    ["protheus", "Protheus", "active", false],
+    ["admitted", "Admitido", "hired", true],
+  ] as const)("candidato em %s permanece vinculado à vaga no perfil", async (stage, label, relationshipStatus, isTerminal) => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      active_job_id: "job-1",
+      active_job: { id: "job-1", title: "Analista Protheus", status: "published" },
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage,
+          relationship_status: relationshipStatus,
+          is_terminal: isTerminal,
+          terminated_at: isTerminal ? "2026-05-25T12:00:00Z" : null,
+          candidate_status: label,
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText("Analista Protheus").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Aguardando vaga")).not.toBeInTheDocument();
+  });
+
+  it("submeter decisão hire recarrega overview sem mover pipeline pela decisão", async () => {
+    const user = userEvent.setup();
+    const offerOverview: CandidateOverview = {
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "offer",
+          candidate_status: "Proposta",
+        },
+      ],
+      preview_pendencies: [],
+    };
+    vi.mocked(candidatesService.getOverview)
+      .mockResolvedValueOnce(offerOverview)
+      .mockResolvedValue(offerOverview);
+    vi.mocked(hiringDecisionService.getHiringDecision)
+      .mockResolvedValueOnce({ decision: null })
+      .mockResolvedValue({ decision: submittedHireDecision });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=workflow&focus=hiring_decision"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Decisão de contratação")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Registrar decisão$/i }));
+    await user.selectOptions(screen.getByLabelText(/^Decisão$/i), "hire");
+    await user.selectOptions(screen.getByLabelText(/^Motivo$/i), "strong_fit");
+    await user.type(screen.getByLabelText(/^Observação$/i), "Contratação aprovada por pessoa autorizada.");
+    await user.click(screen.getByLabelText(/Confirmo que esta decisão/i));
+    await user.click(screen.getAllByRole("button", { name: /^Registrar decisão$/i })[1]);
+
+    await waitFor(() => {
+      expect(hiringDecisionService.createHiringDecision).toHaveBeenCalledWith(
+        "job-1",
+        "candidate-1",
+        expect.objectContaining({
+          decision_outcome: "hire",
+          submit: true,
+          pipeline_action: expect.objectContaining({ enabled: false }),
+        }),
+      );
+    });
+    expect(pipelineService.moveCandidateStage).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(candidatesService.getOverview).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText("Nenhuma pendência.")).toBeInTheDocument();
+  });
+
+  it("Abrir ação prioriza agendamento de Entrevista Técnica quando há pendência do gate", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      preview_pendencies: [
+        {
+          id: "technical_interview_not_completed",
+          label: "Entrevista técnica ainda não concluída",
+          tone: "block",
+          action: "open_interview",
+          description: "Conclua a entrevista técnica antes de avançar.",
+          action_payload: { interview_type: "technical" },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Agendar entrevista técnica")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Abrir ação/i }));
+
+    expect((await screen.findAllByText("Agendar entrevista técnica")).length).toBeGreaterThan(1);
+    expect(screen.getByText("Esta entrevista é necessária para avançar o candidato.")).toBeInTheDocument();
+
+    const select = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+    expect(select.value).toBe("technical");
+
+    fireEvent.change(select, { target: { value: "hr" } });
+    expect(await screen.findByText(/Atenção: uma entrevista de RH/i)).toBeInTheDocument();
   });
 });
 

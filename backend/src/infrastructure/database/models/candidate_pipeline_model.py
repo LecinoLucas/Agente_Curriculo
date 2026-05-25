@@ -11,7 +11,7 @@ from src.infrastructure.database.base import Base
 
 _STAGE_VALUES = (
     "'entry', 'screening', 'hr_interview', 'technical_interview', "
-    "'final', 'offer', 'hired', 'rejected'"
+    "'final', 'offer', 'hired', 'pre_admission', 'protheus', 'admitted', 'rejected'"
 )
 
 

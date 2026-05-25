@@ -15,6 +15,11 @@ from src.application.services.upload_validation_service import (
     resume_upload_policy,
     validate_upload,
 )
+from src.core.pipeline_stages import (
+    is_operationally_closed_process,
+    is_post_hiring_active_stage,
+    is_success_terminal_stage,
+)
 from src.core.settings import settings
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
@@ -44,6 +49,11 @@ from src.application.services.candidate_profile_completion_service import Candid
 logger = structlog.get_logger(__name__)
 
 MAX_PDF_UPLOAD_BYTES = settings.max_upload_size_bytes
+_POST_HIRING_STATUS_LABELS = {
+    "hired": "Contratado",
+    "pre_admission": "Pré-admissão",
+    "protheus": "Protheus",
+}
 
 
 class CandidatePortalProfileConflictError(Exception):
@@ -121,7 +131,7 @@ class CandidatePortalService:
             active_application=active_application,
         )
         closed_reason_public_label = self._closed_reason_public_label(application_status)
-        is_process_closed = application_status in {"rejected", "hired"}
+        is_process_closed = application_status in {"admitted", "rejected"}
         return CandidatePortalOverviewResponse(
             candidate=CandidatePortalCandidateSummaryResponse(
                 id=candidate["id"],
@@ -139,7 +149,7 @@ class CandidatePortalService:
             active_application=active_application,
             application_history=history,
             latest_resume=latest_resume,
-            talent_pool=active_application is None,
+            talent_pool=application_status in {"talent_pool", "no_active_application", "rejected"},
             status_public=current_process_status_label,
             application_status=application_status,
             current_process_status_label=current_process_status_label,
@@ -379,10 +389,15 @@ class CandidatePortalService:
         if current_process_row is not None:
             relationship_status = current_process_row["relationship_status"]
             stage = current_process_row["stage"]
-            if relationship_status == "rejected" or stage == "rejected":
+            if is_operationally_closed_process(
+                relationship_status=relationship_status,
+                stage=stage,
+            ):
                 return "rejected"
-            if relationship_status == "hired" or stage == "hired":
-                return "hired"
+            if is_success_terminal_stage(stage) or relationship_status == "hired":
+                return "admitted"
+            if relationship_status == "active" or is_post_hiring_active_stage(stage):
+                return "active"
         return "talent_pool" if latest_resume is not None else "no_active_application"
 
     @staticmethod
@@ -395,8 +410,8 @@ class CandidatePortalService:
             return active_application.status_public
         if application_status == "rejected":
             return "Processo encerrado"
-        if application_status == "hired":
-            return "Processo concluído"
+        if application_status == "admitted":
+            return "Admitido"
         if application_status == "talent_pool":
             return "Você está em nosso banco de talentos"
         return "Nenhuma candidatura ativa"
@@ -405,8 +420,8 @@ class CandidatePortalService:
     def _closed_reason_public_label(application_status: str) -> str | None:
         if application_status == "rejected":
             return "Você não foi selecionado para esta vaga no momento."
-        if application_status == "hired":
-            return "Processo concluído."
+        if application_status == "admitted":
+            return "Admissão concluída."
         return None
 
     async def _build_public_timeline(
@@ -535,7 +550,15 @@ class CandidatePortalService:
         relationship_status: str,
         analysis_status: str | None,
     ) -> str:
-        if relationship_status in {"rejected", "hired", "withdrawn", "archived"} or stage in {"hired", "rejected"}:
+        if (
+            is_success_terminal_stage(stage)
+            or relationship_status == "hired"
+            or is_operationally_closed_process(
+                relationship_status=relationship_status,
+                stage=stage,
+            )
+            or is_post_hiring_active_stage(stage)
+        ):
             return "result"
         if stage in {"hr_interview", "technical_interview", "final", "offer"}:
             return "interview"
@@ -563,9 +586,14 @@ class CandidatePortalService:
 
     @staticmethod
     def _result_label(relationship_status: str, stage: str) -> str:
-        if relationship_status == "hired" or stage == "hired":
+        if is_success_terminal_stage(stage):
+            return "Admitido"
+        if relationship_status == "hired" or is_post_hiring_active_stage(stage):
             return "Aprovado"
-        if relationship_status in {"rejected", "withdrawn", "archived"} or stage == "rejected":
+        if is_operationally_closed_process(
+            relationship_status=relationship_status,
+            stage=stage,
+        ):
             return "Processo encerrado"
         return "Resultado"
 
@@ -577,8 +605,15 @@ class CandidatePortalService:
         analysis_status: str | None,
     ) -> str:
         normalized_analysis = (analysis_status or "").lower()
-        if relationship_status in {"rejected", "hired", "withdrawn", "archived"}:
+        if is_operationally_closed_process(
+            relationship_status=relationship_status,
+            stage=stage,
+        ):
             return "Processo encerrado"
+        if is_success_terminal_stage(stage) or relationship_status == "hired":
+            return "Admitido"
+        if is_post_hiring_active_stage(stage):
+            return _POST_HIRING_STATUS_LABELS[stage]
         if normalized_analysis in {"pending", "processing", "retry_scheduled"}:
             return "Currículo em análise"
         if normalized_analysis == "completed":
@@ -602,6 +637,14 @@ class CandidatePortalService:
             return "screening"
         if status_public == "Entrevista":
             return "interview"
+        if status_public == "Contratado":
+            return "hired"
+        if status_public == "Pré-admissão":
+            return "pre_admission"
+        if status_public == "Protheus":
+            return "protheus"
+        if status_public == "Admitido":
+            return "admitted"
         if status_public == "Processo encerrado":
             return "finished"
         if status_public == "Banco de Talentos":

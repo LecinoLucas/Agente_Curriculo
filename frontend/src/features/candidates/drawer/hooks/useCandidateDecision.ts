@@ -113,7 +113,7 @@ export function useCandidateDecision({
   const activeJobCompatibilityScore = normalizeScorePercent(
     rankingEntry?.job_fit_score ?? activeJobMatch?.job_fit_score ?? null,
   );
-  const isTerminalPipelineStage = currentStage === "hired" || currentStage === "rejected";
+  const isTerminalPipelineStage = currentStage === "rejected";
 
   const transferAvailableJobs = useMemo(
     () =>

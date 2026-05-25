@@ -271,7 +271,14 @@ export function CandidateProfileView({
           />
         ) : null}
 
-        {!isLoading && (activeJobCompatibilityScore !== null || currentStage === "hired" || currentStage === "rejected") ? (
+        {!isLoading && (
+          activeJobCompatibilityScore !== null ||
+          currentStage === "hired" ||
+          currentStage === "pre_admission" ||
+          currentStage === "protheus" ||
+          currentStage === "admitted" ||
+          currentStage === "rejected"
+        ) ? (
           <CandidateDecisionPanel
             currentStage={currentStage}
             analysisResult={analysisResult}

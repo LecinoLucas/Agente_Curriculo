@@ -194,10 +194,13 @@ async def _seed_scoring_case(
 
     # 4. Create candidate_job_pipeline (REQUIRED by endpoint)
     pipeline = CandidateJobPipelineModel(
+        candidate_job_pipeline_id=uuid4(),
         candidate_id=candidate.id,
         job_id=job.id,
         resume_version_id=resume_version.id,
         link_status="active",
+        relationship_status="active",
+        is_terminal=False,
         pipeline_stage="entry",
         pipeline_status="active",
     )

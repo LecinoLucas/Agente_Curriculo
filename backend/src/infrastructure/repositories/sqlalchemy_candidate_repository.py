@@ -19,6 +19,9 @@ from src.infrastructure.database.models.behavioral_assignment_model import (
     BehavioralAssessmentAIEvaluationModel,
     BehavioralAssessmentAssignmentModel,
 )
+from src.infrastructure.database.models.hiring_decision_model import (
+    CandidateJobHiringDecisionModel,
+)
 from src.infrastructure.database.models.admission_model import Admission, CandidateDocument
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
@@ -28,6 +31,9 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 from src.infrastructure.database.models.candidate_note_model import CandidateNoteModel
 from src.infrastructure.database.models.document_ai_analysis_model import DocumentAIAnalysisModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
+from src.infrastructure.database.models.interview_scorecard_model import (
+    InterviewScorecardModel,
+)
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
@@ -51,8 +57,8 @@ from src.infrastructure.repositories.base_soft_delete_repository import BaseSoft
 _ACTIVE_RELATIONSHIP_STATUS = "active"
 _VISIBLE_RELATIONSHIP_STATUSES = ("active", "hired", "rejected")
 _PORTAL_HISTORY_RELATIONSHIP_STATUSES = ("active", "hired", "rejected", "archived", "withdrawn")
-_CRITICAL_PIPELINE_STAGES = ("final", "offer", "hired", "rejected")
-_CRITICAL_RELATIONSHIP_STATUSES = ("hired", "rejected")
+_CRITICAL_PIPELINE_STAGES = ("final", "offer", "hired", "pre_admission", "protheus", "admitted", "rejected")
+_CRITICAL_RELATIONSHIP_STATUSES = ("rejected",)
 _CRITICAL_ADMISSION_STATUSES = ("in_progress", "approved")
 
 
@@ -69,6 +75,40 @@ class CandidateDeleteSummary:
 class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, CandidateModel)
+
+    @staticmethod
+    def _touch_cycle(cycle: dict, value) -> None:
+        if value is None:
+            return
+        current = cycle.get("_activity_at")
+        if current is None or value > current:
+            cycle["_activity_at"] = value
+
+    @staticmethod
+    def _event_pipeline_id(idempotency_key: str | None, metadata_payload: object | None) -> UUID | None:
+        if isinstance(metadata_payload, dict):
+            raw = metadata_payload.get("pipeline_id")
+            if isinstance(raw, str):
+                try:
+                    return UUID(raw)
+                except ValueError:
+                    pass
+        if not idempotency_key or not idempotency_key.startswith("pipeline:"):
+            return None
+        parts = idempotency_key.split(":")
+        if len(parts) < 2:
+            return None
+        try:
+            return UUID(parts[1])
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _process_history_sort_value(item: dict) -> float:
+        value = item.get("closed_at") or item.get("_activity_at") or item.get("started_at")
+        if value is None:
+            return 0.0
+        return value.timestamp()
 
     async def create(self, candidate: CandidateModel) -> CandidateModel:
         self._session.add(candidate)
@@ -1054,6 +1094,326 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         )
         return [dict(row) for row in result.mappings().all()]
 
+    async def list_process_history(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID | None = None,
+    ) -> list[dict]:
+        filters = [CandidateJobPipelineModel.candidate_id == candidate_id]
+        event_filters = [CandidateJobPipelineEventModel.candidate_id == candidate_id]
+        if job_id is not None:
+            filters.append(CandidateJobPipelineModel.job_id == job_id)
+            event_filters.append(CandidateJobPipelineEventModel.job_id == job_id)
+
+        pipeline_rows = (
+            await self._session.execute(
+                sa.select(
+                    CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
+                    CandidateJobPipelineModel.candidate_id,
+                    CandidateJobPipelineModel.job_id,
+                    JobModel.title.label("job_title"),
+                    CandidateJobPipelineModel.pipeline_stage.label("stage"),
+                    CandidateJobPipelineModel.relationship_status,
+                    CandidateJobPipelineModel.is_terminal,
+                    CandidateJobPipelineModel.terminated_at,
+                    CandidateJobPipelineModel.termination_reason,
+                    CandidateJobPipelineModel.entered_at,
+                    CandidateJobPipelineModel.updated_at,
+                )
+                .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+                .where(
+                    *filters,
+                    CandidateJobPipelineModel.candidate_job_pipeline_id.is_not(None),
+                    JobModel.deleted_at.is_(None),
+                )
+            )
+        ).mappings().all()
+
+        current_by_pipeline = {
+            row["pipeline_id"]: dict(row)
+            for row in pipeline_rows
+            if row["pipeline_id"] is not None
+            and row["relationship_status"] == "active"
+            and not bool(row["is_terminal"])
+            and row["terminated_at"] is None
+        }
+        job_titles = {row["job_id"]: row["job_title"] for row in pipeline_rows}
+        cycles: dict[UUID, dict] = {}
+
+        def ensure_cycle(pipeline_id: UUID, job_id_value: UUID, job_title: str | None = None) -> dict:
+            cycle = cycles.setdefault(
+                pipeline_id,
+                {
+                    "pipeline_id": pipeline_id,
+                    "job_id": job_id_value,
+                    "job_title": job_title or job_titles.get(job_id_value) or "Vaga",
+                    "is_current": pipeline_id in current_by_pipeline,
+                    "started_at": None,
+                    "closed_at": None,
+                    "current_or_final_stage": "entry",
+                    "relationship_status": None,
+                    "closure_reason": None,
+                    "events_count": 0,
+                    "interviews": [],
+                    "scorecards": [],
+                    "behavioral_assessment": None,
+                    "hiring_decision": None,
+                    "_activity_at": None,
+                },
+            )
+            if job_title and cycle["job_title"] == "Vaga":
+                cycle["job_title"] = job_title
+            return cycle
+
+        for row in pipeline_rows:
+            pipeline_id = row["pipeline_id"]
+            if pipeline_id is None:
+                continue
+            cycle = ensure_cycle(pipeline_id, row["job_id"], row["job_title"])
+            cycle["is_current"] = pipeline_id in current_by_pipeline
+            cycle["started_at"] = row["entered_at"] or row["updated_at"]
+            cycle["closed_at"] = row["terminated_at"]
+            cycle["current_or_final_stage"] = row["stage"]
+            cycle["relationship_status"] = row["relationship_status"]
+            cycle["closure_reason"] = row["termination_reason"]
+            cycle["_activity_at"] = row["updated_at"]
+
+        job_filter_clause = [InterviewScheduleModel.candidate_id == candidate_id, InterviewScheduleModel.pipeline_id.is_not(None)]
+        if job_id is not None:
+            job_filter_clause.append(InterviewScheduleModel.job_id == job_id)
+        interview_rows = (
+            await self._session.execute(
+                sa.select(
+                    InterviewScheduleModel.id,
+                    InterviewScheduleModel.pipeline_id,
+                    InterviewScheduleModel.job_id,
+                    JobModel.title.label("job_title"),
+                    InterviewScheduleModel.interview_type,
+                    InterviewScheduleModel.status,
+                    InterviewScheduleModel.scheduled_start,
+                    InterviewScheduleModel.created_at,
+                    InterviewScheduleModel.updated_at,
+                    InterviewScorecardModel.status.label("scorecard_status"),
+                    InterviewScorecardModel.final_recommendation,
+                )
+                .join(JobModel, JobModel.id == InterviewScheduleModel.job_id)
+                .outerjoin(
+                    InterviewScorecardModel,
+                    InterviewScorecardModel.interview_id == InterviewScheduleModel.id,
+                )
+                .where(*job_filter_clause, JobModel.deleted_at.is_(None))
+                .order_by(InterviewScheduleModel.scheduled_start.asc(), InterviewScheduleModel.id.asc())
+            )
+        ).mappings().all()
+
+        for row in interview_rows:
+            pipeline_id = row["pipeline_id"]
+            if pipeline_id is None or row["job_id"] is None:
+                continue
+            cycle = ensure_cycle(pipeline_id, row["job_id"], row["job_title"])
+            cycle["interviews"].append(
+                {
+                    "id": row["id"],
+                    "type": row["interview_type"],
+                    "status": row["status"],
+                    "scheduled_at": row["scheduled_start"],
+                    "scorecard_status": row["scorecard_status"],
+                    "final_recommendation": row["final_recommendation"],
+                }
+            )
+            self._touch_cycle(cycle, row["created_at"])
+            self._touch_cycle(cycle, row["updated_at"])
+
+        scorecard_filters = [InterviewScorecardModel.candidate_id == candidate_id, InterviewScorecardModel.pipeline_id.is_not(None)]
+        if job_id is not None:
+            scorecard_filters.append(InterviewScorecardModel.job_id == job_id)
+        scorecard_rows = (
+            await self._session.execute(
+                sa.select(
+                    InterviewScorecardModel.id,
+                    InterviewScorecardModel.pipeline_id,
+                    InterviewScorecardModel.job_id,
+                    JobModel.title.label("job_title"),
+                    InterviewScorecardModel.interview_id,
+                    InterviewScorecardModel.status,
+                    InterviewScorecardModel.final_recommendation,
+                    InterviewScorecardModel.submitted_at,
+                    InterviewScorecardModel.created_at,
+                    InterviewScorecardModel.updated_at,
+                )
+                .join(JobModel, JobModel.id == InterviewScorecardModel.job_id)
+                .where(*scorecard_filters, JobModel.deleted_at.is_(None))
+                .order_by(InterviewScorecardModel.updated_at.desc(), InterviewScorecardModel.id.desc())
+            )
+        ).mappings().all()
+
+        for row in scorecard_rows:
+            pipeline_id = row["pipeline_id"]
+            if pipeline_id is None:
+                continue
+            cycle = ensure_cycle(pipeline_id, row["job_id"], row["job_title"])
+            cycle["scorecards"].append(
+                {
+                    "id": row["id"],
+                    "interview_id": row["interview_id"],
+                    "status": row["status"],
+                    "final_recommendation": row["final_recommendation"],
+                    "submitted_at": row["submitted_at"],
+                }
+            )
+            self._touch_cycle(cycle, row["submitted_at"])
+            self._touch_cycle(cycle, row["created_at"])
+            self._touch_cycle(cycle, row["updated_at"])
+
+        assignment_filters = [
+            BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+            BehavioralAssessmentAssignmentModel.pipeline_id.is_not(None),
+        ]
+        if job_id is not None:
+            assignment_filters.append(BehavioralAssessmentAssignmentModel.job_id == job_id)
+        assignment_rows = (
+            await self._session.execute(
+                sa.select(
+                    BehavioralAssessmentAssignmentModel.id,
+                    BehavioralAssessmentAssignmentModel.pipeline_id,
+                    BehavioralAssessmentAssignmentModel.job_id,
+                    JobModel.title.label("job_title"),
+                    BehavioralAssessmentAssignmentModel.status,
+                    BehavioralAssessmentAssignmentModel.submitted_at,
+                    BehavioralAssessmentAssignmentModel.created_at,
+                    BehavioralAssessmentAssignmentModel.updated_at,
+                    BehavioralAssessmentAIEvaluationModel.status.label("ai_status"),
+                    BehavioralAssessmentAIEvaluationModel.completed_at.label("ai_completed_at"),
+                    BehavioralAssessmentAIEvaluationModel.updated_at.label("ai_updated_at"),
+                )
+                .join(JobModel, JobModel.id == BehavioralAssessmentAssignmentModel.job_id)
+                .outerjoin(
+                    BehavioralAssessmentAIEvaluationModel,
+                    BehavioralAssessmentAIEvaluationModel.assignment_id == BehavioralAssessmentAssignmentModel.id,
+                )
+                .where(*assignment_filters, JobModel.deleted_at.is_(None))
+                .order_by(
+                    BehavioralAssessmentAssignmentModel.updated_at.desc(),
+                    BehavioralAssessmentAssignmentModel.id.desc(),
+                )
+            )
+        ).mappings().all()
+
+        seen_assignments: set[UUID] = set()
+        for row in assignment_rows:
+            pipeline_id = row["pipeline_id"]
+            if pipeline_id is None or row["id"] in seen_assignments:
+                continue
+            seen_assignments.add(row["id"])
+            cycle = ensure_cycle(pipeline_id, row["job_id"], row["job_title"])
+            if cycle["behavioral_assessment"] is None:
+                cycle["behavioral_assessment"] = {
+                    "assignment_id": row["id"],
+                    "status": row["status"],
+                    "submitted_at": row["submitted_at"],
+                    "ai_status": row["ai_status"],
+                    "ai_completed_at": row["ai_completed_at"],
+                }
+            self._touch_cycle(cycle, row["submitted_at"])
+            self._touch_cycle(cycle, row["created_at"])
+            self._touch_cycle(cycle, row["updated_at"])
+            self._touch_cycle(cycle, row["ai_completed_at"])
+            self._touch_cycle(cycle, row["ai_updated_at"])
+
+        decision_filters = [
+            CandidateJobHiringDecisionModel.candidate_id == candidate_id,
+            CandidateJobHiringDecisionModel.pipeline_id.is_not(None),
+        ]
+        if job_id is not None:
+            decision_filters.append(CandidateJobHiringDecisionModel.job_id == job_id)
+        decision_rows = (
+            await self._session.execute(
+                sa.select(
+                    CandidateJobHiringDecisionModel.id,
+                    CandidateJobHiringDecisionModel.pipeline_id,
+                    CandidateJobHiringDecisionModel.job_id,
+                    JobModel.title.label("job_title"),
+                    CandidateJobHiringDecisionModel.decision_status,
+                    CandidateJobHiringDecisionModel.decision_outcome,
+                    CandidateJobHiringDecisionModel.submitted_at,
+                    CandidateJobHiringDecisionModel.created_at,
+                    CandidateJobHiringDecisionModel.updated_at,
+                )
+                .join(JobModel, JobModel.id == CandidateJobHiringDecisionModel.job_id)
+                .where(*decision_filters, JobModel.deleted_at.is_(None))
+                .order_by(CandidateJobHiringDecisionModel.updated_at.desc(), CandidateJobHiringDecisionModel.id.desc())
+            )
+        ).mappings().all()
+
+        for row in decision_rows:
+            pipeline_id = row["pipeline_id"]
+            if pipeline_id is None:
+                continue
+            cycle = ensure_cycle(pipeline_id, row["job_id"], row["job_title"])
+            if cycle["hiring_decision"] is None:
+                cycle["hiring_decision"] = {
+                    "id": row["id"],
+                    "status": row["decision_status"],
+                    "outcome": row["decision_outcome"],
+                    "submitted_at": row["submitted_at"],
+                }
+            self._touch_cycle(cycle, row["submitted_at"])
+            self._touch_cycle(cycle, row["created_at"])
+            self._touch_cycle(cycle, row["updated_at"])
+
+        event_rows = (
+            await self._session.execute(
+                sa.select(
+                    CandidateJobPipelineEventModel.job_id,
+                    JobModel.title.label("job_title"),
+                    CandidateJobPipelineEventModel.idempotency_key,
+                    CandidateJobPipelineEventModel.event_type,
+                    CandidateJobPipelineEventModel.from_stage,
+                    CandidateJobPipelineEventModel.to_stage,
+                    CandidateJobPipelineEventModel.metadata_payload,
+                    CandidateJobPipelineEventModel.created_at,
+                )
+                .join(JobModel, JobModel.id == CandidateJobPipelineEventModel.job_id)
+                .where(*event_filters, JobModel.deleted_at.is_(None))
+                .order_by(CandidateJobPipelineEventModel.created_at.asc())
+            )
+        ).mappings().all()
+
+        for row in event_rows:
+            pipeline_id = self._event_pipeline_id(row["idempotency_key"], row["metadata_payload"])
+            if pipeline_id is None:
+                continue
+            cycle = ensure_cycle(pipeline_id, row["job_id"], row["job_title"])
+            cycle["events_count"] += 1
+            if cycle["started_at"] is None:
+                cycle["started_at"] = row["created_at"]
+            self._touch_cycle(cycle, row["created_at"])
+            if row["to_stage"] is not None:
+                cycle["current_or_final_stage"] = row["to_stage"]
+            if row["to_stage"] == "rejected" or row["event_type"] in {"job_transferred_out"}:
+                cycle["closed_at"] = row["created_at"]
+                cycle["relationship_status"] = row["to_stage"] if row["to_stage"] == "rejected" else "archived"
+                metadata = row["metadata_payload"] if isinstance(row["metadata_payload"], dict) else {}
+                reason = metadata.get("reason") or metadata.get("notes")
+                if isinstance(reason, str) and reason.strip():
+                    cycle["closure_reason"] = reason.strip()
+
+        for cycle in cycles.values():
+            if cycle["started_at"] is None:
+                cycle["started_at"] = cycle["_activity_at"]
+            if not cycle["is_current"] and cycle["closed_at"] is None:
+                cycle["closed_at"] = cycle["_activity_at"]
+
+        return [
+            {key: value for key, value in cycle.items() if key != "_activity_at"}
+            for cycle in sorted(
+                cycles.values(),
+                key=self._process_history_sort_value,
+                reverse=True,
+            )
+        ]
+
     async def find_latest_candidate_note_summary(self, candidate_id: UUID) -> dict | None:
         row = await self._session.execute(
             sa.select(
@@ -1503,6 +1863,21 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             .correlate(CandidateModel)
             .exists()
         )
+        visible_post_hire_pipeline_exists = (
+            sa.select(sa.literal(1))
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.pipeline_stage.in_(("hired", "pre_admission", "protheus")),
+                CandidateJobPipelineModel.relationship_status == _ACTIVE_RELATIONSHIP_STATUS,
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .exists()
+        )
         closed_pipeline_exists = (
             sa.select(sa.literal(1))
             .select_from(CandidateJobPipelineModel)
@@ -1522,7 +1897,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             if normalized_link_status in {"with_active_job", "com_vaga_ativa", "active"}:
                 filters.append(active_pipeline_exists)
             elif normalized_link_status in {"without_active_job", "sem_vaga_ativa", "talent_pool"}:
-                filters.append(~active_pipeline_exists)
+                filters.append(sa.and_(~active_pipeline_exists, ~visible_post_hire_pipeline_exists))
             elif normalized_link_status in {"closed_process", "processo_encerrado"}:
                 filters.append(sa.and_(~active_pipeline_exists, closed_pipeline_exists))
 

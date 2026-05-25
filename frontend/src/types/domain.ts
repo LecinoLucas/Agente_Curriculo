@@ -199,6 +199,7 @@ export type CandidatePreviewPendencyOverview = {
   tone: "warning" | "info" | "block" | string;
   action?: string | null;
   description?: string | null;
+  action_payload?: Record<string, unknown> | null;
 };
 
 export type CandidateLatestMovementOverview = {
@@ -574,7 +575,18 @@ export type PipelineStage =
   | "final"
   | "offer"
   | "hired"
+  | "pre_admission"
+  | "protheus"
+  | "admitted"
   | "rejected";
+
+export const POST_HIRING_ACTIVE_STAGES = new Set<PipelineStage>([
+  "hired",
+  "pre_admission",
+  "protheus",
+]);
+
+export const SUCCESS_TERMINAL_STAGES = new Set<PipelineStage>(["admitted"]);
 
 export const TRANSFER_ALLOWED_STAGES: PipelineStage[] = ["entry", "screening"];
 
@@ -615,6 +627,60 @@ export type CandidatePipelineHistory = {
   entered_at: string | null;
   updated_at: string;
   transitions: PipelineStageTransition[];
+};
+
+export type CandidateProcessHistoryInterview = {
+  id: string;
+  type: string;
+  status: string;
+  scheduled_at: string | null;
+  scorecard_status: string | null;
+  final_recommendation: string | null;
+};
+
+export type CandidateProcessHistoryScorecard = {
+  id: string;
+  interview_id: string | null;
+  status: string;
+  final_recommendation: string | null;
+  submitted_at: string | null;
+};
+
+export type CandidateProcessHistoryBehavioral = {
+  assignment_id: string;
+  status: string;
+  submitted_at: string | null;
+  ai_status: string | null;
+  ai_completed_at: string | null;
+};
+
+export type CandidateProcessHistoryDecision = {
+  id: string;
+  status: string;
+  outcome: string;
+  submitted_at: string | null;
+};
+
+export type CandidateProcessHistoryItem = {
+  pipeline_id: string;
+  job_id: string;
+  job_title: string;
+  is_current: boolean;
+  started_at: string | null;
+  closed_at: string | null;
+  current_or_final_stage: PipelineStage | string;
+  result_label: string;
+  closure_reason: string | null;
+  events_count: number;
+  interviews: CandidateProcessHistoryInterview[];
+  scorecards: CandidateProcessHistoryScorecard[];
+  behavioral_assessment: CandidateProcessHistoryBehavioral | null;
+  hiring_decision: CandidateProcessHistoryDecision | null;
+};
+
+export type CandidateProcessHistory = {
+  candidate_id: string;
+  processes: CandidateProcessHistoryItem[];
 };
 
 export type MovePipelineCandidatePayload = {
@@ -1100,6 +1166,8 @@ export type HiringDecisionPipelineStage =
   | "final"
   | "offer"
   | "hired"
+  | "pre_admission"
+  | "protheus"
   | "rejected";
 
 export type HiringDecisionPipelineActionPayload = {

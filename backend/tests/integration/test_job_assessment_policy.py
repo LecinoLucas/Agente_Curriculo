@@ -143,11 +143,22 @@ async def _seed_policy_case(
     return job_id, candidate_id, {"owner_id": owner.id}
 
 
+async def _get_active_pipeline_id(db_session: AsyncSession, *, candidate_id: UUID, job_id: UUID) -> UUID | None:
+    return await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+
+
 async def _add_submitted_scorecard(db_session: AsyncSession, *, job_id: UUID, candidate_id: UUID) -> None:
+    pipeline_id = await _get_active_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
     scorecard = InterviewScorecardModel(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         status="submitted",
         final_recommendation="yes",
         overall_notes="Scorecard aprovado.",
@@ -174,10 +185,12 @@ async def _add_completed_interview(
     candidate_id: UUID,
     interview_status: str = "completed",
 ) -> InterviewScheduleModel:
+    pipeline_id = await _get_active_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
     interview = InterviewScheduleModel(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         title="Entrevista Técnica",
         scheduled_start=datetime.now(UTC) - timedelta(days=1),
         scheduled_end=datetime.now(UTC) - timedelta(days=1, hours=-1),

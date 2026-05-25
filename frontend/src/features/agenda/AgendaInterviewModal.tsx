@@ -31,17 +31,18 @@ interface AgendaInterviewModalProps {
 const INTERVIEW_TYPES = [
   { value: "screening", label: "Triagem" },
   { value: "technical", label: "Técnica" },
-  { value: "manager", label: "Gerente" },
+  { value: "manager", label: "Gestor" },
   { value: "hr", label: "RH" },
   { value: "final", label: "Final" },
-  { value: "other", label: "Outro" },
+  { value: "other", label: "Outra" },
 ];
 
 const STATUSES = [
   { value: "scheduled", label: "Agendada" },
   { value: "completed", label: "Concluída" },
+  { value: "awaiting_feedback", label: "Aguardando feedback" },
   { value: "cancelled", label: "Cancelada" },
-  { value: "rescheduled", label: "Remarcada" },
+  { value: "rescheduled", label: "Reagendada" },
   { value: "no_show", label: "Não compareceu" },
 ];
 
@@ -343,6 +344,9 @@ export function AgendaInterviewModal({
           editSnapshot != null &&
           (scheduled_start !== editSnapshot.scheduled_start ||
             scheduled_end !== editSnapshot.scheduled_end);
+        const shouldReactivateByReschedule =
+          timeWasChanged &&
+          (editSnapshot?.status === "cancelled" || editSnapshot?.status === "no_show");
         const payload: InterviewScheduleUpdatePayload = {
           title: form.title || undefined,
           description: form.description || null,
@@ -354,7 +358,9 @@ export function AgendaInterviewModal({
           interview_type: form.interview_type as any,
           interview_format: form.interview_format as any,
           status:
-            statusWasManuallyChanged || !timeWasChanged
+            shouldReactivateByReschedule
+              ? "rescheduled"
+              : statusWasManuallyChanged || !timeWasChanged
               ? (form.status as any)
               : undefined,
           location: form.location || null,

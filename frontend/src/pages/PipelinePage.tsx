@@ -46,6 +46,9 @@ const MAIN_STAGES: ReadonlyArray<PipelineStage> = [
   "final",
   "offer",
   "hired",
+  "pre_admission",
+  "protheus",
+  "admitted",
 ];
 const PIPELINE_SHOW_RANKING_STORAGE_KEY = "pipeline:showRanking";
 const PIPELINE_LAST_SELECTED_JOB_KEY = "pipeline:lastSelectedJobId";
@@ -514,7 +517,7 @@ export function PipelinePage() {
   const emAndamento = useMemo(() => {
     if (!board) return 0;
     return board.columns
-      .filter((col) => col.stage !== "hired" && col.stage !== "rejected")
+      .filter((col) => col.stage !== "rejected" && col.stage !== "admitted")
       .reduce((sum, col) => sum + col.candidates.length, 0);
   }, [board]);
 
@@ -527,8 +530,9 @@ export function PipelinePage() {
 
   const contratacoes = useMemo(() => {
     if (!board) return 0;
-    const col = board.columns.find((c) => c.stage === "hired");
-    return col ? col.candidates.length : 0;
+    return board.columns
+      .filter((c) => c.stage === "hired" || c.stage === "pre_admission" || c.stage === "protheus" || c.stage === "admitted")
+      .reduce((sum, col) => sum + col.candidates.length, 0);
   }, [board]);
 
   const selectedJobMeta = useMemo(() => {
@@ -1165,8 +1169,12 @@ export function PipelinePage() {
           setShowSourceCandidates(false);
           setShowNewCandidate(true);
         }}
-        onOpenCandidate={(candidateId) => {
+        onOpenCandidate={(candidateId, targetUrl) => {
           setShowSourceCandidates(false);
+          if (targetUrl) {
+            navigate(targetUrl);
+            return;
+          }
           setPreviewCandidateId(candidateId);
         }}
       />

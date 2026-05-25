@@ -387,7 +387,7 @@ class AdminBIService:
             .select_from(CandidateJobPipelineModel)
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
             .where(
-                CandidateJobPipelineModel.relationship_status == "hired",
+                CandidateJobPipelineModel.pipeline_stage.in_(("hired", "pre_admission", "protheus", "admitted")),
                 JobModel.deleted_at.is_(None),
             )
         )

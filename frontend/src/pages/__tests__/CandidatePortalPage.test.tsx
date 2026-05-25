@@ -303,6 +303,246 @@ describe("CandidatePortalPage.nextSteps", () => {
     expect(screen.getByText("Resultado")).toBeInTheDocument();
     expect(screen.getByText("Você será atualizado sobre o resultado do processo.")).toBeInTheDocument();
   });
+
+  it("mantém pré-admissão como processo ativo e não mostra processo encerrado", async () => {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: {
+        id: "cand-1",
+        full_name: "Joana Admitida",
+        email: "joana@example.com",
+        phone: "11999999999",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "public_application",
+        application_source_label: "Candidatura pública",
+      },
+      active_application: {
+        pipeline_id: "pipeline-1",
+        job_id: "job-1",
+        job_title: "Analista de Suporte N1",
+        pipeline_stage: "pre_admission",
+        status_public: "Pré-admissão",
+        submitted_at: "2026-05-10T10:00:00Z",
+        current_analysis_id: null,
+        analysis_status: null,
+        resume_version_id: "resume-version-1",
+        resume_filename: "joana.pdf",
+        is_talent_pool: false,
+      },
+      application_history: [],
+      latest_resume: {
+        resume_id: "resume-1",
+        resume_version_id: "resume-version-1",
+        file_name: "joana.pdf",
+        extraction_status: "completed",
+        uploaded_at: "2026-05-10T10:00:00Z",
+      },
+      talent_pool: false,
+      status_public: "Pré-admissão",
+      application_status: "active",
+      current_process_status_label: "Pré-admissão",
+      is_process_closed: false,
+      closed_reason_public_label: null,
+      can_request_contact: true,
+      can_apply_to_other_jobs: true,
+      public_timeline: {
+        current_step_key: "result",
+        current_step_label: "Aprovado",
+        steps: [
+          {
+            key: "application_received",
+            label: "Inscrição recebida",
+            status: "completed",
+            description: "Recebemos sua candidatura.",
+            interview: null,
+          },
+          {
+            key: "resume_analysis",
+            label: "Currículo em análise",
+            status: "completed",
+            description: "Seu currículo está sendo avaliado.",
+            interview: null,
+          },
+          {
+            key: "result",
+            label: "Aprovado",
+            status: "current",
+            description: "Você foi aprovado e segue em andamento admissional.",
+            interview: null,
+          },
+        ],
+      },
+    });
+
+    renderPortal();
+
+    expect((await screen.findAllByText("Pré-admissão")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Analista de Suporte N1")).toBeInTheDocument();
+    expect(screen.queryByText("Processo encerrado")).not.toBeInTheDocument();
+  });
+
+  it("mostra admitido como sucesso final sem banco de talentos", async () => {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: {
+        id: "cand-1",
+        full_name: "Joana Admitida",
+        email: "joana@example.com",
+        phone: "11999999999",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "public_application",
+        application_source_label: "Candidatura pública",
+      },
+      active_application: null,
+      application_history: [
+        {
+          pipeline_id: "pipeline-1",
+          job_id: "job-1",
+          job_title: "Analista de Suporte N1",
+          status: "admitted",
+          status_label: "Admitido",
+          submitted_at: "2026-05-10T10:00:00Z",
+          updated_at: "2026-05-25T10:00:00Z",
+          resume_file_name: "joana.pdf",
+          analysis_status: null,
+          application_source: "public_application",
+          talent_pool: false,
+          talent_pool_profile_status: null,
+        },
+      ],
+      latest_resume: {
+        resume_id: "resume-1",
+        resume_version_id: "resume-version-1",
+        file_name: "joana.pdf",
+        extraction_status: "completed",
+        uploaded_at: "2026-05-10T10:00:00Z",
+      },
+      talent_pool: false,
+      status_public: "Admitido",
+      application_status: "admitted",
+      current_process_status_label: "Admitido",
+      is_process_closed: true,
+      closed_reason_public_label: "Admissão concluída.",
+      can_request_contact: true,
+      can_apply_to_other_jobs: true,
+      public_timeline: {
+        current_step_key: "result",
+        current_step_label: "Admitido",
+        steps: [
+          {
+            key: "application_received",
+            label: "Inscrição recebida",
+            status: "completed",
+            description: "Recebemos sua candidatura.",
+            interview: null,
+          },
+          {
+            key: "result",
+            label: "Admitido",
+            status: "current",
+            description: "Admissão concluída.",
+            interview: null,
+          },
+        ],
+      },
+    });
+
+    renderPortal();
+
+    expect((await screen.findAllByText("Admitido")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Analista de Suporte N1")).toBeInTheDocument();
+    expect(screen.queryByText("Você está no nosso Banco de Talentos.")).not.toBeInTheDocument();
+  });
+
+  it("não cobra avaliação comportamental pendente após admitted", async () => {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: {
+        id: "cand-1",
+        full_name: "Joana Admitida",
+        email: "joana@example.com",
+        phone: "11999999999",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "public_application",
+        application_source_label: "Candidatura pública",
+      },
+      active_application: null,
+      application_history: [
+        {
+          pipeline_id: "pipeline-1",
+          job_id: "job-1",
+          job_title: "Analista de Suporte N1",
+          status: "admitted",
+          status_label: "Admitido",
+          submitted_at: "2026-05-10T10:00:00Z",
+          updated_at: "2026-05-25T10:00:00Z",
+          resume_file_name: "joana.pdf",
+          analysis_status: null,
+          application_source: "public_application",
+          talent_pool: false,
+          talent_pool_profile_status: null,
+        },
+      ],
+      latest_resume: {
+        resume_id: "resume-1",
+        resume_version_id: "resume-version-1",
+        file_name: "joana.pdf",
+        extraction_status: "completed",
+        uploaded_at: "2026-05-10T10:00:00Z",
+      },
+      talent_pool: false,
+      status_public: "Admitido",
+      application_status: "admitted",
+      current_process_status_label: "Admitido",
+      is_process_closed: true,
+      closed_reason_public_label: "Admissão concluída.",
+      can_request_contact: true,
+      can_apply_to_other_jobs: true,
+      public_timeline: {
+        current_step_key: "result",
+        current_step_label: "Admitido",
+        steps: [
+          {
+            key: "application_received",
+            label: "Inscrição recebida",
+            status: "completed",
+            description: "Recebemos sua candidatura.",
+            interview: null,
+          },
+          {
+            key: "result",
+            label: "Admitido",
+            status: "current",
+            description: "Admissão concluída.",
+            interview: null,
+          },
+        ],
+      },
+    });
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([
+      {
+        id: "assignment-1",
+        candidate_id: "cand-1",
+        job_id: "job-1",
+        job_title: "Analista de Suporte N1",
+        template_id: "template-1",
+        template_name: "Perfil comportamental",
+        status: "pending",
+        assigned_at: "2026-05-10T10:00:00Z",
+        started_at: null,
+        submitted_at: null,
+        expires_at: null,
+        answered_count: 0,
+        question_count: 10,
+      },
+    ]);
+
+    renderPortal();
+
+    await screen.findByText("Analista de Suporte N1");
+
+    expect(screen.queryByText("Avaliação comportamental pendente")).not.toBeInTheDocument();
+  });
 });
 
 describe("CandidatePortalPage.rejectedProcess", () => {

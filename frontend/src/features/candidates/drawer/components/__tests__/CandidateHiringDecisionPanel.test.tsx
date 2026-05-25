@@ -91,7 +91,14 @@ describe("CandidateHiringDecisionPanel", () => {
 
   it("registra decisão sem mover pipeline", async () => {
     const user = userEvent.setup();
-    render(<CandidateHiringDecisionPanel jobId="job-1" candidateId="candidate-1" />);
+    const onDecisionSubmitted = vi.fn();
+    render(
+      <CandidateHiringDecisionPanel
+        jobId="job-1"
+        candidateId="candidate-1"
+        onDecisionSubmitted={onDecisionSubmitted}
+      />,
+    );
 
     await screen.findByText(/Nenhuma decisão final registrada/i);
     await user.click(screen.getByRole("button", { name: /^Registrar decisão$/i }));
@@ -112,30 +119,20 @@ describe("CandidateHiringDecisionPanel", () => {
         }),
       );
     });
+    await waitFor(() => {
+      expect(onDecisionSubmitted).toHaveBeenCalledWith(submittedDecision);
+    });
   });
 
-  it("registra decisão com pipeline_action", async () => {
+  it("não oferece movimentação de pipeline no formulário de decisão", async () => {
     const user = userEvent.setup();
     render(<CandidateHiringDecisionPanel jobId="job-1" candidateId="candidate-1" />);
 
     await screen.findByText(/Nenhuma decisão final registrada/i);
     await user.click(screen.getByRole("button", { name: /^Registrar decisão$/i }));
-    await user.selectOptions(screen.getByLabelText(/^Decisão$/i), "advance");
-    await user.selectOptions(screen.getByLabelText(/^Motivo$/i), "strong_fit");
-    await user.click(screen.getByLabelText(/Mover candidato na pipeline agora/i));
-    await user.selectOptions(screen.getByLabelText(/Etapa de destino/i), "hired");
-    await user.click(screen.getByLabelText(/Confirmo que esta decisão/i));
-    await user.click(screen.getAllByRole("button", { name: /^Registrar decisão$/i })[1]);
 
-    await waitFor(() => {
-      expect(hiringDecisionService.createHiringDecision).toHaveBeenCalledWith(
-        "job-1",
-        "candidate-1",
-        expect.objectContaining({
-          pipeline_action: expect.objectContaining({ enabled: true, target_stage: "hired" }),
-        }),
-      );
-    });
+    expect(screen.queryByLabelText(/Mover candidato na pipeline agora/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Etapa de destino/i)).not.toBeInTheDocument();
   });
 
   it("mostra decisão submitted", async () => {

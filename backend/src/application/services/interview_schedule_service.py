@@ -57,6 +57,7 @@ class InterviewScheduleService:
         job_id: Optional[UUID] = None,
         interviewer: Optional[str] = None,
         search: Optional[str] = None,
+        active_pipeline_only: bool = False,
     ) -> tuple[list[dict], int]:
         if date_from and date_to and date_from > date_to:
             raise ValidationException("date_from não pode ser maior que date_to")
@@ -71,6 +72,7 @@ class InterviewScheduleService:
             job_id=job_id,
             interviewer=interviewer,
             search=search,
+            active_pipeline_only=active_pipeline_only,
         )
 
         return items, total
@@ -271,9 +273,9 @@ class InterviewScheduleService:
         requested_by_user_id: Optional[UUID] = None,
     ) -> InterviewScheduleModel:
         schedule = await self.get_interview(schedule_id)
-        if schedule.status in {"cancelled", "completed", "no_show"}:
+        if schedule.status == "completed":
             raise InterviewScheduleValidationError(
-                "Não é possível remarcar entrevista cancelada, concluída ou no-show"
+                "Não é possível remarcar entrevista concluída"
             )
 
         return await self.update_interview(
@@ -352,8 +354,8 @@ class InterviewScheduleService:
         """Editar/remarcar entrevista."""
         schedule = await self.get_interview(schedule_id)
 
-        # Não permitir editar entrevista cancelada
-        if schedule.status == "cancelled":
+        # Entrevistas canceladas só podem voltar via ação explícita de reagendamento.
+        if schedule.status == "cancelled" and status != "rescheduled":
             raise InterviewScheduleValidationError(
                 "Não é possível editar entrevista cancelada"
             )
@@ -420,6 +422,9 @@ class InterviewScheduleService:
         schedule.scheduled_start = new_start
         schedule.scheduled_end = new_end
         schedule.status = new_status
+        if new_status != "cancelled":
+            schedule.cancel_reason = None
+            schedule.cancelled_at = None
 
         if timezone is not None:
             schedule.timezone = timezone

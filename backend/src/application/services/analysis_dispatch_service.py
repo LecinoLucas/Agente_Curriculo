@@ -26,7 +26,7 @@ from src.interface.workers.analysis_dispatcher import enqueue_analysis
 logger = structlog.get_logger(__name__)
 
 _AUTO_ALLOWED_STAGES: frozenset[str] = frozenset({"entry", "screening"})
-_TERMINAL_LINK_STATUSES: frozenset[str] = frozenset({"hired", "rejected", "removed", "transferred"})
+_TERMINAL_LINK_STATUSES: frozenset[str] = frozenset({"rejected", "removed", "transferred"})
 
 
 @dataclass(frozen=True)

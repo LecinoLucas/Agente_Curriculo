@@ -105,6 +105,8 @@ class CandidatePipelineEntryResponse(BaseModel):
     job_id: UUID
     job_title: str
     stage: str
+    pipeline_id: UUID | None = None
+    resume_version_id: UUID | None = None
     relationship_status: str
     is_terminal: bool
     terminated_at: datetime | None = None
@@ -138,6 +140,7 @@ class CandidatePreviewPendencyResponse(BaseModel):
     tone: str = "info"
     action: str | None = None
     description: str | None = None
+    action_payload: dict | None = None
 
 
 class CandidateLatestMovementResponse(BaseModel):
@@ -175,6 +178,60 @@ class CandidateOverviewResponse(BaseModel):
     latest_note: CandidateLatestNoteResponse | None = None
     preview_pendencies: list[CandidatePreviewPendencyResponse] = Field(default_factory=list)
     latest_movement: CandidateLatestMovementResponse | None = None
+
+
+class CandidateProcessHistoryInterviewResponse(BaseModel):
+    id: UUID
+    type: str
+    status: str
+    scheduled_at: datetime | None = None
+    scorecard_status: str | None = None
+    final_recommendation: str | None = None
+
+
+class CandidateProcessHistoryScorecardResponse(BaseModel):
+    id: UUID
+    interview_id: UUID | None = None
+    status: str
+    final_recommendation: str | None = None
+    submitted_at: datetime | None = None
+
+
+class CandidateProcessHistoryBehavioralResponse(BaseModel):
+    assignment_id: UUID
+    status: str
+    submitted_at: datetime | None = None
+    ai_status: str | None = None
+    ai_completed_at: datetime | None = None
+
+
+class CandidateProcessHistoryDecisionResponse(BaseModel):
+    id: UUID
+    status: str
+    outcome: str
+    submitted_at: datetime | None = None
+
+
+class CandidateProcessHistoryItemResponse(BaseModel):
+    pipeline_id: UUID
+    job_id: UUID
+    job_title: str
+    is_current: bool
+    started_at: datetime | None = None
+    closed_at: datetime | None = None
+    current_or_final_stage: str
+    result_label: str
+    closure_reason: str | None = None
+    events_count: int = 0
+    interviews: list[CandidateProcessHistoryInterviewResponse] = Field(default_factory=list)
+    scorecards: list[CandidateProcessHistoryScorecardResponse] = Field(default_factory=list)
+    behavioral_assessment: CandidateProcessHistoryBehavioralResponse | None = None
+    hiring_decision: CandidateProcessHistoryDecisionResponse | None = None
+
+
+class CandidateProcessHistoryResponse(BaseModel):
+    candidate_id: UUID
+    processes: list[CandidateProcessHistoryItemResponse] = Field(default_factory=list)
 
 
 class CandidateListSummaryResponse(BaseModel):

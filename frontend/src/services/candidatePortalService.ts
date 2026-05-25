@@ -1,4 +1,4 @@
-import { httpRequest } from "./http";
+import { API_BASE_URL, httpRequest, HttpError } from "./http";
 import type {
   PreAdmissionChecklistItem,
   PreAdmissionDocument,
@@ -304,5 +304,21 @@ export const candidatePortalService = {
         body: formData,
       }
     );
+  },
+
+  async downloadPreAdmissionDocument(documentId: string) {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/candidate-portal/pre-admission/documents/${documentId}/download`,
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
+
+    if (!response.ok) {
+      throw new HttpError(response.status, "Não foi possível baixar o documento.");
+    }
+
+    return response.blob();
   },
 };

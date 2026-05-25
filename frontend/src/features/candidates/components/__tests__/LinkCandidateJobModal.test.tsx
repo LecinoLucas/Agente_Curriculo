@@ -252,4 +252,67 @@ describe("LinkCandidateJobModal", () => {
     expect(await screen.findByText("Nenhuma vaga ativa encontrada")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Criar nova vaga" })).toBeInTheDocument();
   });
+  describe("Filtro de vagas", () => {
+    it("filtra vagas ignorando maiúsculas/minúsculas e acentuação e buscando em múltiplos campos", async () => {
+      const user = userEvent.setup();
+      
+      listJobsMock.mockResolvedValue({
+        data: [
+          buildJob({ id: "job-1", title: "Analista de Dados", job_area: "data", seniority_level: "sênior", work_model: "remote", location: "São Paulo" }),
+          buildJob({ id: "job-2", title: "Desenvolvedor Backend", job_area: "technology", seniority_level: "pleno", work_model: "on-site", location: "Goiânia" }),
+        ],
+        total: 2,
+        page: 1,
+        page_size: 100,
+        total_pages: 1,
+      });
+
+      render(
+        <MemoryRouter future={routerFuture}>
+          <LinkCandidateJobModal isOpen candidateId="candidate-1" onClose={vi.fn()} />
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByText("Analista de Dados")).toBeInTheDocument();
+      expect(screen.getByText("Desenvolvedor Backend")).toBeInTheDocument();
+
+      const searchInput = screen.getByPlaceholderText(/Buscar vaga por título, área ou senioridade/i);
+
+      // Testa por título
+      await user.type(searchInput, "backend");
+      expect(screen.queryByText("Analista de Dados")).not.toBeInTheDocument();
+      expect(screen.getByText("Desenvolvedor Backend")).toBeInTheDocument();
+      await user.clear(searchInput);
+
+      // Testa ignorando acento (goiania -> Goiânia)
+      await user.type(searchInput, "goiania");
+      expect(screen.queryByText("Analista de Dados")).not.toBeInTheDocument();
+      expect(screen.getByText("Desenvolvedor Backend")).toBeInTheDocument();
+      await user.clear(searchInput);
+
+      // Testa por área (data formatada = Dados)
+      await user.type(searchInput, "dados");
+      expect(screen.getByText("Analista de Dados")).toBeInTheDocument();
+      expect(screen.queryByText("Desenvolvedor Backend")).not.toBeInTheDocument();
+      await user.clear(searchInput);
+      
+      // Testa por senioridade ignorando acentos
+      await user.type(searchInput, "senior");
+      expect(screen.getByText("Analista de Dados")).toBeInTheDocument();
+      expect(screen.queryByText("Desenvolvedor Backend")).not.toBeInTheDocument();
+      await user.clear(searchInput);
+
+      // Testa por modelo de trabalho
+      await user.type(searchInput, "remoto");
+      expect(screen.getByText("Analista de Dados")).toBeInTheDocument();
+      expect(screen.queryByText("Desenvolvedor Backend")).not.toBeInTheDocument();
+      await user.clear(searchInput);
+
+      // Testa empty state
+      await user.type(searchInput, "xzyxpto");
+      expect(screen.queryByText("Analista de Dados")).not.toBeInTheDocument();
+      expect(screen.queryByText("Desenvolvedor Backend")).not.toBeInTheDocument();
+      expect(screen.getByText("Nenhuma vaga encontrada")).toBeInTheDocument();
+    });
+  });
 });

@@ -16,6 +16,7 @@ import { CandidateResumeBadge } from "../features/candidates/components/Candidat
 import { CandidatesFilters } from "../features/candidates/components/CandidatesFilters";
 import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
 import { formatCandidateDate } from "../features/candidates/utils/candidateFormatters";
+import { STAGE_LABEL, isPostHiringActiveStage, isSuccessTerminalStage } from "../features/candidates/utils/profile";
 import { PageHeader } from "../components/common/PageHeader";
 import Pagination from "../components/common/Pagination";
 import { candidatesService } from "../services/candidatesService";
@@ -535,11 +536,15 @@ export function CandidateRow({
   onLinkJob?: () => void;
   direction?: "up" | "down";
 }) {
+  const postHiringActive = isPostHiringActiveStage(c.active_job_stage);
+  const latestSuccessTerminal = isSuccessTerminalStage(c.latest_job_stage);
   const statusLabel =
-    c.active_job_stage === "hired"
-      ? "Contratado"
+    postHiringActive
+      ? STAGE_LABEL[c.active_job_stage]
       : c.active_job_stage === "rejected"
         ? "Reprovado"
+        : latestSuccessTerminal
+          ? STAGE_LABEL[c.latest_job_stage]
         : c.latest_relationship_status === "hired"
           ? "Contratado"
           : c.latest_relationship_status === "rejected"
@@ -549,7 +554,7 @@ export function CandidateRow({
           : "Disponível";
           
   const statusClass =
-    c.active_job_stage === "hired"
+    postHiringActive || latestSuccessTerminal
       ? "border-[hsl(var(--success))]/35 bg-[hsl(var(--success-soft))]/65 text-[hsl(var(--success))]"
       : c.active_job_stage === "rejected"
         ? "border-[hsl(var(--danger))]/35 bg-[hsl(var(--danger-soft))]/65 text-[hsl(var(--danger))]"
@@ -562,9 +567,9 @@ export function CandidateRow({
           : "border-[hsl(var(--success))]/35 bg-[hsl(var(--success-soft))]/65 text-[hsl(var(--success))]";
 
   const vacancyLabel =
-    c.active_job_stage === "hired" || c.active_job_stage === "rejected"
+    postHiringActive || c.active_job_stage === "rejected"
       ? c.active_job_title ?? c.latest_job_title ?? "Vaga encerrada"
-      : c.latest_relationship_status === "hired" || c.latest_relationship_status === "rejected"
+      : latestSuccessTerminal || c.latest_relationship_status === "hired" || c.latest_relationship_status === "rejected"
         ? c.latest_job_title ?? "Vaga encerrada"
       : c.active_job_id
         ? c.active_job_title ?? "Processo ativo"

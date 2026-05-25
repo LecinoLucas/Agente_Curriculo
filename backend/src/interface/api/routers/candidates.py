@@ -48,6 +48,7 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidateListSummaryResponse,
     CandidateResumeDownloadUrlResponse,
     CandidateOverviewResponse,
+    CandidateProcessHistoryResponse,
     CandidateResponse,
     CreateCandidateRequest,
     ArchiveCandidateRequest,
@@ -323,6 +324,21 @@ async def get_candidate_overview(
 ) -> CandidateOverviewResponse:
     try:
         return await _candidate_service(db).get_overview(candidate_id)
+    except Exception as exc:
+        _handle_candidate_service_error(exc)
+        raise
+
+
+@router.get("/{candidate_id}/process-history", response_model=CandidateProcessHistoryResponse)
+async def get_candidate_process_history(
+    candidate_id: UUID,
+    current_user: RecruiterOrAdmin,
+    job_id: UUID | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateProcessHistoryResponse:
+    del current_user
+    try:
+        return await _candidate_service(db).get_process_history(candidate_id, job_id=job_id)
     except Exception as exc:
         _handle_candidate_service_error(exc)
         raise

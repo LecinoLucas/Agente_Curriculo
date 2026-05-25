@@ -14,6 +14,7 @@ import {
   updatePreAdmissionChecklistItem,
 } from "../../../../services/preAdmissionService";
 import type {
+  PipelineStage,
   PreAdmissionCase,
   PreAdmissionChecklistItemStatus,
   PreAdmissionChecklistItemType,
@@ -29,9 +30,18 @@ import { PreAdmissionStatusCard } from "./PreAdmissionStatusCard";
 interface CandidatePreAdmissionPanelProps {
   jobId: string | null;
   candidateId: string | null;
+  currentStage?: PipelineStage | null;
+  sendingToProtheus?: boolean;
+  onSendToProtheus?: () => Promise<void>;
 }
 
-export function CandidatePreAdmissionPanel({ jobId, candidateId }: CandidatePreAdmissionPanelProps) {
+export function CandidatePreAdmissionPanel({
+  jobId,
+  candidateId,
+  currentStage = null,
+  sendingToProtheus = false,
+  onSendToProtheus,
+}: CandidatePreAdmissionPanelProps) {
   const [preAdmissionCase, setPreAdmissionCase] = useState<PreAdmissionCase | null>(null);
   const [events, setEvents] = useState<PreAdmissionEvent[]>([]);
   const [documents, setDocuments] = useState<PreAdmissionDocument[]>([]);
@@ -43,6 +53,19 @@ export function CandidatePreAdmissionPanel({ jobId, candidateId }: CandidatePreA
   const [startDate, setStartDate] = useState("");
   const [workModel, setWorkModel] = useState("");
   const [notes, setNotes] = useState("");
+
+  const requiredItems = preAdmissionCase?.checklist_items.filter((item) => item.required) ?? [];
+  const blockingRequiredItems = requiredItems.filter(
+    (item) => item.status !== "approved" && item.status !== "waived",
+  );
+  const checklistIsReady =
+    (preAdmissionCase?.checklist_items.length ?? 0) > 0 && blockingRequiredItems.length === 0;
+  const canSendToProtheus =
+    Boolean(preAdmissionCase) &&
+    currentStage === "pre_admission" &&
+    checklistIsReady &&
+    !sendingToProtheus &&
+    !saving;
 
   const loadEvents = async (caseId: string) => {
     const [eventsPayload, documentsPayload] = await Promise.all([
@@ -214,6 +237,31 @@ export function CandidatePreAdmissionPanel({ jobId, candidateId }: CandidatePreA
     }
   };
 
+  const handleSendToProtheus = async () => {
+    if (!preAdmissionCase || !canSendToProtheus) return;
+
+    setSaving(true);
+    setError(null);
+    try {
+      let nextCase = preAdmissionCase;
+      if (preAdmissionCase.status !== "ready_for_admission") {
+        nextCase = await updatePreAdmission(preAdmissionCase.id, { status: "ready_for_admission" });
+        setPreAdmissionCase(nextCase);
+      }
+
+      if (onSendToProtheus) {
+        await onSendToProtheus();
+      }
+
+      await loadEvents(nextCase.id);
+      await load();
+    } catch {
+      setError("Não foi possível liberar o candidato para Protheus.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div role="status" className="flex items-center justify-center p-8">
@@ -246,7 +294,7 @@ export function CandidatePreAdmissionPanel({ jobId, candidateId }: CandidatePreA
             Pré-admissão manual
           </h3>
           <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-            Fluxo auditável para oferta, pendências e preparação documental. Não integra ERP nesta fase.
+            Fluxo auditável para checklist, correções e liberação controlada para Protheus.
           </p>
         </div>
       </div>
@@ -330,6 +378,47 @@ export function CandidatePreAdmissionPanel({ jobId, candidateId }: CandidatePreA
 
       {preAdmissionCase ? (
         <>
+          <div
+            className={[
+              "rounded-lg border px-4 py-3",
+              preAdmissionCase.checklist_items.length === 0
+                ? "border-slate-200 bg-slate-50 text-slate-800"
+                : checklistIsReady
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : "border-amber-200 bg-amber-50 text-amber-900",
+            ].join(" ")}
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide">
+                  Liberação operacional
+                </p>
+                <p className="mt-1 text-sm">
+                  {preAdmissionCase.checklist_items.length === 0
+                    ? "Cadastre ao menos um item no checklist antes de seguir para Protheus."
+                    : checklistIsReady
+                      ? "Todos os itens obrigatórios estão aprovados ou dispensados. O candidato pode seguir para Protheus."
+                      : `${blockingRequiredItems.length} item(ns) obrigatório(s) ainda bloqueiam o envio para Protheus.`}
+                </p>
+                {!checklistIsReady && blockingRequiredItems.length > 0 ? (
+                  <p className="mt-2 text-xs">
+                    Pendências: {blockingRequiredItems.map((item) => item.title).slice(0, 3).join(", ")}
+                    {blockingRequiredItems.length > 3 ? "..." : ""}
+                  </p>
+                ) : null}
+              </div>
+              {currentStage === "pre_admission" ? (
+                <button
+                  type="button"
+                  onClick={() => void handleSendToProtheus()}
+                  disabled={!canSendToProtheus}
+                  className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sendingToProtheus || saving ? "Enviando..." : "Enviar para Protheus"}
+                </button>
+              ) : null}
+            </div>
+          </div>
           <PreAdmissionStatusCard
             preAdmissionCase={preAdmissionCase}
             updating={saving}

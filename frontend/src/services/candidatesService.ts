@@ -4,6 +4,8 @@ import {
   CandidateListSummary,
   CandidateNote,
   CandidateOverview,
+  CandidateProcessHistory,
+  CandidateProcessHistoryItem,
   PipelineStage,
 } from "../types/domain";
 import { Paginated } from "../types/api";
@@ -260,6 +262,57 @@ function normalizeCandidateSummary(item: Partial<CandidateListSummary>): Candida
   };
 }
 
+function normalizeProcessHistoryItem(item: Partial<CandidateProcessHistoryItem>): CandidateProcessHistoryItem {
+  return {
+    pipeline_id: item.pipeline_id ?? "",
+    job_id: item.job_id ?? "",
+    job_title: item.job_title ?? "Vaga",
+    is_current: Boolean(item.is_current),
+    started_at: item.started_at ?? null,
+    closed_at: item.closed_at ?? null,
+    current_or_final_stage: item.current_or_final_stage ?? "entry",
+    result_label: item.result_label ?? (item.is_current ? "Em andamento" : "Processo encerrado"),
+    closure_reason: item.closure_reason ?? null,
+    events_count: item.events_count ?? 0,
+    interviews: Array.isArray(item.interviews)
+      ? item.interviews.map((interview) => ({
+          id: interview.id ?? "",
+          type: interview.type ?? "other",
+          status: interview.status ?? "scheduled",
+          scheduled_at: interview.scheduled_at ?? null,
+          scorecard_status: interview.scorecard_status ?? null,
+          final_recommendation: interview.final_recommendation ?? null,
+        }))
+      : [],
+    scorecards: Array.isArray(item.scorecards)
+      ? item.scorecards.map((scorecard) => ({
+          id: scorecard.id ?? "",
+          interview_id: scorecard.interview_id ?? null,
+          status: scorecard.status ?? "draft",
+          final_recommendation: scorecard.final_recommendation ?? null,
+          submitted_at: scorecard.submitted_at ?? null,
+        }))
+      : [],
+    behavioral_assessment: item.behavioral_assessment
+      ? {
+          assignment_id: item.behavioral_assessment.assignment_id ?? "",
+          status: item.behavioral_assessment.status ?? "pending",
+          submitted_at: item.behavioral_assessment.submitted_at ?? null,
+          ai_status: item.behavioral_assessment.ai_status ?? null,
+          ai_completed_at: item.behavioral_assessment.ai_completed_at ?? null,
+        }
+      : null,
+    hiring_decision: item.hiring_decision
+      ? {
+          id: item.hiring_decision.id ?? "",
+          status: item.hiring_decision.status ?? "draft",
+          outcome: item.hiring_decision.outcome ?? "hold",
+          submitted_at: item.hiring_decision.submitted_at ?? null,
+        }
+      : null,
+  };
+}
+
 export const candidatesService = {
   async list(
     page = 1,
@@ -307,6 +360,20 @@ export const candidatesService = {
 
   async getOverview(id: string): Promise<CandidateOverview> {
     return httpRequest<CandidateOverview>(`/api/v1/candidates/${id}/overview`).then(normalizeCandidateOverview);
+  },
+
+  async getProcessHistory(id: string, jobId?: string | null): Promise<CandidateProcessHistory> {
+    const params = new URLSearchParams();
+    if (jobId) params.set("job_id", jobId);
+    const query = params.toString();
+    return httpRequest<CandidateProcessHistory>(
+      `/api/v1/candidates/${id}/process-history${query ? `?${query}` : ""}`,
+    ).then((payload) => ({
+      candidate_id: payload?.candidate_id ?? id,
+      processes: Array.isArray(payload?.processes)
+        ? payload.processes.map(normalizeProcessHistoryItem)
+        : [],
+    }));
   },
 
   async listSummaries(

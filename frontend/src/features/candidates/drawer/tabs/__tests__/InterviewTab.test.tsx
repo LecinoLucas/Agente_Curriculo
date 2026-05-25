@@ -96,7 +96,7 @@ describe("InterviewTab", () => {
     render(<InterviewTab jobId="job-1" candidateId="candidate-1" />);
 
     await screen.findByText("Entrevista RH");
-    await user.click(screen.getByRole("button", { name: /Agendar/i }));
+    await user.click(screen.getByRole("button", { name: /^Agendar$/i }));
     fireEvent.change(screen.getByLabelText(/Início/i), { target: { value: "2026-06-02T09:00" } });
     fireEvent.change(screen.getByLabelText(/Fim/i), { target: { value: "2026-06-02T10:00" } });
     await user.click(screen.getByRole("button", { name: /Salvar/i }));
@@ -109,10 +109,10 @@ describe("InterviewTab", () => {
       );
     });
 
-    await user.click(screen.getByRole("button", { name: /Remarcar/i }));
+    await user.click(screen.getByRole("button", { name: /Reagendar/i }));
     fireEvent.change(screen.getByLabelText(/Início/i), { target: { value: "2026-06-03T09:00" } });
     fireEvent.change(screen.getByLabelText(/Fim/i), { target: { value: "2026-06-03T10:00" } });
-    await user.click(screen.getAllByRole("button", { name: /^Remarcar$/i })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^Reagendar$/i })[0]);
 
     await waitFor(() => {
       expect(rescheduleInterviewMock).toHaveBeenCalledWith(
@@ -122,14 +122,14 @@ describe("InterviewTab", () => {
     });
   });
 
-  it("executa cancelar, realizada, no-show e abre scorecard vinculado", async () => {
+  it("executa cancelar, concluir, não compareceu e abre scorecard vinculado", async () => {
     const user = userEvent.setup();
     render(<InterviewTab jobId="job-1" candidateId="candidate-1" />);
 
     await screen.findByText("Entrevista RH");
     await user.click(screen.getByRole("button", { name: /Cancelar/i }));
-    await user.click(screen.getByRole("button", { name: /Realizada/i }));
-    await user.click(screen.getByRole("button", { name: /No-show/i }));
+    await user.click(screen.getByRole("button", { name: /Concluir/i }));
+    await user.click(screen.getByRole("button", { name: /Não compareceu/i }));
     await user.click(screen.getByRole("button", { name: /Scorecard/i }));
 
     await waitFor(() => {

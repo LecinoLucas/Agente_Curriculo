@@ -17,6 +17,9 @@ import { HiringDecisionForm } from "./HiringDecisionForm";
 interface CandidateHiringDecisionPanelProps {
   jobId?: string | null;
   candidateId?: string | null;
+  title?: string;
+  description?: string;
+  onDecisionSubmitted?: (decision: HiringDecision) => void | Promise<void>;
 }
 
 const outcomeLabels: Record<HiringDecisionOutcome, string> = {
@@ -86,7 +89,13 @@ function DecisionDetails({ decision }: { decision: HiringDecision }) {
   );
 }
 
-export function CandidateHiringDecisionPanel({ jobId, candidateId }: CandidateHiringDecisionPanelProps) {
+export function CandidateHiringDecisionPanel({
+  jobId,
+  candidateId,
+  title = "Decisão humana auditável",
+  description = "Esta é uma decisão humana. A IA é apenas apoio e não aprova ou reprova candidatos automaticamente.",
+  onDecisionSubmitted,
+}: CandidateHiringDecisionPanelProps) {
   const [decision, setDecision] = useState<HiringDecision | null>(null);
   const [history, setHistory] = useState<HiringDecision[]>([]);
   const [loading, setLoading] = useState(false);
@@ -131,6 +140,7 @@ export function CandidateHiringDecisionPanel({ jobId, candidateId }: CandidateHi
       setDecision(saved);
       setFormOpen(false);
       await load();
+      await onDecisionSubmitted?.(saved);
     } catch {
       setError("Não foi possível registrar a decisão final.");
     } finally {
@@ -165,10 +175,10 @@ export function CandidateHiringDecisionPanel({ jobId, candidateId }: CandidateHi
               Decisão final
             </p>
             <h3 className="text-base font-semibold text-[hsl(var(--text))]">
-              Decisão humana auditável
+              {title}
             </h3>
             <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-              Esta é uma decisão humana. A IA é apenas apoio e não aprova ou reprova candidatos automaticamente.
+              {description}
             </p>
           </div>
         </div>

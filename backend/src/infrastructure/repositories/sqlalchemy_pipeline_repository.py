@@ -23,6 +23,10 @@ from src.infrastructure.database.models.hiring_decision_model import CandidateJo
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
+from src.infrastructure.database.models.pre_admission_model import (
+    PreAdmissionCaseModel,
+    PreAdmissionChecklistItemModel,
+)
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
@@ -156,6 +160,53 @@ class SQLAlchemyPipelineRepository:
                 CandidateModel.deleted_at.is_(None),
             )
         )
+
+    async def get_pre_admission_gate_snapshot(self, *, candidate_id: UUID, job_id: UUID) -> dict[str, object]:
+        case = await self._session.scalar(
+            sa.select(PreAdmissionCaseModel)
+            .where(
+                PreAdmissionCaseModel.candidate_id == candidate_id,
+                PreAdmissionCaseModel.job_id == job_id,
+                PreAdmissionCaseModel.status.not_in(("cancelled", "offer_declined")),
+            )
+            .order_by(PreAdmissionCaseModel.created_at.desc())
+            .limit(1)
+        )
+        if case is None:
+            return {
+                "has_case": False,
+                "case_status": None,
+                "total_items": 0,
+                "unresolved_required_count": 0,
+                "unresolved_required_titles": [],
+            }
+
+        unresolved_required_rows = await self._session.execute(
+            sa.select(PreAdmissionChecklistItemModel.title)
+            .where(
+                PreAdmissionChecklistItemModel.case_id == case.id,
+                PreAdmissionChecklistItemModel.required.is_(True),
+                PreAdmissionChecklistItemModel.status.not_in(("approved", "waived")),
+            )
+            .order_by(PreAdmissionChecklistItemModel.created_at.asc())
+        )
+        unresolved_required_titles = [title for title in unresolved_required_rows.scalars().all() if title]
+        total_items = int(
+            await self._session.scalar(
+                sa.select(sa.func.count())
+                .select_from(PreAdmissionChecklistItemModel)
+                .where(PreAdmissionChecklistItemModel.case_id == case.id)
+            )
+            or 0
+        )
+
+        return {
+            "has_case": True,
+            "case_status": case.status,
+            "total_items": total_items,
+            "unresolved_required_count": len(unresolved_required_titles),
+            "unresolved_required_titles": unresolved_required_titles[:5],
+        }
 
     async def find_latest_behavioral_assignment(
         self,
@@ -406,10 +457,20 @@ class SQLAlchemyPipelineRepository:
             .where(
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateModel.deleted_at.is_(None),
-                CandidateJobPipelineModel.relationship_status == "active",
-                CandidateJobPipelineModel.pipeline_status == "active",
-                CandidateJobPipelineModel.is_terminal.is_(False),
-                CandidateJobPipelineModel.terminated_at.is_(None),
+                sa.or_(
+                    sa.and_(
+                        CandidateJobPipelineModel.relationship_status == "active",
+                        CandidateJobPipelineModel.pipeline_status == "active",
+                        CandidateJobPipelineModel.is_terminal.is_(False),
+                        CandidateJobPipelineModel.terminated_at.is_(None),
+                    ),
+                    sa.and_(
+                        CandidateJobPipelineModel.pipeline_stage == "admitted",
+                        CandidateJobPipelineModel.relationship_status == "hired",
+                        CandidateJobPipelineModel.pipeline_status == "terminal",
+                        CandidateJobPipelineModel.is_terminal.is_(True),
+                    ),
+                ),
             )
             .order_by(CandidateJobPipelineModel.updated_at.desc())
         )

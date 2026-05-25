@@ -20,6 +20,9 @@ PipelineStage = Literal[
     "final",
     "offer",
     "hired",
+    "pre_admission",
+    "protheus",
+    "admitted",
     "rejected",
 ]
 

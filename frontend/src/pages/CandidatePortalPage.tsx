@@ -588,11 +588,12 @@ function MotivationalBanner() {
 }
 
 function getClosedProcessApplication(overview: CandidatePortalOverview): CandidatePortalApplication | null {
-  if (overview.application_status !== "rejected" && overview.application_status !== "hired") {
+  if (overview.application_status !== "rejected" && overview.application_status !== "admitted") {
     return null;
   }
+  const targetStatus = overview.application_status === "admitted" ? "admitted" : "finished";
   return (
-    overview.application_history.find((application) => application.status === "finished")
+    overview.application_history.find((application) => application.status === targetStatus)
     ?? overview.application_history[0]
     ?? null
   );
@@ -818,12 +819,16 @@ export function CandidatePortalPage() {
   const applicationHistory: CandidatePortalApplication[] = overview?.application_history ?? [];
   const closedProcessApplication = overview ? getClosedProcessApplication(overview) : null;
   const isRejectedProcess = overview?.application_status === "rejected";
+  const isAdmittedProcess = overview?.application_status === "admitted";
   const isTalentPoolOnly =
     overview?.application_status === "talent_pool" || overview?.application_status === "no_active_application";
   const behavioralAssessments: BehavioralAssignmentSummary[] = behavioralAssessmentSummaries;
-  const pendingBehavioralAssessments = behavioralAssessments.filter(
-    (item) => item.status === "pending" || item.status === "in_progress",
-  );
+  const pendingBehavioralAssessments =
+    isRejectedProcess || isAdmittedProcess
+      ? []
+      : behavioralAssessments.filter(
+          (item) => item.status === "pending" || item.status === "in_progress",
+        );
 
   async function loadPortalData(refresh = false) {
     if (refresh) {
@@ -1289,7 +1294,7 @@ export function CandidatePortalPage() {
                         <div className="grid grid-cols-2 gap-4">
                           {[
                             {
-                              label: isRejectedProcess ? "Vaga encerrada" : "Vaga ativa",
+                              label: isRejectedProcess || isAdmittedProcess ? "Vaga de origem" : "Vaga ativa",
                               val: activeApplication?.job_title || closedProcessApplication?.job_title || "Banco de Talentos Marajó",
                               icon: <Briefcase className="h-5 w-5" />,
                             },

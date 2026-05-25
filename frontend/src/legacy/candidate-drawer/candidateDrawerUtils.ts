@@ -13,6 +13,9 @@ export const STAGE_LABEL: Record<PipelineStage, string> = {
   final: "Final",
   offer: "Proposta",
   hired: "Contratado",
+  pre_admission: "Pré-admissão",
+  protheus: "Protheus",
+  admitted: "Admitido",
   rejected: "Reprovado",
 };
 
@@ -23,6 +26,9 @@ export const NEXT_PIPELINE_STAGE: Partial<Record<PipelineStage, PipelineStage>> 
   technical_interview: "final",
   final: "hired",
   offer: "hired",
+  hired: "pre_admission",
+  pre_admission: "protheus",
+  protheus: "admitted",
 };
 
 export function buildStageActionFeedback(
@@ -36,13 +42,17 @@ export function buildStageActionFeedback(
       tone: "info",
       pending: true,
       title:
-        stage === "hired"
+        stage === "admitted"
+          ? "Concluindo admissão"
+          : stage === "hired"
           ? "Aplicando aprovação"
           : stage === "rejected"
             ? "Encerrando candidatura"
             : `Movendo para ${label}`,
       detail:
-        stage === "hired"
+        stage === "admitted"
+          ? "O candidato está sendo movido para Admitido."
+          : stage === "hired"
           ? "O candidato está sendo movido para Contratado."
           : stage === "rejected"
             ? "A candidatura está sendo encerrada."
@@ -61,13 +71,17 @@ export function buildStageActionFeedback(
   return {
     tone: stage === "rejected" ? "danger" : "success",
     title:
-      stage === "hired"
+      stage === "admitted"
+        ? "Admissão concluída"
+        : stage === "hired"
         ? "Candidato aprovado"
         : stage === "rejected"
           ? "Candidatura encerrada"
           : `Candidato movido para ${label}`,
     detail:
-      stage === "hired"
+      stage === "admitted"
+        ? "O vínculo final permanece disponível no histórico da pipeline."
+        : stage === "hired"
         ? "O estado atual foi atualizado para Contratado."
         : stage === "rejected"
           ? "A candidatura foi encerrada para esta vaga."

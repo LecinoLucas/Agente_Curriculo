@@ -15,6 +15,7 @@ from src.application.services.candidate_score_status_deriver import (
     derive_candidate_score_status,
 )
 from src.application.services.pipeline_gate_evaluator import PipelineGateEvaluator
+from src.core.pipeline_stages import is_post_hiring_active_stage, is_success_terminal_stage
 from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.analysis_model import AnalysisModel
@@ -34,6 +35,12 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidateLatestAnalysisResponse,
     CandidateOverviewResponse,
     CandidatePipelineEntryResponse,
+    CandidateProcessHistoryBehavioralResponse,
+    CandidateProcessHistoryDecisionResponse,
+    CandidateProcessHistoryInterviewResponse,
+    CandidateProcessHistoryItemResponse,
+    CandidateProcessHistoryResponse,
+    CandidateProcessHistoryScorecardResponse,
     CandidatePreviewPendencyResponse,
     CandidateResponse,
     CandidateResumeSummaryResponse,
@@ -360,6 +367,15 @@ class CandidateService:
             (row for row in pipeline_rows if row.get("relationship_status") == "active"),
             None,
         )
+        if active_pipeline_row is None:
+            active_pipeline_row = next(
+                (
+                    row
+                    for row in pipeline_rows
+                    if row.get("relationship_status") == "hired" or is_success_terminal_stage(row.get("stage"))
+                ),
+                None,
+            )
         active_job_id = active_pipeline_row["job_id"] if active_pipeline_row is not None else None
         pipeline_current_analysis_id = (
             active_pipeline_row.get("current_analysis_id")
@@ -492,6 +508,7 @@ class CandidateService:
         # These are authoritative — they are the same gates the pipeline move
         # endpoint evaluates when the user tries to advance the candidate.
         gate_pendencies: list[CandidatePreviewPendencyResponse] = []
+        gate_pendencies_evaluated = False
         if (
             self._gate_evaluator is not None
             and active_pipeline_row is not None
@@ -506,6 +523,7 @@ class CandidateService:
                     job=job,
                     current_stage=active_pipeline_row["stage"],
                 )
+                gate_pendencies_evaluated = gate_result is not None
                 if gate_result is not None and gate_result.is_blocked:
                     gate_pendencies = [
                         CandidatePreviewPendencyResponse(
@@ -514,6 +532,7 @@ class CandidateService:
                             tone="block",
                             action=g.action,
                             description=g.description,
+                            action_payload=g.action_payload,
                         )
                         for g in gate_result.missing_gates
                     ]
@@ -546,6 +565,8 @@ class CandidateService:
                     job_id=row["job_id"],
                     job_title=row["job_title"],
                     stage=row["stage"],
+                    pipeline_id=row.get("pipeline_id"),
+                    resume_version_id=row.get("resume_version_id"),
                     relationship_status=row["relationship_status"],
                     is_terminal=bool(row["is_terminal"]),
                     terminated_at=row.get("terminated_at"),
@@ -571,6 +592,7 @@ class CandidateService:
                     latest_analysis=latest_analysis,
                     active_stage=active_pipeline_row["stage"] if active_pipeline_row is not None else None,
                     flags=preview_flags,
+                    include_interview_flags=not gate_pendencies_evaluated,
                 )
             ),
             latest_movement=(
@@ -579,6 +601,75 @@ class CandidateService:
                 else None
             ),
         )
+
+    async def get_process_history(
+        self,
+        candidate_id: UUID,
+        *,
+        job_id: UUID | None = None,
+    ) -> CandidateProcessHistoryResponse:
+        await self.get(candidate_id)
+        rows = await self._repository.list_process_history(candidate_id=candidate_id, job_id=job_id)
+        return CandidateProcessHistoryResponse(
+            candidate_id=candidate_id,
+            processes=[self._build_process_history_item(row) for row in rows],
+        )
+
+    def _build_process_history_item(self, row: dict) -> CandidateProcessHistoryItemResponse:
+        return CandidateProcessHistoryItemResponse(
+            pipeline_id=row["pipeline_id"],
+            job_id=row["job_id"],
+            job_title=row["job_title"],
+            is_current=bool(row.get("is_current")),
+            started_at=row.get("started_at"),
+            closed_at=row.get("closed_at"),
+            current_or_final_stage=row.get("current_or_final_stage") or "entry",
+            result_label=self._process_result_label(
+                row.get("relationship_status"),
+                row.get("current_or_final_stage"),
+                bool(row.get("is_current")),
+            ),
+            closure_reason=row.get("closure_reason"),
+            events_count=int(row.get("events_count") or 0),
+            interviews=[
+                CandidateProcessHistoryInterviewResponse(**item)
+                for item in row.get("interviews", [])
+            ],
+            scorecards=[
+                CandidateProcessHistoryScorecardResponse(**item)
+                for item in row.get("scorecards", [])
+            ],
+            behavioral_assessment=(
+                CandidateProcessHistoryBehavioralResponse(**row["behavioral_assessment"])
+                if row.get("behavioral_assessment")
+                else None
+            ),
+            hiring_decision=(
+                CandidateProcessHistoryDecisionResponse(**row["hiring_decision"])
+                if row.get("hiring_decision")
+                else None
+            ),
+        )
+
+    @staticmethod
+    def _process_result_label(
+        relationship_status: str | None,
+        stage: str | None,
+        is_current: bool,
+    ) -> str:
+        if stage == "admitted":
+            return "Admitido"
+        if relationship_status == "hired" or is_post_hiring_active_stage(stage):
+            return "Contratado"
+        if is_current and relationship_status == "active":
+            return "Em andamento"
+        if relationship_status == "rejected" or stage == "rejected":
+            return "Não selecionado"
+        if relationship_status == "withdrawn":
+            return "Desistência"
+        if relationship_status == "archived":
+            return "Arquivado"
+        return "Processo encerrado" if not is_current else "Em andamento"
 
     @staticmethod
     def _build_skill_preview(score: object | None) -> CandidateSkillPreviewResponse | None:
@@ -658,6 +749,7 @@ class CandidateService:
         latest_analysis: CandidateLatestAnalysisResponse | None,
         active_stage: str | None,
         flags: dict[str, bool],
+        include_interview_flags: bool = True,
     ) -> list[CandidatePreviewPendencyResponse]:
         pendencies: list[CandidatePreviewPendencyResponse] = []
 
@@ -669,7 +761,11 @@ class CandidateService:
             add("behavioral_assignment", "Teste comportamental pendente", "warning")
         if flags.get("behavioral_ai_pending"):
             add("behavioral_ai", "IA comportamental pendente", "warning")
-        if active_stage in {"hr_interview", "technical_interview"} and flags.get("interview_not_scheduled"):
+        if (
+            include_interview_flags
+            and active_stage in {"hr_interview", "technical_interview"}
+            and flags.get("interview_not_scheduled")
+        ):
             add("interview", "Entrevista não agendada", "warning")
         if not has_resume:
             add("resume", "Currículo ausente", "warning")
@@ -930,7 +1026,10 @@ class CandidateService:
             "technical_interview": "Em processo",
             "final": "Etapa final",
             "offer": "Aprovado",
-            "hired": "Aprovado",
+            "hired": "Contratado",
+            "pre_admission": "Pré-admissão",
+            "protheus": "Protheus",
+            "admitted": "Admitido",
             "rejected": "Reprovado",
         }
         return mapping.get(stage, "Em processo")

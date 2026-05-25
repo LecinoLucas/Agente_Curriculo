@@ -10,7 +10,7 @@ from src.infrastructure.database.base import Base
 
 _PIPELINE_STAGE_VALUES = (
     "'entry', 'screening', 'hr_interview', 'technical_interview', "
-    "'final', 'offer', 'hired', 'rejected'"
+    "'final', 'offer', 'hired', 'pre_admission', 'protheus', 'admitted', 'rejected'"
 )
 _LINK_STATUS_VALUES = "'active', 'removed', 'transferred', 'hired', 'rejected'"
 _RELATIONSHIP_STATUS_VALUES = "'active', 'rejected', 'hired', 'withdrawn', 'archived'"

@@ -9,6 +9,9 @@ const STAGE_LABEL: Record<string, string> = {
   final: "Final",
   offer: "Proposta",
   hired: "Contratado",
+  pre_admission: "Pré-admissão",
+  protheus: "Protheus",
+  admitted: "Admitido",
   rejected: "Reprovado",
 };
 
@@ -20,10 +23,13 @@ const STAGE_OPTIONS: { value: PipelineStage; label: string }[] = [
   { value: "final", label: "Final" },
   { value: "offer", label: "Proposta" },
   { value: "hired", label: "Contratado" },
+  { value: "pre_admission", label: "Pré-admissão" },
+  { value: "protheus", label: "Protheus" },
+  { value: "admitted", label: "Admitido" },
   { value: "rejected", label: "Reprovado" },
 ];
 
-const DANGEROUS_STAGES: PipelineStage[] = ["hired", "rejected"];
+const DANGEROUS_STAGES: PipelineStage[] = ["admitted", "rejected"];
 
 interface CandidateActionPanelProps {
   currentStage: PipelineStage | null;
@@ -68,6 +74,7 @@ export function CandidateActionPanel({
   }
 
   const hasActivePipeline = currentStage !== null;
+  const terminalStage = currentStage === "admitted" || currentStage === "rejected";
 
   return (
     <div className="border-t border-[hsl(var(--border))]/20">
@@ -104,7 +111,7 @@ export function CandidateActionPanel({
           ) : null}
 
           {/* Change stage */}
-          {hasActivePipeline ? (
+          {hasActivePipeline && !terminalStage ? (
             <div>
               <label className="block mb-2 text-sm font-semibold text-[hsl(var(--text))]">
                 Mover para etapa
@@ -171,6 +178,19 @@ export function CandidateActionPanel({
             </div>
           ) : null}
 
+          {terminalStage ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-sm font-semibold text-emerald-900">
+                {currentStage === "admitted" ? "Admissão concluída" : "Processo encerrado"}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700">
+                {currentStage === "admitted"
+                  ? "A etapa final permanece vinculada à vaga no histórico da pipeline."
+                  : "Para alterar a etapa, reconsidere o candidato no pipeline."}
+              </p>
+            </div>
+          ) : null}
+
           {/* Job actions */}
           {canTransferCurrentJob ? (
             <button
@@ -182,7 +202,7 @@ export function CandidateActionPanel({
               ↔️ Transferir para outra vaga
             </button>
           ) : (
-            currentStage !== null && currentStage !== "hired" && currentStage !== "rejected" && (
+            currentStage !== null && currentStage !== "rejected" && currentStage !== "admitted" && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <p className="text-sm font-semibold text-amber-900">Transferência bloqueada</p>
                 <p className="mt-1 text-xs text-amber-700">

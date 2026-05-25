@@ -15,6 +15,7 @@ vi.mock("../../../../services/candidatePortalService", async (importOriginal) =>
     candidatePortalService: {
       ...actual.candidatePortalService,
       uploadPreAdmissionDocument: vi.fn(),
+      downloadPreAdmissionDocument: vi.fn(),
     },
   };
 });
@@ -69,6 +70,7 @@ describe("CandidatePortalPreAdmissionCard", () => {
       created_at: "2026-05-14T10:00:00Z",
       updated_at: "2026-05-14T10:00:00Z",
     });
+    vi.mocked(candidatePortalService.downloadPreAdmissionDocument).mockResolvedValue(new Blob(["pdf"]));
   });
 
   it("mostra empty state sem pré-admissão", () => {
@@ -139,7 +141,7 @@ describe("CandidatePortalPreAdmissionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Enviado")).toBeInTheDocument();
+    expect(screen.getByText("Enviado para análise")).toBeInTheDocument();
     expect(screen.getByText("cpf.pdf")).toBeInTheDocument();
   });
 
@@ -179,7 +181,7 @@ describe("CandidatePortalPreAdmissionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Rejeitado")).toBeInTheDocument();
+    expect(screen.getByText("Correção solicitada")).toBeInTheDocument();
     expect(screen.getByText("Documento ilegível.")).toBeInTheDocument();
   });
 
@@ -234,5 +236,53 @@ describe("CandidatePortalPreAdmissionCard", () => {
     render(<CandidatePortalPreAdmissionCard preAdmission={null} loading onUploaded={vi.fn()} />);
 
     expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("permite download do documento admitido e bloqueia novo upload", async () => {
+    const user = userEvent.setup();
+    render(
+      <CandidatePortalPreAdmissionCard
+        preAdmission={{
+          case: {
+            ...baseEnvelope.case!,
+            status: "admitted",
+            checklist_items: [
+              {
+                ...baseEnvelope.case!.checklist_items[0],
+                status: "approved",
+                documents: [
+                  {
+                    id: "doc-1",
+                    case_id: "case-1",
+                    checklist_item_id: "item-1",
+                    candidate_id: "candidate-1",
+                    original_filename: "cpf.pdf",
+                    mime_type: "application/pdf",
+                    size_bytes: 42,
+                    status: "approved",
+                    uploaded_at: "2026-05-14T10:00:00Z",
+                    reviewed_at: "2026-05-14T11:00:00Z",
+                    reviewed_by: "user-1",
+                    review_notes: null,
+                    created_at: "2026-05-14T10:00:00Z",
+                    updated_at: "2026-05-14T11:00:00Z",
+                  },
+                ],
+              },
+            ],
+          },
+        }}
+        onUploaded={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText(/Enviar documento para CPF/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Novos uploads estão bloqueados/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Baixar/i }));
+
+    await waitFor(() => {
+      expect(candidatePortalService.downloadPreAdmissionDocument).toHaveBeenCalledWith("doc-1");
+    });
   });
 });

@@ -27,7 +27,7 @@ _BLOCKING_INTERVIEW_STATUSES: frozenset[str] = frozenset(
 )
 
 # Maps a pipeline stage to the next forward stage that can have gates.
-# Terminal stages (hired, rejected) map to None.
+# Terminal stages map to None.
 _NEXT_FORWARD_STAGE: dict[str, str | None] = {
     "entry": "screening",
     "screening": "hr_interview",
@@ -35,7 +35,10 @@ _NEXT_FORWARD_STAGE: dict[str, str | None] = {
     "technical_interview": "final",
     "final": "offer",
     "offer": "hired",
-    "hired": None,
+    "hired": "pre_admission",
+    "pre_admission": "protheus",
+    "protheus": "admitted",
+    "admitted": None,
     "rejected": None,
 }
 
@@ -168,6 +171,14 @@ class PipelineGateEvaluator:
             )
             return result
 
+        if target_stage == "protheus":
+            await self._collect_protheus_gates(
+                result=result,
+                candidate_id=candidate_id,
+                job_id=job_id,
+            )
+            return result
+
         return result
 
     async def find_job(self, job_id: UUID) -> JobModel | None:
@@ -185,7 +196,7 @@ class PipelineGateEvaluator:
         """Evaluate gates for the natural next stage without attempting a move.
 
         Returns None when there is no forward stage from current_stage
-        (terminal stages: hired, rejected).  The reason parameter is always
+        (terminal stages).  The reason parameter is always
         None here — rejection-reason gates are excluded from peek results
         because they require actor input at move time, not at overview time.
         """
@@ -223,15 +234,20 @@ class PipelineGateEvaluator:
                 pipeline_id=pipeline_id,
             )
             if latest_interview is None or latest_interview.status != "completed":
+                if latest_interview is None:
+                    label = "Entrevista técnica não agendada"
+                    description = "Agende e conclua a entrevista técnica antes de avançar."
+                elif latest_interview.status == "awaiting_feedback":
+                    label = "Feedback da entrevista pendente"
+                    description = "Registre o feedback da entrevista técnica para continuar."
+                else:
+                    label = "Entrevista técnica ainda não concluída"
+                    description = "Conclua a entrevista técnica antes de avançar."
                 result.missing_gates.append(
                     MissingGate(
                         code="technical_interview_not_completed",
-                        label="Entrevista técnica ainda não concluída",
-                        description=(
-                            "Registre o feedback da entrevista técnica para continuar."
-                            if latest_interview is not None
-                            else "Agende e conclua a entrevista técnica antes de avançar."
-                        ),
+                        label=label,
+                        description=description,
                         action="open_interview",
                         action_payload=(
                             {"interview_id": str(latest_interview.id)}
@@ -252,6 +268,14 @@ class PipelineGateEvaluator:
                     interview_id=latest_interview.id,
                 )
             if scorecard is None or scorecard.status != "submitted":
+                scorecard_payload = None
+                if latest_interview is not None:
+                    scorecard_payload = {
+                        "interview_id": str(latest_interview.id),
+                        "scorecard_id": str(scorecard.id) if scorecard is not None else None,
+                        "scorecard_status": scorecard.status if scorecard is not None else None,
+                        "interview_type": latest_interview.interview_type,
+                    }
                 result.missing_gates.append(
                     MissingGate(
                         code="scorecard_not_submitted",
@@ -260,13 +284,88 @@ class PipelineGateEvaluator:
                             "Preencha e submeta o scorecard da entrevista técnica para continuar."
                         ),
                         action="open_scorecard",
-                        action_payload=(
-                            {"interview_id": str(latest_interview.id)}
-                            if latest_interview is not None
-                            else None
-                        ),
+                        action_payload=scorecard_payload,
                     )
                 )
+            elif not (scorecard.final_recommendation or "").strip():
+                result.missing_gates.append(
+                    MissingGate(
+                        code="scorecard_not_submitted",
+                        label="Scorecard da entrevista pendente",
+                        description=(
+                            "Preencha a recomendação final do scorecard da entrevista técnica para continuar."
+                        ),
+                        action="open_scorecard",
+                        action_payload={
+                            "interview_id": str(latest_interview.id),
+                            "scorecard_id": str(scorecard.id),
+                            "scorecard_status": scorecard.status,
+                            "interview_type": latest_interview.interview_type,
+                        },
+                    )
+                )
+
+    async def _collect_protheus_gates(
+        self,
+        *,
+        result: GateEvaluationResult,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> None:
+        snapshot = await self._repository.get_pre_admission_gate_snapshot(
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+
+        if not bool(snapshot.get("has_case")):
+            result.missing_gates.append(
+                MissingGate(
+                    code="pre_admission_case_required",
+                    label="Pré-admissão obrigatória",
+                    description="Crie o caso de pré-admissão antes de avançar para Protheus.",
+                    action="open_pre_admission",
+                )
+            )
+            return
+
+        if int(snapshot.get("total_items", 0) or 0) == 0:
+            result.missing_gates.append(
+                MissingGate(
+                    code="pre_admission_checklist_required",
+                    label="Checklist documental obrigatório",
+                    description="Cadastre ao menos um item no checklist da pré-admissão antes de seguir para Protheus.",
+                    action="open_pre_admission",
+                )
+            )
+
+        unresolved_required_count = int(snapshot.get("unresolved_required_count", 0) or 0)
+        if unresolved_required_count > 0:
+            pending_titles = snapshot.get("unresolved_required_titles", [])
+            formatted_titles = ", ".join(str(title) for title in pending_titles if title)
+            description = (
+                f"{unresolved_required_count} item(ns) obrigatório(s) ainda não foram aprovados ou dispensados."
+            )
+            if formatted_titles:
+                description = f"{description} Pendências: {formatted_titles}."
+            result.missing_gates.append(
+                MissingGate(
+                    code="pre_admission_documents_pending",
+                    label="Pendências documentais na pré-admissão",
+                    description=description,
+                    action="open_pre_admission",
+                    action_payload={"unresolved_required_count": unresolved_required_count},
+                )
+            )
+
+        if snapshot.get("case_status") != "ready_for_admission":
+            result.missing_gates.append(
+                MissingGate(
+                    code="pre_admission_readiness_required",
+                    label="Pré-admissão ainda não liberada",
+                    description="Conclua a revisão documental e marque a pré-admissão como pronta antes de enviar para Protheus.",
+                    action="open_pre_admission",
+                )
+            )
 
     async def _collect_offer_gates(
         self,
@@ -367,7 +466,13 @@ class PipelineGateEvaluator:
                         ),
                         action="open_scorecard",
                         action_payload=(
-                            {"scorecard_id": str(scorecard.id)} if scorecard is not None else None
+                            {
+                                "scorecard_id": str(scorecard.id),
+                                "scorecard_status": scorecard.status,
+                                "interview_id": str(scorecard.interview_id) if scorecard.interview_id is not None else None,
+                            }
+                            if scorecard is not None
+                            else None
                         ),
                     )
                 )
@@ -457,26 +562,6 @@ class PipelineGateEvaluator:
                     )
                 )
 
-        decision = await self._repository.find_active_hiring_decision(
-            candidate_id=candidate_id,
-            job_id=job_id,
-            pipeline_id=pipeline_id,
-        )
-        if (
-            decision is None
-            or decision.decision_status != "submitted"
-            or decision.decision_outcome != "hire"
-        ):
-            result.missing_gates.append(
-                MissingGate(
-                    code="final_decision_not_submitted",
-                    label="Decisão final de contratação pendente",
-                    description=(
-                        "Registre e submeta uma decisão final com outcome 'hire' antes de contratar."
-                    ),
-                    action="open_decision",
-                    action_payload=(
-                        {"decision_id": str(decision.id)} if decision is not None else None
-                    ),
-                )
-            )
+        # A hiring decision is an auditable record, not the action that hires.
+        # Hiring itself is represented by moving the active pipeline entry to
+        # "hired" and then through post-hire stages, preserving the link.

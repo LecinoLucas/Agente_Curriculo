@@ -22,6 +22,7 @@ export type InterviewSchedule = {
   candidate_name: string;
   job_id: string | null;
   job_title: string | null;
+  pipeline_id?: string | null;
   title: string;
   description: string | null;
   public_notes: string | null;
@@ -46,6 +47,11 @@ export type InterviewSchedule = {
   meeting_provider?: string | null;
   external_calendar_html_link?: string | null;
   external_calendar_event_id?: string | null;
+  scorecard_id?: string | null;
+  scorecard_status?: "draft" | "submitted" | null;
+  scorecard_final_recommendation?: string | null;
+  scorecard_submitted_at?: string | null;
+  counts_for_current_gate?: boolean;
 };
 
 export type AgendaKpis = {

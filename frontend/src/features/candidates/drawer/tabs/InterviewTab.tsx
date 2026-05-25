@@ -15,10 +15,10 @@ type FormMode = "create" | "reschedule";
 
 const STATUS_LABELS: Record<InterviewStatus, string> = {
   scheduled: "Agendada",
-  rescheduled: "Remarcada",
-  completed: "Realizada",
+  rescheduled: "Reagendada",
+  completed: "Concluída",
   awaiting_feedback: "Aguardando feedback",
-  no_show: "No-show",
+  no_show: "Não compareceu",
   cancelled: "Cancelada",
 };
 
@@ -333,7 +333,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
               className="inline-flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
               {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {formMode === "reschedule" ? "Remarcar" : "Salvar"}
+              {formMode === "reschedule" ? "Reagendar" : "Salvar"}
             </button>
             <button
               type="button"
@@ -393,16 +393,16 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => openReschedule(interview)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium">
-                    <Pencil className="h-3.5 w-3.5" /> Remarcar
+                    <Pencil className="h-3.5 w-3.5" /> Reagendar
                   </button>
                   <button type="button" onClick={() => void runAction(() => agendaService.cancelInterviewOperational(interview.id, { cancel_reason: "Cancelada pelo recrutador." }))} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium">
                     <X className="h-3.5 w-3.5" /> Cancelar
                   </button>
                   <button type="button" onClick={() => void runAction(() => agendaService.completeInterview(interview.id))} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium">
-                    <Check className="h-3.5 w-3.5" /> Realizada
+                    <Check className="h-3.5 w-3.5" /> Concluir
                   </button>
                   <button type="button" onClick={() => void runAction(() => agendaService.markNoShow(interview.id, { reason: "Candidato não compareceu." }))} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium">
-                    <UserX className="h-3.5 w-3.5" /> No-show
+                    <UserX className="h-3.5 w-3.5" /> Não compareceu
                   </button>
                   <button type="button" onClick={() => setScorecardInterviewId(interview.id)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium">
                     <RotateCcw className="h-3.5 w-3.5" /> Scorecard

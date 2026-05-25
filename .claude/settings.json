@@ -34,7 +34,11 @@
       "Bash(rtk curl *)",
       "Bash(PLAYWRIGHT_FRONTEND_PORT=5173 PLAYWRIGHT_BACKEND_PORT=8000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 rtk playwright test --reporter=line)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(p\\) for p in d.get\\('paths',{}\\).keys\\(\\) if 'login' in p.lower\\(\\) or 'auth' in p.lower\\(\\)]\")",
-      "Bash(.venv/bin/python -c ' *)"
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/application/services/pipeline_service.py)",
+      "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/application/services/erp_integration_service.py)",
+      "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/interface/api/routers/pipeline.py)",
+      "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/interface/api/schemas/admission_package_schemas.py)"
     ],
     "additionalDirectories": [
       "/Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/versions"

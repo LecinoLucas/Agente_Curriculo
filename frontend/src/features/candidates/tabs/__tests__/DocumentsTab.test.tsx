@@ -31,6 +31,7 @@ vi.mock("../../../../features/candidates/drawer/components/CandidateNotesTab", (
 vi.mock("../../../../services/candidatesService", () => ({
   candidatesService: {
     getOverview: vi.fn(),
+    getProcessHistory: vi.fn(),
     listSummaries: vi.fn(),
     checkDuplicate: vi.fn(),
     update: vi.fn(),
@@ -128,6 +129,10 @@ describe("CandidateProfilePage documents tab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(candidatesService.getOverview).mockResolvedValue(baseOverview);
+    vi.mocked(candidatesService.getProcessHistory).mockResolvedValue({
+      candidate_id: "candidate-1",
+      processes: [],
+    });
     vi.mocked(listJobs).mockResolvedValue({
       data: [],
       total: 0,
