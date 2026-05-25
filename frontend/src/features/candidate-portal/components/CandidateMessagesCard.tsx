@@ -19,7 +19,11 @@ function formatDateTime(value: string): string {
   }).format(new Date(value));
 }
 
-export function CandidateMessagesCard() {
+export interface CandidateMessagesCardProps {
+  refreshTrigger?: number;
+}
+
+export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesCardProps) {
   const [messages, setMessages] = useState<CandidateCommunication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +34,10 @@ export function CandidateMessagesCard() {
     setError(null);
     try {
       const payload = await communicationService.getCandidateCommunications();
-      setMessages(payload.communications);
+      const uniqueMessages = Array.from(
+        new Map(payload.communications.map((m) => [m.id, m])).values()
+      ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setMessages(uniqueMessages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar suas mensagens.");
     } finally {
@@ -40,7 +47,7 @@ export function CandidateMessagesCard() {
 
   useEffect(() => {
     void loadMessages();
-  }, [loadMessages]);
+  }, [loadMessages, refreshTrigger]);
 
   const handleMarkRead = async (messageId: string) => {
     setMarkingId(messageId);

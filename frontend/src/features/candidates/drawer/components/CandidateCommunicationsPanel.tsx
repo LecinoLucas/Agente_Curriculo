@@ -220,7 +220,10 @@ export function CandidateCommunicationsPanel({
     setError(null);
     try {
       const payload = await communicationService.getRecruiterCommunications(jobId, candidateId);
-      setCommunications(payload.communications);
+      const uniqueComms = Array.from(
+        new Map(payload.communications.map((c) => [c.id, c])).values()
+      ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setCommunications(uniqueComms);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar comunicações.");
     } finally {

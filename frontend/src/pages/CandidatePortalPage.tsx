@@ -337,6 +337,7 @@ export function CandidatePortalPage() {
   const [currentTab, setCurrentTab] = useState("inicio");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [messagesRefreshTrigger, setMessagesRefreshTrigger] = useState(0);
 
   const activeApplication: CandidatePortalActiveApplication | null =
     overview?.active_application ?? null;
@@ -349,6 +350,7 @@ export function CandidatePortalPage() {
   async function loadPortalData(refresh = false) {
     if (refresh) {
       setIsRefreshing(true);
+      setMessagesRefreshTrigger((prev) => prev + 1);
     } else {
       setLoading(true);
     }
@@ -385,27 +387,6 @@ export function CandidatePortalPage() {
   useEffect(() => {
     void loadPortalData();
   }, []);
-
-  useEffect(() => {
-    const poll = () => {
-      if (document.hidden) return;
-      if (!loading && !isRefreshing && !isSaving && !isUploading && !assessmentSaving) {
-        void loadPortalData(true);
-      }
-    };
-
-    const intervalId = setInterval(poll, 15000);
-
-    const handleVisibility = () => {
-      if (!document.hidden) poll();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [loading, isRefreshing, isSaving, isUploading, assessmentSaving]);
 
   const handleContactChange = (field: keyof ContactFormState, value: string) => {
     setContactForm((current) => ({ ...current, [field]: value }));
@@ -462,6 +443,17 @@ export function CandidatePortalPage() {
 
   const handleLogout = async () => {
     try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("resume_ai_theme");
+        window.localStorage.removeItem("visual-theme");
+        window.localStorage.removeItem("theme:guest");
+        Object.keys(window.localStorage).forEach((key) => {
+          if (key.startsWith("theme:user:")) {
+            window.localStorage.removeItem(key);
+          }
+        });
+        window.sessionStorage.removeItem("resume_ai_theme");
+      }
       await candidatePortalService.logout();
     } catch (error) {
       // Logout falhando no backend (ERR_EMPTY_RESPONSE, rede, etc.) não pode
@@ -812,7 +804,7 @@ export function CandidatePortalPage() {
                 </Card>
               ) : null}
 
-              <CandidateMessagesCard />
+              <CandidateMessagesCard refreshTrigger={messagesRefreshTrigger} />
             </div>
           </div>
         )}
