@@ -224,7 +224,9 @@ export function AgendaPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string | "all">("all");
   const [filterPeriod, setFilterPeriod] = useState<"today" | "week" | "month" | "all">("week");
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -243,6 +245,14 @@ export function AgendaPage() {
 
   const days = weekDays(selected);
   const todayTs = dayStart(TODAY).getTime();
+
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
 
   async function loadData() {
     setLoading(true);
@@ -302,6 +312,7 @@ export function AgendaPage() {
       setError(message);
     } finally {
       setLoading(false);
+      setHasInitialized(true);
     }
   }
 
@@ -354,7 +365,9 @@ export function AgendaPage() {
       );
   const weekIvs = days.flatMap(byDay);
 
-  if (loading) {
+  const showInitialLoading = loading && !hasInitialized && !error;
+
+  if (showInitialLoading) {
     return (
       <div className="mx-auto w-full max-w-4xl space-y-5 px-4 pb-16 pt-6 sm:px-6">
         <PageHeader
@@ -462,13 +475,18 @@ export function AgendaPage() {
       <div className="space-y-3 rounded-xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Search */}
-          <input
-            type="text"
-            placeholder="Buscar candidato, vaga, avaliador..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 rounded-lg border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] px-3 py-2 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
-          />
+          <div className="relative flex-1 flex items-center">
+            <input
+              type="text"
+              placeholder="Buscar candidato, vaga, avaliador..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full rounded-lg border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] pl-3 pr-9 py-2 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+            />
+            {loading && (
+              <Loader2 className="absolute right-3 h-4 w-4 animate-spin text-[hsl(var(--text-muted))]" />
+            )}
+          </div>
 
           {/* Period filter */}
           <select

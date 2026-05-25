@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -161,5 +161,50 @@ describe("AgendaPage", () => {
         screen.getByRole("button", { name: "Reconectar Google Agenda" })
       ).toBeInTheDocument();
     });
+  });
+
+  it("mantém o campo de busca montado e atualiza query com debounce", async () => {
+    render(
+      <MemoryRouter future={routerFuture}>
+        <GoogleCalendarOAuthBridge />
+        <AgendaPage />
+      </MemoryRouter>
+    );
+
+    // Espera inicializar usando timers reais
+    const searchInput = await screen.findByPlaceholderText(
+      "Buscar candidato, vaga, avaliador..."
+    ) as HTMLInputElement;
+    expect(searchInput).toBeInTheDocument();
+    expect(listInterviewsMock).toHaveBeenCalledTimes(1);
+
+    // Ativa fake timers apenas para o teste de debounce
+    vi.useFakeTimers();
+
+    try {
+      // Digita um caractere
+      fireEvent.change(searchInput, { target: { value: "a" } });
+
+      // O listInterviewsMock não deve ter sido chamado ainda de novo (debounce de 300ms)
+      expect(listInterviewsMock).toHaveBeenCalledTimes(1);
+
+      // Avança o timer em 300ms
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      // Agora deve ter chamado o listInterviewsMock com a query
+      expect(listInterviewsMock).toHaveBeenCalledTimes(2);
+      expect(listInterviewsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "a" })
+      );
+
+      // Garante que o input continua montado e visível
+      expect(
+        screen.getByPlaceholderText("Buscar candidato, vaga, avaliador...")
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
