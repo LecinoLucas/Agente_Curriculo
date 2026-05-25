@@ -5,6 +5,11 @@ import {
   BarChart3,
   Briefcase,
   Calendar,
+  CalendarPlus,
+  ChevronDown,
+  Check,
+  ClipboardCheck,
+  Clock,
   Edit3,
   FileText,
   Loader,
@@ -12,14 +17,18 @@ import {
   MapPin,
   NotebookPen,
   Phone,
+  Pencil,
   RefreshCcw,
   Sparkles,
+  UserX,
   UserRound,
+  X,
 } from "lucide-react";
 
 import { Tabs, type Tab } from "../components/common/Tabs";
 import { LinkCandidateJobModal } from "../features/candidates/components/LinkCandidateJobModal";
 import { CandidateCommunicationsPanel } from "../features/candidates/drawer/components/CandidateCommunicationsPanel";
+import { InterviewScorecardPanel } from "../features/candidates/drawer/components/InterviewScorecardPanel";
 import { CandidateNotesTab } from "../features/candidates/drawer/components/CandidateNotesTab";
 import { useCandidateData } from "../features/candidates/drawer/hooks/useCandidateData";
 import { useCandidateDecision } from "../features/candidates/drawer/hooks/useCandidateDecision";
@@ -36,6 +45,15 @@ import {
   getInitials,
 } from "../features/candidates/utils/profile";
 import { EditCandidateModal } from "../features/pipeline/EditCandidateModal";
+import {
+  INTERVIEW_TYPE_LABELS,
+  formatInterviewDateTime,
+  interviewFormatLabel,
+  interviewStatusLabel,
+  interviewTypeLabel,
+  scorecardActionLabel,
+  scorecardStatusLabel,
+} from "../features/agenda/interviewDisplay";
 import { PipelineRejectionReasonModal } from "../features/pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
 import {
@@ -48,6 +66,7 @@ import { parseQuestionText } from "../features/behavioral-templates/behavioralTe
 import { agendaService } from "../services/agendaService";
 import { analysisService } from "../services/analysisService";
 import { aiLimitsService, type AILimitsUsage } from "../services/aiLimitsService";
+import { candidatesService } from "../services/candidatesService";
 import { HttpError } from "../services/http";
 import { getBehavioralEvaluation, triggerBehavioralAnalysis } from "../services/behavioralAIEvaluationService";
 import { getCandidateBehavioralAssessment } from "../services/behavioralAssessmentService";
@@ -62,7 +81,9 @@ import type {
   AnalysisStatus,
   CandidateOverview,
   CandidatePipelineEntryOverview,
-  CandidatePipelineHistory,
+  CandidatePreviewPendencyOverview,
+  CandidateProcessHistory,
+  CandidateProcessHistoryItem,
   BehavioralAIEvaluationResponse,
   BehavioralAssignmentAnswer,
   BehavioralAssignmentDetailResponse,
@@ -114,13 +135,12 @@ function resolveInitialTab(search: string): CandidateProfileTabKey {
   return "overview";
 }
 
-// Future foci: "scorecard", "interview", "decision" — wired only when the
-// corresponding tab grows a panel that knows how to react.
-type CandidateProfileFocus = "behavioral_ai";
+type CandidateProfileFocus = "behavioral_ai" | "scorecard";
 
 function resolveInitialFocus(search: string): CandidateProfileFocus | null {
   const focus = new URLSearchParams(search).get("focus");
   if (focus === "behavioral_ai") return focus;
+  if (focus === "scorecard") return focus;
   return null;
 }
 
@@ -142,6 +162,8 @@ export function CandidateProfilePage() {
   const [manualAnalysisStatus, setManualAnalysisStatus] = useState<AnalysisStatus["status"] | null>(null);
   const manualAnalysisPollingRef = useRef<number | null>(null);
   const [assessmentFocusTick, setAssessmentFocusTick] = useState(0);
+  const [scorecardFocusTick, setScorecardFocusTick] = useState(0);
+  const [scorecardFocusInterviewId, setScorecardFocusInterviewId] = useState<string | null>(null);
   const [dailyLimitDialogOpen, setDailyLimitDialogOpen] = useState(false);
   const [dailyLimitUsage, setDailyLimitUsage] = useState<AILimitsUsage | null>(null);
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
@@ -167,6 +189,10 @@ export function CandidateProfilePage() {
       // the tick is what causes scrollIntoView to run.
       setAssessmentFocusTick((current) => current + 1);
     }
+    if (tab === "interviews" && focus === "scorecard") {
+      setScorecardFocusInterviewId(new URLSearchParams(location.search).get("interview_id"));
+      setScorecardFocusTick((current) => current + 1);
+    }
   }, [location.search]);
 
   const {
@@ -184,6 +210,10 @@ export function CandidateProfilePage() {
   const activeScore = useMemo(() => getActiveJobScore(overview, activeEntry), [overview, activeEntry]);
   const profileEntry = activeEntry ?? overview?.pipeline_entries[0] ?? null;
   const profileJobId = activeEntry?.job_id ?? overview?.active_job_id ?? profileEntry?.job_id ?? null;
+  const historyFocusJobId = useMemo(
+    () => new URLSearchParams(location.search).get("job_id"),
+    [location.search],
+  );
   const profilePanelTab = activeTab === "score" ? "score" : "summary";
   const {
     rankingEntry,
@@ -484,11 +514,11 @@ export function CandidateProfilePage() {
     <PageShell>
       <nav aria-label="breadcrumb" className="mb-4">
         <Link
-          to="/candidatos"
+          to={profileJobId ? `/pipeline/${profileJobId}` : "/pipeline"}
           className="inline-flex items-center gap-2 text-sm font-semibold text-[hsl(var(--primary))] hover:underline"
         >
           <ArrowLeft className="h-4 w-4" />
-          Candidatos
+          Pipeline
         </Link>
       </nav>
 
@@ -553,6 +583,7 @@ export function CandidateProfilePage() {
               onLinkJob={() => setLinkJobOpen(true)}
               onEdit={() => setEditOpen(true)}
               onOpenNotes={() => setActiveTab("notes")}
+              onOpenHistory={() => setActiveTab("history")}
             />
           ) : null}
           {activeTab === "score" ? (
@@ -577,7 +608,15 @@ export function CandidateProfilePage() {
             <ProfileDocumentsTab overview={overview} onReload={reloadWorkspace} />
           ) : null}
           {activeTab === "interviews" ? (
-            <ProfileInterviewsTab jobId={profileJobId} candidateId={candidateId} />
+            <ProfileInterviewsTab
+              jobId={profileJobId}
+              candidateId={candidateId}
+              previewPendencies={overview?.preview_pendencies ?? []}
+              focusToken={scorecardFocusTick}
+              focusInterviewId={scorecardFocusInterviewId}
+              onAfterInterviewChange={reloadWorkspace}
+              onOpenHistory={() => setActiveTab("history")}
+            />
           ) : null}
           {activeTab === "assessments" ? (
             <ProfileBehavioralAssessmentsTab
@@ -587,13 +626,20 @@ export function CandidateProfilePage() {
               requiresAI={activeJob?.requires_behavioral_ai_evaluation ?? false}
               focusToken={assessmentFocusTick}
               onAfterBehavioralAIRequest={reloadWorkspace}
+              onOpenHistory={() => setActiveTab("history")}
             />
           ) : null}
           {activeTab === "communications" ? (
             <CandidateCommunicationsPanel jobId={profileJobId} candidateId={candidateId} />
           ) : null}
           {activeTab === "notes" ? <CandidateNotesTab candidateId={candidateId} /> : null}
-          {activeTab === "history" ? <HistoryTab overview={overview} activeJobId={profileJobId} /> : null}
+          {activeTab === "history" ? (
+            <HistoryTab
+              overview={overview}
+              activeJobId={profileJobId}
+              focusJobId={historyFocusJobId}
+            />
+          ) : null}
         </div>
       </section>
 
@@ -955,6 +1001,7 @@ function WorkflowTab({
   onLinkJob,
   onEdit,
   onOpenNotes,
+  onOpenHistory,
 }: {
   overview: CandidateOverview;
   activeEntry: CandidatePipelineEntryOverview | null;
@@ -969,6 +1016,7 @@ function WorkflowTab({
   onLinkJob: () => void;
   onEdit: () => void;
   onOpenNotes: () => void;
+  onOpenHistory: () => void;
 }) {
   const [stage, setStage] = useState<PipelineStage>(activeEntry?.stage ?? "entry");
   const [reason, setReason] = useState("");
@@ -990,6 +1038,12 @@ function WorkflowTab({
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <CurrentProcessHistoryHint
+        candidateId={overview.candidate.id}
+        jobId={activeEntry?.job_id ?? null}
+        onOpenHistory={onOpenHistory}
+        className="xl:col-span-2"
+      />
       <SectionCard title="Pipeline">
         <div className="space-y-4">
           <DefinitionList
@@ -1805,15 +1859,31 @@ function formatDateTime(value: string): string {
 function ProfileInterviewsTab({
   jobId,
   candidateId,
+  previewPendencies,
+  focusToken,
+  focusInterviewId,
+  onAfterInterviewChange,
+  onOpenHistory,
 }: {
   jobId: string | null;
   candidateId: string | null;
+  previewPendencies: CandidatePreviewPendencyOverview[];
+  focusToken: number;
+  focusInterviewId: string | null;
+  onAfterInterviewChange: () => void | Promise<void>;
+  onOpenHistory: () => void;
 }) {
   const [items, setItems] = useState<InterviewSchedule[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "reschedule" | null>(null);
+  const [editing, setEditing] = useState<InterviewSchedule | null>(null);
+  const [scorecardInterviewId, setScorecardInterviewId] = useState<string | null>(null);
+  const [detailsInterviewId, setDetailsInterviewId] = useState<string | null>(null);
+  const [highlightedInterviewId, setHighlightedInterviewId] = useState<string | null>(null);
+  const interviewRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const autoOpenedScorecardRef = useRef<string | null>(null);
   const [form, setForm] = useState({
     title: "Entrevista com candidato",
     interview_type: "hr" as InterviewType,
@@ -1827,6 +1897,17 @@ function ProfileInterviewsTab({
   });
 
   const canUseFlow = Boolean(jobId && candidateId);
+  const scorecardGatePayload = useMemo(
+    () =>
+      previewPendencies.find((pendency) => pendency.id === "scorecard_not_submitted")?.action_payload ??
+      null,
+    [previewPendencies],
+  );
+  const scorecardGateInterviewId = useMemo(() => {
+    const raw = scorecardGatePayload?.interview_id;
+    return typeof raw === "string" && raw ? raw : null;
+  }, [scorecardGatePayload]);
+  const hasScorecardGatePendency = previewPendencies.some((pendency) => pendency.id === "scorecard_not_submitted");
 
   const load = useCallback(async () => {
     if (!jobId || !candidateId) {
@@ -1859,6 +1940,35 @@ function ProfileInterviewsTab({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (focusToken <= 0 || items.length === 0) return;
+    const target =
+      (focusInterviewId ? items.find((item) => item.id === focusInterviewId) : null) ??
+      (scorecardGateInterviewId ? items.find((item) => item.id === scorecardGateInterviewId) : null) ??
+      items.find((item) => item.counts_for_current_gate) ??
+      items[0];
+    const canOpenScorecard = target.status === "completed" || target.status === "awaiting_feedback";
+    if (canOpenScorecard) {
+      setScorecardInterviewId(target.id);
+    }
+    setHighlightedInterviewId(target.id);
+    window.setTimeout(() => {
+      interviewRefs.current[target.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+    const timeout = window.setTimeout(() => setHighlightedInterviewId(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [focusInterviewId, focusToken, items, scorecardGateInterviewId]);
+
+  useEffect(() => {
+    if (!scorecardGateInterviewId || items.length === 0) return;
+    if (autoOpenedScorecardRef.current === scorecardGateInterviewId) return;
+    const target = items.find((item) => item.id === scorecardGateInterviewId);
+    if (!target || target.scorecard_status === "submitted") return;
+    if (target.status !== "completed" && target.status !== "awaiting_feedback") return;
+    autoOpenedScorecardRef.current = scorecardGateInterviewId;
+    setScorecardInterviewId(target.id);
+  }, [items, scorecardGateInterviewId]);
+
   const openForm = () => {
     const start = new Date();
     start.setDate(start.getDate() + 1);
@@ -1877,7 +1987,24 @@ function ProfileInterviewsTab({
       location: "",
       meeting_url: "",
     });
-    setFormOpen(true);
+    setEditing(null);
+    setFormMode("create");
+  };
+
+  const openReschedule = (interview: InterviewSchedule) => {
+    setEditing(interview);
+    setForm({
+      title: interview.title,
+      interview_type: interview.interview_type,
+      interview_format: interview.interview_format,
+      scheduled_start: toDatetimeLocal(interview.scheduled_start),
+      scheduled_end: toDatetimeLocal(interview.scheduled_end),
+      interviewer_name: interview.interviewer_name ?? "",
+      interviewer_email: interview.interviewer_email ?? "",
+      location: interview.location ?? "",
+      meeting_url: interview.meeting_url ?? "",
+    });
+    setFormMode("reschedule");
   };
 
   const submit = async () => {
@@ -1886,33 +2013,77 @@ function ProfileInterviewsTab({
     setSaving(true);
     setError(null);
     try {
-      await agendaService.createCandidateJobInterview(jobId, candidateId, {
-        title: form.title,
-        interview_type: form.interview_type,
-        interview_format: form.interview_format,
-        status: "scheduled",
-        scheduled_start: fromDatetimeLocal(form.scheduled_start),
-        scheduled_end: fromDatetimeLocal(form.scheduled_end),
-        timezone: "America/Recife",
-        location: form.location || null,
-        meeting_url: form.meeting_url || null,
-        interviewer_name: form.interviewer_name || null,
-        interviewer_email: form.interviewer_email || null,
-      });
-      toast.success("Entrevista agendada.");
-      setFormOpen(false);
+      if (formMode === "reschedule" && editing) {
+        await agendaService.rescheduleInterview(editing.id, {
+          scheduled_start: fromDatetimeLocal(form.scheduled_start),
+          scheduled_end: fromDatetimeLocal(form.scheduled_end),
+          timezone: "America/Recife",
+          location: form.location || null,
+          meeting_url: form.meeting_url || null,
+          interviewer_name: form.interviewer_name || null,
+          interviewer_email: form.interviewer_email || null,
+        });
+        toast.success("Entrevista reagendada.");
+      } else {
+        await agendaService.createCandidateJobInterview(jobId, candidateId, {
+          title: form.title,
+          interview_type: form.interview_type,
+          interview_format: form.interview_format,
+          status: "scheduled",
+          scheduled_start: fromDatetimeLocal(form.scheduled_start),
+          scheduled_end: fromDatetimeLocal(form.scheduled_end),
+          timezone: "America/Recife",
+          location: form.location || null,
+          meeting_url: form.meeting_url || null,
+          interviewer_name: form.interviewer_name || null,
+          interviewer_email: form.interviewer_email || null,
+        });
+        toast.success("Entrevista agendada.");
+      }
+      setFormMode(null);
+      setEditing(null);
       await load();
+      await onAfterInterviewChange();
     } catch (err: unknown) {
       setError(
         formatContextError(
           err,
-          "Não foi possível agendar a entrevista.",
+          "Não foi possível salvar a entrevista.",
           "Revise data, horário e vínculo com a vaga.",
         ),
       );
     } finally {
       setSaving(false);
     }
+  };
+
+  const runAction = async (
+    action: () => Promise<InterviewSchedule>,
+    successMessage: string,
+  ) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await action();
+      toast.success(successMessage);
+      await load();
+      await onAfterInterviewChange();
+    } catch (err: unknown) {
+      setError(
+        formatContextError(
+          err,
+          "Não foi possível aplicar a ação.",
+          "Tente novamente ou revise o status atual da entrevista.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleScorecardSubmitted = async () => {
+    await load();
+    await onAfterInterviewChange();
   };
 
   if (!canUseFlow) {
@@ -1926,12 +2097,18 @@ function ProfileInterviewsTab({
 
   return (
     <div className="space-y-4">
+      <CurrentProcessHistoryHint
+        candidateId={candidateId}
+        jobId={jobId}
+        onOpenHistory={onOpenHistory}
+      />
       <SectionCard title="Entrevistas">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-[hsl(var(--text-muted))]">
-            Agenda operacional do candidato nesta vaga.
+            Agenda operacional do processo atual nesta vaga. Entrevistas de ciclos anteriores ficam no histórico.
           </p>
           <ActionButton onClick={openForm} primary>
+            <CalendarPlus className="h-4 w-4" />
             Agendar entrevista
           </ActionButton>
         </div>
@@ -1942,14 +2119,18 @@ function ProfileInterviewsTab({
           </p>
         ) : null}
 
-        {formOpen ? (
+        {formMode ? (
           <div className="mt-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-4">
+            <p className="mb-3 text-sm font-bold text-[hsl(var(--text))]">
+              {formMode === "reschedule" ? "Reagendar entrevista" : "Agendar entrevista"}
+            </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-sm">
                 <span className="font-semibold text-[hsl(var(--text))]">Título</span>
                 <input
                   value={form.title}
                   onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                  disabled={formMode === "reschedule"}
                   className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
                 />
               </label>
@@ -1960,14 +2141,51 @@ function ProfileInterviewsTab({
                   onChange={(event) =>
                     setForm((current) => ({ ...current, interview_type: event.target.value as InterviewType }))
                   }
+                  disabled={formMode === "reschedule"}
                   className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
                 >
-                  <option value="hr">RH</option>
-                  <option value="technical">Técnica</option>
-                  <option value="manager">Gestor</option>
-                  <option value="final">Final</option>
-                  <option value="other">Outra</option>
+                  {Object.entries(INTERVIEW_TYPE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
+              </label>
+              <label className="text-sm">
+                <span className="font-semibold text-[hsl(var(--text))]">Formato</span>
+                <select
+                  value={form.interview_format}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, interview_format: event.target.value as InterviewFormat }))
+                  }
+                  disabled={formMode === "reschedule"}
+                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                >
+                  <option value="online">Online</option>
+                  <option value="presencial">Presencial</option>
+                  <option value="telefone">Telefone</option>
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="font-semibold text-[hsl(var(--text))]">Entrevistador</span>
+                <input
+                  value={form.interviewer_name}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, interviewer_name: event.target.value }))
+                  }
+                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="font-semibold text-[hsl(var(--text))]">E-mail do entrevistador</span>
+                <input
+                  type="email"
+                  value={form.interviewer_email}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, interviewer_email: event.target.value }))
+                  }
+                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                />
               </label>
               <label className="text-sm">
                 <span className="font-semibold text-[hsl(var(--text))]">Início</span>
@@ -1992,26 +2210,18 @@ function ProfileInterviewsTab({
                 />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Formato</span>
-                <select
-                  value={form.interview_format}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, interview_format: event.target.value as InterviewFormat }))
-                  }
+                <span className="font-semibold text-[hsl(var(--text))]">Local</span>
+                <input
+                  value={form.location}
+                  onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
                   className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
-                >
-                  <option value="online">Online</option>
-                  <option value="presencial">Presencial</option>
-                  <option value="telefone">Telefone</option>
-                </select>
+                />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Entrevistador</span>
+                <span className="font-semibold text-[hsl(var(--text))]">Link da reunião</span>
                 <input
-                  value={form.interviewer_name}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, interviewer_name: event.target.value }))
-                  }
+                  value={form.meeting_url}
+                  onChange={(event) => setForm((current) => ({ ...current, meeting_url: event.target.value }))}
                   className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
                 />
               </label>
@@ -2019,9 +2229,17 @@ function ProfileInterviewsTab({
 
             <div className="mt-4 flex flex-wrap gap-2">
               <ActionButton onClick={() => void submit()} disabled={saving} primary>
-                {saving ? "Salvando..." : "Salvar entrevista"}
+                {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {formMode === "reschedule" ? "Salvar reagendamento" : "Salvar entrevista"}
               </ActionButton>
-              <ActionButton onClick={() => setFormOpen(false)} disabled={saving}>
+              <ActionButton
+                onClick={() => {
+                  setFormMode(null);
+                  setEditing(null);
+                }}
+                disabled={saving}
+              >
+                <X className="h-4 w-4" />
                 Cancelar
               </ActionButton>
             </div>
@@ -2029,28 +2247,200 @@ function ProfileInterviewsTab({
         ) : null}
       </SectionCard>
 
-      <SectionCard title="Entrevistas agendadas">
+      <SectionCard title="Entrevistas do processo atual">
         {loading ? (
           <p className="text-sm text-[hsl(var(--text-muted))]">Carregando entrevistas...</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhuma entrevista registrada.</p>
+          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhuma entrevista registrada no processo atual.</p>
         ) : (
           <ul className="space-y-3">
-            {items.map((item) => (
-              <li
-                key={item.id}
-                className="rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))] p-4"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-semibold text-[hsl(var(--text))]">{item.title}</p>
-                  <Badge tone={item.status === "cancelled" ? "danger" : "info"}>{item.status}</Badge>
-                </div>
-                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-                  {formatDateTime(item.scheduled_start)}
-                  {item.interviewer_name ? ` · ${item.interviewer_name}` : ""}
-                </p>
-              </li>
-            ))}
+            {items.map((item) => {
+              const isScheduled = item.status === "scheduled" || item.status === "rescheduled";
+              const canScorecard = item.status === "completed" || item.status === "awaiting_feedback";
+              const isTerminal = item.status === "cancelled" || item.status === "no_show";
+              const detailsOpen = detailsInterviewId === item.id;
+              const isScorecardGateInterview =
+                item.id === scorecardGateInterviewId ||
+                (!scorecardGateInterviewId &&
+                  hasScorecardGatePendency &&
+                  item.counts_for_current_gate &&
+                  item.status !== "cancelled" &&
+                  item.status !== "no_show");
+              const needsScorecardForGate =
+                isScorecardGateInterview && item.scorecard_status !== "submitted";
+              const scorecardOpen = scorecardInterviewId === item.id;
+              return (
+                <li
+                  key={item.id}
+                  ref={(node) => {
+                    interviewRefs.current[item.id] = node;
+                  }}
+                  className={[
+                    "rounded-xl border bg-[hsl(var(--bg))] p-4 transition",
+                    highlightedInterviewId === item.id
+                      ? "border-[hsl(var(--primary))] ring-2 ring-[hsl(var(--primary)/0.20)]"
+                      : item.counts_for_current_gate || needsScorecardForGate
+                      ? "border-[hsl(var(--primary)/0.35)]"
+                      : "border-[hsl(var(--border)/0.7)]",
+                  ].join(" ")}
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={item.counts_for_current_gate ? "primary" : "neutral"}>
+                          {item.counts_for_current_gate ? "Conta para o gate atual" : "Não conta para o gate técnico"}
+                        </Badge>
+                        <Badge tone="info">{interviewTypeLabel(item.interview_type)}</Badge>
+                        <Badge tone={item.status === "completed" ? "success" : item.status === "cancelled" || item.status === "no_show" ? "danger" : "neutral"}>
+                          {interviewStatusLabel(item.status)}
+                        </Badge>
+                      </div>
+                      <p className="mt-3 font-semibold text-[hsl(var(--text))]">{item.title}</p>
+                      <div className="mt-2 grid gap-2 text-sm text-[hsl(var(--text-muted))] md:grid-cols-2">
+                        <span className="inline-flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          {formatInterviewDateTime(item.scheduled_start)}
+                        </span>
+                        <span>Formato: {interviewFormatLabel(item.interview_format)}</span>
+                        <span>Entrevistador: {item.interviewer_name || item.interviewer_email || "não definido"}</span>
+                        <span>Scorecard: {scorecardStatusLabel(item)}</span>
+                      </div>
+                      {item.counts_for_current_gate ? (
+                        <p className="mt-3 rounded-lg border border-[hsl(var(--primary)/0.25)] bg-[hsl(var(--primary)/0.06)] px-3 py-2 text-sm font-medium text-[hsl(var(--text))]">
+                          Esta entrevista é necessária para avançar o candidato.
+                        </p>
+                      ) : null}
+                      {needsScorecardForGate ? (
+                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                          Esta entrevista precisa de scorecard para avançar.
+                        </p>
+                      ) : null}
+                      {isScheduled && (item.counts_for_current_gate || isScorecardGateInterview) ? (
+                        <p className="mt-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-3 py-2 text-sm text-[hsl(var(--text-muted))]">
+                          A entrevista precisa ser concluída antes do scorecard.
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 lg:max-w-xs lg:justify-end">
+                      {isScheduled ? (
+                        <>
+                          <ActionButton onClick={() => openReschedule(item)} disabled={saving}>
+                            <Pencil className="h-4 w-4" />
+                            Reagendar
+                          </ActionButton>
+                          <ActionButton
+                            onClick={() =>
+                              void runAction(
+                                () => agendaService.cancelInterviewOperational(item.id, { cancel_reason: "Cancelada pelo recrutador." }),
+                                "Entrevista cancelada.",
+                              )
+                            }
+                            disabled={saving}
+                          >
+                            <X className="h-4 w-4" />
+                            Cancelar
+                          </ActionButton>
+                          <ActionButton
+                            onClick={() =>
+                              void runAction(
+                                () => agendaService.completeInterview(item.id),
+                                "Entrevista marcada como concluída.",
+                              )
+                            }
+                            disabled={saving}
+                            primary
+                          >
+                            <Check className="h-4 w-4" />
+                            Marcar como concluída
+                          </ActionButton>
+                          <ActionButton
+                            onClick={() =>
+                              void runAction(
+                                () => agendaService.markNoShow(item.id, { reason: "Candidato não compareceu." }),
+                                "Entrevista marcada como não comparecimento.",
+                              )
+                            }
+                            disabled={saving}
+                          >
+                            <UserX className="h-4 w-4" />
+                            Não compareceu
+                          </ActionButton>
+                        </>
+                      ) : null}
+
+                      {canScorecard ? (
+                        <>
+                          <ActionButton
+                            onClick={() => setScorecardInterviewId((current) => (current === item.id ? null : item.id))}
+                            disabled={saving}
+                          >
+                            <NotebookPen className="h-4 w-4" />
+                            Registrar feedback
+                          </ActionButton>
+                          <ActionButton
+                            onClick={() => setScorecardInterviewId((current) => (current === item.id ? null : item.id))}
+                            disabled={saving}
+                            primary
+                          >
+                            <ClipboardCheck className="h-4 w-4" />
+                            {scorecardActionLabel(item)}
+                          </ActionButton>
+                        </>
+                      ) : null}
+
+                      {isTerminal ? (
+                        <>
+                          <ActionButton onClick={() => openReschedule(item)} disabled={saving}>
+                            <Pencil className="h-4 w-4" />
+                            Reagendar
+                          </ActionButton>
+                          <ActionButton
+                            onClick={() => setDetailsInterviewId((current) => (current === item.id ? null : item.id))}
+                            disabled={saving}
+                          >
+                            Ver detalhes
+                          </ActionButton>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {detailsOpen ? (
+                    <div className="mt-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 text-sm text-[hsl(var(--text-muted))]">
+                      <p>Status: {interviewStatusLabel(item.status)}</p>
+                      {item.cancel_reason ? <p>Motivo: {item.cancel_reason}</p> : null}
+                      {item.internal_notes ? <p>Observações internas: {item.internal_notes}</p> : null}
+                    </div>
+                  ) : null}
+
+                  {scorecardOpen && canScorecard ? (
+                    <div className="mt-4 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))] px-4 py-3">
+                        <div>
+                          <p className="text-sm font-bold text-[hsl(var(--text))]">
+                            {item.scorecard_status === "submitted" ? "Scorecard enviado" : "Scorecard da entrevista"}
+                          </p>
+                          <p className="text-xs text-[hsl(var(--text-muted))]">
+                            {interviewTypeLabel(item.interview_type)} · {formatInterviewDateTime(item.scheduled_start)}
+                          </p>
+                        </div>
+                        <ActionButton onClick={() => setScorecardInterviewId(null)}>
+                          <X className="h-4 w-4" />
+                          Fechar
+                        </ActionButton>
+                      </div>
+                      <InterviewScorecardPanel
+                        jobId={jobId}
+                        candidateId={candidateId}
+                        interviewId={item.id}
+                        onSubmitted={handleScorecardSubmitted}
+                      />
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </SectionCard>
@@ -2125,6 +2515,7 @@ function ProfileBehavioralAssessmentsTab({
   requiresAI,
   focusToken,
   onAfterBehavioralAIRequest,
+  onOpenHistory,
 }: {
   jobId: string | null;
   candidateId: string | null;
@@ -2132,6 +2523,7 @@ function ProfileBehavioralAssessmentsTab({
   requiresAI: boolean;
   focusToken: number;
   onAfterBehavioralAIRequest: () => Promise<void>;
+  onOpenHistory: () => void;
 }) {
   const [assessment, setAssessment] = useState<BehavioralAssignmentDetailResponse | null>(null);
   const [evaluation, setEvaluation] = useState<BehavioralAIEvaluationResponse | null>(null);
@@ -2303,6 +2695,11 @@ function ProfileBehavioralAssessmentsTab({
 
   return (
     <div className="space-y-4">
+      <CurrentProcessHistoryHint
+        candidateId={candidateId}
+        jobId={jobId}
+        onOpenHistory={onOpenHistory}
+      />
       <SectionCard title="Avaliação comportamental">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -2460,104 +2857,372 @@ function ProfileBehavioralAssessmentsTab({
   );
 }
 
+function CurrentProcessHistoryHint({
+  candidateId,
+  jobId,
+  onOpenHistory,
+  className = "",
+}: {
+  candidateId: string | null;
+  jobId: string | null;
+  onOpenHistory: () => void;
+  className?: string;
+}) {
+  const [hasPrevious, setHasPrevious] = useState(false);
+
+  useEffect(() => {
+    if (!candidateId || !jobId) {
+      setHasPrevious(false);
+      return;
+    }
+    let cancelled = false;
+    void candidatesService
+      .getProcessHistory(candidateId, jobId)
+      .then((payload) => {
+        if (cancelled) return;
+        setHasPrevious(payload.processes.some((process) => !process.is_current));
+      })
+      .catch(() => {
+        if (!cancelled) setHasPrevious(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [candidateId, jobId]);
+
+  if (!hasPrevious) return null;
+
+  return (
+    <div className={`rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 ${className}`}>
+      Este candidato possui processos anteriores nesta vaga.{" "}
+      <button
+        type="button"
+        onClick={onOpenHistory}
+        className="font-semibold underline underline-offset-2"
+      >
+        Ver histórico.
+      </button>
+    </div>
+  );
+}
+
 function HistoryTab({
   overview,
   activeJobId,
+  focusJobId,
 }: {
   overview: CandidateOverview;
   activeJobId: string | null;
+  focusJobId: string | null;
 }) {
-  const entries = overview.pipeline_entries ?? [];
-  const [history, setHistory] = useState<CandidatePipelineHistory | null>(null);
+  const [history, setHistory] = useState<CandidateProcessHistory | null>(null);
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!activeJobId) {
-      setHistory(null);
-      return;
-    }
-
     let cancelled = false;
     setLoading(true);
-    void pipelineService
-      .getCandidateHistory(activeJobId, overview.candidate.id)
+    void candidatesService
+      .getProcessHistory(overview.candidate.id)
       .then((payload) => {
         if (!cancelled) setHistory(payload);
       })
       .catch(() => {
-        if (!cancelled) setHistory(null);
+        if (!cancelled) setHistory({ candidate_id: overview.candidate.id, processes: [] });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-
     return () => {
       cancelled = true;
     };
-  }, [activeJobId, overview.candidate.id]);
+  }, [overview.candidate.id]);
 
-  if (entries.length === 0) {
+  const processes = history?.processes ?? [];
+  const current = processes.filter((process) => process.is_current);
+  const previous = processes
+    .filter((process) => !process.is_current)
+    .sort((left, right) => {
+      if (focusJobId && left.job_id === focusJobId && right.job_id !== focusJobId) return -1;
+      if (focusJobId && right.job_id === focusJobId && left.job_id !== focusJobId) return 1;
+      return 0;
+    });
+
+  const toggle = (pipelineId: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(pipelineId)) next.delete(pipelineId);
+      else next.add(pipelineId);
+      return next;
+    });
+  };
+
+  if (loading) {
+    return <p className="text-sm text-[hsl(var(--text-muted))]">Carregando histórico de processos...</p>;
+  }
+
+  if (processes.length === 0) {
     return (
       <EmptyBlock
-        title="Nenhum evento registrado"
-        description="O histórico operacional aparecerá conforme o candidato avança no pipeline."
+        title="Nenhum processo anterior"
+        description="O histórico aparecerá quando o candidato tiver processos encerrados ou ciclos anteriores."
       />
     );
   }
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Vínculos do candidato">
-        <ol className="space-y-3">
-          {entries.map((entry) => (
-            <li
-              key={`${entry.job_id}-${entry.updated_at}`}
-              className="rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))] p-4"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-semibold text-[hsl(var(--text))]">{entry.job_title}</p>
-                <span className="text-xs text-[hsl(var(--text-muted))]">
-                  {new Date(entry.updated_at).toLocaleDateString("pt-BR")}
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-                Etapa: {STAGE_LABEL[entry.stage]} · Status: {entry.relationship_status}
-              </p>
-            </li>
-          ))}
-        </ol>
-      </SectionCard>
-
-      <SectionCard title="Histórico completo da vaga selecionada">
-        {loading ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Carregando histórico...</p>
-        ) : history?.transitions.length ? (
-          <ol className="space-y-3">
-            {history.transitions.map((transition) => (
-              <li
-                key={transition.id}
-                className="rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))] p-4"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-semibold text-[hsl(var(--text))]">
-                    {transition.from_stage ? `${STAGE_LABEL[transition.from_stage]} -> ` : ""}
-                    {STAGE_LABEL[transition.to_stage]}
-                  </p>
-                  <span className="text-xs text-[hsl(var(--text-muted))]">
-                    {new Date(transition.moved_at).toLocaleString("pt-BR")}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-                  {transition.moved_by_name ? `Por ${transition.moved_by_name}` : "Autor não informado"}
-                  {transition.reason ? ` · ${transition.reason}` : ""}
-                </p>
-              </li>
-            ))}
-          </ol>
+      <SectionCard title="Processo atual">
+        {current.length === 0 ? (
+          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum processo ativo no momento.</p>
         ) : (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Sem movimentações detalhadas.</p>
+          <div className="space-y-3">
+            {current.map((process) => (
+              <ProcessHistoryCard
+                key={process.pipeline_id}
+                process={process}
+                expanded={expanded.has(process.pipeline_id)}
+                onToggle={() => toggle(process.pipeline_id)}
+                activeJobId={activeJobId}
+              />
+            ))}
+          </div>
         )}
       </SectionCard>
+
+      <SectionCard title="Processos anteriores">
+        {previous.length === 0 ? (
+          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum processo anterior.</p>
+        ) : (
+          <div className="space-y-3">
+            {previous.map((process) => (
+              <ProcessHistoryCard
+                key={process.pipeline_id}
+                process={process}
+                expanded={expanded.has(process.pipeline_id)}
+                onToggle={() => toggle(process.pipeline_id)}
+                activeJobId={activeJobId}
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+const INTERVIEW_TYPE_LABEL: Record<string, string> = {
+  hr: "Entrevista RH",
+  technical: "Entrevista técnica",
+  manager: "Entrevista gestor",
+  final: "Entrevista final",
+  other: "Entrevista",
+};
+
+const SIMPLE_STATUS_LABEL: Record<string, string> = {
+  scheduled: "agendada",
+  rescheduled: "reagendada",
+  awaiting_feedback: "aguardando feedback",
+  completed: "concluída",
+  cancelled: "cancelada",
+  no_show: "não compareceu",
+  draft: "rascunho",
+  submitted: "enviado",
+  pending: "pendente",
+  in_progress: "em andamento",
+  expired: "expirado",
+  failed: "falhou",
+  processing: "processando",
+};
+
+const DECISION_OUTCOME_LABEL: Record<string, string> = {
+  advance: "avançar",
+  hold: "manter em análise",
+  reject: "rejeitar",
+  hire: "contratar",
+  request_another_interview: "solicitar nova entrevista",
+  keep_under_review: "manter em observação",
+};
+
+function ProcessHistoryCard({
+  process,
+  expanded,
+  onToggle,
+  activeJobId,
+}: {
+  process: CandidateProcessHistoryItem;
+  expanded: boolean;
+  onToggle: () => void;
+  activeJobId: string | null;
+}) {
+  const closedAt = process.closed_at ? formatDateTime(process.closed_at) : null;
+  const startedAt = process.started_at ? formatDateTime(process.started_at) : null;
+  const title = process.is_current
+    ? `Processo atual - ${process.job_title}`
+    : `Processo anterior encerrado${closedAt ? ` em ${closedAt}` : ""}`;
+  const sameActiveJob = activeJobId && process.job_id === activeJobId;
+
+  return (
+    <article
+      className={[
+        "rounded-xl border bg-[hsl(var(--bg))] p-4",
+        process.is_current
+          ? "border-[hsl(var(--primary)/0.35)]"
+          : sameActiveJob
+            ? "border-amber-200"
+            : "border-[hsl(var(--border)/0.7)]",
+      ].join(" ")}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start justify-between gap-3 text-left"
+        aria-expanded={expanded}
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold text-[hsl(var(--text))]">{title}</h3>
+            <Badge tone={process.is_current ? "success" : "neutral"}>
+              {process.is_current ? "Atual" : "Histórico"}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            {process.job_title} · Resultado: {process.result_label} · Última etapa:{" "}
+            {STAGE_LABEL[process.current_or_final_stage as PipelineStage] ?? process.current_or_final_stage}
+          </p>
+          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+            {startedAt ? `Iniciado em ${startedAt}` : "Início não informado"}
+            {process.events_count ? ` · ${process.events_count} evento(s)` : ""}
+          </p>
+        </div>
+        <ChevronDown className={`mt-1 h-4 w-4 shrink-0 transition ${expanded ? "rotate-180" : ""}`} />
+      </button>
+
+      <div className="mt-4 grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
+        <HistorySummaryLine
+          label="Entrevistas"
+          value={process.interviews.length ? `${process.interviews.length} registrada(s)` : "nenhuma"}
+        />
+        <HistorySummaryLine
+          label="Scorecard"
+          value={process.scorecards.some((item) => item.status === "submitted") ? "enviado" : "não enviado"}
+        />
+        <HistorySummaryLine
+          label="Avaliação comportamental"
+          value={process.behavioral_assessment ? SIMPLE_STATUS_LABEL[process.behavioral_assessment.status] ?? process.behavioral_assessment.status : "nenhuma"}
+        />
+        <HistorySummaryLine
+          label="Decisão"
+          value={process.hiring_decision ? DECISION_OUTCOME_LABEL[process.hiring_decision.outcome] ?? process.hiring_decision.outcome : "nenhuma"}
+        />
+      </div>
+
+      {process.closure_reason ? (
+        <p className="mt-3 rounded-lg border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text-muted))]">
+          Motivo: {process.closure_reason}
+        </p>
+      ) : null}
+
+      {expanded ? (
+        <div className="mt-4 space-y-4 border-t border-[hsl(var(--border)/0.7)] pt-4">
+          <HistoryDetailList
+            title="Entrevistas"
+            empty="Nenhuma entrevista registrada neste processo."
+            items={process.interviews.map((interview) => ({
+              id: interview.id,
+              primary: `${INTERVIEW_TYPE_LABEL[interview.type] ?? interview.type}: ${SIMPLE_STATUS_LABEL[interview.status] ?? interview.status}`,
+              secondary: [
+                interview.scheduled_at ? formatDateTime(interview.scheduled_at) : null,
+                interview.scorecard_status
+                  ? `Scorecard: ${SIMPLE_STATUS_LABEL[interview.scorecard_status] ?? interview.scorecard_status}`
+                  : null,
+                interview.final_recommendation ? `Recomendação: ${interview.final_recommendation}` : null,
+              ].filter(Boolean).join(" · "),
+            }))}
+          />
+          <HistoryDetailList
+            title="Scorecards"
+            empty="Nenhum scorecard registrado neste processo."
+            items={process.scorecards.map((scorecard) => ({
+              id: scorecard.id,
+              primary: `Scorecard: ${SIMPLE_STATUS_LABEL[scorecard.status] ?? scorecard.status}`,
+              secondary: [
+                scorecard.submitted_at ? `Enviado em ${formatDateTime(scorecard.submitted_at)}` : null,
+                scorecard.final_recommendation ? `Recomendação: ${scorecard.final_recommendation}` : null,
+              ].filter(Boolean).join(" · "),
+            }))}
+          />
+          <HistoryDetailList
+            title="Avaliação comportamental"
+            empty="Nenhuma avaliação comportamental neste processo."
+            items={process.behavioral_assessment ? [{
+              id: process.behavioral_assessment.assignment_id,
+              primary: `Avaliação: ${SIMPLE_STATUS_LABEL[process.behavioral_assessment.status] ?? process.behavioral_assessment.status}`,
+              secondary: [
+                process.behavioral_assessment.submitted_at
+                  ? `Concluída em ${formatDateTime(process.behavioral_assessment.submitted_at)}`
+                  : null,
+                process.behavioral_assessment.ai_status
+                  ? `IA: ${SIMPLE_STATUS_LABEL[process.behavioral_assessment.ai_status] ?? process.behavioral_assessment.ai_status}`
+                  : null,
+              ].filter(Boolean).join(" · "),
+            }] : []}
+          />
+          <HistoryDetailList
+            title="Decisão"
+            empty="Nenhuma decisão registrada neste processo."
+            items={process.hiring_decision ? [{
+              id: process.hiring_decision.id,
+              primary: `Decisão: ${DECISION_OUTCOME_LABEL[process.hiring_decision.outcome] ?? process.hiring_decision.outcome}`,
+              secondary: [
+                `Status: ${SIMPLE_STATUS_LABEL[process.hiring_decision.status] ?? process.hiring_decision.status}`,
+                process.hiring_decision.submitted_at
+                  ? `Enviada em ${formatDateTime(process.hiring_decision.submitted_at)}`
+                  : null,
+              ].filter(Boolean).join(" · "),
+            }] : []}
+          />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function HistorySummaryLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] px-3 py-2">
+      <p className="text-xs font-semibold text-[hsl(var(--text-muted))]">{label}</p>
+      <p className="mt-1 font-medium text-[hsl(var(--text))]">{value}</p>
+    </div>
+  );
+}
+
+function HistoryDetailList({
+  title,
+  empty,
+  items,
+}: {
+  title: string;
+  empty: string;
+  items: Array<{ id: string; primary: string; secondary: string }>;
+}) {
+  return (
+    <div>
+      <h4 className="text-sm font-semibold text-[hsl(var(--text))]">{title}</h4>
+      {items.length === 0 ? (
+        <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {items.map((item) => (
+            <li key={item.id} className="rounded-lg border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] px-3 py-2">
+              <p className="text-sm font-medium text-[hsl(var(--text))]">{item.primary}</p>
+              {item.secondary ? (
+                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{item.secondary}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
