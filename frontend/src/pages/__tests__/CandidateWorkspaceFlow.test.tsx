@@ -1037,12 +1037,18 @@ describe("Candidate workspace flow", () => {
     });
   });
 
-  it("Abrir ação prioriza Avaliações quando a pendência é IA comportamental", async () => {
+  it("Abrir ação prioriza Avaliações quando a pendência é IA comportamental (gate)", async () => {
     const user = userEvent.setup();
     vi.mocked(candidatesService.getOverview).mockResolvedValue({
       ...overview,
       preview_pendencies: [
-        { id: "behavioral_ai", label: "IA comportamental pendente", tone: "warning" },
+        {
+          id: "behavioral_ai_pending",
+          label: "IA comportamental pendente",
+          tone: "block",
+          action: "open_behavioral_ai",
+          description: "Aguarde a IA comportamental concluir a análise.",
+        },
       ],
     });
     vi.mocked(getBehavioralEvaluation).mockResolvedValue(null);
@@ -1055,7 +1061,8 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Gerar IA comportamental")).toBeInTheDocument();
+    // Gate-based pendency: label from _ACTION_CODE_LABEL["open_behavioral_ai"]
+    expect(await screen.findByText("Avaliação IA comportamental")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Abrir ação/i }));
 
     await waitFor(() => {

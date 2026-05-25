@@ -3,8 +3,10 @@
 import logging
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.repositories.sqlalchemy_communication_repository import (
     SQLAlchemyCommunicationRepository,
 )
@@ -267,6 +269,40 @@ class CommunicationService:
             template_key="custom_message",
             status="draft",
             created_by=created_by,
+        )
+        await self._deliver(comm)
+        return comm
+
+    async def create_candidate_contact_request(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        subject: str,
+        body: str,
+    ):
+        """Create an internal HR communication requested by the candidate."""
+        pipeline_id = await self.session.scalar(
+            sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+            )
+        )
+        if pipeline_id is None:
+            raise ValueError("Processo não encontrado para este candidato.")
+
+        comm = await self.repository.create_communication(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            related_entity_type="candidate_contact_request",
+            related_entity_id=pipeline_id,
+            template_key="candidate_contact_request",
+            channel="internal",
+            audience="hr",
+            subject=subject,
+            body=body,
+            status="draft",
+            created_by=None,
         )
         await self._deliver(comm)
         return comm

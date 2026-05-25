@@ -82,6 +82,13 @@ class CommunicationMarkReadRequest(BaseModel):
     pass
 
 
+class CandidateContactRequest(BaseModel):
+    """Request created by a candidate asking HR to contact them."""
+    job_id: UUID = Field(..., description="Job UUID related to the closed process")
+    subject: str = Field(..., min_length=1, max_length=200, description="Message subject")
+    body: str = Field(..., min_length=1, max_length=2000, description="Message body")
+
+
 class CommunicationTemplateListResponse(BaseModel):
     """Response with list of templates."""
     templates: list[CommunicationTemplateResponse] = Field(..., description="List of templates")

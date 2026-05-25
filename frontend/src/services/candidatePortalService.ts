@@ -141,6 +141,12 @@ export interface CandidatePortalOverview {
   latest_resume: CandidatePortalResume | null;
   talent_pool: boolean;
   status_public: string;
+  application_status: "active" | "rejected" | "hired" | "talent_pool" | "no_active_application" | string;
+  current_process_status_label: string;
+  is_process_closed: boolean;
+  closed_reason_public_label: string | null;
+  can_request_contact: boolean;
+  can_apply_to_other_jobs: boolean;
   public_timeline: CandidatePortalTimeline | null;
 }
 

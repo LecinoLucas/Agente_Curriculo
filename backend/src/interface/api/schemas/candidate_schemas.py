@@ -136,6 +136,8 @@ class CandidatePreviewPendencyResponse(BaseModel):
     id: str
     label: str
     tone: str = "info"
+    action: str | None = None
+    description: str | None = None
 
 
 class CandidateLatestMovementResponse(BaseModel):

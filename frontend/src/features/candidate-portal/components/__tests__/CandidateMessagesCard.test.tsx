@@ -58,7 +58,7 @@ describe("CandidateMessagesCard", () => {
 
     render(<CandidateMessagesCard />);
 
-    expect(await screen.findByText("Nenhuma mensagem no momento.")).toBeInTheDocument();
+    expect(await screen.findByText("Mais novidades em breve!")).toBeInTheDocument();
   });
 
   it("mostra loading e error state", async () => {

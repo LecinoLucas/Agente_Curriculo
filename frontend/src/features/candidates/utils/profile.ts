@@ -81,22 +81,49 @@ export function formatScorePercent(score: number | null | undefined): string {
 export type CandidatePendency = {
   id: string;
   label: string;
-  tone: "warning" | "info";
+  tone: "warning" | "info" | "block";
+  action?: string | null;
+  description?: string | null;
 };
 
 export function derivePendencies(overview: CandidateOverview | null): CandidatePendency[] {
   if (!overview) return [];
 
-  if (overview.preview_pendencies?.length) {
-    return overview.preview_pendencies
-      .map((pendency) => ({
-        id: pendency.id,
-        label: pendency.label,
-        tone: pendency.tone === "warning" ? "warning" : "info",
+  // Gate-based pendencies (tone === "block") come from PipelineGateEvaluator on
+  // the backend and are authoritative — they are the same gates that block stage
+  // advancement. Show them exclusively when present.
+  const gatePendencies = (overview.preview_pendencies ?? []).filter(
+    (p) => p.tone === "block",
+  );
+  if (gatePendencies.length > 0) {
+    return gatePendencies
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        tone: "block" as const,
+        action: p.action ?? null,
+        description: p.description ?? null,
+      }))
+      .slice(0, 5);
+  }
+
+  // Non-gate pendencies from the backend (resume/analysis/document flags)
+  const flagPendencies = (overview.preview_pendencies ?? []).filter(
+    (p) => p.tone !== "block",
+  );
+  if (flagPendencies.length > 0) {
+    return flagPendencies
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        tone: (p.tone === "warning" ? "warning" : "info") as "warning" | "info",
+        action: p.action ?? null,
+        description: p.description ?? null,
       }))
       .slice(0, 3);
   }
 
+  // Local fallback: no server-side pendencies, derive from raw overview fields
   const pendencies: CandidatePendency[] = [];
   const hasResume = (overview.resumes ?? []).length > 0;
 
@@ -115,7 +142,11 @@ export function derivePendencies(overview: CandidateOverview | null): CandidateP
     if (hasResume) {
       pendencies.push({ id: "analysis", label: "Análise pendente", tone: "info" });
     }
-  } else if (analysis.status === "pending" || analysis.status === "processing" || analysis.status === "retry_scheduled") {
+  } else if (
+    analysis.status === "pending" ||
+    analysis.status === "processing" ||
+    analysis.status === "retry_scheduled"
+  ) {
     pendencies.push({ id: "analysis_processing", label: "Análise em andamento", tone: "info" });
   } else if (analysis.status === "failed") {
     pendencies.push({ id: "analysis_failed", label: "Análise falhou", tone: "warning" });
@@ -183,49 +214,65 @@ export type NextActionSuggestion = {
   targetTab?: string;
 };
 
+const _ACTION_CODE_LABEL: Record<string, string> = {
+  open_decision: "Registrar decisão",
+  open_behavioral_ai: "Avaliação IA comportamental",
+  open_behavioral_assessment: "Avaliação comportamental",
+  open_scorecard: "Registrar scorecard",
+  open_interview: "Agendar / registrar entrevista",
+  add_reason: "Informar motivo",
+};
+
+const _ACTION_CODE_TAB: Record<string, string> = {
+  open_decision: "workflow",
+  open_behavioral_ai: "assessments:behavioral_ai",
+  open_behavioral_assessment: "assessments",
+  open_scorecard: "interviews",
+  open_interview: "interviews",
+};
+
 export function deriveNextAction(
   overview: CandidateOverview | null,
   activeEntry: CandidatePipelineEntryOverview | null,
 ): NextActionSuggestion {
   if (!activeEntry) {
-    return {
-      label: "Adicionar a uma vaga",
-      hint: "Candidato sem vaga ativa",
-    };
+    return { label: "Adicionar a uma vaga", hint: "Candidato sem vaga ativa" };
   }
 
-  if (isTerminalStatus(activeEntry.relationship_status) || isTerminalStatus(activeEntry.candidate_status)) {
-    return {
-      label: "Sem ação pendente",
-      hint: "Processo encerrado",
-    };
+  if (
+    isTerminalStatus(activeEntry.relationship_status) ||
+    isTerminalStatus(activeEntry.candidate_status)
+  ) {
+    return { label: "Sem ação pendente", hint: "Processo encerrado" };
   }
 
   const hasResume = (overview?.resumes ?? []).length > 0;
   if (!hasResume) {
-    return {
-      label: "Aguardar currículo",
-      hint: "Candidato ainda não enviou currículo",
-    };
+    return { label: "Aguardar currículo", hint: "Candidato ainda não enviou currículo" };
   }
 
-  const behavioralAiPendency = overview?.preview_pendencies?.some(
-    (pendency) => pendency.id === "behavioral_ai",
+  // Gate-based pendencies are authoritative: the first gate's action code
+  // becomes the primary next action, ensuring consistency with the blocked modal.
+  const firstGatePendency = (overview?.preview_pendencies ?? []).find(
+    (p) => p.tone === "block" && p.action,
   );
-  if (behavioralAiPendency) {
+  if (firstGatePendency?.action) {
+    const code = firstGatePendency.action;
     return {
-      label: "Gerar IA comportamental",
-      hint: "A vaga exige avaliação IA comportamental concluída",
-      targetTab: "assessments",
+      label: _ACTION_CODE_LABEL[code] ?? firstGatePendency.label,
+      hint: firstGatePendency.description ?? firstGatePendency.label,
+      targetTab: _ACTION_CODE_TAB[code],
     };
   }
 
   const analysis = overview?.latest_analysis;
-  if (!analysis || analysis.status === "pending" || analysis.status === "processing" || analysis.status === "retry_scheduled") {
-    return {
-      label: "Aguardar análise da IA",
-      hint: "Aderência será atualizada quando a análise terminar",
-    };
+  if (
+    !analysis ||
+    analysis.status === "pending" ||
+    analysis.status === "processing" ||
+    analysis.status === "retry_scheduled"
+  ) {
+    return { label: "Aguardar análise da IA", hint: "Aderência será atualizada quando a análise terminar" };
   }
 
   switch (activeEntry.stage) {
@@ -235,11 +282,11 @@ export function deriveNextAction(
       return { label: "Agendar entrevista", hint: "Candidato em triagem" };
     case "hr_interview":
     case "technical_interview":
-      return { label: "Registrar feedback da entrevista", hint: "Entrevista em andamento" };
+      return { label: "Registrar feedback da entrevista", hint: "Entrevista em andamento", targetTab: "interviews" };
     case "final":
       return { label: "Avançar para proposta", hint: "Etapa final" };
     case "offer":
-      return { label: "Confirmar contratação", hint: "Proposta em curso" };
+      return { label: "Registrar decisão de contratação", hint: "Submeta uma decisão hire para liberar contratação", targetTab: "workflow" };
     default:
       return { label: "Revisar próximas etapas", hint: "Acompanhar pipeline" };
   }

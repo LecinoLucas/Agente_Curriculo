@@ -62,6 +62,14 @@ export const communicationService = {
     );
   },
 
+  requestCandidateContact(payload: { job_id: string; subject: string; body: string }) {
+    return httpRequest<CandidateCommunication>("/api/v1/candidate-portal/communications/contact-request", {
+      method: "POST",
+      body: payload,
+      withAuth: false,
+    });
+  },
+
   getTemplates() {
     return httpRequest<CommunicationTemplateListResponse>("/api/v1/admin/communication/templates");
   },

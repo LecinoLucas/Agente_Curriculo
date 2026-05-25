@@ -21,7 +21,12 @@ import {
   ChevronRight,
   Calendar,
   TrendingUp,
-  Settings,
+  Heart,
+  Hourglass,
+  Lightbulb,
+  Bell,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { ChangeEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -48,6 +53,7 @@ import {
   type BehavioralAssignmentSummary,
   type CandidatePortalPreAdmissionEnvelope,
 } from "../services/candidatePortalService";
+import { communicationService } from "../services/communicationService";
 import { HttpError } from "../services/http";
 import { formatPhone } from "../features/public-application/utils/phone";
 import { toast } from "../shared/utils/toast";
@@ -55,6 +61,8 @@ import { BehavioralAssessmentCard } from "../features/candidate-portal/component
 import { BehavioralAssessmentForm } from "../features/candidate-portal/components/BehavioralAssessmentForm";
 import { CandidateMessagesCard } from "../features/candidate-portal/components/CandidateMessagesCard";
 import { CandidatePortalPreAdmissionCard } from "../features/candidate-portal/components/CandidatePortalPreAdmissionCard";
+import { useTheme } from "../hooks/useTheme";
+import { useVisualTheme } from "../hooks/useVisualTheme";
 
 type ContactFormState = {
   email: string;
@@ -131,51 +139,51 @@ function ApplicationCard({
   application: CandidatePortalApplication;
 }) {
   return (
-    <div className="group rounded-2xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] p-5 shadow-sm transition-all hover:border-[hsl(var(--primary)/0.3)] hover:shadow-md">
+    <div className="group rounded-2xl border border-border/50 bg-card dark:bg-card/70 p-5 shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1.5">
-          <p className="font-heading text-base font-bold tracking-tight text-[hsl(var(--text))] group-hover:text-[hsl(var(--primary))] transition-colors">
+          <p className="font-heading text-base font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
             {application.talent_pool
               ? "Banco de Talentos Marajó"
               : application.job_title || "Vaga vinculada"}
           </p>
-          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">
+          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Clock3 className="h-3 w-3" />
             Enviada em {formatDate(application.submitted_at)}
           </p>
         </div>
-        <span className="inline-flex w-fit items-center rounded-full bg-[hsl(var(--primary)/0.08)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-[hsl(var(--primary))] ring-1 ring-inset ring-[hsl(var(--primary)/0.1)]">
+        <span className="inline-flex w-fit items-center rounded-full bg-primary/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-primary ring-1 ring-inset ring-primary/10">
           {application.status_label}
         </span>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-[hsl(var(--border)/0.3)] pt-5 sm:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border/30 pt-5 sm:grid-cols-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">Origem</p>
-          <p className="mt-1 text-xs font-semibold text-[hsl(var(--text))]">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Origem</p>
+          <p className="mt-1 text-xs font-semibold text-foreground">
             {sourceLabel(application.application_source)}
           </p>
         </div>
 
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">Currículo</p>
-          <p className="mt-1 truncate text-xs font-semibold text-[hsl(var(--text))]">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Currículo</p>
+          <p className="mt-1 truncate text-xs font-semibold text-foreground">
             {application.resume_file_name || "Sem arquivo"}
           </p>
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">Última Att</p>
-          <p className="mt-1 text-xs font-semibold text-[hsl(var(--text))]">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Última Att</p>
+          <p className="mt-1 text-xs font-semibold text-foreground">
             {formatDate(application.updated_at).split(',')[0]}
           </p>
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             {application.talent_pool ? "Status Perfil" : "Situação"}
           </p>
-          <p className="mt-1 text-xs font-bold text-[hsl(var(--primary))]">
+          <p className="mt-1 text-xs font-bold text-primary">
             {application.talent_pool
               ? extractionLabel(application.talent_pool_profile_status)
               : application.status_label}
@@ -268,120 +276,507 @@ function getStepDescription(step: CandidatePortalTimelineStep): string {
   return step.description;
 }
 
-function CandidateVerticalTimeline({ timeline }: { timeline: CandidatePortalTimeline }) {
+export type CandidateVisibleStep = {
+  key: string;
+  title: string;
+  status: "completed" | "current" | "next";
+  description: string;
+};
+
+export function buildCandidateVisibleSteps(overview: CandidatePortalOverview | null): CandidateVisibleStep[] {
+  if (overview?.application_status === "rejected") {
+    return [
+      {
+        key: "resume_review",
+        title: "Currículo analisado",
+        status: "completed",
+        description: "Seu currículo foi avaliado pelo time."
+      },
+      {
+        key: "result",
+        title: "Resultado",
+        status: "current",
+        description: "Não selecionado"
+      }
+    ];
+  }
+
+  const defaultSteps: CandidateVisibleStep[] = [
+    {
+      key: "application_received",
+      title: "Inscrição recebida",
+      status: "completed",
+      description: "Recebemos sua candidatura."
+    },
+    {
+      key: "resume_review",
+      title: "Currículo em análise",
+      status: "current",
+      description: "Seu currículo está sendo avaliado pelo time."
+    },
+    {
+      key: "next_update",
+      title: "Próxima etapa",
+      status: "next",
+      description: "Avisaremos por aqui quando houver novidades."
+    }
+  ];
+
+  if (!overview || !overview.public_timeline) {
+    return defaultSteps;
+  }
+
+  const timeline = overview.public_timeline;
+  const steps = timeline.steps;
+  const currentStep = steps.find(s => s.status === "current");
+  
+  const isCompleted = steps.every(s => s.status === "completed" || s.status === "closed");
+  const hasResult = currentStep?.key === "result" || isCompleted;
+  const hasInterview = currentStep?.key === "interview" || steps.some(s => s.key === "interview" && (s.status === "current" || s.status === "completed" || s.interview));
+
+  if (hasResult) {
+    const hadInterview = steps.some(s => s.key === "interview" && s.status === "completed");
+    return [
+      {
+        key: hadInterview ? "interview" : "resume_review",
+        title: hadInterview ? "Entrevista realizada" : "Currículo analisado",
+        status: "completed",
+        description: hadInterview ? "Sua entrevista foi concluída." : "Seu currículo foi avaliado pelo time."
+      },
+      {
+        key: "result",
+        title: "Resultado",
+        status: "current",
+        description: "Você será atualizado sobre o resultado do processo."
+      },
+      {
+        key: "next_update",
+        title: "Próxima etapa",
+        status: "next",
+        description: "Avisaremos por aqui quando houver novidades."
+      }
+    ];
+  }
+
+  if (hasInterview) {
+    const interviewStep = steps.find(s => s.key === "interview");
+    let description = "Seus dados se destacaram! Em breve entraremos em contato.";
+    if (interviewStep?.interview?.scheduled_at) {
+      description = `Entrevista agendada para ${formatInterviewDate(interviewStep.interview.scheduled_at)}.`;
+    }
+    return [
+      {
+        key: "resume_review",
+        title: "Currículo em análise",
+        status: "completed",
+        description: "Seu currículo foi avaliado pelo time."
+      },
+      {
+        key: "interview",
+        title: "Entrevista",
+        status: "current",
+        description: description
+      },
+      {
+        key: "next_update",
+        title: "Próxima etapa",
+        status: "next",
+        description: "Avisaremos por aqui quando houver novidades."
+      }
+    ];
+  }
+
+  return defaultSteps;
+}
+
+function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOverview | null }) {
+  const visibleSteps = buildCandidateVisibleSteps(overview);
+  const isRejected = overview?.application_status === "rejected";
+
   return (
-    <Card className="overflow-hidden border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm">
-      <CardHeader className="p-4 pb-2.5 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-[#5c061a]">
-            <TrendingUp className="h-5 w-5" />
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-5 sm:p-6 lg:p-7">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <TrendingUp className="h-5 w-5" />
+        </div>
+        <div>
+          <CardTitle className="text-lg font-bold text-foreground">Sua jornada de candidatura</CardTitle>
+          <CardDescription className="text-sm font-semibold text-muted-foreground mt-0.5">
+            {isRejected
+              ? "O processo desta vaga foi encerrado."
+              : "Acompanhe as etapas do seu processo seletivo."}
+          </CardDescription>
+        </div>
+      </div>
+
+      <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 md:gap-4 py-4 px-1 md:px-4">
+        {/* Connecting lines for desktop */}
+        <div className="absolute left-[34px] right-[34px] top-[38px] hidden md:block h-0.5 bg-border -z-0">
+          <div
+            className="h-full bg-primary transition-all duration-500"
+            style={{
+              width: visibleSteps[1].status === "completed"
+                ? "100%"
+                : visibleSteps[1].status === "current"
+                ? "50%"
+                : "0%",
+            }}
+          />
+        </div>
+
+        {visibleSteps.map((step, idx) => {
+          const isCompleted = step.status === "completed";
+          const isCurrent = step.status === "current";
+          const isNext = step.status === "next";
+
+          return (
+            <div key={step.key} className="relative z-10 flex md:flex-col items-center md:text-center flex-1 gap-4 md:gap-3 w-full">
+              {/* Bubble */}
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 ${
+                  isCompleted
+                    ? "bg-primary border-primary text-primary-foreground shadow-xs"
+                    : isCurrent
+                    ? "bg-card border-primary text-primary ring-4 ring-primary/10"
+                    : "bg-muted border-border text-muted-foreground"
+                }`}
+              >
+                {isCompleted ? (
+                  <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
+                ) : isCurrent ? (
+                  <div className="h-3 w-3 rounded-full bg-primary animate-pulse" />
+                ) : (
+                  <Circle className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+
+              {/* Text Content */}
+              <div className="flex flex-col md:items-center">
+                <p className={`text-sm font-bold tracking-tight ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {step.title}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground font-medium max-w-[200px]">
+                  {step.description}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Alerta discreto */}
+      <div className="mt-6 flex items-start gap-3 rounded-xl bg-muted border border-border p-4 text-xs text-muted-foreground leading-relaxed">
+        <svg className="h-5 w-5 text-primary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          {isRejected
+            ? "Seu perfil continuará disponível em nosso banco de talentos para futuras oportunidades compatíveis."
+            : "Nosso time está analisando seu perfil com cuidado. Se houver avanço no processo, entraremos em contato."}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function NextUpdateCard() {
+  return (
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-5 flex flex-col justify-between h-full">
+      <div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Calendar className="h-5 w-5" />
+          </div>
+          <CardTitle className="text-sm font-bold text-foreground">Próxima atualização</CardTitle>
+        </div>
+
+        <div className="flex items-center gap-4 py-4">
+          {/* Hourglass Icon */}
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-muted text-primary border border-border">
+            <Hourglass className="h-8 w-8 animate-pulse" />
           </div>
           <div>
-            <CardTitle className="text-base font-bold text-slate-900">Andamento da Candidatura</CardTitle>
-            <CardDescription className="font-extrabold text-[#5c061a] uppercase tracking-widest text-[9px] mt-1">
-              Etapa atual: {timeline.current_step_label}
-            </CardDescription>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Previsão de retorno</p>
+            <p className="text-xl font-bold text-primary mt-0.5">Em breve</p>
+            <p className="text-xs text-muted-foreground mt-1 font-medium leading-relaxed">
+              Enviaremos uma mensagem assim que tivermos novidades para você.
+            </p>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="p-4 pt-4 pb-2">
-        <ol className="relative space-y-0 pl-1">
-          {timeline.steps.map((step, index) => {
-            const isCurrent = step.status === "current";
-            const isCompleted = step.status === "completed";
-            const isClosed = step.status === "closed";
-            const isDone = isCompleted || isClosed || isCurrent;
-            
-            return (
-              <li key={step.key} className="relative flex gap-5 pb-4 last:pb-1">
-                {index < timeline.steps.length - 1 ? (
-                  <span className={`absolute left-[17px] top-9 h-[calc(100%-2.25rem)] w-0.5 rounded-full ${isDone ? 'bg-[#5c061a]' : 'bg-slate-100'}`} />
-                ) : null}
-                
-                <div
-                  className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 ${
-                    isDone
-                      ? "bg-[#5c061a] border-[#5c061a] text-white shadow-sm"
-                      : "bg-white border-slate-200 text-slate-300"
-                  }`}
-                >
-                  {isDone ? (
-                    <svg className="h-4.5 w-4.5 stroke-[3]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <div className="h-2.5 w-2.5 rounded-full bg-slate-100" />
-                  )}
-                </div>
+      </div>
 
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={`text-sm font-bold tracking-tight ${isCurrent ? 'text-slate-900 font-extrabold' : 'text-slate-600'}`}>
-                      {step.label}
-                    </p>
-                    {isCurrent && (
-                      <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#5c061a]">
-                        Foco
-                      </span>
-                    )}
-                  </div>
-                  <p className={`mt-1 text-xs font-semibold leading-relaxed text-slate-400`}>
-                    {getStepDescription(step)}
-                  </p>
-                  {step.interview ? (
-                    <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-500">
-                      <CandidateInterviewInfo interview={step.interview} />
-                    </div>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+      <div className="mt-4 flex items-center gap-2 rounded-xl bg-muted p-3 text-[11px] font-semibold text-muted-foreground">
+        <Bell className="h-4 w-4 text-primary shrink-0" />
+        <span>Fique atento ao seu e-mail e ao portal.</span>
+      </div>
+    </Card>
+  );
+}
+
+function TipsCard() {
+  const tips = [
+    {
+      title: "Mantenha seu perfil atualizado",
+      desc: "Isso aumenta suas chances.",
+    },
+    {
+      title: "Destaque experiências relevantes",
+      desc: "Mostre o que te torna especial.",
+    },
+    {
+      title: "Acompanhe seu e-mail",
+      desc: "Incluindo a caixa de spam.",
+    },
+  ];
+
+  return (
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-5 flex flex-col justify-between h-full">
+      <div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Lightbulb className="h-5 w-5" />
+          </div>
+          <CardTitle className="text-sm font-bold text-foreground">Dicas para sua candidatura</CardTitle>
+        </div>
+
+        <ul className="space-y-3.5 my-3">
+          {tips.map((tip, idx) => (
+            <li key={idx} className="flex items-start gap-3">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary mt-0.5">
+                <CheckCircle2 className="h-3 w-3 stroke-[3]" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-foreground">{tip.title}</p>
+                <p className="text-[11px] text-muted-foreground font-medium">{tip.desc}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="mt-4">
+        <button
+          type="button"
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-muted px-4 py-2.5 text-xs font-bold text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+        >
+          Ver todas as dicas
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function MotivationalBanner() {
+  return (
+    <Card className="overflow-hidden border border-primary/20 dark:border-primary/30 rounded-[1.25rem] bg-primary/5 dark:bg-card/70 dark:backdrop-blur-md p-4 sm:p-5 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary border border-border dark:bg-primary/10 dark:border-primary/20">
+          <Heart className="h-6 w-6 fill-primary text-primary" />
+        </div>
+        <div>
+          <h4 className="text-sm font-black text-foreground">Agradecemos o seu interesse em fazer parte do time Marajó RH.</h4>
+          <p className="text-xs font-medium text-muted-foreground mt-0.5">
+            Nosso propósito é conectar talentos incríveis a oportunidades transformadoras.
+          </p>
+        </div>
+      </div>
+      <div className="text-lg sm:text-xl font-black italic text-primary shrink-0 font-serif leading-none tracking-tight">
+        Você está no caminho certo!
+      </div>
+    </Card>
+  );
+}
+
+function getClosedProcessApplication(overview: CandidatePortalOverview): CandidatePortalApplication | null {
+  if (overview.application_status !== "rejected" && overview.application_status !== "hired") {
+    return null;
+  }
+  return (
+    overview.application_history.find((application) => application.status === "finished")
+    ?? overview.application_history[0]
+    ?? null
+  );
+}
+
+function ProcessClosedCard({
+  overview,
+  application,
+  requesting,
+  onRequestContact,
+  onUpdateResume,
+}: {
+  overview: CandidatePortalOverview;
+  application: CandidatePortalApplication | null;
+  requesting: boolean;
+  onRequestContact: () => void;
+  onUpdateResume: () => void;
+}) {
+  const jobTitle = application?.job_title || "esta vaga";
+
+  return (
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 shadow-xs">
+      <CardHeader className="p-5 pb-4 border-b border-border">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <span className="inline-flex w-fit items-center rounded-full bg-primary/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-primary">
+              {jobTitle}
+            </span>
+            <CardTitle className="text-xl font-black text-foreground">Processo encerrado</CardTitle>
+            <CardDescription className="max-w-2xl text-sm font-semibold leading-relaxed text-muted-foreground">
+              {overview.closed_reason_public_label || "Você não foi selecionado para esta vaga no momento."}
+            </CardDescription>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs font-bold text-foreground">
+            Não selecionado
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5 p-5">
+        <p className="rounded-xl border border-border bg-muted/30 p-4 text-sm font-medium leading-relaxed text-muted-foreground">
+          Seu perfil continuará disponível em nosso banco de talentos e poderá ser considerado em futuras oportunidades compatíveis.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          {overview.can_request_contact ? (
+            <Button
+              type="button"
+              onClick={onRequestContact}
+              disabled={requesting || !application?.job_id}
+              className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl"
+            >
+              {requesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+              Solicitar contato com o RH
+            </Button>
+          ) : null}
+          {overview.can_apply_to_other_jobs ? (
+            <Button asChild variant="outline" className="h-11 border-border bg-card dark:bg-card/70 font-bold rounded-xl text-foreground hover:bg-muted">
+              <Link to="/candidato/cadastro">
+                <Briefcase className="mr-2 h-4 w-4" />
+                Ver outras vagas
+              </Link>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onUpdateResume}
+            className="h-11 border-border bg-card dark:bg-card/70 font-bold rounded-xl text-foreground hover:bg-muted"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Atualizar currículo
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-const getNextStepsData = (timeline: CandidatePortalTimeline | null) => {
-  if (!timeline) {
-    return [
-      { label: "Análise de perfil", status: "Aguardando" },
-      { label: "Entrevista", status: "Aguardando" },
-      { label: "Resultado", status: "Aguardando" },
-    ];
+function TalentPoolStatusCard({ onUpdateResume }: { onUpdateResume: () => void }) {
+  return (
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 shadow-xs">
+      <CardHeader className="p-5 pb-3 border-b border-border">
+        <CardTitle className="text-xl font-black text-foreground">
+          Você está em nosso banco de talentos
+        </CardTitle>
+        <CardDescription className="max-w-2xl text-sm font-semibold leading-relaxed text-muted-foreground">
+          Seu perfil está disponível para futuras oportunidades compatíveis.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 p-5 sm:flex-row">
+        <Button asChild className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl">
+          <Link to="/candidato/cadastro">
+            <Briefcase className="mr-2 h-4 w-4" />
+            Ver outras vagas
+          </Link>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onUpdateResume}
+          className="h-11 border-border bg-card dark:bg-card/70 font-bold rounded-xl text-foreground hover:bg-muted"
+        >
+          <Upload className="mr-2 h-4 w-4" />
+          Atualizar currículo
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+type NextStepItem = { label: string; status: string; icon: "user" | "phone" | "check" };
+
+const buildCandidateNextSteps = (overview: CandidatePortalOverview | null): { subtitle: string; steps: NextStepItem[] } => {
+  if (!overview || !overview.public_timeline) {
+    return {
+      subtitle: "Fique atento às atualizações. Se seu perfil avançar, avisaremos por aqui.",
+      steps: [
+        { label: "Análise do perfil", status: "Em andamento", icon: "user" },
+        { label: "Atualização do RH", status: "Avisaremos por aqui", icon: "check" },
+        { label: "Contato, se houver avanço", status: "Sem previsão no momento", icon: "phone" },
+      ]
+    };
   }
 
-  const stepsKeys = timeline.steps.map((s) => s.key);
+  const timeline = overview.public_timeline;
+  const currentStep = timeline.steps.find(s => s.status === "current");
+  const isCompleted = timeline.steps.every(s => s.status === "completed" || s.status === "closed");
 
-  const getStepStatusByKey = (key: string) => {
-    const idx = stepsKeys.indexOf(key);
-    if (idx === -1) return "Aguardando";
-    const step = timeline.steps[idx];
-    if (step.status === "completed" || step.status === "closed") return "Concluído";
-    if (step.status === "current") return "Em andamento";
-    if (idx > 0 && timeline.steps[idx - 1].status === "current") return "Em breve";
-    return "Aguardando";
+  if (isCompleted || currentStep?.key === "result") {
+    return {
+      subtitle: "O processo seletivo foi finalizado para esta vaga.",
+      steps: [
+        { label: "Processo finalizado", status: "Concluído", icon: "check" },
+        { label: "Resultado disponível", status: "Acesse o portal", icon: "check" }
+      ]
+    };
+  }
+
+  if (currentStep?.key === "interview" && currentStep.interview?.scheduled_at) {
+    return {
+      subtitle: "Você tem uma entrevista agendada. Prepare-se!",
+      steps: [
+        { label: "Entrevista", status: "Agendada", icon: "phone" },
+        { label: "Preparação", status: "Confira data e horário", icon: "user" },
+        { label: "Atualização do RH", status: "Após a entrevista", icon: "check" }
+      ]
+    };
+  }
+
+  if (currentStep && currentStep.key !== "application_received") {
+    return {
+      subtitle: "Seu perfil está em análise pela equipe de recrutamento.",
+      steps: [
+        { label: "Análise do perfil", status: "Em andamento", icon: "user" },
+        { label: "Atualização do RH", status: "Avisaremos por aqui", icon: "check" }
+      ]
+    };
+  }
+
+  return {
+    subtitle: "Fique atento às atualizações. Se seu perfil avançar, avisaremos por aqui.",
+    steps: [
+      { label: "Análise do perfil", status: "Em andamento", icon: "user" },
+      { label: "Atualização do RH", status: "Avisaremos por aqui", icon: "check" },
+      { label: "Contato, se houver avanço", status: "Sem previsão no momento", icon: "phone" }
+    ]
   };
-
-  return [
-    {
-      label: "Análise de perfil",
-      status: getStepStatusByKey("resume_analysis"),
-    },
-    {
-      label: "Entrevista",
-      status: getStepStatusByKey("interview"),
-    },
-    {
-      label: "Resultado",
-      status: getStepStatusByKey("result"),
-    },
-  ];
 };
 
 export function CandidatePortalPage() {
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
+  const { visualTheme, setVisualTheme } = useVisualTheme();
+
+  const isDarkCandidate = theme === "dark" && visualTheme === "theme-dark-candidate";
+
+  const toggleCandidateTheme = () => {
+    if (isDarkCandidate) {
+      setTheme("light");
+      setVisualTheme("theme-1");
+    } else {
+      setTheme("dark");
+      setVisualTheme("theme-dark-candidate");
+    }
+  };
 
   const [overview, setOverview] = useState<CandidatePortalOverview | null>(null);
   const [contactForm, setContactForm] = useState<ContactFormState>(EMPTY_CONTACT_FORM);
@@ -403,15 +798,17 @@ export function CandidatePortalPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [messagesRefreshTrigger, setMessagesRefreshTrigger] = useState(0);
   const [activeMenuId, setActiveMenuId] = useState("inicio");
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [isRequestingContact, setIsRequestingContact] = useState(false);
 
   useEffect(() => {
-    if (currentTab === "inicio" && activeMenuId !== "inicio" && activeMenuId !== "mensagens") {
+    if (currentTab === "inicio" && activeMenuId !== "inicio") {
       setActiveMenuId("inicio");
     } else if (currentTab === "vagas" && activeMenuId !== "vagas" && activeMenuId !== "candidaturas") {
       setActiveMenuId("vagas");
     } else if (currentTab === "avaliacoes" && activeMenuId !== "avaliacoes") {
       setActiveMenuId("avaliacoes");
-    } else if (currentTab === "perfil" && activeMenuId !== "perfil" && activeMenuId !== "configuracoes") {
+    } else if (currentTab === "perfil" && activeMenuId !== "perfil") {
       setActiveMenuId("perfil");
     }
   }, [currentTab, activeMenuId]);
@@ -419,6 +816,10 @@ export function CandidatePortalPage() {
   const activeApplication: CandidatePortalActiveApplication | null =
     overview?.active_application ?? null;
   const applicationHistory: CandidatePortalApplication[] = overview?.application_history ?? [];
+  const closedProcessApplication = overview ? getClosedProcessApplication(overview) : null;
+  const isRejectedProcess = overview?.application_status === "rejected";
+  const isTalentPoolOnly =
+    overview?.application_status === "talent_pool" || overview?.application_status === "no_active_application";
   const behavioralAssessments: BehavioralAssignmentSummary[] = behavioralAssessmentSummaries;
   const pendingBehavioralAssessments = behavioralAssessments.filter(
     (item) => item.status === "pending" || item.status === "in_progress",
@@ -434,15 +835,20 @@ export function CandidatePortalPage() {
     setLoadError(null);
 
     try {
-      const [overviewResponse, assessmentsResponse, preAdmissionResponse] = await Promise.all([
+      const [overviewResponse, assessmentsResponse, preAdmissionResponse, communicationsResponse] = await Promise.all([
         candidatePortalService.getOverview(),
         candidatePortalService.listBehavioralAssessments(),
         candidatePortalService.getPreAdmission(),
+        communicationService.getCandidateCommunications().catch(() => ({ communications: [] })),
       ]);
       setOverview(overviewResponse);
       setBehavioralAssessmentSummaries(assessmentsResponse);
       setPreAdmission(preAdmissionResponse);
       setContactForm(buildContactForm(overviewResponse));
+      const unreadCount = (communicationsResponse?.communications || []).filter(
+        (m: any) => m.status !== "read"
+      ).length;
+      setUnreadMessagesCount(unreadCount);
     } catch (error) {
       if (error instanceof HttpError && error.status === 401) {
         navigate("/candidato/login", { replace: true });
@@ -515,6 +921,30 @@ export function CandidatePortalPage() {
       toast.error(message);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleRequestContact = async () => {
+    if (!closedProcessApplication?.job_id) {
+      toast.error("Não foi possível identificar a vaga deste processo.");
+      return;
+    }
+
+    const jobTitle = closedProcessApplication.job_title || "vaga";
+    setIsRequestingContact(true);
+    try {
+      await communicationService.requestCandidateContact({
+        job_id: closedProcessApplication.job_id,
+        subject: "Solicitação de contato sobre processo encerrado",
+        body: `Olá, gostaria de solicitar contato sobre o processo seletivo da vaga ${jobTitle}.`,
+      });
+      toast.success("Solicitação enviada ao RH.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Não foi possível solicitar contato com o RH.";
+      toast.error(message);
+    } finally {
+      setIsRequestingContact(false);
     }
   };
 
@@ -607,9 +1037,7 @@ export function CandidatePortalPage() {
 
   const handleMenuClick = (menuId: string) => {
     setActiveMenuId(menuId);
-    if (menuId === "configuracoes") {
-      setCurrentTab("perfil");
-    } else if (menuId === "candidaturas" || menuId === "vagas") {
+    if (menuId === "candidaturas" || menuId === "vagas") {
       setCurrentTab("vagas");
     } else if (menuId === "avaliacoes") {
       setCurrentTab("avaliacoes");
@@ -618,9 +1046,9 @@ export function CandidatePortalPage() {
     } else if (menuId === "mensagens") {
       setCurrentTab("inicio");
       setTimeout(() => {
-        const messagesEl = document.getElementById("candidate-messages-section");
-        if (messagesEl) {
-          messagesEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        const element = document.getElementById("candidate-messages-section");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       }, 100);
     } else {
@@ -631,29 +1059,29 @@ export function CandidatePortalPage() {
 
   if (loadError || (!overview && !loading)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#faf8f6] px-4">
-        <Card className="w-full max-w-lg border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-md p-6">
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-lg border border-border rounded-[1.25rem] bg-card shadow-md p-6">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-[#5c061a]">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <CardTitle className="text-2xl font-bold text-slate-805">Portal Indisponível</CardTitle>
-            <CardDescription className="text-slate-450">
+            <CardTitle className="text-2xl font-bold text-foreground">Portal Indisponível</CardTitle>
+            <CardDescription className="text-muted-foreground">
               Não conseguimos sincronizar seus dados agora.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 text-center pt-2">
-            <p className="text-sm text-slate-500 font-medium">
+            <p className="text-sm text-muted-foreground font-medium">
               {loadError ?? "Sua sessão pode ter expirado por inatividade."}
             </p>
             <div className="flex flex-col gap-3">
               <Button 
                 onClick={() => void loadPortalData()} 
-                className="h-11 bg-[#5c061a] hover:bg-[#4c0515] text-white font-bold rounded-xl shadow-sm transition-colors"
+                className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-sm transition-colors"
               >
                 Tentar reconectar
               </Button>
-              <Button variant="ghost" asChild className="text-slate-400 hover:text-slate-600 font-bold">
+              <Button variant="ghost" asChild className="text-muted-foreground hover:text-foreground font-bold">
                 <Link to="/candidato/login">Voltar ao login</Link>
               </Button>
             </div>
@@ -664,28 +1092,28 @@ export function CandidatePortalPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#faf8f6]">
+    <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 bg-[#5c061a] text-white transition-all duration-300 transform ${
+        className={`fixed inset-y-0 left-0 z-50 bg-card border-r border-border transition-all duration-300 transform ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col w-52 shrink-0 shadow-lg`}
+        } md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col w-56 shrink-0 shadow-xs dark:bg-[hsl(var(--nav-bg))]`}
       >
-        <div className="flex items-center h-14 px-5 border-b border-white/5 justify-between">
+        <div className="flex items-center h-14 px-5 border-b border-border justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <svg viewBox="0 0 24 24" className="h-8 w-8 text-white fill-current shrink-0">
-              <path d="M4 18V6h3.5l4.5 7.5L16.5 6H20v12h-3V10l-5 8.25L7 10v8H4z" />
-            </svg>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shrink-0 shadow-sm font-bold text-lg">
+              M
+            </div>
             <div className="flex flex-col text-left">
-              <span className="font-heading text-sm font-black tracking-widest text-white leading-none">
+              <span className="font-heading text-sm font-black tracking-widest text-foreground dark:text-[hsl(var(--nav-text))] leading-none">
                 MARAJÓ
               </span>
-              <span className="text-[10px] font-extrabold text-white/70 tracking-widest leading-none mt-1">
+              <span className="text-[10px] font-extrabold text-muted-foreground dark:text-[hsl(var(--nav-muted))] tracking-widest leading-none mt-1">
                 RH
               </span>
             </div>
           </div>
-          <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10" onClick={() => setIsSidebarOpen(false)}>
+          <button className="md:hidden p-1.5 rounded-lg hover:bg-muted text-muted-foreground" onClick={() => setIsSidebarOpen(false)}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -693,9 +1121,8 @@ export function CandidatePortalPage() {
         <nav className="flex-1 py-4 px-3 space-y-1">
           {[
             { id: "inicio", label: "Dashboard", title: "Dashboard", icon: <Home className="h-5 w-5" /> },
-            { id: "vagas", label: "Vagas", title: "Vagas", icon: <Briefcase className="h-5 w-5" /> },
             { id: "candidaturas", label: "Candidaturas", title: "Candidaturas", icon: <Briefcase className="h-5 w-5" /> },
-            { id: "avaliacoes", label: "Avaliações", title: "Avaliações", icon: <ClipboardCheck className="h-5 w-5" /> },
+            { id: "mensagens", label: "Mensagens", title: "Mensagens", icon: <Mail className="h-5 w-5" /> },
             { id: "perfil", label: "Perfil", title: "Perfil", icon: <User className="h-5 w-5" /> },
           ].map((item) => {
             const isActive = activeMenuId === item.id;
@@ -704,52 +1131,59 @@ export function CandidatePortalPage() {
                 key={item.id}
                 onClick={() => handleMenuClick(item.id)}
                 title={item.title}
-                className={`flex items-center gap-2.5 px-3 py-2.5 w-full text-sm rounded-xl transition-all duration-200 ${
+                className={`flex items-center justify-between px-3.5 py-2.5 w-full text-sm rounded-xl transition-all duration-200 ${
                   isActive
-                    ? "bg-white/15 text-white font-bold shadow-sm"
-                    : "text-white/70 hover:bg-white/5 hover:text-white font-semibold"
+                    ? "bg-primary/10 text-primary dark:bg-[hsl(var(--nav-active-bg))/0.1] font-bold shadow-xs"
+                    : "text-muted-foreground dark:text-[hsl(var(--nav-muted))] hover:bg-muted dark:hover:bg-muted/10 hover:text-foreground dark:hover:text-[hsl(var(--nav-text))] font-semibold"
                 }`}
               >
-                {item.icon}
-                <span className="truncate">{item.label}</span>
+                <div className="flex items-center gap-2.5 truncate">
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.id === "mensagens" && unreadMessagesCount > 0 && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground shrink-0 ml-2">
+                    {unreadMessagesCount}
+                  </span>
+                )}
               </button>
             );
           })}
         </nav>
         
-        <div className="p-3 border-t border-white/5">
+        <div className="p-3 border-t border-border">
           <Button 
             variant="outline" 
             onClick={handleLogout} 
             title="Sair"
-            className="w-full h-10 border-white/10 bg-white/5 font-bold text-white hover:bg-red-750 hover:border-red-750 transition-all rounded-xl flex items-center justify-center text-xs"
+            className="w-full h-11 border-border bg-muted dark:bg-[hsl(var(--nav-bg))] font-bold text-muted-foreground dark:text-[hsl(var(--nav-muted))] hover:bg-primary/10 hover:text-primary hover:border-primary/20 transition-all rounded-xl flex items-center justify-center text-xs"
           >
             <LogOut className="h-4 w-4 mr-2" />
-            <span className="truncate">Sair</span>
+            <span className="truncate">Sair da conta</span>
           </Button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-background">
         {/* Header */}
-        <header className="flex items-center justify-between h-14 px-6 sm:px-8 bg-white border-b border-slate-100 shrink-0">
+        <header className="flex items-center justify-between h-16 px-4 sm:px-6 bg-card border-b border-border shrink-0">
           <div className="flex items-center gap-4">
-            <button className="md:hidden p-1.5 rounded-lg hover:bg-slate-50 text-slate-600" onClick={() => setIsSidebarOpen(true)}>
+            <button className="md:hidden p-1.5 rounded-lg hover:bg-muted text-muted-foreground" onClick={() => setIsSidebarOpen(true)}>
               <Menu className="h-6 w-6" />
             </button>
             <div>
-              <h1 className="font-heading text-lg sm:text-xl font-bold text-slate-800">
-                Olá, {overview ? overview.candidate.full_name.split(' ')[0] : 'Candidato'}!
+              <h1 className="font-heading text-base sm:text-lg font-bold text-foreground">
+                Olá, {overview ? overview.candidate.full_name.split(' ')[0] : 'Candidato'}! 👋
               </h1>
-              <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
-                Acompanhe o andamento da sua candidatura.
+              <p className="text-[11px] font-semibold text-muted-foreground mt-0.5">
+                Acompanhe o andamento da sua candidatura com a Marajó RH.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
             {overview && (
-              <div className="hidden sm:flex items-center gap-2.5 text-xs font-bold text-slate-500 bg-slate-50 px-3.5 py-2 rounded-full border border-slate-100">
+              <div className="hidden sm:flex items-center gap-2.5 text-xs font-bold text-foreground bg-muted px-3.5 py-2 rounded-full border border-border">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -760,24 +1194,31 @@ export function CandidatePortalPage() {
             <button
               onClick={() => void loadPortalData(true)}
               disabled={isRefreshing || loading}
-              className="inline-flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs sm:text-sm shadow-sm transition-all"
+              className="inline-flex items-center gap-2 border border-border bg-card hover:bg-muted disabled:opacity-50 text-foreground font-bold px-4 py-2.5 rounded-xl text-xs shadow-xs transition-all"
             >
               {isRefreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin text-[#5c061a]" />
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
               ) : (
-                <RefreshCw className="h-4 w-4 text-[#5c061a]" />
+                <RefreshCw className="h-4 w-4 text-primary" />
               )}
               Sincronizar
+            </button>
+            <button
+              onClick={toggleCandidateTheme}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-xs transition-colors hover:bg-muted"
+              title={isDarkCandidate ? "Mudar para tema claro" : "Mudar para tema escuro"}
+            >
+              {isDarkCandidate ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
           </div>
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 max-w-7xl w-full mx-auto">
           {loading ? (
-            <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr] animate-pulse">
-              <div className="space-y-5">
-                <div className="bg-white border border-slate-100 rounded-[1.25rem] p-6 space-y-4">
+            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] animate-pulse">
+              <div className="space-y-6">
+                <div className="bg-white border border-[#EEE7DF] rounded-[1.25rem] p-6 space-y-4">
                   <div className="h-5 bg-slate-200 rounded w-1/3" />
                   <div className="space-y-4 pt-4">
                     {[1, 2, 3].map(i => (
@@ -792,13 +1233,13 @@ export function CandidatePortalPage() {
                   </div>
                 </div>
                 
-                <div className="bg-white border border-slate-100 rounded-[1.25rem] p-6">
+                <div className="bg-white border border-[#EEE7DF] rounded-[1.25rem] p-6">
                   <div className="h-14 bg-slate-150 rounded-xl" />
                 </div>
               </div>
 
-              <div className="space-y-5">
-                <div className="bg-white border border-slate-100 rounded-[1.25rem] p-6 space-y-4">
+              <div className="space-y-6">
+                <div className="bg-white border border-[#EEE7DF] rounded-[1.25rem] p-6 space-y-4">
                   <div className="h-5 bg-slate-200 rounded w-1/3" />
                   <div className="grid grid-cols-2 gap-4">
                     {[1, 2, 3, 4].map(i => (
@@ -806,123 +1247,90 @@ export function CandidatePortalPage() {
                     ))}
                   </div>
                 </div>
-                
-                <div className="bg-white border border-slate-100 rounded-[1.25rem] p-6 space-y-4">
-                  <div className="h-5 bg-slate-200 rounded w-1/3" />
-                  <div className="space-y-3">
-                    <div className="h-10 bg-slate-100 rounded-xl" />
-                    <div className="h-10 bg-slate-100 rounded-xl" />
-                  </div>
-                </div>
               </div>
             </div>
           ) : (
             <>
               {currentTab === "inicio" && overview && (
-                <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-                  {/* Main Content Column */}
-                  <div className="space-y-5">
-                    {/* Timeline Section */}
-                    {overview.public_timeline ? (
+                <div className="space-y-6">
+                  {isRejectedProcess ? (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <ProcessClosedCard
+                        overview={overview}
+                        application={closedProcessApplication}
+                        requesting={isRequestingContact}
+                        onRequestContact={() => void handleRequestContact()}
+                        onUpdateResume={() => handleMenuClick("perfil")}
+                      />
+                    </div>
+                  ) : null}
+
+                  {isTalentPoolOnly ? (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <TalentPoolStatusCard onUpdateResume={() => handleMenuClick("perfil")} />
+                    </div>
+                  ) : null}
+
+                  {/* Top Row: Stepper Horizontal & Resumo */}
+                  <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+                    {/* Stepper Card */}
+                    {!isTalentPoolOnly ? (
                       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <CandidateVerticalTimeline timeline={overview.public_timeline} />
+                        <CandidateHorizontalStepper overview={overview} />
                       </div>
                     ) : null}
 
-                    {/* Próximos Passos Card */}
-                    <Card className="overflow-hidden border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm p-4 lg:p-5 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-                      <div className="flex flex-col md:flex-row md:items-center gap-4">
-                        {/* Left branding */}
-                        <div className="flex items-center gap-3.5 md:w-1/3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-[#5c061a]">
-                            <Calendar className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-black text-slate-800 leading-tight">Próximos passos</h3>
-                            <p className="text-[11px] font-semibold text-slate-400 mt-1 leading-normal">
-                              Fique atento às próximas etapas do processo.
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Dividers & Steps */}
-                        <div className="flex-1 grid grid-cols-3 gap-4 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6">
-                          {getNextStepsData(overview.public_timeline).map((step, i) => (
-                            <div key={i} className="flex flex-col items-center text-center">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
-                                {step.label === "Análise de perfil" ? (
-                                  <User className="h-4.5 w-4.5 text-slate-500" />
-                                ) : step.label === "Entrevista" ? (
-                                  <Phone className="h-4.5 w-4.5 text-slate-500" />
-                                ) : (
-                                  <CheckCircle2 className="h-4.5 w-4.5 text-slate-500" />
-                                )}
-                              </div>
-                              <p className="mt-2 text-xs font-bold text-slate-700 truncate w-full">{step.label}</p>
-                              <p className={`mt-0.5 text-[9px] font-extrabold uppercase tracking-wider ${
-                                step.status === "Em andamento"
-                                  ? "text-[#5c061a]"
-                                  : step.status === "Em breve"
-                                  ? "text-amber-600"
-                                  : "text-slate-400"
-                              }`}>
-                                {step.status}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </Card>
-                  </div>
-
-                  {/* Sidebar Column */}
-                  <div className="space-y-5">
-                    {/* Quick Status Card */}
-                    <Card className="overflow-hidden border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm animate-in fade-in slide-in-from-right-4 duration-500">
-                      <CardHeader className="p-4 pb-2.5 border-b border-slate-100">
-                        <CardTitle className="text-base font-bold text-slate-900">Resumo da Situação</CardTitle>
+                    {/* Resumo da situação Card */}
+                    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs animate-in fade-in slide-in-from-right-4 duration-500">
+                      <CardHeader className="p-5 pb-3 border-b border-border">
+                        <CardTitle className="text-base font-bold text-foreground">Resumo da situação</CardTitle>
                       </CardHeader>
-                      <CardContent className="p-4">
-                        <div className="grid grid-cols-2 gap-3">
+                      <CardContent className="p-5">
+                        <div className="grid grid-cols-2 gap-4">
                           {[
                             {
-                              label: "Vaga Ativa",
-                              val: activeApplication?.job_title || "Banco de Talentos Marajó",
-                              icon: <Briefcase className="h-4.5 w-4.5" />,
+                              label: isRejectedProcess ? "Vaga encerrada" : "Vaga ativa",
+                              val: activeApplication?.job_title || closedProcessApplication?.job_title || "Banco de Talentos Marajó",
+                              icon: <Briefcase className="h-5 w-5" />,
                             },
                             {
                               label: "Status",
                               val: overview.status_public,
-                              icon: <ShieldCheck className="h-4.5 w-4.5" />,
+                              icon: <ShieldCheck className="h-5 w-5" />,
                               highlight: true,
                             },
                             {
                               label: "Localização",
                               val: overview.candidate.city
                                 ? `${overview.candidate.city}/${overview.candidate.state}`
-                                : "Aguardando atualização",
-                              icon: <MapPin className="h-4.5 w-4.5" />,
+                                : "Não informado",
+                              icon: <MapPin className="h-5 w-5" />,
                             },
                             {
                               label: "Currículo",
                               val: overview.latest_resume?.file_name ? "Enviado" : "Pendente",
-                              icon: <FileText className="h-4.5 w-4.5" />,
+                              icon: <FileText className="h-5 w-5" />,
+                              isSuccess: overview.latest_resume?.file_name ? true : false,
                             },
                           ].map((item, i) => (
                             <div
                               key={i}
-                              className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 flex gap-2.5 items-center min-w-0"
+                              className="rounded-xl border border-border bg-muted/30 p-3.5 flex gap-3 items-center min-w-0"
                             >
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-50/70 text-[#5c061a]">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                                 {item.icon}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-none">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
                                   {item.label}
                                 </p>
                                 <p
-                                  className={`mt-1.5 text-xs font-black truncate leading-tight ${
-                                    item.highlight ? "text-[#5c061a]" : "text-slate-800"
+                                  className={`mt-1.5 text-xs font-bold truncate leading-tight ${
+                                    item.highlight
+                                      ? "text-primary"
+                                      : item.isSuccess
+                                      ? "text-emerald-600 font-extrabold"
+                                      : "text-foreground"
                                   }`}
                                 >
                                   {item.val}
@@ -933,64 +1341,83 @@ export function CandidatePortalPage() {
                         </div>
                       </CardContent>
                     </Card>
+                  </div>
 
-                    {pendingBehavioralAssessments.length > 0 ? (
-                      <Card className="border border-amber-200 bg-amber-50/50 rounded-[1.25rem] shadow-sm animate-in fade-in duration-500">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-base font-bold text-amber-900">
-                            Avaliação comportamental pendente
-                          </CardTitle>
-                          <CardDescription className="text-amber-700">
-                            Você possui {pendingBehavioralAssessments.length} avaliação(ões) aguardando resposta.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3 pt-0">
-                          {pendingBehavioralAssessments.slice(0, 2).map((assessment) => (
-                            <div
-                              key={assessment.id}
-                              className="rounded-xl border border-amber-100 bg-white px-3.5 py-2.5 shadow-xs"
-                            >
-                              <p className="text-xs font-bold text-slate-800">
-                                {assessment.job_title || "Vaga vinculada"}
-                              </p>
-                              <p className="text-[10px] font-medium text-slate-500 mt-0.5">
-                                {assessment.template_name}
-                              </p>
-                            </div>
-                          ))}
-                          <Button
-                            type="button"
-                            className="w-full bg-[#5c061a] hover:bg-[#480514] font-bold text-white h-10 rounded-xl"
-                            onClick={() => handleMenuClick("avaliacoes")}
+                  {pendingBehavioralAssessments.length > 0 ? (
+                    <Card className="border border-amber-200 bg-amber-50/40 rounded-[1.25rem] shadow-xs animate-in fade-in duration-500 p-5">
+                      <CardHeader className="pb-3 p-0">
+                        <CardTitle className="text-base font-bold text-amber-900">
+                          Avaliação comportamental pendente
+                        </CardTitle>
+                        <CardDescription className="text-amber-700">
+                          Você possui {pendingBehavioralAssessments.length} avaliação(ões) aguardando resposta.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-2 p-0">
+                        {pendingBehavioralAssessments.slice(0, 2).map((assessment) => (
+                          <div
+                            key={assessment.id}
+                            className="rounded-xl border border-amber-100 bg-white px-3.5 py-2.5 shadow-xs"
                           >
-                            Responder avaliação
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ) : null}
+                            <p className="text-xs font-bold text-slate-800">
+                              {assessment.job_title || "Vaga vinculada"}
+                            </p>
+                            <p className="text-[10px] font-medium text-slate-500 mt-0.5">
+                              {assessment.template_name}
+                            </p>
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          className="w-full bg-primary hover:bg-primary/90 font-bold text-primary-foreground h-10 rounded-xl"
+                          onClick={() => handleMenuClick("avaliacoes")}
+                        >
+                          Responder avaliação
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : null}
 
-                    {completedAssessment ? (
-                      <Card className="border border-emerald-200 bg-emerald-50/50 rounded-[1.25rem] shadow-sm animate-in fade-in duration-500">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="flex items-center gap-2 text-base font-bold text-emerald-900">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                            Avaliação concluída
-                          </CardTitle>
-                          <CardDescription className="text-emerald-700">
-                            {completedAssessment.template_name} foi enviada com sucesso.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          <p className="text-xs font-bold text-emerald-950">
-                            {completedAssessment.job_title || "Vaga vinculada"}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ) : null}
+                  {completedAssessment ? (
+                    <Card className="border border-emerald-200 bg-emerald-50/40 rounded-[1.25rem] shadow-xs animate-in fade-in duration-500 p-5">
+                      <CardHeader className="pb-3 p-0">
+                        <CardTitle className="flex items-center gap-2 text-base font-bold text-emerald-900">
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          Avaliação concluída
+                        </CardTitle>
+                        <CardDescription className="text-emerald-700">
+                          {completedAssessment.template_name} foi enviada com sucesso.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-2 p-0">
+                        <p className="text-xs font-bold text-emerald-950">
+                          {completedAssessment.job_title || "Vaga vinculada"}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
 
-                    <div id="candidate-messages-section" className="animate-in fade-in duration-500">
-                      <CandidateMessagesCard refreshTrigger={messagesRefreshTrigger} />
+                  {/* Secondary Row: 3 columns */}
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {!isRejectedProcess ? (
+                      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
+                        <NextUpdateCard />
+                      </div>
+                    ) : null}
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
+                      <TipsCard />
                     </div>
+                    <div id="candidate-messages-section" className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
+                      <CandidateMessagesCard 
+                        refreshTrigger={messagesRefreshTrigger} 
+                        onMessageRead={() => void loadPortalData(true)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Motivational Banner */}
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
+                    <MotivationalBanner />
                   </div>
                 </div>
               )}
@@ -998,23 +1425,23 @@ export function CandidatePortalPage() {
               {currentTab === "vagas" && overview && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                   {/* Application History Card */}
-                  <Card className="overflow-hidden border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm">
-                    <CardHeader className="pb-3 border-b border-slate-100">
+                  <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 shadow-xs">
+                    <CardHeader className="pb-3 border-b border-border p-5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-[#5c061a]">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
                           <Briefcase className="h-5 w-5" />
                         </div>
                         <div>
-                          <CardTitle className="text-base font-bold text-slate-900">Minhas Candidaturas</CardTitle>
-                          <CardDescription className="text-xs font-semibold text-slate-400 mt-0.5 font-sans">Histórico e situação de todos os seus envios.</CardDescription>
+                          <CardTitle className="text-base font-bold text-foreground">Minhas Candidaturas</CardTitle>
+                          <CardDescription className="text-xs font-semibold text-muted-foreground mt-0.5">Histórico e situação de todos os seus envios.</CardDescription>
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-6 pt-6">
+                    <CardContent className="space-y-6 pt-6 p-5">
                       {activeApplication ? (
                         <div className="space-y-3">
-                          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-[#5c061a]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#5c061a] animate-pulse" />
+                          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-primary">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                             Candidatura em Destaque
                           </div>
                           <ApplicationCard
@@ -1037,8 +1464,8 @@ export function CandidatePortalPage() {
                       ) : null}
 
                       {applicationHistory.length > 0 ? (
-                        <div className="space-y-4 border-t border-slate-100 pt-6">
-                          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                        <div className="space-y-4 border-t border-border pt-6">
+                          <p className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">
                             Outros Registros
                           </p>
                           <div className="grid gap-4">
@@ -1051,8 +1478,8 @@ export function CandidatePortalPage() {
                           </div>
                         </div>
                       ) : !activeApplication ? (
-                        <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-slate-100">
-                          <p className="text-sm font-semibold text-slate-500">Você está no nosso Banco de Talentos.</p>
+                        <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-border">
+                          <p className="text-sm font-semibold text-muted-foreground">Você está no nosso Banco de Talentos.</p>
                         </div>
                       ) : null}
                     </CardContent>
@@ -1063,25 +1490,25 @@ export function CandidatePortalPage() {
               {currentTab === "avaliacoes" && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                   {/* Behavioral Assessments Card */}
-                  <Card className="overflow-hidden border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm">
-                    <CardHeader className="pb-3 border-b border-slate-100">
+                  <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 shadow-xs">
+                    <CardHeader className="pb-3 border-b border-border p-5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-[#5c061a]">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
                           <ClipboardCheck className="h-5 w-5" />
                         </div>
                         <div>
-                          <CardTitle className="text-base font-bold text-slate-900">Avaliação Comportamental</CardTitle>
-                          <CardDescription className="text-xs font-semibold text-slate-400 mt-0.5">Responda para completar seu perfil de match.</CardDescription>
+                          <CardTitle className="text-base font-bold text-foreground">Avaliação Comportamental</CardTitle>
+                          <CardDescription className="text-xs font-semibold text-muted-foreground mt-0.5">Responda para completar seu perfil de match.</CardDescription>
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-6 p-5">
                       {behavioralAssessments.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-slate-100">
-                          <div className="h-10 w-10 text-slate-200">
+                        <div className="flex flex-col items-center justify-center py-10 text-center gap-3 rounded-2xl border-2 border-dashed border-border">
+                          <div className="h-10 w-10 text-muted-foreground/40">
                             <CheckCircle2 className="h-full w-full" />
                           </div>
-                          <p className="text-sm font-semibold text-slate-555">Nenhuma avaliação pendente no momento.</p>
+                          <p className="text-sm font-semibold text-muted-foreground">Nenhuma avaliação pendente no momento.</p>
                         </div>
                       ) : (
                         <div className="space-y-4">
@@ -1117,15 +1544,15 @@ export function CandidatePortalPage() {
                 <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] animate-in fade-in slide-in-from-bottom-4 duration-500">
                   {/* Left Column: Profile Update */}
                   <div className="space-y-8">
-                    <Card className="border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm">
-                      <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 py-4 px-6">
-                        <CardTitle className="text-base font-bold text-slate-900">Dados de Contato</CardTitle>
+                    <Card className="border border-border rounded-[1.25rem] bg-card dark:bg-card/70 shadow-xs">
+                      <CardHeader className="flex flex-row items-center justify-between border-b border-border py-4 px-6">
+                        <CardTitle className="text-base font-bold text-foreground">Dados de Contato</CardTitle>
                         {!isEditing && (
                           <Button 
                             variant="ghost" 
                             size="sm" 
                             onClick={() => setIsEditing(true)}
-                            className="h-8 text-[#5c061a] hover:bg-rose-50 font-bold"
+                            className="h-8 text-primary hover:bg-primary/10 font-bold"
                           >
                             Editar
                           </Button>
@@ -1140,7 +1567,7 @@ export function CandidatePortalPage() {
                             { id: "state", label: "Estado (UF)", type: "text", val: contactForm.state, max: 2 },
                           ].map((field) => (
                             <div key={field.id} className="space-y-2">
-                              <label className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                              <label className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
                                 {field.label}
                               </label>
                               <Input
@@ -1149,7 +1576,7 @@ export function CandidatePortalPage() {
                                 maxLength={field.max}
                                 value={field.val}
                                 disabled={!isEditing || isSaving}
-                                className="h-11 border-slate-200 bg-slate-50/50 font-medium focus:ring-[#5c061a] rounded-xl"
+                                className="h-11 border-border bg-muted/30 font-medium focus:ring-primary rounded-xl"
                                 onChange={(e) => handleContactChange(field.id as any, e.target.value)}
                               />
                             </div>
@@ -1161,7 +1588,7 @@ export function CandidatePortalPage() {
                             <Button 
                               onClick={() => void handleSaveProfile()} 
                               disabled={isSaving}
-                              className="flex-1 bg-[#5c061a] hover:bg-[#4c0515] font-bold text-white rounded-xl h-11 transition-colors"
+                              className="flex-1 bg-primary hover:bg-primary/90 font-bold text-primary-foreground rounded-xl h-11 transition-colors"
                             >
                               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                               Salvar Alterações
@@ -1173,7 +1600,7 @@ export function CandidatePortalPage() {
                                 setIsEditing(false);
                               }}
                               disabled={isSaving}
-                              className="font-bold border-slate-200 rounded-xl h-11"
+                              className="font-bold border-border rounded-xl h-11 text-foreground"
                             >
                               Cancelar
                             </Button>
@@ -1190,20 +1617,20 @@ export function CandidatePortalPage() {
 
                   {/* Right Column: Resume Upload */}
                   <div className="space-y-8">
-                    <Card className="border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm">
-                      <CardHeader className="py-4 px-6 border-b border-slate-100">
-                        <CardTitle className="text-base font-bold text-slate-900">Atualizar Currículo</CardTitle>
+                    <Card className="border border-border rounded-[1.25rem] bg-card dark:bg-card/70 shadow-xs">
+                      <CardHeader className="py-4 px-6 border-b border-border">
+                        <CardTitle className="text-base font-bold text-foreground">Atualizar Currículo</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-5 p-6">
-                        <div className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-xs text-[#5c061a] border border-slate-100">
+                        <div className="flex items-center gap-4 rounded-2xl border border-border bg-muted/30 p-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-card shadow-xs text-primary border border-border">
                             <FileText className="h-5 w-5" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-slate-800">
+                            <p className="truncate text-sm font-bold text-foreground">
                               {overview.latest_resume?.file_name || "Nenhum arquivo"}
                             </p>
-                            <p className="text-[10px] font-semibold text-slate-450">
+                            <p className="text-[10px] font-semibold text-muted-foreground">
                               {overview.latest_resume ? `Enviado em ${formatDate(overview.latest_resume.uploaded_at)}` : "Formatos aceitos: PDF"}
                             </p>
                           </div>
@@ -1219,10 +1646,10 @@ export function CandidatePortalPage() {
                           />
                           <label 
                             htmlFor="resume-upload" 
-                            className="flex h-24 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 transition-all hover:bg-slate-50 hover:border-[#5c061a]/30"
+                            className="flex h-24 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 transition-all hover:bg-card hover:border-primary/30"
                           >
-                            <Upload className="mb-2 h-6 w-6 text-slate-400" />
-                            <span className="text-xs font-bold text-slate-400 px-4 text-center">
+                            <Upload className="mb-2 h-6 w-6 text-muted-foreground/60" />
+                            <span className="text-xs font-bold text-muted-foreground/60 px-4 text-center">
                               {resumeFile ? resumeFile.name : "Clique para selecionar novo PDF"}
                             </span>
                           </label>
@@ -1231,7 +1658,7 @@ export function CandidatePortalPage() {
                         <Button 
                           onClick={() => void handleUploadResume()} 
                           disabled={isUploading || !resumeFile}
-                          className="w-full bg-[#5c061a] hover:bg-[#4c0515] font-bold text-white rounded-xl h-11 transition-colors"
+                          className="w-full bg-primary hover:bg-primary/90 font-bold text-primary-foreground rounded-xl h-11 transition-colors"
                         >
                           {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                           Fazer Upload Agora

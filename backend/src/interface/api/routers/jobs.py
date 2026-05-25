@@ -149,10 +149,12 @@ async def _get_current_job_behavioral_assignment(
     if job is None or job.behavioral_template_id is None:
         return None
     repo = SQLAlchemyBehavioralAssignmentRepository(db)
+    pipeline_id = await repo.get_active_pipeline_id(candidate_id=candidate_id, job_id=job_id)
     return await repo.get_assignment_by_job_candidate(
         job_id=job_id,
         candidate_id=candidate_id,
         template_id=job.behavioral_template_id,
+        pipeline_id=pipeline_id,
     )
 
 

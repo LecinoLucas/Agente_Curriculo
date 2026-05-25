@@ -12,6 +12,8 @@ import { CandidatePortalPage } from "../CandidatePortalPage";
 import { candidatePortalService } from "../../services/candidatePortalService";
 import { communicationService } from "../../services/communicationService";
 import { HttpError } from "../../services/http";
+import { VisualThemeProvider } from "../../hooks/useVisualTheme";
+import { AuthProvider } from "../../features/auth/AuthContext";
 
 vi.mock("../../services/candidatePortalService", () => ({
   candidatePortalService: {
@@ -34,6 +36,7 @@ vi.mock("../../services/communicationService", () => ({
   communicationService: {
     getCandidateCommunications: vi.fn(),
     markCommunicationRead: vi.fn(),
+    requestCandidateContact: vi.fn(),
   },
 }));
 
@@ -55,6 +58,7 @@ describe("Candidate portal flow", () => {
     (communicationService.markCommunicationRead as any).mockResolvedValue({
       message: "Communication marked as read",
     });
+    (communicationService.requestCandidateContact as any).mockResolvedValue({});
   });
 
   it("renderiza entrada única do candidato com acesso para login e cadastro", () => {
@@ -99,12 +103,18 @@ describe("Candidate portal flow", () => {
     });
 
     render(
-      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
-        <Routes>
-          <Route path="/candidato/login" element={<CandidateLoginPage />} />
-          <Route path="/candidato/portal" element={<div>Portal destino</div>} />
-        </Routes>
-      </MemoryRouter>
+      <VisualThemeProvider>
+        <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
+          <Routes>
+            <Route path="/candidato/login" element={
+              <AuthProvider>
+                <CandidateLoginPage />
+              </AuthProvider>
+            } />
+            <Route path="/candidato/portal" element={<div>Portal destino</div>} />
+          </Routes>
+        </MemoryRouter>
+      </VisualThemeProvider>
     );
 
     fireEvent.change(screen.getByLabelText("E-mail"), {
@@ -203,12 +213,14 @@ describe("Candidate portal flow", () => {
     });
 
     render(
-      <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
-        <Routes>
-          <Route path="/candidato/portal" element={<CandidatePortalPage />} />
-          <Route path="/candidato/login" element={<div>Login candidato</div>} />
-        </Routes>
-      </MemoryRouter>
+      <VisualThemeProvider>
+        <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
+          <Routes>
+            <Route path="/candidato/portal" element={<CandidatePortalPage />} />
+            <Route path="/candidato/login" element={<div>Login candidato</div>} />
+          </Routes>
+        </MemoryRouter>
+      </VisualThemeProvider>
     );
 
     // Verify portal loads and displays candidate information (name contains Maria)
@@ -239,12 +251,14 @@ describe("Candidate portal flow", () => {
     );
 
     render(
-      <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
-        <Routes>
-          <Route path="/candidato/portal" element={<CandidatePortalPage />} />
-          <Route path="/candidato/cadastro" element={<div>Cadastro candidato</div>} />
-        </Routes>
-      </MemoryRouter>
+      <VisualThemeProvider>
+        <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
+          <Routes>
+            <Route path="/candidato/portal" element={<CandidatePortalPage />} />
+            <Route path="/candidato/cadastro" element={<div>Cadastro candidato</div>} />
+          </Routes>
+        </MemoryRouter>
+      </VisualThemeProvider>
     );
 
     expect(await screen.findByText("Cadastro candidato")).toBeInTheDocument();
@@ -377,12 +391,14 @@ describe("Candidate portal flow", () => {
     });
 
     render(
-      <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
-        <Routes>
-          <Route path="/candidato/portal" element={<CandidatePortalPage />} />
-          <Route path="/candidato/login" element={<div>Login candidato</div>} />
-        </Routes>
-      </MemoryRouter>
+      <VisualThemeProvider>
+        <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
+          <Routes>
+            <Route path="/candidato/portal" element={<CandidatePortalPage />} />
+            <Route path="/candidato/login" element={<div>Login candidato</div>} />
+          </Routes>
+        </MemoryRouter>
+      </VisualThemeProvider>
     );
 
     // Wait for behavioral assessment service to be called

@@ -82,8 +82,7 @@ describe("AgendaPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("Agenda de Entrevistas");
-    await user.click(screen.getByRole("button", { name: "Conectar Google Agenda" }));
+    await user.click(await screen.findByRole("button", { name: "Conectar Google Agenda" }));
 
     await waitFor(() => {
       expect(getGoogleCalendarAuthUrlMock).toHaveBeenCalledOnce();
@@ -107,8 +106,7 @@ describe("AgendaPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("Agenda de Entrevistas");
-    await user.click(screen.getByRole("button", { name: "Conectar Google Agenda" }));
+    await user.click(await screen.findByRole("button", { name: "Conectar Google Agenda" }));
 
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith(

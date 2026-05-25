@@ -44,7 +44,6 @@ from src.infrastructure.security.password_service import hash_password, verify_p
 from src.interface.api.schemas.candidate_schemas import CreateCandidateRequest
 from src.interface.api.schemas.public_schemas import PublicApplyResponse
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineEventModel
-from src.infrastructure.repositories.sqlalchemy_pipeline_repository import _candidate_job_pipeline_key
 
 logger = structlog.get_logger(__name__)
 
@@ -368,12 +367,13 @@ class PublicApplicationService:
                     status="active",
                     moved_by=None,
                     updated_at=now,
+                    resume_version_id=version.id,
                 )
                 if reactivated_pipeline is None:
                     raise PublicApplicationDuplicateJobError(
                         "Não foi possível reabrir sua candidatura agora. Tente novamente."
                     )
-                pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate.id, job_id=job_id)
+                pipeline_id = reactivated_pipeline.get("pipeline_id")
                 await self._pipeline_repo.save_transition(
                     CandidateJobPipelineEventModel(
                         candidate_id=candidate.id,
@@ -426,6 +426,7 @@ class PublicApplicationService:
                 job_id=job_id,
                 requires_behavioral_assessment=bool(job_model.requires_behavioral_assessment),
                 template_id=job_model.behavioral_template_id,
+                pipeline_id=pipeline_id,
             )
 
             try:

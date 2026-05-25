@@ -111,6 +111,12 @@ class CandidatePortalOverviewResponse(BaseModel):
     latest_resume: CandidatePortalResumeResponse | None = None
     talent_pool: bool
     status_public: str
+    application_status: str
+    current_process_status_label: str
+    is_process_closed: bool = False
+    closed_reason_public_label: str | None = None
+    can_request_contact: bool = True
+    can_apply_to_other_jobs: bool = True
     public_timeline: CandidatePortalTimelineResponse | None = None
 
 

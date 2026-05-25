@@ -21,9 +21,10 @@ function formatDateTime(value: string): string {
 
 export interface CandidateMessagesCardProps {
   refreshTrigger?: number;
+  onMessageRead?: () => void;
 }
 
-export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesCardProps) {
+export function CandidateMessagesCard({ refreshTrigger = 0, onMessageRead }: CandidateMessagesCardProps) {
   const [messages, setMessages] = useState<CandidateCommunication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +65,9 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
             : message,
         ),
       );
+      if (onMessageRead) {
+        onMessageRead();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível marcar a mensagem como lida.");
     } finally {
@@ -72,17 +76,17 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
   };
 
   return (
-    <Card className="overflow-hidden border border-[#eae6e2] rounded-[1.25rem] bg-white shadow-sm transition-all duration-300">
-      <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs transition-all duration-300">
+      <CardHeader className="pb-3 border-b border-border flex flex-row items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#5c061a]/5 text-[#5c061a]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Mail className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
               Mensagens
               {messages.length > 0 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#5c061a]/10 text-[11px] font-black text-[#5c061a]">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-black text-primary">
                   {messages.length}
                 </span>
               )}
@@ -92,7 +96,7 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
         {messages.length > 2 && (
           <button
             onClick={() => setShowAll((prev) => !prev)}
-            className="text-xs font-bold text-[#5c061a] hover:underline"
+            className="text-xs font-bold text-primary hover:underline"
           >
             {showAll ? "Ver menos" : "Ver todas"}
           </button>
@@ -100,8 +104,8 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
         {loading ? (
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-100 p-5 text-xs font-semibold text-slate-400">
-            <Loader2 className="h-4 w-4 animate-spin text-[#5c061a]" />
+          <div className="flex items-center gap-2 rounded-2xl border border-border p-5 text-xs font-semibold text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
             Carregando mensagens...
           </div>
         ) : null}
@@ -114,14 +118,14 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
         ) : null}
 
         {!loading && !error && messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-100 py-10 text-center">
-            <Inbox className="h-10 w-10 text-slate-300" />
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border py-10 text-center bg-muted/50">
+            <Mail className="h-10 w-10 text-muted-foreground/40" />
             <div>
-              <p className="text-sm font-semibold text-slate-500">
-                Nenhuma mensagem no momento.
+              <p className="text-sm font-bold text-foreground">
+                Mais novidades em breve!
               </p>
-              <p className="text-[11px] text-slate-400 font-semibold mt-1">
-                Quando houver atualização, ela aparecerá aqui.
+              <p className="text-[11px] text-muted-foreground font-semibold mt-1">
+                Quando tivermos atualizações, avisaremos por aqui.
               </p>
             </div>
           </div>
@@ -132,37 +136,37 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
             {displayedMessages.map((message) => (
               <article
                 key={message.id}
-                className="group relative flex items-start gap-4 pb-4 last:pb-0 border-b border-slate-100 last:border-0"
+                className="group relative flex items-start gap-4 pb-4 last:pb-0 border-b border-border/50 last:border-0"
               >
-                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#5c061a] text-white text-xs font-extrabold shadow-sm">
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-extrabold shadow-xs">
                   MR
                   {message.status !== "read" && (
-                    <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse" />
+                    <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-background animate-pulse" />
                   )}
                 </div>
 
                 <div className="min-w-0 flex-1 pt-0.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-slate-800">
+                      <p className="text-sm font-bold text-foreground">
                         {message.subject || "Marajó RH"}
                       </p>
                       {message.status === "read" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-success">
                           Lida
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-[#5c061a]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#5c061a]">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
                           Nova
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-medium text-slate-400">
+                    <span className="text-[10px] font-medium text-muted-foreground">
                       {formatDateTime(message.created_at)}
                     </span>
                   </div>
 
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-slate-500">
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                     {message.body}
                   </p>
 
@@ -174,7 +178,7 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
                         size="sm"
                         disabled={markingId === message.id}
                         onClick={() => void handleMarkRead(message.id)}
-                        className="h-8 text-xs font-bold text-slate-700 hover:text-slate-900 border-slate-200 rounded-lg transition-colors duration-200"
+                        className="h-8 text-xs font-bold text-muted-foreground hover:text-foreground border-border rounded-lg transition-colors duration-200"
                       >
                         {markingId === message.id ? (
                           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
@@ -190,10 +194,10 @@ export function CandidateMessagesCard({ refreshTrigger = 0 }: CandidateMessagesC
         ) : null}
 
         {messages.length > 2 && (
-          <div className="pt-3 border-t border-slate-100 flex justify-center">
+          <div className="pt-3 border-t border-border flex justify-center">
             <button
               onClick={() => setShowAll((prev) => !prev)}
-              className="inline-flex items-center gap-1 text-xs font-bold text-[#5c061a] hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
             >
               {showAll ? "Ver menos mensagens" : "Ver todas as mensagens →"}
             </button>

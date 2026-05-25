@@ -82,6 +82,7 @@ class CandidatePortalService:
             candidate_id=candidate_id,
             active_pipeline_rows=active_pipeline_rows,
         )
+        current_process_row = active_pipeline_row or self._resolve_latest_public_process_row(pipeline_rows)
 
         active_application: CandidatePortalActiveApplicationResponse | None = None
         public_timeline: CandidatePortalTimelineResponse | None = None
@@ -95,6 +96,11 @@ class CandidatePortalService:
                 active_pipeline_row=active_pipeline_row,
                 analysis_status=active_application.analysis_status,
             )
+        elif current_process_row is not None:
+            public_timeline = await self._build_public_timeline(
+                active_pipeline_row=current_process_row,
+                analysis_status=None,
+            )
 
         history = await self._build_history_applications(
             candidate_id=candidate_id,
@@ -105,6 +111,17 @@ class CandidatePortalService:
 
         source_value = candidate["application_source"]
         source_label = self._source_label(source_value)
+        application_status = self._application_status(
+            active_application=active_application,
+            current_process_row=current_process_row,
+            latest_resume=latest_resume,
+        )
+        current_process_status_label = self._current_process_status_label(
+            application_status=application_status,
+            active_application=active_application,
+        )
+        closed_reason_public_label = self._closed_reason_public_label(application_status)
+        is_process_closed = application_status in {"rejected", "hired"}
         return CandidatePortalOverviewResponse(
             candidate=CandidatePortalCandidateSummaryResponse(
                 id=candidate["id"],
@@ -123,7 +140,13 @@ class CandidatePortalService:
             application_history=history,
             latest_resume=latest_resume,
             talent_pool=active_application is None,
-            status_public=active_application.status_public if active_application else "Banco de Talentos",
+            status_public=current_process_status_label,
+            application_status=application_status,
+            current_process_status_label=current_process_status_label,
+            is_process_closed=is_process_closed,
+            closed_reason_public_label=closed_reason_public_label,
+            can_request_contact=True,
+            can_apply_to_other_jobs=True,
             public_timeline=public_timeline,
         )
 
@@ -337,8 +360,54 @@ class CandidatePortalService:
                 "candidate_portal.integrity.multiple_active_pipelines",
                 candidate_id=str(candidate_id),
                 pipeline_ids=[str(item.get("pipeline_id")) for item in active_pipeline_rows],
-            )
+        )
         return active_pipeline_rows[0] if active_pipeline_rows else None
+
+    @staticmethod
+    def _resolve_latest_public_process_row(pipeline_rows: list[dict]) -> dict | None:
+        return pipeline_rows[0] if pipeline_rows else None
+
+    @staticmethod
+    def _application_status(
+        *,
+        active_application: CandidatePortalActiveApplicationResponse | None,
+        current_process_row: dict | None,
+        latest_resume: CandidatePortalResumeResponse | None,
+    ) -> str:
+        if active_application is not None:
+            return "active"
+        if current_process_row is not None:
+            relationship_status = current_process_row["relationship_status"]
+            stage = current_process_row["stage"]
+            if relationship_status == "rejected" or stage == "rejected":
+                return "rejected"
+            if relationship_status == "hired" or stage == "hired":
+                return "hired"
+        return "talent_pool" if latest_resume is not None else "no_active_application"
+
+    @staticmethod
+    def _current_process_status_label(
+        *,
+        application_status: str,
+        active_application: CandidatePortalActiveApplicationResponse | None,
+    ) -> str:
+        if active_application is not None:
+            return active_application.status_public
+        if application_status == "rejected":
+            return "Processo encerrado"
+        if application_status == "hired":
+            return "Processo concluído"
+        if application_status == "talent_pool":
+            return "Você está em nosso banco de talentos"
+        return "Nenhuma candidatura ativa"
+
+    @staticmethod
+    def _closed_reason_public_label(application_status: str) -> str | None:
+        if application_status == "rejected":
+            return "Você não foi selecionado para esta vaga no momento."
+        if application_status == "hired":
+            return "Processo concluído."
+        return None
 
     async def _build_public_timeline(
         self,
@@ -426,10 +495,7 @@ class CandidatePortalService:
                 InterviewScheduleModel.public_notes,
             )
             .where(
-                sa.or_(
-                    InterviewScheduleModel.pipeline_id == pipeline_id,
-                    InterviewScheduleModel.pipeline_id.is_(None),
-                ),
+                InterviewScheduleModel.pipeline_id == pipeline_id,
                 InterviewScheduleModel.candidate_id == active_pipeline_row["candidate_id"],
                 InterviewScheduleModel.job_id == active_pipeline_row["job_id"],
                 InterviewScheduleModel.status.in_(("scheduled", "rescheduled")),
@@ -442,10 +508,7 @@ class CandidatePortalService:
             cancelled = await self._db.execute(
                 sa.select(InterviewScheduleModel.status)
                 .where(
-                    sa.or_(
-                        InterviewScheduleModel.pipeline_id == pipeline_id,
-                        InterviewScheduleModel.pipeline_id.is_(None),
-                    ),
+                    InterviewScheduleModel.pipeline_id == pipeline_id,
                     InterviewScheduleModel.candidate_id == active_pipeline_row["candidate_id"],
                     InterviewScheduleModel.job_id == active_pipeline_row["job_id"],
                     InterviewScheduleModel.status == "cancelled",

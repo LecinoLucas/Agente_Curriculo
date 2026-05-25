@@ -281,6 +281,9 @@ async def _seed_policy_case_with_template(
         )
     )
     assert pipeline is not None
+    if pipeline.candidate_job_pipeline_id is None:
+        pipeline.candidate_job_pipeline_id = uuid4()
+        await db_session.flush()
     now = datetime.now(UTC)
     db_session.add(
         CandidateJobScoreModel(
@@ -324,6 +327,7 @@ async def _seed_policy_case_with_template(
             id=uuid4(),
             candidate_id=candidate_id,
             job_id=job_id,
+            pipeline_id=pipeline.candidate_job_pipeline_id,
             template_id=template_id,
             status=assignment_status,
             assigned_at=now,

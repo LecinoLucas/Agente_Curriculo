@@ -172,6 +172,137 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+function CompactField({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">{label}</dt>
+      <dd className="mt-1 break-words text-sm text-[hsl(var(--text))]">{value || "-"}</dd>
+    </div>
+  );
+}
+
+function RowActions({
+  item,
+  retryingId,
+  onOpenDetail,
+  onRetry,
+  compact = false,
+}: {
+  item: BehavioralAIEvaluationListItem;
+  retryingId: string | null;
+  onOpenDetail: (evaluationId: string) => void;
+  onRetry: (item: BehavioralAIEvaluationListItem) => void;
+  compact?: boolean;
+}) {
+  const buttonClass = compact
+    ? "ui-btn-secondary inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold"
+    : "ui-btn-secondary inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold";
+  const retryClass = compact
+    ? "ui-btn-primary inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold disabled:opacity-50"
+    : "ui-btn-primary inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold disabled:opacity-50";
+  const linkClass = compact
+    ? "ui-btn-secondary inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 text-xs font-semibold"
+    : "ui-btn-secondary inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold";
+
+  return (
+    <div className={cn("flex gap-2", compact ? "flex-wrap" : "justify-end whitespace-nowrap")}>
+      <button
+        type="button"
+        onClick={() => onOpenDetail(item.evaluation_id)}
+        className={buttonClass}
+      >
+        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+        Ver detalhes
+      </button>
+      {item.can_retry ? (
+        <button
+          type="button"
+          disabled={retryingId === item.evaluation_id}
+          onClick={() => onRetry(item)}
+          className={retryClass}
+        >
+          {retryingId === item.evaluation_id ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          Reprocessar
+        </button>
+      ) : null}
+      <Link
+        to={`/candidatos/${item.candidate_id}?tab=assessments&focus=behavioral_ai`}
+        className={linkClass}
+      >
+        Abrir candidato
+      </Link>
+      <Link
+        to={`/vagas/${item.job_id}/editar`}
+        className={linkClass}
+      >
+        Abrir vaga
+      </Link>
+    </div>
+  );
+}
+
+function CompactEvaluationCard({
+  item,
+  retryingId,
+  onOpenDetail,
+  onRetry,
+}: {
+  item: BehavioralAIEvaluationListItem;
+  retryingId: string | null;
+  onOpenDetail: (evaluationId: string) => void;
+  onRetry: (item: BehavioralAIEvaluationListItem) => void;
+}) {
+  return (
+    <article className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="break-words text-base font-semibold text-[hsl(var(--text))]">{item.candidate_name}</h2>
+          <p className="mt-1 break-words text-xs text-[hsl(var(--text-muted))]">{item.candidate_email || "-"}</p>
+        </div>
+        <StatusBadge status={item.operational_status} />
+      </div>
+
+      <p className="mt-3 break-words text-sm font-medium text-[hsl(var(--text))]">{item.job_title}</p>
+
+      <dl className="mt-4 grid grid-cols-2 gap-3">
+        <CompactField
+          label="Provider/modelo"
+          value={
+            <>
+              <span className="font-medium">{item.provider}</span>
+              <span className="block text-xs text-[hsl(var(--text-muted))]">{item.model}</span>
+            </>
+          }
+        />
+        <CompactField label="Tentativas" value={item.retry_count} />
+        <CompactField label="Solicitado" value={formatDateTime(item.requested_at)} />
+        <CompactField label="Finalizado" value={finalTimestamp(item)} />
+      </dl>
+
+      <div className="mt-4 rounded-lg border border-[hsl(var(--border))]/70 bg-[hsl(var(--bg))]/50 p-3">
+        <p className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">Erro seguro</p>
+        <p className="mt-1 line-clamp-3 break-words text-sm text-[hsl(var(--text))]">
+          {item.safe_error_message || "-"}
+        </p>
+      </div>
+
+      <div className="mt-4">
+        <RowActions
+          item={item}
+          retryingId={retryingId}
+          onOpenDetail={onOpenDetail}
+          onRetry={onRetry}
+          compact
+        />
+      </div>
+    </article>
+  );
+}
+
 export function AnalisesIaComportamentalPage() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -407,33 +538,42 @@ export function AnalisesIaComportamentalPage() {
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            <input
-              list="behavioral-ai-providers"
-              value={filters.provider}
-              onChange={(event) => updateFilter("provider", event.target.value)}
-              placeholder="Provider"
-              className="ui-input h-10 rounded-lg text-sm"
-            />
+            <label className="block">
+              <span className="sr-only">Provider</span>
+              <input
+                list="behavioral-ai-providers"
+                value={filters.provider}
+                onChange={(event) => updateFilter("provider", event.target.value)}
+                placeholder="Provider"
+                className="ui-input h-10 w-full rounded-lg text-sm"
+              />
+            </label>
             <datalist id="behavioral-ai-providers">
               {providerOptions.map((value) => <option key={value} value={value} />)}
             </datalist>
-            <input
-              list="behavioral-ai-models"
-              value={filters.model}
-              onChange={(event) => updateFilter("model", event.target.value)}
-              placeholder="Modelo"
-              className="ui-input h-10 rounded-lg text-sm"
-            />
+            <label className="block">
+              <span className="sr-only">Modelo</span>
+              <input
+                list="behavioral-ai-models"
+                value={filters.model}
+                onChange={(event) => updateFilter("model", event.target.value)}
+                placeholder="Modelo"
+                className="ui-input h-10 w-full rounded-lg text-sm"
+              />
+            </label>
             <datalist id="behavioral-ai-models">
               {modelOptions.map((value) => <option key={value} value={value} />)}
             </datalist>
-            <input
-              list="behavioral-ai-error-types"
-              value={filters.provider_error_type}
-              onChange={(event) => updateFilter("provider_error_type", event.target.value)}
-              placeholder="Tipo de erro"
-              className="ui-input h-10 rounded-lg text-sm"
-            />
+            <label className="block">
+              <span className="sr-only">Tipo de erro</span>
+              <input
+                list="behavioral-ai-error-types"
+                value={filters.provider_error_type}
+                onChange={(event) => updateFilter("provider_error_type", event.target.value)}
+                placeholder="Tipo de erro"
+                className="ui-input h-10 w-full rounded-lg text-sm"
+              />
+            </label>
             <datalist id="behavioral-ai-error-types">
               {errorTypeOptions.map((value) => <option key={value} value={value} />)}
             </datalist>
@@ -503,92 +643,75 @@ export function AnalisesIaComportamentalPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-[1320px] w-full divide-y divide-[hsl(var(--border))] text-sm">
-                <thead className="bg-[hsl(var(--bg))]/70">
-                  <tr className="text-left text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">
-                    <th className="px-4 py-3">Candidato</th>
-                    <th className="px-4 py-3">Vaga</th>
-                    <th className="px-4 py-3">Status operacional</th>
-                    <th className="px-4 py-3">Provider/modelo</th>
-                    <th className="px-4 py-3">Tentativas</th>
-                    <th className="px-4 py-3">Solicitado</th>
-                    <th className="px-4 py-3">Enfileirado</th>
-                    <th className="px-4 py-3">Iniciado</th>
-                    <th className="px-4 py-3">Concluído/falhou</th>
-                    <th className="px-4 py-3">Próxima tentativa</th>
-                    <th className="px-4 py-3">Erro seguro</th>
-                    <th className="sticky right-0 border-l border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-4 py-3 text-right">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[hsl(var(--border))]">
-                  {items.map((item) => (
-                    <tr key={item.evaluation_id} className="group align-top hover:bg-[hsl(var(--bg))]/50">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-[hsl(var(--text))]">{item.candidate_name}</div>
-                        <div className="text-xs text-[hsl(var(--text-muted))]">{item.candidate_email || "-"}</div>
-                      </td>
-                      <td className="px-4 py-3 text-[hsl(var(--text))]">{item.job_title}</td>
-                      <td className="px-4 py-3"><StatusBadge status={item.operational_status} /></td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-[hsl(var(--text))]">{item.provider}</div>
-                        <div className="text-xs text-[hsl(var(--text-muted))]">{item.model}</div>
-                      </td>
-                      <td className="px-4 py-3 text-[hsl(var(--text))]">{item.retry_count}</td>
-                      <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.requested_at)}</td>
-                      <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.queued_at)}</td>
-                      <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.started_at)}</td>
-                      <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{finalTimestamp(item)}</td>
-                      <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.next_retry_at)}</td>
-                      <td className="max-w-[220px] px-4 py-3 text-xs text-[hsl(var(--text-muted))]">
-                        <span className="line-clamp-3">{item.safe_error_message || "-"}</span>
-                      </td>
-                      <td className="sticky right-0 border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 group-hover:bg-[hsl(var(--bg))]">
-                        <div className="flex justify-end gap-2 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => void openDetail(item.evaluation_id)}
-                            className="ui-btn-secondary inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold"
-                          >
-                            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                            Ver detalhes
-                          </button>
-                          {item.can_retry ? (
-                            <button
-                              type="button"
-                              disabled={retryingId === item.evaluation_id}
-                              onClick={() => void handleRetry(item)}
-                              className="ui-btn-primary inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold disabled:opacity-50"
-                            >
-                              {retryingId === item.evaluation_id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                              ) : (
-                                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                              )}
-                              Reprocessar
-                            </button>
-                          ) : null}
-                          <Link
-                            to={`/candidatos/${item.candidate_id}?tab=assessments&focus=behavioral_ai`}
-                            className="ui-btn-secondary inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold"
-                          >
-                            Abrir candidato
-                          </Link>
-                          <Link
-                            to={`/vagas/${item.job_id}/editar`}
-                            className="ui-btn-secondary inline-flex h-9 items-center rounded-lg px-3 text-xs font-semibold"
-                          >
-                            Abrir vaga
-                          </Link>
-                        </div>
-                      </td>
+            <>
+              <div className="space-y-3 p-3 lg:hidden">
+                {items.map((item) => (
+                  <CompactEvaluationCard
+                    key={item.evaluation_id}
+                    item={item}
+                    retryingId={retryingId}
+                    onOpenDetail={(evaluationId) => void openDetail(evaluationId)}
+                    onRetry={(evaluation) => void handleRetry(evaluation)}
+                  />
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="min-w-[1320px] w-full divide-y divide-[hsl(var(--border))] text-sm">
+                  <thead className="bg-[hsl(var(--bg))]/70">
+                    <tr className="text-left text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">
+                      <th className="px-4 py-3">Candidato</th>
+                      <th className="px-4 py-3">Vaga</th>
+                      <th className="px-4 py-3">Status operacional</th>
+                      <th className="px-4 py-3">Provider/modelo</th>
+                      <th className="px-4 py-3">Tentativas</th>
+                      <th className="px-4 py-3">Solicitado</th>
+                      <th className="px-4 py-3">Enfileirado</th>
+                      <th className="px-4 py-3">Iniciado</th>
+                      <th className="px-4 py-3">Concluído/falhou</th>
+                      <th className="px-4 py-3">Próxima tentativa</th>
+                      <th className="px-4 py-3">Erro seguro</th>
+                      <th className="sticky right-0 border-l border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-4 py-3 text-right">
+                        Ações
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[hsl(var(--border))]">
+                    {items.map((item) => (
+                      <tr key={item.evaluation_id} className="group align-top hover:bg-[hsl(var(--bg))]/50">
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-[hsl(var(--text))]">{item.candidate_name}</div>
+                          <div className="text-xs text-[hsl(var(--text-muted))]">{item.candidate_email || "-"}</div>
+                        </td>
+                        <td className="px-4 py-3 text-[hsl(var(--text))]">{item.job_title}</td>
+                        <td className="px-4 py-3"><StatusBadge status={item.operational_status} /></td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-[hsl(var(--text))]">{item.provider}</div>
+                          <div className="text-xs text-[hsl(var(--text-muted))]">{item.model}</div>
+                        </td>
+                        <td className="px-4 py-3 text-[hsl(var(--text))]">{item.retry_count}</td>
+                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.requested_at)}</td>
+                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.queued_at)}</td>
+                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.started_at)}</td>
+                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{finalTimestamp(item)}</td>
+                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.next_retry_at)}</td>
+                        <td className="max-w-[220px] px-4 py-3 text-xs text-[hsl(var(--text-muted))]">
+                          <span className="line-clamp-3">{item.safe_error_message || "-"}</span>
+                        </td>
+                        <td className="sticky right-0 border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 group-hover:bg-[hsl(var(--bg))]">
+                          <RowActions
+                            item={item}
+                            retryingId={retryingId}
+                            onOpenDetail={(evaluationId) => void openDetail(evaluationId)}
+                            onRetry={(evaluation) => void handleRetry(evaluation)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 

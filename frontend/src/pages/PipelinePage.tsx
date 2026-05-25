@@ -8,6 +8,7 @@ import { CandidateSearchModal } from "../features/pipeline/CandidateSearchModal"
 import { InterviewQuickScheduleModal } from "../features/pipeline/InterviewQuickScheduleModal";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
+import { PipelineRejectionReasonModal } from "../features/pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
 import {
   usePipelineGateActionResolver,
@@ -108,6 +109,12 @@ export function PipelinePage() {
     targetStage: PipelineStage;
   } | null>(null);
   const [isStageMoveSaving, setIsStageMoveSaving] = useState(false);
+  const [rejectionCandidate, setRejectionCandidate] = useState<{
+    candidateId: string;
+    candidateName: string;
+  } | null>(null);
+  const [rejectionSubmitting, setRejectionSubmitting] = useState(false);
+
   const {
     blockedTransition,
     handleBlockedError,
@@ -116,7 +123,19 @@ export function PipelinePage() {
     forceSubmitting,
     forceError,
   } = usePipelineTransitionBlockedHandler();
-  const resolveBlockedAction = usePipelineGateActionResolver(closeBlocked);
+
+  const handleOpenRejectionModal = useCallback(
+    (candidateId: string) => {
+      const candidateName =
+        blockedTransition?.candidateId === candidateId
+          ? (blockedTransition.candidateName ?? "")
+          : "";
+      setRejectionCandidate({ candidateId, candidateName });
+    },
+    [blockedTransition],
+  );
+
+  const resolveBlockedAction = usePipelineGateActionResolver(closeBlocked, handleOpenRejectionModal);
 
   const {
     activeJobId,
@@ -627,6 +646,15 @@ export function PipelinePage() {
         return;
       }
 
+      if (stage === "rejected") {
+        setRejectionCandidate({
+          candidateId: draggingCandidate.candidateId,
+          candidateName: draggingCandidate.candidateName,
+        });
+        resetDragState();
+        return;
+      }
+
       if (INTERVIEW_STAGES.has(stage)) {
         setInterviewCandidate({
           candidateId: draggingCandidate.candidateId,
@@ -707,6 +735,28 @@ export function PipelinePage() {
       closeBlocked();
     },
     [closeBlocked, navigate],
+  );
+
+  const handleRejectionConfirm = useCallback(
+    async (reason: string) => {
+      if (!rejectionCandidate || !activeJobId) return;
+      setRejectionSubmitting(true);
+      feedback.moveCandidate.processing();
+      try {
+        await pipelineService.moveCandidateStage(activeJobId, rejectionCandidate.candidateId, {
+          stage: "rejected",
+          reason,
+        });
+        setRejectionCandidate(null);
+        await syncAfterStageMutation();
+        feedback.moveCandidate.success();
+      } catch (err: unknown) {
+        feedback.moveCandidate.error(err);
+      } finally {
+        setRejectionSubmitting(false);
+      }
+    },
+    [activeJobId, rejectionCandidate, syncAfterStageMutation],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1182,6 +1232,14 @@ export function PipelinePage() {
             feedback.moveCandidate.success();
           }
         }}
+      />
+
+      <PipelineRejectionReasonModal
+        open={rejectionCandidate !== null}
+        candidateName={rejectionCandidate?.candidateName}
+        submitting={rejectionSubmitting}
+        onClose={() => setRejectionCandidate(null)}
+        onConfirm={handleRejectionConfirm}
       />
     </div>
   );

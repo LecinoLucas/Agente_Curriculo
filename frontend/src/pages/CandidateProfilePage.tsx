@@ -36,6 +36,7 @@ import {
   getInitials,
 } from "../features/candidates/utils/profile";
 import { EditCandidateModal } from "../features/pipeline/EditCandidateModal";
+import { PipelineRejectionReasonModal } from "../features/pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
 import {
   usePipelineGateActionResolver,
@@ -143,6 +144,7 @@ export function CandidateProfilePage() {
   const [assessmentFocusTick, setAssessmentFocusTick] = useState(0);
   const [dailyLimitDialogOpen, setDailyLimitDialogOpen] = useState(false);
   const [dailyLimitUsage, setDailyLimitUsage] = useState<AILimitsUsage | null>(null);
+  const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
 
   // React to `?tab=…&focus=…` on URL changes. We snapshot the last applied
   // search so we don't re-fire focus on unrelated state churn (the
@@ -506,9 +508,17 @@ export function CandidateProfilePage() {
         activeEntry={activeEntry}
         activeScore={activeScore}
         onPrimaryAction={(targetTab) => {
-          if (targetTab === "assessments") {
+          if (targetTab === "assessments" || targetTab === "assessments:behavioral_ai") {
             setActiveTab("assessments");
             setAssessmentFocusTick((current) => current + 1);
+            return;
+          }
+          if (targetTab === "workflow") {
+            setActiveTab("workflow");
+            return;
+          }
+          if (targetTab === "interviews") {
+            setActiveTab("interviews");
             return;
           }
           setActiveTab(activeEntry ? "interviews" : "workflow");
@@ -538,6 +548,7 @@ export function CandidateProfilePage() {
               canTransfer={canTransferCurrentJob}
               saving={workflowSaving}
               onMoveStage={handleMoveStage}
+              onRequestReject={() => setRejectionModalOpen(true)}
               onTransfer={handleTransfer}
               onLinkJob={() => setLinkJobOpen(true)}
               onEdit={() => setEditOpen(true)}
@@ -638,9 +649,14 @@ export function CandidateProfilePage() {
               closeBlocked();
               return true;
             }
-            if (action.action === "open_decision" || action.action === "add_reason") {
+            if (action.action === "open_decision") {
               setActiveTab("workflow");
               closeBlocked();
+              return true;
+            }
+            if (action.action === "add_reason") {
+              closeBlocked();
+              setRejectionModalOpen(true);
               return true;
             }
           }
@@ -670,6 +686,17 @@ export function CandidateProfilePage() {
             toast.success("Etapa atualizada com justificativa registrada.");
             await reloadWorkspace();
           }
+        }}
+      />
+
+      <PipelineRejectionReasonModal
+        open={rejectionModalOpen}
+        candidateName={overview?.candidate?.full_name}
+        submitting={workflowSaving}
+        onClose={() => setRejectionModalOpen(false)}
+        onConfirm={async (reason) => {
+          await handleMoveStage("rejected", reason);
+          setRejectionModalOpen(false);
         }}
       />
     </PageShell>
@@ -820,11 +847,26 @@ function DecisionCards({
         {pendencies.length === 0 ? (
           <p className="text-sm text-[hsl(var(--text-muted))]">Nenhuma pendência.</p>
         ) : (
-          <ul className="space-y-1.5 text-sm text-[hsl(var(--text))]">
+          <ul className="space-y-2 text-sm text-[hsl(var(--text))]">
             {pendencies.map((pendency) => (
-              <li key={pendency.id} className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--warning))]" />
-                {pendency.label}
+              <li key={pendency.id} className="flex items-start gap-2">
+                <span
+                  className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                    pendency.tone === "block"
+                      ? "bg-rose-500"
+                      : pendency.tone === "warning"
+                        ? "bg-[hsl(var(--warning))]"
+                        : "bg-sky-400"
+                  }`}
+                />
+                <span className="flex flex-col">
+                  <span className={pendency.tone === "block" ? "font-medium text-rose-700 dark:text-rose-400" : ""}>
+                    {pendency.label}
+                  </span>
+                  {pendency.description ? (
+                    <span className="text-xs text-[hsl(var(--text-muted))]">{pendency.description}</span>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>
@@ -908,6 +950,7 @@ function WorkflowTab({
   canTransfer,
   saving,
   onMoveStage,
+  onRequestReject,
   onTransfer,
   onLinkJob,
   onEdit,
@@ -921,6 +964,7 @@ function WorkflowTab({
   canTransfer: boolean;
   saving: boolean;
   onMoveStage: (stage: PipelineStage, reason?: string | null) => Promise<void>;
+  onRequestReject: () => void;
   onTransfer: (toJobId: string, reason: string) => Promise<void>;
   onLinkJob: () => void;
   onEdit: () => void;
@@ -993,7 +1037,7 @@ function WorkflowTab({
                   Mover etapa
                 </ActionButton>
                 <ActionButton
-                  onClick={() => void onMoveStage("rejected", reason || "Candidato reprovado.")}
+                  onClick={onRequestReject}
                   disabled={saving || activeEntry.stage === "rejected"}
                 >
                   Reprovar candidato

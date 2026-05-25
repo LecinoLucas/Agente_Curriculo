@@ -196,7 +196,9 @@ export type CandidateLatestNoteOverview = {
 export type CandidatePreviewPendencyOverview = {
   id: string;
   label: string;
-  tone: "warning" | "info" | string;
+  tone: "warning" | "info" | "block" | string;
+  action?: string | null;
+  description?: string | null;
 };
 
 export type CandidateLatestMovementOverview = {

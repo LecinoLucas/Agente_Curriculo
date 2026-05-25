@@ -33,8 +33,12 @@ from src.application.services.pipeline_service import (
     PipelineEntryNotFoundError,
     PipelineJobNotFoundError,
 )
+from src.application.services.pipeline_gate_evaluator import PipelineGateEvaluator
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
+    SQLAlchemyPipelineRepository,
 )
 from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlchemyResumeRepository
 from src.infrastructure.storage.resume_files import read_resume_file
@@ -78,6 +82,7 @@ def _candidate_service(db: AsyncSession) -> CandidateService:
     return CandidateService(
         SQLAlchemyCandidateRepository(db),
         audit_service=AuditService(db),
+        gate_evaluator=PipelineGateEvaluator(SQLAlchemyPipelineRepository(db)),
     )
 
 

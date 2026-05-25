@@ -15,6 +15,7 @@ from src.interface.api.dependencies import (
     get_db,
 )
 from src.interface.api.schemas.communication_schemas import (
+    CandidateContactRequest,
     CommunicationListResponse,
     CommunicationMarkReadRequest,
     CommunicationResponse,
@@ -104,6 +105,29 @@ async def mark_communication_read(
     try:
         await service.mark_read(communication_id, current_session.candidate_id)
         return {"message": "Communication marked as read"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/candidate-portal/communications/contact-request",
+    response_model=CommunicationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_candidate_contact_request(
+    request: CandidateContactRequest,
+    current_session: CurrentCompleteCandidateSession,
+    service: CommunicationService = Depends(_get_service),
+) -> CommunicationResponse:
+    """Create an internal HR contact request from the current candidate."""
+    try:
+        comm = await service.create_candidate_contact_request(
+            candidate_id=current_session.candidate_id,
+            job_id=request.job_id,
+            subject=request.subject,
+            body=request.body,
+        )
+        return CommunicationResponse.model_validate(comm)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

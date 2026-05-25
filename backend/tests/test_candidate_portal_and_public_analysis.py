@@ -23,6 +23,7 @@ from src.infrastructure.database.models.analysis_model import (
 from src.infrastructure.database.models.candidate_auth_token_model import (
     CandidateAuthTokenModel,
 )
+from src.infrastructure.database.models.communication_model import CandidateCommunicationModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
@@ -952,4 +953,118 @@ async def test_portal_overview_returns_talent_pool_when_candidate_has_no_active_
 
     assert overview_payload["active_application"] is None
     assert overview_payload["talent_pool"] is True
-    assert overview_payload["status_public"] == "Banco de Talentos"
+    assert overview_payload["application_status"] == "talent_pool"
+    assert overview_payload["is_process_closed"] is False
+    assert overview_payload["status_public"] == "Você está em nosso banco de talentos"
+    assert overview_payload["closed_reason_public_label"] is None
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_returns_rejected_status_without_internal_reason(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Renata Encerrada",
+        email="renata.encerrada@example.com",
+        cpf="71237464004",
+    )
+    job = await _create_published_job(db_session, title="Analista Encerrado")
+    now = datetime.now(UTC)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=uuid4(),
+            candidate_id=candidate.id,
+            job_id=job.id,
+            pipeline_stage="rejected",
+            link_status="rejected",
+            relationship_status="rejected",
+            pipeline_status="terminal",
+            is_terminal=True,
+            terminated_at=now,
+            termination_reason="motivo interno sensível",
+            entered_at=now - timedelta(days=4),
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-rejected")
+    client.cookies.set("candidate_portal_token", "portal-token-rejected")
+
+    overview_response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert overview_response.status_code == status.HTTP_200_OK
+    payload = overview_response.json()
+
+    assert payload["active_application"] is None
+    assert payload["application_status"] == "rejected"
+    assert payload["status_public"] == "Processo encerrado"
+    assert payload["current_process_status_label"] == "Processo encerrado"
+    assert payload["is_process_closed"] is True
+    assert payload["closed_reason_public_label"] == "Você não foi selecionado para esta vaga no momento."
+    assert payload["talent_pool"] is True
+    assert payload["can_request_contact"] is True
+    assert payload["can_apply_to_other_jobs"] is True
+    assert payload["application_history"][0]["job_id"] == str(job.id)
+    assert payload["public_timeline"]["current_step_key"] == "result"
+    assert payload["public_timeline"]["steps"][-1]["label"] == "Processo encerrado"
+    assert "motivo interno sensível" not in str(payload)
+
+
+@pytest.mark.asyncio
+async def test_candidate_contact_request_creates_hr_communication(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Clara Contato",
+        email="clara.contato@example.com",
+        cpf="34665378006",
+    )
+    job = await _create_published_job(db_session, title="Vaga com Contato")
+    now = datetime.now(UTC)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=uuid4(),
+            candidate_id=candidate.id,
+            job_id=job.id,
+            pipeline_stage="rejected",
+            link_status="rejected",
+            relationship_status="rejected",
+            pipeline_status="terminal",
+            is_terminal=True,
+            terminated_at=now,
+            termination_reason="motivo interno",
+            entered_at=now - timedelta(days=2),
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-contact")
+    client.cookies.set("candidate_portal_token", "portal-token-contact")
+
+    response = await client.post(
+        "/api/v1/candidate-portal/communications/contact-request",
+        json={
+            "job_id": str(job.id),
+            "subject": "Solicitação de contato sobre processo encerrado",
+            "body": "Olá, gostaria de solicitar contato sobre o processo seletivo da vaga Vaga com Contato.",
+        },
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    payload = response.json()
+    assert payload["audience"] == "hr"
+    assert payload["channel"] == "internal"
+    assert payload["status"] == "sent"
+    assert payload["candidate_id"] == str(candidate.id)
+    assert payload["job_id"] == str(job.id)
+
+    saved = await db_session.scalar(
+        sa.select(CandidateCommunicationModel).where(CandidateCommunicationModel.id == UUID(payload["id"]))
+    )
+    assert saved is not None
+    assert saved.template_key == "candidate_contact_request"

@@ -150,16 +150,28 @@ describe("AnalisesIaComportamentalPage", () => {
     expect(screen.getAllByText("Processando").length).toBeGreaterThan(0);
     expect(screen.getByText("Concluídas 24h")).toBeInTheDocument();
     expect(screen.getAllByText("Rate limited").length).toBeGreaterThan(0);
-    expect(await screen.findByText("Ana Candidata")).toBeInTheDocument();
-    expect(screen.getByText("Tecnologia e Suporte")).toBeInTheDocument();
-    expect(screen.getByText("Tempo limite ao chamar o provedor IA.")).toBeInTheDocument();
+    expect((await screen.findAllByText("Ana Candidata")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Tecnologia e Suporte").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Tempo limite ao chamar o provedor IA.").length).toBeGreaterThan(0);
   });
 
   it("aplica filtros e dispara nova busca", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByText("Ana Candidata");
+    await screen.findAllByText("Ana Candidata");
+    expect(screen.getByLabelText("Provider")).toBeInTheDocument();
+    expect(screen.getByLabelText("Modelo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tipo de erro")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Provider"), "google");
+
+    await waitFor(() => {
+      expect(listMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ provider: "google", page: 1 }),
+      );
+    });
+
     await user.selectOptions(screen.getByLabelText("Status operacional"), "failed");
 
     await waitFor(() => {
@@ -173,7 +185,7 @@ describe("AnalisesIaComportamentalPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByText("Ana Candidata");
+    await screen.findAllByText("Ana Candidata");
     await user.click(screen.getAllByText("Ver detalhes")[0]);
 
     expect(await screen.findByText("Resumo seguro da IA comportamental.")).toBeInTheDocument();
@@ -190,9 +202,9 @@ describe("AnalisesIaComportamentalPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByText("Bruno Candidato");
-    expect(screen.getAllByText("Reprocessar")).toHaveLength(1);
-    await user.click(screen.getByText("Reprocessar"));
+    await screen.findAllByText("Bruno Candidato");
+    expect(screen.getAllByText("Reprocessar").length).toBeGreaterThan(0);
+    await user.click(screen.getAllByText("Reprocessar")[0]);
 
     await waitFor(() => {
       expect(retryMock).toHaveBeenCalledWith("eval-2");

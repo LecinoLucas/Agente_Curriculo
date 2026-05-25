@@ -14,6 +14,7 @@ from src.application.services.candidate_salary_expectation import normalize_sala
 from src.application.services.candidate_score_status_deriver import (
     derive_candidate_score_status,
 )
+from src.application.services.pipeline_gate_evaluator import PipelineGateEvaluator
 from src.domain.entities.user import User
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.analysis_model import AnalysisModel
@@ -118,10 +119,12 @@ class CandidateService:
         *,
         audit_service: AuditService | None = None,
         file_storage: FileStorageService | None = None,
+        gate_evaluator: PipelineGateEvaluator | None = None,
     ) -> None:
         self._repository = repository
         self._audit_service = audit_service
         self._file_storage = file_storage
+        self._gate_evaluator = gate_evaluator
 
     async def create(
         self,
@@ -485,6 +488,36 @@ class CandidateService:
             else {}
         )
 
+        # Gate-based pendencies: peek at gates for the next forward stage.
+        # These are authoritative — they are the same gates the pipeline move
+        # endpoint evaluates when the user tries to advance the candidate.
+        gate_pendencies: list[CandidatePreviewPendencyResponse] = []
+        if (
+            self._gate_evaluator is not None
+            and active_pipeline_row is not None
+            and active_job_id is not None
+            and not bool(active_pipeline_row.get("is_terminal", False))
+        ):
+            job = await self._gate_evaluator.find_job(active_job_id)
+            if job is not None:
+                gate_result = await self._gate_evaluator.peek_next_stage_gates(
+                    candidate_id=candidate_id,
+                    job_id=active_job_id,
+                    job=job,
+                    current_stage=active_pipeline_row["stage"],
+                )
+                if gate_result is not None and gate_result.is_blocked:
+                    gate_pendencies = [
+                        CandidatePreviewPendencyResponse(
+                            id=g.code,
+                            label=g.label,
+                            tone="block",
+                            action=g.action,
+                            description=g.description,
+                        )
+                        for g in gate_result.missing_gates
+                    ]
+
         return CandidateOverviewResponse(
             candidate=CandidateResponse.model_validate(candidate),
             resumes=[
@@ -530,11 +563,15 @@ class CandidateService:
                 if latest_note_row is not None
                 else None
             ),
-            preview_pendencies=self._build_preview_pendencies(
-                has_resume=bool(resume_rows),
-                latest_analysis=latest_analysis,
-                active_stage=active_pipeline_row["stage"] if active_pipeline_row is not None else None,
-                flags=preview_flags,
+            preview_pendencies=(
+                gate_pendencies
+                if gate_pendencies
+                else self._build_preview_pendencies(
+                    has_resume=bool(resume_rows),
+                    latest_analysis=latest_analysis,
+                    active_stage=active_pipeline_row["stage"] if active_pipeline_row is not None else None,
+                    flags=preview_flags,
+                )
             ),
             latest_movement=(
                 CandidateLatestMovementResponse(**latest_movement_row)

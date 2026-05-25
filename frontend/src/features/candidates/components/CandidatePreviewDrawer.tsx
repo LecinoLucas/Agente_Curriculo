@@ -4,6 +4,7 @@ import { ClipboardCheck, FileText, LoaderCircle, X } from "lucide-react";
 
 import { CandidateScoreDimensionsCard } from "./CandidateScoreDimensionsCard";
 import { InterviewQuickScheduleModal } from "../../pipeline/InterviewQuickScheduleModal";
+import { PipelineRejectionReasonModal } from "../../pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../../pipeline/PipelineTransitionBlockedModal";
 import {
   usePipelineGateActionResolver,
@@ -108,6 +109,7 @@ function DrawerPanel({
   const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId);
   const [stageSaving, setStageSaving] = useState(false);
   const [interviewStageToSchedule, setInterviewStageToSchedule] = useState<PipelineStage | null>(null);
+  const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
   const {
     blockedTransition,
     handleBlockedError,
@@ -116,7 +118,10 @@ function DrawerPanel({
     forceSubmitting,
     forceError,
   } = usePipelineTransitionBlockedHandler();
-  const resolveBlockedAction = usePipelineGateActionResolver(closeBlocked);
+  const resolveBlockedAction = usePipelineGateActionResolver(
+    closeBlocked,
+    () => setRejectionModalOpen(true),
+  );
 
   const candidate = overview?.candidate ?? null;
   const activeEntry = getActivePipelineEntry(overview);
@@ -170,14 +175,14 @@ function DrawerPanel({
     }
   };
 
-  const moveToStage = async (targetStage: PipelineStage) => {
+  const moveToStage = async (targetStage: PipelineStage, reason?: string) => {
     if (!activeEntry || stageSaving) return false;
     setStageSaving(true);
     try {
       await pipelineService.moveCandidateStage(activeEntry.job_id, candidateId, {
         stage: targetStage,
         notes: null,
-        reason: "Avanço pelo preview da pipeline.",
+        reason: reason ?? "Avanço pelo preview da pipeline.",
       });
       toast.success(`Candidato movido para ${STAGE_LABEL[targetStage] ?? targetStage}.`);
     } catch (err: unknown) {
@@ -587,6 +592,17 @@ function DrawerPanel({
             await syncAfterPipelineChange();
             toast.success(`Candidato movido para ${STAGE_LABEL[targetStage] ?? targetStage}.`);
           }
+        }}
+      />
+
+      <PipelineRejectionReasonModal
+        open={rejectionModalOpen}
+        candidateName={candidate?.full_name}
+        submitting={stageSaving}
+        onClose={() => setRejectionModalOpen(false)}
+        onConfirm={async (reason) => {
+          const moved = await moveToStage("rejected", reason);
+          if (moved) setRejectionModalOpen(false);
         }}
       />
     </>
