@@ -32,6 +32,9 @@ class InterviewScorecardModel(Base):
         sa.ForeignKey("jobs.id", ondelete="CASCADE"),
         nullable=False,
     )
+    pipeline_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+    )
     interview_id: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
         sa.ForeignKey("interview_schedules.id", ondelete="SET NULL"),
@@ -71,25 +74,27 @@ class InterviewScorecardModel(Base):
             f"final_recommendation IS NULL OR final_recommendation IN ({INTERVIEW_SCORECARD_RECOMMENDATIONS})",
             name="ck_interview_scorecards_final_recommendation",
         ),
-        sa.UniqueConstraint("candidate_id", "job_id", "interview_id", name="uq_interview_scorecard_candidate_job_interview"),
         sa.Index(
-            "uq_interview_scorecard_candidate_job_no_interview",
+            "uq_interview_scorecard_pipeline_no_interview",
+            "pipeline_id",
             "candidate_id",
             "job_id",
             unique=True,
-            postgresql_where=sa.text("interview_id IS NULL"),
-            sqlite_where=sa.text("interview_id IS NULL"),
+            postgresql_where=sa.text("interview_id IS NULL AND pipeline_id IS NOT NULL"),
+            sqlite_where=sa.text("interview_id IS NULL AND pipeline_id IS NOT NULL"),
         ),
         sa.Index(
-            "uq_interview_scorecard_candidate_job_with_interview",
+            "uq_interview_scorecard_pipeline_with_interview",
+            "pipeline_id",
             "candidate_id",
             "job_id",
             "interview_id",
             unique=True,
-            postgresql_where=sa.text("interview_id IS NOT NULL"),
-            sqlite_where=sa.text("interview_id IS NOT NULL"),
+            postgresql_where=sa.text("interview_id IS NOT NULL AND pipeline_id IS NOT NULL"),
+            sqlite_where=sa.text("interview_id IS NOT NULL AND pipeline_id IS NOT NULL"),
         ),
         sa.Index("idx_interview_scorecards_job_candidate", "job_id", "candidate_id"),
+        sa.Index("idx_interview_scorecards_pipeline", "pipeline_id"),
         sa.Index("idx_interview_scorecards_status", "status"),
     )
 

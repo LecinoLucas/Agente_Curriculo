@@ -255,7 +255,7 @@ async def test_public_application_with_inactive_template_does_not_create_assignm
 
 
 @pytest.mark.asyncio
-async def test_reapplication_does_not_duplicate_assignment(
+async def test_reapplication_creates_new_assignment_for_new_pipeline_cycle(
     client: AsyncClient,
     db_session: AsyncSession,
     valid_pdf_bytes: bytes,
@@ -288,7 +288,7 @@ async def test_reapplication_does_not_duplicate_assignment(
         valid_pdf_bytes=valid_pdf_bytes,
     )
 
-    assert await _assignment_count(db_session) == 1
+    assert await _assignment_count(db_session) == 2
 
 
 @pytest.mark.asyncio
@@ -676,6 +676,7 @@ async def test_manual_pipeline_link_creates_behavioral_assignment_idempotently(
     ).scalars().all()
     assert len(rows) == 1
     first_assignment = rows[0]
+    assert first_assignment.pipeline_id is not None
 
     ensured = await BehavioralAssignmentService(SQLAlchemyBehavioralAssignmentRepository(db_session)).ensure_assignment_for_application(
         candidate_id=candidate.id,
@@ -919,6 +920,20 @@ async def test_behavioral_ai_uses_assignment_for_current_job_template(
         "src.infrastructure.ai.factory.AIServiceFactory.create",
         lambda *_args, **_kwargs: _FakeAIService(),
     )
+    async def _fake_count_matching_credentials(*_args, **_kwargs):
+        return 1
+
+    async def _fake_get_available_credentials(*_args, **_kwargs):
+        return [SimpleNamespace(id=None, provider="google", model_id=None, label="test", api_key="test")]
+
+    monkeypatch.setattr(
+        "src.application.services.ai_provider_credential_service.AIProviderCredentialService.count_matching_credentials",
+        _fake_count_matching_credentials,
+    )
+    monkeypatch.setattr(
+        "src.application.services.ai_provider_credential_service.AIProviderCredentialService.get_available_credentials",
+        _fake_get_available_credentials,
+    )
 
     await _create_active_user(db_session, "behavioral-ai-current-template@test.com", "password123", UserRole.RECRUITER)
     recruiter_headers = await _auth_headers(client, "behavioral-ai-current-template@test.com", "password123")
@@ -960,12 +975,27 @@ async def test_unique_constraint_blocks_duplicate_candidate_job_template_assignm
         created_by=SYSTEM_USER_ID,
     )
     db_session.add(candidate)
+    pipeline_id = uuid4()
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=pipeline_id,
+            candidate_id=candidate.id,
+            job_id=job.id,
+            relationship_status="active",
+            pipeline_status="active",
+            link_status="active",
+            is_terminal=False,
+            pipeline_stage="entry",
+            entered_at=datetime.now(UTC),
+        )
+    )
     await db_session.commit()
 
     first = BehavioralAssessmentAssignmentModel(
         id=uuid4(),
         candidate_id=candidate.id,
         job_id=job.id,
+        pipeline_id=pipeline_id,
         template_id=template.id,
         status="pending",
     )
@@ -973,6 +1003,7 @@ async def test_unique_constraint_blocks_duplicate_candidate_job_template_assignm
         id=uuid4(),
         candidate_id=candidate.id,
         job_id=job.id,
+        pipeline_id=pipeline_id,
         template_id=template.id,
         status="pending",
     )
@@ -1013,13 +1044,25 @@ async def test_integrity_error_race_recovers_existing_assignment(
     original_find = repository.find_assignment
     calls = {"count": 0}
 
-    async def fake_find_assignment(*, candidate_id: UUID, job_id: UUID, template_id: UUID):
+    async def fake_find_assignment(*, candidate_id: UUID, job_id: UUID, template_id: UUID, pipeline_id: UUID | None = None):
         calls["count"] += 1
         if calls["count"] == 1:
             return None
-        return await original_find(candidate_id=candidate_id, job_id=job_id, template_id=template_id)
+        return await original_find(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            template_id=template_id,
+            pipeline_id=pipeline_id,
+        )
 
-    async def fake_create_assignment(*, candidate_id: UUID, job_id: UUID, template_id: UUID, expires_at=None):
+    async def fake_create_assignment(
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        template_id: UUID,
+        pipeline_id: UUID | None = None,
+        expires_at=None,
+    ):
         raise IntegrityError("INSERT", {"candidate_id": str(candidate_id)}, Exception("duplicate key"))
 
     monkeypatch.setattr(repository, "find_assignment", fake_find_assignment)

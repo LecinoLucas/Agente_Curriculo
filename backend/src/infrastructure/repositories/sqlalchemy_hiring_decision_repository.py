@@ -10,7 +10,6 @@ from src.infrastructure.database.models.behavioral_assignment_model import (
     BehavioralAssessmentAssignmentModel,
 )
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
-from src.infrastructure.database.models.collaboration_comments_model import CollaborationCommentModel
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
@@ -40,11 +39,16 @@ class SQLAlchemyHiringDecisionRepository:
         return dict(row) if row is not None else None
 
     async def get_current(self, *, candidate_id: UUID, job_id: UUID) -> CandidateJobHiringDecisionModel | None:
+        pipeline = await self.get_active_pipeline(candidate_id=candidate_id, job_id=job_id)
+        pipeline_id = pipeline["candidate_job_pipeline_id"] if pipeline is not None else None
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(CandidateJobHiringDecisionModel)
             .where(
                 CandidateJobHiringDecisionModel.candidate_id == candidate_id,
                 CandidateJobHiringDecisionModel.job_id == job_id,
+                CandidateJobHiringDecisionModel.pipeline_id == pipeline_id,
                 CandidateJobHiringDecisionModel.decision_status != "superseded",
             )
             .order_by(CandidateJobHiringDecisionModel.created_at.desc(), CandidateJobHiringDecisionModel.id.desc())
@@ -65,12 +69,21 @@ class SQLAlchemyHiringDecisionRepository:
         )
         return list(result.scalars().all())
 
-    async def latest_submitted_scorecard(self, *, candidate_id: UUID, job_id: UUID) -> InterviewScorecardModel | None:
+    async def latest_submitted_scorecard(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID | None,
+    ) -> InterviewScorecardModel | None:
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(InterviewScorecardModel)
             .where(
                 InterviewScorecardModel.candidate_id == candidate_id,
                 InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.pipeline_id == pipeline_id,
                 InterviewScorecardModel.status == "submitted",
             )
             .order_by(InterviewScorecardModel.submitted_at.desc().nullslast(), InterviewScorecardModel.created_at.desc())
@@ -83,13 +96,17 @@ class SQLAlchemyHiringDecisionRepository:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID,
+        pipeline_id: UUID | None,
     ) -> BehavioralAssessmentAssignmentModel | None:
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(BehavioralAssessmentAssignmentModel)
             .where(
                 BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
                 BehavioralAssessmentAssignmentModel.job_id == job_id,
                 BehavioralAssessmentAssignmentModel.template_id == template_id,
+                BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id,
             )
             .order_by(
                 BehavioralAssessmentAssignmentModel.created_at.desc(),
@@ -112,28 +129,30 @@ class SQLAlchemyHiringDecisionRepository:
             .limit(1)
         )
 
-    async def latest_completed_interview(self, *, candidate_id: UUID, job_id: UUID) -> InterviewScheduleModel | None:
+    async def latest_completed_interview(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID | None,
+    ) -> InterviewScheduleModel | None:
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(InterviewScheduleModel)
             .where(
                 InterviewScheduleModel.candidate_id == candidate_id,
                 InterviewScheduleModel.job_id == job_id,
+                InterviewScheduleModel.pipeline_id == pipeline_id,
                 InterviewScheduleModel.status.in_(["completed", "awaiting_feedback"]),
             )
             .order_by(InterviewScheduleModel.scheduled_start.desc().nullslast(), InterviewScheduleModel.created_at.desc())
             .limit(1)
         )
 
-    async def has_manager_feedback(self, *, candidate_id: UUID, job_id: UUID) -> bool:
-        comment_count = await self._session.scalar(
-            sa.select(sa.func.count()).select_from(CollaborationCommentModel).where(
-                CollaborationCommentModel.candidate_id == candidate_id,
-                CollaborationCommentModel.job_id == job_id,
-                CollaborationCommentModel.author_role == "manager",
-            )
-        )
-        if (comment_count or 0) > 0:
-            return True
+    async def has_manager_feedback(self, *, candidate_id: UUID, job_id: UUID, pipeline_id: UUID | None) -> bool:
+        if pipeline_id is None:
+            return False
         scorecard_count = await self._session.scalar(
             sa.select(sa.func.count())
             .select_from(InterviewScorecardModel)
@@ -141,6 +160,7 @@ class SQLAlchemyHiringDecisionRepository:
             .where(
                 InterviewScorecardModel.candidate_id == candidate_id,
                 InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.pipeline_id == pipeline_id,
                 InterviewScorecardModel.status == "submitted",
                 UserModel.role == "manager",
             )

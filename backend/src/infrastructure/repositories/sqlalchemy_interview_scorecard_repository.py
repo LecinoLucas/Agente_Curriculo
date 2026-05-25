@@ -22,16 +22,15 @@ class SQLAlchemyInterviewScorecardRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def has_active_pipeline(self, *, candidate_id: UUID, job_id: UUID) -> bool:
-        return bool(
-            await self._session.scalar(
-                sa.select(sa.literal(True)).where(
-                    CandidateJobPipelineModel.candidate_id == candidate_id,
-                    CandidateJobPipelineModel.job_id == job_id,
-                    CandidateJobPipelineModel.pipeline_status == "active",
-                    CandidateJobPipelineModel.relationship_status == "active",
-                    CandidateJobPipelineModel.is_terminal.is_(False),
-                )
+    async def get_active_pipeline_id(self, *, candidate_id: UUID, job_id: UUID) -> UUID | None:
+        return await self._session.scalar(
+            sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
             )
         )
 
@@ -51,12 +50,16 @@ class SQLAlchemyInterviewScorecardRepository:
         *,
         candidate_id: UUID,
         job_id: UUID,
+        pipeline_id: UUID | None,
         interview_id: UUID | None = None,
         evaluator_id: UUID | None = None,
     ) -> InterviewScorecardModel | None:
+        if pipeline_id is None:
+            return None
         conditions = [
             InterviewScorecardModel.candidate_id == candidate_id,
             InterviewScorecardModel.job_id == job_id,
+            InterviewScorecardModel.pipeline_id == pipeline_id,
         ]
         if interview_id is None:
             conditions.append(InterviewScorecardModel.interview_id.is_(None))
@@ -102,7 +105,15 @@ class SQLAlchemyInterviewScorecardRepository:
     async def flush(self) -> None:
         await self._session.flush()
 
-    async def list_suggested_behavioral_questions(self, *, candidate_id: UUID, job_id: UUID) -> list[str]:
+    async def list_suggested_behavioral_questions(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID | None,
+    ) -> list[str]:
+        if pipeline_id is None:
+            return []
         result = await self._session.execute(
             sa.select(BehavioralAssessmentAIEvaluationModel.suggested_interview_questions_json)
             .join(
@@ -112,6 +123,7 @@ class SQLAlchemyInterviewScorecardRepository:
             .where(
                 BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
                 BehavioralAssessmentAssignmentModel.job_id == job_id,
+                BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id,
                 BehavioralAssessmentAIEvaluationModel.status == "completed",
             )
             .order_by(BehavioralAssessmentAIEvaluationModel.completed_at.desc().nullslast())

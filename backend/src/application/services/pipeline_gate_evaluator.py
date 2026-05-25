@@ -26,6 +26,19 @@ _BLOCKING_INTERVIEW_STATUSES: frozenset[str] = frozenset(
     {"scheduled", "rescheduled", "awaiting_feedback", "cancelled", "no_show"}
 )
 
+# Maps a pipeline stage to the next forward stage that can have gates.
+# Terminal stages (hired, rejected) map to None.
+_NEXT_FORWARD_STAGE: dict[str, str | None] = {
+    "entry": "screening",
+    "screening": "hr_interview",
+    "hr_interview": "technical_interview",
+    "technical_interview": "final",
+    "final": "offer",
+    "offer": "hired",
+    "hired": None,
+    "rejected": None,
+}
+
 
 @dataclass(frozen=True)
 class MissingGate:
@@ -123,33 +136,70 @@ class PipelineGateEvaluator:
             return result
 
         if target_stage == "final":
+            pipeline_id = await self._repository.find_active_pipeline_id(candidate_id, job_id)
             await self._collect_final_gates(
                 result=result,
                 candidate_id=candidate_id,
                 job_id=job_id,
                 job=job,
+                pipeline_id=pipeline_id,
             )
             return result
 
         if target_stage == "offer":
+            pipeline_id = await self._repository.find_active_pipeline_id(candidate_id, job_id)
             await self._collect_offer_gates(
                 result=result,
                 candidate_id=candidate_id,
                 job_id=job_id,
                 job=job,
+                pipeline_id=pipeline_id,
             )
             return result
 
         if target_stage == "hired":
+            pipeline_id = await self._repository.find_active_pipeline_id(candidate_id, job_id)
             await self._collect_hired_gates(
                 result=result,
                 candidate_id=candidate_id,
                 job_id=job_id,
                 job=job,
+                pipeline_id=pipeline_id,
             )
             return result
 
         return result
+
+    async def find_job(self, job_id: UUID) -> JobModel | None:
+        """Load a JobModel for the given job_id (ignores status filter)."""
+        return await self._repository.find_active_job(job_id)
+
+    async def peek_next_stage_gates(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        job: JobModel,
+        current_stage: str,
+    ) -> GateEvaluationResult | None:
+        """Evaluate gates for the natural next stage without attempting a move.
+
+        Returns None when there is no forward stage from current_stage
+        (terminal stages: hired, rejected).  The reason parameter is always
+        None here — rejection-reason gates are excluded from peek results
+        because they require actor input at move time, not at overview time.
+        """
+        target = _NEXT_FORWARD_STAGE.get(current_stage)
+        if target is None:
+            return None
+        return await self.evaluate(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            job=job,
+            current_stage=current_stage,
+            target_stage=target,
+            reason=None,
+        )
 
     # ------------------------------------------------------------------
     # Gate helpers per target stage
@@ -162,6 +212,7 @@ class PipelineGateEvaluator:
         candidate_id: UUID,
         job_id: UUID,
         job: JobModel,
+        pipeline_id: UUID | None,
     ) -> None:
         latest_interview = None
         if bool(job.requires_interview):
@@ -169,6 +220,7 @@ class PipelineGateEvaluator:
                 candidate_id=candidate_id,
                 job_id=job_id,
                 interview_types=_TECHNICAL_INTERVIEW_TYPES,
+                pipeline_id=pipeline_id,
             )
             if latest_interview is None or latest_interview.status != "completed":
                 result.missing_gates.append(
@@ -223,11 +275,13 @@ class PipelineGateEvaluator:
         candidate_id: UUID,
         job_id: UUID,
         job: JobModel,
+        pipeline_id: UUID | None,
     ) -> None:
         if bool(job.requires_behavioral_assessment):
             assignment = await self._repository.find_behavioral_assignment(
                 candidate_id=candidate_id,
                 job_id=job_id,
+                pipeline_id=pipeline_id,
             )
             if assignment is None or assignment.status != "submitted":
                 result.missing_gates.append(
@@ -297,6 +351,7 @@ class PipelineGateEvaluator:
             scorecard = await self._repository.find_latest_submitted_scorecard(
                 candidate_id=candidate_id,
                 job_id=job_id,
+                pipeline_id=pipeline_id,
             )
             if (
                 scorecard is None
@@ -321,6 +376,7 @@ class PipelineGateEvaluator:
             decision = await self._repository.find_active_hiring_decision(
                 candidate_id=candidate_id,
                 job_id=job_id,
+                pipeline_id=pipeline_id,
             )
             if (
                 decision is None
@@ -348,6 +404,7 @@ class PipelineGateEvaluator:
         candidate_id: UUID,
         job_id: UUID,
         job: JobModel,
+        pipeline_id: UUID | None,
     ) -> None:
         # Keep existing behavioral policy gates aligned with prior contract.
         assignment = None
@@ -356,6 +413,7 @@ class PipelineGateEvaluator:
                 candidate_id=candidate_id,
                 job_id=job_id,
                 template_id=job.behavioral_template_id,
+                pipeline_id=pipeline_id,
             )
             if assignment is None or assignment.status != "submitted":
                 result.missing_gates.append(
@@ -402,6 +460,7 @@ class PipelineGateEvaluator:
         decision = await self._repository.find_active_hiring_decision(
             candidate_id=candidate_id,
             job_id=job_id,
+            pipeline_id=pipeline_id,
         )
         if (
             decision is None

@@ -17,6 +17,7 @@ from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralTemplateCompetencyModel,
     BehavioralTemplateQuestionModel,
 )
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.job_model import JobModel
 
 
@@ -38,13 +39,17 @@ class SQLAlchemyBehavioralAssignmentRepository:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID,
+        pipeline_id: UUID | None = None,
     ) -> BehavioralAssessmentAssignmentModel | None:
+        conditions = [
+            BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+            BehavioralAssessmentAssignmentModel.job_id == job_id,
+            BehavioralAssessmentAssignmentModel.template_id == template_id,
+        ]
+        if pipeline_id is not None:
+            conditions.append(BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id)
         return await self._session.scalar(
-            sa.select(BehavioralAssessmentAssignmentModel).where(
-                BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
-                BehavioralAssessmentAssignmentModel.job_id == job_id,
-                BehavioralAssessmentAssignmentModel.template_id == template_id,
-            )
+            sa.select(BehavioralAssessmentAssignmentModel).where(*conditions)
         )
 
     async def create_assignment(
@@ -53,12 +58,14 @@ class SQLAlchemyBehavioralAssignmentRepository:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID,
+        pipeline_id: UUID | None = None,
         expires_at: datetime | None = None,
     ) -> BehavioralAssessmentAssignmentModel:
         assignment = BehavioralAssessmentAssignmentModel(
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=template_id,
+            pipeline_id=pipeline_id,
             expires_at=expires_at,
         )
         self._session.add(assignment)
@@ -106,15 +113,15 @@ class SQLAlchemyBehavioralAssignmentRepository:
         *,
         job_id: UUID,
         candidate_id: UUID,
+        pipeline_id: UUID | None = None,
     ) -> dict[str, Any] | None:
-        result = await self._session.execute(
-            self._summary_stmt()
-            .where(
-                BehavioralAssessmentAssignmentModel.job_id == job_id,
-                BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
-            )
-            .limit(1)
+        stmt = self._summary_stmt().where(
+            BehavioralAssessmentAssignmentModel.job_id == job_id,
+            BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
         )
+        if pipeline_id is not None:
+            stmt = stmt.where(BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id)
+        result = await self._session.execute(stmt.limit(1))
         row = result.mappings().first()
         return dict(row) if row is not None else None
 
@@ -190,6 +197,7 @@ class SQLAlchemyBehavioralAssignmentRepository:
         job_id: UUID,
         candidate_id: UUID,
         template_id: UUID | None = None,
+        pipeline_id: UUID | None = None,
     ) -> BehavioralAssessmentAssignmentModel | None:
         """Get latest assignment for candidate in job, optionally constrained by template."""
         stmt = (
@@ -206,7 +214,21 @@ class SQLAlchemyBehavioralAssignmentRepository:
         )
         if template_id is not None:
             stmt = stmt.where(BehavioralAssessmentAssignmentModel.template_id == template_id)
+        if pipeline_id is not None:
+            stmt = stmt.where(BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id)
         return await self._session.scalar(stmt)
+
+    async def get_active_pipeline_id(self, *, candidate_id: UUID, job_id: UUID) -> UUID | None:
+        return await self._session.scalar(
+            sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+            )
+        )
 
     @staticmethod
     def _summary_stmt() -> sa.Select:

@@ -67,6 +67,9 @@ async def _seed_candidate_job(db_session: AsyncSession) -> tuple[UUID, UUID]:
     )
     assert pipeline is not None
     assert pipeline.current_analysis_id is not None
+    if pipeline.candidate_job_pipeline_id is None:
+        pipeline.candidate_job_pipeline_id = uuid4()
+        await db_session.flush()
     now = datetime.now(UTC)
     db_session.add(
         CandidateJobScoreModel(
@@ -107,10 +110,17 @@ async def _seed_candidate_job(db_session: AsyncSession) -> tuple[UUID, UUID]:
 async def _add_completed_interview(db_session: AsyncSession, *, job_id: UUID, candidate_id: UUID) -> InterviewScheduleModel:
     from datetime import timedelta
     now = datetime.now(UTC)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
     interview = InterviewScheduleModel(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         title="Entrevista técnica",
         interview_type="technical",
         status="completed",
@@ -123,10 +133,17 @@ async def _add_completed_interview(db_session: AsyncSession, *, job_id: UUID, ca
 
 
 async def _add_submitted_scorecard(db_session: AsyncSession, *, job_id: UUID, candidate_id: UUID) -> InterviewScorecardModel:
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
     scorecard = InterviewScorecardModel(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         status="submitted",
         final_recommendation="yes",
         overall_notes="Scorecard humano favorável.",

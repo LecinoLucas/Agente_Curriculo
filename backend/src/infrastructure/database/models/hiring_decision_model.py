@@ -43,7 +43,6 @@ class CandidateJobHiringDecisionModel(Base):
     )
     pipeline_id: Mapped[UUID | None] = mapped_column(
         sa.UUID(as_uuid=True),
-        sa.ForeignKey("candidate_job_pipeline.candidate_job_pipeline_id", ondelete="SET NULL"),
     )
     decided_by: Mapped[UUID | None] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"))
     decision_status: Mapped[str] = mapped_column(sa.String(20), nullable=False, server_default="draft")
@@ -91,12 +90,13 @@ class CandidateJobHiringDecisionModel(Base):
             name="ck_candidate_job_hiring_decisions_reason_code",
         ),
         sa.Index(
-            "uq_candidate_job_hiring_decision_current",
+            "uq_candidate_job_hiring_decision_current_pipeline",
+            "pipeline_id",
             "candidate_id",
             "job_id",
             unique=True,
-            postgresql_where=sa.text("decision_status <> 'superseded'"),
-            sqlite_where=sa.text("decision_status <> 'superseded'"),
+            postgresql_where=sa.text("decision_status <> 'superseded' AND pipeline_id IS NOT NULL"),
+            sqlite_where=sa.text("decision_status <> 'superseded' AND pipeline_id IS NOT NULL"),
         ),
         sa.Index("idx_candidate_job_hiring_decisions_job_candidate", "job_id", "candidate_id"),
         sa.Index("idx_candidate_job_hiring_decisions_status", "decision_status"),

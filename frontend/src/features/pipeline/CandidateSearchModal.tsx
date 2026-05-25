@@ -37,6 +37,13 @@ export function CandidateSearchModal({
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [previousProcessPrompt, setPreviousProcessPrompt] = useState<{
+    candidateId: string;
+    candidateName: string;
+    lastStage: string;
+    result: string;
+    closedAt: string;
+  } | null>(null);
 
   // FIX #3: Use a ref to track the latest request version and avoid race conditions
   const fetchVersionRef = useRef(0);
@@ -83,6 +90,7 @@ export function CandidateSearchModal({
       setSummaries([]);
       setAddedIds(new Set());
       setErrors({});
+      setPreviousProcessPrompt(null);
       // Reset fetch version so stale requests from previous session are ignored
       fetchVersionRef.current = 0;
     }
@@ -113,10 +121,34 @@ export function CandidateSearchModal({
     [summaries, rankedIds, addedIds, addingIds],
   );
 
-  async function handleAdd(candidateId: string) {
+  async function hasPreviousClosedProcess(candidateId: string, candidateName: string) {
+    try {
+      const history = await pipelineService.getCandidateHistory(activeJobId, candidateId);
+      if (history.status === "active") return false;
+      setPreviousProcessPrompt({
+        candidateId,
+        candidateName,
+        lastStage: history.current_stage,
+        result: history.status === "rejected" ? "Não selecionado" : history.status,
+        closedAt: history.updated_at,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleAdd(
+    candidateId: string,
+    candidateName: string,
+    options: { skipPreviousCheck?: boolean } = {},
+  ) {
     setAddingIds((prev) => new Set(prev).add(candidateId));
     setErrors((prev) => ({ ...prev, [candidateId]: "" }));
     try {
+      if (!options.skipPreviousCheck && await hasPreviousClosedProcess(candidateId, candidateName)) {
+        return;
+      }
       const linkResult = await pipelineService.addCandidateToJob(candidateId, {
         job_id: activeJobId,
         initial_stage: "entry",
@@ -128,6 +160,7 @@ export function CandidateSearchModal({
         if (analysisToast.tone === "warning") toast.warning(analysisToast.message);
         if (analysisToast.tone === "error") toast.error(analysisToast.message);
       }
+      setPreviousProcessPrompt(null);
       setAddedIds((prev) => new Set(prev).add(candidateId));
       await onAdded();
     } catch (err: unknown) {
@@ -148,6 +181,54 @@ export function CandidateSearchModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      {previousProcessPrompt ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-2xl">
+            <h3 className="text-base font-semibold text-[hsl(var(--text))]">
+              Este candidato já participou desta vaga anteriormente.
+            </h3>
+            <div className="mt-4 space-y-2 text-sm text-[hsl(var(--text-muted))]">
+              <p>Última etapa: {previousProcessPrompt.lastStage}</p>
+              <p>Último resultado: {previousProcessPrompt.result}</p>
+              <p>Encerrado em: {new Date(previousProcessPrompt.closedAt).toLocaleDateString("pt-BR")}</p>
+              <p>
+                Ao iniciar novo processo, entrevistas, scorecards e decisões anteriores
+                permanecem no histórico, mas não liberam etapas do novo processo.
+              </p>
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+                onClick={() => setPreviousProcessPrompt(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+                onClick={() => {
+                  onOpenCandidate?.(previousProcessPrompt.candidateId);
+                  setPreviousProcessPrompt(null);
+                }}
+              >
+                Ver histórico anterior
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-sm font-medium text-white transition hover:bg-[hsl(var(--primary))]/90"
+                onClick={() => void handleAdd(
+                  previousProcessPrompt.candidateId,
+                  previousProcessPrompt.candidateName,
+                  { skipPreviousCheck: true },
+                )}
+              >
+                Iniciar novo processo
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-2xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="shrink-0 border-b border-[hsl(var(--border))]/30 px-6 py-4">
@@ -216,7 +297,7 @@ export function CandidateSearchModal({
                       isAdding={addingIds.has(entry.candidate_id)}
                       isAdded={addedIds.has(entry.candidate_id)}
                       error={errors[entry.candidate_id]}
-                      onAdd={() => void handleAdd(entry.candidate_id)}
+                      onAdd={() => void handleAdd(entry.candidate_id, entry.candidate_name)}
                     />
                   ))}
                 </div>
@@ -257,7 +338,7 @@ export function CandidateSearchModal({
                       isAdding={addingIds.has(candidate.id)}
                       isAdded={addedIds.has(candidate.id)}
                       error={errors[candidate.id]}
-                      onAdd={() => void handleAdd(candidate.id)}
+                      onAdd={() => void handleAdd(candidate.id, candidate.full_name)}
                       onOpen={() => onOpenCandidate?.(candidate.id)}
                     />
                   ))}

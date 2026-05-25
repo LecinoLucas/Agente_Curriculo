@@ -27,6 +27,7 @@ class DecisionSummaryService:
     async def get_summary(self, *, candidate_id: UUID, job_id: UUID) -> CandidateDecisionSummaryResponse:
         job = await self._repository.get_job(job_id)
         pipeline = await self._repository.get_active_pipeline(candidate_id=candidate_id, job_id=job_id)
+        pipeline_id = pipeline["candidate_job_pipeline_id"] if pipeline is not None else None
         latest_analysis = await self._repository.get_latest_analysis(candidate_id=candidate_id, job_id=job_id)
 
         score = None
@@ -73,11 +74,24 @@ class DecisionSummaryService:
             candidate_id,
             job_id,
             requires_behavioral_assessment=requires_behavioral,
+            pipeline_id=pipeline_id,
         )
-        scorecard_model = await self._repository.get_latest_scorecard(candidate_id=candidate_id, job_id=job_id)
-        interview_model = await self._repository.get_latest_interview(candidate_id=candidate_id, job_id=job_id)
+        scorecard_model = await self._repository.get_latest_scorecard(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=pipeline_id,
+        )
+        interview_model = await self._repository.get_latest_interview(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=pipeline_id,
+        )
         scorecard = self._scorecard_response(scorecard_model)
-        has_manager = await self._repository.has_manager_feedback(candidate_id=candidate_id, job_id=job_id)
+        has_manager = await self._repository.has_manager_feedback(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=pipeline_id,
+        )
         readiness = self._readiness(
             active_job_decision,
             behavioral,
@@ -117,6 +131,7 @@ class DecisionSummaryService:
         job_id: UUID,
         *,
         requires_behavioral_assessment: bool,
+        pipeline_id: UUID | None,
     ) -> DecisionSummaryBehavioralAssessmentResponse:
         if not requires_behavioral_assessment or template_id is None:
             return DecisionSummaryBehavioralAssessmentResponse(template_required=False)
@@ -125,6 +140,7 @@ class DecisionSummaryService:
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=template_id,
+            pipeline_id=pipeline_id,
         )
         question_count = await self._repository.count_template_questions(template_id)
         if assignment is None:

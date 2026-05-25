@@ -143,17 +143,33 @@ export function usePipelineTransitionBlockedHandler(): UsePipelineTransitionBloc
  * - open_interview / open_scorecard       → /candidatos/:id?tab=interviews
  * - open_behavioral_assessment            → /candidatos/:id?tab=assessments
  * - open_behavioral_ai                    → /candidatos/:id?tab=assessments&focus=behavioral_ai
- * - open_decision / add_reason            → /candidatos/:id?tab=workflow
+ * - open_decision                         → /candidatos/:id?tab=workflow
+ * - add_reason (when onAddReason given)   → calls onAddReason(candidateId) instead of navigating
+ * - add_reason (no onAddReason)           → /candidatos/:id?tab=workflow
  * - open_profile or any unknown action    → handled by the modal's fallback
  *
  * `onAfterNavigate` runs only when the resolver fires (i.e. the action is
  * mapped). Hosts typically use it to close their local modal state.
+ *
+ * `onAddReason` lets surfaces intercept the `add_reason` gate action locally
+ * (e.g., open a PipelineRejectionReasonModal) instead of navigating to the
+ * workflow tab. When provided, it receives the candidateId and the resolver
+ * returns true without navigating.
  */
-export function usePipelineGateActionResolver(onAfterNavigate?: () => void) {
+export function usePipelineGateActionResolver(
+  onAfterNavigate?: () => void,
+  onAddReason?: (candidateId: string) => void,
+) {
   const navigate = useNavigate();
 
   return useCallback(
     (action: GateAction): boolean => {
+      if (action.action === "add_reason" && onAddReason) {
+        onAddReason(action.candidateId);
+        onAfterNavigate?.();
+        return true;
+      }
+
       const tabByAction: Record<string, string> = {
         open_interview: "interviews",
         open_scorecard: "interviews",
@@ -178,6 +194,6 @@ export function usePipelineGateActionResolver(onAfterNavigate?: () => void) {
       onAfterNavigate?.();
       return true;
     },
-    [navigate, onAfterNavigate],
+    [navigate, onAfterNavigate, onAddReason],
   );
 }

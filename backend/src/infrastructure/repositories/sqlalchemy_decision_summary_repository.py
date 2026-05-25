@@ -17,7 +17,6 @@ from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralTemplateQuestionModel,
 )
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
-from src.infrastructure.database.models.collaboration_comments_model import CollaborationCommentModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
 from src.infrastructure.database.models.job_model import JobModel
@@ -120,13 +119,17 @@ class SQLAlchemyDecisionSummaryRepository:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID,
+        pipeline_id: UUID | None,
     ) -> BehavioralAssessmentAssignmentModel | None:
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(BehavioralAssessmentAssignmentModel)
             .where(
                 BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
                 BehavioralAssessmentAssignmentModel.job_id == job_id,
                 BehavioralAssessmentAssignmentModel.template_id == template_id,
+                BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id,
             )
             .order_by(
                 BehavioralAssessmentAssignmentModel.created_at.desc(),
@@ -169,7 +172,15 @@ class SQLAlchemyDecisionSummaryRepository:
             .limit(1)
         )
 
-    async def get_latest_scorecard(self, *, candidate_id: UUID, job_id: UUID) -> InterviewScorecardModel | None:
+    async def get_latest_scorecard(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID | None,
+    ) -> InterviewScorecardModel | None:
+        if pipeline_id is None:
+            return None
         status_rank = sa.case((InterviewScorecardModel.status == "submitted", 0), else_=1)
         return await self._session.scalar(
             sa.select(InterviewScorecardModel)
@@ -177,6 +188,7 @@ class SQLAlchemyDecisionSummaryRepository:
             .where(
                 InterviewScorecardModel.candidate_id == candidate_id,
                 InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.pipeline_id == pipeline_id,
             )
             .order_by(
                 status_rank,
@@ -186,7 +198,15 @@ class SQLAlchemyDecisionSummaryRepository:
             .limit(1)
         )
 
-    async def get_latest_interview(self, *, candidate_id: UUID, job_id: UUID) -> InterviewScheduleModel | None:
+    async def get_latest_interview(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID | None,
+    ) -> InterviewScheduleModel | None:
+        if pipeline_id is None:
+            return None
         status_rank = sa.case(
             (InterviewScheduleModel.status == "awaiting_feedback", 0),
             (InterviewScheduleModel.status.in_(("scheduled", "rescheduled")), 1),
@@ -198,6 +218,7 @@ class SQLAlchemyDecisionSummaryRepository:
             .where(
                 InterviewScheduleModel.candidate_id == candidate_id,
                 InterviewScheduleModel.job_id == job_id,
+                InterviewScheduleModel.pipeline_id == pipeline_id,
             )
             .order_by(
                 status_rank,
@@ -207,22 +228,20 @@ class SQLAlchemyDecisionSummaryRepository:
             .limit(1)
         )
 
-    async def has_manager_feedback(self, *, candidate_id: UUID, job_id: UUID) -> bool:
-        has_comment = sa.exists().where(
-            CollaborationCommentModel.candidate_id == candidate_id,
-            CollaborationCommentModel.job_id == job_id,
-            CollaborationCommentModel.author_role == "manager",
-        )
+    async def has_manager_feedback(self, *, candidate_id: UUID, job_id: UUID, pipeline_id: UUID | None) -> bool:
+        if pipeline_id is None:
+            return False
         has_scorecard = sa.exists(
             sa.select(InterviewScorecardModel.id)
             .join(UserModel, UserModel.id == InterviewScorecardModel.evaluator_id)
             .where(
                 InterviewScorecardModel.candidate_id == candidate_id,
                 InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.pipeline_id == pipeline_id,
                 InterviewScorecardModel.status == "submitted",
                 UserModel.role == "manager",
             )
         )
         return bool(
-            await self._session.scalar(sa.select(sa.or_(has_comment, has_scorecard)))
+            await self._session.scalar(sa.select(has_scorecard))
         )

@@ -34,6 +34,9 @@ class BehavioralAssessmentAssignmentModel(Base):
         sa.ForeignKey("jobs.id", ondelete="CASCADE"),
         nullable=False,
     )
+    pipeline_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+    )
     template_id: Mapped[UUID] = mapped_column(
         sa.UUID(as_uuid=True),
         sa.ForeignKey("behavioral_assessment_templates.id", ondelete="RESTRICT"),
@@ -67,14 +70,10 @@ class BehavioralAssessmentAssignmentModel(Base):
             f"status IN ({BEHAVIORAL_ASSIGNMENT_STATUSES})",
             name="ck_behavioral_assessment_assignments_status",
         ),
-        sa.UniqueConstraint(
-            "candidate_id",
-            "job_id",
-            "template_id",
-            name="uq_behavioral_assignment_candidate_job_template",
-        ),
+        sa.UniqueConstraint("pipeline_id", "template_id", name="uq_behavioral_assignment_pipeline_template"),
         sa.Index("idx_behavioral_assignments_candidate_status", "candidate_id", "status"),
         sa.Index("idx_behavioral_assignments_job_candidate", "job_id", "candidate_id"),
+        sa.Index("idx_behavioral_assignments_pipeline", "pipeline_id"),
     )
 
 

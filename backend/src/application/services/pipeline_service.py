@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import UUID, NAMESPACE_URL, uuid5
+from uuid import UUID
 
 import sqlalchemy as sa
 import structlog
@@ -23,7 +23,6 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
-    _candidate_job_pipeline_key,
 )
 from src.observability.domain_events import DomainEvent, DomainEventType, publish_domain_event
 from src.application.services.behavioral_assignment_service import BehavioralAssignmentService
@@ -570,7 +569,7 @@ class PipelineService:
                 f"Stage was modified concurrently (expected '{from_stage}'). Please retry."
             )
 
-        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        pipeline_id = entry.candidate_job_pipeline_id
         # R08: count prior events with same prefix so A→B→A→B → 4 events, not 2.
         sequence = await _compute_event_sequence(
             self._repository,
@@ -700,7 +699,7 @@ class PipelineService:
                 moved_by=moved_by,
                 updated_at=now,
             )
-        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        pipeline_id = saved_row["pipeline_id"]
         _added_from_stage = existing_entry.pipeline_stage if existing_entry else None
         _added_sequence = await _compute_event_sequence(
             self._repository,
@@ -743,6 +742,7 @@ class PipelineService:
                 job_id=body.job_id,
                 requires_behavioral_assessment=bool(job.requires_behavioral_assessment),
                 template_id=job.behavioral_template_id,
+                pipeline_id=pipeline_id,
             )
 
         return AddCandidateToJobResponse(
@@ -796,7 +796,7 @@ class PipelineService:
             if source_row is None:
                 raise PipelineEntryNotFoundError
 
-            source_pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.from_job_id)
+            source_pipeline_id = source_entry.candidate_job_pipeline_id
             _src_seq = await _compute_event_sequence(
                 self._repository,
                 candidate_id=candidate_id,
@@ -852,7 +852,7 @@ class PipelineService:
                     moved_by=moved_by,
                     updated_at=now,
                 )
-            dest_pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.to_job_id)
+            dest_pipeline_id = destination_row["pipeline_id"]
             _dest_from_stage = destination_any_entry.pipeline_stage if destination_any_entry is not None else None
             _dest_seq = await _compute_event_sequence(
                 self._repository,
@@ -900,6 +900,7 @@ class PipelineService:
                 job_id=body.to_job_id,
                 requires_behavioral_assessment=bool(to_job.requires_behavioral_assessment),
                 template_id=to_job.behavioral_template_id,
+                pipeline_id=dest_pipeline_id,
             )
 
         await publish_domain_event(
@@ -968,7 +969,7 @@ class PipelineService:
                 "Não foi possível reabrir a candidatura. Recarregue e tente novamente."
             )
 
-        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=body.job_id)
+        pipeline_id = saved_row["pipeline_id"]
         _reconsider_seq = await _compute_event_sequence(
             self._repository,
             candidate_id=candidate_id,
@@ -1012,6 +1013,7 @@ class PipelineService:
                 job_id=body.job_id,
                 requires_behavioral_assessment=bool(job.requires_behavioral_assessment),
                 template_id=job.behavioral_template_id,
+                pipeline_id=pipeline_id,
             )
 
         return ReconsiderCandidateResponse(
@@ -1050,7 +1052,7 @@ class PipelineService:
         if updated is None:
             raise PipelineEntryNotFoundError
 
-        pipeline_id = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
+        pipeline_id = entry.candidate_job_pipeline_id
         _removed_seq = await _compute_event_sequence(
             self._repository,
             candidate_id=candidate_id,
@@ -1195,6 +1197,7 @@ class PipelineService:
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=job.behavioral_template_id,
+            pipeline_id=await self._repository.find_active_pipeline_id(candidate_id, job_id),
         )
         if assignment is None or assignment.status != "submitted":
             raise PipelineDecisionGateBlockedError(

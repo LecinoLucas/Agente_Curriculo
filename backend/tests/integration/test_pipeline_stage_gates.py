@@ -177,6 +177,20 @@ async def _force_stage(
     await db_session.commit()
 
 
+async def _active_pipeline_id(db_session: AsyncSession, *, candidate_id: UUID, job_id: UUID) -> UUID:
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+            CandidateJobPipelineModel.relationship_status == "active",
+            CandidateJobPipelineModel.is_terminal.is_(False),
+            CandidateJobPipelineModel.terminated_at.is_(None),
+        )
+    )
+    assert pipeline_id is not None
+    return pipeline_id
+
+
 async def _add_interview(
     db_session: AsyncSession,
     *,
@@ -186,10 +200,17 @@ async def _add_interview(
     status: str,
 ) -> InterviewScheduleModel:
     now = datetime.now(UTC)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
     interview = InterviewScheduleModel(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         title=f"Entrevista {interview_type}",
         interview_type=interview_type,
         status=status,
@@ -211,10 +232,17 @@ async def _add_scorecard(
     final_recommendation: str | None = "yes",
 ) -> InterviewScorecardModel:
     now = datetime.now(UTC)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
     scorecard = InterviewScorecardModel(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         interview_id=interview_id,
         status=status,
         final_recommendation=final_recommendation,
@@ -282,11 +310,18 @@ async def _add_behavioral_assignment(
     same (candidate, job, template), update its status; otherwise insert.
     """
     now = datetime.now(UTC)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
     existing = await db_session.scalar(
         sa.select(BehavioralAssessmentAssignmentModel).where(
             BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
             BehavioralAssessmentAssignmentModel.job_id == job_id,
             BehavioralAssessmentAssignmentModel.template_id == template_id,
+            BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id,
         )
     )
     if existing is not None:
@@ -300,6 +335,7 @@ async def _add_behavioral_assignment(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         template_id=template_id,
         status=status,
         assigned_at=now,
@@ -344,10 +380,17 @@ async def _add_hiring_decision(
     decision_outcome: str = "hire",
 ) -> CandidateJobHiringDecisionModel:
     now = datetime.now(UTC)
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
     decision = CandidateJobHiringDecisionModel(
         id=uuid4(),
         candidate_id=candidate_id,
         job_id=job_id,
+        pipeline_id=pipeline_id,
         decision_status=decision_status,
         decision_outcome=decision_outcome,
         reason_code="strong_fit",
@@ -384,6 +427,122 @@ async def _setup_admin(db_session: AsyncSession, client: AsyncClient) -> tuple[U
 # ---------------------------------------------------------------------------
 # A) Final stage gates — technical interview + scorecard
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reconsidered_candidate_starts_clean_cycle_for_operational_gates(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_recruiter(db_session, client)
+    template_id = await _add_behavioral_template(db_session)
+    job_id = await _create_job(
+        client,
+        headers,
+        db_session,
+        requires_interview=True,
+        requires_scorecard=True,
+        requires_behavioral_assessment=True,
+        requires_behavioral_ai_evaluation=True,
+        behavioral_template_id=template_id,
+    )
+    candidate_id = await _create_candidate(client, headers, "Cycle", f"cycle-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    old_pipeline_id = await _active_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
+
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    interview = await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="completed",
+    )
+    await _add_scorecard(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_id=interview.id,
+        status="submitted",
+        final_recommendation="yes",
+    )
+    assignment = await _add_behavioral_assignment(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        template_id=template_id,
+        status="submitted",
+    )
+    await _add_ai_evaluation(db_session, assignment=assignment, status="completed")
+    await _add_hiring_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        decision_status="submitted",
+        decision_outcome="hire",
+    )
+
+    rejected = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "rejected", "notes": "", "reason": "Encerramento do ciclo anterior."},
+        headers=headers,
+    )
+    assert rejected.status_code == 200, rejected.text
+    reconsidered = await client.post(
+        f"/api/v1/pipeline/{candidate_id}/reconsider-job",
+        json={"job_id": str(job_id), "initial_stage": "entry", "reason": "Novo processo aprovado."},
+        headers=headers,
+    )
+    assert reconsidered.status_code == 200, reconsidered.text
+    new_pipeline_id = await _active_pipeline_id(db_session, candidate_id=candidate_id, job_id=job_id)
+    assert new_pipeline_id != old_pipeline_id
+
+    old_artifacts = await db_session.execute(
+        sa.select(
+            InterviewScheduleModel.pipeline_id,
+            InterviewScorecardModel.pipeline_id,
+            BehavioralAssessmentAssignmentModel.pipeline_id,
+            CandidateJobHiringDecisionModel.pipeline_id,
+        )
+        .select_from(InterviewScheduleModel)
+        .join(InterviewScorecardModel, InterviewScorecardModel.interview_id == InterviewScheduleModel.id)
+        .join(BehavioralAssessmentAssignmentModel, BehavioralAssessmentAssignmentModel.id == assignment.id)
+        .join(CandidateJobHiringDecisionModel, CandidateJobHiringDecisionModel.candidate_id == candidate_id)
+        .where(InterviewScheduleModel.id == interview.id)
+    )
+    row = old_artifacts.first()
+    assert row is not None
+    assert tuple(row) == (old_pipeline_id, old_pipeline_id, old_pipeline_id, old_pipeline_id)
+
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    final_resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "final", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert final_resp.status_code == 409, final_resp.text
+    final_codes = {gate["code"] for gate in final_resp.json()["missing_gates"]}
+    assert {"technical_interview_not_completed", "scorecard_not_submitted"} <= final_codes
+
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="final")
+    offer_resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "offer", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert offer_resp.status_code == 409, offer_resp.text
+    offer_codes = {gate["code"] for gate in offer_resp.json()["missing_gates"]}
+    assert {"behavioral_assessment_pending", "scorecard_not_submitted"} <= offer_codes
+
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="offer")
+    hired_resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "hired", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert hired_resp.status_code == 409, hired_resp.text
+    hired_codes = {gate["code"] for gate in hired_resp.json()["missing_gates"]}
+    assert "final_decision_not_submitted" in hired_codes
 
 
 @pytest.mark.asyncio

@@ -163,14 +163,18 @@ class SQLAlchemyPipelineRepository:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID,
+        pipeline_id: UUID | None = None,
     ) -> BehavioralAssessmentAssignmentModel | None:
+        conditions = [
+            BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+            BehavioralAssessmentAssignmentModel.job_id == job_id,
+            BehavioralAssessmentAssignmentModel.template_id == template_id,
+        ]
+        if pipeline_id is not None:
+            conditions.append(BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id)
         return await self._session.scalar(
             sa.select(BehavioralAssessmentAssignmentModel)
-            .where(
-                BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
-                BehavioralAssessmentAssignmentModel.job_id == job_id,
-                BehavioralAssessmentAssignmentModel.template_id == template_id,
-            )
+            .where(*conditions)
             .order_by(
                 BehavioralAssessmentAssignmentModel.created_at.desc(),
                 BehavioralAssessmentAssignmentModel.id.desc(),
@@ -216,6 +220,18 @@ class SQLAlchemyPipelineRepository:
         )
         return self._build_entry_namespace(result.mappings().first())
 
+    async def find_active_pipeline_id(self, candidate_id: UUID, job_id: UUID) -> UUID | None:
+        return await self._session.scalar(
+            sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+            )
+        )
+
     async def find_active_entry_by_candidate(self, candidate_id: UUID) -> CandidateJobPipelineModel | None:
         table = self._entry_table()
         result = await self._session.execute(
@@ -250,6 +266,8 @@ class SQLAlchemyPipelineRepository:
             .where(
                 BehavioralAssessmentAssignmentModel.candidate_id == CandidateJobPipelineModel.candidate_id,
                 BehavioralAssessmentAssignmentModel.job_id == CandidateJobPipelineModel.job_id,
+                BehavioralAssessmentAssignmentModel.pipeline_id
+                == CandidateJobPipelineModel.candidate_job_pipeline_id,
             )
             .order_by(
                 BehavioralAssessmentAssignmentModel.created_at.desc(),
@@ -293,6 +311,7 @@ class SQLAlchemyPipelineRepository:
             .where(
                 InterviewScheduleModel.candidate_id == CandidateJobPipelineModel.candidate_id,
                 InterviewScheduleModel.job_id == CandidateJobPipelineModel.job_id,
+                InterviewScheduleModel.pipeline_id == CandidateJobPipelineModel.candidate_job_pipeline_id,
             )
             .order_by(
                 InterviewScheduleModel.scheduled_start.desc().nullslast(),
@@ -308,6 +327,7 @@ class SQLAlchemyPipelineRepository:
             .where(
                 InterviewScheduleModel.candidate_id == CandidateJobPipelineModel.candidate_id,
                 InterviewScheduleModel.job_id == CandidateJobPipelineModel.job_id,
+                InterviewScheduleModel.pipeline_id == CandidateJobPipelineModel.candidate_job_pipeline_id,
                 InterviewScheduleModel.status.in_(("scheduled", "rescheduled")),
             )
             .order_by(
@@ -324,6 +344,7 @@ class SQLAlchemyPipelineRepository:
             .where(
                 InterviewScorecardModel.candidate_id == CandidateJobPipelineModel.candidate_id,
                 InterviewScorecardModel.job_id == CandidateJobPipelineModel.job_id,
+                InterviewScorecardModel.pipeline_id == CandidateJobPipelineModel.candidate_job_pipeline_id,
             )
             .order_by(
                 InterviewScorecardModel.submitted_at.desc().nullslast(),
@@ -447,6 +468,7 @@ class SQLAlchemyPipelineRepository:
                 updated_at=updated_at,
             )
             .returning(
+                CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
                 CandidateJobPipelineModel.candidate_id,
                 CandidateJobPipelineModel.job_id,
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
@@ -574,7 +596,7 @@ class SQLAlchemyPipelineRepository:
             link_status=status,
             updated_at=updated_at,
         )
-        pipeline_key = _candidate_job_pipeline_key(candidate_id=candidate_id, job_id=job_id)
+        pipeline_key = uuid4()
         result = await self._session.execute(
             sa.insert(CandidateJobPipelineModel)
             .values(
@@ -652,7 +674,25 @@ class SQLAlchemyPipelineRepository:
         status: str,
         moved_by: UUID | None,
         updated_at: datetime,
+        resume_version_id: UUID | None = None,
     ) -> dict | None:
+        update_values = {
+            "candidate_job_pipeline_id": uuid4(),
+            "pipeline_stage": stage,
+            "link_status": status,
+            "pipeline_status": "active",
+            "relationship_status": "active",
+            "is_terminal": False,
+            "terminated_at": None,
+            "termination_reason": None,
+            "current_analysis_id": None,
+            "source": "manual",
+            "entered_at": updated_at,
+            "last_moved_by": moved_by,
+            "updated_at": updated_at,
+        }
+        if resume_version_id is not None:
+            update_values["resume_version_id"] = resume_version_id
         result = await self._session.execute(
             sa.update(CandidateJobPipelineModel)
             .where(
@@ -664,24 +704,15 @@ class SQLAlchemyPipelineRepository:
                     CandidateJobPipelineModel.terminated_at.is_not(None),
                 ),
             )
-            .values(
-                pipeline_stage=stage,
-                link_status=status,
-                pipeline_status="active",
-                relationship_status="active",
-                is_terminal=False,
-                terminated_at=None,
-                termination_reason=None,
-                source="manual",
-                entered_at=updated_at,
-                last_moved_by=moved_by,
-                updated_at=updated_at,
-            )
+            .values(**update_values)
             .returning(
+                CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
                 CandidateJobPipelineModel.candidate_id,
                 CandidateJobPipelineModel.job_id,
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
                 CandidateJobPipelineModel.link_status.label("status"),
+                CandidateJobPipelineModel.current_analysis_id,
+                CandidateJobPipelineModel.resume_version_id,
                 CandidateJobPipelineModel.updated_at,
             )
         )
@@ -718,6 +749,7 @@ class SQLAlchemyPipelineRepository:
                 updated_at=updated_at,
             )
             .returning(
+                CandidateJobPipelineModel.candidate_job_pipeline_id.label("pipeline_id"),
                 CandidateJobPipelineModel.candidate_id,
                 CandidateJobPipelineModel.job_id,
                 CandidateJobPipelineModel.pipeline_stage.label("stage"),
@@ -893,13 +925,17 @@ class SQLAlchemyPipelineRepository:
         candidate_id: UUID,
         job_id: UUID,
         interview_types: tuple[str, ...],
+        pipeline_id: UUID | None,
     ) -> InterviewScheduleModel | None:
         """Latest non-cancelled interview matching candidate+job+any of the given types."""
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(InterviewScheduleModel)
             .where(
                 InterviewScheduleModel.candidate_id == candidate_id,
                 InterviewScheduleModel.job_id == job_id,
+                InterviewScheduleModel.pipeline_id == pipeline_id,
                 InterviewScheduleModel.interview_type.in_(interview_types),
             )
             .order_by(
@@ -931,12 +967,16 @@ class SQLAlchemyPipelineRepository:
         *,
         candidate_id: UUID,
         job_id: UUID,
+        pipeline_id: UUID | None,
     ) -> InterviewScorecardModel | None:
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(InterviewScorecardModel)
             .where(
                 InterviewScorecardModel.candidate_id == candidate_id,
                 InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.pipeline_id == pipeline_id,
                 InterviewScorecardModel.status == "submitted",
             )
             .order_by(
@@ -952,13 +992,17 @@ class SQLAlchemyPipelineRepository:
         *,
         candidate_id: UUID,
         job_id: UUID,
+        pipeline_id: UUID | None,
     ) -> CandidateJobHiringDecisionModel | None:
         """Latest hiring decision that has not been superseded for candidate+job."""
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(CandidateJobHiringDecisionModel)
             .where(
                 CandidateJobHiringDecisionModel.candidate_id == candidate_id,
                 CandidateJobHiringDecisionModel.job_id == job_id,
+                CandidateJobHiringDecisionModel.pipeline_id == pipeline_id,
                 CandidateJobHiringDecisionModel.decision_status != "superseded",
             )
             .order_by(
@@ -973,13 +1017,17 @@ class SQLAlchemyPipelineRepository:
         *,
         candidate_id: UUID,
         job_id: UUID,
+        pipeline_id: UUID | None,
     ) -> BehavioralAssessmentAssignmentModel | None:
         """Latest behavioral assignment for candidate+job (any template)."""
+        if pipeline_id is None:
+            return None
         return await self._session.scalar(
             sa.select(BehavioralAssessmentAssignmentModel)
             .where(
                 BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
                 BehavioralAssessmentAssignmentModel.job_id == job_id,
+                BehavioralAssessmentAssignmentModel.pipeline_id == pipeline_id,
             )
             .order_by(
                 BehavioralAssessmentAssignmentModel.created_at.desc(),

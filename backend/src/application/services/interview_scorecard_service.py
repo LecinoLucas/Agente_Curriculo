@@ -33,11 +33,17 @@ class InterviewScorecardService:
         interview_id: UUID | None = None,
         evaluator_id: UUID | None = None,
     ) -> InterviewScorecardEnvelopeResponse:
-        await self._assert_active_pipeline(candidate_id=candidate_id, job_id=job_id)
-        await self._validate_interview(candidate_id=candidate_id, job_id=job_id, interview_id=interview_id)
+        pipeline_id = await self._assert_active_pipeline(candidate_id=candidate_id, job_id=job_id)
+        await self._validate_interview(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            interview_id=interview_id,
+            pipeline_id=pipeline_id,
+        )
         scorecard = await self._repository.find_for_candidate_job(
             candidate_id=candidate_id,
             job_id=job_id,
+            pipeline_id=pipeline_id,
             interview_id=interview_id,
             evaluator_id=evaluator_id,
         )
@@ -46,6 +52,7 @@ class InterviewScorecardService:
             suggested_behavioral_questions=await self._repository.list_suggested_behavioral_questions(
                 candidate_id=candidate_id,
                 job_id=job_id,
+                pipeline_id=pipeline_id,
             ),
         )
 
@@ -57,12 +64,18 @@ class InterviewScorecardService:
         evaluator_id: UUID | None,
         body: InterviewScorecardCreateRequest,
     ) -> InterviewScorecardResponse:
-        await self._assert_active_pipeline(candidate_id=candidate_id, job_id=job_id)
-        await self._validate_interview(candidate_id=candidate_id, job_id=job_id, interview_id=body.interview_id)
+        pipeline_id = await self._assert_active_pipeline(candidate_id=candidate_id, job_id=job_id)
+        await self._validate_interview(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            interview_id=body.interview_id,
+            pipeline_id=pipeline_id,
+        )
 
         existing = await self._repository.find_for_candidate_job(
             candidate_id=candidate_id,
             job_id=job_id,
+            pipeline_id=pipeline_id,
             interview_id=body.interview_id,
         )
         if existing is not None:
@@ -71,6 +84,7 @@ class InterviewScorecardService:
         scorecard = InterviewScorecardModel(
             candidate_id=candidate_id,
             job_id=job_id,
+            pipeline_id=pipeline_id,
             interview_id=body.interview_id,
             evaluator_id=evaluator_id,
             status="draft",
@@ -93,6 +107,7 @@ class InterviewScorecardService:
                 candidate_id=scorecard.candidate_id,
                 job_id=scorecard.job_id,
                 interview_id=body.interview_id,
+                pipeline_id=scorecard.pipeline_id,
             )
             scorecard.interview_id = body.interview_id
         if "final_recommendation" in body.model_fields_set:
@@ -133,10 +148,11 @@ class InterviewScorecardService:
             raise ConflictException("Scorecard enviado não pode ser editado nesta fase.")
         return scorecard
 
-    async def _assert_active_pipeline(self, *, candidate_id: UUID, job_id: UUID) -> None:
-        has_pipeline = await self._repository.has_active_pipeline(candidate_id=candidate_id, job_id=job_id)
-        if not has_pipeline:
+    async def _assert_active_pipeline(self, *, candidate_id: UUID, job_id: UUID) -> UUID:
+        pipeline_id = await self._repository.get_active_pipeline_id(candidate_id=candidate_id, job_id=job_id)
+        if pipeline_id is None:
             raise NotFoundException("Candidato não possui pipeline ativo nesta vaga.")
+        return pipeline_id
 
     async def _validate_interview(
         self,
@@ -144,11 +160,17 @@ class InterviewScorecardService:
         candidate_id: UUID,
         job_id: UUID,
         interview_id: UUID | None,
+        pipeline_id: UUID | None,
     ) -> None:
         if interview_id is None:
             return
         interview = await self._repository.get_interview(interview_id)
-        if interview is None or interview.candidate_id != candidate_id or interview.job_id != job_id:
+        if (
+            interview is None
+            or interview.candidate_id != candidate_id
+            or interview.job_id != job_id
+            or interview.pipeline_id != pipeline_id
+        ):
             raise ValidationException("Entrevista não pertence ao candidato e vaga informados.")
 
     def _build_items(self, items: list[InterviewScorecardItemUpsert]) -> list[InterviewScorecardItemModel]:

@@ -362,25 +362,30 @@ class BehavioralTemplateService:
             return
 
         result = await session.execute(
-            sa.select(CandidateJobPipelineModel.candidate_id).where(
+            sa.select(
+                CandidateJobPipelineModel.candidate_id,
+                CandidateJobPipelineModel.candidate_job_pipeline_id,
+            ).where(
                 CandidateJobPipelineModel.job_id == job_id,
                 CandidateJobPipelineModel.relationship_status == "active",
                 CandidateJobPipelineModel.is_terminal.is_(False),
                 CandidateJobPipelineModel.terminated_at.is_(None),
             )
         )
-        candidate_ids = [row.candidate_id for row in result]
+        active_rows = result.all()
+        candidate_ids = [row.candidate_id for row in active_rows]
 
         if not candidate_ids:
             return
 
         assignment_service = BehavioralAssignmentService(SQLAlchemyBehavioralAssignmentRepository(session))
-        for candidate_id in candidate_ids:
+        for row in active_rows:
             await assignment_service.ensure_behavioral_assignment_for_candidate_job(
-                candidate_id=candidate_id,
+                candidate_id=row.candidate_id,
                 job_id=job_id,
                 requires_behavioral_assessment=True,
                 template_id=template_id,
+                pipeline_id=row.candidate_job_pipeline_id,
                 pipeline_active=True,
             )
 

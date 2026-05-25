@@ -39,6 +39,7 @@ class BehavioralAssignmentService:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID | None,
+        pipeline_id: UUID | None = None,
     ) -> BehavioralAssessmentAssignmentModel | None:
         if template_id is None:
             return None
@@ -46,11 +47,17 @@ class BehavioralAssignmentService:
         template = await self._repository.get_active_template(template_id)
         if template is None:
             return None
+        if pipeline_id is None:
+            pipeline_id = await self._repository.get_active_pipeline_id(
+                candidate_id=candidate_id,
+                job_id=job_id,
+            )
 
         existing = await self._repository.find_assignment(
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=template_id,
+            pipeline_id=pipeline_id,
         )
         if existing is not None:
             return existing
@@ -63,6 +70,7 @@ class BehavioralAssignmentService:
                     candidate_id=candidate_id,
                     job_id=job_id,
                     template_id=template_id,
+                    pipeline_id=pipeline_id,
                 )
         except IntegrityError as exc:
             integrity_error = exc
@@ -71,6 +79,7 @@ class BehavioralAssignmentService:
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=template_id,
+            pipeline_id=pipeline_id,
         )
         if recovered is not None:
             return recovered
@@ -85,6 +94,7 @@ class BehavioralAssignmentService:
         job_id: UUID,
         requires_behavioral_assessment: bool,
         template_id: UUID | None,
+        pipeline_id: UUID | None = None,
         pipeline_active: bool = True,
     ) -> BehavioralAssessmentAssignmentModel | None:
         if not pipeline_active:
@@ -95,6 +105,7 @@ class BehavioralAssignmentService:
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=template_id,
+            pipeline_id=pipeline_id,
         )
 
     async def list_for_candidate(self, candidate_id: UUID) -> list[BehavioralAssignmentSummaryResponse]:
@@ -238,7 +249,8 @@ class BehavioralAssignmentService:
         candidate_id: UUID,
     ) -> RecruiterBehavioralAssessmentStatusResponse | BehavioralAssignmentDetailResponse:
         """Get full behavioral assessment detail for recruiter view."""
-        row = await self._repository.get_summary_for_job_candidate(job_id=job_id, candidate_id=candidate_id)
+        pipeline_id = await self._repository.get_active_pipeline_id(candidate_id=candidate_id, job_id=job_id)
+        row = await self._repository.get_summary_for_job_candidate(job_id=job_id, candidate_id=candidate_id, pipeline_id=pipeline_id)
         if row is None:
             return RecruiterBehavioralAssessmentStatusResponse()
 
