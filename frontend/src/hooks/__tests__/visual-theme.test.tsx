@@ -42,22 +42,17 @@ describe("useVisualTheme", () => {
     document.documentElement.removeAttribute("data-visual-theme");
   });
 
-  it("aplica theme-1 sem usuário autenticado e ignora chave global antiga", () => {
+  it("aplica o tema armazenado no localStorage, ou theme-1 por padrão", () => {
     window.localStorage.setItem("visual-theme", "theme-2");
-    window.localStorage.setItem("resume_ai_theme", "theme-2");
 
     initializeVisualTheme();
     renderProbe();
 
-    expect(screen.getByTestId("theme")).toHaveTextContent("theme-1");
-    expect(document.documentElement).toHaveAttribute("data-visual-theme", "theme-1");
-    
-    // As chaves antigas devem ter sido removidas pelo provider no mount
-    expect(window.localStorage.getItem("visual-theme")).toBeNull();
-    expect(window.localStorage.getItem("resume_ai_theme")).toBeNull();
+    expect(screen.getByTestId("theme")).toHaveTextContent("theme-2");
+    expect(document.documentElement).toHaveAttribute("data-visual-theme", "theme-2");
   });
 
-  it("permite mudar o tema em memória", () => {
+  it("permite mudar o tema em memória e persiste em localStorage", () => {
     renderProbe();
     expect(screen.getByTestId("theme")).toHaveTextContent("theme-1");
 
@@ -66,7 +61,7 @@ describe("useVisualTheme", () => {
     expect(screen.getByTestId("theme")).toHaveTextContent("theme-2");
     expect(document.documentElement).toHaveAttribute("data-visual-theme", "theme-2");
     
-    // Nenhuma persistência em localStorage
-    expect(window.localStorage.getItem("visual-theme")).toBeNull();
+    // Agora existe persistência em localStorage
+    expect(window.localStorage.getItem("visual-theme")).toBe("theme-2");
   });
 });

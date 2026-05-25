@@ -5,6 +5,7 @@ import { AppShell } from "../components/layout/AppShell";
 import { PipelineProvider } from "../features/pipeline/PipelineContext";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { PublicRouteThemeGuard } from "./PublicRouteThemeGuard";
+import { CandidateThemeGuard } from "./CandidateThemeGuard";
 
 const LoginPage = lazy(() =>
   import("../pages/LoginPage").then((m) => ({ default: m.LoginPage }))
@@ -176,13 +177,21 @@ function publicPage(element: ReactNode) {
   );
 }
 
+function candidatePage(element: ReactNode) {
+  return (
+    <CandidateThemeGuard>
+      {withSuspense(element)}
+    </CandidateThemeGuard>
+  );
+}
+
 export function AppRouter() {
   return (
     <Routes>
       <Route path="/candidato" element={publicPage(<CandidateEntryPage />)} />
       <Route path="/candidato/cadastro" element={publicPage(<PublicApplicationPage />)} />
       <Route path="/candidato/login" element={publicPage(<CandidateLoginPage />)} />
-      <Route path="/candidato/portal" element={publicPage(<CandidatePortalPage />)} />
+      <Route path="/candidato/portal" element={candidatePage(<CandidatePortalPage />)} />
       <Route path="/login" element={publicPage(<LoginPage />)} />
 
       <Route

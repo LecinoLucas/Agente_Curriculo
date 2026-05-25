@@ -875,6 +875,62 @@
     --page-gradient-end:   0 0% 10%;
   }
 
+  :root[data-theme="dark"][data-visual-theme="theme-dark-candidate"] {
+    /* -----------------------------------------------------------------------
+       Visual Theme Dark Candidate — Premium SaaS Style
+       -----------------------------------------------------------------------
+       Direção:
+       - Dark mode premium focado em azul profundo/navy com destaques teal.
+       - Desenvolvido especificamente para o Portal do Candidato.
+       ----------------------------------------------------------------------- */
+    --brand:               173 80% 50%;
+    --brand-dark:          173 80% 30%;
+    --brand-soft:          216 62% 16%;
+    --brand-glow:          173 80% 70%;
+
+    --bg:                  226 48% 8%; /* #0B1020 */
+    --surface:             216 62% 16%; /* #0F2341 */
+    --surface-muted:       217 33% 25%;
+    --border:              217 33% 25%;
+    --border-strong:       173 80% 50%;
+
+    --background:          226 48% 8%;
+    --card:                216 62% 16%;
+    --popover:             216 62% 16%;
+    --secondary:           217 33% 25%;
+    --muted:               217 33% 25%;
+
+    --text:                210 40% 98%; /* #F8FAFC */
+    --text-muted:          215 16% 65%; /* #94A3B8 */
+
+    --foreground:          210 40% 98%;
+    --card-foreground:     210 40% 98%;
+    --popover-foreground:  210 40% 98%;
+
+    --primary:             173 80% 50%; /* #2DD4BF */
+    --primary-foreground:  226 48% 8%;
+    --ring:                173 80% 50%;
+
+    --accent:              217 33% 25%;
+    --accent-foreground:   210 40% 98%;
+    --accent-soft:         216 62% 16%;
+
+    --nav-bg:              226 50% 6%;
+    --nav-text:            210 40% 98%;
+    --nav-muted:           215 16% 65%;
+    --nav-active-bg:       173 80% 50%;
+    --nav-border:          216 62% 16%;
+
+    --sidebar-accent:      173 80% 50%;
+    --hero-start:          226 48% 8%;
+    --hero-end:            216 62% 16%;
+
+    --page-glow-start:     217 33% 25%;
+    --page-glow-end:       226 48% 8%;
+    --page-gradient-start: 226 48% 8%;
+    --page-gradient-end:   226 50% 6%;
+  }
+
   /* ==========================================================================
      GLOBAL ELEMENT RESET
      ========================================================================== */

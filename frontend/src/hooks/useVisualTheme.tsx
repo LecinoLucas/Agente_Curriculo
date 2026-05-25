@@ -15,31 +15,17 @@ type VisualThemeContextValue = {
 const VisualThemeContext = createContext<VisualThemeContextValue | undefined>(undefined);
 
 export function VisualThemeProvider({ children }: PropsWithChildren) {
-  const [visualTheme, setVisualThemeState] = useState<VisualTheme>(DEFAULT_PUBLIC_THEME);
+  const [visualTheme, setVisualThemeState] = useState<VisualTheme>(() => {
+    if (typeof window !== "undefined") {
+      return (window.localStorage.getItem("visual-theme") as VisualTheme) || DEFAULT_PUBLIC_THEME;
+    }
+    return DEFAULT_PUBLIC_THEME;
+  });
 
   useEffect(() => {
-    clearLegacyVisualTheme();
-    // Limpar outras chaves antigas de tema
-    try {
-      if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
-        window.localStorage.removeItem("resume_ai_theme");
-        window.localStorage.removeItem("visual-theme");
-        window.localStorage.removeItem("theme:guest");
-        Object.keys(window.localStorage).forEach((key) => {
-          if (key.startsWith("theme:user:")) {
-            window.localStorage.removeItem(key);
-          }
-        });
-      }
-      if (typeof window !== "undefined" && typeof window.sessionStorage !== "undefined") {
-        window.sessionStorage.removeItem("resume_ai_theme");
-      }
-    } catch (e) {
-      console.error("Erro ao limpar chaves no VisualThemeProvider:", e);
-    }
-    
-    setDocumentVisualTheme(DEFAULT_PUBLIC_THEME);
-    setVisualThemeState(DEFAULT_PUBLIC_THEME);
+    const initialTheme = (typeof window !== "undefined" ? window.localStorage.getItem("visual-theme") as VisualTheme : null) || DEFAULT_PUBLIC_THEME;
+    setDocumentVisualTheme(initialTheme);
+    setVisualThemeState(initialTheme);
   }, []);
 
   function setVisualTheme(next: VisualTheme) {
