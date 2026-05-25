@@ -18,33 +18,33 @@ export function CandidateEntryPage() {
       <div className="pointer-events-none absolute right-[-10%] bottom-[-15%] h-[30rem] w-[30rem] rounded-full bg-[hsl(var(--brand-glow)/0.09)] blur-[95px]" />
 
       {/* Floating Glassmorphic Top Header - Compact */}
-      <header className="sticky top-0 z-50 w-full border-b border-[hsl(var(--border)/0.15)] bg-[hsl(var(--bg))/0.7] py-2.5 backdrop-blur-md transition-all duration-300">
+      <header className="w-full bg-transparent py-4 shrink-0 z-10">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] shadow-md shadow-[hsl(var(--primary)/0.25)]">
-              <Sparkles className="h-4 w-4 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-black tracking-wider text-[hsl(var(--text))] uppercase leading-none mb-0.5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary))] text-base font-black text-white shadow-sm">
+              RA
+            </span>
+            <div className="flex flex-col text-left">
+              <span className="font-heading text-lg font-black leading-none tracking-tight text-[hsl(var(--text))]">
                 Marajó RH
               </span>
-              <span className="text-[8px] font-bold text-[hsl(var(--text-muted))] uppercase tracking-widest leading-none">
-                Recrutamento IA
+              <span className="text-[11px] text-[hsl(var(--text-muted))] uppercase tracking-widest mt-1 font-bold">
+                ATS & Recrutamento IA
               </span>
             </div>
           </div>
-          <div className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--border)/0.25)] bg-[hsl(var(--surface-muted)/0.45)] px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-[hsl(var(--text))]">
-            <span className="h-1 w-1 rounded-full bg-emerald-500 animate-ping" />
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.05)] px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-[hsl(var(--primary))]">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Portal de Carreiras
           </div>
         </div>
       </header>
 
       {/* Main Content Area - Fully Proportional & Compact */}
-      <main className="relative flex flex-1 flex-col items-center justify-start px-4 pt-4 sm:pt-6 pb-10 max-w-5xl mx-auto w-full">
+      <main className="relative flex flex-1 flex-col items-center justify-start px-4 pt-1 sm:pt-2 pb-8 max-w-5xl mx-auto w-full">
         
         {/* Animated Badge & Bold Title - Perfectly Proportioned */}
-        <div className="mb-6 flex flex-col items-center text-center animate-in fade-in slide-in-from-top-4 duration-700">
+        <div className="mb-4 flex flex-col items-center text-center animate-in fade-in slide-in-from-top-4 duration-700">
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.04)] px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-[hsl(var(--primary))] shadow-sm">
             <Sparkles className="h-3 w-3" />
             OPORTUNIDADES EM DESTAQUE
@@ -83,7 +83,7 @@ export function CandidateEntryPage() {
               </p>
               
               {/* Feature Checklist */}
-              <ul className="mt-4 space-y-2 border-t border-[hsl(var(--border)/0.15)] pt-3.5">
+              <ul className="mt-3 space-y-1.5 border-t border-[hsl(var(--border)/0.15)] pt-3">
                 {[
                   { title: "Processo simplificado", desc: "Aplicação intuitiva em poucos minutos" },
                   { title: "Análise inteligente de currículo", desc: "Seu perfil avaliado por IA" },
@@ -106,7 +106,7 @@ export function CandidateEntryPage() {
               </ul>
             </div>
 
-            <div className="relative mt-5">
+            <div className="relative mt-4">
               <Button asChild className="h-11 w-full rounded-xl bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--brand-glow))] text-xs font-black uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] hover:shadow-[0_8px_16px_-6px_hsl(var(--primary)/0.35)]">
                 <Link to="/candidato/cadastro">
                   Iniciar Candidatura
@@ -139,7 +139,7 @@ export function CandidateEntryPage() {
               </p>
 
               {/* Status Tracking Alert Box */}
-              <div className="mt-4 rounded-xl border border-[hsl(var(--border)/0.15)] bg-[hsl(var(--surface-muted)/0.4)] p-3.5">
+              <div className="mt-3 rounded-xl border border-[hsl(var(--border)/0.15)] bg-[hsl(var(--surface-muted)/0.4)] p-3">
                 <div className="flex items-center gap-2">
                   <div className="relative flex h-2 w-2 shrink-0">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
@@ -149,14 +149,14 @@ export function CandidateEntryPage() {
                     Painel Operacional Ativo
                   </span>
                 </div>
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold text-[hsl(var(--text))]">
+                <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-[hsl(var(--text))]">
                   <ShieldCheck className="h-3.5 w-3.5 text-[hsl(var(--primary))]" />
                   <span className="text-[11px]">Acesso seguro e autenticado</span>
                 </div>
               </div>
             </div>
 
-            <div className="relative mt-5">
+            <div className="relative mt-4">
               <Button asChild variant="outline" className="h-11 w-full rounded-xl border-2 border-[hsl(var(--primary))] bg-transparent text-xs font-black uppercase tracking-wider text-[hsl(var(--primary))] transition-all duration-300 hover:bg-[hsl(var(--primary))] hover:text-white active:scale-[0.99] hover:shadow-[0_8px_16px_-6px_hsl(var(--primary)/0.25)]">
                 <Link to="/candidato/login">
                   Entrar no Portal
