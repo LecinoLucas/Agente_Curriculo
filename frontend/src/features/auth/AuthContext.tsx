@@ -88,6 +88,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const logout = async () => {
     setUser(null);
     try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("resume_ai_theme");
+        window.localStorage.removeItem("visual-theme");
+        window.localStorage.removeItem("theme:guest");
+        Object.keys(window.localStorage).forEach((key) => {
+          if (key.startsWith("theme:user:")) {
+            window.localStorage.removeItem(key);
+          }
+        });
+        window.sessionStorage.removeItem("resume_ai_theme");
+      }
       await authService.logout();
     } finally {
       tokenStorage.clear();

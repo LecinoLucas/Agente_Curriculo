@@ -72,8 +72,8 @@ describe("AuthProvider e tema visual", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("theme-4")).toBeInTheDocument();
+      expect(screen.getByText("theme-1")).toBeInTheDocument();
     });
-    expect(document.documentElement).toHaveAttribute("data-visual-theme", "theme-4");
+    expect(document.documentElement).toHaveAttribute("data-visual-theme", "theme-1");
   });
 });

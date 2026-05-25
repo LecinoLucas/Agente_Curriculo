@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { PipelineProvider } from "../features/pipeline/PipelineContext";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { PublicRouteThemeGuard } from "./PublicRouteThemeGuard";
 
 const LoginPage = lazy(() =>
   import("../pages/LoginPage").then((m) => ({ default: m.LoginPage }))
@@ -161,14 +162,22 @@ function protectedPage(element: ReactNode, roles?: UserRole[]) {
   );
 }
 
+function publicPage(element: ReactNode) {
+  return (
+    <PublicRouteThemeGuard>
+      {withSuspense(element)}
+    </PublicRouteThemeGuard>
+  );
+}
+
 export function AppRouter() {
   return (
     <Routes>
-      <Route path="/candidato" element={withSuspense(<CandidateEntryPage />)} />
-      <Route path="/candidato/cadastro" element={withSuspense(<PublicApplicationPage />)} />
-      <Route path="/candidato/login" element={withSuspense(<CandidateLoginPage />)} />
-      <Route path="/candidato/portal" element={withSuspense(<CandidatePortalPage />)} />
-      <Route path="/login" element={withSuspense(<LoginPage />)} />
+      <Route path="/candidato" element={publicPage(<CandidateEntryPage />)} />
+      <Route path="/candidato/cadastro" element={publicPage(<PublicApplicationPage />)} />
+      <Route path="/candidato/login" element={publicPage(<CandidateLoginPage />)} />
+      <Route path="/candidato/portal" element={publicPage(<CandidatePortalPage />)} />
+      <Route path="/login" element={publicPage(<LoginPage />)} />
 
       <Route
         path="/"

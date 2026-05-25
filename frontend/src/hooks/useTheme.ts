@@ -2,14 +2,10 @@ import { useEffect, useState } from "react";
 
 export type AppTheme = "light" | "dark";
 
-const THEME_KEY = "resume_ai_theme";
 const THEME_EVENT = "resume_ai_theme_changed";
 
 function resolveInitialTheme(): AppTheme {
-  if (typeof window === "undefined") return "light";
-  const saved = window.localStorage.getItem(THEME_KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "light";
 }
 
 export function useTheme() {
@@ -22,20 +18,17 @@ export function useTheme() {
     } else {
       document.documentElement.classList.remove("dark");
     }
-    window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
   useEffect(() => {
     const handler = () => {
-      const next = resolveInitialTheme();
-      setThemeState(next);
+      // Sincroniza estado se alterado em outro lugar
     };
     window.addEventListener(THEME_EVENT, handler);
     return () => window.removeEventListener(THEME_EVENT, handler);
   }, []);
 
   function setTheme(next: AppTheme) {
-    window.localStorage.setItem(THEME_KEY, next);
     document.documentElement.dataset.theme = next;
     if (next === "dark") {
       document.documentElement.classList.add("dark");

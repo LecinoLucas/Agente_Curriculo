@@ -1,6 +1,7 @@
 export type VisualTheme = "theme-1" | "theme-2" | "theme-3" | "theme-4";
 
-export const DEFAULT_PUBLIC_THEME: VisualTheme = "theme-4";
+export const DEFAULT_PUBLIC_THEME: VisualTheme = "theme-1";
+export const DEFAULT_THEME: VisualTheme = "theme-1";
 
 const LEGACY_VISUAL_THEME_KEY = "visual-theme";
 
