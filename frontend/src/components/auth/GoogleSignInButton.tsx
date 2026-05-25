@@ -104,9 +104,9 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
             theme: "outline",
             size: "large",
             text: "continue_with",
-            shape: "pill",
+            shape: "rectangular",
             logo_alignment: "left",
-            width: 280,
+            width: 320,
           });
           if (import.meta.env.DEV) {
             // eslint-disable-next-line no-console
