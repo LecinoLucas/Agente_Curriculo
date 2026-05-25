@@ -416,7 +416,7 @@ fi
 
 cd "$BACKEND_DIR"
 .venv/bin/celery -A src.infrastructure.queue.celery_app worker \
-  --queues=analysis,matching,document_ai,extraction \
+  --queues=analysis,matching,document_ai,extraction,behavioral_ai \
   --loglevel=warning \
   --concurrency=2 &
 CELERY_PID=$!
