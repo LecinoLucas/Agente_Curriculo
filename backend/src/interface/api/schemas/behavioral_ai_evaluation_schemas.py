@@ -1,7 +1,10 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from src.interface.api.schemas.common import APISchemaModel, PaginatedResponse
 
 
 class BehavioralCompetencySignal(BaseModel):
@@ -42,7 +45,7 @@ class BehavioralAIEvaluationResponse(BaseModel):
     )
 
 
-class BehavioralAIEvaluationDetailResponse(BaseModel):
+class BehavioralAIEvaluationStoredResponse(BaseModel):
     """Stored evaluation record."""
 
     id: str = Field(..., description="Evaluation ID")
@@ -78,3 +81,65 @@ class BehavioralAIEvaluationStatusResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class BehavioralAIEvaluationListItem(APISchemaModel):
+    id: UUID
+    evaluation_id: UUID
+    assignment_id: UUID
+    candidate_id: UUID
+    candidate_name: str
+    candidate_email: str | None = None
+    job_id: UUID
+    job_title: str
+    type: str = "behavioral_ai"
+    status: str
+    operational_status: str
+    provider: str
+    model: str
+    retry_count: int
+    can_retry: bool
+    retry_allowed_reason: str | None = None
+    requested_at: datetime | None = None
+    queued_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    failed_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    provider_error_type: str | None = None
+    provider_status_code: int | None = None
+    safe_error_message: str | None = None
+    stuck: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class BehavioralAIEvaluationListResponse(PaginatedResponse[BehavioralAIEvaluationListItem]):
+    pass
+
+
+class BehavioralAIEvaluationMetricsResponse(APISchemaModel):
+    pending: int
+    processing: int
+    retry_scheduled: int
+    completed_last_24h: int
+    failed_last_24h: int
+    rate_limited: int
+    credential_invalid: int
+    next_retries: int
+    stuck: int
+
+
+class BehavioralAIEvaluationDetailResponse(BehavioralAIEvaluationListItem):
+    prompt_version: int
+    confidence: str | None = None
+    summary: str | None = None
+
+
+class BehavioralAIRetryResponse(APISchemaModel):
+    evaluation_id: UUID
+    assignment_id: UUID
+    status: str
+    enqueued: bool
+    retry_count: int
+    message: str

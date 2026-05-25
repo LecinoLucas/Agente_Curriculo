@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -11,34 +12,64 @@ from src.application.services.behavioral_ai_evaluation_service import (
 )
 from src.domain.exceptions import ValidationException
 from src.interface.api.dependencies import AdminOnly, RecruiterOrAdmin, get_db
+from src.interface.api.schemas.behavioral_ai_evaluation_schemas import (
+    BehavioralAIEvaluationDetailResponse,
+    BehavioralAIEvaluationListResponse,
+    BehavioralAIEvaluationMetricsResponse,
+    BehavioralAIRetryResponse,
+)
 from src.interface.workers.behavioral_ai_dispatcher import enqueue_behavioral_ai_evaluation
 
 router = APIRouter(prefix="/admin/behavioral-ai", tags=["admin-behavioral-ai"])
 
 
-@router.get("/metrics", status_code=status.HTTP_200_OK)
+@router.get(
+    "/metrics",
+    response_model=BehavioralAIEvaluationMetricsResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def get_behavioral_ai_metrics(
     _current_user: AdminOnly,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> BehavioralAIEvaluationMetricsResponse:
     service = BehavioralAIEvaluationService(db)
     return await service.get_operational_metrics()
 
 
-@router.get("/evaluations", status_code=status.HTTP_200_OK)
+@router.get(
+    "/evaluations",
+    response_model=BehavioralAIEvaluationListResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def list_behavioral_ai_evaluations(
     _current_user: RecruiterOrAdmin,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     status_filter: str | None = Query(default=None, alias="status"),
+    operational_status: str | None = Query(default=None),
+    candidate_id: UUID | None = Query(default=None),
+    job_id: UUID | None = Query(default=None),
+    provider: str | None = Query(default=None),
+    model: str | None = Query(default=None),
+    provider_error_type: str | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
     search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> BehavioralAIEvaluationListResponse:
     service = BehavioralAIEvaluationService(db)
     rows, total = await service.list_operational_evaluations(
         page=page,
         page_size=page_size,
         status_filter=status_filter,
+        operational_status=operational_status,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        provider=provider,
+        model=model,
+        provider_error_type=provider_error_type,
+        date_from=date_from,
+        date_to=date_to,
         search=search,
     )
     return {
@@ -48,6 +79,29 @@ async def list_behavioral_ai_evaluations(
         "page_size": page_size,
         "total_pages": max(1, (total + page_size - 1) // page_size),
     }
+
+
+@router.get(
+    "/evaluations/{evaluation_id}",
+    response_model=BehavioralAIEvaluationDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_behavioral_ai_evaluation_detail(
+    evaluation_id: UUID,
+    _current_user: RecruiterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> BehavioralAIEvaluationDetailResponse:
+    service = BehavioralAIEvaluationService(db)
+    detail = await service.get_operational_evaluation_detail(evaluation_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=behavioral_ai_safe_detail(
+                "behavioral_ai_evaluation_not_found",
+                message="Avaliação IA comportamental não encontrada.",
+            ),
+        )
+    return detail
 
 
 @router.post("/stuck/detect", status_code=status.HTTP_200_OK)
@@ -62,12 +116,16 @@ async def detect_and_mark_stuck_behavioral_ai(
     return {"success": True, "evaluations_marked_failed": count}
 
 
-@router.post("/{evaluation_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{evaluation_id}/retry",
+    response_model=BehavioralAIRetryResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def retry_behavioral_ai_evaluation(
     evaluation_id: UUID,
     _current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> BehavioralAIRetryResponse:
     service = BehavioralAIEvaluationService(db)
     try:
         evaluation, should_enqueue = await service.retry_failed_or_stuck(evaluation_id=evaluation_id)

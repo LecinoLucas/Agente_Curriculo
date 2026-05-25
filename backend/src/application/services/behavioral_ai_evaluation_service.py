@@ -59,6 +59,23 @@ _BEHAVIORAL_AI_RETRY_BACKOFF_SECONDS = {1: 15, 2: 45, 3: 120}
 _BEHAVIORAL_AI_MAX_RETRIES = 3
 _BEHAVIORAL_AI_RETRY_MESSAGE = "Alta demanda no provedor IA. Nova tentativa automática agendada."
 _BEHAVIORAL_AI_RATE_LIMIT_MESSAGE = "Limite temporário do provedor IA. Nova tentativa automática agendada."
+_BEHAVIORAL_AI_CREDENTIAL_ERROR_TYPES = {
+    "ai_credential_invalid",
+    "credential_invalid",
+    "invalid_api_key",
+    "no_ai_credential_available",
+}
+_BEHAVIORAL_AI_RATE_LIMIT_ERROR_TYPES = {"rate_limited", "ai_rate_limited"}
+_BEHAVIORAL_AI_PROHIBITED_OUTPUT_MARKERS = {
+    "api_key",
+    "encrypted_api_key",
+    "authorization",
+    "bearer ",
+    "prompt",
+    "raw_response",
+    "traceback",
+    "stack trace",
+}
 SAFE_BEHAVIORAL_AI_ERROR_MESSAGES = {
     "no_ai_credential_available": "Nenhuma credencial IA ativa está disponível para este provider/modelo.",
     "ai_credential_invalid": "Credencial IA inválida ou indisponível para este provider/modelo.",
@@ -454,6 +471,17 @@ class BehavioralAIEvaluationService:
                 ),
             )
         )
+        rate_limited_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.provider_error_type.in_(_BEHAVIORAL_AI_RATE_LIMIT_ERROR_TYPES)
+        )
+        credential_invalid_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.provider_error_type.in_(_BEHAVIORAL_AI_CREDENTIAL_ERROR_TYPES)
+        )
+        next_retries_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.status == "retry_scheduled",
+            BehavioralAssessmentAIEvaluationModel.next_retry_at.is_not(None),
+            BehavioralAssessmentAIEvaluationModel.next_retry_at > now,
+        )
 
         pending = int((await self.session.scalar(pending_stmt)) or 0)
         retry_scheduled = int((await self.session.scalar(retry_stmt)) or 0)
@@ -461,6 +489,9 @@ class BehavioralAIEvaluationService:
         completed_24h = int((await self.session.scalar(completed_stmt)) or 0)
         failed_24h = int((await self.session.scalar(failed_stmt)) or 0)
         stuck = int((await self.session.scalar(stuck_count_stmt)) or 0)
+        rate_limited = int((await self.session.scalar(rate_limited_stmt)) or 0)
+        credential_invalid = int((await self.session.scalar(credential_invalid_stmt)) or 0)
+        next_retries = int((await self.session.scalar(next_retries_stmt)) or 0)
 
         return {
             "pending": pending,
@@ -468,6 +499,9 @@ class BehavioralAIEvaluationService:
             "retry_scheduled": retry_scheduled,
             "completed_last_24h": completed_24h,
             "failed_last_24h": failed_24h,
+            "rate_limited": rate_limited,
+            "credential_invalid": credential_invalid,
+            "next_retries": next_retries,
             "stuck": stuck,
         }
 
@@ -477,11 +511,35 @@ class BehavioralAIEvaluationService:
         page: int = 1,
         page_size: int = 20,
         status_filter: str | None = None,
+        operational_status: str | None = None,
+        candidate_id: UUID | None = None,
+        job_id: UUID | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        provider_error_type: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
         search: str | None = None,
     ) -> tuple[list[dict], int]:
         filters: list[sa.ColumnElement] = []
         if status_filter:
             filters.append(BehavioralAssessmentAIEvaluationModel.status == status_filter)
+        if candidate_id is not None:
+            filters.append(BehavioralAssessmentAIEvaluationModel.candidate_id == candidate_id)
+        if job_id is not None:
+            filters.append(BehavioralAssessmentAIEvaluationModel.job_id == job_id)
+        if provider:
+            filters.append(BehavioralAssessmentAIEvaluationModel.provider == provider.strip())
+        if model:
+            filters.append(BehavioralAssessmentAIEvaluationModel.model == model.strip())
+        if provider_error_type:
+            filters.append(BehavioralAssessmentAIEvaluationModel.provider_error_type == provider_error_type.strip())
+        if date_from is not None:
+            filters.append(BehavioralAssessmentAIEvaluationModel.created_at >= date_from)
+        if date_to is not None:
+            filters.append(BehavioralAssessmentAIEvaluationModel.created_at <= date_to)
+        if operational_status:
+            filters.extend(self._operational_status_filters(operational_status))
         if search:
             term = f"%{search.lower().strip()}%"
             filters.append(
@@ -516,6 +574,7 @@ class BehavioralAIEvaluationService:
                 CandidateModel.email.label("candidate_email"),
                 BehavioralAssessmentAIEvaluationModel.status,
                 BehavioralAssessmentAIEvaluationModel.error_message,
+                BehavioralAssessmentAIEvaluationModel.requested_at,
                 BehavioralAssessmentAIEvaluationModel.provider,
                 BehavioralAssessmentAIEvaluationModel.model,
                 BehavioralAssessmentAIEvaluationModel.retry_count,
@@ -540,13 +599,180 @@ class BehavioralAIEvaluationService:
         rows = []
         now = datetime.now(UTC)
         for row in result.mappings().all():
-            item = dict(row)
-            item["type"] = "behavioral_ai"
-            item["stuck"] = self._is_stuck(row, now=now)
+            item = self._to_operational_item(dict(row), now=now)
             rows.append(item)
         return rows, total
 
+    async def get_operational_evaluation_detail(self, evaluation_id: UUID) -> dict | None:
+        result = await self.session.execute(
+            sa.select(
+                BehavioralAssessmentAIEvaluationModel.id,
+                BehavioralAssessmentAIEvaluationModel.assignment_id,
+                BehavioralAssessmentAIEvaluationModel.job_id,
+                JobModel.title.label("job_title"),
+                BehavioralAssessmentAIEvaluationModel.candidate_id,
+                CandidateModel.full_name.label("candidate_name"),
+                CandidateModel.email.label("candidate_email"),
+                BehavioralAssessmentAIEvaluationModel.status,
+                BehavioralAssessmentAIEvaluationModel.error_message,
+                BehavioralAssessmentAIEvaluationModel.requested_at,
+                BehavioralAssessmentAIEvaluationModel.provider,
+                BehavioralAssessmentAIEvaluationModel.model,
+                BehavioralAssessmentAIEvaluationModel.prompt_version,
+                BehavioralAssessmentAIEvaluationModel.retry_count,
+                BehavioralAssessmentAIEvaluationModel.queued_at,
+                BehavioralAssessmentAIEvaluationModel.started_at,
+                BehavioralAssessmentAIEvaluationModel.completed_at,
+                BehavioralAssessmentAIEvaluationModel.failed_at,
+                BehavioralAssessmentAIEvaluationModel.next_retry_at,
+                BehavioralAssessmentAIEvaluationModel.provider_error_type,
+                BehavioralAssessmentAIEvaluationModel.provider_status_code,
+                BehavioralAssessmentAIEvaluationModel.confidence,
+                BehavioralAssessmentAIEvaluationModel.summary,
+                BehavioralAssessmentAIEvaluationModel.created_at,
+                BehavioralAssessmentAIEvaluationModel.updated_at,
+            )
+            .select_from(BehavioralAssessmentAIEvaluationModel)
+            .join(CandidateModel, CandidateModel.id == BehavioralAssessmentAIEvaluationModel.candidate_id)
+            .join(JobModel, JobModel.id == BehavioralAssessmentAIEvaluationModel.job_id)
+            .where(BehavioralAssessmentAIEvaluationModel.id == evaluation_id)
+        )
+        row = result.mappings().one_or_none()
+        if row is None:
+            return None
+        item = self._to_operational_item(dict(row), now=datetime.now(UTC))
+        item["prompt_version"] = int(row["prompt_version"] or 1)
+        if row["status"] == "completed":
+            item["confidence"] = row["confidence"]
+            item["summary"] = row["summary"]
+        else:
+            item["confidence"] = None
+            item["summary"] = None
+        return item
+
     # Private methods
+
+    @classmethod
+    def _to_operational_item(cls, row: dict, *, now: datetime) -> dict:
+        stuck = cls._is_stuck(row, now=now)
+        operational_status = cls._derive_operational_status(
+            status=row.get("status"),
+            provider_error_type=row.get("provider_error_type"),
+        )
+        can_retry, retry_allowed_reason = cls._retry_capability(
+            status=row.get("status"),
+            provider_error_type=row.get("provider_error_type"),
+            stuck=stuck,
+            next_retry_at=row.get("next_retry_at"),
+            now=now,
+        )
+        evaluation_id = row["id"]
+        return {
+            "id": evaluation_id,
+            "evaluation_id": evaluation_id,
+            "assignment_id": row["assignment_id"],
+            "candidate_id": row["candidate_id"],
+            "candidate_name": row["candidate_name"],
+            "candidate_email": row.get("candidate_email"),
+            "job_id": row["job_id"],
+            "job_title": row["job_title"],
+            "type": "behavioral_ai",
+            "status": row["status"],
+            "operational_status": operational_status,
+            "provider": row["provider"],
+            "model": row["model"],
+            "retry_count": int(row.get("retry_count") or 0),
+            "can_retry": can_retry,
+            "retry_allowed_reason": retry_allowed_reason,
+            "requested_at": row.get("requested_at"),
+            "queued_at": row.get("queued_at"),
+            "started_at": row.get("started_at"),
+            "completed_at": row.get("completed_at"),
+            "failed_at": row.get("failed_at"),
+            "next_retry_at": row.get("next_retry_at"),
+            "provider_error_type": row.get("provider_error_type"),
+            "provider_status_code": row.get("provider_status_code"),
+            "safe_error_message": cls._safe_output_error(
+                row.get("error_message"),
+                provider_error_type=row.get("provider_error_type"),
+            ),
+            "stuck": stuck,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    @staticmethod
+    def _derive_operational_status(*, status: str | None, provider_error_type: str | None) -> str:
+        error_type = (provider_error_type or "").strip()
+        if error_type in _BEHAVIORAL_AI_CREDENTIAL_ERROR_TYPES:
+            return "credential_invalid"
+        if error_type in _BEHAVIORAL_AI_RATE_LIMIT_ERROR_TYPES:
+            return "rate_limited"
+        if status in {"pending", "processing", "retry_scheduled", "completed", "failed"}:
+            return status
+        return "failed"
+
+    @classmethod
+    def _retry_capability(
+        cls,
+        *,
+        status: str | None,
+        provider_error_type: str | None,
+        stuck: bool,
+        next_retry_at: datetime | None,
+        now: datetime,
+    ) -> tuple[bool, str | None]:
+        error_type = (provider_error_type or "").strip()
+        if status == "completed":
+            return False, "completed"
+        if error_type in _BEHAVIORAL_AI_CREDENTIAL_ERROR_TYPES:
+            return False, "credential_action_required"
+        if status in {"pending", "processing"}:
+            return (True, "stuck") if stuck else (False, "already_in_progress")
+        if status == "retry_scheduled":
+            if stuck:
+                return True, "retry_due"
+            if next_retry_at is not None and cls._comparable(next_retry_at) > cls._comparable(now):
+                return False, "waiting_next_retry"
+            return False, "retry_not_due"
+        if status == "failed":
+            return True, "failed"
+        return False, "retry_not_allowed"
+
+    @staticmethod
+    def _safe_output_error(error_message: str | None, *, provider_error_type: str | None) -> str | None:
+        if not error_message:
+            return None
+        sanitized = sanitize_log_text(str(error_message)) or ""
+        lower = sanitized.lower()
+        if any(marker in lower for marker in _BEHAVIORAL_AI_PROHIBITED_OUTPUT_MARKERS):
+            return BehavioralAIEvaluationService._safe_failure_message(provider_error_type or "unexpected_error")
+        return sanitized[:500]
+
+    @staticmethod
+    def _operational_status_filters(operational_status: str) -> list[sa.ColumnElement]:
+        value = operational_status.strip()
+        if value == "credential_invalid":
+            return [BehavioralAssessmentAIEvaluationModel.provider_error_type.in_(_BEHAVIORAL_AI_CREDENTIAL_ERROR_TYPES)]
+        if value == "rate_limited":
+            return [BehavioralAssessmentAIEvaluationModel.provider_error_type.in_(_BEHAVIORAL_AI_RATE_LIMIT_ERROR_TYPES)]
+        if value in {"pending", "processing", "retry_scheduled", "completed", "failed"}:
+            return [
+                BehavioralAssessmentAIEvaluationModel.status == value,
+                sa.or_(
+                    BehavioralAssessmentAIEvaluationModel.provider_error_type.is_(None),
+                    BehavioralAssessmentAIEvaluationModel.provider_error_type.not_in(
+                        _BEHAVIORAL_AI_CREDENTIAL_ERROR_TYPES | _BEHAVIORAL_AI_RATE_LIMIT_ERROR_TYPES
+                    ),
+                ),
+            ]
+        return [sa.false()]
+
+    @staticmethod
+    def _comparable(timestamp: datetime) -> datetime:
+        if timestamp.tzinfo is None:
+            return timestamp.replace(tzinfo=UTC)
+        return timestamp
 
     @staticmethod
     def _is_stuck(

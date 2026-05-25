@@ -1672,7 +1672,17 @@ async def test_admin_behavioral_ai_metrics_endpoint_returns_operational_counts(
     response = await client.get("/api/v1/admin/behavioral-ai/metrics", headers=headers)
     assert response.status_code == status.HTTP_200_OK, response.text
     payload = response.json()
-    for key in ["pending", "processing", "retry_scheduled", "completed_last_24h", "failed_last_24h", "stuck"]:
+    for key in [
+        "pending",
+        "processing",
+        "retry_scheduled",
+        "completed_last_24h",
+        "failed_last_24h",
+        "rate_limited",
+        "credential_invalid",
+        "next_retries",
+        "stuck",
+    ]:
         assert key in payload
 
 
@@ -1720,11 +1730,195 @@ async def test_admin_behavioral_ai_evaluations_endpoint_lists_queue_items(
     assert payload["total"] >= 1
     item = next(row for row in payload["data"] if row["id"] == str(evaluation.id))
     assert item["type"] == "behavioral_ai"
+    assert item["evaluation_id"] == str(evaluation.id)
     assert item["candidate_name"] == candidate.full_name
     assert item["job_title"] == job.title
     assert item["status"] == "retry_scheduled"
+    assert item["operational_status"] == "retry_scheduled"
     assert item["retry_count"] == 2
     assert item["next_retry_at"] is not None
+    assert item["can_retry"] is False
+    assert item["retry_allowed_reason"] == "waiting_next_retry"
+
+
+@pytest.mark.asyncio
+async def test_admin_behavioral_ai_evaluations_support_operational_filters_and_safe_fields(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session, f"behavioral-admin-filters-{uuid4()}@test.com", "password123", UserRole.RECRUITER
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template, _ = await _create_template_with_competencies(db_session)
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=recruiter.id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(db_session, job.id, candidate.id, template, status="submitted")
+    created_at = datetime.now(UTC) - timedelta(hours=1)
+    evaluation = BehavioralAssessmentAIEvaluationModel(
+        id=uuid4(),
+        assignment_id=assignment.id,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        template_id=template.id,
+        status="failed",
+        provider="google",
+        model="gemini-2.5-flash",
+        prompt_version=1,
+        retry_count=1,
+        provider_error_type="ai_credential_invalid",
+        provider_status_code=401,
+        error_message="api_key=secret Authorization: Bearer token prompt raw_response Traceback",
+        failed_at=created_at,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    db_session.add(evaluation)
+    await db_session.commit()
+
+    date_from = (created_at - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+    date_to = (created_at + timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+    filter_urls = [
+        f"/api/v1/admin/behavioral-ai/evaluations?candidate_id={candidate.id}",
+        f"/api/v1/admin/behavioral-ai/evaluations?job_id={job.id}",
+        "/api/v1/admin/behavioral-ai/evaluations?provider=google",
+        "/api/v1/admin/behavioral-ai/evaluations?model=gemini-2.5-flash",
+        "/api/v1/admin/behavioral-ai/evaluations?provider_error_type=ai_credential_invalid",
+        "/api/v1/admin/behavioral-ai/evaluations?operational_status=credential_invalid",
+        f"/api/v1/admin/behavioral-ai/evaluations?date_from={date_from}&date_to={date_to}",
+    ]
+    for url in filter_urls:
+        response = await client.get(url, headers=headers)
+        assert response.status_code == status.HTTP_200_OK, response.text
+        payload = response.json()
+        assert any(row["evaluation_id"] == str(evaluation.id) for row in payload["data"])
+
+    response = await client.get(
+        f"/api/v1/admin/behavioral-ai/evaluations?candidate_id={candidate.id}",
+        headers=headers,
+    )
+    item = next(row for row in response.json()["data"] if row["evaluation_id"] == str(evaluation.id))
+    assert item["operational_status"] == "credential_invalid"
+    assert item["can_retry"] is False
+    assert item["retry_allowed_reason"] == "credential_action_required"
+    assert item["safe_error_message"] == "Credencial IA inválida ou indisponível para este provider/modelo."
+    assert "error_message" not in item
+
+    serialized = json.dumps(response.json()).lower()
+    for forbidden in ["api_key", "encrypted_api_key", "authorization", "bearer", "prompt", "raw_response", "traceback"]:
+        assert forbidden not in serialized
+
+
+@pytest.mark.asyncio
+async def test_admin_behavioral_ai_metrics_count_operational_error_types(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await _create_active_user(
+        db_session, f"behavioral-admin-metrics-detail-{uuid4()}@test.com", "password123", UserRole.ADMIN
+    )
+    headers = await _auth_headers(client, admin.email, "password123")
+    template, _ = await _create_template_with_competencies(db_session)
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=admin.id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(db_session, job.id, candidate.id, template, status="submitted")
+    retry_eval = BehavioralAssessmentAIEvaluationModel(
+        id=uuid4(),
+        assignment_id=assignment.id,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        template_id=template.id,
+        status="retry_scheduled",
+        provider="google",
+        model="gemini-2.5-flash",
+        prompt_version=1,
+        provider_error_type="rate_limited",
+        provider_status_code=429,
+        next_retry_at=datetime.now(UTC) + timedelta(minutes=10),
+    )
+    db_session.add(retry_eval)
+    await db_session.commit()
+
+    response = await client.get("/api/v1/admin/behavioral-ai/metrics", headers=headers)
+    assert response.status_code == status.HTTP_200_OK, response.text
+    payload = response.json()
+    assert payload["rate_limited"] >= 1
+    assert payload["next_retries"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_admin_behavioral_ai_evaluation_detail_is_sanitized_and_typed(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session, f"behavioral-admin-detail-{uuid4()}@test.com", "password123", UserRole.RECRUITER
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template, _ = await _create_template_with_competencies(db_session)
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=recruiter.id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(db_session, job.id, candidate.id, template, status="submitted")
+    evaluation = BehavioralAssessmentAIEvaluationModel(
+        id=uuid4(),
+        assignment_id=assignment.id,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        template_id=template.id,
+        status="completed",
+        provider="google",
+        model="gemini-2.5-flash",
+        prompt_version=1,
+        confidence="medium",
+        summary="Resumo seguro da avaliação comportamental.",
+        completed_at=datetime.now(UTC),
+    )
+    db_session.add(evaluation)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/admin/behavioral-ai/evaluations/{evaluation.id}",
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK, response.text
+    payload = response.json()
+    assert payload["evaluation_id"] == str(evaluation.id)
+    assert payload["status"] == "completed"
+    assert payload["operational_status"] == "completed"
+    assert payload["confidence"] == "medium"
+    assert payload["summary"] == "Resumo seguro da avaliação comportamental."
+    assert payload["can_retry"] is False
+    assert payload["retry_allowed_reason"] == "completed"
+
+    serialized = json.dumps(payload).lower()
+    for forbidden in ["api_key", "encrypted_api_key", "authorization", "bearer", "raw_response", "traceback"]:
+        assert forbidden not in serialized
+
+
+@pytest.mark.asyncio
+async def test_admin_behavioral_ai_permissions_remain_restricted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session, f"behavioral-admin-permissions-{uuid4()}@test.com", "password123", UserRole.RECRUITER
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+
+    metrics_response = await client.get("/api/v1/admin/behavioral-ai/metrics", headers=headers)
+    assert metrics_response.status_code == status.HTTP_403_FORBIDDEN
+
+    list_response = await client.get("/api/v1/admin/behavioral-ai/evaluations", headers=headers)
+    assert list_response.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.asyncio
