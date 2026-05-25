@@ -370,6 +370,17 @@ async def _setup_recruiter(db_session: AsyncSession, client: AsyncClient) -> tup
     return recruiter.id, headers
 
 
+async def _setup_admin(db_session: AsyncSession, client: AsyncClient) -> tuple[UUID, dict[str, str]]:
+    admin = await _create_active_user(
+        db_session,
+        f"gate-admin-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.ADMIN,
+    )
+    headers = await _auth_headers(client, admin.email, "password123")
+    return admin.id, headers
+
+
 # ---------------------------------------------------------------------------
 # A) Final stage gates — technical interview + scorecard
 # ---------------------------------------------------------------------------
@@ -883,3 +894,326 @@ async def test_blocked_transition_writes_no_event_and_no_analysis(
         )
     )
     assert stage == "technical_interview"
+
+
+# ---------------------------------------------------------------------------
+# E) Force flow — admin override with mandatory justification (Fase 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_can_force_is_false_for_recruiter_when_blocked(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F1", f"f1-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="scheduled",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "final", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["can_force"] is False
+    assert body["force_requires_reason"] is True
+
+
+@pytest.mark.asyncio
+async def test_can_force_is_true_for_admin_when_all_gates_forceable(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_admin(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F2", f"f2-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="scheduled",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "final", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["can_force"] is True
+    # Every blocking gate exposes forceable=True so the modal can offer "Forçar".
+    assert all(gate["forceable"] is True for gate in body["missing_gates"])
+
+
+@pytest.mark.asyncio
+async def test_recruiter_cannot_force_even_with_reason(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F3", f"f3-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="scheduled",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={
+            "stage": "final",
+            "notes": "",
+            "reason": "",
+            "force": True,
+            "force_reason": "Concluído fora do sistema por autorização verbal",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.asyncio
+async def test_admin_force_with_short_reason_is_422(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_admin(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F4", f"f4-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="scheduled",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={
+            "stage": "final",
+            "notes": "",
+            "reason": "",
+            "force": True,
+            "force_reason": "curto",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_admin_force_with_empty_reason_is_422(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_admin(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F5", f"f5-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="scheduled",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={
+            "stage": "final",
+            "notes": "",
+            "reason": "",
+            "force": True,
+            "force_reason": "   ",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_admin_force_success_persists_force_metadata_and_audit_log(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin_id, headers = await _setup_admin(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F6", f"f6-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="technical_interview")
+    await _add_interview(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        interview_type="technical",
+        status="scheduled",
+    )
+
+    justification = "Entrevista concluída fora do sistema — autorização da diretoria #123"
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={
+            "stage": "final",
+            "notes": "",
+            "reason": "",
+            "force": True,
+            "force_reason": justification,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["stage"] == "final"
+
+    # Event was recorded with force metadata + missing_gates snapshot.
+    event = await db_session.scalar(
+        sa.select(CandidateJobPipelineEventModel).where(
+            CandidateJobPipelineEventModel.candidate_id == candidate_id,
+            CandidateJobPipelineEventModel.job_id == job_id,
+            CandidateJobPipelineEventModel.event_type == "stage_moved",
+            CandidateJobPipelineEventModel.to_stage == "final",
+        )
+    )
+    assert event is not None
+    assert event.actor_id == admin_id
+    meta = event.metadata_payload or {}
+    assert meta.get("force") is True
+    assert meta.get("force_reason") == justification
+    assert "technical_interview_not_completed" in (meta.get("missing_gates") or [])
+
+    # Append-only audit row written.
+    from src.infrastructure.database.models.audit_model import AuditLogModel
+    audit_row = await db_session.scalar(
+        sa.select(AuditLogModel).where(
+            AuditLogModel.action == "pipeline.stage_forced",
+            AuditLogModel.user_id == admin_id,
+        )
+    )
+    assert audit_row is not None
+    assert audit_row.metadata_["from_stage"] == "technical_interview"
+    assert audit_row.metadata_["to_stage"] == "final"
+    assert audit_row.metadata_["force_reason"] == justification
+    assert "technical_interview_not_completed" in audit_row.metadata_["missing_gates"]
+
+
+@pytest.mark.asyncio
+async def test_force_does_not_bypass_terminal_stage_block(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_admin(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F7", f"f7-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    # Force the entry into a terminal stage directly in the DB. The
+    # ck_candidate_job_pipeline_relationship_terminal constraint requires
+    # terminated_at to be set alongside is_terminal.
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(
+            pipeline_stage="hired",
+            relationship_status="hired",
+            is_terminal=True,
+            terminated_at=datetime.now(UTC),
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={
+            "stage": "final",
+            "notes": "",
+            "reason": "",
+            "force": True,
+            "force_reason": "Justificativa válida e suficientemente longa",
+        },
+        headers=headers,
+    )
+    # Terminal stage is a structural rule, not a forceable gate. The active
+    # entry lookup already excludes terminal entries, so the API returns 404
+    # ("Candidato não está no pipeline desta vaga"). Force cannot reactivate
+    # a hired/rejected entry from here.
+    assert resp.status_code == 404, resp.text
+
+
+@pytest.mark.asyncio
+async def test_force_does_not_bypass_disqualification_reason_required(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, headers = await _setup_admin(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F8", f"f8-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+
+    # disqualification_reason_required has forceable=False — admin force must
+    # be rejected at the 422 layer (PipelineForceNotApplicableError).
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={
+            "stage": "rejected",
+            "notes": "",
+            "reason": "",  # missing reason triggers the non-forceable gate
+            "force": True,
+            "force_reason": "Tentativa de bypass do motivo obrigatório",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_force_true_without_pending_gates_is_422(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    # When the move would succeed on its own, force=true is meaningless — we
+    # surface 422 so the UI drops the flag instead of silently accepting and
+    # recording a misleading "forced" audit entry.
+    _, headers = await _setup_admin(db_session, client)
+    job_id = await _create_job(client, headers, db_session)
+    candidate_id = await _create_candidate(client, headers, "F9", f"f9-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={
+            "stage": "screening",
+            "notes": "",
+            "reason": "",
+            "force": True,
+            "force_reason": "Justificativa válida desnecessária",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422, resp.text

@@ -1011,6 +1011,32 @@ describe("Candidate workspace flow", () => {
     });
   });
 
+  it("?tab=assessments&focus=behavioral_ai abre Avaliações e destaca o bloco de IA comportamental", async () => {
+    vi.mocked(getBehavioralEvaluation).mockResolvedValue(null);
+
+    render(
+      <MemoryRouter
+        future={routerFuture}
+        initialEntries={["/candidatos/candidate-1?tab=assessments&focus=behavioral_ai"]}
+      >
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Lands directly on the assessments tab (existing IA pending UI rendered).
+    expect(
+      await screen.findByRole("button", { name: /Gerar análise IA comportamental/i }),
+    ).toBeInTheDocument();
+
+    // The IA block carries the highlight marker triggered by the focus param.
+    const aiBlock = await screen.findByTestId("behavioral-ai-action-block");
+    await waitFor(() => {
+      expect(aiBlock).toHaveAttribute("data-highlighted", "true");
+    });
+  });
+
   it("Abrir ação prioriza Avaliações quando a pendência é IA comportamental", async () => {
     const user = userEvent.setup();
     vi.mocked(candidatesService.getOverview).mockResolvedValue({

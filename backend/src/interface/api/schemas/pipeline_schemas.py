@@ -99,11 +99,20 @@ class UpdateCandidateStageResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+FORCE_REASON_MIN_LENGTH = 10
+FORCE_REASON_MAX_LENGTH = 500
+
+
 class MoveCandidateRequest(BaseModel):
     job_id: UUID
     stage: PipelineStage
     notes: str | None = Field(default=None, max_length=2000)
     reason: str | None = Field(default=None, max_length=500)
+    # Admin-only escape hatch to bypass structural gates. Service enforces:
+    # actor role == admin AND force_reason length >= FORCE_REASON_MIN_LENGTH
+    # AND every blocking gate is forceable.
+    force: bool = False
+    force_reason: str | None = Field(default=None, max_length=FORCE_REASON_MAX_LENGTH)
 
 
 class MoveCandidateResponse(BaseModel):
@@ -122,6 +131,8 @@ class MoveCandidateByJobBody(BaseModel):
     stage: PipelineStage
     notes: str | None = Field(default=None, max_length=2000)
     reason: str | None = Field(default=None, max_length=500)
+    force: bool = False
+    force_reason: str | None = Field(default=None, max_length=FORCE_REASON_MAX_LENGTH)
 
 
 class SchedulePipelineInterviewRequest(BaseModel):

@@ -36,6 +36,11 @@ import {
   getInitials,
 } from "../features/candidates/utils/profile";
 import { EditCandidateModal } from "../features/pipeline/EditCandidateModal";
+import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
+import {
+  usePipelineGateActionResolver,
+  usePipelineTransitionBlockedHandler,
+} from "../features/pipeline/usePipelineTransitionBlocked";
 import { AILimitIncreaseModal } from "../features/admin/AILimitIncreaseModal";
 import { useAuth } from "../features/auth/useAuth";
 import { parseQuestionText } from "../features/behavioral-templates/behavioralTemplateHelper";
@@ -108,6 +113,16 @@ function resolveInitialTab(search: string): CandidateProfileTabKey {
   return "overview";
 }
 
+// Future foci: "scorecard", "interview", "decision" — wired only when the
+// corresponding tab grows a panel that knows how to react.
+type CandidateProfileFocus = "behavioral_ai";
+
+function resolveInitialFocus(search: string): CandidateProfileFocus | null {
+  const focus = new URLSearchParams(search).get("focus");
+  if (focus === "behavioral_ai") return focus;
+  return null;
+}
+
 export function CandidateProfilePage() {
   const { candidateId } = useParams<{ candidateId: string }>();
   const location = useLocation();
@@ -128,6 +143,39 @@ export function CandidateProfilePage() {
   const [assessmentFocusTick, setAssessmentFocusTick] = useState(0);
   const [dailyLimitDialogOpen, setDailyLimitDialogOpen] = useState(false);
   const [dailyLimitUsage, setDailyLimitUsage] = useState<AILimitsUsage | null>(null);
+
+  // React to `?tab=…&focus=…` on URL changes. We snapshot the last applied
+  // search so we don't re-fire focus on unrelated state churn (the
+  // PipelinePage navigates here with focus=behavioral_ai after a blocked
+  // transition; if the user then changes tab manually the URL resets and we
+  // don't keep "stealing" focus from them).
+  const lastAppliedSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastAppliedSearchRef.current === location.search) return;
+    lastAppliedSearchRef.current = location.search;
+
+    const tab = resolveInitialTab(location.search);
+    const focus = resolveInitialFocus(location.search);
+
+    setActiveTab(tab);
+
+    if (tab === "assessments" && focus === "behavioral_ai") {
+      // Trigger the existing scroll/focus mechanism inside
+      // ProfileBehavioralAssessmentsTab. The tab itself is the destination;
+      // the tick is what causes scrollIntoView to run.
+      setAssessmentFocusTick((current) => current + 1);
+    }
+  }, [location.search]);
+
+  const {
+    blockedTransition,
+    handleBlockedError,
+    closeBlocked,
+    submitForce,
+    forceSubmitting,
+    forceError,
+  } = usePipelineTransitionBlockedHandler();
+  const resolveBlockedAction = usePipelineGateActionResolver(closeBlocked);
 
   const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId ?? null);
   const activeEntry = useMemo(() => getActivePipelineEntry(overview), [overview]);
@@ -329,18 +377,28 @@ export function CandidateProfilePage() {
         toast.success("Etapa atualizada.");
         await reloadWorkspace();
       } catch (err: unknown) {
-        toast.error(
-          formatContextError(
-            err,
-            "Não foi possível mover o candidato.",
-            "Revise o estado atual do pipeline e tente novamente.",
-          ),
-        );
+        const handled = handleBlockedError(err, {
+          candidateId,
+          candidateName: overview?.candidate?.full_name ?? null,
+        });
+        if (handled) {
+          // Backend rejected the move: refetch so the page reflects the
+          // unchanged server stage.
+          await reloadWorkspace();
+        } else {
+          toast.error(
+            formatContextError(
+              err,
+              "Não foi possível mover o candidato.",
+              "Revise o estado atual do pipeline e tente novamente.",
+            ),
+          );
+        }
       } finally {
         setWorkflowSaving(false);
       }
     },
-    [candidateId, profileJobId, reloadWorkspace],
+    [candidateId, handleBlockedError, overview?.candidate?.full_name, profileJobId, reloadWorkspace],
   );
 
   const handleTransfer = useCallback(
@@ -552,6 +610,68 @@ export function CandidateProfilePage() {
           defaults={dailyLimitUsage.defaults}
         />
       ) : null}
+
+      <PipelineTransitionBlockedModal
+        open={blockedTransition !== null}
+        candidateId={blockedTransition?.candidateId ?? null}
+        candidateName={blockedTransition?.candidateName ?? null}
+        blocked={blockedTransition?.response ?? null}
+        onClose={closeBlocked}
+        onResolveAction={(action) => {
+          // We're already on the profile page — if the resolver would only
+          // change tab/focus, do it in-place instead of navigating to the
+          // same URL.
+          if (action.candidateId === candidateId) {
+            if (action.action === "open_interview" || action.action === "open_scorecard") {
+              setActiveTab("interviews");
+              closeBlocked();
+              return true;
+            }
+            if (
+              action.action === "open_behavioral_assessment" ||
+              action.action === "open_behavioral_ai"
+            ) {
+              setActiveTab("assessments");
+              if (action.action === "open_behavioral_ai") {
+                setAssessmentFocusTick((current) => current + 1);
+              }
+              closeBlocked();
+              return true;
+            }
+            if (action.action === "open_decision" || action.action === "add_reason") {
+              setActiveTab("workflow");
+              closeBlocked();
+              return true;
+            }
+          }
+          // Different candidate (rare) or unknown action: hand off to the
+          // shared resolver which navigates with the proper query string.
+          return resolveBlockedAction(action);
+        }}
+        onOpenProfile={(id) => {
+          if (id === candidateId) {
+            closeBlocked();
+            return;
+          }
+          navigate(`/candidatos/${id}`);
+          closeBlocked();
+        }}
+        forceSubmitting={forceSubmitting}
+        forceError={forceError}
+        onForceSubmit={async ({ candidateId: forcedId, targetStage, forceReason }) => {
+          if (!profileJobId) return;
+          const result = await submitForce({
+            candidateId: forcedId,
+            jobId: profileJobId,
+            targetStage,
+            forceReason,
+          });
+          if (result) {
+            toast.success("Etapa atualizada com justificativa registrada.");
+            await reloadWorkspace();
+          }
+        }}
+      />
     </PageShell>
   );
 }
@@ -2039,6 +2159,7 @@ function ProfileBehavioralAssessmentsTab({
     return () => window.clearInterval(intervalId);
   }, [evaluation?.status, loadBehavioralAssessment]);
 
+  const [highlightingAI, setHighlightingAI] = useState(false);
   useEffect(() => {
     if (focusToken <= 0) return;
     window.setTimeout(() => {
@@ -2047,6 +2168,9 @@ function ProfileBehavioralAssessmentsTab({
       }
       aiActionRef.current?.focus({ preventScroll: true });
     }, 0);
+    setHighlightingAI(true);
+    const clearId = window.setTimeout(() => setHighlightingAI(false), 3000);
+    return () => window.clearTimeout(clearId);
   }, [focusToken]);
 
   const handleGenerateBehavioralAI = useCallback(async () => {
@@ -2168,12 +2292,14 @@ function ProfileBehavioralAssessmentsTab({
           <div
             ref={aiActionRef}
             tabIndex={-1}
+            data-testid="behavioral-ai-action-block"
+            data-highlighted={highlightingAI ? "true" : undefined}
             className={[
               "rounded-xl border p-4 outline-none transition",
               canRequestAI
                 ? "border-amber-200 bg-amber-50"
                 : "border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))]",
-              focusToken > 0 && canRequestAI ? "ring-2 ring-amber-300 ring-offset-2" : "",
+              highlightingAI ? "ring-2 ring-amber-400 ring-offset-2 animate-pulse" : "",
             ].join(" ")}
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

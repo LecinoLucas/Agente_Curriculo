@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { candidatesService } from "../../../../services/candidatesService";
+import { HttpError } from "../../../../services/http";
 import { pipelineService } from "../../../../services/pipelineService";
+import { toast } from "../../../../shared/utils/toast";
 import type { CandidateOverview } from "../../../../types/domain";
 import { CandidatePreviewDrawer } from "../CandidatePreviewDrawer";
 
@@ -18,12 +20,18 @@ vi.mock("../../../../services/candidatesService", () => ({
   },
 }));
 
-vi.mock("../../../../services/pipelineService", () => ({
-  pipelineService: {
-    moveCandidateStage: vi.fn(),
-    schedulePipelineInterview: vi.fn(),
-  },
-}));
+vi.mock("../../../../services/pipelineService", async () => {
+  const actual = await vi.importActual<typeof import("../../../../services/pipelineService")>(
+    "../../../../services/pipelineService",
+  );
+  return {
+    ...actual,
+    pipelineService: {
+      moveCandidateStage: vi.fn(),
+      schedulePipelineInterview: vi.fn(),
+    },
+  };
+});
 
 vi.mock("../../../../services/agendaService", () => ({
   agendaService: {
@@ -367,6 +375,71 @@ describe("CandidatePreviewDrawer", () => {
     await waitFor(() => {
       expect(onPipelineChanged).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("abre PipelineTransitionBlockedModal e não mostra toast genérico quando backend retorna 409 estruturado", async () => {
+    const user = userEvent.setup();
+    const blockedPayload = {
+      code: "pipeline_transition_blocked",
+      message: "Não é possível avançar candidato para esta etapa.",
+      current_stage: "technical_interview",
+      target_stage: "final",
+      missing_gates: [
+        {
+          code: "scorecard_not_submitted",
+          label: "Scorecard final pendente",
+          description: "Submeta o scorecard.",
+          action: "open_scorecard",
+          action_payload: null,
+          severity: "block",
+          forceable: false,
+        },
+        {
+          code: "exotic_gate",
+          label: "Pendência exótica",
+          description: "Backend introduziu uma ação nova.",
+          action: "open_brand_new_thing",
+          action_payload: null,
+          severity: "block",
+          forceable: false,
+        },
+      ],
+      can_force: false,
+      force_requires_reason: true,
+    };
+    vi.mocked(pipelineService.moveCandidateStage).mockRejectedValueOnce(
+      new HttpError(409, "Conflict", undefined, blockedPayload, undefined),
+    );
+
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "technical_interview",
+          candidate_status: "Entrevista Técnica",
+        },
+      ],
+    });
+    renderDrawer();
+
+    await user.click(await screen.findByRole("button", { name: /Avançar para fase Final/i }));
+
+    // Modal opened with structured pendencies (including the unknown-action one).
+    const modal = await screen.findByTestId("pipeline-transition-blocked-modal");
+    expect(modal).toBeInTheDocument();
+    expect(screen.getByTestId("pipeline-blocked-gate-scorecard_not_submitted")).toBeInTheDocument();
+    // Unknown action is NOT discarded — it is still listed so we don't mask a backend regression.
+    expect(screen.getByTestId("pipeline-blocked-gate-exotic_gate")).toBeInTheDocument();
+    // The unknown action falls back to "Abrir perfil" on its button.
+    expect(
+      screen.getByTestId("pipeline-blocked-gate-exotic_gate-action"),
+    ).toHaveTextContent(/abrir perfil/i);
+
+    // No generic move-error toast was issued.
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+
+    // can_force=false → no force button.
+    expect(screen.queryByText(/forçar avanço/i)).not.toBeInTheDocument();
   });
 
   it("mantém avanço direto para etapa que não é entrevista", async () => {

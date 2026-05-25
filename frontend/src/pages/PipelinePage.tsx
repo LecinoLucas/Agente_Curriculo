@@ -8,10 +8,11 @@ import { CandidateSearchModal } from "../features/pipeline/CandidateSearchModal"
 import { InterviewQuickScheduleModal } from "../features/pipeline/InterviewQuickScheduleModal";
 import { NewCandidateModal } from "../features/pipeline/NewCandidateModal";
 import { usePipeline } from "../features/pipeline/PipelineContext";
+import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
 import {
-  PipelineTransitionBlockedModal,
-  type GateAction,
-} from "../features/pipeline/PipelineTransitionBlockedModal";
+  usePipelineGateActionResolver,
+  usePipelineTransitionBlockedHandler,
+} from "../features/pipeline/usePipelineTransitionBlocked";
 import { KanbanColumn } from "../components/kanban/KanbanColumn";
 import { SkeletonRows } from "../components/common/Skeleton";
 import { EmptyState } from "../components/common/EmptyState";
@@ -22,12 +23,7 @@ import { toast } from "../shared/utils/toast";
 
 const MOVE_CANDIDATE_TOAST_KEY = "feedback-move-candidate";
 import { getJobRanking } from "../services/jobsService";
-import {
-  pipelineService,
-  readPipelineTransitionBlockedResponse,
-  type PipelineJobSummary,
-  type PipelineTransitionBlockedResponse,
-} from "../services/pipelineService";
+import { pipelineService, type PipelineJobSummary } from "../services/pipelineService";
 import type { JobCandidate, JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
 import {
   formatJobStatus,
@@ -112,11 +108,15 @@ export function PipelinePage() {
     targetStage: PipelineStage;
   } | null>(null);
   const [isStageMoveSaving, setIsStageMoveSaving] = useState(false);
-  const [blockedTransition, setBlockedTransition] = useState<{
-    candidateId: string;
-    candidateName: string | null;
-    response: PipelineTransitionBlockedResponse;
-  } | null>(null);
+  const {
+    blockedTransition,
+    handleBlockedError,
+    closeBlocked,
+    submitForce,
+    forceSubmitting,
+    forceError,
+  } = usePipelineTransitionBlockedHandler();
+  const resolveBlockedAction = usePipelineGateActionResolver(closeBlocked);
 
   const {
     activeJobId,
@@ -574,17 +574,12 @@ export function PipelinePage() {
         await syncAfterStageMutation();
         feedback.moveCandidate.success();
       } catch (err: unknown) {
-        const blocked = readPipelineTransitionBlockedResponse(err);
-        if (blocked) {
-          // Dismiss the optimistic-move loading toast and open the structured
-          // modal. The PipelineContext already restored the card to its
-          // original column; force a server refetch to be safe.
+        const handled = handleBlockedError(err, { candidateId, candidateName });
+        if (handled) {
+          // Dismiss the optimistic-move loading toast. The PipelineContext
+          // already restored the card to its original column; force a server
+          // refetch to be safe.
           toast.dismissKey(MOVE_CANDIDATE_TOAST_KEY);
-          setBlockedTransition({
-            candidateId,
-            candidateName: candidateName ?? null,
-            response: blocked,
-          });
           await syncAfterStageMutation();
         } else {
           feedback.moveCandidate.error(err);
@@ -593,7 +588,7 @@ export function PipelinePage() {
         setIsStageMoveSaving(false);
       }
     },
-    [moveCandidateStage, syncAfterStageMutation],
+    [handleBlockedError, moveCandidateStage, syncAfterStageMutation],
   );
 
   const handleCardDragStart = useCallback(
@@ -682,14 +677,12 @@ export function PipelinePage() {
         await syncAfterStageMutation();
         feedback.moveCandidate.success();
       } catch (err: unknown) {
-        const blocked = readPipelineTransitionBlockedResponse(err);
-        if (blocked) {
+        const handled = handleBlockedError(err, {
+          candidateId: interviewCandidate.candidateId,
+          candidateName: interviewCandidate.candidateName,
+        });
+        if (handled) {
           toast.dismissKey(MOVE_CANDIDATE_TOAST_KEY);
-          setBlockedTransition({
-            candidateId: interviewCandidate.candidateId,
-            candidateName: interviewCandidate.candidateName,
-            response: blocked,
-          });
           setInterviewCandidate(null);
           await syncAfterStageMutation();
         } else {
@@ -699,7 +692,7 @@ export function PipelinePage() {
         setIsStageMoveSaving(false);
       }
     },
-    [activeJobId, interviewCandidate, syncAfterStageMutation],
+    [activeJobId, handleBlockedError, interviewCandidate, syncAfterStageMutation],
   );
 
   const handleCloseInterviewModal = useCallback(() => {
@@ -708,52 +701,13 @@ export function PipelinePage() {
     }
   }, [isStageMoveSaving]);
 
-  const handleResolveBlockedAction = useCallback(
-    (action: GateAction): boolean => {
-      const tabByAction: Partial<Record<GateAction["action"], string>> = {
-        open_interview: "interviews",
-        open_scorecard: "interviews",
-        open_behavioral_assessment: "assessments",
-        open_behavioral_ai: "assessments",
-        open_decision: "workflow",
-      };
-
-      // add_reason: there is no global "set rejection reason" modal at the
-      // pipeline level in this surface. Falling back to the candidate
-      // profile is the safe path — recruiters can disqualify with a reason
-      // from there (workflow tab).
-      if (action.action === "add_reason") {
-        navigate(`/candidatos/${action.candidateId}?tab=workflow`);
-        setBlockedTransition(null);
-        return true;
-      }
-
-      const tab = tabByAction[action.action];
-      if (!tab) return false; // let modal fall back to "Abrir perfil"
-
-      const params = new URLSearchParams({ tab });
-      if (action.action === "open_behavioral_ai") {
-        // Hint to the profile page that the IA panel should get focus.
-        params.set("focus", "behavioral_ai");
-      }
-      navigate(`/candidatos/${action.candidateId}?${params.toString()}`);
-      setBlockedTransition(null);
-      return true;
-    },
-    [navigate],
-  );
-
   const handleOpenBlockedProfile = useCallback(
     (candidateId: string) => {
       navigate(`/candidatos/${candidateId}`);
-      setBlockedTransition(null);
+      closeBlocked();
     },
-    [navigate],
+    [closeBlocked, navigate],
   );
-
-  const handleCloseBlockedModal = useCallback(() => {
-    setBlockedTransition(null);
-  }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -1210,9 +1164,24 @@ export function PipelinePage() {
         candidateId={blockedTransition?.candidateId ?? null}
         candidateName={blockedTransition?.candidateName ?? null}
         blocked={blockedTransition?.response ?? null}
-        onClose={handleCloseBlockedModal}
-        onResolveAction={handleResolveBlockedAction}
+        onClose={closeBlocked}
+        onResolveAction={resolveBlockedAction}
         onOpenProfile={handleOpenBlockedProfile}
+        forceSubmitting={forceSubmitting}
+        forceError={forceError}
+        onForceSubmit={async ({ candidateId, targetStage, forceReason }) => {
+          if (!activeJobId) return;
+          const result = await submitForce({
+            candidateId,
+            jobId: activeJobId,
+            targetStage,
+            forceReason,
+          });
+          if (result) {
+            await syncAfterStageMutation();
+            feedback.moveCandidate.success();
+          }
+        }}
       />
     </div>
   );

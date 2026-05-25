@@ -619,6 +619,11 @@ export type MovePipelineCandidatePayload = {
   stage: PipelineStage;
   notes?: string | null;
   reason?: string | null;
+  // Admin-only escape hatch. Backend rejects with 403 if the caller is not an
+  // admin and with 422 if the justification is missing or shorter than the
+  // server-side minimum.
+  force?: boolean;
+  force_reason?: string | null;
 };
 
 export type MovePipelineCandidateResponse = {

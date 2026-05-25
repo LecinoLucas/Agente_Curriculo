@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { HttpError } from "../http";
 import {
   isPipelineTransitionBlockedError,
+  pipelineService,
   readPipelineTransitionBlockedResponse,
 } from "../pipelineService";
 
@@ -75,7 +76,7 @@ describe("readPipelineTransitionBlockedResponse", () => {
     expect(result!.force_requires_reason).toBe(true);
   });
 
-  it("filters out missing_gates with unknown action codes", () => {
+  it("normalizes missing_gates with unknown action codes to open_profile", () => {
     const err = new HttpError(409, "Conflict", undefined, {
       ...VALID_PAYLOAD,
       missing_gates: [
@@ -89,7 +90,51 @@ describe("readPipelineTransitionBlockedResponse", () => {
       ],
     });
     const result = readPipelineTransitionBlockedResponse(err);
-    expect(result!.missing_gates).toHaveLength(1);
+    expect(result!.missing_gates).toHaveLength(2);
     expect(result!.missing_gates[0].action).toBe("open_behavioral_ai");
+    expect(result!.missing_gates[1].action).toBe("open_profile");
+  });
+});
+
+
+describe("pipelineService.moveCandidateStage — force payload", () => {
+  it("inclui force/force_reason no body somente quando force=true", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch" as never)
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } }) as never);
+
+    await pipelineService.moveCandidateStage("job-1", "c-1", {
+      stage: "offer",
+      force: true,
+      force_reason: "Entrevista realizada por telefone com autorização externa",
+    });
+
+    expect(fetchSpy).toHaveBeenCalled();
+    const lastCall = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
+    const init = lastCall[1] as RequestInit;
+    expect(init.method).toBe("PATCH");
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({
+      stage: "offer",
+      force: true,
+      force_reason: "Entrevista realizada por telefone com autorização externa",
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it("não inclui force/force_reason quando force=false (padrão)", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch" as never)
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } }) as never);
+
+    await pipelineService.moveCandidateStage("job-1", "c-1", { stage: "screening" });
+
+    const init = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1][1] as RequestInit;
+    const body = JSON.parse(init.body as string);
+    expect(body).not.toHaveProperty("force");
+    expect(body).not.toHaveProperty("force_reason");
+
+    fetchSpy.mockRestore();
   });
 });

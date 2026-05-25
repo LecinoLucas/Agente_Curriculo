@@ -24,13 +24,25 @@ export type PipelineGateActionCode =
   | "open_behavioral_assessment"
   | "open_behavioral_ai"
   | "open_decision"
-  | "add_reason";
+  | "add_reason"
+  /**
+   * Sentinel used by the parser when the backend ships an `action` value that
+   * the frontend doesn't recognize. We keep the gate visible (so we don't mask
+   * backend regressions) and let the modal route the user to the candidate
+   * profile as a safe fallback.
+   */
+  | "open_profile";
 
 export type PipelineMissingGate = {
   code: string;
   label: string;
   description: string;
-  action: PipelineGateActionCode;
+  /**
+   * Known action code, OR a raw string if the backend introduces a new action
+   * the frontend hasn't been taught yet. Consumers should treat unknown
+   * strings as "fall back to profile".
+   */
+  action: PipelineGateActionCode | (string & {});
   action_payload?: Record<string, unknown> | null;
   severity: "block";
   forceable: boolean;
@@ -46,24 +58,34 @@ export type PipelineTransitionBlockedResponse = {
   force_requires_reason: boolean;
 };
 
-const GATE_ACTION_CODES: ReadonlySet<PipelineGateActionCode> = new Set([
+const GATE_ACTION_CODES: ReadonlySet<PipelineGateActionCode> = new Set<PipelineGateActionCode>([
   "open_interview",
   "open_scorecard",
   "open_behavioral_assessment",
   "open_behavioral_ai",
   "open_decision",
   "add_reason",
+  "open_profile",
 ]);
 
-function isGateActionCode(value: unknown): value is PipelineGateActionCode {
-  return typeof value === "string" && GATE_ACTION_CODES.has(value as PipelineGateActionCode);
+export function isKnownGateAction(value: string): value is PipelineGateActionCode {
+  return GATE_ACTION_CODES.has(value as PipelineGateActionCode);
 }
 
+/**
+ * Normalizes one gate entry. Unlike the previous behavior (Fase 3), this no
+ * longer discards gates with unrecognized `action` codes — a missing pendency
+ * staying invisible would mask backend regressions. Unknown actions fall back
+ * to `open_profile`, so the modal can still show the gate and route the user
+ * to a safe place.
+ */
 function normalizeMissingGate(raw: unknown): PipelineMissingGate | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
-  const action = isGateActionCode(record.action) ? record.action : null;
-  if (!action) return null;
+  const rawAction = typeof record.action === "string" ? record.action : "";
+  const action: PipelineMissingGate["action"] = rawAction && isKnownGateAction(rawAction)
+    ? rawAction
+    : "open_profile";
   return {
     code: typeof record.code === "string" ? record.code : "unknown_gate",
     label: typeof record.label === "string" ? record.label : "Pendência",
@@ -109,6 +131,19 @@ export function readPipelineTransitionBlockedResponse(
   for (const gate of raw.missing_gates) {
     const normalized = normalizeMissingGate(gate);
     if (normalized) gates.push(normalized);
+  }
+  // Edge case: the backend sent gates but every entry was malformed (no object,
+  // no label). Surface a single fallback so the user is still informed.
+  if (gates.length === 0 && Array.isArray(raw.missing_gates) && raw.missing_gates.length > 0) {
+    gates.push({
+      code: "unknown_gate",
+      label: "Pendência detectada",
+      description: "Abra o perfil do candidato para revisar o estado do pipeline.",
+      action: "open_profile",
+      action_payload: null,
+      severity: "block",
+      forceable: false,
+    });
   }
   return {
     code: "pipeline_transition_blocked",
@@ -233,6 +268,11 @@ export const pipelineService = {
         stage: payload.stage,
         notes: payload.notes ?? null,
         reason: payload.reason ?? null,
+        // Only send the admin force fields when actually forcing — keeps the
+        // request body small and the audit trail honest for non-force calls.
+        ...(payload.force
+          ? { force: true, force_reason: payload.force_reason ?? null }
+          : {}),
       },
     });
 

@@ -4,6 +4,11 @@ import { ClipboardCheck, FileText, LoaderCircle, X } from "lucide-react";
 
 import { CandidateScoreDimensionsCard } from "./CandidateScoreDimensionsCard";
 import { InterviewQuickScheduleModal } from "../../pipeline/InterviewQuickScheduleModal";
+import { PipelineTransitionBlockedModal } from "../../pipeline/PipelineTransitionBlockedModal";
+import {
+  usePipelineGateActionResolver,
+  usePipelineTransitionBlockedHandler,
+} from "../../pipeline/usePipelineTransitionBlocked";
 import { useCandidateOverview } from "../hooks/useCandidateOverview";
 import { formatContextError } from "../../../services/errorMessages";
 import { pipelineService } from "../../../services/pipelineService";
@@ -103,6 +108,15 @@ function DrawerPanel({
   const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId);
   const [stageSaving, setStageSaving] = useState(false);
   const [interviewStageToSchedule, setInterviewStageToSchedule] = useState<PipelineStage | null>(null);
+  const {
+    blockedTransition,
+    handleBlockedError,
+    closeBlocked,
+    submitForce,
+    forceSubmitting,
+    forceError,
+  } = usePipelineTransitionBlockedHandler();
+  const resolveBlockedAction = usePipelineGateActionResolver(closeBlocked);
 
   const candidate = overview?.candidate ?? null;
   const activeEntry = getActivePipelineEntry(overview);
@@ -167,13 +181,23 @@ function DrawerPanel({
       });
       toast.success(`Candidato movido para ${STAGE_LABEL[targetStage] ?? targetStage}.`);
     } catch (err: unknown) {
-      toast.error(
-        formatContextError(
-          err,
-          "Não foi possível avançar a etapa.",
-          "Revise as pendências do candidato e tente novamente.",
-        ),
-      );
+      const handled = handleBlockedError(err, {
+        candidateId,
+        candidateName: candidate?.full_name ?? null,
+      });
+      if (handled) {
+        // Reload the overview so the drawer reflects the server-side stage
+        // (the move did NOT happen — candidate stays put).
+        await syncAfterPipelineChange();
+      } else {
+        toast.error(
+          formatContextError(
+            err,
+            "Não foi possível avançar a etapa.",
+            "Revise as pendências do candidato e tente novamente.",
+          ),
+        );
+      }
       setStageSaving(false);
       return false;
     }
@@ -223,13 +247,22 @@ function DrawerPanel({
       toast.success(`Entrevista agendada em ${STAGE_LABEL[interviewStageToSchedule] ?? "entrevista"}.`);
       setInterviewStageToSchedule(null);
     } catch (err: unknown) {
-      toast.error(
-        formatContextError(
-          err,
-          "Não foi possível agendar a entrevista.",
-          "Revise os dados do agendamento e tente novamente.",
-        ),
-      );
+      const handled = handleBlockedError(err, {
+        candidateId,
+        candidateName: candidate?.full_name ?? null,
+      });
+      if (handled) {
+        setInterviewStageToSchedule(null);
+        await syncAfterPipelineChange();
+      } else {
+        toast.error(
+          formatContextError(
+            err,
+            "Não foi possível agendar a entrevista.",
+            "Revise os dados do agendamento e tente novamente.",
+          ),
+        );
+      }
       setStageSaving(false);
       return;
     }
@@ -528,6 +561,34 @@ function DrawerPanel({
           onOpenFullAgenda={openFullAgenda}
         />
       ) : null}
+
+      <PipelineTransitionBlockedModal
+        open={blockedTransition !== null}
+        candidateId={blockedTransition?.candidateId ?? null}
+        candidateName={blockedTransition?.candidateName ?? null}
+        blocked={blockedTransition?.response ?? null}
+        onClose={closeBlocked}
+        onResolveAction={resolveBlockedAction}
+        onOpenProfile={(id) => {
+          navigate(`/candidatos/${id}`);
+          closeBlocked();
+        }}
+        forceSubmitting={forceSubmitting}
+        forceError={forceError}
+        onForceSubmit={async ({ candidateId: forcedId, targetStage, forceReason }) => {
+          if (!activeEntry) return;
+          const result = await submitForce({
+            candidateId: forcedId,
+            jobId: activeEntry.job_id,
+            targetStage,
+            forceReason,
+          });
+          if (result) {
+            await syncAfterPipelineChange();
+            toast.success(`Candidato movido para ${STAGE_LABEL[targetStage] ?? targetStage}.`);
+          }
+        }}
+      />
     </>
   );
 }

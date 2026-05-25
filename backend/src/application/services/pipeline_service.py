@@ -14,6 +14,7 @@ from src.application.services.domain_events import CandidateStageChangedEvent, d
 from src.application.services.pipeline_gate_evaluator import (
     MissingGate,
     PipelineGateEvaluator,
+    can_force_transition,
 )
 from src.application.services.strict_payload import require_key
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
@@ -34,6 +35,7 @@ from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest,
     AddCandidateToJobResponse,
     CandidatePipelineHistoryResponse,
+    FORCE_REASON_MIN_LENGTH,
     JobMatchCandidateResponse,
     MoveCandidateRequest,
     MoveCandidateResponse,
@@ -280,14 +282,31 @@ class PipelineTransitionBlockedError(Exception):
         current_stage: str | None,
         target_stage: str,
         missing_gates: list[MissingGate],
+        can_force: bool = False,
     ) -> None:
         self.current_stage = current_stage
         self.target_stage = target_stage
         self.missing_gates = missing_gates
+        self.can_force = can_force
         super().__init__(
             f"Pipeline transition to '{target_stage}' blocked by "
             f"{len(missing_gates)} gate(s)."
         )
+
+
+class PipelineForceNotAllowedError(Exception):
+    """Raised when a non-admin actor attempts to force-bypass pipeline gates."""
+
+
+class PipelineForceReasonInvalidError(Exception):
+    """Raised when a force-bypass attempt comes without a valid justification."""
+
+
+class PipelineForceNotApplicableError(Exception):
+    """Raised when force=true is requested but no gate is currently blocking the
+    transition (the move would succeed naturally) or the gates are not all
+    forceable. Returned as 422 so the client can drop the force flag and retry.
+    """
 
 
 class PipelineConcurrentModificationError(Exception):
@@ -437,6 +456,7 @@ class PipelineService:
         moved_by: UUID,
         *,
         bypass_gates: bool = False,
+        actor_role: str | None = None,
     ) -> MoveCandidateResponse:
         await self._ensure_active_job(body.job_id)
         await self._ensure_active_candidate(candidate_id)
@@ -449,6 +469,7 @@ class PipelineService:
         from_cfg = STAGE_CONFIG[from_stage]
 
         # Task 2: derive terminal check from STAGE_CONFIG — single source of truth.
+        # Terminal stages are NEVER force-bypassable.
         if from_cfg.is_terminal:
             raise PipelineTerminalStageError
 
@@ -456,19 +477,26 @@ class PipelineService:
             raise PipelineSameStageError
 
         # Task 4: flow control — block invalid backwards transitions.
-        # 'rejected' is always reachable from any non-terminal stage.
+        # Structural backward block is NOT force-bypassable either; an admin
+        # has to use the proper reactivation path instead.
         to_cfg = STAGE_CONFIG[body.stage]
         if body.stage != "rejected" and to_cfg.order < from_cfg.order and not from_cfg.allow_backwards:
             raise PipelineInvalidTransitionError(
                 f"Cannot move backwards from '{from_stage}' to '{body.stage}'"
             )
 
-        # Fase 2: structural gate evaluator. Only fires on forward moves and on
-        # the disqualification path (which validates the reason). Backwards
-        # moves continue to follow legacy behavior. The caller may opt to
-        # bypass gates for system-driven moves (e.g. interview scheduling that
-        # auto-advances stage — would otherwise self-block).
+        # Fase 2/5: structural gate evaluator. Only fires on forward moves and
+        # on the disqualification path (which validates the reason). Backwards
+        # moves continue to follow legacy behavior. Callers may opt to bypass
+        # gates for system-driven moves (e.g. interview scheduling).
+        #
+        # Force flow (Fase 5): admin can override structural gates with a
+        # written justification. See PipelineGateEvaluator.can_force_transition.
         is_forward = to_cfg.order > from_cfg.order
+        force_applied = False
+        forced_missing_gates: list[MissingGate] = []
+        gates_at_check: list[MissingGate] = []
+
         if not bypass_gates and (is_forward or body.stage == "rejected"):
             job = await self._repository.find_active_job(body.job_id)
             if job is None:
@@ -481,11 +509,46 @@ class PipelineService:
                 target_stage=body.stage,
                 reason=body.reason,
             )
+            gates_at_check = gate_result.missing_gates
+
             if gate_result.is_blocked:
-                raise PipelineTransitionBlockedError(
-                    current_stage=from_stage,
-                    target_stage=body.stage,
+                can_force = can_force_transition(
+                    actor_role=actor_role,
                     missing_gates=gate_result.missing_gates,
+                )
+
+                if not body.force:
+                    raise PipelineTransitionBlockedError(
+                        current_stage=from_stage,
+                        target_stage=body.stage,
+                        missing_gates=gate_result.missing_gates,
+                        can_force=can_force,
+                    )
+
+                # body.force is True. Validate authorization + justification.
+                if actor_role != "admin":
+                    raise PipelineForceNotAllowedError(
+                        "Apenas administradores podem forçar avanço de etapa."
+                    )
+                if not gate_result.all_forceable:
+                    # E.g. disqualification_reason_required — never forceable.
+                    raise PipelineForceNotApplicableError(
+                        "Alguma pendência impede forçar avanço (ex.: motivo de desclassificação obrigatório)."
+                    )
+                reason_text = (body.force_reason or "").strip()
+                if len(reason_text) < FORCE_REASON_MIN_LENGTH:
+                    raise PipelineForceReasonInvalidError(
+                        "Justificativa do force inválida: mínimo de "
+                        f"{FORCE_REASON_MIN_LENGTH} caracteres."
+                    )
+
+                force_applied = True
+                forced_missing_gates = list(gate_result.missing_gates)
+            elif body.force:
+                # No gates blocking — force is meaningless; surface 422 so the
+                # client drops the flag and retries (vs. silently accepting).
+                raise PipelineForceNotApplicableError(
+                    "Force não se aplica: nenhuma pendência está bloqueando esta transição."
                 )
 
         now = datetime.now(UTC)
@@ -518,6 +581,18 @@ class PipelineService:
             to_stage=body.stage,
             actor_id=moved_by,
         )
+        force_reason_clean = (body.force_reason or "").strip() if force_applied else None
+        forced_gate_codes = [gate.code for gate in forced_missing_gates] if force_applied else []
+        event_metadata: dict[str, object] = {
+            "trigger": "manual",
+            "notes": body.notes,
+            "reason": body.reason,
+        }
+        if force_applied:
+            event_metadata["force"] = True
+            event_metadata["force_reason"] = force_reason_clean
+            event_metadata["missing_gates"] = forced_gate_codes
+
         transition = CandidateJobPipelineEventModel(
             candidate_id=candidate_id,
             job_id=body.job_id,
@@ -529,14 +604,34 @@ class PipelineService:
                 pipeline_id, "stage_moved", from_stage, body.stage, moved_by,
                 sequence=sequence,
             ),
-            metadata_payload={
-                "trigger": "manual",
-                "notes": body.notes,
-                "reason": body.reason,
-            },
+            metadata_payload=event_metadata,
             created_at=now,
         )
         saved_transition = await self._repository.save_transition(transition)
+
+        if force_applied and self._session is not None:
+            # Append-only audit trail for compliance / review. Best-effort:
+            # never block the user response on audit-log failure.
+            try:
+                from src.application.services.audit_service import AuditService
+                await AuditService(self._session).log_event(
+                    action="pipeline.stage_forced",
+                    resource_type="candidate_job_pipeline",
+                    resource_id=pipeline_id,
+                    user_id=moved_by,
+                    metadata={
+                        "from_stage": from_stage,
+                        "to_stage": body.stage,
+                        "force_reason": force_reason_clean,
+                        "missing_gates": forced_gate_codes,
+                    },
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning(
+                    "pipeline.stage_forced.audit_failed",
+                    pipeline_id=str(pipeline_id),
+                    error=str(exc),
+                )
 
         # Task 3: dispatch domain event through the extension point.
         dispatch_event(CandidateStageChangedEvent(

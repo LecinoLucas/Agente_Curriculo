@@ -35,7 +35,11 @@ class MissingGate:
     action: str
     action_payload: dict[str, Any] | None = None
     severity: str = "block"
-    forceable: bool = False
+    # True when an admin is allowed to force-bypass the gate with a written
+    # justification. Structural pendencies (interview/scorecard/IA/decision)
+    # are forceable. The disqualification-reason gate is NOT — rejection must
+    # always carry a reason from the actor.
+    forceable: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +62,29 @@ class GateEvaluationResult:
     @property
     def is_blocked(self) -> bool:
         return bool(self.missing_gates)
+
+    @property
+    def all_forceable(self) -> bool:
+        """True when every pending gate accepts an admin force-bypass."""
+        return all(gate.forceable for gate in self.missing_gates)
+
+
+def can_force_transition(
+    *,
+    actor_role: str | None,
+    missing_gates: list[MissingGate],
+) -> bool:
+    """Whether the current actor may force-bypass the listed gates.
+
+    `True` only when the actor is admin AND every gate is marked forceable.
+    The reason-required gate for `rejected` is intentionally non-forceable —
+    admins cannot bypass it either; they must still write a reason.
+    """
+    if actor_role != "admin":
+        return False
+    if not missing_gates:
+        return False
+    return all(gate.forceable for gate in missing_gates)
 
 
 class PipelineGateEvaluator:
@@ -90,6 +117,7 @@ class PipelineGateEvaluator:
                         label="Motivo da desclassificação obrigatório",
                         description="Informe um motivo para desclassificar o candidato.",
                         action="add_reason",
+                        forceable=False,
                     )
                 )
             return result

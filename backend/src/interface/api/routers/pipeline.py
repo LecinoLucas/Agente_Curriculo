@@ -18,6 +18,9 @@ from src.application.services.pipeline_service import (
     PipelineDecisionGateBlockedError,
     PipelineDuplicateEntryError,
     PipelineEntryNotFoundError,
+    PipelineForceNotAllowedError,
+    PipelineForceNotApplicableError,
+    PipelineForceReasonInvalidError,
     PipelineInvalidTransitionError,
     PipelineJobNotFoundError,
     PipelineSameStageError,
@@ -77,7 +80,7 @@ def _blocked_response(exc: PipelineTransitionBlockedError) -> JSONResponse:
             "current_stage": exc.current_stage,
             "target_stage": exc.target_stage,
             "missing_gates": [gate.as_dict() for gate in exc.missing_gates],
-            "can_force": False,
+            "can_force": exc.can_force,
             "force_requires_reason": True,
         },
     )
@@ -250,11 +253,19 @@ async def move_candidate_stage_v2(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        request = MoveCandidateRequest(job_id=job_id, stage=body.stage, notes=body.notes, reason=body.reason)
+        request = MoveCandidateRequest(
+            job_id=job_id,
+            stage=body.stage,
+            notes=body.notes,
+            reason=body.reason,
+            force=body.force,
+            force_reason=body.force_reason,
+        )
         result = await _service(db).move_candidate(
             candidate_id=candidate_id,
             body=request,
             moved_by=current_user.id,
+            actor_role=current_user.role.value if current_user.role else None,
         )
         await db.commit()
         analysis_decision = await CandidateJobAnalysisDispatcher(db).request_auto_analysis(
@@ -266,6 +277,15 @@ async def move_candidate_stage_v2(
     except PipelineTransitionBlockedError as exc:
         await db.rollback()
         return _blocked_response(exc)
+    except PipelineForceNotAllowedError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except PipelineForceReasonInvalidError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except PipelineForceNotApplicableError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except Exception as exc:
         await db.rollback()
         _handle(exc)
