@@ -83,6 +83,12 @@ const AnalisesIaPage = lazy(() =>
   }))
 );
 
+const AnalisesIaComportamentalPage = lazy(() =>
+  import("../pages/AnalisesIaComportamentalPage").then((m) => ({
+    default: m.AnalisesIaComportamentalPage,
+  }))
+);
+
 const DashboardPage = lazy(() =>
   import("../pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
 );
@@ -249,6 +255,11 @@ export function AppRouter() {
         <Route
           path="analises-ia"
           element={protectedPage(<AnalisesIaPage />, ["admin", "recruiter"])}
+        />
+
+        <Route
+          path="analises-ia/comportamental"
+          element={protectedPage(<AnalisesIaComportamentalPage />, ["admin", "recruiter"])}
         />
 
         <Route

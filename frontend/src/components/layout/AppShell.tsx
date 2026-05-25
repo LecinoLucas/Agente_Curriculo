@@ -24,6 +24,7 @@ import {
   User,
   GraduationCap,
   KeyRound,
+  BrainCircuit,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -103,7 +104,8 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     roles: ["admin", "recruiter"],
     isDropdown: true,
     items: [
-      { to: "/analises-ia", label: "Análises IA", caption: "Status e execuções", roles: ["admin", "recruiter"] },
+      { to: "/analises-ia", label: "Currículos e matching", caption: "Análises IA", roles: ["admin", "recruiter"] },
+      { to: "/analises-ia/comportamental", label: "IA Comportamental", caption: "Fila e avaliações", roles: ["admin", "recruiter"] },
       { to: "/importar", label: "Importação de currículos", caption: "Carga de CVs", roles: ["admin", "recruiter"] },
       { to: "/importar-formulario", label: "Importação por formulário", caption: "Google Forms / Drive", roles: ["admin", "recruiter"] },
     ],
@@ -144,6 +146,7 @@ const ICON_MAP: Record<string, any> = {
   "/importar": Upload,
   "/importar-formulario": FileSpreadsheet,
   "/analises-ia": Sparkles,
+  "/analises-ia/comportamental": BrainCircuit,
   "/manager": ShieldCheck,
   "/admin": Settings,
   "/admin/usuarios": UserRound,
@@ -241,6 +244,9 @@ export function AppShell() {
     }
     if (itemTo === "/candidato/portal") {
       return location.pathname === "/candidato/portal";
+    }
+    if (itemTo === "/analises-ia") {
+      return location.pathname === "/analises-ia";
     }
     return location.pathname.startsWith(itemTo);
   };
