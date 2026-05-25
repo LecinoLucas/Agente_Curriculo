@@ -5,7 +5,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.behavioral_ai_evaluation_service import BehavioralAIEvaluationService
+from src.application.services.behavioral_ai_evaluation_service import (
+    BehavioralAIEvaluationService,
+    behavioral_ai_safe_detail,
+)
 from src.domain.exceptions import ValidationException
 from src.interface.api.dependencies import AdminOnly, RecruiterOrAdmin, get_db
 from src.interface.workers.behavioral_ai_dispatcher import enqueue_behavioral_ai_evaluation
@@ -20,6 +23,31 @@ async def get_behavioral_ai_metrics(
 ) -> dict:
     service = BehavioralAIEvaluationService(db)
     return await service.get_operational_metrics()
+
+
+@router.get("/evaluations", status_code=status.HTTP_200_OK)
+async def list_behavioral_ai_evaluations(
+    _current_user: RecruiterOrAdmin,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    status_filter: str | None = Query(default=None, alias="status"),
+    search: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    service = BehavioralAIEvaluationService(db)
+    rows, total = await service.list_operational_evaluations(
+        page=page,
+        page_size=page_size,
+        status_filter=status_filter,
+        search=search,
+    )
+    return {
+        "data": rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
 
 
 @router.post("/stuck/detect", status_code=status.HTTP_200_OK)
@@ -45,7 +73,19 @@ async def retry_behavioral_ai_evaluation(
         evaluation, should_enqueue = await service.retry_failed_or_stuck(evaluation_id=evaluation_id)
         if should_enqueue:
             await service.mark_enqueued(evaluation)
-            enqueue_behavioral_ai_evaluation(evaluation.id)
+            try:
+                enqueue_behavioral_ai_evaluation(evaluation.id)
+            except Exception as exc:
+                await service.mark_enqueue_failed(evaluation, "behavioral_ai_enqueue_failed")
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "code": "enqueue_failed",
+                        "message": "Não foi possível enfileirar a IA comportamental.",
+                        "evaluation_id": str(evaluation.id),
+                    },
+                ) from exc
         await db.commit()
         return {
             "evaluation_id": str(evaluation.id),
@@ -63,11 +103,26 @@ async def retry_behavioral_ai_evaluation(
         await db.rollback()
         detail = str(exc)
         if "not found" in detail.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=behavioral_ai_safe_detail(
+                    "behavioral_ai_evaluation_not_found",
+                    message="Avaliação IA comportamental não encontrada.",
+                ),
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=behavioral_ai_safe_detail(
+                "retry_not_allowed",
+                message="Retry não permitido para o estado atual.",
+            ),
+        ) from exc
     except HTTPException:
         await db.rollback()
         raise
-    except Exception:
+    except Exception as exc:
         await db.rollback()
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=behavioral_ai_safe_detail("unexpected_error"),
+        ) from exc

@@ -15,4 +15,4 @@ RUN poetry config virtualenvs.create false \
 
 COPY . .
 
-CMD ["celery", "-A", "src.infrastructure.queue.celery_app", "worker", "--loglevel=info", "-Q", "analysis,extraction,matching,document_ai"]
+CMD ["celery", "-A", "src.infrastructure.queue.celery_app", "worker", "--loglevel=info", "-Q", "analysis,extraction,matching,document_ai,behavioral_ai"]

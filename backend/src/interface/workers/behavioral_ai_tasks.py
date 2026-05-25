@@ -24,7 +24,7 @@ def _run_async(coro):
 @celery_app.task(
     bind=True,
     name="src.interface.workers.behavioral_ai_tasks.process_behavioral_ai_evaluation",
-    max_retries=2,
+    max_retries=3,
     soft_time_limit=BEHAVIORAL_AI_SOFT_TIME_LIMIT_SECONDS,
     time_limit=BEHAVIORAL_AI_TIME_LIMIT_SECONDS,
 )

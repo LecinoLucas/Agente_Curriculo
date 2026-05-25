@@ -16,6 +16,7 @@ IA failures are non-blocking.
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import timedelta
 from datetime import UTC, datetime
 from typing import Optional
@@ -23,18 +24,28 @@ from uuid import UUID
 
 import sqlalchemy as sa
 import structlog
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ports.ai_service import AIAnalysisRequest, AIService
+from src.application.services.ai_provider_credential_service import (
+    AIProviderCredentialService,
+    InvalidAIProviderCredentialError,
+    normalize_ai_provider,
+)
 from src.core.settings import settings
 from src.core.log_sanitizer import sanitize_log_text
 from src.domain.exceptions import ValidationException
+from src.infrastructure.ai.gemini_adapter import AIProviderRateLimitedError
 from src.infrastructure.database.models import (
+    AIProviderCredentialModel,
     BehavioralAssessmentAIEvaluationModel,
     BehavioralAssessmentAssignmentModel,
     BehavioralAssessmentAnswerModel,
     BehavioralTemplateCompetencyModel,
     BehavioralTemplateQuestionModel,
+    CandidateModel,
+    JobModel,
 )
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_ai_repository import (
     SQLAlchemyBehavioralAssignmentAIRepository,
@@ -44,6 +55,22 @@ logger = structlog.get_logger(__name__)
 
 _BEHAVIORAL_AI_PROCESSING_STUCK_AFTER = timedelta(minutes=30)
 _BEHAVIORAL_AI_PENDING_STALE_AFTER = timedelta(hours=2)
+_BEHAVIORAL_AI_RETRY_BACKOFF_SECONDS = {1: 15, 2: 45, 3: 120}
+_BEHAVIORAL_AI_MAX_RETRIES = 3
+_BEHAVIORAL_AI_RETRY_MESSAGE = "Alta demanda no provedor IA. Nova tentativa automática agendada."
+_BEHAVIORAL_AI_RATE_LIMIT_MESSAGE = "Limite temporário do provedor IA. Nova tentativa automática agendada."
+SAFE_BEHAVIORAL_AI_ERROR_MESSAGES = {
+    "no_ai_credential_available": "Nenhuma credencial IA ativa está disponível para este provider/modelo.",
+    "ai_credential_invalid": "Credencial IA inválida ou indisponível para este provider/modelo.",
+    "ai_rate_limited": "Rate limit temporário do provedor IA.",
+    "enqueue_failed": "Falha ao enfileirar avaliação comportamental.",
+    "behavioral_answers_missing": "O teste comportamental não possui respostas suficientes para análise IA.",
+    "evaluation_already_processing": "A IA comportamental já está em andamento.",
+    "provider_response_invalid": "O provedor IA retornou uma resposta inválida para análise comportamental.",
+    "provider_timeout": "Tempo limite ao chamar o provedor IA.",
+    "retry_not_allowed": "Retry não permitido para o estado atual.",
+    "unexpected_error": "Erro inesperado ao solicitar IA comportamental.",
+}
 
 # Prohibited clinical/diagnostic language
 PROHIBITED_TERMS = {
@@ -62,6 +89,62 @@ PROHIBITED_TERMS = {
     "psicopatia",
     "psicose",
 }
+
+
+def behavioral_ai_safe_message(code: str, fallback: str | None = None) -> str:
+    return SAFE_BEHAVIORAL_AI_ERROR_MESSAGES.get(code) or fallback or SAFE_BEHAVIORAL_AI_ERROR_MESSAGES["unexpected_error"]
+
+
+def behavioral_ai_safe_detail(
+    code: str,
+    *,
+    message: str | None = None,
+    evaluation_id: UUID | str | None = None,
+    retryable: bool | None = None,
+    next_retry_at: datetime | None = None,
+    provider_status_code: int | None = None,
+) -> dict:
+    detail: dict[str, object] = {
+        "code": code,
+        "message": behavioral_ai_safe_message(code, message),
+    }
+    if evaluation_id is not None:
+        detail["evaluation_id"] = str(evaluation_id)
+    if retryable is not None:
+        detail["retryable"] = retryable
+    if next_retry_at is not None:
+        detail["next_retry_at"] = next_retry_at.isoformat()
+    if provider_status_code is not None:
+        detail["provider_status_code"] = provider_status_code
+    return detail
+
+
+@dataclass(slots=True)
+class BehavioralAIOperationalError(Exception):
+    code: str
+    message: str | None = None
+    status_code: int = 400
+    evaluation_id: UUID | None = None
+    retryable: bool | None = None
+    next_retry_at: datetime | None = None
+    provider_status_code: int | None = None
+
+    def __post_init__(self) -> None:
+        Exception.__init__(self, behavioral_ai_safe_message(self.code, self.message))
+
+    def to_detail(self) -> dict:
+        return behavioral_ai_safe_detail(
+            self.code,
+            message=self.message,
+            evaluation_id=self.evaluation_id,
+            retryable=self.retryable,
+            next_retry_at=self.next_retry_at,
+            provider_status_code=self.provider_status_code,
+        )
+
+
+class BehavioralAIProviderResponseInvalidError(ValueError):
+    """Raised when the provider response cannot be safely used."""
 
 
 class BehavioralAIEvaluationService:
@@ -121,17 +204,50 @@ class BehavioralAIEvaluationService:
                 f"Cannot evaluate assignment in '{assignment.status}' status. Only 'submitted' assignments can be evaluated."
             )
 
-        return await self._prepare_evaluation_record(
+        evaluation, should_enqueue = await self._prepare_evaluation_record(
             assignment=assignment,
             retry_failed=retry_failed,
             enqueue_mode=True,
         )
+        if should_enqueue:
+            try:
+                await self._ensure_behavioral_answers_available(assignment.id)
+                await self._ensure_ai_credentials_available()
+            except BehavioralAIOperationalError as exc:
+                provider_error_type = "rate_limited" if exc.code == "ai_rate_limited" else exc.code
+                await self._save_failed_evaluation(
+                    evaluation,
+                    behavioral_ai_safe_message(exc.code, exc.message),
+                    provider_error_type=provider_error_type,
+                    provider_status_code=exc.provider_status_code,
+                )
+                exc.evaluation_id = evaluation.id
+                raise
+
+        return evaluation, should_enqueue
 
     async def mark_enqueued(
         self,
         evaluation: BehavioralAssessmentAIEvaluationModel,
     ) -> BehavioralAssessmentAIEvaluationModel:
         return await self.repository.mark_queued(evaluation)
+
+    async def mark_enqueue_failed(
+        self,
+        evaluation: BehavioralAssessmentAIEvaluationModel,
+        error_message: str = "behavioral_ai_enqueue_failed",
+    ) -> BehavioralAssessmentAIEvaluationModel:
+        now = datetime.now(UTC)
+        evaluation.status = "failed"
+        evaluation.error_message = behavioral_ai_safe_message("enqueue_failed")
+        evaluation.failed_at = now
+        evaluation.started_at = None
+        evaluation.next_retry_at = None
+        evaluation.provider_error_type = "enqueue_failed"
+        evaluation.provider_status_code = None
+        evaluation.updated_at = now
+        await self.session.flush()
+        return evaluation
 
     async def process_evaluation(
         self,
@@ -147,7 +263,7 @@ class BehavioralAIEvaluationService:
             return None
         if evaluation.status == "completed":
             return evaluation
-        if evaluation.status == "processing":
+        if evaluation.status == "processing" and not self._is_stuck(evaluation, now=datetime.now(UTC)):
             return evaluation
 
         assignment = await self._fetch_assignment(
@@ -205,6 +321,11 @@ class BehavioralAIEvaluationService:
                         BehavioralAssessmentAIEvaluationModel.status == "pending",
                         BehavioralAssessmentAIEvaluationModel.updated_at < pending_threshold,
                     ),
+                    sa.and_(
+                        BehavioralAssessmentAIEvaluationModel.status == "retry_scheduled",
+                        BehavioralAssessmentAIEvaluationModel.next_retry_at.is_not(None),
+                        BehavioralAssessmentAIEvaluationModel.next_retry_at <= now,
+                    ),
                 )
             )
             .order_by(BehavioralAssessmentAIEvaluationModel.updated_at.asc())
@@ -236,11 +357,12 @@ class BehavioralAIEvaluationService:
             else await self.list_stuck_behavioral_ai_evaluations(limit=limit)
         )
         for evaluation in stuck:
-            reason = (
-                "behavioral_ai_stuck_processing_timeout"
-                if evaluation.status == "processing"
-                else "behavioral_ai_stale_pending_timeout"
-            )
+            if evaluation.status == "processing":
+                reason = "behavioral_ai_stuck_processing_timeout"
+            elif evaluation.status == "retry_scheduled":
+                reason = "behavioral_ai_retry_scheduled_timeout"
+            else:
+                reason = "behavioral_ai_stale_pending_timeout"
             evaluation.status = "failed"
             evaluation.error_message = reason
             evaluation.failed_at = now
@@ -289,6 +411,9 @@ class BehavioralAIEvaluationService:
         pending_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
             BehavioralAssessmentAIEvaluationModel.status == "pending"
         )
+        retry_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.status == "retry_scheduled"
+        )
         processing_stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAIEvaluationModel).where(
             BehavioralAssessmentAIEvaluationModel.status == "processing"
         )
@@ -322,10 +447,16 @@ class BehavioralAIEvaluationService:
                     BehavioralAssessmentAIEvaluationModel.status == "pending",
                     BehavioralAssessmentAIEvaluationModel.updated_at < (now - _BEHAVIORAL_AI_PENDING_STALE_AFTER),
                 ),
+                sa.and_(
+                    BehavioralAssessmentAIEvaluationModel.status == "retry_scheduled",
+                    BehavioralAssessmentAIEvaluationModel.next_retry_at.is_not(None),
+                    BehavioralAssessmentAIEvaluationModel.next_retry_at <= now,
+                ),
             )
         )
 
         pending = int((await self.session.scalar(pending_stmt)) or 0)
+        retry_scheduled = int((await self.session.scalar(retry_stmt)) or 0)
         processing = int((await self.session.scalar(processing_stmt)) or 0)
         completed_24h = int((await self.session.scalar(completed_stmt)) or 0)
         failed_24h = int((await self.session.scalar(failed_stmt)) or 0)
@@ -334,24 +465,122 @@ class BehavioralAIEvaluationService:
         return {
             "pending": pending,
             "processing": processing,
+            "retry_scheduled": retry_scheduled,
             "completed_last_24h": completed_24h,
             "failed_last_24h": failed_24h,
             "stuck": stuck,
         }
 
+    async def list_operational_evaluations(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status_filter: str | None = None,
+        search: str | None = None,
+    ) -> tuple[list[dict], int]:
+        filters: list[sa.ColumnElement] = []
+        if status_filter:
+            filters.append(BehavioralAssessmentAIEvaluationModel.status == status_filter)
+        if search:
+            term = f"%{search.lower().strip()}%"
+            filters.append(
+                sa.or_(
+                    sa.func.lower(CandidateModel.full_name).like(term),
+                    sa.func.lower(CandidateModel.email).like(term),
+                    sa.func.lower(JobModel.title).like(term),
+                )
+            )
+
+        total = int(
+            (
+                await self.session.scalar(
+                    sa.select(sa.func.count())
+                    .select_from(BehavioralAssessmentAIEvaluationModel)
+                    .join(CandidateModel, CandidateModel.id == BehavioralAssessmentAIEvaluationModel.candidate_id)
+                    .join(JobModel, JobModel.id == BehavioralAssessmentAIEvaluationModel.job_id)
+                    .where(*filters)
+                )
+            )
+            or 0
+        )
+        offset = (page - 1) * page_size
+        result = await self.session.execute(
+            sa.select(
+                BehavioralAssessmentAIEvaluationModel.id,
+                BehavioralAssessmentAIEvaluationModel.assignment_id,
+                BehavioralAssessmentAIEvaluationModel.job_id,
+                JobModel.title.label("job_title"),
+                BehavioralAssessmentAIEvaluationModel.candidate_id,
+                CandidateModel.full_name.label("candidate_name"),
+                CandidateModel.email.label("candidate_email"),
+                BehavioralAssessmentAIEvaluationModel.status,
+                BehavioralAssessmentAIEvaluationModel.error_message,
+                BehavioralAssessmentAIEvaluationModel.provider,
+                BehavioralAssessmentAIEvaluationModel.model,
+                BehavioralAssessmentAIEvaluationModel.retry_count,
+                BehavioralAssessmentAIEvaluationModel.queued_at,
+                BehavioralAssessmentAIEvaluationModel.started_at,
+                BehavioralAssessmentAIEvaluationModel.completed_at,
+                BehavioralAssessmentAIEvaluationModel.failed_at,
+                BehavioralAssessmentAIEvaluationModel.next_retry_at,
+                BehavioralAssessmentAIEvaluationModel.provider_error_type,
+                BehavioralAssessmentAIEvaluationModel.provider_status_code,
+                BehavioralAssessmentAIEvaluationModel.created_at,
+                BehavioralAssessmentAIEvaluationModel.updated_at,
+            )
+            .select_from(BehavioralAssessmentAIEvaluationModel)
+            .join(CandidateModel, CandidateModel.id == BehavioralAssessmentAIEvaluationModel.candidate_id)
+            .join(JobModel, JobModel.id == BehavioralAssessmentAIEvaluationModel.job_id)
+            .where(*filters)
+            .order_by(BehavioralAssessmentAIEvaluationModel.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        rows = []
+        now = datetime.now(UTC)
+        for row in result.mappings().all():
+            item = dict(row)
+            item["type"] = "behavioral_ai"
+            item["stuck"] = self._is_stuck(row, now=now)
+            rows.append(item)
+        return rows, total
+
     # Private methods
 
     @staticmethod
     def _is_stuck(
-        evaluation: BehavioralAssessmentAIEvaluationModel,
+        evaluation,
         *,
         now: datetime,
     ) -> bool:
-        if evaluation.status == "processing":
-            reference = evaluation.started_at or evaluation.updated_at
+        def value(name: str):
+            if isinstance(evaluation, dict):
+                return evaluation.get(name)
+            try:
+                return evaluation[name]
+            except Exception:
+                return getattr(evaluation, name)
+
+        def comparable(timestamp: datetime | None) -> datetime | None:
+            if timestamp is None:
+                return None
+            if timestamp.tzinfo is None:
+                return timestamp.replace(tzinfo=UTC)
+            return timestamp
+
+        status = value("status")
+        if status == "processing":
+            reference = comparable(value("started_at") or value("updated_at"))
+            if reference is None:
+                return False
             return reference < (now - _BEHAVIORAL_AI_PROCESSING_STUCK_AFTER)
-        if evaluation.status == "pending":
-            return evaluation.updated_at < (now - _BEHAVIORAL_AI_PENDING_STALE_AFTER)
+        if status == "retry_scheduled":
+            next_retry_at = comparable(value("next_retry_at"))
+            return next_retry_at is not None and next_retry_at <= now
+        if status == "pending":
+            updated_at = comparable(value("updated_at"))
+            return updated_at is not None and updated_at < (now - _BEHAVIORAL_AI_PENDING_STALE_AFTER)
         return False
 
     async def _fetch_assignment(
@@ -394,6 +623,27 @@ class BehavioralAIEvaluationService:
                 )
                 return existing, False
             if existing.status == "processing":
+                if self._is_stuck(existing, now=datetime.now(UTC)):
+                    logger.info(
+                        "behavioral_ai.retry_requested",
+                        assignment_id=str(assignment.id),
+                        evaluation_id=str(existing.id),
+                        status=existing.status,
+                        stuck=True,
+                    )
+                    await self.repository.mark_pending_for_retry(existing)
+                    return existing, True
+                logger.info(
+                    "behavioral_ai.enqueue_skipped_existing_status",
+                    assignment_id=str(assignment.id),
+                    evaluation_id=str(existing.id),
+                    status=existing.status,
+                )
+                return existing, False
+            if existing.status == "retry_scheduled":
+                if self._is_stuck(existing, now=datetime.now(UTC)):
+                    await self.repository.mark_pending_for_retry(existing)
+                    return existing, True
                 logger.info(
                     "behavioral_ai.enqueue_skipped_existing_status",
                     assignment_id=str(assignment.id),
@@ -402,6 +652,16 @@ class BehavioralAIEvaluationService:
                 )
                 return existing, False
             if existing.status == "pending" and enqueue_mode:
+                if self._is_stuck(existing, now=datetime.now(UTC)):
+                    logger.info(
+                        "behavioral_ai.retry_requested",
+                        assignment_id=str(assignment.id),
+                        evaluation_id=str(existing.id),
+                        status=existing.status,
+                        stuck=True,
+                    )
+                    await self.repository.mark_pending_for_retry(existing)
+                    return existing, True
                 logger.info(
                     "behavioral_ai.enqueue_skipped_existing_status",
                     assignment_id=str(assignment.id),
@@ -439,9 +699,118 @@ class BehavioralAIEvaluationService:
             candidate_id=assignment.candidate_id,
             job_id=assignment.job_id,
             template_id=assignment.template_id,
+            provider=normalize_ai_provider(settings.AI_PROVIDER),
             model=settings.AI_MODEL_ID,
         )
         return created, True
+
+    async def _ensure_behavioral_answers_available(self, assignment_id: UUID) -> None:
+        stmt = sa.select(sa.func.count()).select_from(BehavioralAssessmentAnswerModel).where(
+            BehavioralAssessmentAnswerModel.assignment_id == assignment_id,
+            sa.or_(
+                sa.and_(
+                    BehavioralAssessmentAnswerModel.answer_text.is_not(None),
+                    sa.func.length(sa.func.trim(BehavioralAssessmentAnswerModel.answer_text)) > 0,
+                ),
+                BehavioralAssessmentAnswerModel.answer_value.is_not(None),
+                BehavioralAssessmentAnswerModel.selected_options_json.is_not(None),
+            ),
+        )
+        count = int((await self.session.scalar(stmt)) or 0)
+        if count <= 0:
+            raise BehavioralAIOperationalError(
+                code="behavioral_answers_missing",
+                status_code=400,
+                retryable=True,
+            )
+
+    async def _ensure_ai_credentials_available(self) -> None:
+        try:
+            provider = normalize_ai_provider(settings.AI_PROVIDER)
+        except InvalidAIProviderCredentialError as exc:
+            raise BehavioralAIOperationalError(
+                code="ai_credential_invalid",
+                status_code=409,
+                retryable=False,
+            ) from exc
+
+        model_id = settings.AI_MODEL_ID
+        credential_service = AIProviderCredentialService(self.session)
+        configured_count = await credential_service.count_matching_credentials(
+            provider=provider,
+            model_id=model_id,
+        )
+        if configured_count <= 0:
+            raise BehavioralAIOperationalError(
+                code="no_ai_credential_available",
+                status_code=409,
+                retryable=True,
+            )
+
+        next_retry_at = await self._next_ai_credential_cooldown(provider=provider, model_id=model_id)
+        try:
+            available_credentials = await credential_service.get_available_credentials(
+                provider=provider,
+                model_id=model_id,
+            )
+        except InvalidAIProviderCredentialError as exc:
+            raise BehavioralAIOperationalError(
+                code="ai_credential_invalid",
+                status_code=409,
+                retryable=False,
+            ) from exc
+        except Exception as exc:
+            logger.warning(
+                "behavioral_ai.credential_preflight_failed",
+                provider=provider,
+                model=model_id,
+                error_type=type(exc).__name__,
+            )
+            raise BehavioralAIOperationalError(
+                code="ai_credential_invalid",
+                status_code=409,
+                retryable=False,
+            ) from exc
+
+        if available_credentials:
+            return
+
+        if next_retry_at is not None:
+            raise BehavioralAIOperationalError(
+                code="ai_rate_limited",
+                status_code=429,
+                retryable=True,
+                next_retry_at=next_retry_at,
+                provider_status_code=429,
+            )
+
+        raise BehavioralAIOperationalError(
+            code="ai_credential_invalid",
+            status_code=409,
+            retryable=False,
+        )
+
+    async def _next_ai_credential_cooldown(
+        self,
+        *,
+        provider: str,
+        model_id: str | None,
+    ) -> datetime | None:
+        now = datetime.now(UTC)
+        stmt = sa.select(sa.func.min(AIProviderCredentialModel.cooldown_until)).where(
+            AIProviderCredentialModel.provider == provider,
+            AIProviderCredentialModel.status == "rate_limited",
+            AIProviderCredentialModel.cooldown_until.is_not(None),
+            AIProviderCredentialModel.cooldown_until > now,
+        )
+        if model_id is not None:
+            stmt = stmt.where(
+                sa.or_(
+                    AIProviderCredentialModel.model_id.is_(None),
+                    AIProviderCredentialModel.model_id == model_id,
+                )
+            )
+        return await self.session.scalar(stmt)
 
     async def _evaluate_async(
         self,
@@ -459,6 +828,9 @@ class BehavioralAIEvaluationService:
             evaluation.status = "processing"
             evaluation.started_at = evaluation.started_at or now
             evaluation.failed_at = None
+            evaluation.next_retry_at = None
+            evaluation.provider_error_type = None
+            evaluation.provider_status_code = None
             evaluation.task_id = task_id or evaluation.task_id
             evaluation.updated_at = now
             logger.info(
@@ -496,7 +868,7 @@ class BehavioralAIEvaluationService:
 
             # Check for prohibited language before parsing
             if self._contains_prohibited_language(response_text):
-                raise ValueError("Response contains prohibited clinical/diagnostic language")
+                raise BehavioralAIProviderResponseInvalidError("provider_response_invalid")
 
             # Parse and validate response
             evaluation_data = self._parse_evaluation_response(response_text)
@@ -509,16 +881,41 @@ class BehavioralAIEvaluationService:
                 model=settings.AI_MODEL_ID,
             )
 
+        except (AIProviderRateLimitedError, httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as e:
+            retry_count = int(evaluation.retry_count or 0) + 1
+            provider_error_type = self._provider_error_type(e)
+            if self._is_retryable_provider_error(provider_error_type) and retry_count <= _BEHAVIORAL_AI_MAX_RETRIES:
+                await self._save_retry_scheduled_evaluation(
+                    evaluation,
+                    e,
+                    retry_count=retry_count,
+                    task_id=task_id or evaluation.task_id,
+                )
+                raise
+
+            await self._save_failed_evaluation(
+                evaluation,
+                self._safe_failure_message(provider_error_type),
+                provider_error_type=provider_error_type,
+                provider_status_code=self._provider_status_code(e),
+            )
         except Exception as e:
-            error_msg = sanitize_log_text(str(e)) or type(e).__name__
+            provider_error_type = self._classify_unexpected_failure(e)
+            error_msg = self._safe_failure_message(provider_error_type)
             logger.error(
                 "behavioral_ai.task_failed",
                 evaluation_id=str(evaluation.id),
                 assignment_id=str(assignment.id),
                 task_id=task_id or evaluation.task_id,
-                error=error_msg,
+                error_type=type(e).__name__,
+                provider_error_type=provider_error_type,
             )
-            await self._save_failed_evaluation(evaluation, error_msg)
+            await self._save_failed_evaluation(
+                evaluation,
+                error_msg,
+                provider_error_type=provider_error_type,
+                provider_status_code=None,
+            )
 
     async def _fetch_competencies(
         self, template_id: UUID
@@ -665,18 +1062,18 @@ Responda com JSON válido neste formato exato:
 
             # Validate required fields
             if not isinstance(data.get("confidence"), str) or data["confidence"] not in ["low", "medium", "high"]:
-                raise ValueError("Invalid confidence level")
+                raise BehavioralAIProviderResponseInvalidError("Invalid confidence level")
 
             if not isinstance(data.get("summary"), str):
-                raise ValueError("Summary is required")
+                raise BehavioralAIProviderResponseInvalidError("Summary is required")
 
             if not isinstance(data.get("competency_signals"), list):
-                raise ValueError("competency_signals must be a list")
+                raise BehavioralAIProviderResponseInvalidError("competency_signals must be a list")
 
             return data
 
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in IA response: {str(e)}")
+            raise BehavioralAIProviderResponseInvalidError("Invalid JSON in IA response") from e
 
     async def _save_completed_evaluation(
         self,
@@ -697,6 +1094,9 @@ Responda com JSON válido neste formato exato:
         evaluation.suggested_interview_questions_json = data.get("suggested_interview_questions", [])
         evaluation.risk_flags_json = data.get("risk_flags", [])
         evaluation.error_message = None
+        evaluation.next_retry_at = None
+        evaluation.provider_error_type = None
+        evaluation.provider_status_code = None
         now = datetime.now(UTC)
         evaluation.completed_at = now
         evaluation.failed_at = None
@@ -712,16 +1112,58 @@ Responda com JSON válido neste formato exato:
             model=model or settings.AI_MODEL_ID,
         )
 
+    async def _save_retry_scheduled_evaluation(
+        self,
+        evaluation: BehavioralAssessmentAIEvaluationModel,
+        exc: Exception,
+        *,
+        retry_count: int,
+        task_id: str | None,
+    ) -> None:
+        now = datetime.now(UTC)
+        retry_after_seconds = self._retry_after_seconds(exc, retry_count=retry_count)
+        provider_error_type = self._provider_error_type(exc)
+        evaluation.status = "retry_scheduled"
+        evaluation.error_message = (
+            _BEHAVIORAL_AI_RATE_LIMIT_MESSAGE
+            if provider_error_type == "rate_limited"
+            else _BEHAVIORAL_AI_RETRY_MESSAGE
+        )
+        evaluation.retry_count = retry_count
+        evaluation.task_id = task_id or evaluation.task_id
+        evaluation.started_at = None
+        evaluation.failed_at = None
+        evaluation.next_retry_at = now + timedelta(seconds=retry_after_seconds)
+        evaluation.provider_error_type = provider_error_type
+        evaluation.provider_status_code = self._provider_status_code(exc)
+        evaluation.updated_at = now
+        await self.session.commit()
+        logger.warning(
+            "behavioral_ai.retry_scheduled",
+            evaluation_id=str(evaluation.id),
+            assignment_id=str(evaluation.assignment_id),
+            status=evaluation.status,
+            provider_error_type=provider_error_type,
+            retry_count=retry_count,
+            next_retry_at=evaluation.next_retry_at.isoformat(),
+        )
+
     async def _save_failed_evaluation(
         self,
         evaluation: BehavioralAssessmentAIEvaluationModel,
         error_message: str,
+        *,
+        provider_error_type: str | None = None,
+        provider_status_code: int | None = None,
     ) -> None:
         """Save failed evaluation."""
         now = datetime.now(UTC)
         evaluation.status = "failed"
         evaluation.error_message = (sanitize_log_text(error_message) or "behavioral_ai_failed")[:2000]
         evaluation.failed_at = now
+        evaluation.next_retry_at = None
+        evaluation.provider_error_type = provider_error_type
+        evaluation.provider_status_code = provider_status_code
         evaluation.updated_at = now
 
         await self.session.commit()
@@ -730,5 +1172,82 @@ Responda com JSON válido neste formato exato:
             evaluation_id=str(evaluation.id),
             assignment_id=str(evaluation.assignment_id),
             status=evaluation.status,
-            error=evaluation.error_message,
+            provider_error_type=provider_error_type,
         )
+
+    @staticmethod
+    def _provider_error_type(exc: Exception) -> str:
+        if isinstance(exc, AIProviderRateLimitedError):
+            return exc.provider_error_type or "rate_limited"
+        if isinstance(exc, httpx.HTTPStatusError):
+            status_code = int(exc.response.status_code)
+            if status_code == 429:
+                return "rate_limited"
+            if status_code in {400, 401, 403}:
+                return "ai_credential_invalid"
+            if status_code in {500, 502, 503, 504}:
+                return "provider_unavailable"
+            return "provider_http_error"
+        if isinstance(exc, httpx.TimeoutException):
+            return "provider_timeout"
+        if isinstance(exc, httpx.ConnectError):
+            return "connection_error"
+        return "temporary_error"
+
+    @staticmethod
+    def _is_retryable_provider_error(provider_error_type: str) -> bool:
+        return provider_error_type in {
+            "rate_limited",
+            "provider_unavailable",
+            "provider_timeout",
+            "connection_error",
+            "temporary_error",
+        }
+
+    @staticmethod
+    def _classify_unexpected_failure(exc: Exception) -> str:
+        if isinstance(exc, BehavioralAIProviderResponseInvalidError):
+            return "provider_response_invalid"
+        message = str(exc).lower()
+        if "no gemini credentials configured" in message or "no ai credentials configured" in message:
+            return "no_ai_credential_available"
+        if "timeout" in message or "timed out" in message:
+            return "provider_timeout"
+        if "api key" in message or "credential" in message or "credentials" in message:
+            return "ai_credential_invalid"
+        return "unexpected_error"
+
+    @staticmethod
+    def _safe_failure_message(provider_error_type: str) -> str:
+        if provider_error_type == "rate_limited":
+            return _BEHAVIORAL_AI_RATE_LIMIT_MESSAGE
+        if provider_error_type == "provider_unavailable":
+            return _BEHAVIORAL_AI_RETRY_MESSAGE
+        if provider_error_type in {"provider_timeout", "connection_error", "temporary_error"}:
+            return SAFE_BEHAVIORAL_AI_ERROR_MESSAGES["provider_timeout"]
+        if provider_error_type in SAFE_BEHAVIORAL_AI_ERROR_MESSAGES:
+            return SAFE_BEHAVIORAL_AI_ERROR_MESSAGES[provider_error_type]
+        if provider_error_type == "provider_http_error":
+            return "Falha temporária no provedor IA."
+        return SAFE_BEHAVIORAL_AI_ERROR_MESSAGES["unexpected_error"]
+
+    @staticmethod
+    def _provider_status_code(exc: Exception) -> int | None:
+        if isinstance(exc, AIProviderRateLimitedError):
+            return exc.status_code
+        if isinstance(exc, httpx.HTTPStatusError):
+            return int(exc.response.status_code)
+        return None
+
+    @staticmethod
+    def _retry_after_seconds(exc: Exception, *, retry_count: int) -> int:
+        if isinstance(exc, AIProviderRateLimitedError):
+            return max(1, int(exc.retry_after_seconds or 0))
+        if isinstance(exc, httpx.HTTPStatusError):
+            retry_after = exc.response.headers.get("retry-after")
+            if retry_after:
+                try:
+                    return max(1, int(float(retry_after)))
+                except ValueError:
+                    pass
+        return _BEHAVIORAL_AI_RETRY_BACKOFF_SECONDS.get(retry_count, 300)

@@ -25,8 +25,10 @@ from unittest.mock import AsyncMock
 from src.application.ports.ai_service import AIAnalysisResponse, AIService
 from src.application.services.behavioral_ai_evaluation_service import BehavioralAIEvaluationService
 from src.application.services import behavioral_ai_evaluation_service as behavioral_ai_service_module
+from src.core.settings import settings
 from src.domain.entities.user import UserRole
 from src.domain.exceptions import ValidationException
+from src.infrastructure.ai.gemini_adapter import AIProviderRateLimitedError
 from src.infrastructure.database.models import (
     BehavioralAssessmentTemplateModel,
     BehavioralTemplateCompetencyModel,
@@ -110,6 +112,55 @@ async def _create_assignment(
     session.add(assignment)
     await session.flush()
     return assignment
+
+
+async def _create_answer(
+    session: AsyncSession,
+    *,
+    assignment_id: UUID,
+    template_id: UUID,
+    answer_text: str = "Resposta comportamental com evidências suficientes para análise.",
+) -> BehavioralAssessmentAnswerModel:
+    question = await session.scalar(
+        sa.select(BehavioralTemplateQuestionModel).where(
+            BehavioralTemplateQuestionModel.competency_id.in_(
+                sa.select(BehavioralTemplateCompetencyModel.id).where(
+                    BehavioralTemplateCompetencyModel.template_id == template_id
+                )
+            )
+        )
+    )
+    assert question is not None
+    answer = BehavioralAssessmentAnswerModel(
+        id=uuid4(),
+        assignment_id=assignment_id,
+        question_id=question.id,
+        answer_text=answer_text,
+        answer_value=None,
+        selected_options_json=None,
+    )
+    session.add(answer)
+    await session.flush()
+    return answer
+
+
+def _skip_request_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _noop_answers(self, assignment_id: UUID) -> None:
+        return None
+
+    async def _noop_credentials(self) -> None:
+        return None
+
+    monkeypatch.setattr(
+        BehavioralAIEvaluationService,
+        "_ensure_behavioral_answers_available",
+        _noop_answers,
+    )
+    monkeypatch.setattr(
+        BehavioralAIEvaluationService,
+        "_ensure_ai_credentials_available",
+        _noop_credentials,
+    )
 
 
 async def _create_job_and_candidate(
@@ -236,7 +287,7 @@ async def test_evaluate_submitted_assignment_with_valid_response(
 
     assert evaluation.status == "completed"
     assert evaluation.confidence == "high"
-    assert evaluation.provider == "gemini"
+    assert evaluation.provider == settings.AI_PROVIDER
     assert evaluation.completed_at is not None
     mock_ai_service.analyze.assert_called_once()
 
@@ -271,6 +322,7 @@ async def test_invalid_json_response_saves_failed(
 
     assert evaluation.status == "failed"
     assert evaluation.error_message is not None
+    assert evaluation.provider_error_type == "provider_response_invalid"
 
 
 @pytest.mark.asyncio
@@ -313,7 +365,8 @@ async def test_prohibited_language_saves_failed(
     evaluation = await service.evaluate_assignment(job_id, candidate_id, assignment.id)
 
     assert evaluation.status == "failed"
-    assert "prohibited" in evaluation.error_message.lower() or "clinical" in evaluation.error_message.lower()
+    assert evaluation.provider_error_type == "provider_response_invalid"
+    assert "resposta inválida" in evaluation.error_message.lower()
 
 
 @pytest.mark.asyncio
@@ -702,6 +755,7 @@ async def test_evaluate_endpoint_returns_202_and_enqueues_without_sync_call(
     assignment = await _create_assignment(
         db_session, job.id, candidate.id, template, status="submitted"
     )
+    _skip_request_preflight(monkeypatch)
     await db_session.commit()
 
     enqueued: list[str] = []
@@ -741,6 +795,154 @@ async def test_evaluate_endpoint_returns_202_and_enqueues_without_sync_call(
     )
     assert stored is not None
     assert stored.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_endpoint_marks_failed_when_enqueue_fails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session, f"behavioral-enqueue-fail-{uuid4()}@test.com", "password123", UserRole.RECRUITER
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template, _ = await _create_template_with_competencies(db_session)
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=recruiter.id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(
+        db_session, job.id, candidate.id, template, status="submitted"
+    )
+    _skip_request_preflight(monkeypatch)
+    await db_session.commit()
+
+    def _fail_enqueue(_evaluation_id: UUID) -> None:
+        raise RuntimeError("broker unavailable api_key=secret")
+
+    monkeypatch.setattr(
+        "src.interface.workers.behavioral_ai_dispatcher.enqueue_behavioral_ai_evaluation",
+        _fail_enqueue,
+    )
+
+    response = await client.post(
+        f"/api/v1/jobs/{job.id}/candidates/{candidate.id}/behavioral-assessment/evaluate",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE, response.text
+    payload = response.json()
+    assert payload["detail"]["code"] == "enqueue_failed"
+
+    stored = await db_session.scalar(
+        sa.select(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.assignment_id == assignment.id
+        )
+    )
+    assert stored is not None
+    assert stored.status == "failed"
+    assert stored.provider_error_type == "enqueue_failed"
+    assert stored.error_message == "Falha ao enfileirar avaliação comportamental."
+    assert stored.failed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_evaluate_endpoint_missing_answers_returns_safe_code(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session, f"behavioral-missing-answers-{uuid4()}@test.com", "password123", UserRole.RECRUITER
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template, _ = await _create_template_with_competencies(db_session)
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=recruiter.id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(
+        db_session, job.id, candidate.id, template, status="submitted"
+    )
+
+    async def _noop_credentials(self) -> None:
+        return None
+
+    monkeypatch.setattr(
+        BehavioralAIEvaluationService,
+        "_ensure_ai_credentials_available",
+        _noop_credentials,
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/jobs/{job.id}/candidates/{candidate.id}/behavioral-assessment/evaluate",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST, response.text
+    payload = response.json()
+    assert payload["detail"]["code"] == "behavioral_answers_missing"
+    assert "Evaluation failed" not in response.text
+
+    stored = await db_session.scalar(
+        sa.select(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.assignment_id == assignment.id
+        )
+    )
+    assert stored is not None
+    assert stored.status == "failed"
+    assert stored.provider_error_type == "behavioral_answers_missing"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_endpoint_missing_ai_credential_returns_safe_code(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session, f"behavioral-missing-credential-{uuid4()}@test.com", "password123", UserRole.RECRUITER
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template, _ = await _create_template_with_competencies(db_session)
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=recruiter.id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(
+        db_session, job.id, candidate.id, template, status="submitted"
+    )
+    await _create_answer(
+        db_session,
+        assignment_id=assignment.id,
+        template_id=template.id,
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/jobs/{job.id}/candidates/{candidate.id}/behavioral-assessment/evaluate",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_409_CONFLICT, response.text
+    payload = response.json()
+    assert payload["detail"]["code"] == "no_ai_credential_available"
+    assert "Evaluation failed" not in response.text
+    assert "api_key" not in response.text
+    assert "encrypted_api_key" not in response.text
+
+    stored = await db_session.scalar(
+        sa.select(BehavioralAssessmentAIEvaluationModel).where(
+            BehavioralAssessmentAIEvaluationModel.assignment_id == assignment.id
+        )
+    )
+    assert stored is not None
+    assert stored.status == "failed"
+    assert stored.provider_error_type == "no_ai_credential_available"
 
 
 @pytest.mark.asyncio
@@ -807,8 +1009,65 @@ async def test_request_evaluation_idempotency_by_status(
 
 
 @pytest.mark.asyncio
+async def test_retry_scheduled_evaluation_is_idempotent_until_due(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template, _ = await _create_template_with_competencies(db_session)
+    owner_id = uuid4()
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=owner_id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(
+        db_session, job.id, candidate.id, template, status="submitted"
+    )
+    retry_eval = BehavioralAssessmentAIEvaluationModel(
+        id=uuid4(),
+        assignment_id=assignment.id,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        template_id=template.id,
+        status="retry_scheduled",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        prompt_version=1,
+        retry_count=1,
+        next_retry_at=datetime.now(UTC) + timedelta(minutes=5),
+        error_message="retry scheduled",
+    )
+    db_session.add(retry_eval)
+    await db_session.commit()
+    _skip_request_preflight(monkeypatch)
+
+    service = BehavioralAIEvaluationService(db_session)
+    evaluation, should_enqueue = await service.request_evaluation(
+        job_id=job.id,
+        candidate_id=candidate.id,
+        assignment_id=assignment.id,
+    )
+    assert evaluation.id == retry_eval.id
+    assert evaluation.status == "retry_scheduled"
+    assert should_enqueue is False
+
+    retry_eval.next_retry_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db_session.commit()
+    evaluation, should_enqueue = await service.request_evaluation(
+        job_id=job.id,
+        candidate_id=candidate.id,
+        assignment_id=assignment.id,
+    )
+    assert evaluation.id == retry_eval.id
+    assert evaluation.status == "pending"
+    assert evaluation.next_retry_at is None
+    assert should_enqueue is True
+
+
+@pytest.mark.asyncio
 async def test_failed_evaluation_requires_explicit_retry(
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     template, _ = await _create_template_with_competencies(db_session)
     owner_id = uuid4()
@@ -834,6 +1093,7 @@ async def test_failed_evaluation_requires_explicit_retry(
     )
     db_session.add(failed_eval)
     await db_session.commit()
+    _skip_request_preflight(monkeypatch)
 
     service = BehavioralAIEvaluationService(db_session)
     evaluation, should_enqueue = await service.request_evaluation(
@@ -1045,6 +1305,98 @@ async def test_worker_marks_failed_on_exception(
     assert evaluation.status == "failed"
     assert evaluation.error_message is not None
     assert evaluation.failed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_worker_marks_rate_limit_as_retry_scheduled(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template, competencies = await _create_template_with_competencies(db_session)
+    owner_id = uuid4()
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=owner_id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(
+        db_session, job.id, candidate.id, template, status="submitted"
+    )
+    question = await db_session.scalar(
+        sa.select(BehavioralTemplateQuestionModel).where(
+            BehavioralTemplateQuestionModel.competency_id == competencies[0].id
+        )
+    )
+    assert question is not None
+    sensitive_answer = "Resposta sensível com CPF 123.456.789-10 e detalhes pessoais."
+    db_session.add(
+        BehavioralAssessmentAnswerModel(
+            id=uuid4(),
+            assignment_id=assignment.id,
+            question_id=question.id,
+            answer_text=sensitive_answer,
+            answer_value=None,
+            selected_options_json=None,
+        )
+    )
+    evaluation = BehavioralAssessmentAIEvaluationModel(
+        id=uuid4(),
+        assignment_id=assignment.id,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        template_id=template.id,
+        status="pending",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        prompt_version=1,
+    )
+    db_session.add(evaluation)
+    await db_session.commit()
+
+    class _EngineHandle:
+        async def dispose(self) -> None:
+            return None
+
+    async def _fake_sessionmaker_factory():
+        session_factory = async_sessionmaker(
+            db_session.bind,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False,
+        )
+        return _EngineHandle(), session_factory
+
+    class _RateLimitedAIService:
+        async def analyze(self, _request):
+            raise AIProviderRateLimitedError(
+                "quota exceeded api_key=secret",
+                provider=settings.AI_PROVIDER,
+                model_id=settings.AI_MODEL_ID,
+                retry_after_seconds=30,
+                cooldown_until=datetime.now(UTC) + timedelta(seconds=30),
+            )
+
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _fake_sessionmaker_factory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.ai.factory.AIServiceFactory.create",
+        lambda *_args, **_kwargs: _RateLimitedAIService(),
+    )
+
+    with pytest.raises(AIProviderRateLimitedError):
+        await _process_behavioral_ai_evaluation_async(str(evaluation.id), "task-rate-limit")
+
+    await db_session.refresh(evaluation)
+    assert evaluation.status == "retry_scheduled"
+    assert evaluation.retry_count == 1
+    assert evaluation.next_retry_at is not None
+    assert evaluation.provider_error_type == "rate_limited"
+    assert evaluation.provider_status_code == 429
+    assert "CPF 123.456.789-10" not in (evaluation.error_message or "")
+    assert "api_key" not in (evaluation.error_message or "")
 
 
 @pytest.mark.asyncio
@@ -1320,8 +1672,59 @@ async def test_admin_behavioral_ai_metrics_endpoint_returns_operational_counts(
     response = await client.get("/api/v1/admin/behavioral-ai/metrics", headers=headers)
     assert response.status_code == status.HTTP_200_OK, response.text
     payload = response.json()
-    for key in ["pending", "processing", "completed_last_24h", "failed_last_24h", "stuck"]:
+    for key in ["pending", "processing", "retry_scheduled", "completed_last_24h", "failed_last_24h", "stuck"]:
         assert key in payload
+
+
+@pytest.mark.asyncio
+async def test_admin_behavioral_ai_evaluations_endpoint_lists_queue_items(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session, f"behavioral-list-{uuid4()}@test.com", "password123", UserRole.RECRUITER
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    template, _ = await _create_template_with_competencies(db_session)
+    job, candidate = await _create_job_and_candidate(
+        db_session,
+        created_by=recruiter.id,
+        template_id=template.id,
+    )
+    assignment = await _create_assignment(
+        db_session, job.id, candidate.id, template, status="submitted"
+    )
+    evaluation = BehavioralAssessmentAIEvaluationModel(
+        id=uuid4(),
+        assignment_id=assignment.id,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        template_id=template.id,
+        status="retry_scheduled",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        prompt_version=1,
+        retry_count=2,
+        next_retry_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    db_session.add(evaluation)
+    await db_session.commit()
+
+    response = await client.get(
+        "/api/v1/admin/behavioral-ai/evaluations?status=retry_scheduled",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    payload = response.json()
+    assert payload["total"] >= 1
+    item = next(row for row in payload["data"] if row["id"] == str(evaluation.id))
+    assert item["type"] == "behavioral_ai"
+    assert item["candidate_name"] == candidate.full_name
+    assert item["job_title"] == job.title
+    assert item["status"] == "retry_scheduled"
+    assert item["retry_count"] == 2
+    assert item["next_retry_at"] is not None
 
 
 @pytest.mark.asyncio
@@ -1378,10 +1781,20 @@ async def test_stuck_detection_task_marks_processing_and_pending_only(
         cpf=f"{str(uuid4().int)[:11]}",
         created_by=owner_id,
     )
-    db_session.add(candidate5)
+    candidate6 = CandidateModel(
+        id=uuid4(),
+        full_name="Candidate 6",
+        email=f"candidate6-{uuid4()}@example.com",
+        cpf=f"{str(uuid4().int)[:11]}",
+        created_by=owner_id,
+    )
+    db_session.add_all([candidate5, candidate6])
     await db_session.flush()
     assignment5 = await _create_assignment(
         db_session, job.id, candidate5.id, template, status="submitted"
+    )
+    assignment6 = await _create_assignment(
+        db_session, job.id, candidate6.id, template, status="submitted"
     )
     now = datetime.now(UTC)
 
@@ -1448,7 +1861,21 @@ async def test_stuck_detection_task_marks_processing_and_pending_only(
         prompt_version=1,
         updated_at=now - timedelta(minutes=20),
     )
-    db_session.add_all([stuck_processing, stale_pending, completed, recent_processing, recent_pending])
+    due_retry = BehavioralAssessmentAIEvaluationModel(
+        id=uuid4(),
+        assignment_id=assignment6.id,
+        candidate_id=candidate6.id,
+        job_id=job.id,
+        template_id=template.id,
+        status="retry_scheduled",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        prompt_version=1,
+        retry_count=1,
+        next_retry_at=now - timedelta(minutes=1),
+        updated_at=now - timedelta(minutes=5),
+    )
+    db_session.add_all([stuck_processing, stale_pending, completed, recent_processing, recent_pending, due_retry])
     await db_session.commit()
 
     class _EngineHandle:
@@ -1481,23 +1908,26 @@ async def test_stuck_detection_task_marks_processing_and_pending_only(
 
     result = await _detect_stuck_behavioral_ai_evaluations_async("stuck-task-1")
     assert result["status"] == "ok"
-    assert result["total_found"] == 2
-    assert result["total_marked"] == 2
-    assert result["evaluations_marked_failed"] == 2
+    assert result["total_found"] == 3
+    assert result["total_marked"] == 3
+    assert result["evaluations_marked_failed"] == 3
 
     await db_session.refresh(stuck_processing)
     await db_session.refresh(stale_pending)
     await db_session.refresh(completed)
     await db_session.refresh(recent_processing)
     await db_session.refresh(recent_pending)
+    await db_session.refresh(due_retry)
 
     assert stuck_processing.status == "failed"
     assert stale_pending.status == "failed"
+    assert due_retry.status == "failed"
     assert completed.status == "completed"
     assert recent_processing.status == "processing"
     assert recent_pending.status == "pending"
     assert stuck_processing.error_message == "behavioral_ai_stuck_processing_timeout"
     assert stale_pending.error_message == "behavioral_ai_stale_pending_timeout"
+    assert due_retry.error_message == "behavioral_ai_retry_scheduled_timeout"
     assert enqueue_calls == []
 
 

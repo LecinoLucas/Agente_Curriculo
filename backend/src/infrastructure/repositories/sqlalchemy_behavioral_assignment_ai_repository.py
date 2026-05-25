@@ -27,6 +27,7 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID,
+        provider: str = "anthropic",
         model: str = "claude-3-5-sonnet-20241022",
     ) -> BehavioralAssessmentAIEvaluationModel:
         """Create new evaluation record."""
@@ -36,7 +37,7 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
             job_id=job_id,
             template_id=template_id,
             status="pending",
-            provider="anthropic",
+            provider=provider,
             model=model,
             prompt_version=1,
             requested_at=datetime.now(UTC),
@@ -72,6 +73,7 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
         candidate_id: UUID,
         job_id: UUID,
         template_id: UUID,
+        provider: str = "anthropic",
         model: str = "claude-3-5-sonnet-20241022",
     ) -> BehavioralAssessmentAIEvaluationModel:
         """Get existing or create new evaluation."""
@@ -84,6 +86,7 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
             candidate_id=candidate_id,
             job_id=job_id,
             template_id=template_id,
+            provider=provider,
             model=model,
         )
 
@@ -98,7 +101,10 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
         evaluation.failed_at = None
         evaluation.started_at = None
         evaluation.queued_at = None
+        evaluation.next_retry_at = None
         evaluation.task_id = None
+        evaluation.provider_error_type = None
+        evaluation.provider_status_code = None
         evaluation.retry_count = (evaluation.retry_count or 0) + 1
         evaluation.updated_at = now
         await self.session.flush()
@@ -110,6 +116,9 @@ class SQLAlchemyBehavioralAssignmentAIRepository:
     ) -> BehavioralAssessmentAIEvaluationModel:
         now = datetime.now(UTC)
         evaluation.queued_at = now
+        evaluation.next_retry_at = None
+        evaluation.provider_error_type = None
+        evaluation.provider_status_code = None
         evaluation.updated_at = now
         await self.session.flush()
         return evaluation

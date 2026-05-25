@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
+from src.core.log_sanitizer import sanitize_log_text
 from src.application.services.job_service import (
     JobSkillConflictError,
     JobSkillLinkNotFoundError,
@@ -709,7 +710,9 @@ async def trigger_behavioral_assessment_evaluation(
     IA analysis is assistive only, never affects decisions or scoring.
     """
     from src.application.services.behavioral_ai_evaluation_service import (
+        BehavioralAIOperationalError,
         BehavioralAIEvaluationService,
+        behavioral_ai_safe_detail,
     )
     from src.interface.workers.behavioral_ai_dispatcher import enqueue_behavioral_ai_evaluation
 
@@ -734,29 +737,71 @@ async def trigger_behavioral_assessment_evaluation(
         )
         if should_enqueue:
             await service.mark_enqueued(evaluation)
-            enqueue_behavioral_ai_evaluation(evaluation.id)
+            try:
+                enqueue_behavioral_ai_evaluation(evaluation.id)
+            except Exception as exc:
+                await service.mark_enqueue_failed(evaluation, "behavioral_ai_enqueue_failed")
+                await db.commit()
+                logger.error(
+                    "behavioral_ai.enqueue_failed",
+                    evaluation_id=str(evaluation.id),
+                    assignment_id=str(evaluation.assignment_id),
+                    error=sanitize_log_text(str(exc)) or type(exc).__name__,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "code": "enqueue_failed",
+                        "message": "Não foi possível enfileirar a IA comportamental.",
+                        "evaluation_id": str(evaluation.id),
+                    },
+                ) from exc
 
         await db.commit()
         return {
             "evaluation_id": str(evaluation.id),
             "assignment_id": str(evaluation.assignment_id),
             "status": evaluation.status,
+            "queued_at": evaluation.queued_at,
+            "next_retry_at": evaluation.next_retry_at,
+            "retry_count": int(evaluation.retry_count or 0),
             "message": (
                 "Avaliação enfileirada"
                 if should_enqueue
                 else "Avaliação já existente para este assignment"
             ),
         }
+    except BehavioralAIOperationalError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail()) from exc
     except ValidationException as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        detail = str(exc)
+        code = "behavioral_assessment_not_found" if "not found" in detail.lower() else "behavioral_assessment_not_submitted"
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND if code == "behavioral_assessment_not_found" else status.HTTP_400_BAD_REQUEST,
+            detail=behavioral_ai_safe_detail(
+                code,
+                message=(
+                    "Avaliação comportamental não encontrada."
+                    if code == "behavioral_assessment_not_found"
+                    else "O teste comportamental ainda não foi concluído."
+                ),
+            ),
+        ) from exc
     except HTTPException:
         await db.rollback()
         raise
     except Exception as exc:
         await db.rollback()
-        logger.error(f"Error triggering behavioral evaluation: {exc}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Evaluation failed")
+        logger.error(
+            "behavioral_ai.request_failed",
+            error_type=type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=behavioral_ai_safe_detail("unexpected_error"),
+        ) from exc
 
 
 @router.get(
@@ -808,6 +853,15 @@ async def get_behavioral_assessment_evaluation(
             "id": str(evaluation.id),
             "assignment_id": str(evaluation.assignment_id),
             "status": evaluation.status,
+            "queued_at": evaluation.queued_at,
+            "started_at": evaluation.started_at,
+            "completed_at": evaluation.completed_at,
+            "failed_at": evaluation.failed_at,
+            "next_retry_at": evaluation.next_retry_at,
+            "retry_count": int(evaluation.retry_count or 0),
+            "provider": evaluation.provider,
+            "model": evaluation.model,
+            "provider_error_type": evaluation.provider_error_type,
             "created_at": evaluation.created_at,
             "updated_at": evaluation.updated_at,
         }
@@ -823,7 +877,7 @@ async def get_behavioral_assessment_evaluation(
                 "risk_flags": evaluation.risk_flags_json or [],
                 "completed_at": evaluation.completed_at,
             })
-        elif evaluation.status == "failed":
+        elif evaluation.status in {"failed", "retry_scheduled"}:
             result["error_message"] = evaluation.error_message
 
         return result

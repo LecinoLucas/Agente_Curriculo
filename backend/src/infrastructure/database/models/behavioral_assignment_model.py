@@ -119,7 +119,7 @@ class BehavioralAssessmentAnswerModel(Base):
     )
 
 
-BEHAVIORAL_AI_EVALUATION_STATUSES = "'pending', 'processing', 'completed', 'failed'"
+BEHAVIORAL_AI_EVALUATION_STATUSES = "'pending', 'processing', 'retry_scheduled', 'completed', 'failed'"
 BEHAVIORAL_CONFIDENCE_LEVELS = "'low', 'medium', 'high'"
 
 
@@ -187,8 +187,11 @@ class BehavioralAssessmentAIEvaluationModel(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     failed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    next_retry_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
     retry_count: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False, server_default="0")
     task_id: Mapped[str | None] = mapped_column(sa.String(255))
+    provider_error_type: Mapped[str | None] = mapped_column(sa.String(50))
+    provider_status_code: Mapped[int | None] = mapped_column(sa.Integer)
 
     __table_args__ = (
         sa.CheckConstraint(

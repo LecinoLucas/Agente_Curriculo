@@ -97,7 +97,7 @@ celery_app.conf.update(
             "time_limit": 180,
         },
         "src.interface.workers.behavioral_ai_tasks.process_behavioral_ai_evaluation": {
-            "max_retries": 2,
+            "max_retries": 3,
             "default_retry_delay": 15,
             "time_limit": 120,
         },
