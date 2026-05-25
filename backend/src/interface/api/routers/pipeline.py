@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,7 @@ from src.application.services.pipeline_service import (
     PipelineTerminalStageError,
     PipelineTransferBlockedAdvancedStageError,
     PipelineTransferNotAllowedError,
+    PipelineTransitionBlockedError,
 )
 from src.application.services.interview_schedule_service import (
     InterviewScheduleConflictError,
@@ -64,6 +66,21 @@ def _service(db: AsyncSession) -> PipelineService:
 
 def _analysis_response(decision) -> PipelineAnalysisDecisionResponse:
     return PipelineAnalysisDecisionResponse.model_validate(decision.as_dict())
+
+
+def _blocked_response(exc: PipelineTransitionBlockedError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "code": "pipeline_transition_blocked",
+            "message": "Não é possível avançar candidato para esta etapa.",
+            "current_stage": exc.current_stage,
+            "target_stage": exc.target_stage,
+            "missing_gates": [gate.as_dict() for gate in exc.missing_gates],
+            "can_force": False,
+            "force_requires_reason": True,
+        },
+    )
 
 
 def _handle(exc: Exception) -> None:
@@ -231,7 +248,7 @@ async def move_candidate_stage_v2(
     body: MoveCandidateByJobBody,
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
-) -> MoveCandidateResponse:
+):
     try:
         request = MoveCandidateRequest(job_id=job_id, stage=body.stage, notes=body.notes, reason=body.reason)
         result = await _service(db).move_candidate(
@@ -246,6 +263,9 @@ async def move_candidate_stage_v2(
             requested_by=current_user.id,
         )
         return result.model_copy(update={"analysis": _analysis_response(analysis_decision)})
+    except PipelineTransitionBlockedError as exc:
+        await db.rollback()
+        return _blocked_response(exc)
     except Exception as exc:
         await db.rollback()
         _handle(exc)
@@ -289,6 +309,7 @@ async def schedule_pipeline_interview(
                     reason=None,
                 ),
                 moved_by=current_user.id,
+                bypass_gates=True,
             )
 
         interview_service = InterviewScheduleService(SQLAlchemyInterviewScheduleRepository(db))

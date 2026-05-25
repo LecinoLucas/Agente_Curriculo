@@ -257,3 +257,38 @@ class PipelineJobSummaryResponse(BaseModel):
     total_candidates: int
     stage_counts: dict[str, int]
     latest_activity: datetime | None
+
+
+# ---------------------------------------------------------------------------
+# Stage gate blocking — structured error payload
+# ---------------------------------------------------------------------------
+
+
+GateActionCode = Literal[
+    "open_interview",
+    "open_scorecard",
+    "open_behavioral_assessment",
+    "open_behavioral_ai",
+    "open_decision",
+    "add_reason",
+]
+
+
+class MissingGateSchema(BaseModel):
+    code: str
+    label: str
+    description: str
+    action: GateActionCode
+    action_payload: dict | None = None
+    severity: Literal["block"] = "block"
+    forceable: bool = False
+
+
+class PipelineTransitionBlockedResponse(BaseModel):
+    code: Literal["pipeline_transition_blocked"] = "pipeline_transition_blocked"
+    message: str = "Não é possível avançar candidato para esta etapa."
+    current_stage: PipelineStage | None
+    target_stage: PipelineStage
+    missing_gates: list[MissingGateSchema]
+    can_force: bool = False
+    force_requires_reason: bool = True

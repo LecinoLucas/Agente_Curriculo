@@ -11,6 +11,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.domain_events import CandidateStageChangedEvent, dispatch_event
+from src.application.services.pipeline_gate_evaluator import (
+    MissingGate,
+    PipelineGateEvaluator,
+)
 from src.application.services.strict_payload import require_key
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
@@ -267,6 +271,25 @@ class PipelineDecisionGateBlockedError(Exception):
     """Raised when a terminal hiring move bypasses required decision gates."""
 
 
+class PipelineTransitionBlockedError(Exception):
+    """Raised when one or more structural gates prevent advancing to a stage."""
+
+    def __init__(
+        self,
+        *,
+        current_stage: str | None,
+        target_stage: str,
+        missing_gates: list[MissingGate],
+    ) -> None:
+        self.current_stage = current_stage
+        self.target_stage = target_stage
+        self.missing_gates = missing_gates
+        super().__init__(
+            f"Pipeline transition to '{target_stage}' blocked by "
+            f"{len(missing_gates)} gate(s)."
+        )
+
+
 class PipelineConcurrentModificationError(Exception):
     """Raised when a concurrent request changed the candidate's stage before this one committed."""
 
@@ -412,6 +435,8 @@ class PipelineService:
         candidate_id: UUID,
         body: MoveCandidateRequest,
         moved_by: UUID,
+        *,
+        bypass_gates: bool = False,
     ) -> MoveCandidateResponse:
         await self._ensure_active_job(body.job_id)
         await self._ensure_active_candidate(candidate_id)
@@ -438,8 +463,30 @@ class PipelineService:
                 f"Cannot move backwards from '{from_stage}' to '{body.stage}'"
             )
 
-        if body.stage == "hired":
-            await self._assert_hiring_decision_gates(candidate_id=candidate_id, job_id=body.job_id)
+        # Fase 2: structural gate evaluator. Only fires on forward moves and on
+        # the disqualification path (which validates the reason). Backwards
+        # moves continue to follow legacy behavior. The caller may opt to
+        # bypass gates for system-driven moves (e.g. interview scheduling that
+        # auto-advances stage — would otherwise self-block).
+        is_forward = to_cfg.order > from_cfg.order
+        if not bypass_gates and (is_forward or body.stage == "rejected"):
+            job = await self._repository.find_active_job(body.job_id)
+            if job is None:
+                raise PipelineJobNotFoundError
+            gate_result = await PipelineGateEvaluator(self._repository).evaluate(
+                candidate_id=candidate_id,
+                job_id=body.job_id,
+                job=job,
+                current_stage=from_stage,
+                target_stage=body.stage,
+                reason=body.reason,
+            )
+            if gate_result.is_blocked:
+                raise PipelineTransitionBlockedError(
+                    current_stage=from_stage,
+                    target_stage=body.stage,
+                    missing_gates=gate_result.missing_gates,
+                )
 
         now = datetime.now(UTC)
         new_status = to_cfg.terminal_status or "active"

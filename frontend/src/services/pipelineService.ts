@@ -6,12 +6,120 @@ import type {
   MovePipelineCandidatePayload,
   MovePipelineCandidateResponse,
   PipelineAnalysisDecision,
+  PipelineStage,
   PipelineStageTransition,
   TransferCandidateJobPayload,
   TransferCandidateJobResponse,
 } from "../types/domain";
 import type { InterviewFormat, InterviewSchedule } from "../types/agenda";
-import { httpRequest } from "./http";
+import { httpRequest, HttpError } from "./http";
+
+// ---------------------------------------------------------------------------
+// Pipeline stage gate blocking — Fase 3 (frontend)
+// ---------------------------------------------------------------------------
+
+export type PipelineGateActionCode =
+  | "open_interview"
+  | "open_scorecard"
+  | "open_behavioral_assessment"
+  | "open_behavioral_ai"
+  | "open_decision"
+  | "add_reason";
+
+export type PipelineMissingGate = {
+  code: string;
+  label: string;
+  description: string;
+  action: PipelineGateActionCode;
+  action_payload?: Record<string, unknown> | null;
+  severity: "block";
+  forceable: boolean;
+};
+
+export type PipelineTransitionBlockedResponse = {
+  code: "pipeline_transition_blocked";
+  message: string;
+  current_stage: PipelineStage | null;
+  target_stage: PipelineStage;
+  missing_gates: PipelineMissingGate[];
+  can_force: boolean;
+  force_requires_reason: boolean;
+};
+
+const GATE_ACTION_CODES: ReadonlySet<PipelineGateActionCode> = new Set([
+  "open_interview",
+  "open_scorecard",
+  "open_behavioral_assessment",
+  "open_behavioral_ai",
+  "open_decision",
+  "add_reason",
+]);
+
+function isGateActionCode(value: unknown): value is PipelineGateActionCode {
+  return typeof value === "string" && GATE_ACTION_CODES.has(value as PipelineGateActionCode);
+}
+
+function normalizeMissingGate(raw: unknown): PipelineMissingGate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const action = isGateActionCode(record.action) ? record.action : null;
+  if (!action) return null;
+  return {
+    code: typeof record.code === "string" ? record.code : "unknown_gate",
+    label: typeof record.label === "string" ? record.label : "Pendência",
+    description: typeof record.description === "string" ? record.description : "",
+    action,
+    action_payload:
+      record.action_payload && typeof record.action_payload === "object"
+        ? (record.action_payload as Record<string, unknown>)
+        : null,
+    severity: "block",
+    forceable: Boolean(record.forceable),
+  };
+}
+
+/**
+ * Detects the structured 409 returned by the backend when a pipeline stage
+ * move is blocked by structural gates. The payload lives at the top level
+ * of the response body (NOT under `detail`), so we read it from
+ * `HttpError.data`.
+ */
+export function isPipelineTransitionBlockedError(
+  error: unknown,
+): error is HttpError & { data: PipelineTransitionBlockedResponse } {
+  if (!(error instanceof HttpError) || error.status !== 409) return false;
+  const data = error.data as Record<string, unknown> | null | undefined;
+  if (!data || typeof data !== "object") return false;
+  if (data.code !== "pipeline_transition_blocked") return false;
+  if (!Array.isArray(data.missing_gates)) return false;
+  return true;
+}
+
+/**
+ * Returns a sanitized PipelineTransitionBlockedResponse from a blocked error.
+ * Filters out any gate with an unrecognized action so the UI never tries to
+ * render a button with no behavior.
+ */
+export function readPipelineTransitionBlockedResponse(
+  error: unknown,
+): PipelineTransitionBlockedResponse | null {
+  if (!isPipelineTransitionBlockedError(error)) return null;
+  const raw = error.data;
+  const gates: PipelineMissingGate[] = [];
+  for (const gate of raw.missing_gates) {
+    const normalized = normalizeMissingGate(gate);
+    if (normalized) gates.push(normalized);
+  }
+  return {
+    code: "pipeline_transition_blocked",
+    message: typeof raw.message === "string" ? raw.message : "Não é possível avançar candidato para esta etapa.",
+    current_stage: (raw.current_stage as PipelineStage | null) ?? null,
+    target_stage: raw.target_stage as PipelineStage,
+    missing_gates: gates,
+    can_force: Boolean(raw.can_force),
+    force_requires_reason: raw.force_requires_reason !== false,
+  };
+}
 
 export type SchedulePipelineInterviewPayload = {
   scheduled_start: string;

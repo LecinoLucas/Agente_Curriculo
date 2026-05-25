@@ -5,6 +5,8 @@ import { PipelinePage } from "../PipelinePage";
 import { usePipeline } from "../../features/pipeline/PipelineContext";
 import { pipelineService } from "../../services/pipelineService";
 import { getJobRanking } from "../../services/jobsService";
+import { HttpError } from "../../services/http";
+import { feedback } from "../../services/feedback";
 import "@testing-library/jest-dom";
 const routerFuture = {
   v7_startTransition: true,
@@ -17,12 +19,18 @@ vi.mock("../../features/pipeline/PipelineContext", () => ({
 }));
 
 // Mock services
-vi.mock("../../services/pipelineService", () => ({
-  pipelineService: {
-    listPipelineJobs: vi.fn(),
-    schedulePipelineInterview: vi.fn(),
-  },
-}));
+vi.mock("../../services/pipelineService", async () => {
+  const actual = await vi.importActual<typeof import("../../services/pipelineService")>(
+    "../../services/pipelineService",
+  );
+  return {
+    ...actual,
+    pipelineService: {
+      listPipelineJobs: vi.fn(),
+      schedulePipelineInterview: vi.fn(),
+    },
+  };
+});
 
 vi.mock("../../services/jobsService", () => ({
   getJobRanking: vi.fn(),
@@ -405,6 +413,206 @@ describe("PipelinePage", () => {
     fireEvent.scroll(topScroll, { target: { scrollLeft: 120 } });
 
     expect(scrollContainer.scrollLeft).toBe(120);
+  });
+
+  it("14. Bloqueio 409 pipeline_transition_blocked abre modal e não move o card", async () => {
+    const blockedPayload = {
+      code: "pipeline_transition_blocked",
+      message: "Não é possível avançar candidato para esta etapa.",
+      current_stage: "entry",
+      target_stage: "screening",
+      missing_gates: [
+        {
+          code: "behavioral_ai_pending",
+          label: "IA comportamental pendente",
+          description: "Aguarde a IA comportamental concluir.",
+          action: "open_behavioral_ai",
+          action_payload: { assignment_id: "asg-1" },
+          severity: "block",
+          forceable: false,
+        },
+        {
+          code: "scorecard_not_submitted",
+          label: "Scorecard final pendente",
+          description: "Submeta o scorecard.",
+          action: "open_scorecard",
+          action_payload: null,
+          severity: "block",
+          forceable: false,
+        },
+      ],
+      can_force: false,
+      force_requires_reason: true,
+    };
+    mockMoveCandidateStage.mockRejectedValueOnce(
+      new HttpError(409, "Conflict", undefined, blockedPayload, undefined),
+    );
+    mockRefreshBoard.mockResolvedValue(undefined);
+
+    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          <Route path="/candidatos/:candidateId" element={<div data-testid="profile-page" />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+
+    const modal = await screen.findByTestId("pipeline-transition-blocked-modal");
+    expect(modal).toBeInTheDocument();
+    expect(screen.getByTestId("pipeline-blocked-message")).toHaveTextContent(
+      /não é possível avançar candidato/i,
+    );
+
+    // Listing of missing gates
+    expect(screen.getByTestId("pipeline-blocked-gate-behavioral_ai_pending")).toBeInTheDocument();
+    expect(screen.getByTestId("pipeline-blocked-gate-scorecard_not_submitted")).toBeInTheDocument();
+
+    // Card must still belong to the original column (entry).
+    const entryColumn = screen.getByTestId("kanban-column-entry");
+    expect(entryColumn).toContainElement(screen.getByTestId("kanban-card-c-1"));
+
+    // Board was refetched after the blocked response.
+    expect(mockRefreshBoard).toHaveBeenCalled();
+
+    // Generic move-error toast was NOT issued.
+    expect(feedback.moveCandidate.error).not.toHaveBeenCalled();
+
+    // can_force=false: no force-advance button is rendered.
+    expect(screen.queryByText(/forçar avanço/i)).not.toBeInTheDocument();
+  });
+
+  it("15. open_behavioral_ai navega para perfil aba Avaliações com foco IA", async () => {
+    const blockedPayload = {
+      code: "pipeline_transition_blocked",
+      message: "Bloqueio",
+      current_stage: "final",
+      target_stage: "offer",
+      missing_gates: [
+        {
+          code: "behavioral_ai_pending",
+          label: "IA comportamental pendente",
+          description: "Aguarde a IA.",
+          action: "open_behavioral_ai",
+          action_payload: null,
+          severity: "block",
+          forceable: false,
+        },
+      ],
+      can_force: false,
+      force_requires_reason: true,
+    };
+    mockMoveCandidateStage.mockRejectedValueOnce(
+      new HttpError(409, "Conflict", undefined, blockedPayload, undefined),
+    );
+
+    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          <Route path="/candidatos/:candidateId" element={<div data-testid="profile-page" />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+
+    await screen.findByTestId("pipeline-transition-blocked-modal");
+
+    fireEvent.click(
+      screen.getByTestId("pipeline-blocked-gate-behavioral_ai_pending-action"),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("profile-page")).toBeInTheDocument();
+    });
+  });
+
+  it("16. open_scorecard usa fallback de perfil quando ação não está mapeada por algum motivo", async () => {
+    const blockedPayload = {
+      code: "pipeline_transition_blocked",
+      message: "Bloqueio",
+      current_stage: "technical_interview",
+      target_stage: "final",
+      missing_gates: [
+        {
+          code: "scorecard_not_submitted",
+          label: "Scorecard pendente",
+          description: "Submeta o scorecard.",
+          action: "open_scorecard",
+          action_payload: { interview_id: "int-1" },
+          severity: "block",
+          forceable: false,
+        },
+      ],
+      can_force: false,
+      force_requires_reason: true,
+    };
+    mockMoveCandidateStage.mockRejectedValueOnce(
+      new HttpError(409, "Conflict", undefined, blockedPayload, undefined),
+    );
+
+    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+          <Route path="/candidatos/:candidateId" element={<div data-testid="profile-page" />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+
+    await screen.findByTestId("pipeline-transition-blocked-modal");
+    fireEvent.click(
+      screen.getByTestId("pipeline-blocked-gate-scorecard_not_submitted-action"),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("profile-page")).toBeInTheDocument();
+    });
+  });
+
+  it("17. Erro genérico continua usando o feedback antigo (toast)", async () => {
+    mockMoveCandidateStage.mockRejectedValueOnce(new Error("Falha de rede"));
+
+    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(feedback.moveCandidate.error).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId("pipeline-transition-blocked-modal")).not.toBeInTheDocument();
   });
 
   it("13. Mover candidato atualiza Kanban e força refresh do drawer aberto", async () => {

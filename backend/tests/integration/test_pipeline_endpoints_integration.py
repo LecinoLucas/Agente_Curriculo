@@ -275,7 +275,10 @@ async def test_patch_pipeline_stage_hired_blocks_when_behavioral_required_pendin
     )
 
     assert move_resp.status_code == 409
-    assert "avaliação comportamental" in move_resp.json()["detail"]
+    body = move_resp.json()
+    assert body["code"] == "pipeline_transition_blocked"
+    gate_codes = {g["code"] for g in body["missing_gates"]}
+    assert "behavioral_assessment_pending" in gate_codes
 
 
 @pytest.mark.asyncio
@@ -338,7 +341,10 @@ async def test_patch_pipeline_stage_hired_requires_behavioral_ai_when_policy_req
         headers=headers,
     )
     assert blocked.status_code == 409
-    assert "IA comportamental" in blocked.json()["detail"]
+    blocked_body = blocked.json()
+    assert blocked_body["code"] == "pipeline_transition_blocked"
+    blocked_codes = {g["code"] for g in blocked_body["missing_gates"]}
+    assert "behavioral_ai_pending" in blocked_codes
 
     db_session.add(
         BehavioralAssessmentAIEvaluationModel(
@@ -352,6 +358,21 @@ async def test_patch_pipeline_stage_hired_requires_behavioral_ai_when_policy_req
             model="test-model",
             prompt_version=1,
             completed_at=now,
+        )
+    )
+    # Final decision gate ('hired' requires a submitted decision with outcome 'hire').
+    from src.infrastructure.database.models.hiring_decision_model import (
+        CandidateJobHiringDecisionModel,
+    )
+    db_session.add(
+        CandidateJobHiringDecisionModel(
+            id=uuid4(),
+            candidate_id=candidate_id,
+            job_id=job_id,
+            decision_status="submitted",
+            decision_outcome="hire",
+            reason_code="strong_fit",
+            submitted_at=now,
         )
     )
     await db_session.commit()

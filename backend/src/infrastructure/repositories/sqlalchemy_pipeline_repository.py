@@ -19,6 +19,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import InterviewScorecardModel
@@ -880,6 +881,112 @@ class SQLAlchemyPipelineRepository:
             .group_by(CandidateJobPipelineModel.job_id, CandidateJobPipelineModel.pipeline_stage)
         )
         return [dict(row) for row in result.mappings().all()]
+
+
+    # ------------------------------------------------------------------
+    # Gate evaluator read-only helpers
+    # ------------------------------------------------------------------
+
+    async def find_latest_interview_for_gate(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        interview_types: tuple[str, ...],
+    ) -> InterviewScheduleModel | None:
+        """Latest non-cancelled interview matching candidate+job+any of the given types."""
+        return await self._session.scalar(
+            sa.select(InterviewScheduleModel)
+            .where(
+                InterviewScheduleModel.candidate_id == candidate_id,
+                InterviewScheduleModel.job_id == job_id,
+                InterviewScheduleModel.interview_type.in_(interview_types),
+            )
+            .order_by(
+                InterviewScheduleModel.scheduled_start.desc().nullslast(),
+                InterviewScheduleModel.updated_at.desc(),
+                InterviewScheduleModel.created_at.desc(),
+            )
+            .limit(1)
+        )
+
+    async def find_scorecard_for_interview(
+        self,
+        *,
+        interview_id: UUID,
+    ) -> InterviewScorecardModel | None:
+        return await self._session.scalar(
+            sa.select(InterviewScorecardModel)
+            .where(InterviewScorecardModel.interview_id == interview_id)
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+            .limit(1)
+        )
+
+    async def find_latest_submitted_scorecard(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> InterviewScorecardModel | None:
+        return await self._session.scalar(
+            sa.select(InterviewScorecardModel)
+            .where(
+                InterviewScorecardModel.candidate_id == candidate_id,
+                InterviewScorecardModel.job_id == job_id,
+                InterviewScorecardModel.status == "submitted",
+            )
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+            .limit(1)
+        )
+
+    async def find_active_hiring_decision(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobHiringDecisionModel | None:
+        """Latest hiring decision that has not been superseded for candidate+job."""
+        return await self._session.scalar(
+            sa.select(CandidateJobHiringDecisionModel)
+            .where(
+                CandidateJobHiringDecisionModel.candidate_id == candidate_id,
+                CandidateJobHiringDecisionModel.job_id == job_id,
+                CandidateJobHiringDecisionModel.decision_status != "superseded",
+            )
+            .order_by(
+                CandidateJobHiringDecisionModel.created_at.desc(),
+                CandidateJobHiringDecisionModel.id.desc(),
+            )
+            .limit(1)
+        )
+
+    async def find_behavioral_assignment(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> BehavioralAssessmentAssignmentModel | None:
+        """Latest behavioral assignment for candidate+job (any template)."""
+        return await self._session.scalar(
+            sa.select(BehavioralAssessmentAssignmentModel)
+            .where(
+                BehavioralAssessmentAssignmentModel.candidate_id == candidate_id,
+                BehavioralAssessmentAssignmentModel.job_id == job_id,
+            )
+            .order_by(
+                BehavioralAssessmentAssignmentModel.created_at.desc(),
+                BehavioralAssessmentAssignmentModel.id.desc(),
+            )
+            .limit(1)
+        )
 
 
 def _candidate_job_pipeline_key(*, candidate_id: UUID, job_id: UUID) -> UUID:
