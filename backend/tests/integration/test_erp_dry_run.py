@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.admission_package_service import AdmissionPackageService
 from src.application.services.erp_integration_service import ErpIntegrationService
 from src.core.settings import settings
-from src.infrastructure.security.password_service import hash_password
 from src.infrastructure.database.models import (
     CandidateJobHiringDecisionModel,
     CandidateJobPipelineModel,
@@ -26,6 +25,7 @@ from src.infrastructure.database.models import (
     PreAdmissionEventModel,
     UserModel,
 )
+from src.infrastructure.security.password_service import hash_password
 
 
 async def _create_user(session: AsyncSession, role: str = "recruiter") -> UserModel:
@@ -43,14 +43,14 @@ async def _create_user(session: AsyncSession, role: str = "recruiter") -> UserMo
 
 
 async def _auth_headers(client: httpx.AsyncClient, db_session: AsyncSession) -> dict[str, str]:
-    email = f"recruiter-{uuid4()}@example.com"
+    email = f"hr-{uuid4()}@example.com"
     password = "password123"
     user = UserModel(
         id=uuid4(),
         email=email,
-        full_name="Recruiter ERP",
+        full_name="HR ERP",
         password_hash=hash_password(password),
-        role="recruiter",
+        role="hr",
         status="active",
     )
     db_session.add(user)
@@ -65,7 +65,9 @@ async def _auth_headers(client: httpx.AsyncClient, db_session: AsyncSession) -> 
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _create_candidate(session: AsyncSession, *, cpf: str | None = "390.533.447-05") -> CandidateModel:
+async def _create_candidate(
+    session: AsyncSession, *, cpf: str | None = "390.533.447-05"
+) -> CandidateModel:
     user = await _create_user(session, role="candidate")
     candidate = CandidateModel(
         id=uuid4(),
@@ -94,7 +96,9 @@ async def _create_job(session: AsyncSession) -> JobModel:
     return job
 
 
-async def _create_pipeline(session: AsyncSession, *, candidate_id, job_id) -> CandidateJobPipelineModel:
+async def _create_pipeline(
+    session: AsyncSession, *, candidate_id, job_id
+) -> CandidateJobPipelineModel:
     pipeline = CandidateJobPipelineModel(
         candidate_job_pipeline_id=uuid4(),
         candidate_id=candidate_id,
@@ -131,7 +135,13 @@ async def _create_hiring_decision(
 
 
 async def _create_case(
-    session: AsyncSession, *, candidate_id, job_id, hiring_decision_id, start_date: date | None, salary_offer: Decimal | None
+    session: AsyncSession,
+    *,
+    candidate_id,
+    job_id,
+    hiring_decision_id,
+    start_date: date | None,
+    salary_offer: Decimal | None,
 ) -> PreAdmissionCaseModel:
     case = PreAdmissionCaseModel(
         id=uuid4(),
@@ -512,7 +522,9 @@ async def test_dry_run_does_not_change_pipeline_or_score_or_hiring_decision(
     before_pipeline_status = data["pipeline"].pipeline_status
     before_decision_status = data["decision"].decision_status
     before_decision_outcome = data["decision"].decision_outcome
-    before_score_count = await db_session.scalar(sa.select(sa.func.count()).select_from(CandidateJobScoreModel))
+    before_score_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateJobScoreModel)
+    )
 
     create_resp = await client.post(
         f"/api/v1/admission-packages/{data['package'].id}/erp/protheus/dry-run",
@@ -527,7 +539,9 @@ async def test_dry_run_does_not_change_pipeline_or_score_or_hiring_decision(
 
     await db_session.refresh(data["pipeline"])
     await db_session.refresh(data["decision"])
-    after_score_count = await db_session.scalar(sa.select(sa.func.count()).select_from(CandidateJobScoreModel))
+    after_score_count = await db_session.scalar(
+        sa.select(sa.func.count()).select_from(CandidateJobScoreModel)
+    )
 
     assert data["pipeline"].pipeline_stage == before_pipeline_stage
     assert data["pipeline"].pipeline_status == before_pipeline_status

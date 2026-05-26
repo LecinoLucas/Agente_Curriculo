@@ -34,11 +34,20 @@ def _service(db: AsyncSession) -> AIProviderCredentialService:
 
 def _handle_error(exc: Exception) -> None:
     if isinstance(exc, AIProviderCredentialNotFoundError):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Credencial IA não encontrada")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Credencial IA não encontrada",
+        )
     if isinstance(exc, AIProviderCredentialConflictError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Já existe credencial com este label para o provider")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Já existe credencial com este label para o provider",
+        )
     if isinstance(exc, InvalidAIProviderCredentialError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Campos obrigatórios inválidos")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Campos obrigatórios inválidos",
+        )
     raise exc
 
 
@@ -49,7 +58,6 @@ def _to_response(credential) -> AIProviderCredentialResponse:
         model_id=credential.model_id,
         label=credential.label,
         masked_key=mask_api_key_last4(credential.key_last4),
-        key_last4=credential.key_last4,
         status=credential.status,
         priority=credential.priority,
         cooldown_until=credential.cooldown_until,
@@ -91,7 +99,10 @@ async def list_ai_provider_credentials(
     _current_user: AdminOnly,
     provider: str | None = Query(default=None),
     model_id: str | None = Query(default=None),
-    credential_status: Literal["active", "disabled", "rate_limited", "invalid"] | None = Query(default=None, alias="status"),
+    credential_status: Literal["active", "disabled", "rate_limited", "invalid"] | None = Query(
+        default=None,
+        alias="status",
+    ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),

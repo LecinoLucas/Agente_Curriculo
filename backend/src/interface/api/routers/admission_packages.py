@@ -12,18 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.admission_package_service import AdmissionPackageService
 from src.application.services.erp_integration_service import ErpIntegrationService
 from src.domain.exceptions import ValidationException
-from src.interface.api.dependencies import RecruiterHrOrAdmin, get_db
+from src.interface.api.dependencies import (
+    PreAdmissionExportStaff,
+    PreAdmissionReadStaff,
+    PreAdmissionWriteStaff,
+    get_db,
+)
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.admission_package_schemas import (
-    AdmissionPackageApproveRequest,
-    AdmissionPackageCancelRequest,
     AdmissionPackageResponse,
-    AdmissionPackageCreateRequest,
     ErpIntegrationAttemptListResponse,
     ErpIntegrationAttemptResponse,
-    ProtheusMockSendRequest,
     ErpRetryRequest,
     ProtheusCapabilitiesResponse,
+    ProtheusMockSendRequest,
 )
 
 router = APIRouter(tags=["admission-packages"])
@@ -95,7 +97,7 @@ def _to_attempt_response(attempt) -> ErpIntegrationAttemptResponse:
 )
 async def create_admission_package(
     case_id: UUID,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionWriteStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AdmissionPackageResponse:
     """Create or retrieve admission export package for case."""
@@ -114,7 +116,7 @@ async def create_admission_package(
 )
 async def get_admission_package(
     case_id: UUID,
-    _current_user: RecruiterHrOrAdmin,
+    _current_user: PreAdmissionReadStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AdmissionPackageResponse | None:
     """Retrieve admission package for case (null if not created)."""
@@ -130,7 +132,7 @@ async def get_admission_package(
 )
 async def approve_admission_package(
     package_id: UUID,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionWriteStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AdmissionPackageResponse:
     """Approve admission package for export."""
@@ -158,7 +160,7 @@ async def approve_admission_package(
 )
 async def cancel_admission_package(
     package_id: UUID,
-    _current_user: RecruiterHrOrAdmin,
+    _current_user: PreAdmissionWriteStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AdmissionPackageResponse:
     """Cancel admission package."""
@@ -177,7 +179,7 @@ async def cancel_admission_package(
 )
 async def export_package_json(
     package_id: UUID,
-    _current_user: RecruiterHrOrAdmin,
+    _current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Export admission package as JSON."""
@@ -187,7 +189,9 @@ async def export_package_json(
         return Response(
             content=json.dumps(package.payload_json, ensure_ascii=False, indent=2),
             media_type="application/json",
-            headers={"Content-Disposition": f'attachment; filename="admission-package-{package_id}.json"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="admission-package-{package_id}.json"'
+            },
         )
     except ValidationException:
         await db.rollback()
@@ -203,7 +207,7 @@ async def export_package_json(
 )
 async def export_package_csv(
     package_id: UUID,
-    _current_user: RecruiterHrOrAdmin,
+    _current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Export admission package as CSV."""
@@ -245,7 +249,9 @@ async def export_package_csv(
         return Response(
             content=buf.getvalue(),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="admission-package-{package_id}.csv"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="admission-package-{package_id}.csv"'
+            },
         )
     except ValidationException:
         await db.rollback()
@@ -257,12 +263,10 @@ async def export_package_csv(
     response_model=ProtheusCapabilitiesResponse,
 )
 async def get_protheus_capabilities(
-    _current_user: RecruiterHrOrAdmin,
+    _current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ProtheusCapabilitiesResponse:
-    return ProtheusCapabilitiesResponse.model_validate(
-        _erp_service(db).get_protheus_capabilities()
-    )
+    return ProtheusCapabilitiesResponse.model_validate(_erp_service(db).get_protheus_capabilities())
 
 
 @router.post(
@@ -272,7 +276,7 @@ async def get_protheus_capabilities(
 )
 async def create_protheus_dry_run_attempt(
     package_id: UUID,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ErpIntegrationAttemptResponse:
     try:
@@ -295,7 +299,7 @@ async def create_protheus_dry_run_attempt(
 async def create_protheus_mock_send_attempt(
     package_id: UUID,
     payload: ProtheusMockSendRequest,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ErpIntegrationAttemptResponse:
     try:
@@ -318,7 +322,7 @@ async def create_protheus_mock_send_attempt(
 )
 async def create_protheus_homolog_send_attempt(
     package_id: UUID,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ErpIntegrationAttemptResponse:
     """Send to real Protheus in homologation environment.
@@ -348,7 +352,7 @@ async def create_protheus_homolog_send_attempt(
 )
 async def list_protheus_attempts(
     package_id: UUID,
-    _current_user: RecruiterHrOrAdmin,
+    _current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ErpIntegrationAttemptListResponse:
     attempts = await _erp_service(db).list_attempts(package_id=package_id)
@@ -361,7 +365,7 @@ async def list_protheus_attempts(
 )
 async def get_erp_integration_attempt(
     attempt_id: UUID,
-    _current_user: RecruiterHrOrAdmin,
+    _current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ErpIntegrationAttemptResponse:
     attempt = await _erp_service(db).get_attempt(attempt_id=attempt_id)
@@ -374,7 +378,7 @@ async def get_erp_integration_attempt(
 )
 async def simulate_erp_integration_attempt(
     attempt_id: UUID,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ErpIntegrationAttemptResponse:
     try:
@@ -396,7 +400,7 @@ async def simulate_erp_integration_attempt(
 async def retry_erp_integration_attempt(
     attempt_id: UUID,
     payload: ErpRetryRequest,
-    current_user: RecruiterHrOrAdmin,
+    current_user: PreAdmissionExportStaff,
     db: AsyncSession = Depends(get_db),
 ) -> ErpIntegrationAttemptResponse:
     try:

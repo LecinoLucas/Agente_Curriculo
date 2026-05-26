@@ -13,17 +13,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.candidate_portal_auth_service import PORTAL_SESSION_PURPOSE
 from src.application.services.pre_admission_service import MAX_PRE_ADMISSION_DOCUMENT_BYTES
 from src.infrastructure.database.models.candidate_auth_token_model import CandidateAuthTokenModel
-from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionDocumentModel,
-    PreAdmissionEventModel,
 )
 from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
 
 from .test_hiring_decisions import (
+    _admin_headers,
     _create_decision,
     _recruiter_headers,
     _seed_candidate_job,
@@ -48,6 +50,24 @@ async def _create_hire_decision(
         reason_code="strong_fit",
         notes="Decisão humana de contratação.",
     )
+
+
+async def _move_pipeline_to_stage(
+    db_session: AsyncSession,
+    *,
+    job_id: UUID,
+    candidate_id: UUID,
+    stage: str,
+) -> None:
+    pipeline = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    assert pipeline is not None
+    pipeline.pipeline_stage = stage
+    await db_session.commit()
 
 
 async def _create_pre_admission(
@@ -87,7 +107,9 @@ async def _create_checklist_item(
     return response.json()
 
 
-async def _create_portal_session(db_session: AsyncSession, candidate_id: UUID, raw_token: str) -> None:
+async def _create_portal_session(
+    db_session: AsyncSession, candidate_id: UUID, raw_token: str
+) -> None:
     db_session.add(
         CandidateAuthTokenModel(
             candidate_id=candidate_id,
@@ -103,10 +125,11 @@ async def _seed_pre_admission_with_item(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> tuple[dict[str, str], UUID, UUID, dict, dict]:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _complete_candidate_portal_profile(db_session, candidate_id)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     case = await _create_pre_admission(client, headers, job_id, candidate_id)
     item = await _create_checklist_item(client, headers, case["id"])
     return headers, job_id, candidate_id, case, item
@@ -122,7 +145,9 @@ def _pdf_upload(filename: str = "cpf.pdf") -> dict:
     }
 
 
-async def _complete_candidate_portal_profile(db_session: AsyncSession, candidate_id: UUID) -> CandidateModel:
+async def _complete_candidate_portal_profile(
+    db_session: AsyncSession, candidate_id: UUID
+) -> CandidateModel:
     candidate = await db_session.get(CandidateModel, candidate_id)
     assert candidate is not None
     candidate.phone = "11999999999"
@@ -160,7 +185,7 @@ async def test_does_not_create_pre_admission_without_hire_decision(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_decision(client, headers, job_id, candidate_id, outcome="hold")
 
@@ -178,9 +203,10 @@ async def test_creates_pre_admission_with_submitted_hire_decision(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     decision = await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
 
     payload = await _create_pre_admission(client, headers, job_id, candidate_id)
 
@@ -192,10 +218,53 @@ async def test_creates_pre_admission_with_submitted_hire_decision(
 
 
 @pytest.mark.asyncio
-async def test_does_not_duplicate_case_for_same_decision(client: AsyncClient, db_session: AsyncSession) -> None:
-    headers = await _recruiter_headers(client, db_session)
+async def test_does_not_create_pre_admission_in_incompatible_pipeline_stage(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="offer")
+
+    response = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
+        headers=headers,
+        json={"notes": "Tentativa fora da etapa compatível."},
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_get_pre_admission_marks_can_create_false_when_pipeline_stage_is_incompatible(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers = await _admin_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="offer")
+
+    response = await client.get(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["case"] is None
+    assert response.json()["hiring_decision_outcome"] == "hire"
+    assert response.json()["can_create"] is False
+
+
+@pytest.mark.asyncio
+async def test_does_not_duplicate_case_for_same_decision(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    headers = await _admin_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
 
     first = await _create_pre_admission(client, headers, job_id, candidate_id)
     second = await _create_pre_admission(client, headers, job_id, candidate_id)
@@ -215,9 +284,10 @@ async def test_does_not_duplicate_case_for_same_decision(client: AsyncClient, db
 
 @pytest.mark.asyncio
 async def test_get_lists_existing_case(client: AsyncClient, db_session: AsyncSession) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     created = await _create_pre_admission(client, headers, job_id, candidate_id)
 
     response = await client.get(
@@ -231,10 +301,44 @@ async def test_get_lists_existing_case(client: AsyncClient, db_session: AsyncSes
 
 
 @pytest.mark.asyncio
-async def test_updates_status_and_registers_event(client: AsyncClient, db_session: AsyncSession) -> None:
-    headers = await _recruiter_headers(client, db_session)
+async def test_recruiter_cannot_access_pre_admission_staff_endpoints(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin_headers = await _admin_headers(client, db_session)
+    recruiter_headers = await _recruiter_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _create_hire_decision(client, db_session, admin_headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
+    created = await _create_pre_admission(client, admin_headers, job_id, candidate_id)
+
+    read_response = await client.get(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
+        headers=recruiter_headers,
+    )
+    workspace_response = await client.get(
+        f"/api/v1/admission/cases/{created['id']}/workspace",
+        headers=recruiter_headers,
+    )
+    update_response = await client.patch(
+        f"/api/v1/pre-admission/{created['id']}",
+        headers=recruiter_headers,
+        json={"status": "offer_sent"},
+    )
+
+    assert read_response.status_code == status.HTTP_403_FORBIDDEN
+    assert workspace_response.status_code == status.HTTP_403_FORBIDDEN
+    assert update_response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_updates_status_and_registers_event(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     case = await _create_pre_admission(client, headers, job_id, candidate_id)
 
     response = await client.patch(
@@ -252,9 +356,10 @@ async def test_updates_status_and_registers_event(client: AsyncClient, db_sessio
 
 @pytest.mark.asyncio
 async def test_creates_checklist_item(client: AsyncClient, db_session: AsyncSession) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     case = await _create_pre_admission(client, headers, job_id, candidate_id)
 
     response = await client.post(
@@ -273,9 +378,10 @@ async def test_updates_checklist_item_and_registers_event(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     case = await _create_pre_admission(client, headers, job_id, candidate_id)
     item = (
         await client.post(
@@ -302,9 +408,10 @@ async def test_pre_admission_does_not_move_pipeline_automatically(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     pipeline = await db_session.scalar(
         sa.select(CandidateJobPipelineModel).where(
             CandidateJobPipelineModel.candidate_id == candidate_id,
@@ -325,9 +432,10 @@ async def test_pre_admission_does_not_change_ranking_or_hiring_decision(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     decision = await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     score_count_before = int(
         await db_session.scalar(
             sa.select(sa.func.count(CandidateJobScoreModel.id)).where(
@@ -350,7 +458,9 @@ async def test_pre_admission_does_not_change_ranking_or_hiring_decision(
         or 0
     )
     persisted_decision = await db_session.scalar(
-        sa.select(CandidateJobHiringDecisionModel).where(CandidateJobHiringDecisionModel.id == UUID(decision["id"]))
+        sa.select(CandidateJobHiringDecisionModel).where(
+            CandidateJobHiringDecisionModel.id == UUID(decision["id"])
+        )
     )
     assert score_count_after == score_count_before
     assert persisted_decision is not None
@@ -360,9 +470,10 @@ async def test_pre_admission_does_not_change_ranking_or_hiring_decision(
 
 @pytest.mark.asyncio
 async def test_events_are_returned_ordered(client: AsyncClient, db_session: AsyncSession) -> None:
-    headers = await _recruiter_headers(client, db_session)
+    headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
     case = await _create_pre_admission(client, headers, job_id, candidate_id)
     await client.patch(
         f"/api/v1/pre-admission/{case['id']}",
@@ -385,8 +496,12 @@ async def test_events_are_returned_ordered(client: AsyncClient, db_session: Asyn
 
 
 @pytest.mark.asyncio
-async def test_candidate_sees_only_own_pre_admission(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, _item = await _seed_pre_admission_with_item(client, db_session)
+async def test_candidate_sees_only_own_pre_admission(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _headers, _job_id, candidate_id, case, _item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-own")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-own")
 
@@ -401,7 +516,9 @@ async def test_candidate_cannot_access_other_candidate_pre_admission(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    _headers, _job_id, _candidate_id, case, _item = await _seed_pre_admission_with_item(client, db_session)
+    _headers, _job_id, _candidate_id, case, _item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     other_candidate = await _create_plain_candidate(db_session)
     await _create_portal_session(db_session, other_candidate.id, "portal-pre-admission-other")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-other")
@@ -412,8 +529,12 @@ async def test_candidate_cannot_access_other_candidate_pre_admission(
 
 
 @pytest.mark.asyncio
-async def test_candidate_valid_upload_creates_document(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+async def test_candidate_valid_upload_creates_document(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-upload")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-upload")
 
@@ -430,8 +551,12 @@ async def test_candidate_valid_upload_creates_document(client: AsyncClient, db_s
 
 
 @pytest.mark.asyncio
-async def test_candidate_upload_invalid_type_fails(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+async def test_candidate_upload_invalid_type_fails(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-invalid")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-invalid")
 
@@ -444,22 +569,36 @@ async def test_candidate_upload_invalid_type_fails(client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_candidate_upload_oversized_file_fails(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+async def test_candidate_upload_oversized_file_fails(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-big")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-big")
 
     response = await client.post(
         f"/api/v1/candidate-portal/pre-admission/{case['id']}/checklist-items/{item['id']}/documents",
-        files={"document_file": ("cpf.pdf", b"x" * (MAX_PRE_ADMISSION_DOCUMENT_BYTES + 1), "application/pdf")},
+        files={
+            "document_file": (
+                "cpf.pdf",
+                b"x" * (MAX_PRE_ADMISSION_DOCUMENT_BYTES + 1),
+                "application/pdf",
+            )
+        },
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 @pytest.mark.asyncio
-async def test_candidate_upload_changes_checklist_to_received(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+async def test_candidate_upload_changes_checklist_to_received(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-received")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-received")
 
@@ -478,7 +617,9 @@ async def test_admin_approve_changes_document_and_checklist_to_approved(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-approve")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-approve")
     document = (
@@ -489,7 +630,9 @@ async def test_admin_approve_changes_document_and_checklist_to_approved(
     ).json()
     client.cookies.clear()
 
-    response = await client.post(f"/api/v1/pre-admission/documents/{document['id']}/approve", headers=headers)
+    response = await client.post(
+        f"/api/v1/pre-admission/documents/{document['id']}/approve", headers=headers
+    )
     item_response = await client.get(
         f"/api/v1/jobs/{case['job_id']}/candidates/{case['candidate_id']}/pre-admission",
         headers=headers,
@@ -505,7 +648,9 @@ async def test_admin_reject_requires_reason_and_changes_document_and_checklist(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-reject")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-reject")
     document = (
@@ -534,8 +679,12 @@ async def test_admin_reject_requires_reason_and_changes_document_and_checklist(
 
 
 @pytest.mark.asyncio
-async def test_rejected_document_can_be_replaced_by_candidate(client: AsyncClient, db_session: AsyncSession) -> None:
-    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+async def test_rejected_document_can_be_replaced_by_candidate(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-replace")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-replace")
     first = (
@@ -563,8 +712,12 @@ async def test_rejected_document_can_be_replaced_by_candidate(client: AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_pre_admission_document_actions_generate_events(client: AsyncClient, db_session: AsyncSession) -> None:
-    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+async def test_pre_admission_document_actions_generate_events(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-events")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-events")
     document = (
@@ -588,7 +741,9 @@ async def test_pre_admission_document_download_respects_authorization(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-download")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-download")
     document = (
@@ -598,16 +753,22 @@ async def test_pre_admission_document_download_respects_authorization(
         )
     ).json()
 
-    own_download = await client.get(f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download")
+    own_download = await client.get(
+        f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download"
+    )
     client.cookies.clear()
     admin_download = await client.get(
         f"/api/v1/pre-admission/documents/{document['id']}/download",
         headers=headers,
     )
     other_candidate = await _create_plain_candidate(db_session)
-    await _create_portal_session(db_session, other_candidate.id, "portal-pre-admission-forbidden-download")
+    await _create_portal_session(
+        db_session, other_candidate.id, "portal-pre-admission-forbidden-download"
+    )
     client.cookies.set("candidate_portal_token", "portal-pre-admission-forbidden-download")
-    forbidden = await client.get(f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download")
+    forbidden = await client.get(
+        f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download"
+    )
 
     assert own_download.status_code == status.HTTP_200_OK
     assert admin_download.status_code == status.HTTP_200_OK
@@ -619,8 +780,12 @@ async def test_cancelled_or_admitted_case_does_not_accept_candidate_upload(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
-    await client.patch(f"/api/v1/pre-admission/{case['id']}", headers=headers, json={"status": "cancelled"})
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
+    await client.patch(
+        f"/api/v1/pre-admission/{case['id']}", headers=headers, json={"status": "cancelled"}
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-cancelled")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-cancelled")
 

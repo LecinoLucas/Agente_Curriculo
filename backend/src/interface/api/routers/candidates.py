@@ -8,19 +8,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.audit_service import AuditService
-from src.application.services.candidate_service import (
-    CandidateCpfConflictError,
-    CandidateCriticalHistoryError,
-    CandidateDeleteConfirmationError,
-    CandidateDeleteReasonRequiredError,
-    CandidateArchiveReasonRequiredError,
-    CandidateEmailConflictError,
-    CandidateNotAllowedUserIdError,
-    CandidateNotFoundError,
-    CandidateService,
-    InvalidCandidateCpfError,
-    InvalidCandidateTextError,
-)
 from src.application.services.candidate_note_service import (
     CandidateNoteCandidateNotFoundError,
     CandidateNoteForbiddenError,
@@ -28,12 +15,25 @@ from src.application.services.candidate_note_service import (
     CandidateNoteService,
     CandidateNoteValidationError,
 )
+from src.application.services.candidate_service import (
+    CandidateArchiveReasonRequiredError,
+    CandidateCpfConflictError,
+    CandidateCriticalHistoryError,
+    CandidateDeleteConfirmationError,
+    CandidateDeleteReasonRequiredError,
+    CandidateEmailConflictError,
+    CandidateNotAllowedUserIdError,
+    CandidateNotFoundError,
+    CandidateService,
+    InvalidCandidateCpfError,
+    InvalidCandidateTextError,
+)
+from src.application.services.pipeline_gate_evaluator import PipelineGateEvaluator
 from src.application.services.pipeline_service import (
     PipelineCandidateNotFoundError,
     PipelineEntryNotFoundError,
     PipelineJobNotFoundError,
 )
-from src.application.services.pipeline_gate_evaluator import PipelineGateEvaluator
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     SQLAlchemyCandidateRepository,
 )
@@ -44,19 +44,19 @@ from src.infrastructure.repositories.sqlalchemy_resume_repository import SQLAlch
 from src.infrastructure.storage.resume_files import read_resume_file
 from src.interface.api.dependencies import AdminOnly, RecruiterOrAdmin, get_db
 from src.interface.api.schemas.candidate_schemas import (
+    ArchiveCandidateRequest,
     CandidateCheckResponse,
     CandidateListSummaryResponse,
-    CandidateResumeDownloadUrlResponse,
+    CandidateNoteResponse,
     CandidateOverviewResponse,
     CandidateProcessHistoryResponse,
     CandidateResponse,
-    CreateCandidateRequest,
-    ArchiveCandidateRequest,
-    DeleteCandidateRequest,
-    UpdateCandidateRequest,
-    CandidateNoteResponse,
+    CandidateResumeDownloadUrlResponse,
     CreateCandidateNoteRequest,
+    CreateCandidateRequest,
+    DeleteCandidateRequest,
     UpdateCandidateNoteRequest,
+    UpdateCandidateRequest,
 )
 from src.interface.api.schemas.common import PaginatedResponse
 
@@ -320,10 +320,11 @@ async def get_candidate(
 async def get_candidate_overview(
     candidate_id: UUID,
     current_user: RecruiterOrAdmin,
+    job_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> CandidateOverviewResponse:
     try:
-        return await _candidate_service(db).get_overview(candidate_id)
+        return await _candidate_service(db).get_overview(candidate_id, job_id=job_id)
     except Exception as exc:
         _handle_candidate_service_error(exc)
         raise

@@ -7,11 +7,9 @@ import { JobResumeStep } from "../features/public-application/components/JobResu
 import { PersonalDataStep } from "../features/public-application/components/PersonalDataStep";
 import { ReviewStep } from "../features/public-application/components/ReviewStep";
 import { SignupMethodStep } from "../features/public-application/components/SignupMethodStep";
-import { SuccessScreen } from "../features/public-application/components/SuccessScreen";
 import { useApplicationForm } from "../features/public-application/hooks/useApplicationForm";
 import { publicApplicationService } from "../features/public-application/services/publicApplicationService";
 import { normalizeSalaryExpectation } from "../features/public-application/utils/salary";
-import type { ApplyResponse } from "../features/public-application/types";
 import type { CandidateGoogleLoginResponse } from "../types/auth";
 import { HttpError } from "../services/http";
 import { toast } from "../shared/utils/toast";
@@ -53,7 +51,6 @@ export function PublicApplicationPage() {
     applyGoogleCandidate,
     clearGoogleData,
   } = useApplicationForm();
-  const [successResponse, setSuccessResponse] = useState<ApplyResponse | null>(null);
   const [googleNotice, setGoogleNotice] = useState<string | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
 
@@ -119,6 +116,7 @@ export function PublicApplicationPage() {
   }, [navigate, reset]);
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     try {
       const formData = new FormData();
@@ -143,13 +141,24 @@ export function PublicApplicationPage() {
         formData.append("resume_file", form.resumeFile);
       }
 
-      const response = await publicApplicationService.submitApplication(formData);
-      setSuccessResponse(response);
+      await publicApplicationService.submitApplication(formData);
       sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
-      toast.success("Candidatura enviada com sucesso!");
-      navigate("/candidato/portal", { replace: true });
+      reset();
+      navigate("/candidato/login", { 
+        replace: true, 
+        state: { applicationSubmitted: true } 
+      });
     } catch (err: unknown) {
-      toast.error(resolvePublicSubmitErrorMessage(err));
+      if (err instanceof HttpError && err.status === 409) {
+        sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
+        reset();
+        navigate("/candidato/login", { 
+          replace: true, 
+          state: { applicationSubmitted: true } 
+        });
+      } else {
+        toast.error(resolvePublicSubmitErrorMessage(err));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -157,6 +166,7 @@ export function PublicApplicationPage() {
 
   const handleFormSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting) return;
     if (currentStep === "review") {
       void handleSubmit();
       return;
@@ -169,25 +179,6 @@ export function PublicApplicationPage() {
     nextStep();
   };
 
-  if (successResponse) {
-    return (
-      <CandidatePublicShell
-        eyebrow="Tudo Pronto"
-        title="Parabéns!"
-        subtitle="Sua candidatura foi registrada com sucesso."
-        maxWidth="md"
-      >
-        <SuccessScreen
-          response={successResponse}
-          onNewApplication={() => {
-            sessionStorage.removeItem(GOOGLE_CANDIDATE_STORAGE_KEY);
-            reset();
-            setSuccessResponse(null);
-          }}
-        />
-      </CandidatePublicShell>
-    );
-  }
 
   const topAction = (
     <Dialog>

@@ -1,35 +1,35 @@
-from dataclasses import dataclass
 import re
 import time
+from dataclasses import dataclass
 from uuid import UUID
 
-import structlog
 import sqlalchemy as sa
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
+from src.domain.entities.candidate import Candidate as CandidateEntity
+from src.infrastructure.database.models.admission_model import Admission, CandidateDocument
 from src.infrastructure.database.models.analysis_model import (
     AnalysisModel,
     AnalysisResultModel,
     MatchingObservationModel,
 )
-from src.domain.entities.candidate import Candidate as CandidateEntity
 from src.infrastructure.database.models.behavioral_assignment_model import (
     BehavioralAssessmentAIEvaluationModel,
     BehavioralAssessmentAssignmentModel,
 )
-from src.infrastructure.database.models.hiring_decision_model import (
-    CandidateJobHiringDecisionModel,
-)
-from src.infrastructure.database.models.admission_model import Admission, CandidateDocument
-from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineEventModel,
     CandidateJobPipelineModel,
 )
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.candidate_note_model import CandidateNoteModel
 from src.infrastructure.database.models.document_ai_analysis_model import DocumentAIAnalysisModel
+from src.infrastructure.database.models.hiring_decision_model import (
+    CandidateJobHiringDecisionModel,
+)
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.interview_scorecard_model import (
     InterviewScorecardModel,
@@ -1518,21 +1518,43 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             )
             behavioral_ai_pending = not behavioral_ai_completed
         interview_not_scheduled = False
+        interview_awaiting_feedback = False
+        interview_scheduled_or_running = False
+        scorecard_pending = False
         if active_stage in {"hr_interview", "technical_interview"}:
-            interview_scheduled = bool(
-                await self._session.scalar(
-                    sa.select(sa.literal(True))
-                    .select_from(InterviewScheduleModel)
+            interview_types = ("technical", "manager") if active_stage == "technical_interview" else ("hr", "screening")
+
+            interview_row = (
+                await self._session.execute(
+                    sa.select(InterviewScheduleModel.id, InterviewScheduleModel.status)
                     .where(
                         InterviewScheduleModel.candidate_id == candidate_id,
                         InterviewScheduleModel.job_id == job_id,
-                        InterviewScheduleModel.status.in_(("scheduled", "rescheduled")),
+                        InterviewScheduleModel.interview_type.in_(interview_types),
+                        InterviewScheduleModel.status.not_in(("cancelled", "no_show")),
                     )
+                    .order_by(InterviewScheduleModel.scheduled_start.desc(), InterviewScheduleModel.id.desc())
                     .limit(1)
                 )
-            )
-            interview_not_scheduled = not interview_scheduled
+            ).mappings().one_or_none()
 
+            if interview_row is None:
+                interview_not_scheduled = True
+            else:
+                if interview_row["status"] in ("scheduled", "rescheduled"):
+                    interview_scheduled_or_running = True
+                elif interview_row["status"] == "awaiting_feedback":
+                    interview_awaiting_feedback = True
+                elif interview_row["status"] == "completed":
+                    scorecard_row = (
+                        await self._session.execute(
+                            sa.select(InterviewScorecardModel.status, InterviewScorecardModel.final_recommendation)
+                            .where(InterviewScorecardModel.interview_id == interview_row["id"])
+                            .limit(1)
+                        )
+                    ).mappings().one_or_none()
+                    if scorecard_row is None or scorecard_row["status"] != "submitted" or not str(scorecard_row["final_recommendation"] or "").strip():
+                        scorecard_pending = True
         document_pending = bool(
             await self._session.scalar(
                 sa.select(sa.literal(True))
@@ -1553,6 +1575,9 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             "behavioral_assignment_pending": behavioral_assignment_pending,
             "behavioral_ai_pending": behavioral_ai_pending,
             "interview_not_scheduled": interview_not_scheduled,
+            "interview_feedback_pending": interview_awaiting_feedback,
+            "interview_scheduled": interview_scheduled_or_running,
+            "interview_scorecard_pending": scorecard_pending,
             "document_pending": document_pending,
         }
 

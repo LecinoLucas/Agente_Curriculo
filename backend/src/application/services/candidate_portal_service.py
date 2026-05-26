@@ -45,6 +45,10 @@ from src.interface.api.schemas.candidate_portal_schemas import (
 )
 from src.interface.workers.resume_extraction_dispatcher import enqueue_resume_extraction
 from src.application.services.candidate_profile_completion_service import CandidateProfileCompletionService
+from src.application.services.pre_admission_service import PreAdmissionService
+from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import (
+    SQLAlchemyPreAdmissionRepository,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -96,20 +100,41 @@ class CandidatePortalService:
 
         active_application: CandidatePortalActiveApplicationResponse | None = None
         public_timeline: CandidatePortalTimelineResponse | None = None
+        public_interview: CandidatePortalPublicInterviewResponse | None = None
         if active_pipeline_row is not None:
             active_application = await self._build_active_application(
                 candidate_id=candidate_id,
                 active_pipeline_row=active_pipeline_row,
                 latest_resume=latest_resume,
             )
+            current_key = self._current_timeline_key(
+                stage=active_pipeline_row["stage"],
+                relationship_status=active_pipeline_row["relationship_status"],
+                analysis_status=active_application.analysis_status,
+            )
+            public_interview = await self._find_public_interview(
+                active_pipeline_row,
+                current_key=current_key,
+            )
             public_timeline = await self._build_public_timeline(
                 active_pipeline_row=active_pipeline_row,
                 analysis_status=active_application.analysis_status,
+                interview=public_interview,
             )
         elif current_process_row is not None:
+            current_key = self._current_timeline_key(
+                stage=current_process_row["stage"],
+                relationship_status=current_process_row["relationship_status"],
+                analysis_status=None,
+            )
+            public_interview = await self._find_public_interview(
+                current_process_row,
+                current_key=current_key,
+            )
             public_timeline = await self._build_public_timeline(
                 active_pipeline_row=current_process_row,
                 analysis_status=None,
+                interview=public_interview,
             )
 
         history = await self._build_history_applications(
@@ -132,6 +157,9 @@ class CandidatePortalService:
         )
         closed_reason_public_label = self._closed_reason_public_label(application_status)
         is_process_closed = application_status in {"admitted", "rejected"}
+        pre_admission_summary = await PreAdmissionService(
+            SQLAlchemyPreAdmissionRepository(self._db)
+        ).candidate_portal_summary(candidate_id=candidate_id)
         return CandidatePortalOverviewResponse(
             candidate=CandidatePortalCandidateSummaryResponse(
                 id=candidate["id"],
@@ -149,6 +177,7 @@ class CandidatePortalService:
             active_application=active_application,
             application_history=history,
             latest_resume=latest_resume,
+            public_interview=public_interview,
             talent_pool=application_status in {"talent_pool", "no_active_application", "rejected"},
             status_public=current_process_status_label,
             application_status=application_status,
@@ -158,6 +187,7 @@ class CandidatePortalService:
             can_request_contact=True,
             can_apply_to_other_jobs=True,
             public_timeline=public_timeline,
+            pre_admission=pre_admission_summary,
         )
 
     async def update_profile(
@@ -429,13 +459,13 @@ class CandidatePortalService:
         *,
         active_pipeline_row: dict,
         analysis_status: str | None,
+        interview: CandidatePortalPublicInterviewResponse | None = None,
     ) -> CandidatePortalTimelineResponse:
         current_key = self._current_timeline_key(
             stage=active_pipeline_row["stage"],
             relationship_status=active_pipeline_row["relationship_status"],
             analysis_status=analysis_status,
         )
-        interview = await self._find_public_interview(active_pipeline_row)
 
         definitions: list[tuple[str, str, str]] = [
             (
@@ -495,53 +525,137 @@ class CandidatePortalService:
             steps=steps,
         )
 
-    async def _find_public_interview(self, active_pipeline_row: dict) -> CandidatePortalPublicInterviewResponse | None:
+    async def _find_public_interview(
+        self,
+        active_pipeline_row: dict,
+        *,
+        current_key: str,
+    ) -> CandidatePortalPublicInterviewResponse | None:
         pipeline_id = active_pipeline_row.get("pipeline_id")
         if pipeline_id is None:
             return None
 
+        search_order: list[tuple[tuple[str, ...], bool, bool]]
+        if current_key == "result":
+            search_order = [
+                (("awaiting_feedback", "completed"), False, False),
+                (("cancelled",), False, False),
+            ]
+        else:
+            search_order = [
+                (("scheduled", "rescheduled"), True, True),
+                (("scheduled", "rescheduled"), False, False),
+                (("awaiting_feedback", "completed"), False, False),
+                (("cancelled",), False, False),
+            ]
+
+        for statuses, future_only, ascending in search_order:
+            mapping = await self._select_public_interview_row(
+                candidate_id=active_pipeline_row["candidate_id"],
+                job_id=active_pipeline_row["job_id"],
+                pipeline_id=pipeline_id,
+                statuses=statuses,
+                future_only=future_only,
+                ascending=ascending,
+            )
+            if mapping is not None:
+                return self._build_public_interview(mapping)
+
+        return None
+
+    async def _select_public_interview_row(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID,
+        statuses: tuple[str, ...],
+        future_only: bool,
+        ascending: bool,
+    ) -> dict | None:
+        filters: list[object] = [
+            InterviewScheduleModel.pipeline_id == pipeline_id,
+            InterviewScheduleModel.candidate_id == candidate_id,
+            InterviewScheduleModel.job_id == job_id,
+            InterviewScheduleModel.status.in_(statuses),
+        ]
+        if future_only:
+            filters.append(InterviewScheduleModel.scheduled_start >= datetime.now(UTC))
+
+        order_column = InterviewScheduleModel.scheduled_start.asc() if ascending else InterviewScheduleModel.scheduled_start.desc()
         row = await self._db.execute(
             sa.select(
+                InterviewScheduleModel.id,
                 InterviewScheduleModel.status,
                 InterviewScheduleModel.scheduled_start,
+                InterviewScheduleModel.interview_type,
                 InterviewScheduleModel.interview_format,
                 InterviewScheduleModel.location,
                 InterviewScheduleModel.meeting_url,
                 InterviewScheduleModel.public_notes,
             )
-            .where(
-                InterviewScheduleModel.pipeline_id == pipeline_id,
-                InterviewScheduleModel.candidate_id == active_pipeline_row["candidate_id"],
-                InterviewScheduleModel.job_id == active_pipeline_row["job_id"],
-                InterviewScheduleModel.status.in_(("scheduled", "rescheduled")),
-            )
-            .order_by(InterviewScheduleModel.scheduled_start.asc())
+            .where(*filters)
+            .order_by(order_column, InterviewScheduleModel.updated_at.desc())
             .limit(1)
         )
         mapping = row.mappings().first()
-        if mapping is None:
-            cancelled = await self._db.execute(
-                sa.select(InterviewScheduleModel.status)
-                .where(
-                    InterviewScheduleModel.pipeline_id == pipeline_id,
-                    InterviewScheduleModel.candidate_id == active_pipeline_row["candidate_id"],
-                    InterviewScheduleModel.job_id == active_pipeline_row["job_id"],
-                    InterviewScheduleModel.status == "cancelled",
-                )
-                .order_by(InterviewScheduleModel.updated_at.desc())
-                .limit(1)
-            )
-            if cancelled.scalar_one_or_none() == "cancelled":
-                return CandidatePortalPublicInterviewResponse(status="cancelled")
-            return None
+        return dict(mapping) if mapping is not None else None
+
+    def _build_public_interview(self, mapping: dict) -> CandidatePortalPublicInterviewResponse:
+        interview_format = mapping.get("interview_format")
+        interview_type = mapping.get("interview_type")
         return CandidatePortalPublicInterviewResponse(
+            id=mapping["id"],
             status=mapping["status"],
+            status_label=self._public_interview_status_label(mapping["status"]),
             scheduled_at=mapping["scheduled_start"],
-            interview_format=mapping["interview_format"],
-            location=mapping["location"],
-            meeting_url=mapping["meeting_url"],
-            public_notes=mapping["public_notes"],
+            interview_type=interview_type,
+            interview_type_label=self._public_interview_type_label(interview_type),
+            interview_format=interview_format,
+            interview_format_label=self._public_interview_format_label(interview_format),
+            location=mapping.get("location"),
+            meeting_url=mapping.get("meeting_url"),
+            public_notes=mapping.get("public_notes"),
+            is_online=interview_format == "online",
         )
+
+    @staticmethod
+    def _public_interview_status_label(status: str) -> str:
+        if status in {"scheduled", "rescheduled"}:
+            return "Entrevista agendada"
+        if status in {"awaiting_feedback", "completed"}:
+            return "Entrevista concluída"
+        if status == "cancelled":
+            return "Entrevista cancelada"
+        if status == "no_show":
+            return "Entrevista não realizada"
+        return "Entrevista"
+
+    @staticmethod
+    def _public_interview_type_label(interview_type: str | None) -> str | None:
+        if interview_type == "screening":
+            return "Triagem"
+        if interview_type == "technical":
+            return "Técnica"
+        if interview_type == "manager":
+            return "Gestor"
+        if interview_type == "hr":
+            return "RH"
+        if interview_type == "final":
+            return "Final"
+        if interview_type == "other":
+            return "Entrevista"
+        return None
+
+    @staticmethod
+    def _public_interview_format_label(interview_format: str | None) -> str | None:
+        if interview_format == "online":
+            return "Online"
+        if interview_format == "presencial":
+            return "Presencial"
+        if interview_format == "telefone":
+            return "Telefone"
+        return None
 
     @staticmethod
     def _current_timeline_key(
@@ -614,6 +728,8 @@ class CandidatePortalService:
             return "Caso avance, entraremos em contato."
         if interview.status == "cancelled":
             return "Sua entrevista será reagendada. Nossa equipe entrará em contato."
+        if interview.status in {"awaiting_feedback", "completed"}:
+            return "Sua entrevista foi concluída. Nossa equipe está avaliando os próximos passos."
         if interview.scheduled_at is not None:
             return "Sua entrevista foi agendada."
         return "Você avançou para a etapa de entrevista. Nossa equipe entrará em contato para agendar."

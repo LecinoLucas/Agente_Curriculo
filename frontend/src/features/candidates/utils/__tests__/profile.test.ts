@@ -74,14 +74,16 @@ describe("profile terminal post-hire states", () => {
     expect(deriveNextAction(admittedOverview, activeEntry)).toEqual({
       label: "Sem ação pendente",
       hint: "Candidato admitido",
+      actionable: false,
     });
   });
 
   it.each([
-    ["hired", "Inicie ou acompanhe o caso admissional"],
-    ["pre_admission", "Acompanhe checklist, pendências e readiness"],
-    ["protheus", "Confira o caso admissional antes da integração"],
-  ] as const)("direciona %s para a aba robusta de pré-admissão", (stage, hint) => {
+    // sem contexto (preAdmissionContext undefined): fallback conservador
+    ["hired", "Registrar decisão", "Registre a decisão de contratação para prosseguir", "workflow:hiring_decision"],
+    ["pre_admission", "Acompanhar pré-admissão", "Acesse a aba de pré-admissão para acompanhar o processo", "workflow"],
+    ["protheus", "Ver integração Protheus", "Confira o caso admissional antes da integração", "pre_admission"],
+  ] as const)("sem contexto de pré-admissão, %s retorna label conservadora", (stage, label, hint, targetTab) => {
     const overview: CandidateOverview = {
       ...admittedOverview,
       resumes: admittedOverview.resumes.length
@@ -131,9 +133,174 @@ describe("profile terminal post-hire states", () => {
     const activeEntry = getActivePipelineEntry(overview);
 
     expect(deriveNextAction(overview, activeEntry)).toEqual({
-      label: "Abrir pré-admissão",
+      label,
       hint,
+      targetTab,
+      actionable: true,
+    });
+  });
+
+  it("candidato em hired SEM decisão Contratar retorna Registrar decisão (context ciente)", () => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage: "hired",
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: "Contratado",
+        },
+      ],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(
+      deriveNextAction(overview, activeEntry, {
+        preAdmission: {
+          hasAccess: true,
+          hasActiveCase: false,
+          canCreateCase: false,
+          hiringDecisionOutcome: null,
+        },
+      }),
+    ).toEqual({
+      label: "Registrar decisão",
+      hint: "A pré-admissão só fica disponível após a decisão de contratar.",
+      targetTab: "workflow:hiring_decision",
+      actionable: true,
+    });
+  });
+
+  it("candidato em pre_admission SEM decisão Contratar retorna Registrar decisão (context ciente)", () => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage: "pre_admission",
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: "Pré-admissão",
+        },
+      ],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(
+      deriveNextAction(overview, activeEntry, {
+        preAdmission: {
+          hasAccess: true,
+          hasActiveCase: false,
+          canCreateCase: false,
+          hiringDecisionOutcome: null,
+        },
+      }),
+    ).toEqual({
+      label: "Registrar decisão",
+      hint: "A pré-admissão só fica disponível após a decisão de contratar.",
+      targetTab: "workflow:hiring_decision",
+      actionable: true,
+    });
+  });
+
+  it("prioriza criação explícita do caso admissional quando há decisão hire e nenhum caso ativo", () => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage: "hired",
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: "Contratado",
+        },
+      ],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(
+      deriveNextAction(overview, activeEntry, {
+        preAdmission: {
+          hasAccess: true,
+          hasActiveCase: false,
+          canCreateCase: true,
+          hiringDecisionOutcome: "hire",
+        },
+      }),
+    ).toEqual({
+      label: "Iniciar pré-admissão",
+      hint: "Crie o caso admissional para iniciar checklist, documentos e integração.",
+      targetTab: "pre_admission:create",
+      actionable: true,
+    });
+  });
+
+  it("abre a pré-admissão existente quando já há caso admissional ativo", () => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage: "pre_admission",
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: "Pré-admissão",
+        },
+      ],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(
+      deriveNextAction(overview, activeEntry, {
+        preAdmission: {
+          hasAccess: true,
+          hasActiveCase: true,
+          canCreateCase: false,
+          hiringDecisionOutcome: "hire",
+        },
+      }),
+    ).toEqual({
+      label: "Abrir pré-admissão",
+      hint: "Acompanhe checklist, pendências e readiness",
       targetTab: "pre_admission",
+      actionable: true,
+    });
+  });
+
+  it("informa restrição ao RH quando o usuário não pode abrir a pré-admissão", () => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage: "hired",
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: "Contratado",
+        },
+      ],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(
+      deriveNextAction(overview, activeEntry, {
+        preAdmission: {
+          hasAccess: false,
+          hasActiveCase: false,
+          canCreateCase: false,
+          hiringDecisionOutcome: "hire",
+        },
+      }),
+    ).toEqual({
+      label: "Pré-admissão restrita ao RH.",
+      hint: "Disponível apenas para RH e administradores.",
+      actionable: false,
     });
   });
 });

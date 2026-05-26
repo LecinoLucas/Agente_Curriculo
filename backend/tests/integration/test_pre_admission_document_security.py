@@ -8,12 +8,8 @@ from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Fase 30B — segurança de documentos sensíveis na pré-admissão (RBAC + path
-# traversal + content-type). Sempre no smoke.
-pytestmark = pytest.mark.smoke
-
-from src.domain.entities.user import UserRole
 from src.application.services.pre_admission_service import MAX_PRE_ADMISSION_DOCUMENT_BYTES
+from src.domain.entities.user import UserRole
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionDocumentModel,
     PreAdmissionEventModel,
@@ -24,9 +20,12 @@ from tests.integration.helpers import _auth_headers, _create_active_user
 from .test_pre_admission import (
     _create_plain_candidate,
     _create_portal_session,
-    _pdf_upload,
     _seed_pre_admission_with_item,
 )
+
+# Fase 30B — segurança de documentos sensíveis na pré-admissão (RBAC + path
+# traversal + content-type). Sempre no smoke.
+pytestmark = pytest.mark.smoke
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +58,9 @@ async def _upload_for_seed(
     mime_type: str,
     token: str = "portal-pre-admission-security",
 ) -> tuple[dict[str, str], UUID, UUID, dict, dict, dict]:
-    headers, job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+    headers, job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, token)
     client.cookies.set("candidate_portal_token", token)
     response = await client.post(
@@ -112,7 +113,9 @@ async def test_valid_jpeg_upload_passes(client: AsyncClient, db_session: AsyncSe
 
 @pytest.mark.asyncio
 async def test_empty_file_fails(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-empty")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-empty")
 
@@ -125,8 +128,12 @@ async def test_empty_file_fails(client: AsyncClient, db_session: AsyncSession) -
 
 
 @pytest.mark.asyncio
-async def test_pdf_extension_with_invalid_signature_fails(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+async def test_pdf_extension_with_invalid_signature_fails(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-invalid-signature")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-invalid-signature")
 
@@ -196,13 +203,17 @@ async def test_candidate_cannot_download_other_candidate_document(
     await _create_portal_session(db_session, other_candidate.id, "portal-pre-admission-other-owner")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-other-owner")
 
-    response = await client.get(f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download")
+    response = await client.get(
+        f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download"
+    )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.asyncio
-async def test_staff_download_is_authorized_and_audited(client: AsyncClient, db_session: AsyncSession) -> None:
+async def test_staff_download_is_authorized_and_audited(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
     headers, _job_id, _candidate_id, case, item, document = await _upload_for_seed(
         client,
         db_session,
@@ -213,7 +224,9 @@ async def test_staff_download_is_authorized_and_audited(client: AsyncClient, db_
     )
     client.cookies.clear()
 
-    response = await client.get(f"/api/v1/pre-admission/documents/{document['id']}/download", headers=headers)
+    response = await client.get(
+        f"/api/v1/pre-admission/documents/{document['id']}/download", headers=headers
+    )
     event = await db_session.scalar(
         sa.select(PreAdmissionEventModel)
         .where(
@@ -230,7 +243,7 @@ async def test_staff_download_is_authorized_and_audited(client: AsyncClient, db_
         "document_id": document["id"],
         "checklist_item_id": item["id"],
         "actor_type": "staff",
-        "actor_role": "recruiter",
+        "actor_role": "admin",
         "mime_type": "application/pdf",
         "size_bytes": document["size_bytes"],
     }
@@ -246,7 +259,7 @@ async def test_staff_download_is_authorized_and_audited(client: AsyncClient, db_
     [
         (UserRole.ADMIN, status.HTTP_200_OK),
         (UserRole.HR, status.HTTP_200_OK),
-        (UserRole.RECRUITER, status.HTTP_200_OK),  # contrato atual mantém recruiter com acesso
+        (UserRole.RECRUITER, status.HTTP_403_FORBIDDEN),
         (UserRole.MANAGER, status.HTTP_403_FORBIDDEN),
         (UserRole.VIEWER, status.HTTP_403_FORBIDDEN),
         (UserRole.CANDIDATE, status.HTTP_403_FORBIDDEN),
@@ -278,6 +291,91 @@ async def test_staff_download_role_matrix(
 
 
 @pytest.mark.asyncio
+async def test_recruiter_cannot_approve_or_reject_pre_admission_document(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _seed_headers, _job_id, _candidate_id, _case, _item, document = await _upload_for_seed(
+        client,
+        db_session,
+        filename="cpf.pdf",
+        content=b"%PDF-1.4\n%%EOF",
+        mime_type="application/pdf",
+        token="portal-pre-admission-recruiter-action",
+    )
+    client.cookies.clear()
+    recruiter_headers = await _staff_headers_for_role(client, db_session, UserRole.RECRUITER)
+
+    approve_response = await client.post(
+        f"/api/v1/pre-admission/documents/{document['id']}/approve",
+        headers=recruiter_headers,
+    )
+    reject_response = await client.post(
+        f"/api/v1/pre-admission/documents/{document['id']}/reject",
+        headers=recruiter_headers,
+        json={"review_notes": "Documento ilegível."},
+    )
+
+    assert approve_response.status_code == status.HTTP_403_FORBIDDEN
+    assert reject_response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_hr_can_approve_and_reject_pre_admission_documents(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    seed_headers, _job_id, candidate_id, case, _item, first_document = await _upload_for_seed(
+        client,
+        db_session,
+        filename="cpf.pdf",
+        content=b"%PDF-1.4\n%%EOF",
+        mime_type="application/pdf",
+        token="portal-pre-admission-hr-approve",
+    )
+    client.cookies.clear()
+    hr_headers = await _staff_headers_for_role(client, db_session, UserRole.HR)
+
+    approve_response = await client.post(
+        f"/api/v1/pre-admission/documents/{first_document['id']}/approve",
+        headers=hr_headers,
+    )
+    assert approve_response.status_code == status.HTTP_200_OK
+    assert approve_response.json()["status"] == "approved"
+
+    second_item_response = await client.post(
+        f"/api/v1/pre-admission/{case['id']}/checklist-items",
+        headers=seed_headers,
+        json={
+            "item_type": "rg",
+            "title": "RG",
+            "required": True,
+        },
+    )
+    assert second_item_response.status_code == status.HTTP_201_CREATED, second_item_response.text
+    second_item = second_item_response.json()
+
+    await _create_portal_session(db_session, candidate_id, "portal-pre-admission-hr-reject")
+    client.cookies.set("candidate_portal_token", "portal-pre-admission-hr-reject")
+    upload_response = await client.post(
+        f"/api/v1/candidate-portal/pre-admission/{case['id']}/checklist-items/{second_item['id']}/documents",
+        files=_upload("rg.pdf", b"%PDF-1.4\n%%EOF", "application/pdf"),
+    )
+    assert upload_response.status_code == status.HTTP_201_CREATED, upload_response.text
+    second_document = upload_response.json()
+
+    client.cookies.clear()
+    reject_response = await client.post(
+        f"/api/v1/pre-admission/documents/{second_document['id']}/reject",
+        headers=hr_headers,
+        json={"review_notes": "Documento ilegível."},
+    )
+
+    assert reject_response.status_code == status.HTTP_200_OK
+    assert reject_response.json()["status"] == "rejected"
+
+
+@pytest.mark.asyncio
 async def test_candidate_download_is_audited(client: AsyncClient, db_session: AsyncSession) -> None:
     _headers, _job_id, _candidate_id, case, item, document = await _upload_for_seed(
         client,
@@ -288,7 +386,9 @@ async def test_candidate_download_is_audited(client: AsyncClient, db_session: As
         token="portal-pre-admission-candidate-download",
     )
 
-    response = await client.get(f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download")
+    response = await client.get(
+        f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download"
+    )
     event = await db_session.scalar(
         sa.select(PreAdmissionEventModel)
         .where(
@@ -392,13 +492,17 @@ async def test_terminal_case_document_download_policy(
         mime_type="application/pdf",
         token=f"portal-pre-admission-terminal-{case_status}",
     )
-    await client.patch(f"/api/v1/pre-admission/{case['id']}", headers=headers, json={"status": case_status})
+    await client.patch(
+        f"/api/v1/pre-admission/{case['id']}", headers=headers, json={"status": case_status}
+    )
 
     candidate_response = await client.get(
         f"/api/v1/candidate-portal/pre-admission/documents/{document['id']}/download"
     )
     client.cookies.clear()
-    staff_response = await client.get(f"/api/v1/pre-admission/documents/{document['id']}/download", headers=headers)
+    staff_response = await client.get(
+        f"/api/v1/pre-admission/documents/{document['id']}/download", headers=headers
+    )
 
     assert candidate_response.status_code == expected_candidate_status
     assert staff_response.status_code == status.HTTP_200_OK
@@ -406,13 +510,19 @@ async def test_terminal_case_document_download_policy(
 
 @pytest.mark.asyncio
 async def test_upload_above_10mb_fails(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
-    await _create_portal_session(db_session, candidate_id, "portal-pre-admission-oversized-security")
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
+    await _create_portal_session(
+        db_session, candidate_id, "portal-pre-admission-oversized-security"
+    )
     client.cookies.set("candidate_portal_token", "portal-pre-admission-oversized-security")
 
     response = await client.post(
         f"/api/v1/candidate-portal/pre-admission/{case['id']}/checklist-items/{item['id']}/documents",
-        files=_upload("cpf.pdf", b"%PDF" + b"x" * MAX_PRE_ADMISSION_DOCUMENT_BYTES, "application/pdf"),
+        files=_upload(
+            "cpf.pdf", b"%PDF" + b"x" * MAX_PRE_ADMISSION_DOCUMENT_BYTES, "application/pdf"
+        ),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -420,7 +530,9 @@ async def test_upload_above_10mb_fails(client: AsyncClient, db_session: AsyncSes
 
 @pytest.mark.asyncio
 async def test_disallowed_mime_type_fails(client: AsyncClient, db_session: AsyncSession) -> None:
-    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(client, db_session)
+    _headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
     await _create_portal_session(db_session, candidate_id, "portal-pre-admission-disallowed-mime")
     client.cookies.set("candidate_portal_token", "portal-pre-admission-disallowed-mime")
 
@@ -433,7 +545,9 @@ async def test_disallowed_mime_type_fails(client: AsyncClient, db_session: Async
 
 
 @pytest.mark.asyncio
-async def test_stored_filename_does_not_contain_original_name(client: AsyncClient, db_session: AsyncSession) -> None:
+async def test_stored_filename_does_not_contain_original_name(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
     *_rest, document = await _upload_for_seed(
         client,
         db_session,

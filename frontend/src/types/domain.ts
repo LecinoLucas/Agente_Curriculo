@@ -1272,6 +1272,7 @@ export type PreAdmissionDocument = {
   reviewed_at: string | null;
   reviewed_by: string | null;
   review_notes: string | null;
+  rejection_reason_public: string | null;
   created_at: string;
   updated_at: string;
 };

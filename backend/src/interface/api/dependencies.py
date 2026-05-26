@@ -6,21 +6,21 @@ from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.entities.user import User, UserRole
-from src.domain.exceptions import ForbiddenException, UnauthorizedException
-from src.infrastructure.database.connection import get_db_session
-from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from src.infrastructure.security.jwt_service import decode_access_token
+from src.application.services.candidate_portal_auth_service import (
+    CANDIDATE_PORTAL_COOKIE_NAME,
+    CandidatePortalAuthService,
+    CandidatePortalSession,
+    CandidatePortalSessionError,
+)
 from src.application.services.candidate_profile_completion_service import (
     CandidateProfileCompletionService,
     CandidateProfileNotFoundError,
 )
-from src.application.services.candidate_portal_auth_service import (
-    CANDIDATE_PORTAL_COOKIE_NAME,
-    CandidatePortalSession,
-    CandidatePortalAuthService,
-    CandidatePortalSessionError,
-)
+from src.domain.entities.user import User, UserRole
+from src.domain.exceptions import UnauthorizedException
+from src.infrastructure.database.connection import get_db_session
+from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
+from src.infrastructure.security.jwt_service import decode_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ async def get_current_user(
     try:
         payload = decode_access_token(credentials.credentials)
     except UnauthorizedException as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message) from exc
 
     user_id = UUID(payload["sub"])
     repo = SQLAlchemyUserRepository(db)
@@ -90,17 +90,29 @@ ManagerOnly = Annotated[User, Depends(require_roles(UserRole.MANAGER))]
 RecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.ADMIN))]
 HrOrAdmin = Annotated[User, Depends(require_roles(UserRole.HR, UserRole.ADMIN))]
 ManagerOrAdmin = Annotated[User, Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN))]
-
-# Compatibility: Temporary dual access (RECRUITER still has pre_admission/admission access)
-RecruiterHrOrAdmin = Annotated[User, Depends(require_roles(UserRole.RECRUITER, UserRole.HR, UserRole.ADMIN))]
-ManagerRecruiterOrAdmin = Annotated[User, Depends(require_roles(UserRole.MANAGER, UserRole.RECRUITER, UserRole.ADMIN))]
-PreAdmissionDocumentDownloadStaff = Annotated[
-    User,
-    Depends(require_roles(UserRole.RECRUITER, UserRole.HR, UserRole.ADMIN)),
+ManagerRecruiterOrAdmin = Annotated[
+    User, Depends(require_roles(UserRole.MANAGER, UserRole.RECRUITER, UserRole.ADMIN))
 ]
 
+# Analysis endpoints expose operational AI data and must not be available to viewers.
+AnalysisReadStaff = RecruiterOrAdmin
+AnalysisWriteStaff = RecruiterOrAdmin
+
+# Pre-admission/admission contains sensitive documents and ERP payloads.
+PreAdmissionReadStaff = HrOrAdmin
+PreAdmissionWriteStaff = HrOrAdmin
+PreAdmissionDocumentDownloadStaff = HrOrAdmin
+PreAdmissionExportStaff = HrOrAdmin
+
 # Internal users: all internal roles
-InternalUser = Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.RECRUITER, UserRole.VIEWER, UserRole.HR, UserRole.MANAGER))]
+InternalUser = Annotated[
+    User,
+    Depends(
+        require_roles(
+            UserRole.ADMIN, UserRole.RECRUITER, UserRole.VIEWER, UserRole.HR, UserRole.MANAGER
+        )
+    ),
+]
 
 
 async def get_current_candidate_session(
@@ -111,11 +123,11 @@ async def get_current_candidate_session(
     service = CandidatePortalAuthService(db)
     try:
         session = await service.authenticate(candidate_portal_token)
-    except CandidatePortalSessionError:
+    except CandidatePortalSessionError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão do candidato inválida ou expirada",
-        )
+        ) from exc
 
     request.state.candidate_id = session.candidate_id
     return session
@@ -161,12 +173,14 @@ async def require_complete_candidate_profile(
     db: AsyncSession = Depends(get_db),
 ) -> CandidatePortalSession:
     try:
-        state = await CandidateProfileCompletionService(db).get_completion_state(candidate_session.candidate_id)
-    except CandidateProfileNotFoundError:
+        state = await CandidateProfileCompletionService(db).get_completion_state(
+            candidate_session.candidate_id
+        )
+    except CandidateProfileNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão do candidato inválida ou expirada",
-        )
+        ) from exc
 
     if state.missing_fields:
         raise_candidate_profile_incomplete(state.missing_fields)
@@ -176,5 +190,9 @@ async def require_complete_candidate_profile(
 
 
 CurrentCandidateSession = Annotated[CandidatePortalSession, Depends(get_current_candidate_session)]
-CurrentCompleteCandidateSession = Annotated[CandidatePortalSession, Depends(require_complete_candidate_profile)]
-OptionalCandidateSession = Annotated[CandidatePortalSession | None, Depends(get_optional_candidate_session)]
+CurrentCompleteCandidateSession = Annotated[
+    CandidatePortalSession, Depends(require_complete_candidate_profile)
+]
+OptionalCandidateSession = Annotated[
+    CandidatePortalSession | None, Depends(get_optional_candidate_session)
+]

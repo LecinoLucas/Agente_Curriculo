@@ -27,6 +27,16 @@ vi.mock("../../../../shared/utils/toast", () => ({
   },
 }));
 
+const baseSummary = {
+  has_pre_admission_case: true,
+  pre_admission_status: "documents_pending" as const,
+  documents_total: 1,
+  documents_pending: 1,
+  documents_submitted: 0,
+  documents_approved: 0,
+  next_pending_document: "CPF",
+};
+
 const baseEnvelope: CandidatePortalPreAdmissionEnvelope = {
   case: {
     id: "case-1",
@@ -36,19 +46,20 @@ const baseEnvelope: CandidatePortalPreAdmissionEnvelope = {
     work_model: null,
     checklist_items: [
       {
-        id: "item-1",
-        case_id: "case-1",
-        item_type: "cpf",
+        item_id: "item-1",
         title: "CPF",
-        status: "pending",
+        description: "Envie o CPF.",
         required: true,
-        notes: null,
-        created_at: "2026-05-14T10:00:00Z",
-        updated_at: "2026-05-14T10:00:00Z",
-        documents: [],
+        status: "pending",
+        rejection_reason_public: null,
+        uploaded_document: null,
+        allowed_file_types: ["application/pdf", "image/jpeg", "image/png"],
+        max_file_size_mb: 10,
       },
     ],
+    summary: baseSummary,
   },
+  summary: baseSummary,
 };
 
 describe("CandidatePortalPreAdmissionCard", () => {
@@ -73,10 +84,18 @@ describe("CandidatePortalPreAdmissionCard", () => {
     vi.mocked(candidatePortalService.downloadPreAdmissionDocument).mockResolvedValue(new Blob(["pdf"]));
   });
 
-  it("mostra empty state sem pré-admissão", () => {
-    render(<CandidatePortalPreAdmissionCard preAdmission={{ case: null }} onUploaded={vi.fn()} />);
+  it("não renderiza nada quando não há caso de pré-admissão", () => {
+    const { container } = render(
+      <CandidatePortalPreAdmissionCard
+        preAdmission={{
+          case: null,
+          summary: { ...baseSummary, has_pre_admission_case: false, documents_total: 0 },
+        }}
+        onUploaded={vi.fn()}
+      />,
+    );
 
-    expect(screen.getByText(/Nenhuma pré-admissão disponível/i)).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
   it("mostra checklist pendente", () => {
@@ -85,6 +104,7 @@ describe("CandidatePortalPreAdmissionCard", () => {
     expect(screen.getByText("CPF")).toBeInTheDocument();
     expect(screen.getByText("Pendente")).toBeInTheDocument();
     expect(screen.getByLabelText(/Enviar documento para CPF/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 de 1 documentos aprovados/i)).toBeInTheDocument();
   });
 
   it("upload de documento funciona", async () => {
@@ -109,30 +129,21 @@ describe("CandidatePortalPreAdmissionCard", () => {
     render(
       <CandidatePortalPreAdmissionCard
         preAdmission={{
+          ...baseEnvelope,
           case: {
             ...baseEnvelope.case!,
             checklist_items: [
               {
                 ...baseEnvelope.case!.checklist_items[0],
                 status: "received",
-                documents: [
-                  {
-                    id: "doc-1",
-                    case_id: "case-1",
-                    checklist_item_id: "item-1",
-                    candidate_id: "candidate-1",
-                    original_filename: "cpf.pdf",
-                    mime_type: "application/pdf",
-                    size_bytes: 42,
-                    status: "uploaded",
-                    uploaded_at: "2026-05-14T10:00:00Z",
-                    reviewed_at: null,
-                    reviewed_by: null,
-                    review_notes: null,
-                    created_at: "2026-05-14T10:00:00Z",
-                    updated_at: "2026-05-14T10:00:00Z",
-                  },
-                ],
+                uploaded_document: {
+                  id: "doc-1",
+                  original_filename: "cpf.pdf",
+                  mime_type: "application/pdf",
+                  size_bytes: 42,
+                  status: "uploaded",
+                  uploaded_at: "2026-05-14T10:00:00Z",
+                },
               },
             ],
           },
@@ -145,34 +156,26 @@ describe("CandidatePortalPreAdmissionCard", () => {
     expect(screen.getByText("cpf.pdf")).toBeInTheDocument();
   });
 
-  it("documento rejeitado mostra motivo", () => {
+  it("item rejeitado mostra motivo público", () => {
     render(
       <CandidatePortalPreAdmissionCard
         preAdmission={{
+          ...baseEnvelope,
           case: {
             ...baseEnvelope.case!,
             checklist_items: [
               {
                 ...baseEnvelope.case!.checklist_items[0],
                 status: "rejected",
-                documents: [
-                  {
-                    id: "doc-1",
-                    case_id: "case-1",
-                    checklist_item_id: "item-1",
-                    candidate_id: "candidate-1",
-                    original_filename: "cpf.pdf",
-                    mime_type: "application/pdf",
-                    size_bytes: 42,
-                    status: "rejected",
-                    uploaded_at: "2026-05-14T10:00:00Z",
-                    reviewed_at: "2026-05-14T11:00:00Z",
-                    reviewed_by: "user-1",
-                    review_notes: "Documento ilegível.",
-                    created_at: "2026-05-14T10:00:00Z",
-                    updated_at: "2026-05-14T11:00:00Z",
-                  },
-                ],
+                rejection_reason_public: "Documento ilegível.",
+                uploaded_document: {
+                  id: "doc-1",
+                  original_filename: "cpf.pdf",
+                  mime_type: "application/pdf",
+                  size_bytes: 42,
+                  status: "rejected",
+                  uploaded_at: "2026-05-14T10:00:00Z",
+                },
               },
             ],
           },
@@ -181,40 +184,33 @@ describe("CandidatePortalPreAdmissionCard", () => {
       />,
     );
 
-    expect(screen.getByText("Correção solicitada")).toBeInTheDocument();
-    expect(screen.getByText("Documento ilegível.")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("candidate-portal-pre-admission-rejection-reason"),
+    ).toHaveTextContent(/Documento ilegível/);
   });
 
-  it("permite reenviar documento rejeitado", async () => {
+  it("permite substituir arquivo rejeitado", async () => {
     const user = userEvent.setup();
     const onUploaded = vi.fn().mockResolvedValue(undefined);
     render(
       <CandidatePortalPreAdmissionCard
         preAdmission={{
+          ...baseEnvelope,
           case: {
             ...baseEnvelope.case!,
             checklist_items: [
               {
                 ...baseEnvelope.case!.checklist_items[0],
                 status: "rejected",
-                documents: [
-                  {
-                    id: "doc-1",
-                    case_id: "case-1",
-                    checklist_item_id: "item-1",
-                    candidate_id: "candidate-1",
-                    original_filename: "cpf.pdf",
-                    mime_type: "application/pdf",
-                    size_bytes: 42,
-                    status: "rejected",
-                    uploaded_at: "2026-05-14T10:00:00Z",
-                    reviewed_at: "2026-05-14T11:00:00Z",
-                    reviewed_by: "user-1",
-                    review_notes: "Documento ilegível.",
-                    created_at: "2026-05-14T10:00:00Z",
-                    updated_at: "2026-05-14T11:00:00Z",
-                  },
-                ],
+                rejection_reason_public: "Documento ilegível.",
+                uploaded_document: {
+                  id: "doc-1",
+                  original_filename: "cpf.pdf",
+                  mime_type: "application/pdf",
+                  size_bytes: 42,
+                  status: "rejected",
+                  uploaded_at: "2026-05-14T10:00:00Z",
+                },
               },
             ],
           },
@@ -223,6 +219,7 @@ describe("CandidatePortalPreAdmissionCard", () => {
       />,
     );
 
+    expect(screen.getByText(/Substituir arquivo/i)).toBeInTheDocument();
     const file = new File(["%PDF-1.4"], "cpf-novo.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/Enviar documento para CPF/i), file);
 
@@ -238,11 +235,12 @@ describe("CandidatePortalPreAdmissionCard", () => {
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
-  it("permite download do documento admitido e bloqueia novo upload", async () => {
+  it("permite download do documento aprovado e bloqueia novo upload em caso admitido", async () => {
     const user = userEvent.setup();
     render(
       <CandidatePortalPreAdmissionCard
         preAdmission={{
+          ...baseEnvelope,
           case: {
             ...baseEnvelope.case!,
             status: "admitted",
@@ -250,24 +248,14 @@ describe("CandidatePortalPreAdmissionCard", () => {
               {
                 ...baseEnvelope.case!.checklist_items[0],
                 status: "approved",
-                documents: [
-                  {
-                    id: "doc-1",
-                    case_id: "case-1",
-                    checklist_item_id: "item-1",
-                    candidate_id: "candidate-1",
-                    original_filename: "cpf.pdf",
-                    mime_type: "application/pdf",
-                    size_bytes: 42,
-                    status: "approved",
-                    uploaded_at: "2026-05-14T10:00:00Z",
-                    reviewed_at: "2026-05-14T11:00:00Z",
-                    reviewed_by: "user-1",
-                    review_notes: null,
-                    created_at: "2026-05-14T10:00:00Z",
-                    updated_at: "2026-05-14T11:00:00Z",
-                  },
-                ],
+                uploaded_document: {
+                  id: "doc-1",
+                  original_filename: "cpf.pdf",
+                  mime_type: "application/pdf",
+                  size_bytes: 42,
+                  status: "approved",
+                  uploaded_at: "2026-05-14T10:00:00Z",
+                },
               },
             ],
           },
@@ -278,6 +266,7 @@ describe("CandidatePortalPreAdmissionCard", () => {
 
     expect(screen.queryByLabelText(/Enviar documento para CPF/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Novos uploads estão bloqueados/i)).toBeInTheDocument();
+    expect(screen.getByText(/Documento aprovado pelo RH/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Baixar/i }));
 

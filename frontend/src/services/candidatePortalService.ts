@@ -44,12 +44,18 @@ export interface CandidatePortalActiveApplication {
 }
 
 export interface CandidatePortalPublicInterview {
+  id: string | null;
   status: string;
+  status_label: string;
   scheduled_at: string | null;
+  interview_type: string | null;
+  interview_type_label: string | null;
   interview_format: string | null;
+  interview_format_label: string | null;
   location: string | null;
   meeting_url: string | null;
   public_notes: string | null;
+  is_online: boolean | null;
 }
 
 export interface CandidatePortalTimelineStep {
@@ -139,6 +145,7 @@ export interface CandidatePortalOverview {
   active_application: CandidatePortalActiveApplication | null;
   application_history: CandidatePortalApplication[];
   latest_resume: CandidatePortalResume | null;
+  public_interview: CandidatePortalPublicInterview | null;
   talent_pool: boolean;
   status_public: string;
   application_status: "active" | "rejected" | "hired" | "talent_pool" | "no_active_application" | string;
@@ -148,6 +155,38 @@ export interface CandidatePortalOverview {
   can_request_contact: boolean;
   can_apply_to_other_jobs: boolean;
   public_timeline: CandidatePortalTimeline | null;
+  pre_admission: CandidatePortalPreAdmissionSummary | null;
+}
+
+export interface CandidatePortalPreAdmissionUploadedDocument {
+  id: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  status: PreAdmissionDocument["status"];
+  uploaded_at: string;
+}
+
+export interface CandidatePortalPreAdmissionChecklistItem {
+  item_id: string;
+  title: string;
+  description: string | null;
+  required: boolean;
+  status: PreAdmissionChecklistItem["status"];
+  rejection_reason_public: string | null;
+  uploaded_document: CandidatePortalPreAdmissionUploadedDocument | null;
+  allowed_file_types: string[];
+  max_file_size_mb: number;
+}
+
+export interface CandidatePortalPreAdmissionSummary {
+  has_pre_admission_case: boolean;
+  pre_admission_status: PreAdmissionStatus | null;
+  documents_total: number;
+  documents_pending: number;
+  documents_submitted: number;
+  documents_approved: number;
+  next_pending_document: string | null;
 }
 
 export interface CandidatePortalPreAdmissionCase {
@@ -156,11 +195,13 @@ export interface CandidatePortalPreAdmissionCase {
   salary_offer: string | number | null;
   start_date: string | null;
   work_model: string | null;
-  checklist_items: Array<PreAdmissionChecklistItem & { documents: PreAdmissionDocument[] }>;
+  checklist_items: CandidatePortalPreAdmissionChecklistItem[];
+  summary: CandidatePortalPreAdmissionSummary;
 }
 
 export interface CandidatePortalPreAdmissionEnvelope {
   case: CandidatePortalPreAdmissionCase | null;
+  summary: CandidatePortalPreAdmissionSummary;
 }
 
 export interface CandidatePortalLoginPayload {

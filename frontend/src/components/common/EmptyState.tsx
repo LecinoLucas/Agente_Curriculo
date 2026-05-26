@@ -5,7 +5,7 @@ type EmptyStateProps = {
   title: string;
   description?: string;
   note?: string;
-  action?: { label: string; onClick: () => void };
+  action?: { label: string; onClick: () => void; disabled?: boolean };
 };
 
 export function EmptyState({ icon = "◯", title, description, note, action }: EmptyStateProps) {
@@ -18,7 +18,13 @@ export function EmptyState({ icon = "◯", title, description, note, action }: E
       {description ? <p className="text-sm text-muted-foreground max-w-sm">{description}</p> : null}
       {note ? <span className="text-xs text-muted-foreground">{note}</span> : null}
       {action ? (
-        <Button variant="outline" size="sm" onClick={action.onClick} className="mt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={action.onClick}
+          disabled={action.disabled}
+          className="mt-1"
+        >
           {action.label}
         </Button>
       ) : null}

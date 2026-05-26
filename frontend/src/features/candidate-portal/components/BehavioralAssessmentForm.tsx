@@ -58,17 +58,26 @@ function toPayload(assignment: BehavioralAssignmentDetail, answers: Record<strin
   );
 }
 
-function requiredMissing(assignment: BehavioralAssignmentDetail, answers: Record<string, DraftAnswer>): boolean {
-  return assignment.competencies.some((competency) =>
-    competency.questions.some((question) => {
-      if (!question.is_required) return false;
+function getInvalidRequiredQuestions(assignment: BehavioralAssignmentDetail, answers: Record<string, DraftAnswer>): string[] {
+  const invalidIds: string[] = [];
+  for (const competency of assignment.competencies) {
+    for (const question of competency.questions) {
+      if (!question.is_required) continue;
       const answer = answers[question.id];
-      if (!answer) return true;
-      if (question.answer_type === "text") return !answer.answer_text.trim();
-      if (question.answer_type === "scale") return !answer.answer_value;
-      return answer.selected_options_json.length === 0;
-    })
-  );
+      if (!answer) {
+        invalidIds.push(question.id);
+        continue;
+      }
+      if (question.answer_type === "text" && !answer.answer_text.trim()) {
+        invalidIds.push(question.id);
+      } else if (question.answer_type === "scale" && !answer.answer_value) {
+        invalidIds.push(question.id);
+      } else if (question.answer_type === "multiple_choice" && answer.selected_options_json.length === 0) {
+        invalidIds.push(question.id);
+      }
+    }
+  }
+  return invalidIds;
 }
 
 export function BehavioralAssessmentForm({
@@ -86,6 +95,7 @@ export function BehavioralAssessmentForm({
 }) {
   const [answers, setAnswers] = useState<Record<string, DraftAnswer>>(() => buildInitialAnswers(assignment));
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [invalidQuestions, setInvalidQuestions] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const submitLockedRef = useRef(false);
   const isSubmitted = assignment.status === "submitted";
@@ -103,17 +113,31 @@ export function BehavioralAssessmentForm({
         ...patch,
       },
     }));
+    setInvalidQuestions((current) => current.filter((id) => id !== questionId));
   };
 
   const handleSubmit = async () => {
     if (isSubmitted || isBusy || submitLockedRef.current) return;
 
-    if (requiredMissing(assignment, answers)) {
+    const invalidIds = getInvalidRequiredQuestions(assignment, answers);
+    if (invalidIds.length > 0) {
       setValidationMessage("Responda todas as perguntas obrigatórias antes de enviar.");
+      setInvalidQuestions(invalidIds);
+      
+      const firstInvalidId = invalidIds[0];
+      const element = document.getElementById(`question-container-${firstInvalidId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        const input = document.getElementById(firstInvalidId);
+        if (input) {
+          input.focus();
+        }
+      }
       return;
     }
 
     setValidationMessage(null);
+    setInvalidQuestions([]);
     submitLockedRef.current = true;
     setSubmitting(true);
     try {
@@ -161,8 +185,18 @@ export function BehavioralAssessmentForm({
               };
               const options = optionList(question);
               const parsed = parseQuestionText(question.question_text);
+              const isInvalid = invalidQuestions.includes(question.id);
+
               return (
-                <div key={question.id} className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+                <div 
+                  key={question.id} 
+                  id={`question-container-${question.id}`}
+                  className={`space-y-2 rounded-lg border p-3 ${
+                    isInvalid 
+                      ? "border-destructive/60 bg-destructive/5" 
+                      : "border-border/70 bg-muted/20"
+                  }`}
+                >
                   <label htmlFor={question.id} className="block text-sm font-medium text-foreground">
                     {parsed.text}
                     {question.is_required ? <span className="text-destructive"> *</span> : null}
@@ -223,6 +257,12 @@ export function BehavioralAssessmentForm({
                         </label>
                       ))}
                     </div>
+                  ) : null}
+
+                  {isInvalid ? (
+                    <p className="mt-2 text-xs font-medium text-destructive">
+                      Esta pergunta é obrigatória.
+                    </p>
                   ) : null}
                 </div>
               );

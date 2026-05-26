@@ -35,14 +35,15 @@ function extractBlockersFromError(error: unknown): AdmissionWorkspaceBlocker[] {
 
 function WorkspaceLoadingState() {
   return (
-    <div className="admission-cockpit space-y-4">
-      <div className="admission-section-card p-5">
-        <div className="space-y-4">
-          <div className="h-6 w-48 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-          <div className="h-4 w-72 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-          <div className="h-20 animate-pulse rounded-lg bg-[hsl(var(--surface-muted))]" />
-        </div>
+    <div className="admission-cockpit space-y-5 px-3 pt-5 sm:px-4">
+      {/* Loading: page header */}
+      <div className="space-y-2">
+        <div className="h-3 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+        <div className="h-6 w-64 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
       </div>
+      {/* Loading: summary bar */}
+      <div className="admission-section-card h-24 animate-pulse p-5" />
+      {/* Loading: main grid */}
       <SkeletonCards count={4} columns={2} />
     </div>
   );
@@ -185,41 +186,57 @@ export function AdmissionCaseWorkspacePanel({
   }
 
   return (
-    <div className="admission-cockpit admission-cockpit-shell space-y-6 p-3 sm:p-4">
+    <div
+      className="admission-cockpit space-y-5"
+      data-page="admission-case-workspace"
+    >
+      {/* Header: breadcrumb + title + horizontal summary bar */}
       <AdmissionCaseHeader workspace={workspace} openPageHref={openPageHref} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.95fr)]">
-        <div className="space-y-6">
+      {/* ─── Main 2-column grid ─────────────────────────────────────────── */}
+      {/*
+          LEFT  (larger): Checklist admissional + Pendências principais
+          RIGHT (smaller): Resumo do caso + Documentos enviados + Próximas ações + Histórico recente
+      */}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,1fr)]">
+
+        {/* ── Left column ─────────────────────────────────────────────── */}
+        <div className="space-y-5">
           <AdmissionChecklistCard
             items={workspace.checklist.items}
             loadingActionKey={loadingActionKey}
             onAction={runChecklistAction}
           />
-          <AdmissionDocumentsCard documents={workspace.documents} />
-          <AdmissionRecentEventsCard events={workspace.recent_events} />
+          <AdmissionBlockersCard
+            blockers={workspace.main_blockers}
+            onOpenChecklist={openChecklist}
+          />
         </div>
 
-        <div className="admission-side-rail space-y-6">
+        {/* ── Right column (sticky on xl) ──────────────────────────────── */}
+        <div className="admission-side-rail space-y-5">
           <AdmissionSummaryCard
             workspace={workspace}
             onMarkReady={handleMarkReady}
             submitting={loadingActionKey === "case:mark-ready"}
             actionMessage={summaryMessage}
           />
-          <AdmissionBlockersCard blockers={workspace.main_blockers} />
+          <AdmissionDocumentsCard documents={workspace.documents} />
           <AdmissionNextActionsCard
             actions={workspace.next_actions}
             integrationHref={resolvedIntegrationHref}
             onOpenChecklist={openChecklist}
           />
+          <AdmissionRecentEventsCard events={workspace.recent_events} />
         </div>
       </div>
 
-      <div className="flex justify-end">
+      {/* Refresh button */}
+      <div className="flex justify-end pt-2">
         <button
           type="button"
           onClick={() => void loadWorkspace()}
-          className="ui-btn-secondary inline-flex min-h-11 items-center gap-2 rounded-lg px-4 text-sm font-semibold"
+          className="ui-btn-secondary inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-medium"
         >
           <RefreshCw className="h-4 w-4" />
           Recarregar workspace

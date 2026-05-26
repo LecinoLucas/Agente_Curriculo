@@ -146,6 +146,26 @@ class SQLAlchemyPreAdmissionRepository:
         )
         return await self._session.scalar(stmt)
 
+    async def get_active_pipeline_for_job_candidate(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+    ) -> CandidateJobPipelineModel | None:
+        stmt = (
+            sa.select(CandidateJobPipelineModel)
+            .where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+                CandidateJobPipelineModel.pipeline_status == "active",
+                CandidateJobPipelineModel.relationship_status == "active",
+                CandidateJobPipelineModel.is_terminal.is_(False),
+                CandidateJobPipelineModel.terminated_at.is_(None),
+            )
+            .limit(1)
+        )
+        return await self._session.scalar(stmt)
+
     async def get_candidate(self, candidate_id: UUID) -> CandidateModel | None:
         return await self._session.get(CandidateModel, candidate_id)
 

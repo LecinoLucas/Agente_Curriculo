@@ -1,6 +1,3 @@
-import { History } from "lucide-react";
-
-import { EmptyState } from "@/components/common/EmptyState";
 import type { AdmissionWorkspaceRecentEvent } from "../../../types/domain";
 import { AdmissionSectionCard } from "./AdmissionSectionCard";
 import { formatDateTime } from "../utils";
@@ -9,45 +6,75 @@ type AdmissionRecentEventsCardProps = {
   events: AdmissionWorkspaceRecentEvent[];
 };
 
+function eventDotColor(type: string): string {
+  if (type.includes("approved") || type.includes("approve") || type.includes("ready")) {
+    return "bg-[hsl(var(--success))]";
+  }
+  if (type.includes("rejected") || type.includes("blocked") || type.includes("cancel")) {
+    return "bg-[hsl(var(--danger))]";
+  }
+  if (type.includes("created") || type.includes("case")) {
+    return "bg-[hsl(155_70%_50%)]";
+  }
+  if (type.includes("updated") || type.includes("checklist")) {
+    return "bg-[hsl(var(--warning))]";
+  }
+  return "bg-[hsl(var(--brand-dark))]";
+}
+
 export function AdmissionRecentEventsCard({
   events,
 }: AdmissionRecentEventsCardProps) {
   return (
     <AdmissionSectionCard
-      eyebrow="Histórico"
-      title="Eventos recentes"
-      description="Auditoria operacional do caso, sem misturar tentativas do ERP."
+      title="Histórico recente"
+      id="admission-events-section"
     >
       {events.length === 0 ? (
-        <EmptyState
-          icon="🕘"
-          title="Sem eventos recentes"
-          description="As mudanças mais importantes do caso serão registradas aqui."
-        />
+        <p className="py-2 text-sm text-[hsl(var(--text-muted))]">
+          Nenhum evento recente.
+        </p>
       ) : (
-        <div className="space-y-3">
-          {events.map((event) => (
-            <article
+        <div className="relative space-y-0">
+          {/* Vertical line */}
+          <div
+            className="absolute left-[7px] top-2 bottom-2 w-px bg-[hsl(var(--border))]/60"
+            aria-hidden="true"
+          />
+
+          {events.map((event, index) => (
+            <div
               key={event.id}
-              className="admission-row flex gap-3 p-4"
+              className={`relative flex gap-4 pb-4 ${index === events.length - 1 ? "pb-0" : ""}`}
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--accent-soft))] text-[hsl(var(--brand-dark))]">
-                <History className="h-4 w-4" />
+              {/* Timeline dot */}
+              <div className="relative z-10 mt-1 shrink-0">
+                <span
+                  className={`block h-3.5 w-3.5 rounded-full ring-2 ring-[hsl(var(--surface))] ${eventDotColor(event.type)}`}
+                  aria-hidden="true"
+                />
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+
+              {/* Content */}
+              <div className="min-w-0 flex-1 pt-0.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                   <p className="text-sm font-semibold text-[hsl(var(--text))]">
                     {event.title}
                   </p>
-                  <span className="text-xs text-[hsl(var(--text-muted))]">
+                  <time
+                    className="shrink-0 text-[10px] text-[hsl(var(--text-muted))]"
+                    dateTime={event.created_at}
+                  >
                     {formatDateTime(event.created_at)}
-                  </span>
+                  </time>
                 </div>
-                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-                  {event.description}
-                </p>
+                {event.description ? (
+                  <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))] leading-relaxed">
+                    {event.description}
+                  </p>
+                ) : null}
               </div>
-            </article>
+            </div>
           ))}
         </div>
       )}

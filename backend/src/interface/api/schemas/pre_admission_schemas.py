@@ -123,6 +123,7 @@ class PreAdmissionDocumentResponse(BaseModel):
     reviewed_at: datetime | None = None
     reviewed_by: UUID | None = None
     review_notes: str | None = None
+    rejection_reason_public: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -132,13 +133,27 @@ class PreAdmissionChecklistItemWithDocumentsResponse(PreAdmissionChecklistItemRe
 
 
 class PreAdmissionDocumentRejectRequest(BaseModel):
-    review_notes: str = Field(min_length=1, max_length=2000)
+    """Request body for rejecting a pre-admission document.
 
-    @field_validator("review_notes", mode="before")
+    Two independent text fields:
+
+    - ``rejection_reason_public`` is shown to the candidate on the portal.
+    - ``review_notes`` is the internal RH note and must never reach the
+      candidate.
+
+    At least one of the two must be provided so the staff/auditor knows why a
+    document was rejected.
+    """
+
+    rejection_reason_public: str | None = Field(default=None, max_length=1000)
+    review_notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("rejection_reason_public", "review_notes", mode="before")
     @classmethod
-    def clean_review_notes(cls, value: object) -> object:
+    def clean_text(cls, value: object) -> object:
         if isinstance(value, str):
-            return value.strip()
+            cleaned = value.strip()
+            return cleaned or None
         return value
 
 
@@ -185,17 +200,50 @@ class PreAdmissionDocumentsResponse(BaseModel):
     documents: list[PreAdmissionDocumentResponse] = Field(default_factory=list)
 
 
+class CandidatePortalPreAdmissionUploadedDocumentResponse(BaseModel):
+    id: UUID
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    status: PreAdmissionDocumentStatus
+    uploaded_at: datetime
+
+
+class CandidatePortalPreAdmissionChecklistItemResponse(BaseModel):
+    item_id: UUID
+    title: str
+    description: str | None = None
+    required: bool
+    status: PreAdmissionChecklistItemStatus
+    rejection_reason_public: str | None = None
+    uploaded_document: CandidatePortalPreAdmissionUploadedDocumentResponse | None = None
+    allowed_file_types: list[str] = Field(default_factory=list)
+    max_file_size_mb: int
+
+
+class CandidatePortalPreAdmissionSummary(BaseModel):
+    has_pre_admission_case: bool
+    pre_admission_status: PreAdmissionStatus | None = None
+    documents_total: int = 0
+    documents_pending: int = 0
+    documents_submitted: int = 0
+    documents_approved: int = 0
+    next_pending_document: str | None = None
+
+
 class CandidatePortalPreAdmissionCaseResponse(BaseModel):
     id: UUID
     status: PreAdmissionStatus
     salary_offer: Decimal | None = None
     start_date: date | None = None
     work_model: str | None = None
-    checklist_items: list[PreAdmissionChecklistItemWithDocumentsResponse] = Field(default_factory=list)
+    checklist_items: list[CandidatePortalPreAdmissionChecklistItemResponse] = Field(default_factory=list)
+    summary: CandidatePortalPreAdmissionSummary
 
 
 class CandidatePortalPreAdmissionEnvelopeResponse(BaseModel):
     case: CandidatePortalPreAdmissionCaseResponse | None = None
+    summary: CandidatePortalPreAdmissionSummary
 
 
 class AdmissionCaseSummarySchema(BaseModel):

@@ -84,6 +84,7 @@ describe("BehavioralAssessmentForm", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   it("exibe o nome do template e o título da vaga", () => {
@@ -115,7 +116,7 @@ describe("BehavioralAssessmentForm", () => {
     expect(screen.getByText("Colaboração")).toBeInTheDocument();
   });
 
-  it("bloqueia envio e mostra mensagem de validação quando há pergunta obrigatória sem resposta", async () => {
+  it("1. mostra mensagem geral e específica ao enviar com pergunta obrigatória sem resposta", async () => {
     render(
       <BehavioralAssessmentForm
         assignment={makeAssignment()}
@@ -125,8 +126,85 @@ describe("BehavioralAssessmentForm", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /enviar avaliação/i }));
+    
+    // Mensagem geral
     expect(await screen.findByText("Responda todas as perguntas obrigatórias antes de enviar.")).toBeInTheDocument();
+    
+    // Mensagens específicas por pergunta (3 perguntas obrigatórias no mock)
+    const specificMessages = screen.getAllByText("Esta pergunta é obrigatória.");
+    expect(specificMessages.length).toBe(3);
+    
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("2 e 3. chama scrollIntoView somente na primeira inválida da ordem e dá foco (se aplicável)", async () => {
+    render(
+      <BehavioralAssessmentForm
+        assignment={makeAssignment()}
+        onSave={onSave}
+        onSubmit={onSubmit}
+        onClose={onClose}
+      />
+    );
+    
+    const firstInput = screen.getByRole("textbox");
+    const focusSpy = vi.spyOn(firstInput, "focus");
+
+    fireEvent.click(screen.getByRole("button", { name: /enviar avaliação/i }));
+    
+    // scrollIntoView chamado exatamente 1 vez na primeira pergunta
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    
+    // foco dado ao textarea da primeira pergunta
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("4 e 5. adiciona destaque visual na pergunta obrigatória (incluindo escala/radio) e remove ao responder", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <BehavioralAssessmentForm
+        assignment={makeAssignment()}
+        onSave={onSave}
+        onSubmit={onSubmit}
+        onClose={onClose}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /enviar avaliação/i }));
+    
+    // Todas as 3 perguntas (text, radio, scale) devem ter erro
+    expect(screen.getAllByText("Esta pergunta é obrigatória.").length).toBe(3);
+    
+    // Verifica a classe de destaque no grupo
+    const qChoiceContainer = container.querySelector("#question-container-q-choice");
+    expect(qChoiceContainer).toHaveClass("border-destructive/60", "bg-destructive/5");
+
+    // Responde a pergunta de múltipla escolha (radio)
+    fireEvent.click(screen.getByLabelText("Sempre"));
+    
+    // O erro deve sumir desse card e a classe mudar
+    expect(screen.getAllByText("Esta pergunta é obrigatória.").length).toBe(2);
+    expect(qChoiceContainer).not.toHaveClass("border-destructive/60", "bg-destructive/5");
+    expect(qChoiceContainer).toHaveClass("border-border/70", "bg-muted/20");
+  });
+
+  it("6. Salvar rascunho continua funcionando sem exigir todas as obrigatórias", async () => {
+    const user = userEvent.setup();
+    render(
+      <BehavioralAssessmentForm
+        assignment={makeAssignment()}
+        onSave={onSave}
+        onSubmit={onSubmit}
+        onClose={onClose}
+      />
+    );
+
+    await user.type(screen.getByRole("textbox"), "rascunho parcial");
+    await user.click(screen.getByRole("button", { name: /salvar rascunho/i }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    // Não deve disparar mensagem de validação
+    expect(screen.queryByText("Esta pergunta é obrigatória.")).not.toBeInTheDocument();
   });
 
   it("chama onSubmit quando todas as perguntas obrigatórias estão respondidas", async () => {
@@ -186,23 +264,6 @@ describe("BehavioralAssessmentForm", () => {
     await act(async () => {
       resolveSubmit();
     });
-  });
-
-  it("chama onSave ao clicar em Salvar rascunho", async () => {
-    const user = userEvent.setup();
-    render(
-      <BehavioralAssessmentForm
-        assignment={makeAssignment()}
-        onSave={onSave}
-        onSubmit={onSubmit}
-        onClose={onClose}
-      />
-    );
-
-    await user.type(screen.getByRole("textbox"), "rascunho parcial");
-    await user.click(screen.getByRole("button", { name: /salvar rascunho/i }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
   });
 
   it("exibe opções de múltipla escolha e permite selecionar uma", () => {

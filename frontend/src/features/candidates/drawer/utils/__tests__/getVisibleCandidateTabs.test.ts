@@ -57,7 +57,7 @@ describe("getVisibleCandidateTabs", () => {
   });
 
   it("should show pre_admission tab when in offer/hired stage with hiring decision", () => {
-    const input = { ...defaultInput, pipelineStage: "offer", hasHiringDecision: true };
+    const input = { ...defaultInput, pipelineStage: "offer", hasHiringDecision: true, userRole: "hr" };
     const result = getVisibleCandidateTabs(input);
     expect(result).toContain("pre_admission");
   });
@@ -65,7 +65,7 @@ describe("getVisibleCandidateTabs", () => {
   it("should show all tabs except notes for candidate when showAll is true", () => {
     const input = { ...defaultInput, showAll: true };
     const result = getVisibleCandidateTabs(input);
-    expect(result).toEqual(["overview", "score", "documents", "interview", "assessment", "communications", "collaboration", "pre_admission"]);
+    expect(result).toEqual(["overview", "score", "documents", "interview", "assessment", "communications", "collaboration"]);
   });
 
   it("should include notes for recruiter", () => {
@@ -105,11 +105,22 @@ describe("getVisibleCandidateTabs", () => {
   it.each(["hired", "pre_admission", "protheus", "admitted"] as const)(
     "should show pre_admission in %s stage",
     (pipelineStage) => {
-    const input = { ...defaultInput, pipelineStage };
+    const input = { ...defaultInput, pipelineStage, userRole: "hr" };
     const result = getVisibleCandidateTabs(input);
     expect(result).toContain("pre_admission");
     },
   );
+
+  it("should hide pre_admission for recruiter in admission stages", () => {
+    const input = {
+      ...defaultInput,
+      pipelineStage: "pre_admission",
+      hasPreAdmission: true,
+      userRole: "recruiter",
+    };
+    const result = getVisibleCandidateTabs(input);
+    expect(result).not.toContain("pre_admission");
+  });
 
   it("should prioritize important tabs when exceeding max", () => {
     const input = {

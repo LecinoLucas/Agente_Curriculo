@@ -6,7 +6,6 @@ from uuid import UUID
 
 from pydantic import Field, field_validator
 
-from src.application.services.ai_provider_credential_service import mask_api_key_last4
 from src.interface.api.schemas.common import ORMAPISchemaModel
 
 AIProviderName = Literal["google", "gemini", "anthropic", "claude"]
@@ -44,7 +43,6 @@ class AIProviderCredentialResponse(ORMAPISchemaModel):
     model_id: str | None = None
     label: str
     masked_key: str
-    key_last4: str
     status: AIProviderCredentialStatus
     priority: int = Field(ge=1, le=10000)
     cooldown_until: datetime | None = None
@@ -54,11 +52,3 @@ class AIProviderCredentialResponse(ORMAPISchemaModel):
     consecutive_rate_limit_count: int
     created_at: datetime
     updated_at: datetime
-
-    @field_validator("masked_key", mode="before")
-    @classmethod
-    def build_masked_key(cls, value: str | None, info):
-        if value:
-            return value
-        data = info.data
-        return mask_api_key_last4(str(data.get("key_last4") or ""))

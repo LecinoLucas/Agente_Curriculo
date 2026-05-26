@@ -150,6 +150,7 @@ type UserRole = "admin" | "recruiter" | "candidate" | "viewer" | "manager" | "hr
 
 const STAFF_ROLES: UserRole[] = ["admin", "recruiter", "viewer", "manager", "hr"];
 const ADMIN_ROLES: UserRole[] = ["admin"];
+const PRE_ADMISSION_ROLES: UserRole[] = ["admin", "hr"];
 const MANAGER_ROLES: UserRole[] = ["admin", "manager"];
 const ALL_AUTH_ROLES: UserRole[] = ["admin", "recruiter", "candidate", "viewer", "manager", "hr"];
 
@@ -194,7 +195,7 @@ export function AppRouter() {
     <Routes>
       <Route path="/candidato" element={publicPage(<CandidateEntryPage />)} />
       <Route path="/candidato/cadastro" element={publicPage(<PublicApplicationPage />)} />
-      <Route path="/candidato/login" element={<Navigate to="/candidato" replace />} />
+      <Route path="/candidato/login" element={publicPage(<CandidateEntryPage />)} />
       <Route path="/candidato/portal" element={candidatePage(<CandidatePortalPage />)} />
       <Route path="/login" element={publicPage(<LoginPage />)} />
 
@@ -242,12 +243,22 @@ export function AppRouter() {
 
         <Route
           path="admission/cases/:caseId"
-          element={protectedPage(<AdmissionCasePage />, STAFF_ROLES)}
+          element={protectedPage(<AdmissionCasePage />, PRE_ADMISSION_ROLES)}
         />
 
         <Route
           path="admission/cases/:caseId/integration"
-          element={protectedPage(<AdmissionIntegrationPlaceholderPage />, STAFF_ROLES)}
+          element={protectedPage(<AdmissionIntegrationPlaceholderPage />, PRE_ADMISSION_ROLES)}
+        />
+
+        <Route
+          path="admissao/:caseId"
+          element={protectedPage(<AdmissionCasePage />, PRE_ADMISSION_ROLES)}
+        />
+
+        <Route
+          path="admissao/:caseId/integracao"
+          element={protectedPage(<AdmissionIntegrationPlaceholderPage />, PRE_ADMISSION_ROLES)}
         />
 
         <Route

@@ -1,14 +1,14 @@
-import { CheckCircle2, FileUp, Loader2, XCircle } from "lucide-react";
-import { useState, type ChangeEvent } from "react";
+import { CheckCircle2, FileUp, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { useMemo, useState, type ChangeEvent } from "react";
 
 import {
   candidatePortalService,
+  type CandidatePortalPreAdmissionChecklistItem,
   type CandidatePortalPreAdmissionEnvelope,
 } from "../../../services/candidatePortalService";
 import { toast } from "../../../shared/utils/toast";
-import type { PreAdmissionDocument } from "../../../types/domain";
 
-const statusLabels: Record<string, string> = {
+const STATUS_LABELS: Record<string, string> = {
   draft: "Em preparação",
   offer_preparing: "Oferta em preparação",
   offer_sent: "Oferta enviada",
@@ -21,15 +21,25 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelado",
 };
 
-const documentStatusLabels: Record<string, string> = {
-  uploaded: "Enviado para análise",
+const ITEM_STATUS_LABELS: Record<string, string> = {
+  pending: "Pendente",
+  received: "Enviado para análise",
   approved: "Aprovado",
   rejected: "Correção solicitada",
-  replaced: "Substituído",
+  waived: "Dispensado pelo RH",
 };
 
-function latestDocument(documents: PreAdmissionDocument[]): PreAdmissionDocument | null {
-  return documents.find((document) => document.status !== "replaced") ?? null;
+const EXTENSION_BY_MIME: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+};
+
+function formatAllowedTypes(mimeTypes: string[] | null | undefined): string {
+  const extensions = (mimeTypes ?? [])
+    .map((mime) => EXTENSION_BY_MIME[mime])
+    .filter((value): value is string => Boolean(value));
+  return Array.from(new Set(extensions)).join(", ") || "PDF, JPG, PNG";
 }
 
 interface CandidatePortalPreAdmissionCardProps {
@@ -46,20 +56,50 @@ export function CandidatePortalPreAdmissionCard({
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
   const [downloadingDocumentId, setDownloadingDocumentId] = useState<string | null>(null);
 
+  const process = preAdmission?.case ?? null;
+  const summary = process?.summary ?? preAdmission?.summary ?? null;
+
+  const acceptString = useMemo(() => {
+    const fallback = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+    if (!process?.checklist_items?.length) {
+      return fallback;
+    }
+    const collected = new Set<string>();
+    process.checklist_items.forEach((item) => {
+      (item.allowed_file_types ?? []).forEach((mime) => {
+        collected.add(mime);
+        const ext = EXTENSION_BY_MIME[mime];
+        if (ext) collected.add(ext);
+      });
+    });
+    return Array.from(collected).join(",") || fallback;
+  }, [process?.checklist_items]);
+
   const handleUpload = async (
     event: ChangeEvent<HTMLInputElement>,
     caseId: string,
-    itemId: string,
+    item: CandidatePortalPreAdmissionChecklistItem,
   ) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
 
+    const maxBytes = (item.max_file_size_mb || 1) * 1024 * 1024;
+    if (file.size > maxBytes) {
+      toast.error(`Arquivo acima do limite de ${item.max_file_size_mb}MB.`);
+      return;
+    }
+    const allowed = item.allowed_file_types ?? [];
+    if (allowed.length > 0 && file.type && !allowed.includes(file.type)) {
+      toast.error("Tipo de arquivo não permitido. Envie um PDF, JPG ou PNG.");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("document_file", file);
-    setUploadingItemId(itemId);
+    setUploadingItemId(item.item_id);
     try {
-      await candidatePortalService.uploadPreAdmissionDocument(caseId, itemId, formData);
+      await candidatePortalService.uploadPreAdmissionDocument(caseId, item.item_id, formData);
       await onUploaded();
       toast.success("Documento enviado para análise.");
     } catch (error) {
@@ -92,63 +132,66 @@ export function CandidatePortalPreAdmissionCard({
 
   if (loading) {
     return (
-      <div role="status" className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white p-6 shadow-xl">
+      <div
+        role="status"
+        data-testid="candidate-portal-pre-admission-card"
+        className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white p-6 shadow-xl"
+      >
         <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
       </div>
     );
   }
 
-  if (!preAdmission?.case) {
-    return (
-      <div className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white p-6 shadow-xl">
-        <p className="text-xs font-extrabold uppercase tracking-widest text-[hsl(var(--text-muted))]">
-          Pré-admissão
-        </p>
-        <h2 className="mt-1 text-xl font-bold text-[hsl(var(--text))]">Documentos</h2>
-        <p className="mt-4 rounded-xl border border-dashed border-[hsl(var(--border))] p-4 text-sm text-[hsl(var(--text-muted))]">
-          Nenhuma pré-admissão disponível no momento.
-        </p>
-      </div>
-    );
+  if (!process) {
+    return null;
   }
 
-  const process = preAdmission.case;
-  const requiredItems = process.checklist_items.filter((item) => item.required);
-  const pendingRequiredCount = requiredItems.filter((item) => {
-    const document = latestDocument(item.documents ?? []);
-    return !document || !["approved"].includes(document.status);
-  }).length;
   const uploadsLocked =
     process.status === "admitted" ||
     process.status === "cancelled" ||
     process.status === "offer_declined";
 
+  const documentsTotal = summary?.documents_total ?? process.checklist_items.length;
+  const documentsApproved = summary?.documents_approved ?? 0;
+
   return (
-    <div className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white p-6 shadow-xl">
+    <div
+      data-testid="candidate-portal-pre-admission-card"
+      className="rounded-2xl border border-[hsl(var(--border)/0.5)] bg-white p-6 shadow-xl"
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-extrabold uppercase tracking-widest text-[hsl(var(--text-muted))]">
             Pré-admissão
           </p>
-          <h2 className="mt-1 text-xl font-bold text-[hsl(var(--text))]">Documentos</h2>
+          <h2 className="mt-1 text-xl font-bold text-[hsl(var(--text))]">Documentos da admissão</h2>
+          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            Envie os documentos solicitados pelo RH. Aceitamos {formatAllowedTypes(
+              process.checklist_items[0]?.allowed_file_types ?? [],
+            )}.
+          </p>
         </div>
-        <span className="w-fit rounded-full bg-[hsl(var(--primary)/0.08)] px-3 py-1 text-xs font-bold text-[hsl(var(--primary))]">
-          {statusLabels[process.status] ?? process.status}
+        <span
+          data-testid="candidate-portal-pre-admission-status"
+          className="w-fit rounded-full bg-[hsl(var(--primary)/0.08)] px-3 py-1 text-xs font-bold text-[hsl(var(--primary))]"
+        >
+          {STATUS_LABELS[process.status] ?? process.status}
         </span>
       </div>
 
-      {process.checklist_items.length > 0 ? (
+      {documentsTotal > 0 ? (
         <div
-          className={[
-            "mt-5 rounded-xl border px-4 py-3 text-sm",
-            pendingRequiredCount > 0
-              ? "border-amber-200 bg-amber-50 text-amber-900"
-              : "border-emerald-200 bg-emerald-50 text-emerald-900",
-          ].join(" ")}
+          data-testid="candidate-portal-pre-admission-progress"
+          className="mt-5 flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-4 py-3"
         >
-          {pendingRequiredCount > 0
-            ? `${pendingRequiredCount} documento(s) obrigatório(s) ainda precisam de ação antes da conclusão da pré-admissão.`
-            : "Todos os documentos obrigatórios atuais já foram resolvidos."}
+          <span className="text-sm font-semibold text-[hsl(var(--text))]">
+            {documentsApproved} de {documentsTotal} documentos aprovados
+          </span>
+          {summary?.next_pending_document ? (
+            <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+              Próximo: {summary.next_pending_document}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -157,46 +200,64 @@ export function CandidatePortalPreAdmissionCard({
           Nenhuma pendência documental registrada.
         </p>
       ) : (
-        <div className="mt-5 space-y-3">
+        <ul className="mt-5 space-y-3">
           {process.checklist_items.map((item) => {
-            const document = latestDocument(item.documents ?? []);
-            const canUpload = !uploadsLocked && (!document || document.status === "rejected");
+            const document = item.uploaded_document;
+            const canUpload =
+              !uploadsLocked &&
+              (!document || document.status === "rejected" || item.status === "rejected");
+            const statusKey = document?.status === "approved" ? "approved" : item.status;
+            const statusLabel = ITEM_STATUS_LABELS[statusKey] ?? statusKey;
+
             return (
-              <div
-                key={item.id}
+              <li
+                key={item.item_id}
+                data-testid="candidate-portal-pre-admission-item"
                 className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/20 p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-[hsl(var(--text))]">{item.title}</p>
-                    <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                      {item.required ? "Obrigatório" : "Opcional"}
+                    <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
+                      {item.required ? "Obrigatório" : "Opcional"} ·{" "}
+                      {formatAllowedTypes(item.allowed_file_types)} até {item.max_file_size_mb}MB
                     </p>
-                    {document ? (
-                      <div className="mt-3 flex items-center gap-2 text-sm">
-                        {document.status === "approved" ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        ) : document.status === "rejected" ? (
-                          <XCircle className="h-4 w-4 text-red-600" />
-                        ) : (
-                          <FileUp className="h-4 w-4 text-[hsl(var(--primary))]" />
-                        )}
-                        <span className="font-medium text-[hsl(var(--text))]">
-                          {documentStatusLabels[document.status] ?? document.status}
+                    {item.description ? (
+                      <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{item.description}</p>
+                    ) : null}
+                    <div className="mt-3 flex items-center gap-2 text-sm">
+                      {statusKey === "approved" ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      ) : statusKey === "rejected" ? (
+                        <XCircle className="h-4 w-4 text-red-600" />
+                      ) : (
+                        <FileUp className="h-4 w-4 text-[hsl(var(--primary))]" />
+                      )}
+                      <span className="font-medium text-[hsl(var(--text))]">{statusLabel}</span>
+                      {document ? (
+                        <span className="break-all text-[hsl(var(--text-muted))]">
+                          {document.original_filename}
                         </span>
-                        <span className="break-all text-[hsl(var(--text-muted))]">{document.original_filename}</span>
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">Pendente</p>
-                    )}
-                    {document?.status === "rejected" && document.review_notes ? (
-                      <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-                        <span className="font-semibold">Observação do RH:</span> {document.review_notes}
+                      ) : null}
+                    </div>
+                    {statusKey === "approved" ? (
+                      <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                        Documento aprovado pelo RH. Nenhuma ação necessária.
+                      </p>
+                    ) : null}
+                    {statusKey === "rejected" ? (
+                      <p
+                        data-testid="candidate-portal-pre-admission-rejection-reason"
+                        className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900"
+                      >
+                        <span className="font-semibold">Correção solicitada:</span>{" "}
+                        {item.rejection_reason_public ??
+                          "Documento rejeitado. Envie uma nova versão para análise."}
                       </p>
                     ) : null}
                     {uploadsLocked && process.status === "admitted" ? (
                       <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                        Admissão concluída. Novos uploads estão bloqueados, mas os documentos já enviados continuam disponíveis para download.
+                        Admissão concluída. Novos uploads estão bloqueados, mas os documentos enviados continuam disponíveis para download.
                       </p>
                     ) : null}
                   </div>
@@ -216,24 +277,32 @@ export function CandidatePortalPreAdmissionCard({
                     ) : null}
                     {canUpload ? (
                       <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-sm font-semibold text-white hover:opacity-90">
-                        {uploadingItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-                        {document?.status === "rejected" ? "Reenviar" : "Enviar documento"}
+                        {uploadingItemId === item.item_id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : document?.status === "rejected" || item.status === "rejected" ? (
+                          <RefreshCw className="h-4 w-4" />
+                        ) : (
+                          <FileUp className="h-4 w-4" />
+                        )}
+                        {document?.status === "rejected" || item.status === "rejected"
+                          ? "Substituir arquivo"
+                          : "Enviar documento"}
                         <input
                           type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                          accept={acceptString}
                           className="hidden"
                           aria-label={`Enviar documento para ${item.title}`}
                           disabled={uploadingItemId !== null}
-                          onChange={(event) => void handleUpload(event, process.id, item.id)}
+                          onChange={(event) => void handleUpload(event, process.id, item)}
                         />
                       </label>
                     ) : null}
                   </div>
                 </div>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );

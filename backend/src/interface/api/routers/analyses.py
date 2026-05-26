@@ -33,7 +33,13 @@ from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.repositories.sqlalchemy_user_repository import SQLAlchemyUserRepository
-from src.interface.api.dependencies import AdminOnly, CurrentUser, InternalUser, RecruiterOrAdmin, get_db
+from src.interface.api.dependencies import (
+    AdminOnly,
+    AnalysisReadStaff,
+    AnalysisWriteStaff,
+    RecruiterOrAdmin,
+    get_db,
+)
 from src.interface.api.rate_limiting import rate_limit_analysis_request, rate_limit_analysis_retry
 from src.interface.api.schemas.analysis_schemas import (
     AnalysisGlobalItemResponse,
@@ -337,7 +343,7 @@ async def request_analysis(
 
 @router.get("", response_model=PaginatedResponse[AnalysisResponse])
 async def list_analyses(
-    current_user: CurrentUser,
+    current_user: AnalysisReadStaff,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
     status_filter: str | None = Query(default=None, alias="status"),
@@ -379,7 +385,7 @@ async def list_analyses_global(
 @router.get("/{analysis_id}", response_model=AnalysisResponse)
 async def get_analysis(
     analysis_id: UUID,
-    current_user: CurrentUser,
+    current_user: AnalysisReadStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisResponse:
     try:
@@ -394,7 +400,7 @@ async def get_analysis(
 async def discard_analysis(
     analysis_id: UUID,
     body: DiscardAnalysisRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: AnalysisWriteStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisResponse:
     try:
@@ -415,7 +421,7 @@ async def discard_analysis(
 @router.get("/{analysis_id}/status", response_model=AnalysisStatusResponse)
 async def get_analysis_status(
     analysis_id: UUID,
-    current_user: CurrentUser,
+    current_user: AnalysisReadStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisStatusResponse:
     try:
@@ -442,7 +448,7 @@ async def get_analysis_status(
 @router.get("/{analysis_id}/result", response_model=AnalysisResultResponse)
 async def get_analysis_result(
     analysis_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AnalysisReadStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisResultResponse:
     try:
@@ -456,7 +462,7 @@ async def get_analysis_result(
 @router.get("/{analysis_id}/pipeline", response_model=AnalysisPipelineResponse)
 async def get_analysis_pipeline(
     analysis_id: UUID,
-    current_user: CurrentUser,
+    current_user: AnalysisReadStaff,
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisPipelineResponse:
     try:
@@ -470,7 +476,7 @@ async def get_analysis_pipeline(
 async def match_analysis_to_job(
     analysis_id: UUID,
     job_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AnalysisWriteStaff,
     force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisMatchResponse:
@@ -523,7 +529,7 @@ async def detect_and_mark_stuck_analyses(
 @router.post("/bulk-force-fail", response_model=BulkAnalysisActionResponse)
 async def bulk_force_fail_analyses(
     body: BulkAnalysisActionRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: AnalysisWriteStaff,
     db: AsyncSession = Depends(get_db),
 ) -> BulkAnalysisActionResponse:
     """Force-fail multiple analyses immediately.
@@ -567,7 +573,7 @@ async def bulk_force_fail_analyses(
 @router.post("/bulk-retry", response_model=BulkAnalysisActionResponse)
 async def bulk_retry_analyses(
     body: BulkAnalysisActionRequest,
-    current_user: RecruiterOrAdmin,
+    current_user: AnalysisWriteStaff,
     db: AsyncSession = Depends(get_db),
 ) -> BulkAnalysisActionResponse:
     """Retry multiple failed analyses.
@@ -628,7 +634,7 @@ async def bulk_retry_analyses(
 @router.post("/{analysis_id}/retry", response_model=AnalysisRequestResponse, status_code=status.HTTP_202_ACCEPTED)
 async def retry_analysis(
     analysis_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AnalysisWriteStaff,
     db: AsyncSession = Depends(get_db),
     _rl: None = Depends(rate_limit_analysis_retry),
 ) -> AnalysisRequestResponse:
@@ -712,7 +718,7 @@ async def retry_analysis(
 @router.post("/{analysis_id}/force-fail", status_code=status.HTTP_200_OK)
 async def force_fail_analysis(
     analysis_id: UUID,
-    current_user: RecruiterOrAdmin,
+    current_user: AnalysisWriteStaff,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Force-fail an analysis immediately.

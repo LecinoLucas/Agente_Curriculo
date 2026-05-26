@@ -209,7 +209,21 @@ function interviewFormatLabel(value: string | null): string | null {
   return null;
 }
 
-function CandidateInterviewInfo({ interview }: { interview: CandidatePortalPublicInterview }) {
+function getPublicInterview(overview: CandidatePortalOverview | null): CandidatePortalPublicInterview | null {
+  if (!overview) return null;
+  if (overview.public_interview) return overview.public_interview;
+  return overview.public_timeline?.steps.find((step) => step.key === "interview" && step.interview)?.interview ?? null;
+}
+
+function CandidateInterviewInfo({ interview }: { interview: CandidatePortalPublicInterview | null }) {
+  if (!interview) {
+    return (
+      <div className="mt-3 rounded-lg border border-border/70 bg-background px-3 py-2 text-sm text-muted-foreground">
+        Nenhuma entrevista agendada no momento.
+      </div>
+    );
+  }
+
   if (interview.status === "cancelled") {
     return (
       <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -226,15 +240,26 @@ function CandidateInterviewInfo({ interview }: { interview: CandidatePortalPubli
     );
   }
 
-  const format = interviewFormatLabel(interview.interview_format);
+  const format = interview.interview_format_label ?? interviewFormatLabel(interview.interview_format);
+  const typeLabel = interview.interview_type_label;
+  const isCompletedInterview = interview.status === "completed" || interview.status === "awaiting_feedback";
   return (
-    <div className="mt-3 space-y-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-3 text-sm">
+    <div
+      className={`mt-3 space-y-2 rounded-lg px-3 py-3 text-sm ${
+        isCompletedInterview
+          ? "border border-emerald-200 bg-emerald-50/70"
+          : "border border-primary/20 bg-primary/5"
+      }`}
+    >
       <p className="font-medium text-foreground">
-        Entrevista agendada para {formatInterviewDate(interview.scheduled_at)}.
+        {isCompletedInterview
+          ? `Entrevista concluída em ${formatInterviewDate(interview.scheduled_at)}.`
+          : `Entrevista agendada para ${formatInterviewDate(interview.scheduled_at)}.`}
       </p>
+      {typeLabel ? <p className="text-muted-foreground">Tipo: {typeLabel}.</p> : null}
       {format ? <p className="text-muted-foreground">Formato: {format}.</p> : null}
       {interview.location ? <p className="text-muted-foreground">Local: {interview.location}</p> : null}
-      {interview.meeting_url ? (
+      {interview.meeting_url && !isCompletedInterview ? (
         <a
           href={interview.meeting_url}
           target="_blank"
@@ -248,6 +273,29 @@ function CandidateInterviewInfo({ interview }: { interview: CandidatePortalPubli
         <p className="text-muted-foreground">{interview.public_notes}</p>
       ) : null}
     </div>
+  );
+}
+
+function CandidateInterviewCard({ interview }: { interview: CandidatePortalPublicInterview | null }) {
+  if (!interview) {
+    return null;
+  }
+
+  return (
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs" data-testid="candidate-interview-card">
+      <CardHeader className="p-5 pb-3 border-b border-border">
+        <CardTitle className="text-base font-bold text-foreground">Entrevista</CardTitle>
+        <CardDescription className="text-xs font-semibold text-muted-foreground">
+          Acompanhe aqui os dados públicos da sua entrevista no processo atual.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-5 pt-2">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          {interview.status_label}
+        </div>
+        <CandidateInterviewInfo interview={interview} />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -330,13 +378,15 @@ export function buildCandidateVisibleSteps(overview: CandidatePortalOverview | n
   const timeline = overview.public_timeline;
   const steps = timeline.steps;
   const currentStep = steps.find(s => s.status === "current");
+  const publicInterview = getPublicInterview(overview);
   
   const isCompleted = steps.every(s => s.status === "completed" || s.status === "closed");
   const hasResult = currentStep?.key === "result" || isCompleted;
-  const hasInterview = currentStep?.key === "interview" || steps.some(s => s.key === "interview" && (s.status === "current" || s.status === "completed" || s.interview));
+  const hasInterview = currentStep?.key === "interview" || publicInterview !== null;
 
   if (hasResult) {
-    const hadInterview = steps.some(s => s.key === "interview" && s.status === "completed");
+    const hadInterview =
+      publicInterview?.status === "completed" || publicInterview?.status === "awaiting_feedback";
     return [
       {
         key: hadInterview ? "interview" : "resume_review",
@@ -360,10 +410,13 @@ export function buildCandidateVisibleSteps(overview: CandidatePortalOverview | n
   }
 
   if (hasInterview) {
-    const interviewStep = steps.find(s => s.key === "interview");
     let description = "Seus dados se destacaram! Em breve entraremos em contato.";
-    if (interviewStep?.interview?.scheduled_at) {
-      description = `Entrevista agendada para ${formatInterviewDate(interviewStep.interview.scheduled_at)}.`;
+    if (publicInterview?.status === "completed" || publicInterview?.status === "awaiting_feedback") {
+      description = "Sua entrevista foi concluída.";
+    } else if (publicInterview?.status === "cancelled") {
+      description = "Sua entrevista será reagendada.";
+    } else if (publicInterview?.scheduled_at) {
+      description = `Entrevista agendada para ${formatInterviewDate(publicInterview.scheduled_at)}.`;
     }
     return [
       {
@@ -898,6 +951,7 @@ export function CandidatePortalPage() {
 
   const activeApplication: CandidatePortalActiveApplication | null =
     overview?.active_application ?? null;
+  const publicInterview = getPublicInterview(overview);
   const applicationHistory: CandidatePortalApplication[] = overview?.application_history ?? [];
   const closedProcessApplication = overview ? getClosedProcessApplication(overview) : null;
   const isRejectedProcess = overview?.application_status === "rejected";
@@ -1394,6 +1448,46 @@ export function CandidatePortalPage() {
                     </Card>
                   </div>
 
+                  {overview.pre_admission?.has_pre_admission_case ? (
+                    <div
+                      className="animate-in fade-in slide-in-from-bottom-4 duration-500"
+                      data-testid="candidate-portal-pre-admission-tile"
+                    >
+                      <Card className="overflow-hidden border border-primary/20 rounded-2xl bg-gradient-to-br from-primary/5 to-card p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/15">
+                            <FileText className="h-6 w-6" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-primary block leading-none">
+                              PRÉ-ADMISSÃO INICIADA
+                            </span>
+                            <h3 className="text-lg font-black text-foreground mt-1.5 leading-none">
+                              {overview.pre_admission.documents_approved} de {overview.pre_admission.documents_total} documentos aprovados
+                            </h3>
+                            {overview.pre_admission.next_pending_document ? (
+                              <p className="text-xs text-muted-foreground mt-1.5 font-medium leading-relaxed">
+                                Próximo: {overview.pre_admission.next_pending_document}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground mt-1.5 font-medium leading-relaxed">
+                                Tudo enviado. Aguarde a análise do RH.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => handleMenuClick("perfil")}
+                          className="h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-center shrink-0"
+                          data-testid="candidate-portal-pre-admission-tile-cta"
+                        >
+                          Enviar documentos
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </Card>
+                    </div>
+                  ) : null}
+
                   {isRejectedProcess ? (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <ProcessClosedCard
@@ -1416,6 +1510,12 @@ export function CandidatePortalPage() {
                   {!isTalentPoolOnly ? (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
                       <CandidateHorizontalStepper overview={overview} />
+                    </div>
+                  ) : null}
+
+                  {!isRejectedProcess && !isTalentPoolOnly ? (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <CandidateInterviewCard interview={publicInterview} />
                     </div>
                   ) : null}
 
@@ -1511,7 +1611,8 @@ export function CandidatePortalPage() {
 
                   <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
                     {/* Status Overview Card - Main stats */}
-                    <Card className="lg:col-span-2 overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs">
+                    <div className="lg:col-span-2 space-y-6">
+                      <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs">
                       <CardHeader className="p-5 pb-3 border-b border-border">
                         <CardTitle className="text-base font-bold text-foreground">
                           Resumo da situação
@@ -1572,7 +1673,11 @@ export function CandidatePortalPage() {
                           ))}
                         </div>
                       </CardContent>
-                    </Card>
+                      </Card>
+                      {!isRejectedProcess && !isTalentPoolOnly ? (
+                        <CandidateInterviewCard interview={publicInterview} />
+                      ) : null}
+                    </div>
 
                     {/* Next Update Card & Basic Candidate Info - Side column */}
                     <div className="flex flex-col gap-6">

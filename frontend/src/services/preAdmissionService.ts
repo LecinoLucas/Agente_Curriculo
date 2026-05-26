@@ -87,13 +87,26 @@ export async function approvePreAdmissionDocument(documentId: string): Promise<P
   });
 }
 
+export interface RejectPreAdmissionDocumentPayload {
+  rejection_reason_public?: string | null;
+  review_notes?: string | null;
+}
+
 export async function rejectPreAdmissionDocument(
   documentId: string,
-  reviewNotes: string,
+  payload: RejectPreAdmissionDocumentPayload | string,
 ): Promise<PreAdmissionDocument> {
+  // Backwards-compatible signature: a bare string is treated as the public
+  // rejection reason shown to the candidate. Internal review notes can only be
+  // sent via the object form, keeping callers explicit about which audience
+  // each text targets.
+  const body =
+    typeof payload === "string"
+      ? { rejection_reason_public: payload }
+      : payload;
   return httpRequest<PreAdmissionDocument>(`/api/v1/pre-admission/documents/${documentId}/reject`, {
     method: "POST",
-    body: { review_notes: reviewNotes },
+    body,
   });
 }
 

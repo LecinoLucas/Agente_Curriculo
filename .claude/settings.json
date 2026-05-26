@@ -55,7 +55,9 @@
       "Bash(.venv/bin/pytest tests/unit/test_crud_services.py::test_candidate_list_summaries_includes_linked_job_count -q)",
       "Bash(npm --prefix frontend test -- --run src/features/candidates/components/__tests__/CandidatePreviewDrawer.test.tsx)",
       "Bash(npm --prefix frontend test -- --run src/pages/__tests__/PipelinePage.test.tsx)",
-      "Bash(grep -v \"^--$\")"
+      "Bash(grep -v \"^--$\")",
+      "Bash(python -c \"import pytest; print\\(pytest.__version__\\)\")",
+      "Bash(kill 16075 17118)"
     ],
     "additionalDirectories": [
       "/Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/versions"

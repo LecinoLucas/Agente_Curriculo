@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,7 @@ import { CandidateProfilePage } from "../CandidateProfilePage";
 import { candidatesService } from "../../services/candidatesService";
 import { agendaService } from "../../services/agendaService";
 import { analysisService } from "../../services/analysisService";
+import { admissionWorkspaceService } from "../../services/admissionWorkspaceService";
 import { getBehavioralEvaluation, triggerBehavioralAnalysis } from "../../services/behavioralAIEvaluationService";
 import { getCandidateBehavioralAssessment } from "../../services/behavioralAssessmentService";
 import { communicationService } from "../../services/communicationService";
@@ -18,6 +19,7 @@ import * as hiringDecisionService from "../../services/hiringDecisionService";
 import * as scorecardService from "../../services/interviewScorecardService";
 import { listJobs, getCandidateRankingEntry } from "../../services/jobsService";
 import { pipelineService } from "../../services/pipelineService";
+import * as preAdmissionService from "../../services/preAdmissionService";
 import { resumeService } from "../../services/resumeService";
 import { scoreExplanationService, type ScoreExplanationResponse } from "../../services/scoreExplanationService";
 import type { InterviewSchedule } from "../../types/agenda";
@@ -28,11 +30,13 @@ const routerFuture = {
   v7_relativeSplatPath: true,
 } as const;
 
+let mockedUserRole = "admin";
+
 vi.mock("../../features/auth/useAuth", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
-      role: "admin",
+      role: mockedUserRole,
       real_ai_token_spend_enabled: true,
     },
   }),
@@ -91,6 +95,17 @@ vi.mock("../../services/analysisService", () => ({
   },
 }));
 
+vi.mock("../../services/admissionWorkspaceService", () => ({
+  admissionWorkspaceService: {
+    getWorkspace: vi.fn(),
+    approveChecklistItem: vi.fn(),
+    rejectChecklistItem: vi.fn(),
+    requestChecklistItemCorrection: vi.fn(),
+    markChecklistItemNotRequired: vi.fn(),
+    markCaseReadyForExport: vi.fn(),
+  },
+}));
+
 vi.mock("../../services/behavioralAssessmentService", () => ({
   getCandidateBehavioralAssessment: vi.fn(),
 }));
@@ -133,6 +148,11 @@ vi.mock("../../services/pipelineService", () => ({
     transferCandidateJob: vi.fn(),
     addCandidateToJob: vi.fn(),
   },
+}));
+
+vi.mock("../../services/preAdmissionService", () => ({
+  getPreAdmission: vi.fn(),
+  createPreAdmission: vi.fn(),
 }));
 
 vi.mock("../../services/resumeService", () => ({
@@ -526,6 +546,7 @@ const detailedResume = {
 describe("Candidate workspace flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedUserRole = "admin";
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
     vi.mocked(candidatesService.getOverview).mockResolvedValue(overview);
     vi.mocked(candidatesService.getProcessHistory).mockResolvedValue({
@@ -643,6 +664,67 @@ describe("Candidate workspace flow", () => {
     vi.mocked(hiringDecisionService.getHiringDecision).mockResolvedValue({ decision: null });
     vi.mocked(hiringDecisionService.getHiringDecisionHistory).mockResolvedValue({ decisions: [] });
     vi.mocked(hiringDecisionService.createHiringDecision).mockResolvedValue(submittedHireDecision);
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: false,
+      hiring_decision_outcome: null,
+    });
+    vi.mocked(preAdmissionService.createPreAdmission).mockResolvedValue({
+      id: "case-created",
+      candidate_id: "candidate-1",
+      job_id: "job-1",
+      hiring_decision_id: "decision-1",
+      status: "draft",
+      salary_offer: null,
+      start_date: null,
+      work_model: null,
+      notes: null,
+      created_by: "user-1",
+      ready_for_export: false,
+      ready_for_export_at: null,
+      ready_for_export_by: null,
+      created_at: "2026-05-24T10:00:00Z",
+      updated_at: "2026-05-24T10:00:00Z",
+      closed_at: null,
+      checklist_items: [],
+    });
+    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue({
+      case: {
+        id: "case-created",
+        status: "draft",
+        current_stage: "pre_admission",
+        created_at: "2026-05-24T10:00:00Z",
+        updated_at: "2026-05-24T10:00:00Z",
+      },
+      candidate: {
+        id: "candidate-1",
+        name: "Ana Souza",
+        initials: "AS",
+        avatar_url: null,
+      },
+      job: {
+        id: "job-1",
+        title: "Analista Protheus",
+      },
+      checklist: {
+        total: 0,
+        approved: 0,
+        pending: 0,
+        blocked: 0,
+        items: [],
+      },
+      documents: [],
+      main_blockers: [],
+      next_actions: [],
+      summary: {
+        responsible_name: "Juliana",
+        created_at: "2026-05-24T10:00:00Z",
+        last_update_at: "2026-05-24T10:00:00Z",
+        readiness_status: "not_ready",
+        ready_for_export: false,
+      },
+      recent_events: [],
+    });
     vi.mocked(getCandidateBehavioralAssessment).mockResolvedValue(behavioralAssignment);
     vi.mocked(getBehavioralEvaluation).mockResolvedValue({
       id: "evaluation-1",
@@ -739,6 +821,17 @@ describe("Candidate workspace flow", () => {
 
     expect(await screen.findByRole("heading", { name: "Ana Souza" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ações" })).toBeInTheDocument();
+    expect(screen.getByTestId("candidate-profile-primary-action")).toHaveTextContent("Agendar entrevista");
+    expect(screen.getByRole("button", { name: "Observação" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mais ações" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Vincular vaga$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Mover etapa$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Ver score$/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mais ações" }));
+    expect(screen.getByRole("button", { name: /^Editar candidato$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Ver score$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Alterar etapa manualmente$/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Ações" }));
 
@@ -831,6 +924,400 @@ describe("Candidate workspace flow", () => {
     expect(screen.getByText(/Resultado: Não selecionado/i)).toBeInTheDocument();
   });
 
+  it("candidato com vaga ativa não mostra Vincular vaga no cabeçalho e mantém ação manual em Mais ações", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "final",
+          candidate_status: "Final",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Avançar para proposta");
+    expect(screen.queryByRole("button", { name: /^Vincular vaga$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Mover etapa$/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mais ações" }));
+    expect(screen.getByRole("button", { name: /^Alterar etapa manualmente$/i })).toBeInTheDocument();
+  });
+
+  it("candidato sem vaga ativa mostra Vincular vaga como ação principal", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      active_job_id: null,
+      active_job: null,
+      pipeline_entries: [],
+      active_job_decision: null,
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Vincular vaga");
+    expect(screen.getByTestId("candidate-profile-next-action-button")).toHaveTextContent("Vincular vaga");
+  });
+
+  it("botão da Próxima ação usa a mesma ação contextual do cabeçalho", async () => {
+    const user = userEvent.setup();
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "final",
+          candidate_status: "Final",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Avançar para proposta");
+    expect(screen.getByTestId("candidate-profile-next-action-button")).toHaveTextContent("Avançar para proposta");
+
+    await user.click(screen.getByTestId("candidate-profile-next-action-button"));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Pipeline").length).toBeGreaterThan(1);
+    });
+  });
+
+  it("candidato com caso ativo em pré-admissão mostra Abrir pré-admissão como ação principal", async () => {
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: {
+        id: "case-1",
+        candidate_id: "candidate-1",
+        job_id: "job-1",
+        hiring_decision_id: "decision-1",
+        status: "draft",
+        salary_offer: null,
+        start_date: null,
+        work_model: null,
+        notes: null,
+        created_by: "user-1",
+        ready_for_export: false,
+        ready_for_export_at: null,
+        ready_for_export_by: null,
+        created_at: "2026-05-24T10:00:00Z",
+        updated_at: "2026-05-25T10:00:00Z",
+        closed_at: null,
+        checklist_items: [],
+      },
+      can_create: false,
+      hiring_decision_outcome: "hire",
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "pre_admission",
+          candidate_status: "Pré-admissão",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Abrir pré-admissão");
+  });
+
+  it("candidato em Protheus mostra Ver integração Protheus como ação principal", async () => {
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: {
+        id: "case-1",
+        candidate_id: "candidate-1",
+        job_id: "job-1",
+        hiring_decision_id: "decision-1",
+        status: "in_progress",
+        salary_offer: null,
+        start_date: null,
+        work_model: null,
+        notes: null,
+        created_by: "user-1",
+        ready_for_export: false,
+        ready_for_export_at: null,
+        ready_for_export_by: null,
+        created_at: "2026-05-24T10:00:00Z",
+        updated_at: "2026-05-25T10:00:00Z",
+        closed_at: null,
+        checklist_items: [],
+      },
+      can_create: false,
+      hiring_decision_outcome: "hire",
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "protheus",
+          candidate_status: "Protheus",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Ver integração Protheus");
+  });
+
+  it("decisão contratar sem caso ativo abre drawer de início da pré-admissão e cria o caso para HR/Admin", async () => {
+    const user = userEvent.setup();
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: true,
+      hiring_decision_outcome: "hire",
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      active_job_decision: {
+        ...overview.active_job_decision!,
+        hiring_status: "submitted",
+      },
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "hired",
+          candidate_status: "Contratado",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Iniciar pré-admissão");
+    expect(screen.getByTestId("candidate-profile-next-action-button")).toHaveTextContent("Iniciar pré-admissão");
+
+    await user.click(screen.getByTestId("candidate-profile-primary-action"));
+    const drawer = await screen.findByRole("dialog", { name: /Iniciar pré-admissão/i });
+    expect(screen.queryByText("Caso admissional ainda não aberto")).not.toBeInTheDocument();
+    expect(within(drawer).getByText("Analista Protheus")).toBeInTheDocument();
+    expect(within(drawer).getByText("Contratar")).toBeInTheDocument();
+
+    await user.click(within(drawer).getByRole("button", { name: /^Criar caso admissional$/i }));
+
+    await waitFor(() => {
+      expect(preAdmissionService.createPreAdmission).toHaveBeenCalledWith("job-1", "candidate-1", {});
+    });
+    await waitFor(() => {
+      expect(admissionWorkspaceService.getWorkspace).toHaveBeenCalledWith("case-created");
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /Iniciar pré-admissão/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it("cancelar o drawer de pré-admissão mantém o usuário na aba atual", async () => {
+    const user = userEvent.setup();
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: true,
+      hiring_decision_outcome: "hire",
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      active_job_decision: {
+        ...overview.active_job_decision!,
+        hiring_status: "submitted",
+      },
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "hired",
+          candidate_status: "Contratado",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByTestId("candidate-profile-primary-action"));
+    const drawer = await screen.findByRole("dialog", { name: /Iniciar pré-admissão/i });
+
+    await user.click(within(drawer).getByRole("button", { name: /Cancelar/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /Iniciar pré-admissão/i })).not.toBeInTheDocument();
+    });
+    expect(preAdmissionService.createPreAdmission).not.toHaveBeenCalled();
+    expect(screen.queryByText("Caso admissional ainda não aberto")).not.toBeInTheDocument();
+  });
+
+  it("quando o caso já existe a ação principal abre direto a aba de pré-admissão", async () => {
+    const user = userEvent.setup();
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: {
+        id: "case-1",
+        candidate_id: "candidate-1",
+        job_id: "job-1",
+        hiring_decision_id: "decision-1",
+        status: "draft",
+        salary_offer: null,
+        start_date: null,
+        work_model: null,
+        notes: null,
+        created_by: "user-1",
+        ready_for_export: false,
+        ready_for_export_at: null,
+        ready_for_export_by: null,
+        created_at: "2026-05-24T10:00:00Z",
+        updated_at: "2026-05-24T10:00:00Z",
+        closed_at: null,
+        checklist_items: [],
+      },
+      can_create: false,
+      hiring_decision_outcome: "hire",
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "pre_admission",
+          candidate_status: "Pré-admissão",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Abrir pré-admissão");
+    await user.click(screen.getByTestId("candidate-profile-primary-action"));
+    expect(screen.queryByRole("dialog", { name: /Iniciar pré-admissão/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(admissionWorkspaceService.getWorkspace).toHaveBeenCalledWith("case-1");
+    });
+  });
+
+  it("erro 403 ao criar caso pela CTA principal mostra acesso restrito ao RH", async () => {
+    const user = userEvent.setup();
+    vi.mocked(preAdmissionService.createPreAdmission).mockRejectedValueOnce(new HttpError(403, "forbidden"));
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: true,
+      hiring_decision_outcome: "hire",
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      active_job_decision: {
+        ...overview.active_job_decision!,
+        hiring_status: "submitted",
+      },
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "hired",
+          candidate_status: "Contratado",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByTestId("candidate-profile-primary-action"));
+    const drawer = await screen.findByRole("dialog", { name: /Iniciar pré-admissão/i });
+
+    await user.click(within(drawer).getByRole("button", { name: /^Criar caso admissional$/i }));
+
+    expect(await within(drawer).findByText("Acesso restrito ao RH.")).toBeInTheDocument();
+  });
+
+  it("recruiter não vê CTA de iniciar pré-admissão e recebe mensagem de restrição", async () => {
+    mockedUserRole = "recruiter";
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: [
+        {
+          ...overview.pipeline_entries[0],
+          stage: "hired",
+          candidate_status: "Contratado",
+        },
+      ],
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Pré-admissão restrita ao RH.")).toBeInTheDocument();
+    expect(screen.queryByTestId("candidate-profile-primary-action")).not.toBeInTheDocument();
+    expect(preAdmissionService.getPreAdmission).not.toHaveBeenCalled();
+  });
+
   it("abas progressivas: candidato sem vaga ativa não mostra entrevistas, avaliações ou pré-admissão", async () => {
     vi.mocked(candidatesService.getOverview).mockResolvedValue({
       ...overview,
@@ -906,7 +1393,30 @@ describe("Candidate workspace flow", () => {
     },
   );
 
-  it("abas progressivas: candidato contratado mostra Pré-admissão", async () => {
+  it("abas progressivas: candidato contratado COM caso de pré-admissão mostra a aba", async () => {
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: {
+        id: "case-1",
+        candidate_id: "candidate-1",
+        job_id: "job-1",
+        hiring_decision_id: "decision-1",
+        status: "draft",
+        salary_offer: null,
+        start_date: null,
+        work_model: null,
+        notes: null,
+        created_by: "user-1",
+        ready_for_export: false,
+        ready_for_export_at: null,
+        ready_for_export_by: null,
+        created_at: "2026-05-24T10:00:00Z",
+        updated_at: "2026-05-24T10:00:00Z",
+        closed_at: null,
+        checklist_items: [],
+      },
+      can_create: false,
+      hiring_decision_outcome: "hire",
+    });
     vi.mocked(candidatesService.getOverview).mockResolvedValue({
       ...overview,
       pipeline_entries: overview.pipeline_entries.map((entry) => ({
@@ -924,7 +1434,139 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("button", { name: /Pré-admissão/i })).toBeInTheDocument();
+    expect((await screen.findAllByRole("button", { name: /Pré-admissão/i })).length).toBeGreaterThan(0);
+  });
+
+  it("abas progressivas: candidato contratado SEM caso de pré-admissão NÃO mostra a aba", async () => {
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: true,
+      hiring_decision_outcome: "hire",
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "hired",
+        candidate_status: "Contratado",
+      })),
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: "Ana Souza" });
+    expect(screen.queryByRole("button", { name: /^Pré-admissão$/i })).not.toBeInTheDocument();
+  });
+
+  it("candidato contratado SEM decisão Contratar: CTA mostra 'Registrar decisão', não 'Iniciar pré-admissão'", async () => {
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: false,
+      hiring_decision_outcome: null, // sem decisão
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "hired",
+        candidate_status: "Contratado",
+      })),
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // CTA principal deve ser "Registrar decisão", não qualquer variação de pré-admissão
+    const primaryAction = await screen.findByTestId("candidate-profile-primary-action");
+    expect(primaryAction).toHaveTextContent("Registrar decisão");
+    expect(primaryAction).not.toHaveTextContent("pré-admissão");
+    expect(primaryAction).not.toHaveTextContent("Iniciar");
+    expect(primaryAction).not.toHaveTextContent("Mover para Pré-admissão");
+
+    // Card "Próxima ação" também deve mostrar "Registrar decisão"
+    expect(screen.getByTestId("candidate-profile-next-action-button")).toHaveTextContent("Registrar decisão");
+  });
+
+  it("candidato contratado SEM decisão Contratar: botão 'Mover para Pré-admissão' NÃO aparece na aba Ações", async () => {
+    const user = userEvent.setup();
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: false,
+      hiring_decision_outcome: null, // sem decisão
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "hired",
+        candidate_status: "Contratado",
+      })),
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: "Ana Souza" });
+
+    // navegar para aba Ações
+    await user.click(screen.getByRole("button", { name: "Ações" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Mover para Pré-admissão/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it("candidato contratado COM decisão Contratar: botão 'Mover para Pré-admissão' aparece na aba Ações", async () => {
+    const user = userEvent.setup();
+    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+      case: null,
+      can_create: true,
+      hiring_decision_outcome: "hire", // com decisão
+    });
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "hired",
+        candidate_status: "Contratado",
+      })),
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: "Ana Souza" });
+
+    // navegar para aba Ações
+    await user.click(screen.getByRole("button", { name: "Ações" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Mover para Pré-admissão/i })).toBeInTheDocument();
+    });
   });
 
   it("abas progressivas: candidato reprovado mostra Histórico e Comunicação sem Score ou Entrevistas", async () => {
@@ -1739,7 +2381,7 @@ describe("Candidate workspace flow", () => {
     });
   });
 
-  it("Abrir ação prioriza Avaliações quando a pendência é IA comportamental (gate)", async () => {
+  it("ação contextual prioriza Avaliações quando a pendência é IA comportamental (gate)", async () => {
     const user = userEvent.setup();
     vi.mocked(candidatesService.getOverview).mockResolvedValue({
       ...overview,
@@ -1764,8 +2406,8 @@ describe("Candidate workspace flow", () => {
     );
 
     // Gate-based pendency: label from _ACTION_CODE_LABEL["open_behavioral_ai"]
-    expect(await screen.findByText("Avaliação IA comportamental")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Abrir ação/i }));
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Avaliação IA comportamental");
+    await user.click(screen.getAllByRole("button", { name: /Avaliação IA comportamental/i })[0]);
 
     await waitFor(() => {
       expect(screen.getAllByText("IA comportamental pendente").length).toBeGreaterThan(1);
@@ -1879,13 +2521,13 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Mover para Contratado")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Abrir ação/i }));
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Mover para Contratado");
+    await user.click(screen.getAllByRole("button", { name: /Mover para Contratado/i })[0]);
 
     await waitFor(() => {
       expect(screen.getAllByText("Pipeline").length).toBeGreaterThan(1);
     });
-    await user.click(screen.getByRole("button", { name: /^Mover para Contratado$/i }));
+    await user.click(screen.getAllByRole("button", { name: /^Mover para Contratado$/i }).at(-1)!);
 
     await waitFor(() => {
       expect(pipelineService.moveCandidateStage).toHaveBeenCalledWith(
@@ -1988,7 +2630,7 @@ describe("Candidate workspace flow", () => {
     expect(await screen.findByText("Nenhuma pendência.")).toBeInTheDocument();
   });
 
-  it("Abrir ação prioriza agendamento de Entrevista Técnica quando há pendência do gate", async () => {
+  it("ação contextual prioriza agendamento de Entrevista Técnica quando há pendência do gate", async () => {
     const user = userEvent.setup();
     vi.mocked(candidatesService.getOverview).mockResolvedValue({
       ...overview,
@@ -2012,8 +2654,8 @@ describe("Candidate workspace flow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Agendar entrevista técnica")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Abrir ação/i }));
+    expect(await screen.findByTestId("candidate-profile-primary-action")).toHaveTextContent("Agendar entrevista técnica");
+    await user.click(screen.getAllByRole("button", { name: /Agendar entrevista técnica/i })[0]);
 
     expect((await screen.findAllByText("Agendar entrevista técnica")).length).toBeGreaterThan(1);
     expect(screen.getByText("Esta entrevista é necessária para avançar o candidato.")).toBeInTheDocument();

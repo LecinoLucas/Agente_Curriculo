@@ -7,6 +7,7 @@ from uuid import UUID
 from uuid import uuid4
 
 from src.application.services.upload_validation_service import (
+    MIME_EXTENSIONS,
     UploadValidationError,
     ValidatedUpload,
     document_upload_policy,
@@ -15,6 +16,7 @@ from src.application.services.upload_validation_service import (
 )
 from src.core.settings import settings
 from src.domain.exceptions import NotFoundException, ValidationException
+from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistItemModel,
@@ -29,11 +31,13 @@ from src.infrastructure.storage.pre_admission_documents import (
 )
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionCaseResponse,
+    CandidatePortalPreAdmissionChecklistItemResponse,
     CandidatePortalPreAdmissionEnvelopeResponse,
+    CandidatePortalPreAdmissionSummary,
+    CandidatePortalPreAdmissionUploadedDocumentResponse,
     PreAdmissionCaseResponse,
     PreAdmissionChecklistItemCreateRequest,
     PreAdmissionChecklistItemResponse,
-    PreAdmissionChecklistItemWithDocumentsResponse,
     PreAdmissionDocumentResponse,
     PreAdmissionDocumentsResponse,
     PreAdmissionChecklistItemUpdateRequest,
@@ -45,10 +49,32 @@ from src.interface.api.schemas.pre_admission_schemas import (
 )
 
 
+_CANDIDATE_ITEM_DESCRIPTIONS: dict[str, str] = {
+    "cpf": "Envie uma cópia legível do CPF (frente).",
+    "rg": "Envie uma cópia legível do RG (frente e verso, se houver).",
+    "comprovante_endereco": "Comprovante de endereço dos últimos 90 dias.",
+    "carteira_trabalho": "Páginas da carteira de trabalho com foto e dados pessoais.",
+    "pis": "Envie o documento com o número do PIS/PASEP.",
+    "titulo_eleitor": "Frente e verso do título de eleitor.",
+    "certificado_reservista": "Certificado militar/reservista, se aplicável.",
+    "exame_admissional": "Atestado de saúde ocupacional do exame admissional.",
+    "dados_bancarios": "Comprovante da conta para depósito do salário.",
+    "other": "Documento solicitado pelo RH para a admissão.",
+}
+
+
+def _candidate_item_description(item_type: str, fallback: str | None = None) -> str | None:
+    description = _CANDIDATE_ITEM_DESCRIPTIONS.get(item_type)
+    if description:
+        return description
+    return fallback
+
+
 TERMINAL_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
 DOCUMENT_UPLOAD_BLOCKED_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
 CANDIDATE_DOWNLOAD_BLOCKED_CASE_STATUSES = {"cancelled", "offer_declined"}
 MAX_PRE_ADMISSION_DOCUMENT_BYTES = settings.max_upload_size_bytes
+PRE_ADMISSION_CREATE_ALLOWED_PIPELINE_STAGES = {"hired", "pre_admission", "protheus"}
 
 
 class PreAdmissionService:
@@ -58,11 +84,19 @@ class PreAdmissionService:
     async def get(self, *, candidate_id: UUID, job_id: UUID) -> PreAdmissionEnvelopeResponse:
         case = await self._repository.get_active_case(candidate_id=candidate_id, job_id=job_id)
         latest_decision = await self._repository.get_latest_decision(candidate_id=candidate_id, job_id=job_id)
+        active_pipeline = await self._repository.get_active_pipeline_for_job_candidate(
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
         hire_decision = latest_decision if latest_decision and latest_decision.decision_outcome == "hire" else None
         return PreAdmissionEnvelopeResponse(
             case=self._case_response(case) if case else None,
             hiring_decision_outcome=latest_decision.decision_outcome if latest_decision else None,
-            can_create=case is None and hire_decision is not None,
+            can_create=(
+                case is None
+                and hire_decision is not None
+                and self._pipeline_allows_case_creation(active_pipeline)
+            ),
         )
 
     async def create(
@@ -76,6 +110,15 @@ class PreAdmissionService:
         decision = await self._repository.get_hire_decision(candidate_id=candidate_id, job_id=job_id)
         if decision is None:
             raise ValidationException("Pré-admissão disponível apenas após decisão humana submitted de contratação.")
+
+        active_pipeline = await self._repository.get_active_pipeline_for_job_candidate(
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+        if not self._pipeline_allows_case_creation(active_pipeline):
+            raise ValidationException(
+                "Pré-admissão só pode ser iniciada quando a pipeline estiver em etapa compatível de contratação."
+            )
 
         existing_for_decision = await self._repository.get_case_by_decision(decision_id=decision.id)
         if existing_for_decision is not None:
@@ -240,12 +283,33 @@ class PreAdmissionService:
             case = await self._repository.get_candidate_case(candidate_id=candidate_id, case_id=case_id)
             if case is None:
                 raise NotFoundException("Pré-admissão não encontrada.")
-            return CandidatePortalPreAdmissionEnvelopeResponse(case=self._candidate_case_response(case))
+            case_response = self._candidate_case_response(case)
+            return CandidatePortalPreAdmissionEnvelopeResponse(
+                case=case_response,
+                summary=case_response.summary,
+            )
 
         case = await self._repository.get_candidate_pre_admission_case(candidate_id=candidate_id)
+        if case is None:
+            return CandidatePortalPreAdmissionEnvelopeResponse(
+                case=None,
+                summary=CandidatePortalPreAdmissionSummary(has_pre_admission_case=False),
+            )
+        case_response = self._candidate_case_response(case)
         return CandidatePortalPreAdmissionEnvelopeResponse(
-            case=self._candidate_case_response(case) if case else None,
+            case=case_response,
+            summary=case_response.summary,
         )
+
+    async def candidate_portal_summary(
+        self,
+        *,
+        candidate_id: UUID,
+    ) -> CandidatePortalPreAdmissionSummary:
+        case = await self._repository.get_candidate_pre_admission_case(candidate_id=candidate_id)
+        if case is None:
+            return CandidatePortalPreAdmissionSummary(has_pre_admission_case=False)
+        return self._build_summary(case)
 
     async def candidate_upload_document(
         self,
@@ -359,16 +423,32 @@ class PreAdmissionService:
         )
         return self._document_response(document)
 
+    REJECTION_REASON_PUBLIC_MAX_LENGTH = 1000
+    REVIEW_NOTES_MAX_LENGTH = 2000
+
     async def reject_document(
         self,
         *,
         document_id: UUID,
         actor_id: UUID | None,
-        review_notes: str,
+        rejection_reason_public: str | None = None,
+        review_notes: str | None = None,
     ) -> PreAdmissionDocumentResponse:
-        cleaned_notes = review_notes.strip()
-        if not cleaned_notes:
-            raise ValidationException("Informe o motivo da rejeição.")
+        public_reason = self._clean_rejection_text(
+            rejection_reason_public,
+            max_length=self.REJECTION_REASON_PUBLIC_MAX_LENGTH,
+            field_label="motivo público da rejeição",
+        )
+        internal_notes = self._clean_rejection_text(
+            review_notes,
+            max_length=self.REVIEW_NOTES_MAX_LENGTH,
+            field_label="nota interna de rejeição",
+        )
+        if not public_reason and not internal_notes:
+            raise ValidationException(
+                "Informe um motivo público para o candidato ou uma nota interna da rejeição."
+            )
+
         document = await self._required_document(document_id)
         item = await self._repository.get_checklist_item(case_id=document.case_id, item_id=document.checklist_item_id)
         if item is None:
@@ -377,7 +457,8 @@ class PreAdmissionService:
         document.status = "rejected"
         document.reviewed_at = now
         document.reviewed_by = actor_id
-        document.review_notes = cleaned_notes
+        document.review_notes = internal_notes
+        document.rejection_reason_public = public_reason
         document.updated_at = now
         item.status = "rejected"
         item.updated_at = now
@@ -389,10 +470,29 @@ class PreAdmissionService:
             payload={
                 "document_id": str(document.id),
                 "checklist_item_id": str(item.id),
-                "review_notes": cleaned_notes,
+                "has_public_reason": public_reason is not None,
+                "has_internal_note": internal_notes is not None,
             },
         )
         return self._document_response(document)
+
+    @staticmethod
+    def _clean_rejection_text(
+        value: str | None,
+        *,
+        max_length: int,
+        field_label: str,
+    ) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if len(cleaned) > max_length:
+            raise ValidationException(
+                f"O campo {field_label} excede o limite de {max_length} caracteres."
+            )
+        return cleaned
 
     async def document_download(
         self,
@@ -442,6 +542,10 @@ class PreAdmissionService:
         if case is None:
             raise NotFoundException("Caso de pré-admissão não encontrado.")
         return case
+
+    @staticmethod
+    def _pipeline_allows_case_creation(pipeline: CandidateJobPipelineModel | None) -> bool:
+        return pipeline is not None and pipeline.pipeline_stage in PRE_ADMISSION_CREATE_ALLOWED_PIPELINE_STAGES
 
     async def _required_document(self, document_id: UUID) -> PreAdmissionDocumentModel:
         document = await self._repository.get_document(document_id)
@@ -548,23 +652,83 @@ class PreAdmissionService:
 
     @classmethod
     def _candidate_case_response(cls, case: PreAdmissionCaseModel) -> CandidatePortalPreAdmissionCaseResponse:
+        items = sorted(case.checklist_items, key=lambda item: (not item.required, item.created_at))
+        item_responses = [cls._candidate_item_response(item) for item in items]
+        summary = cls._build_summary(case)
         return CandidatePortalPreAdmissionCaseResponse(
             id=case.id,
             status=case.status,  # type: ignore[arg-type]
             salary_offer=case.salary_offer,
             start_date=case.start_date,
             work_model=case.work_model,
-            checklist_items=[cls._item_with_documents_response(item) for item in case.checklist_items],
+            checklist_items=item_responses,
+            summary=summary,
         )
 
     @classmethod
-    def _item_with_documents_response(
+    def _candidate_item_response(
         cls,
         item: PreAdmissionChecklistItemModel,
-    ) -> PreAdmissionChecklistItemWithDocumentsResponse:
-        return PreAdmissionChecklistItemWithDocumentsResponse(
-            **cls._item_response(item).model_dump(),
-            documents=[cls._document_response(document) for document in item.documents if document.status != "replaced"],
+    ) -> CandidatePortalPreAdmissionChecklistItemResponse:
+        active_documents = [doc for doc in item.documents if doc.status != "replaced"]
+        active_documents.sort(key=lambda doc: doc.uploaded_at, reverse=True)
+        latest = active_documents[0] if active_documents else None
+
+        uploaded_document = None
+        rejection_reason_public: str | None = None
+        if latest is not None:
+            uploaded_document = CandidatePortalPreAdmissionUploadedDocumentResponse(
+                id=latest.id,
+                original_filename=latest.original_filename,
+                mime_type=latest.mime_type,
+                size_bytes=latest.size_bytes,
+                status=latest.status,  # type: ignore[arg-type]
+                uploaded_at=latest.uploaded_at,
+            )
+            if latest.status == "rejected":
+                rejection_reason_public = latest.rejection_reason_public
+
+        allowed_types = sorted(MIME_EXTENSIONS.keys() & document_upload_policy().allowed_mime_types)
+        max_file_size_mb = max(1, MAX_PRE_ADMISSION_DOCUMENT_BYTES // (1024 * 1024))
+
+        return CandidatePortalPreAdmissionChecklistItemResponse(
+            item_id=item.id,
+            title=item.title,
+            description=_candidate_item_description(item.item_type),
+            required=item.required,
+            status=item.status,  # type: ignore[arg-type]
+            rejection_reason_public=rejection_reason_public,
+            uploaded_document=uploaded_document,
+            allowed_file_types=allowed_types,
+            max_file_size_mb=max_file_size_mb,
+        )
+
+    @classmethod
+    def _build_summary(cls, case: PreAdmissionCaseModel) -> CandidatePortalPreAdmissionSummary:
+        items = list(case.checklist_items)
+        total = len(items)
+        approved = sum(1 for item in items if item.status == "approved")
+        submitted = sum(
+            1
+            for item in items
+            if any(doc.status in {"uploaded", "approved"} for doc in item.documents)
+        )
+        pending = total - approved
+        next_pending: str | None = None
+        required_first = sorted(items, key=lambda item: (not item.required, item.created_at))
+        for item in required_first:
+            has_active = any(doc.status in {"uploaded", "approved"} for doc in item.documents)
+            if item.status not in {"approved"} and not has_active:
+                next_pending = item.title
+                break
+        return CandidatePortalPreAdmissionSummary(
+            has_pre_admission_case=True,
+            pre_admission_status=case.status,  # type: ignore[arg-type]
+            documents_total=total,
+            documents_pending=max(pending, 0),
+            documents_submitted=submitted,
+            documents_approved=approved,
+            next_pending_document=next_pending,
         )
 
     @staticmethod
@@ -582,6 +746,7 @@ class PreAdmissionService:
             reviewed_at=document.reviewed_at,
             reviewed_by=document.reviewed_by,
             review_notes=document.review_notes,
+            rejection_reason_public=document.rejection_reason_public,
             created_at=document.created_at,
             updated_at=document.updated_at,
         )

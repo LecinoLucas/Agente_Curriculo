@@ -1,6 +1,6 @@
 import { Loader2, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { Button } from "../ui/button";
@@ -19,7 +19,11 @@ const GOOGLE_CANDIDATE_STORAGE_KEY = "candidate-google-auth";
 
 export function CandidateLoginAccessCard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
+
+  const state = location.state as { applicationSubmitted?: boolean } | null;
+  const isApplicationSubmitted = state?.applicationSubmitted;
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,6 +96,11 @@ export function CandidateLoginAccessCard() {
       </CardHeader>
       
       <CardContent className="px-6 pb-6 space-y-6">
+        {isApplicationSubmitted && (
+          <div className="animate-in fade-in slide-in-from-top-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-700">
+            Recebemos sua candidatura. Faça login para acompanhar seu processo.
+          </div>
+        )}
         <form className="space-y-4" onSubmit={handleSubmit} noValidate>
           <div className="space-y-1.5">
             <label htmlFor="candidate-login-email" className="text-xs font-bold tracking-tight text-foreground">

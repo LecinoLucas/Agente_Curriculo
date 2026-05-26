@@ -51,21 +51,59 @@ function mockBaseOverview() {
       full_name: "Logout Tester",
       email: "logout@example.com",
       phone: "11999999999",
-      cpf: "12345678909",
-      salary_expectation: "5500.00",
-      desired_contract_type: "CLT",
       city: "São Paulo",
       state: "SP",
-      profile_completeness: 100,
-      profile_status: "active",
+      application_source: "public_application",
+      application_source_label: "Candidatura pública",
+      salary_expectation: "5500.00",
+      desired_contract_type: "CLT",
     },
-    resume: { has_resume: true, current_version: 1 },
-    applications: [],
-    interviews: [],
-    documents: [],
+    active_application: {
+      pipeline_id: "pipeline-1",
+      job_id: "job-1",
+      job_title: "Analista",
+      pipeline_stage: "screening",
+      status_public: "Em triagem",
+      submitted_at: "2026-05-01T10:00:00Z",
+      current_analysis_id: null,
+      analysis_status: null,
+      resume_version_id: "resume-version-1",
+      resume_filename: "curriculo.pdf",
+      is_talent_pool: false,
+    },
+    application_history: [],
+    latest_resume: {
+      resume_id: "resume-1",
+      resume_version_id: "resume-version-1",
+      file_name: "curriculo.pdf",
+      extraction_status: "completed",
+      uploaded_at: "2026-05-01T10:00:00Z",
+    },
+    public_interview: null,
+    talent_pool: false,
+    status_public: "Em triagem",
+    application_status: "active",
+    current_process_status_label: "Em triagem",
+    is_process_closed: false,
+    closed_reason_public_label: null,
+    can_request_contact: true,
+    can_apply_to_other_jobs: true,
+    public_timeline: null,
+    pre_admission: null,
   });
   (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([]);
-  (candidatePortalService.getPreAdmission as any).mockResolvedValue({ case: null });
+  (candidatePortalService.getPreAdmission as any).mockResolvedValue({
+    case: null,
+    summary: {
+      has_pre_admission_case: false,
+      pre_admission_status: null,
+      documents_total: 0,
+      documents_pending: 0,
+      documents_submitted: 0,
+      documents_approved: 0,
+      next_pending_document: null,
+    },
+  });
   (communicationService.getCandidateCommunications as any).mockResolvedValue({ communications: [] });
   (communicationService.requestCandidateContact as any).mockResolvedValue({});
 }
@@ -261,6 +299,20 @@ describe("CandidatePortalPage.nextSteps", () => {
   it("mostra Entrevista apenas quando houver entrevista agendada", async () => {
     (candidatePortalService.getOverview as any).mockResolvedValue({
       candidate: { full_name: "John Doe", city: "SP", state: "SP" },
+      public_interview: {
+        id: "int-1",
+        status: "scheduled",
+        status_label: "Entrevista agendada",
+        scheduled_at: "2026-06-01T10:00:00Z",
+        interview_type: "hr",
+        interview_type_label: "RH",
+        interview_format: "online",
+        interview_format_label: "Online",
+        location: null,
+        meeting_url: "https://meet.example.com/sala",
+        public_notes: "Entrar 5 minutos antes.",
+        is_online: true,
+      },
       public_timeline: {
         ...baseTimeline,
         current_step_label: "Entrevista",
@@ -281,6 +333,7 @@ describe("CandidatePortalPage.nextSteps", () => {
 
     expect(screen.getAllByText("Entrevista").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Entrevista agendada para/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("candidate-interview-card")).toBeInTheDocument();
   });
 
   it("mostra Resultado apenas quando o processo estiver finalizado", async () => {
@@ -558,7 +611,18 @@ describe("CandidatePortalPage.rejectedProcess", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([]);
-    (candidatePortalService.getPreAdmission as any).mockResolvedValue({ case: null });
+    (candidatePortalService.getPreAdmission as any).mockResolvedValue({
+      case: null,
+      summary: {
+        has_pre_admission_case: false,
+        pre_admission_status: null,
+        documents_total: 0,
+        documents_pending: 0,
+        documents_submitted: 0,
+        documents_approved: 0,
+        next_pending_document: null,
+      },
+    });
     (communicationService.getCandidateCommunications as any).mockResolvedValue({ communications: [] });
     (communicationService.requestCandidateContact as any).mockResolvedValue({});
   });
@@ -834,5 +898,438 @@ describe("CandidatePortalPage.premiumLightThemeAndEmptyStates", () => {
     const headerMailBtn = screen.getByTestId("header-mail-button");
     fireEvent.click(headerMailBtn);
     expect(await screen.findByText("Fique por dentro das comunicações enviadas pelo time de recrutamento.")).toBeInTheDocument();
+  });
+
+  it("mostra card de entrevista com data, local e link quando public_interview vem no overview", async () => {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: {
+        id: "cand-1",
+        full_name: "Marina Agenda",
+        email: "marina@example.com",
+        phone: "11999999999",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "public_application",
+        application_source_label: "Candidatura pública",
+      },
+      active_application: {
+        pipeline_id: "pipeline-1",
+        job_id: "job-1",
+        job_title: "Analista",
+        pipeline_stage: "hr_interview",
+        status_public: "Entrevista",
+        submitted_at: "2026-05-10T10:00:00Z",
+        current_analysis_id: null,
+        analysis_status: null,
+        resume_version_id: "resume-version-1",
+        resume_filename: "marina.pdf",
+        is_talent_pool: false,
+      },
+      application_history: [],
+      latest_resume: {
+        resume_id: "resume-1",
+        resume_version_id: "resume-version-1",
+        file_name: "marina.pdf",
+        extraction_status: "completed",
+        uploaded_at: "2026-05-10T10:00:00Z",
+      },
+      public_interview: {
+        id: "interview-1",
+        status: "scheduled",
+        status_label: "Entrevista agendada",
+        scheduled_at: "2026-06-01T10:00:00Z",
+        interview_type: "hr",
+        interview_type_label: "RH",
+        interview_format: "online",
+        interview_format_label: "Online",
+        location: "Sala virtual RH",
+        meeting_url: "https://meet.example.com/interview-1",
+        public_notes: "Tenha um documento com foto em mãos.",
+        is_online: true,
+      },
+      talent_pool: false,
+      status_public: "Entrevista",
+      application_status: "active",
+      current_process_status_label: "Entrevista",
+      is_process_closed: false,
+      closed_reason_public_label: null,
+      can_request_contact: true,
+      can_apply_to_other_jobs: true,
+      public_timeline: {
+        current_step_key: "interview",
+        current_step_label: "Entrevista",
+        steps: [
+          { key: "application_received", label: "Inscrição recebida", status: "completed", description: "", interview: null },
+          { key: "resume_analysis", label: "Currículo em análise", status: "completed", description: "", interview: null },
+          {
+            key: "interview",
+            label: "Entrevista",
+            status: "current",
+            description: "Sua entrevista foi agendada.",
+            interview: {
+              id: "interview-1",
+              status: "scheduled",
+              status_label: "Entrevista agendada",
+              scheduled_at: "2026-06-01T10:00:00Z",
+              interview_type: "hr",
+              interview_type_label: "RH",
+              interview_format: "online",
+              interview_format_label: "Online",
+              location: "Sala virtual RH",
+              meeting_url: "https://meet.example.com/interview-1",
+              public_notes: "Tenha um documento com foto em mãos.",
+              is_online: true,
+            },
+          },
+          { key: "result", label: "Resultado", status: "upcoming", description: "", interview: null },
+        ],
+      },
+    });
+
+    renderPortal();
+
+    const interviewCard = await screen.findByTestId("candidate-interview-card");
+    expect(interviewCard).toBeInTheDocument();
+    expect(within(interviewCard).getByText(/Entrevista agendada para/i)).toBeInTheDocument();
+    expect(within(interviewCard).getByText("Tipo: RH.")).toBeInTheDocument();
+    expect(within(interviewCard).getByText("Formato: Online.")).toBeInTheDocument();
+    expect(within(interviewCard).getByText("Local: Sala virtual RH")).toBeInTheDocument();
+    expect(within(interviewCard).getByRole("link", { name: /acessar link da entrevista/i })).toHaveAttribute(
+      "href",
+      "https://meet.example.com/interview-1",
+    );
+    expect(within(interviewCard).getByText("Tenha um documento com foto em mãos.")).toBeInTheDocument();
+  });
+
+  it("sincronizar recarrega overview e atualiza a entrevista visível", async () => {
+    (candidatePortalService.getOverview as any)
+      .mockResolvedValueOnce({
+        candidate: { id: "cand-1", full_name: "Marina Agenda", email: "marina@example.com", phone: "11999999999", city: "São Paulo", state: "SP", application_source: "public_application", application_source_label: "Candidatura pública" },
+        active_application: { pipeline_id: "pipeline-1", job_id: "job-1", job_title: "Analista", pipeline_stage: "hr_interview", status_public: "Entrevista", submitted_at: "2026-05-10T10:00:00Z", current_analysis_id: null, analysis_status: null, resume_version_id: "resume-version-1", resume_filename: "marina.pdf", is_talent_pool: false },
+        application_history: [],
+        latest_resume: { resume_id: "resume-1", resume_version_id: "resume-version-1", file_name: "marina.pdf", extraction_status: "completed", uploaded_at: "2026-05-10T10:00:00Z" },
+        public_interview: { id: "interview-1", status: "scheduled", status_label: "Entrevista agendada", scheduled_at: "2026-06-01T10:00:00Z", interview_type: "hr", interview_type_label: "RH", interview_format: "online", interview_format_label: "Online", location: "Sala A", meeting_url: "https://meet.example.com/1", public_notes: null, is_online: true },
+        talent_pool: false,
+        status_public: "Entrevista",
+        application_status: "active",
+        current_process_status_label: "Entrevista",
+        is_process_closed: false,
+        closed_reason_public_label: null,
+        can_request_contact: true,
+        can_apply_to_other_jobs: true,
+        public_timeline: { current_step_key: "interview", current_step_label: "Entrevista", steps: [] },
+      })
+      .mockResolvedValueOnce({
+        candidate: { id: "cand-1", full_name: "Marina Agenda", email: "marina@example.com", phone: "11999999999", city: "São Paulo", state: "SP", application_source: "public_application", application_source_label: "Candidatura pública" },
+        active_application: { pipeline_id: "pipeline-1", job_id: "job-1", job_title: "Analista", pipeline_stage: "hr_interview", status_public: "Entrevista", submitted_at: "2026-05-10T10:00:00Z", current_analysis_id: null, analysis_status: null, resume_version_id: "resume-version-1", resume_filename: "marina.pdf", is_talent_pool: false },
+        application_history: [],
+        latest_resume: { resume_id: "resume-1", resume_version_id: "resume-version-1", file_name: "marina.pdf", extraction_status: "completed", uploaded_at: "2026-05-10T10:00:00Z" },
+        public_interview: { id: "interview-1", status: "rescheduled", status_label: "Entrevista agendada", scheduled_at: "2026-06-02T14:30:00Z", interview_type: "hr", interview_type_label: "RH", interview_format: "online", interview_format_label: "Online", location: "Sala B", meeting_url: "https://meet.example.com/2", public_notes: "Horário atualizado.", is_online: true },
+        talent_pool: false,
+        status_public: "Entrevista",
+        application_status: "active",
+        current_process_status_label: "Entrevista",
+        is_process_closed: false,
+        closed_reason_public_label: null,
+        can_request_contact: true,
+        can_apply_to_other_jobs: true,
+        public_timeline: { current_step_key: "interview", current_step_label: "Entrevista", steps: [] },
+      });
+
+    (candidatePortalService.listBehavioralAssessments as any).mockResolvedValue([]);
+    (candidatePortalService.getPreAdmission as any).mockResolvedValue({
+      case: null,
+      summary: {
+        has_pre_admission_case: false,
+        pre_admission_status: null,
+        documents_total: 0,
+        documents_pending: 0,
+        documents_submitted: 0,
+        documents_approved: 0,
+        next_pending_document: null,
+      },
+    });
+    (communicationService.getCandidateCommunications as any).mockResolvedValue({ communications: [] });
+
+    renderPortal();
+
+    expect(await screen.findByText(/Sala A/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /sincronizar/i }));
+
+    await waitFor(() => {
+      expect(candidatePortalService.getOverview).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText(/Sala B/)).toBeInTheDocument();
+    expect(screen.getByText("Horário atualizado.")).toBeInTheDocument();
+  });
+
+  it("resultado final sem entrevista pública não inventa entrevista realizada", async () => {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: {
+        id: "cand-1",
+        full_name: "Resultado Sem Entrevista",
+        email: "resultado@example.com",
+        phone: "11999999999",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "public_application",
+        application_source_label: "Candidatura pública",
+      },
+      active_application: null,
+      application_history: [],
+      latest_resume: {
+        resume_id: "resume-1",
+        resume_version_id: "resume-version-1",
+        file_name: "resultado.pdf",
+        extraction_status: "completed",
+        uploaded_at: "2026-05-10T10:00:00Z",
+      },
+      public_interview: null,
+      talent_pool: false,
+      status_public: "Admitido",
+      application_status: "admitted",
+      current_process_status_label: "Admitido",
+      is_process_closed: true,
+      closed_reason_public_label: "Admissão concluída.",
+      can_request_contact: true,
+      can_apply_to_other_jobs: true,
+      public_timeline: {
+        current_step_key: "result",
+        current_step_label: "Admitido",
+        steps: [
+          { key: "application_received", label: "Inscrição recebida", status: "completed", description: "", interview: null },
+          { key: "resume_analysis", label: "Currículo em análise", status: "completed", description: "", interview: null },
+          { key: "interview", label: "Entrevista", status: "completed", description: "", interview: null },
+          { key: "result", label: "Admitido", status: "current", description: "", interview: null },
+        ],
+      },
+    });
+
+    renderPortal();
+
+    expect(await screen.findByText("Currículo analisado")).toBeInTheDocument();
+    expect(screen.queryByText("Entrevista realizada")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("candidate-interview-card")).not.toBeInTheDocument();
+  });
+});
+
+describe("CandidatePortalPage.preAdmission", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockBaseOverview();
+  });
+
+  function buildEnvelope() {
+    return {
+      case: {
+        id: "case-1",
+        status: "documents_pending",
+        salary_offer: null,
+        start_date: null,
+        work_model: null,
+        checklist_items: [
+          {
+            item_id: "item-1",
+            title: "CPF",
+            description: "Envie o CPF",
+            required: true,
+            status: "pending",
+            rejection_reason_public: null,
+            uploaded_document: null,
+            allowed_file_types: ["application/pdf", "image/jpeg", "image/png"],
+            max_file_size_mb: 10,
+          },
+          {
+            item_id: "item-2",
+            title: "RG",
+            description: "Envie o RG",
+            required: true,
+            status: "rejected",
+            rejection_reason_public: "Foto borrada, envie novamente.",
+            uploaded_document: {
+              id: "doc-1",
+              original_filename: "rg.pdf",
+              mime_type: "application/pdf",
+              size_bytes: 1024,
+              status: "rejected",
+              uploaded_at: "2026-05-20T10:00:00Z",
+            },
+            allowed_file_types: ["application/pdf", "image/jpeg", "image/png"],
+            max_file_size_mb: 10,
+          },
+          {
+            item_id: "item-3",
+            title: "Comprovante de endereço",
+            description: null,
+            required: true,
+            status: "approved",
+            rejection_reason_public: null,
+            uploaded_document: {
+              id: "doc-2",
+              original_filename: "endereco.pdf",
+              mime_type: "application/pdf",
+              size_bytes: 1024,
+              status: "approved",
+              uploaded_at: "2026-05-21T10:00:00Z",
+            },
+            allowed_file_types: ["application/pdf", "image/jpeg", "image/png"],
+            max_file_size_mb: 10,
+          },
+        ],
+        summary: {
+          has_pre_admission_case: true,
+          pre_admission_status: "documents_pending",
+          documents_total: 3,
+          documents_pending: 2,
+          documents_submitted: 1,
+          documents_approved: 1,
+          next_pending_document: "CPF",
+        },
+      },
+      summary: {
+        has_pre_admission_case: true,
+        pre_admission_status: "documents_pending",
+        documents_total: 3,
+        documents_pending: 2,
+        documents_submitted: 1,
+        documents_approved: 1,
+        next_pending_document: "CPF",
+      },
+    };
+  }
+
+  function mockOverviewWithPreAdmission() {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: {
+        id: "cand-1",
+        full_name: "Aline Pré-admissão",
+        email: "aline@example.com",
+        phone: "11999999999",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "manual",
+        application_source_label: "Indicação",
+      },
+      active_application: {
+        pipeline_id: "pipeline-1",
+        job_id: "job-1",
+        job_title: "Analista Protheus",
+        pipeline_stage: "pre_admission",
+        status_public: "Pré-admissão em andamento",
+        submitted_at: "2026-04-15T10:00:00Z",
+        current_analysis_id: null,
+        analysis_status: null,
+        resume_version_id: "resume-version-1",
+        resume_filename: "curriculo.pdf",
+        is_talent_pool: false,
+      },
+      application_history: [],
+      latest_resume: null,
+      public_interview: null,
+      talent_pool: false,
+      status_public: "Pré-admissão",
+      application_status: "active",
+      current_process_status_label: "Pré-admissão",
+      is_process_closed: false,
+      closed_reason_public_label: null,
+      can_request_contact: true,
+      can_apply_to_other_jobs: true,
+      public_timeline: null,
+      pre_admission: {
+        has_pre_admission_case: true,
+        pre_admission_status: "documents_pending",
+        documents_total: 3,
+        documents_pending: 2,
+        documents_submitted: 1,
+        documents_approved: 1,
+        next_pending_document: "CPF",
+      },
+    });
+    (candidatePortalService.getPreAdmission as any).mockResolvedValue(buildEnvelope());
+  }
+
+  it("mostra tile de pré-admissão no dashboard quando existe caso ativo", async () => {
+    mockOverviewWithPreAdmission();
+
+    renderPortal();
+
+    expect(await screen.findByTestId("candidate-portal-pre-admission-tile")).toBeInTheDocument();
+    expect(screen.getByText(/1 de 3 documentos aprovados/i)).toBeInTheDocument();
+    expect(screen.getByText(/Próximo: CPF/i)).toBeInTheDocument();
+  });
+
+  it("não mostra tile de pré-admissão quando não existe caso", async () => {
+    renderPortal();
+
+    await screen.findByText("STATUS ATUAL");
+    expect(screen.queryByTestId("candidate-portal-pre-admission-tile")).not.toBeInTheDocument();
+  });
+
+  it("renderiza card-resumo dentro do perfil com lista de documentos", async () => {
+    mockOverviewWithPreAdmission();
+
+    renderPortal();
+
+    fireEvent.click(await screen.findByTestId("candidate-portal-pre-admission-tile-cta"));
+
+    const card = await screen.findByTestId("candidate-portal-pre-admission-card");
+    const view = within(card);
+    expect(view.getByText("CPF")).toBeInTheDocument();
+    expect(view.getByText("RG")).toBeInTheDocument();
+    expect(view.getByText("Comprovante de endereço")).toBeInTheDocument();
+    expect(view.getAllByText(/Correção solicitada/i).length).toBeGreaterThan(0);
+    expect(view.getByTestId("candidate-portal-pre-admission-rejection-reason")).toHaveTextContent(
+      /Foto borrada/,
+    );
+    expect(view.getByText(/Documento aprovado pelo RH/i)).toBeInTheDocument();
+  });
+
+  it("não expõe dados internos de RH/Protheus no card-resumo do portal", async () => {
+    mockOverviewWithPreAdmission();
+
+    renderPortal();
+
+    fireEvent.click(await screen.findByTestId("candidate-portal-pre-admission-tile-cta"));
+
+    const card = await screen.findByTestId("candidate-portal-pre-admission-card");
+    const view = within(card);
+    expect(view.queryByText(/protheus/i)).not.toBeInTheDocument();
+    expect(view.queryByText(/observa[çc][ãa]o do rh/i)).not.toBeInTheDocument();
+    expect(view.queryByText(/reviewed_by/i)).not.toBeInTheDocument();
+    expect(view.queryByText(/payload/i)).not.toBeInTheDocument();
+    expect(view.queryByText(/score/i)).not.toBeInTheDocument();
+  });
+
+  it("upload chama endpoint correto e recarrega pré-admissão", async () => {
+    mockOverviewWithPreAdmission();
+    (candidatePortalService.uploadPreAdmissionDocument as any).mockResolvedValue({
+      id: "doc-new",
+      original_filename: "cpf.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 1024,
+      status: "uploaded",
+      uploaded_at: "2026-05-25T10:00:00Z",
+    });
+
+    renderPortal();
+
+    fireEvent.click(await screen.findByTestId("candidate-portal-pre-admission-tile-cta"));
+    const card = await screen.findByTestId("candidate-portal-pre-admission-card");
+
+    const fileInput = within(card).getByLabelText(/Enviar documento para CPF/i) as HTMLInputElement;
+    const file = new File(["pdf"], "cpf.pdf", { type: "application/pdf" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(candidatePortalService.uploadPreAdmissionDocument).toHaveBeenCalledWith(
+        "case-1",
+        "item-1",
+        expect.any(FormData),
+      );
+    });
+    // initial load + reloadPreAdmission after upload
+    expect((candidatePortalService.getPreAdmission as any).mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(toast.success).toHaveBeenCalledWith("Documento enviado para análise.");
   });
 });

@@ -75,6 +75,7 @@ function renderPage(initialEntry = "/candidato/cadastro") {
       <Routes>
         <Route path="/candidato/cadastro" element={<PublicApplicationPage />} />
         <Route path="/candidato/portal" element={<div>Portal destino</div>} />
+        <Route path="/candidato/login" element={<div>Login destino</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -275,7 +276,7 @@ describe("PublicApplicationPage", () => {
     expect(screen.queryByText(/e-mail já cadastrado/i)).not.toBeInTheDocument();
   });
 
-  it("exibe mensagem genérica segura quando o submit retorna conflito", async () => {
+  it("redireciona para o login quando o submit retorna conflito 409", async () => {
     (publicApplicationService.submitApplication as any).mockRejectedValue(
       new HttpError(409, "Já existe um cadastro com este CPF. Faça login para continuar.")
     );
@@ -293,9 +294,7 @@ describe("PublicApplicationPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /enviar candidatura/i }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
-        "Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH."
-      );
+      expect(screen.getByText("Login destino")).toBeInTheDocument();
     });
   });
 });

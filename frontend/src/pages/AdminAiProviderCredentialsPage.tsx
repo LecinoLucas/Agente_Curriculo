@@ -513,7 +513,7 @@ export function AdminAiProviderCredentialsPage() {
                       <div className="space-y-1">
                         <p className="font-medium text-[hsl(var(--text))]">{credential.label}</p>
                         <p className="font-mono text-xs text-[hsl(var(--text-muted))]">
-                          {credential.masked_key || `****...${credential.key_last4}`}
+                          {credential.masked_key}
                         </p>
                       </div>
                     </TableCell>

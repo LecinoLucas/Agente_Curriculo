@@ -250,11 +250,21 @@ export type NextActionSuggestion = {
   label: string;
   hint: string;
   targetTab?: string;
+  actionable?: boolean;
+};
+
+export type NextActionContext = {
+  preAdmission?: {
+    hasAccess?: boolean;
+    hasActiveCase?: boolean;
+    canCreateCase?: boolean;
+    hiringDecisionOutcome?: string | null;
+  };
 };
 
 const _ACTION_CODE_LABEL: Record<string, string> = {
-  open_pre_admission: "Abrir pré-admissão",
-  open_decision: "Registrar decisão de contratação",
+  open_pre_admission: "Abrir admissão",
+  open_decision: "Registrar decisão",
   open_behavioral_ai: "Avaliação IA comportamental",
   open_behavioral_assessment: "Avaliação comportamental",
   open_scorecard: "Registrar scorecard",
@@ -274,13 +284,19 @@ const _ACTION_CODE_TAB: Record<string, string> = {
 export function deriveNextAction(
   overview: CandidateOverview | null,
   activeEntry: CandidatePipelineEntryOverview | null,
+  context?: NextActionContext,
 ): NextActionSuggestion {
   if (!activeEntry) {
-    return { label: "Adicionar a uma vaga", hint: "Candidato sem vaga ativa" };
+    return {
+      label: "Vincular vaga",
+      hint: "Candidato sem vaga ativa",
+      targetTab: "link_job",
+      actionable: true,
+    };
   }
 
   if (isSuccessTerminalStage(activeEntry.stage)) {
-    return { label: "Sem ação pendente", hint: "Candidato admitido" };
+    return { label: "Sem ação pendente", hint: "Candidato admitido", actionable: false };
   }
 
   if (
@@ -288,17 +304,80 @@ export function deriveNextAction(
     isTerminalStatus(activeEntry.candidate_status)
   ) {
     if (activeEntry.stage === "admitted") {
-      return { label: "Sem ação pendente", hint: "Candidato admitido" };
+      return { label: "Sem ação pendente", hint: "Candidato admitido", actionable: false };
     }
     if (isPostHiringActiveStage(activeEntry.stage) || activeEntry.relationship_status === "hired") {
-      return { label: "Sem ação pendente", hint: "Contratado nesta vaga" };
+      return { label: "Sem ação pendente", hint: "Contratado nesta vaga", actionable: false };
     }
-    return { label: "Sem ação pendente", hint: "Processo encerrado" };
+    return { label: "Sem ação pendente", hint: "Processo encerrado", actionable: false };
+  }
+
+  const preAdmissionContext = context?.preAdmission;
+  if (
+    activeEntry.stage === "hired" ||
+    activeEntry.stage === "pre_admission" ||
+    activeEntry.stage === "protheus"
+  ) {
+    if (preAdmissionContext?.hasAccess === false) {
+      return {
+        label: "Pré-admissão restrita ao RH.",
+        hint: "Disponível apenas para RH e administradores.",
+        actionable: false,
+      };
+    }
+
+    if (preAdmissionContext?.hasActiveCase) {
+      if (activeEntry.stage === "protheus") {
+        return {
+          label: "Ver integração Protheus",
+          hint: "Confira o caso admissional antes da integração",
+          targetTab: "pre_admission",
+          actionable: true,
+        };
+      }
+      return {
+        label: "Abrir pré-admissão",
+        hint:
+          activeEntry.stage === "hired"
+            ? "Acompanhe o caso admissional já criado"
+            : "Acompanhe checklist, pendências e readiness",
+        targetTab: "pre_admission",
+        actionable: true,
+      };
+    }
+
+    if (preAdmissionContext?.canCreateCase && preAdmissionContext.hiringDecisionOutcome === "hire") {
+      return {
+        label: "Iniciar pré-admissão",
+        hint: "Crie o caso admissional para iniciar checklist, documentos e integração.",
+        targetTab: "pre_admission:create",
+        actionable: true,
+      };
+    }
+
+    if (preAdmissionContext?.hiringDecisionOutcome === "hire") {
+      return {
+        label: "Aguardar etapa compatível",
+        hint: "Mova o candidato para a etapa de contratação antes de abrir a pré-admissão.",
+        actionable: false,
+      };
+    }
+
+    // Sem decisão Contratar (outcome nulo ou diferente de hire) e sem caso ativo:
+    // a ação correta é registrar a decisão de contratação.
+    if (preAdmissionContext !== undefined) {
+      return {
+        label: "Registrar decisão",
+        hint: "A pré-admissão só fica disponível após a decisão de contratar.",
+        targetTab: "workflow:hiring_decision",
+        actionable: true,
+      };
+    }
   }
 
   const hasResume = (overview?.resumes ?? []).length > 0;
   if (!hasResume) {
-    return { label: "Aguardar currículo", hint: "Candidato ainda não enviou currículo" };
+    return { label: "Aguardar currículo", hint: "Candidato ainda não enviou currículo", actionable: false };
   }
 
   // Gate-based pendencies are authoritative: the first gate's action code
@@ -320,11 +399,20 @@ export function deriveNextAction(
       label = "Agendar entrevista técnica";
       hint = "Agende e conclua a entrevista técnica antes de avançar.";
     }
+    if (code === "open_pre_admission") {
+      label =
+        activeEntry.stage === "hired"
+          ? "Iniciar pré-admissão"
+          : activeEntry.stage === "protheus"
+            ? "Ver integração Protheus"
+            : "Abrir admissão";
+    }
 
     return {
       label,
       hint,
       targetTab,
+      actionable: true,
     };
   }
 
@@ -335,30 +423,69 @@ export function deriveNextAction(
     analysis.status === "processing" ||
     analysis.status === "retry_scheduled"
   ) {
-    return { label: "Aguardar análise da IA", hint: "Aderência será atualizada quando a análise terminar" };
+    return {
+      label: "Aguardar análise da IA",
+      hint: "Aderência será atualizada quando a análise terminar",
+      actionable: false,
+    };
   }
+
+  const pendencies = overview?.preview_pendencies ?? [];
+  const hasInterviewNotScheduled = pendencies.some(p => p.id === "interview_not_scheduled");
+  const hasInterviewScheduled = pendencies.some(p => p.id === "interview_scheduled");
+  const hasInterviewAwaitingFeedback = pendencies.some(p => p.id === "interview_feedback_pending");
+  const hasScorecardPending = pendencies.some(p => p.id === "interview_scorecard_pending");
+  const hasBehavioralPending = pendencies.some(p => p.id === "behavioral_assignment");
 
   switch (activeEntry.stage) {
     case "entry":
-      return { label: "Mover para triagem", hint: "Sugestão com base no estágio atual" };
+      return { label: "Mover para triagem", hint: "Sugestão com base no estágio atual", targetTab: "workflow", actionable: true };
     case "screening":
-      return { label: "Agendar entrevista", hint: "Candidato em triagem" };
+      return { label: "Agendar entrevista", hint: "Candidato em triagem", targetTab: "interviews", actionable: true };
     case "hr_interview":
     case "technical_interview":
-      return { label: "Registrar feedback da entrevista", hint: "Entrevista em andamento", targetTab: "interviews" };
+      if (hasInterviewNotScheduled) {
+        return { label: "Agendar entrevista", hint: "Nenhuma entrevista agendada", targetTab: "interviews", actionable: true };
+      }
+      if (hasInterviewScheduled) {
+        return { label: "Aguardar entrevista", hint: "Entrevista agendada", targetTab: "interviews", actionable: false };
+      }
+      if (hasInterviewAwaitingFeedback) {
+        return {
+          label: "Registrar feedback da entrevista",
+          hint: "Entrevista concluída",
+          targetTab: "interviews",
+          actionable: true,
+        };
+      }
+      if (hasScorecardPending) {
+        return { label: "Preencher scorecard", hint: "Scorecard pendente", targetTab: "interviews", actionable: true };
+      }
+      if (hasBehavioralPending) {
+         return {
+           label: "Aguardar teste comportamental",
+           hint: "Teste comportamental pendente",
+           targetTab: "assessments",
+           actionable: false,
+         };
+      }
+      return { label: "Avançar candidato", hint: "Pendências da entrevista concluídas", targetTab: "workflow", actionable: true };
     case "final":
-      return { label: "Avançar para proposta", hint: "Etapa final" };
+      return { label: "Avançar para proposta", hint: "Etapa final", targetTab: "workflow", actionable: true };
     case "offer":
-      return { label: "Mover para Contratado", hint: "Finalize a etapa na pipeline", targetTab: "workflow" };
+      return { label: "Mover para Contratado", hint: "Finalize a etapa na pipeline", targetTab: "workflow", actionable: true };
     case "hired":
-      return { label: "Abrir pré-admissão", hint: "Inicie ou acompanhe o caso admissional", targetTab: "pre_admission" };
+      // Fallback sem contexto de pré-admissão: não exibir ação de pré-admissão
+      // pois não sabemos se existe decisão Contratar. Direcionar para decisão.
+      return { label: "Registrar decisão", hint: "Registre a decisão de contratação para prosseguir", targetTab: "workflow:hiring_decision", actionable: true };
     case "pre_admission":
-      return { label: "Abrir pré-admissão", hint: "Acompanhe checklist, pendências e readiness", targetTab: "pre_admission" };
+      // Sem contexto: não há como saber se o caso existe — ação neutra
+      return { label: "Acompanhar pré-admissão", hint: "Acesse a aba de pré-admissão para acompanhar o processo", targetTab: "workflow", actionable: true };
     case "protheus":
-      return { label: "Abrir pré-admissão", hint: "Confira o caso admissional antes da integração", targetTab: "pre_admission" };
+      return { label: "Ver integração Protheus", hint: "Confira o caso admissional antes da integração", targetTab: "pre_admission", actionable: true };
     case "admitted":
-      return { label: "Sem ação pendente", hint: "Candidato admitido" };
+      return { label: "Sem ação pendente", hint: "Candidato admitido", actionable: false };
     default:
-      return { label: "Revisar próximas etapas", hint: "Acompanhar pipeline" };
+      return { label: "Revisar próximas etapas", hint: "Acompanhar pipeline", targetTab: "workflow", actionable: true };
   }
 }

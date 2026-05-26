@@ -2,13 +2,20 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import sqlalchemy as sa
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.database.models.admission_model import CandidateDocument
+from src.domain.entities.user import User, UserRole
+from src.infrastructure.database.models.admission_model import Admission, CandidateDocument
+from src.infrastructure.database.models.candidate_job_pipeline_model import (
+    CandidateJobPipelineModel,
+)
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.document_ai_analysis_model import (
     DocumentAIAnalysisModel,
 )
+from src.infrastructure.database.models.job_model import JobModel
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.schemas.document_ai_schemas import (
     DocumentAIAnalysisResponse,
@@ -16,7 +23,6 @@ from src.interface.api.schemas.document_ai_schemas import (
 )
 from src.interface.workers.document_ai_dispatcher import enqueue_document_ai
 from src.observability.context import get_correlation_id
-import structlog
 
 logger = structlog.get_logger(__name__)
 
@@ -38,6 +44,46 @@ def _to_response(model: DocumentAIAnalysisModel) -> DocumentAIAnalysisResponse:
     )
 
 
+async def _assert_document_ai_access(
+    *,
+    db: AsyncSession,
+    document_id: UUID,
+    current_user: User,
+) -> CandidateDocument:
+    document = await db.scalar(
+        sa.select(CandidateDocument).where(CandidateDocument.id == document_id)
+    )
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    admission = await db.scalar(sa.select(Admission).where(Admission.id == document.admission_id))
+    if admission is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    candidate_exists = await db.scalar(
+        sa.select(CandidateModel.id).where(CandidateModel.id == admission.candidate_id)
+    )
+    job_exists = await db.scalar(sa.select(JobModel.id).where(JobModel.id == admission.job_id))
+    if candidate_exists is None or job_exists is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if current_user.role == UserRole.ADMIN:
+        return document
+
+    pipeline_exists = await db.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_id)
+        .where(
+            CandidateJobPipelineModel.candidate_id == admission.candidate_id,
+            CandidateJobPipelineModel.job_id == admission.job_id,
+        )
+        .limit(1)
+    )
+    if pipeline_exists is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Document access denied")
+
+    return document
+
+
 @router.get("/{document_id}/analysis", response_model=DocumentAIAnalysisResponse)
 async def get_latest_document_ai_analysis(
     document_id: UUID,
@@ -52,6 +98,7 @@ async def get_latest_document_ai_analysis(
     )
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    await _assert_document_ai_access(db=db, document_id=document_id, current_user=current_user)
     return _to_response(analysis)
 
 
@@ -61,6 +108,7 @@ async def get_document_ai_history(
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> list[DocumentAIAnalysisResponse]:
+    await _assert_document_ai_access(db=db, document_id=document_id, current_user=current_user)
     rows = await db.execute(
         sa.select(DocumentAIAnalysisModel)
         .where(DocumentAIAnalysisModel.document_id == document_id)
@@ -87,11 +135,11 @@ async def retry_document_ai_analysis(
             detail="Retry is allowed only for failed analyses",
         )
 
-    document = await db.scalar(
-        sa.select(CandidateDocument).where(CandidateDocument.id == analysis.document_id)
+    document = await _assert_document_ai_access(
+        db=db,
+        document_id=analysis.document_id,
+        current_user=current_user,
     )
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
     new_analysis = DocumentAIAnalysisModel(
         document_id=analysis.document_id,
@@ -117,7 +165,7 @@ async def retry_document_ai_analysis(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to enqueue retry",
-        )
+        ) from exc
 
     return DocumentAIRetryResponse(
         analysis_id=analysis.id,
@@ -149,6 +197,8 @@ async def cleanup_stale_processing_analyses(
 
     if count > 0:
         await db.commit()
-        logger.info("document_ai.cleanup_stale_analyses", count=count, timeout_seconds=timeout_seconds)
+        logger.info(
+            "document_ai.cleanup_stale_analyses", count=count, timeout_seconds=timeout_seconds
+        )
 
     return {"cleaned": count, "timeout_seconds": timeout_seconds}

@@ -117,6 +117,13 @@ describe("AppShell — TopNavbar", () => {
       expectTopNavMissing(["Avaliações", "IA & Automação", "Adm"]);
     });
 
+    it("não exibe IA & Automação para viewer", () => {
+      renderShell("viewer");
+
+      expectTopNavLabels(["Dashboard", "Pipeline", "Recrutamento"]);
+      expectTopNavMissing(["Avaliações", "IA & Automação", "Gestores", "Adm"]);
+    });
+
     it("renderiza somente Portal do Candidato para candidate quando AppShell é usado nesse fluxo", () => {
       renderShell("candidate", "/candidato/portal");
 

@@ -17,8 +17,8 @@ from src.application.services.candidate_score_status_deriver import (
 from src.application.services.pipeline_gate_evaluator import PipelineGateEvaluator
 from src.core.pipeline_stages import is_post_hiring_active_stage, is_success_terminal_stage
 from src.domain.entities.user import User
-from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.analysis_model import AnalysisModel
+from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.repositories.sqlalchemy_candidate_repository import (
     CandidateDeleteSummary,
     SQLAlchemyCandidateRepository,
@@ -28,20 +28,20 @@ from src.interface.api.schemas.candidate_schemas import (
     CandidateActiveJobResponse,
     CandidateCheckResponse,
     CandidateJobMatchSummaryResponse,
+    CandidateLatestAnalysisPipelineResponse,
+    CandidateLatestAnalysisResponse,
     CandidateLatestMovementResponse,
     CandidateLatestNoteResponse,
     CandidateListSummaryResponse,
-    CandidateLatestAnalysisPipelineResponse,
-    CandidateLatestAnalysisResponse,
     CandidateOverviewResponse,
     CandidatePipelineEntryResponse,
+    CandidatePreviewPendencyResponse,
     CandidateProcessHistoryBehavioralResponse,
     CandidateProcessHistoryDecisionResponse,
     CandidateProcessHistoryInterviewResponse,
     CandidateProcessHistoryItemResponse,
     CandidateProcessHistoryResponse,
     CandidateProcessHistoryScorecardResponse,
-    CandidatePreviewPendencyResponse,
     CandidateResponse,
     CandidateResumeSummaryResponse,
     CandidateScoreDimensionsResponse,
@@ -358,24 +358,31 @@ class CandidateService:
         analysis.updated_at = now
         await session.flush()
 
-    async def get_overview(self, candidate_id: UUID) -> CandidateOverviewResponse:
+    async def get_overview(self, candidate_id: UUID, job_id: UUID | None = None) -> CandidateOverviewResponse:
         candidate = await self.get(candidate_id)
         resume_rows = await self._repository.list_resume_summaries(candidate_id)
         match_rows = await self._repository.list_top_job_matches(candidate_id)
         pipeline_rows = await self._repository.list_pipeline_entries(candidate_id)
-        active_pipeline_row = next(
-            (row for row in pipeline_rows if row.get("relationship_status") == "active"),
-            None,
-        )
-        if active_pipeline_row is None:
+
+        if job_id is not None:
             active_pipeline_row = next(
-                (
-                    row
-                    for row in pipeline_rows
-                    if row.get("relationship_status") == "hired" or is_success_terminal_stage(row.get("stage"))
-                ),
+                (row for row in pipeline_rows if str(row.get("job_id")) == str(job_id)),
                 None,
             )
+        else:
+            active_pipeline_row = next(
+                (row for row in pipeline_rows if row.get("relationship_status") == "active"),
+                None,
+            )
+            if active_pipeline_row is None:
+                active_pipeline_row = next(
+                    (
+                        row
+                        for row in pipeline_rows
+                        if row.get("relationship_status") == "hired" or is_success_terminal_stage(row.get("stage"))
+                    ),
+                    None,
+                )
         active_job_id = active_pipeline_row["job_id"] if active_pipeline_row is not None else None
         pipeline_current_analysis_id = (
             active_pipeline_row.get("current_analysis_id")
@@ -585,14 +592,11 @@ class CandidateService:
                 else None
             ),
             preview_pendencies=(
-                gate_pendencies
-                if gate_pendencies
-                else self._build_preview_pendencies(
+                gate_pendencies + self._build_preview_pendencies(
                     has_resume=bool(resume_rows),
                     latest_analysis=latest_analysis,
                     active_stage=active_pipeline_row["stage"] if active_pipeline_row is not None else None,
                     flags=preview_flags,
-                    include_interview_flags=not gate_pendencies_evaluated,
                 )
             ),
             latest_movement=(
@@ -749,7 +753,6 @@ class CandidateService:
         latest_analysis: CandidateLatestAnalysisResponse | None,
         active_stage: str | None,
         flags: dict[str, bool],
-        include_interview_flags: bool = True,
     ) -> list[CandidatePreviewPendencyResponse]:
         pendencies: list[CandidatePreviewPendencyResponse] = []
 
@@ -762,11 +765,16 @@ class CandidateService:
         if flags.get("behavioral_ai_pending"):
             add("behavioral_ai", "IA comportamental pendente", "warning")
         if (
-            include_interview_flags
-            and active_stage in {"hr_interview", "technical_interview"}
-            and flags.get("interview_not_scheduled")
+            active_stage in {"hr_interview", "technical_interview"}
         ):
-            add("interview", "Entrevista não agendada", "warning")
+            if flags.get("interview_not_scheduled"):
+                add("interview_not_scheduled", "Entrevista não agendada", "warning")
+            elif flags.get("interview_scheduled"):
+                add("interview_scheduled", "Entrevista em andamento", "info")
+            elif flags.get("interview_feedback_pending"):
+                add("interview_feedback_pending", "Feedback da entrevista pendente", "warning")
+            elif flags.get("interview_scorecard_pending"):
+                add("interview_scorecard_pending", "Scorecard da entrevista pendente", "warning")
         if not has_resume:
             add("resume", "Currículo ausente", "warning")
         if has_resume and latest_analysis is None:

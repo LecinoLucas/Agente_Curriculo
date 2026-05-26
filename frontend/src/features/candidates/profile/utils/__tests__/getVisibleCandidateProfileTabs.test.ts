@@ -71,13 +71,46 @@ describe("getVisibleCandidateProfileTabs", () => {
     expect(tabs).toContain("history");
   });
 
-  it("candidato Contratado mostra Pré-admissão", () => {
+  it("candidato Contratado sem caso de pré-admissão NÃO mostra a aba", () => {
     const tabs = getVisibleCandidateProfileTabs({
       ...baseContext,
       pipelineStage: "hired",
+      hasPreAdmissionCase: false,
+    });
+
+    expect(tabs).not.toContain("pre_admission");
+  });
+
+  it("candidato Contratado com caso de pré-admissão mostra a aba", () => {
+    const tabs = getVisibleCandidateProfileTabs({
+      ...baseContext,
+      pipelineStage: "hired",
+      hasPreAdmissionCase: true,
     });
 
     expect(tabs).toContain("pre_admission");
+  });
+
+  it("candidato em etapa admissional sem caso NÃO mostra a aba", () => {
+    const tabs = getVisibleCandidateProfileTabs({
+      ...baseContext,
+      pipelineStage: "pre_admission",
+      hasPreAdmissionCase: false,
+    });
+
+    expect(tabs).not.toContain("pre_admission");
+  });
+
+  it("recruiter não vê Pré-admissão mesmo em etapa admissional", () => {
+    const tabs = getVisibleCandidateProfileTabs({
+      ...baseContext,
+      userRole: "recruiter",
+      pipelineStage: "pre_admission",
+      hasPreAdmissionCase: true,
+      explicitTab: "pre_admission",
+    });
+
+    expect(tabs).not.toContain("pre_admission");
   });
 
   it("candidato Reprovado mostra Histórico e Comunicação, mas não Score ou Entrevistas", () => {

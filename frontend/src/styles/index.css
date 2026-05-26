@@ -1127,11 +1127,11 @@
   .admission-executive-header,
   .admission-section-card {
     border: 1px solid hsl(var(--border) / 0.72);
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     background: hsl(var(--surface) / 0.94);
     box-shadow:
-      0 18px 44px -38px hsl(var(--text) / 0.28),
-      inset 0 1px 0 hsl(0 0% 100% / 0.58);
+      0 18px 44px -38px hsl(var(--text) / 0.18),
+      inset 0 1px 0 hsl(0 0% 100% / 0.72);
   }
 
   :root[data-theme="dark"] .admission-cockpit-shell {
@@ -1187,6 +1187,101 @@
     border-radius: 0.5rem;
     background: hsl(var(--surface) / 0.72);
     box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.38);
+  }
+
+  /* --------------------------------------------------------------------------
+     Admission Page Header (breadcrumb + title block)
+     -------------------------------------------------------------------------- */
+
+  .admission-breadcrumb ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* --------------------------------------------------------------------------
+     Admission Summary Bar (horizontal candidate summary card)
+     -------------------------------------------------------------------------- */
+
+  .admission-summary-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border: 1px solid hsl(var(--border) / 0.72);
+    border-radius: 1rem;
+    background: hsl(var(--surface) / 0.96);
+    box-shadow:
+      0 18px 44px -38px hsl(var(--text) / 0.14),
+      inset 0 1px 0 hsl(0 0% 100% / 0.80);
+    overflow: hidden;
+    padding: 1rem 1.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .admission-summary-bar {
+      flex-direction: row;
+      align-items: center;
+      gap: 0;
+    }
+  }
+
+  .admission-summary-bar__block {
+    flex: 1;
+    min-width: 0;
+    padding: 0.25rem 0;
+  }
+
+  @media (min-width: 768px) {
+    .admission-summary-bar__block {
+      padding: 0.25rem 1.25rem;
+    }
+
+    .admission-summary-bar__block:first-child {
+      padding-left: 0;
+    }
+  }
+
+  .admission-summary-bar__block--progress {
+    flex: 1.2;
+  }
+
+  .admission-summary-bar__divider {
+    display: none;
+  }
+
+  @media (min-width: 768px) {
+    .admission-summary-bar__divider {
+      display: block;
+      width: 1px;
+      align-self: stretch;
+      background: hsl(var(--border) / 0.60);
+      flex-shrink: 0;
+    }
+  }
+
+  .admission-summary-bar__actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+  }
+
+  @media (min-width: 768px) {
+    .admission-summary-bar__actions {
+      flex-direction: column;
+      align-items: flex-end;
+      padding: 0.25rem 0 0.25rem 1.25rem;
+      flex-shrink: 0;
+    }
+  }
+
+  :root[data-theme="dark"] .admission-summary-bar {
+    background: hsl(var(--surface) / 0.88);
+    box-shadow:
+      0 20px 48px -36px rgba(0, 0, 0, 0.72),
+      inset 0 1px 0 hsl(0 0% 100% / 0.04);
   }
 
   .admission-side-rail {

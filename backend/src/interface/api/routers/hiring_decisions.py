@@ -5,10 +5,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.audit_service import AuditService
 from src.application.services.hiring_decision_service import HiringDecisionService
-from src.infrastructure.repositories.sqlalchemy_decision_summary_repository import SQLAlchemyDecisionSummaryRepository
-from src.infrastructure.repositories.sqlalchemy_hiring_decision_repository import SQLAlchemyHiringDecisionRepository
-from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
+from src.infrastructure.repositories.sqlalchemy_decision_summary_repository import (
+    SQLAlchemyDecisionSummaryRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_hiring_decision_repository import (
+    SQLAlchemyHiringDecisionRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
+    SQLAlchemyPipelineRepository,
+)
 from src.interface.api.dependencies import RecruiterOrAdmin, get_db
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.routers.pipeline import _handle as _handle_pipeline_error
@@ -28,6 +35,7 @@ def _service(db: AsyncSession) -> HiringDecisionService:
         SQLAlchemyHiringDecisionRepository(db),
         SQLAlchemyDecisionSummaryRepository(db),
         SQLAlchemyPipelineRepository(db),
+        AuditService(db),
     )
 
 
@@ -104,16 +112,23 @@ async def patch_hiring_decision(
     current_user: RecruiterOrAdmin,
     db: AsyncSession = Depends(get_db),
 ) -> HiringDecisionResponse:
-    result = await _service(db).patch(decision_id=decision_id, body=body)
-    await db.commit()
-    if body.submit and result.decision_status == "submitted":
-        await notify_candidate_event_safely(
-            db,
-            event_type="hiring_decision_submitted",
-            candidate_id=result.candidate_id,
-            job_id=result.job_id,
-            related_entity_type="hiring_decision",
-            related_entity_id=result.id,
-            actor_id=current_user.id,
+    try:
+        result = await _service(db).patch(
+            decision_id=decision_id, body=body, actor_user_id=current_user.id
         )
-    return result
+        await db.commit()
+        if body.submit and result.decision_status == "submitted":
+            await notify_candidate_event_safely(
+                db,
+                event_type="hiring_decision_submitted",
+                candidate_id=result.candidate_id,
+                job_id=result.job_id,
+                related_entity_type="hiring_decision",
+                related_entity_id=result.id,
+                actor_id=current_user.id,
+            )
+        return result
+    except Exception as exc:
+        await db.rollback()
+        _handle_pipeline_error(exc)
+        raise

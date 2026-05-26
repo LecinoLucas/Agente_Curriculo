@@ -46,6 +46,11 @@ export interface CandidateProfileTabsContext {
 }
 
 const STAFF_ROLES = new Set<UserRole>(["admin", "recruiter", "manager", "hr"]);
+const PRE_ADMISSION_STAFF_ROLES = new Set<UserRole>(["admin", "hr"]);
+
+function canAccessPreAdmission(context: CandidateProfileTabsContext): boolean {
+  return PRE_ADMISSION_STAFF_ROLES.has(context.userRole);
+}
 
 function addStaffBaseTabs(visible: Set<CandidateProfileTabKey>, context: CandidateProfileTabsContext) {
   if (!STAFF_ROLES.has(context.userRole)) return;
@@ -73,6 +78,7 @@ export function getVisibleCandidateProfileTabs(
   const visible = new Set<CandidateProfileTabKey>(["overview"]);
   const stage = context.pipelineStage;
   const hasActiveJob = Boolean(context.activeJobId);
+  const canSeePreAdmission = canAccessPreAdmission(context);
   const rejected =
     stage === "rejected" ||
     context.relationshipStatus === "rejected" ||
@@ -85,10 +91,8 @@ export function getVisibleCandidateProfileTabs(
     addStaffBaseTabs(visible, context);
   } else if (stage === "hired") {
     visible.add("workflow");
-    visible.add("pre_admission");
     addStaffBaseTabs(visible, context);
   } else if (stage === "pre_admission" || stage === "protheus" || stage === "admitted") {
-    visible.add("pre_admission");
     addStaffBaseTabs(visible, context);
   } else if (stage === "entry") {
     addPipelineBaseTabs(visible);
@@ -116,12 +120,18 @@ export function getVisibleCandidateProfileTabs(
     addStaffBaseTabs(visible, context);
   }
 
-  if (context.hasPreAdmissionCase) {
+  if (context.hasPreAdmissionCase && canSeePreAdmission) {
     visible.add("pre_admission");
   }
 
   if (context.explicitTab) {
-    visible.add(context.explicitTab);
+    if (context.explicitTab === "pre_admission") {
+      if (canSeePreAdmission && context.hasPreAdmissionCase) {
+        visible.add(context.explicitTab);
+      }
+    } else {
+      visible.add(context.explicitTab);
+    }
   }
 
   return CANDIDATE_PROFILE_TAB_KEYS.filter((tab) => visible.has(tab));

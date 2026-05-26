@@ -28,6 +28,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.user_model import UserModel
@@ -165,6 +166,79 @@ async def _create_published_job(db_session: AsyncSession, *, title: str) -> JobM
     db_session.add(job)
     await db_session.commit()
     return job
+
+
+async def _create_pipeline_for_portal(
+    db_session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+    pipeline_id: UUID,
+    stage: str = "hr_interview",
+    relationship_status: str = "active",
+    link_status: str = "active",
+    pipeline_status: str = "active",
+    is_terminal: bool = False,
+    terminated_at: datetime | None = None,
+) -> None:
+    now = datetime.now(UTC)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_job_pipeline_id=pipeline_id,
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_stage=stage,
+            link_status=link_status,
+            relationship_status=relationship_status,
+            pipeline_status=pipeline_status,
+            is_terminal=is_terminal,
+            terminated_at=terminated_at,
+            termination_reason="candidate_rejected" if is_terminal else None,
+            entered_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+
+async def _create_interview_schedule(
+    db_session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+    pipeline_id: UUID,
+    status: str,
+    scheduled_start: datetime,
+    scheduled_end: datetime,
+    title: str = "Entrevista RH",
+    public_notes: str | None = "Entraremos na sala 5 minutos antes.",
+    meeting_url: str | None = "https://meet.example.com/portal",
+    location: str | None = "Sala 3",
+    interview_type: str = "hr",
+    interview_format: str = "online",
+) -> InterviewScheduleModel:
+    schedule = InterviewScheduleModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        pipeline_id=pipeline_id,
+        title=title,
+        description="Descrição pública",
+        public_notes=public_notes,
+        internal_notes="NÃO EXPOR",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_end,
+        timezone="America/Sao_Paulo",
+        interview_type=interview_type,
+        interview_format=interview_format,
+        status=status,
+        location=location,
+        meeting_url=meeting_url,
+        created_by=SYSTEM_USER_ID,
+    )
+    db_session.add(schedule)
+    await db_session.commit()
+    return schedule
 
 
 @pytest.mark.asyncio
@@ -1419,3 +1493,247 @@ async def test_candidate_contact_request_creates_hr_communication(
     )
     assert saved is not None
     assert saved.template_key == "candidate_contact_request"
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_returns_public_interview_for_active_cycle_only(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Renata Entrevista",
+        email="renata.entrevista@example.com",
+        cpf="34665378007",
+    )
+    job = await _create_published_job(db_session, title="Analista RH")
+    previous_job = await _create_published_job(db_session, title="Analista RH - Processo Anterior")
+    active_pipeline_id = uuid4()
+    previous_pipeline_id = uuid4()
+
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=active_pipeline_id,
+    )
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=previous_job.id,
+        pipeline_id=previous_pipeline_id,
+        stage="rejected",
+        relationship_status="rejected",
+        link_status="rejected",
+        pipeline_status="terminal",
+        is_terminal=True,
+        terminated_at=datetime.now(UTC),
+    )
+
+    old_start = datetime.now(UTC) + timedelta(days=1)
+    old_interview = await _create_interview_schedule(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=previous_job.id,
+        pipeline_id=previous_pipeline_id,
+        status="scheduled",
+        scheduled_start=old_start,
+        scheduled_end=old_start + timedelta(hours=1),
+        title="Entrevista antiga",
+        meeting_url="https://meet.example.com/old-cycle",
+    )
+    next_start = datetime.now(UTC) + timedelta(days=3)
+    active_interview = await _create_interview_schedule(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=active_pipeline_id,
+        status="scheduled",
+        scheduled_start=next_start,
+        scheduled_end=next_start + timedelta(hours=1),
+        title="Entrevista ativa",
+        meeting_url="https://meet.example.com/active-cycle",
+    )
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-public-interview")
+    client.cookies.set("candidate_portal_token", "portal-token-public-interview")
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+
+    assert payload["public_interview"]["id"] == str(active_interview.id)
+    assert payload["public_interview"]["meeting_url"] == "https://meet.example.com/active-cycle"
+    assert payload["public_interview"]["status"] == "scheduled"
+    assert payload["public_interview"]["status_label"] == "Entrevista agendada"
+    assert payload["public_timeline"]["steps"][3]["interview"]["id"] == str(active_interview.id)
+    assert payload["public_interview"]["id"] != str(old_interview.id)
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_does_not_return_interview_from_other_candidate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Camila Portal",
+        email="camila.portal@example.com",
+        cpf="34665378008",
+    )
+    other_candidate = await _create_candidate(
+        db_session,
+        full_name="Outro Candidato",
+        email="outro.portal@example.com",
+        cpf="34665378009",
+    )
+    job = await _create_published_job(db_session, title="Assistente Administrativo")
+    pipeline_id = uuid4()
+
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=pipeline_id,
+    )
+    await _create_interview_schedule(
+        db_session,
+        candidate_id=other_candidate.id,
+        job_id=job.id,
+        pipeline_id=pipeline_id,
+        status="scheduled",
+        scheduled_start=datetime.now(UTC) + timedelta(days=2),
+        scheduled_end=datetime.now(UTC) + timedelta(days=2, hours=1),
+        title="Entrevista de outro candidato",
+    )
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-own-candidate")
+    client.cookies.set("candidate_portal_token", "portal-token-own-candidate")
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+
+    assert payload["public_interview"] is None
+    interview_step = next(step for step in payload["public_timeline"]["steps"] if step["key"] == "interview")
+    assert interview_step["interview"] is None
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_refreshes_public_interview_when_rescheduled_cancelled_and_completed(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Paula Reagendada",
+        email="paula.reagendada@example.com",
+        cpf="34665378010",
+    )
+    job = await _create_published_job(db_session, title="Analista de Pessoas")
+    pipeline_id = uuid4()
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=pipeline_id,
+    )
+
+    original_start = datetime.now(UTC) + timedelta(days=1)
+    interview = await _create_interview_schedule(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=pipeline_id,
+        status="scheduled",
+        scheduled_start=original_start,
+        scheduled_end=original_start + timedelta(hours=1),
+    )
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-refresh-interview")
+    client.cookies.set("candidate_portal_token", "portal-token-refresh-interview")
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["public_interview"]["status"] == "scheduled"
+
+    interview.status = "rescheduled"
+    interview.scheduled_start = original_start + timedelta(days=1)
+    interview.scheduled_end = interview.scheduled_start + timedelta(hours=1)
+    interview.updated_at = datetime.now(UTC)
+    db_session.add(interview)
+    await db_session.commit()
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["public_interview"]["status"] == "rescheduled"
+    assert payload["public_interview"]["status_label"] == "Entrevista agendada"
+
+    interview.status = "cancelled"
+    interview.updated_at = datetime.now(UTC)
+    db_session.add(interview)
+    await db_session.commit()
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["public_interview"]["status"] == "cancelled"
+
+    interview.status = "completed"
+    interview.updated_at = datetime.now(UTC)
+    db_session.add(interview)
+    await db_session.commit()
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["public_interview"]["status"] == "completed"
+    assert payload["public_interview"]["status_label"] == "Entrevista concluída"
+
+
+@pytest.mark.asyncio
+async def test_closed_process_does_not_show_old_scheduled_interview_as_active(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Luana Encerrada",
+        email="luana.encerrada@example.com",
+        cpf="34665378011",
+    )
+    job = await _create_published_job(db_session, title="Coordenadora")
+    pipeline_id = uuid4()
+    await _create_pipeline_for_portal(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=pipeline_id,
+        stage="rejected",
+        relationship_status="rejected",
+        link_status="rejected",
+        pipeline_status="terminal",
+        is_terminal=True,
+        terminated_at=datetime.now(UTC),
+    )
+    await _create_interview_schedule(
+        db_session,
+        candidate_id=candidate.id,
+        job_id=job.id,
+        pipeline_id=pipeline_id,
+        status="scheduled",
+        scheduled_start=datetime.now(UTC) + timedelta(days=2),
+        scheduled_end=datetime.now(UTC) + timedelta(days=2, hours=1),
+        title="Entrevista que não deve aparecer como ativa",
+    )
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-closed-process")
+    client.cookies.set("candidate_portal_token", "portal-token-closed-process")
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+
+    assert payload["application_status"] == "rejected"
+    assert payload["public_interview"] is None

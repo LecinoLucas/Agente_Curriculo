@@ -9,20 +9,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.ai_provider_credential_service import AIProviderCredentialService
 from src.domain.entities.user import UserRole
-from src.infrastructure.database.models.audit_model import AuditLogModel
-from src.infrastructure.database.models.ai_provider_credential_model import AIProviderCredentialModel
+from src.infrastructure.database.models.ai_provider_credential_model import (
+    AIProviderCredentialModel,
+)
 from src.infrastructure.database.models.ai_provider_health_model import AIProviderHealthModel
+from src.infrastructure.database.models.audit_model import AuditLogModel
 
 from .helpers import _auth_headers, _create_active_user
 
 
 async def _admin_headers(client: AsyncClient, db_session: AsyncSession) -> dict[str, str]:
-    await _create_active_user(db_session, "admin-ai-creds@test.com", "password123", UserRole.ADMIN)
+    await _create_active_user(
+        db_session,
+        "admin-ai-creds@test.com",
+        "password123",
+        UserRole.ADMIN,
+    )
     return await _auth_headers(client, "admin-ai-creds@test.com", "password123")
 
 
 async def _recruiter_headers(client: AsyncClient, db_session: AsyncSession) -> dict[str, str]:
-    await _create_active_user(db_session, "recruiter-ai-creds@test.com", "password123", UserRole.RECRUITER)
+    await _create_active_user(
+        db_session,
+        "recruiter-ai-creds@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
     return await _auth_headers(client, "recruiter-ai-creds@test.com", "password123")
 
 
@@ -48,8 +60,9 @@ async def test_admin_creates_encrypted_ai_provider_credential(
     assert response.status_code == 201
     body = response.json()
     assert body["provider"] == "google"
-    assert body["key_last4"] == "ABCD"
     assert body["masked_key"] == "****...ABCD"
+    assert "key_last4" not in body
+    assert "key_last4" not in response.text
     assert raw_key not in response.text
     assert "encrypted_api_key" not in response.text
 
@@ -82,9 +95,10 @@ async def test_admin_lists_only_masked_ai_provider_credentials(
     assert "encrypted_api_key" not in response.text
     body = response.json()
     assert body[0]["masked_key"] == "****...WXYZ"
-    assert body[0]["key_last4"] == "WXYZ"
     assert "api_key" not in body[0]
     assert "encrypted_api_key" not in body[0]
+    assert "key_last4" not in body[0]
+    assert "key_last4" not in response.text
 
 
 @pytest.mark.asyncio
@@ -147,8 +161,9 @@ async def test_rotate_disable_enable_do_not_return_secret_and_update_status(
     )
 
     assert rotate_response.status_code == 200
-    assert rotate_response.json()["key_last4"] == "2222"
     assert rotate_response.json()["masked_key"] == "****...2222"
+    assert "key_last4" not in rotate_response.json()
+    assert "key_last4" not in rotate_response.text
     assert "second-secret-2222" not in rotate_response.text
     assert "encrypted_api_key" not in rotate_response.text
 
@@ -194,10 +209,16 @@ async def test_audit_log_for_admin_actions_never_contains_api_key(
         )
 
     rows = (
-        await db_session.execute(
-            sa.select(AuditLogModel).where(AuditLogModel.resource_type == "ai_provider_credential")
+        (
+            await db_session.execute(
+                sa.select(AuditLogModel).where(
+                    AuditLogModel.resource_type == "ai_provider_credential"
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert {row.action for row in rows} >= {
         "ai_provider_credential.created",

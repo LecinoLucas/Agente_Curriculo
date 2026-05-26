@@ -6,13 +6,15 @@ Cobre achados R-H2, R-M1 e R-M3 da auditoria de segurança Fase 1.
 - GET /analyses/{id}/result → deve exigir RecruiterOrAdmin
 - POST /analyses/stuck → deve exigir AdminOnly
 """
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities.user import UserRole
+from src.infrastructure.database.models.analysis_model import AnalysisModel
 from tests.integration.helpers import _create_active_user, _auth_headers, _seed_scoring_case
 
 
@@ -33,6 +35,15 @@ async def _setup_user(
     password = "rbac_password123"
     await _create_active_user(db_session, email, password, role)
     return await _login(client, email, password)
+
+
+async def _seed_analysis_id(db_session: AsyncSession) -> UUID:
+    job_id, _, _ = await _seed_scoring_case(db_session, uuid4())
+    analysis_id = await db_session.scalar(
+        sa.select(AnalysisModel.id).where(AnalysisModel.job_id == job_id).limit(1)
+    )
+    assert analysis_id is not None
+    return analysis_id
 
 
 # ── R-H2: POST /analyses must require RecruiterOrAdmin ───────────────────────
@@ -165,6 +176,108 @@ class TestGetAnalysisResultRBAC:
     ) -> None:
         r = await client.get(f"/api/v1/analyses/{uuid4()}/result")
         assert r.status_code == 401
+
+
+class TestSensitiveAnalysisReadRBAC:
+    """Endpoints sensíveis de análise devem bloquear VIEWER."""
+
+    @pytest.mark.asyncio
+    async def test_admin_can_list_analyses(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.ADMIN, "_lr1")
+        r = await client.get("/api/v1/analyses", headers=headers)
+        assert r.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_recruiter_can_list_analyses(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.RECRUITER, "_lr2")
+        r = await client.get("/api/v1/analyses", headers=headers)
+        assert r.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_list_analyses(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.VIEWER, "_lr3")
+        r = await client.get("/api/v1/analyses", headers=headers)
+        assert r.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_cannot_list_analyses(
+        self, client: AsyncClient
+    ) -> None:
+        r = await client.get("/api/v1/analyses")
+        assert r.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_get_analysis(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.VIEWER, "_ga1")
+        analysis_id = await _seed_analysis_id(db_session)
+        r = await client.get(f"/api/v1/analyses/{analysis_id}", headers=headers)
+        assert r.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_recruiter_can_get_analysis(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.RECRUITER, "_ga2")
+        analysis_id = await _seed_analysis_id(db_session)
+        r = await client.get(f"/api/v1/analyses/{analysis_id}", headers=headers)
+        assert r.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_admin_can_get_analysis_status(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.ADMIN, "_gs1")
+        analysis_id = await _seed_analysis_id(db_session)
+        r = await client.get(f"/api/v1/analyses/{analysis_id}/status", headers=headers)
+        assert r.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_get_analysis_status(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.VIEWER, "_gs2")
+        analysis_id = await _seed_analysis_id(db_session)
+        r = await client.get(f"/api/v1/analyses/{analysis_id}/status", headers=headers)
+        assert r.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_get_analysis_pipeline(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.VIEWER, "_gp1")
+        analysis_id = await _seed_analysis_id(db_session)
+        r = await client.get(f"/api/v1/analyses/{analysis_id}/pipeline", headers=headers)
+        assert r.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_discard_analysis(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.VIEWER, "_gd1")
+        analysis_id = await _seed_analysis_id(db_session)
+        r = await client.patch(
+            f"/api/v1/analyses/{analysis_id}/discard",
+            headers=headers,
+            json={"reason": "duplicate", "note": "viewer should not mutate"},
+        )
+        assert r.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_retry_analysis(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _setup_user(db_session, client, UserRole.VIEWER, "_rr1")
+        analysis_id = await _seed_analysis_id(db_session)
+        r = await client.post(f"/api/v1/analyses/{analysis_id}/retry", headers=headers)
+        assert r.status_code == 403
 
 
 # ── R-M3: POST /analyses/stuck must require AdminOnly ────────────────────────

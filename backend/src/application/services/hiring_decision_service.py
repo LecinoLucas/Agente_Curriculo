@@ -3,12 +3,24 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from src.application.services.audit_service import AuditService
 from src.application.services.decision_summary_service import DecisionSummaryService
-from src.domain.exceptions import ConflictException, NotFoundException, ValidationException
+from src.domain.exceptions import (
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+    ValidationException,
+)
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
-from src.infrastructure.repositories.sqlalchemy_decision_summary_repository import SQLAlchemyDecisionSummaryRepository
-from src.infrastructure.repositories.sqlalchemy_hiring_decision_repository import SQLAlchemyHiringDecisionRepository
-from src.infrastructure.repositories.sqlalchemy_pipeline_repository import SQLAlchemyPipelineRepository
+from src.infrastructure.repositories.sqlalchemy_decision_summary_repository import (
+    SQLAlchemyDecisionSummaryRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_hiring_decision_repository import (
+    SQLAlchemyHiringDecisionRepository,
+)
+from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
+    SQLAlchemyPipelineRepository,
+)
 from src.interface.api.schemas.hiring_decision_schemas import (
     HiringDecisionCreateRequest,
     HiringDecisionEnvelopeResponse,
@@ -24,17 +36,27 @@ class HiringDecisionService:
         repository: SQLAlchemyHiringDecisionRepository,
         decision_summary_repository: SQLAlchemyDecisionSummaryRepository,
         pipeline_repository: SQLAlchemyPipelineRepository,
+        audit_service: AuditService,
     ) -> None:
         self._repository = repository
         self._summary_service = DecisionSummaryService(decision_summary_repository)
+        self._audit_service = audit_service
 
-    async def get_current(self, *, candidate_id: UUID, job_id: UUID) -> HiringDecisionEnvelopeResponse:
+    async def get_current(
+        self, *, candidate_id: UUID, job_id: UUID
+    ) -> HiringDecisionEnvelopeResponse:
         decision = await self._repository.get_current(candidate_id=candidate_id, job_id=job_id)
-        return HiringDecisionEnvelopeResponse(decision=self._response(decision) if decision else None)
+        return HiringDecisionEnvelopeResponse(
+            decision=self._response(decision) if decision else None
+        )
 
-    async def list_history(self, *, candidate_id: UUID, job_id: UUID) -> HiringDecisionHistoryResponse:
+    async def list_history(
+        self, *, candidate_id: UUID, job_id: UUID
+    ) -> HiringDecisionHistoryResponse:
         decisions = await self._repository.list_history(candidate_id=candidate_id, job_id=job_id)
-        return HiringDecisionHistoryResponse(decisions=[self._response(decision) for decision in decisions])
+        return HiringDecisionHistoryResponse(
+            decisions=[self._response(decision) for decision in decisions]
+        )
 
     async def create(
         self,
@@ -45,6 +67,7 @@ class HiringDecisionService:
         body: HiringDecisionCreateRequest,
     ) -> HiringDecisionResponse:
         await self._assert_job_exists(job_id)
+        pipeline_id = await self._active_pipeline_id(candidate_id=candidate_id, job_id=job_id)
         notes = self._clean_text(body.notes)
         await self._validate_business_rules(
             candidate_id=candidate_id,
@@ -56,7 +79,6 @@ class HiringDecisionService:
 
         summary_snapshot = await self._summary_snapshot(candidate_id=candidate_id, job_id=job_id)
         refs = await self._basis_refs(candidate_id=candidate_id, job_id=job_id)
-        pipeline = await self._repository.get_active_pipeline(candidate_id=candidate_id, job_id=job_id)
         current = await self._repository.get_current(candidate_id=candidate_id, job_id=job_id)
         now = datetime.now(UTC)
         if current is not None:
@@ -67,7 +89,7 @@ class HiringDecisionService:
         decision = CandidateJobHiringDecisionModel(
             candidate_id=candidate_id,
             job_id=job_id,
-            pipeline_id=pipeline["candidate_job_pipeline_id"] if pipeline is not None else None,
+            pipeline_id=pipeline_id,
             decided_by=decided_by,
             decision_status="submitted" if body.submit else "draft",
             decision_outcome=body.decision_outcome,
@@ -82,6 +104,24 @@ class HiringDecisionService:
             updated_at=now,
         )
         await self._repository.add(decision)
+        await self._audit_decision_event(
+            action="hiring_decision.created",
+            decision=decision,
+            actor_user_id=decided_by,
+            before_state=None,
+            after_state=self._audit_state(decision),
+        )
+        if body.submit:
+            await self._audit_decision_event(
+                action="hiring_decision.submitted",
+                decision=decision,
+                actor_user_id=decided_by,
+                before_state={
+                    "decision_status": "draft",
+                    "decision_outcome": decision.decision_outcome,
+                },
+                after_state=self._audit_state(decision),
+            )
 
         # Hiring decisions are audit records. Pipeline movement, including
         # hiring, must go through PipelineService.move_candidate explicitly.
@@ -92,15 +132,18 @@ class HiringDecisionService:
         *,
         decision_id: UUID,
         body: HiringDecisionPatchRequest,
+        actor_user_id: UUID | None,
     ) -> HiringDecisionResponse:
         decision = await self._repository.get(decision_id)
         if decision is None:
             raise NotFoundException("Decisão final não encontrada.")
+        await self._assert_decision_in_active_scope(decision)
         if decision.decision_status == "submitted":
             raise ConflictException("Decisão final submitted não pode ser editada diretamente.")
         if decision.decision_status == "superseded":
             raise ConflictException("Decisão final superseded não pode ser editada.")
 
+        before_state = self._audit_state(decision)
         outcome = body.decision_outcome or decision.decision_outcome
         reason_code = body.reason_code or decision.reason_code
         notes = self._clean_text(body.notes) if "notes" in body.model_fields_set else decision.notes
@@ -125,17 +168,55 @@ class HiringDecisionService:
                 candidate_id=decision.candidate_id,
                 job_id=decision.job_id,
             )
-            refs = await self._basis_refs(candidate_id=decision.candidate_id, job_id=decision.job_id)
+            refs = await self._basis_refs(
+                candidate_id=decision.candidate_id, job_id=decision.job_id
+            )
             decision.based_on_scorecard_id = refs["scorecard_id"]
             decision.based_on_behavioral_assignment_id = refs["assignment_id"]
             decision.based_on_behavioral_ai_evaluation_id = refs["ai_evaluation_id"]
         await self._repository.flush()
+        after_state = self._audit_state(decision)
+        await self._audit_decision_event(
+            action="hiring_decision.updated",
+            decision=decision,
+            actor_user_id=actor_user_id,
+            before_state=before_state,
+            after_state=after_state,
+        )
+        if (
+            before_state["decision_status"] != "submitted"
+            and decision.decision_status == "submitted"
+        ):
+            await self._audit_decision_event(
+                action="hiring_decision.submitted",
+                decision=decision,
+                actor_user_id=actor_user_id,
+                before_state=before_state,
+                after_state=after_state,
+            )
         return self._response(decision)
 
     async def _assert_job_exists(self, job_id: UUID) -> None:
         job = await self._repository.get_job(job_id)
         if job is None or job.deleted_at is not None:
             raise NotFoundException("Vaga não encontrada.")
+
+    async def _active_pipeline_id(self, *, candidate_id: UUID, job_id: UUID) -> UUID:
+        pipeline = await self._repository.get_active_pipeline(
+            candidate_id=candidate_id, job_id=job_id
+        )
+        if pipeline is None:
+            raise ForbiddenException("Candidato não possui vínculo ativo com a vaga informada.")
+        return pipeline["candidate_job_pipeline_id"]
+
+    async def _assert_decision_in_active_scope(
+        self, decision: CandidateJobHiringDecisionModel
+    ) -> None:
+        active_pipeline_id = await self._active_pipeline_id(
+            candidate_id=decision.candidate_id, job_id=decision.job_id
+        )
+        if decision.pipeline_id != active_pipeline_id:
+            raise ForbiddenException("Decisão final fora do escopo ativo do candidato e vaga.")
 
     async def _validate_business_rules(
         self,
@@ -147,11 +228,15 @@ class HiringDecisionService:
         notes: str | None,
     ) -> None:
         if decision_outcome in {"hire", "reject"} and not notes:
-            raise ValidationException("Observações são obrigatórias para decisões de contratação ou rejeição.")
+            raise ValidationException(
+                "Observações são obrigatórias para decisões de contratação ou rejeição."
+            )
 
         if decision_outcome == "hire" and reason_code != "other":
             job = await self._repository.get_job(job_id)
-            pipeline = await self._repository.get_active_pipeline(candidate_id=candidate_id, job_id=job_id)
+            pipeline = await self._repository.get_active_pipeline(
+                candidate_id=candidate_id, job_id=job_id
+            )
             pipeline_id = pipeline["candidate_job_pipeline_id"] if pipeline is not None else None
 
             if job is not None and job.requires_scorecard:
@@ -161,10 +246,16 @@ class HiringDecisionService:
                     pipeline_id=pipeline_id,
                 )
                 if scorecard is None:
-                    raise ValidationException("Contratação exige scorecard enviado conforme política da vaga.")
+                    raise ValidationException(
+                        "Contratação exige scorecard enviado conforme política da vaga."
+                    )
 
             assignment = None
-            if job is not None and job.requires_behavioral_assessment and job.behavioral_template_id is not None:
+            if (
+                job is not None
+                and job.requires_behavioral_assessment
+                and job.behavioral_template_id is not None
+            ):
                 assignment = await self._repository.latest_behavioral_assignment(
                     candidate_id=candidate_id,
                     job_id=job_id,
@@ -172,12 +263,23 @@ class HiringDecisionService:
                     pipeline_id=pipeline_id,
                 )
                 if assignment is None or assignment.status != "submitted":
-                    raise ValidationException("Contratação exige avaliação comportamental submetida conforme política da vaga.")
+                    raise ValidationException(
+                        "Contratação exige avaliação comportamental submetida "
+                        "conforme política da vaga."
+                    )
 
-            if job is not None and job.requires_behavioral_ai_evaluation and job.behavioral_template_id is not None and assignment is not None:
+            if (
+                job is not None
+                and job.requires_behavioral_ai_evaluation
+                and job.behavioral_template_id is not None
+                and assignment is not None
+            ):
                 ai_eval = await self._repository.ai_evaluation_for_assignment(assignment.id)
                 if ai_eval is None or ai_eval.status != "completed":
-                    raise ValidationException("Contratação exige avaliação de IA comportamental concluída conforme política da vaga.")
+                    raise ValidationException(
+                        "Contratação exige avaliação de IA comportamental concluída "
+                        "conforme política da vaga."
+                    )
 
             if job is not None and job.requires_interview:
                 interview = await self._repository.latest_completed_interview(
@@ -186,7 +288,9 @@ class HiringDecisionService:
                     pipeline_id=pipeline_id,
                 )
                 if interview is None:
-                    raise ValidationException("Contratação exige entrevista realizada conforme política da vaga.")
+                    raise ValidationException(
+                        "Contratação exige entrevista realizada conforme política da vaga."
+                    )
 
             if job is not None and job.requires_manager_review:
                 has_feedback = await self._repository.has_manager_feedback(
@@ -195,14 +299,18 @@ class HiringDecisionService:
                     pipeline_id=pipeline_id,
                 )
                 if not has_feedback:
-                    raise ValidationException("Contratação exige revisão do gestor conforme política da vaga.")
+                    raise ValidationException(
+                        "Contratação exige revisão do gestor conforme política da vaga."
+                    )
 
     async def _summary_snapshot(self, *, candidate_id: UUID, job_id: UUID) -> dict:
         summary = await self._summary_service.get_summary(candidate_id=candidate_id, job_id=job_id)
         return summary.model_dump(mode="json")
 
     async def _basis_refs(self, *, candidate_id: UUID, job_id: UUID) -> dict[str, UUID | None]:
-        pipeline = await self._repository.get_active_pipeline(candidate_id=candidate_id, job_id=job_id)
+        pipeline = await self._repository.get_active_pipeline(
+            candidate_id=candidate_id, job_id=job_id
+        )
         pipeline_id = pipeline["candidate_job_pipeline_id"] if pipeline is not None else None
         scorecard = await self._repository.latest_submitted_scorecard(
             candidate_id=candidate_id,
@@ -233,6 +341,37 @@ class HiringDecisionService:
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    @staticmethod
+    def _audit_state(decision: CandidateJobHiringDecisionModel) -> dict[str, str]:
+        return {
+            "decision_status": decision.decision_status,
+            "decision_outcome": decision.decision_outcome,
+        }
+
+    async def _audit_decision_event(
+        self,
+        *,
+        action: str,
+        decision: CandidateJobHiringDecisionModel,
+        actor_user_id: UUID | None,
+        before_state: dict[str, str] | None,
+        after_state: dict[str, str],
+    ) -> None:
+        await self._audit_service.log_event(
+            action=action,
+            resource_type="hiring_decision",
+            resource_id=decision.id,
+            user_id=actor_user_id,
+            metadata={
+                "candidate_id": str(decision.candidate_id),
+                "job_id": str(decision.job_id),
+                "pipeline_id": str(decision.pipeline_id) if decision.pipeline_id else None,
+                "decision_id": str(decision.id),
+            },
+            before_state=before_state,
+            after_state=after_state,
+        )
 
     @staticmethod
     def _response(

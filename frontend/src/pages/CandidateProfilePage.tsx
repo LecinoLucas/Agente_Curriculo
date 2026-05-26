@@ -32,6 +32,10 @@ import { CandidateHiringDecisionPanel } from "../features/candidates/drawer/comp
 import { InterviewScorecardPanel } from "../features/candidates/drawer/components/InterviewScorecardPanel";
 import { CandidateNotesTab } from "../features/candidates/drawer/components/CandidateNotesTab";
 import { CandidatePreAdmissionPanel } from "../features/candidates/drawer/components/CandidatePreAdmissionPanel";
+import {
+  PreAdmissionStartDrawer,
+  type PreAdmissionStartDrawerResult,
+} from "../features/candidates/drawer/components/PreAdmissionStartDrawer";
 import { useCandidateData } from "../features/candidates/drawer/hooks/useCandidateData";
 import { useCandidateDecision } from "../features/candidates/drawer/hooks/useCandidateDecision";
 import { ScoreTab as CandidateScoreDetailsTab } from "../features/candidates/drawer/tabs/ScoreTab";
@@ -52,6 +56,7 @@ import {
   getInitials,
   isPostHiringActiveStage,
   isSuccessTerminalStage,
+  type NextActionSuggestion,
 } from "../features/candidates/utils/profile";
 import { EditCandidateModal } from "../features/pipeline/EditCandidateModal";
 import {
@@ -82,6 +87,7 @@ import { getCandidateBehavioralAssessment } from "../services/behavioralAssessme
 import { formatContextError } from "../services/errorMessages";
 import { listJobs } from "../services/jobsService";
 import { pipelineService } from "../services/pipelineService";
+import { createPreAdmission, getPreAdmission } from "../services/preAdmissionService";
 import { resumeService } from "../services/resumeService";
 import { scoreExplanationService, type ScoreExplanationResponse } from "../services/scoreExplanationService";
 import { toast } from "../shared/utils/toast";
@@ -99,6 +105,7 @@ import type {
   Job,
   JobRankingEntry,
   PipelineStage,
+  PreAdmissionEnvelope,
   Resume,
   ResumeVersion,
 } from "../types/domain";
@@ -162,6 +169,9 @@ export function CandidateProfilePage() {
   const [dailyLimitDialogOpen, setDailyLimitDialogOpen] = useState(false);
   const [dailyLimitUsage, setDailyLimitUsage] = useState<AILimitsUsage | null>(null);
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
+  const [preAdmissionEnvelope, setPreAdmissionEnvelope] = useState<PreAdmissionEnvelope | null>(null);
+  const [preAdmissionLoading, setPreAdmissionLoading] = useState(false);
+  const [preAdmissionStartOpen, setPreAdmissionStartOpen] = useState(false);
 
   // React to `?tab=…&focus=…` on URL changes. We snapshot the last applied
   // search so we don't re-fire focus on unrelated state churn (the
@@ -277,15 +287,7 @@ export function CandidateProfilePage() {
       profileEntry?.stage === "admitted",
     [overview?.preview_pendencies, profileEntry?.stage],
   );
-  const hasPreAdmissionForProfileTabs = useMemo(
-    () =>
-      (overview?.preview_pendencies ?? []).some((pendency) => pendency.action === "open_pre_admission") ||
-      profileEntry?.stage === "hired" ||
-      profileEntry?.stage === "pre_admission" ||
-      profileEntry?.stage === "protheus" ||
-      profileEntry?.stage === "admitted",
-    [overview?.preview_pendencies, profileEntry?.stage],
-  );
+  const hasPreAdmissionForProfileTabs = Boolean(preAdmissionEnvelope?.case);
   const visibleProfileTabKeys = useMemo(
     () =>
       getVisibleCandidateProfileTabs({
@@ -330,16 +332,115 @@ export function CandidateProfilePage() {
     () => PROFILE_TABS.filter((tab) => visibleProfileTabKeys.includes(tab.key as CandidateProfileTabKey)),
     [visibleProfileTabKeys],
   );
+  const canAccessPreAdmission = user?.role === "admin" || user?.role === "hr";
+  const loadPreAdmissionEnvelope = useCallback(async () => {
+    if (!candidateId || !profileJobId || !canAccessPreAdmission) {
+      setPreAdmissionEnvelope(null);
+      setPreAdmissionLoading(false);
+      return null;
+    }
+
+    setPreAdmissionLoading(true);
+    try {
+      const payload = await getPreAdmission(profileJobId, candidateId);
+      setPreAdmissionEnvelope(payload);
+      return payload;
+    } catch (requestError) {
+      setPreAdmissionEnvelope(null);
+      toast.error(
+        formatContextError(
+          requestError,
+          "Não foi possível carregar o estado da pré-admissão.",
+          "A ação admissional pode ficar temporariamente indisponível.",
+        ),
+      );
+      return null;
+    } finally {
+      setPreAdmissionLoading(false);
+    }
+  }, [canAccessPreAdmission, candidateId, profileJobId]);
+  const nextAction = useMemo(
+    () =>
+      deriveNextAction(overview, activeEntry, {
+        preAdmission: {
+          hasAccess: canAccessPreAdmission,
+          hasActiveCase: Boolean(preAdmissionEnvelope?.case),
+          canCreateCase: preAdmissionEnvelope?.can_create,
+          hiringDecisionOutcome: preAdmissionEnvelope?.hiring_decision_outcome ?? null,
+        },
+      }),
+    [activeEntry, canAccessPreAdmission, overview, preAdmissionEnvelope?.can_create, preAdmissionEnvelope?.case, preAdmissionEnvelope?.hiring_decision_outcome],
+  );
+  const canManuallyChangeStageFromHeader = Boolean(
+    activeEntry &&
+      !isSuccessTerminalStage(activeEntry.stage) &&
+      activeEntry.stage !== "rejected",
+  );
+  const canRunPrimaryAction = Boolean(
+    nextAction.actionable !== false &&
+      nextAction.targetTab &&
+      (!nextAction.targetTab.startsWith("pre_admission") || canAccessPreAdmission) &&
+      !(preAdmissionLoading && nextAction.targetTab.startsWith("pre_admission")),
+  );
 
   useEffect(() => {
     if (visibleProfileTabKeys.includes(activeTab)) return;
     setActiveTab(visibleProfileTabKeys[0] ?? "overview");
   }, [activeTab, visibleProfileTabKeys]);
 
+  useEffect(() => {
+    if (!canAccessPreAdmission) {
+      setPreAdmissionEnvelope(null);
+      setPreAdmissionLoading(false);
+      return;
+    }
+    void loadPreAdmissionEnvelope();
+  }, [canAccessPreAdmission, loadPreAdmissionEnvelope]);
+
   const reloadWorkspace = useCallback(async () => {
     await reload();
     setRankingSyncTick((current) => current + 1);
-  }, [reload]);
+    await loadPreAdmissionEnvelope();
+  }, [loadPreAdmissionEnvelope, reload]);
+
+  const handleCreatePreAdmissionCase = useCallback(async (): Promise<PreAdmissionStartDrawerResult> => {
+    if (!canAccessPreAdmission) {
+      throw new HttpError(403, "Acesso restrito ao RH.");
+    }
+    if (!candidateId || !profileJobId) {
+      throw new Error("Não foi possível identificar o candidato ou a vaga para iniciar a pré-admissão.");
+    }
+
+    try {
+      const created = await createPreAdmission(profileJobId, candidateId, {});
+      setPreAdmissionEnvelope({
+        case: created,
+        can_create: false,
+        hiring_decision_outcome: "hire",
+      });
+      toast.success("Caso admissional criado.");
+      return { caseId: created.id };
+    } catch (requestError) {
+      if (requestError instanceof HttpError && requestError.status === 403) {
+        throw requestError;
+      }
+
+      const refreshed = await loadPreAdmissionEnvelope();
+      if (refreshed?.case?.id) {
+        return {
+          caseId: refreshed.case.id,
+          reusedExistingCase: true,
+        };
+      }
+      throw requestError;
+    }
+  }, [canAccessPreAdmission, candidateId, loadPreAdmissionEnvelope, profileJobId]);
+
+  const handlePreAdmissionStartSuccess = useCallback(async () => {
+    setPreAdmissionStartOpen(false);
+    setActiveTab("pre_admission");
+    await reloadWorkspace();
+  }, [reloadWorkspace]);
 
   useEffect(() => {
     setManualAnalysisStatus(null);
@@ -559,6 +660,53 @@ export function CandidateProfilePage() {
     [candidateId, profileJobId, reloadWorkspace],
   );
 
+  const handleSuggestedAction = useCallback(
+    (action: NextActionSuggestion) => {
+      if (!action.targetTab) return;
+
+      if (action.targetTab === "link_job") {
+        setLinkJobOpen(true);
+        return;
+      }
+      if (action.targetTab === "assessments" || action.targetTab === "assessments:behavioral_ai") {
+        setActiveTab("assessments");
+        setAssessmentFocusTick((current) => current + 1);
+        return;
+      }
+      if (action.targetTab === "workflow") {
+        setActiveTab("workflow");
+        return;
+      }
+      if (action.targetTab === "pre_admission:create") {
+        if (!canAccessPreAdmission) return;
+        if (preAdmissionEnvelope?.case?.id) {
+          setActiveTab("pre_admission");
+          return;
+        }
+        setPreAdmissionStartOpen(true);
+        return;
+      }
+      if (action.targetTab === "pre_admission") {
+        if (!canAccessPreAdmission) return;
+        setActiveTab("pre_admission");
+        return;
+      }
+      if (action.targetTab === "workflow:hiring_decision") {
+        setActiveTab("workflow");
+        setHiringDecisionFocusTick((current) => current + 1);
+        return;
+      }
+      if (action.targetTab === "interviews" || action.targetTab === "interviews:schedule_technical") {
+        setActiveTab("interviews");
+        if (action.targetTab === "interviews:schedule_technical") {
+          setScheduleTechnicalFocusTick((current) => current + 1);
+        }
+        return;
+      }
+    },
+    [canAccessPreAdmission, preAdmissionEnvelope?.case?.id],
+  );
+
   if (!candidateId) {
     return (
       <PageShell>
@@ -625,45 +773,23 @@ export function CandidateProfilePage() {
         overview={overview}
         activeEntry={activeEntry}
         activeScore={activeScore}
+        primaryActionLabel={canRunPrimaryAction ? nextAction.label : null}
+        onPrimaryAction={canRunPrimaryAction ? () => handleSuggestedAction(nextAction) : undefined}
         onAddNote={() => setActiveTab("notes")}
         onEdit={() => setEditOpen(true)}
-        onLinkJob={() => setLinkJobOpen(true)}
         onViewScore={() => setActiveTab("score")}
-        onMoveStage={() => setActiveTab("workflow")}
+        onOpenManualStage={() => setActiveTab("workflow")}
+        onOpenTransferJob={() => setActiveTab("workflow")}
+        canShowManualStage={canManuallyChangeStageFromHeader}
+        canShowTransferJob={canTransferCurrentJob}
       />
 
       <DecisionCards
         overview={overview}
         activeEntry={activeEntry}
+        nextAction={nextAction}
         activeScore={activeScore}
-        onPrimaryAction={(targetTab) => {
-          if (targetTab === "assessments" || targetTab === "assessments:behavioral_ai") {
-            setActiveTab("assessments");
-            setAssessmentFocusTick((current) => current + 1);
-            return;
-          }
-          if (targetTab === "workflow") {
-            setActiveTab("workflow");
-            return;
-          }
-          if (targetTab === "pre_admission") {
-            setActiveTab("pre_admission");
-            return;
-          }
-          if (targetTab === "workflow:hiring_decision") {
-            setActiveTab("workflow");
-            setHiringDecisionFocusTick((current) => current + 1);
-            return;
-          }
-          if (targetTab === "interviews" || targetTab === "interviews:schedule_technical") {
-            setActiveTab("interviews");
-            if (targetTab === "interviews:schedule_technical") {
-              setScheduleTechnicalFocusTick((current) => current + 1);
-            }
-            return;
-          }
-          setActiveTab(activeEntry ? "interviews" : "workflow");
-        }}
+        onPrimaryAction={canRunPrimaryAction ? () => handleSuggestedAction(nextAction) : undefined}
       />
 
       <section className="mt-8 overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] shadow-sm">
@@ -698,12 +824,15 @@ export function CandidateProfilePage() {
               onOpenHistory={() => setActiveTab("history")}
               hiringDecisionFocusToken={hiringDecisionFocusTick}
               onDecisionSubmitted={reloadWorkspace}
+              hiringDecisionOutcome={preAdmissionEnvelope?.hiring_decision_outcome ?? null}
             />
           ) : null}
           {activeTab === "pre_admission" ? (
             <CandidatePreAdmissionPanel
+              caseId={preAdmissionEnvelope?.case?.id ?? null}
               jobId={profileJobId}
               candidateId={candidateId}
+              userRole={user?.role ?? "viewer"}
               candidateName={overview?.candidate.full_name ?? null}
               jobTitle={activeEntry?.job_title ?? activeJob?.title ?? null}
               currentStage={profileEntry?.stage ?? null}
@@ -712,6 +841,10 @@ export function CandidateProfilePage() {
               onOpenHiringDecision={() => {
                 setActiveTab("workflow");
                 setHiringDecisionFocusTick((current) => current + 1);
+              }}
+              initialEnvelope={preAdmissionEnvelope}
+              onCaseCreated={async () => {
+                await reloadWorkspace();
               }}
             />
           ) : null}
@@ -877,6 +1010,17 @@ export function CandidateProfilePage() {
           setRejectionModalOpen(false);
         }}
       />
+
+      <PreAdmissionStartDrawer
+        open={preAdmissionStartOpen}
+        candidateName={overview?.candidate.full_name ?? null}
+        jobTitle={activeEntry?.job_title ?? activeJob?.title ?? null}
+        onClose={() => {
+          setPreAdmissionStartOpen(false);
+        }}
+        onConfirm={handleCreatePreAdmissionCase}
+        onSuccess={handlePreAdmissionStartSuccess}
+      />
     </PageShell>
   );
 }
@@ -893,20 +1037,28 @@ function ProfileHeader({
   overview,
   activeEntry,
   activeScore,
-  onMoveStage,
+  primaryActionLabel,
+  onPrimaryAction,
   onAddNote,
   onEdit,
-  onLinkJob,
   onViewScore,
+  onOpenManualStage,
+  onOpenTransferJob,
+  canShowManualStage,
+  canShowTransferJob,
 }: {
   overview: CandidateOverview;
   activeEntry: CandidatePipelineEntryOverview | null;
   activeScore: number | null;
-  onMoveStage: () => void;
+  primaryActionLabel: string | null;
+  onPrimaryAction?: () => void;
   onAddNote: () => void;
   onEdit: () => void;
-  onLinkJob: () => void;
   onViewScore: () => void;
+  onOpenManualStage: () => void;
+  onOpenTransferJob: () => void;
+  canShowManualStage: boolean;
+  canShowTransferJob: boolean;
 }) {
   const { candidate } = overview;
   const location = [candidate.location_city, candidate.location_state].filter(Boolean).join(", ");
@@ -969,46 +1121,117 @@ function ProfileHeader({
         </div>
 
         <div className="flex flex-wrap gap-2 lg:justify-end">
-          <ActionButton onClick={onEdit}>
-            <Edit3 className="h-4 w-4" />
-            Editar
-          </ActionButton>
-          <ActionButton onClick={onLinkJob}>
-            <Briefcase className="h-4 w-4" />
-            Vincular vaga
-          </ActionButton>
-          <ActionButton onClick={onMoveStage} disabled={!activeEntry}>
-            <Briefcase className="h-4 w-4" />
-            Mover etapa
-          </ActionButton>
+          {primaryActionLabel && onPrimaryAction ? (
+            <ActionButton onClick={onPrimaryAction} primary dataTestId="candidate-profile-primary-action">
+              {primaryActionLabel}
+            </ActionButton>
+          ) : null}
           <ActionButton onClick={onAddNote}>
             <NotebookPen className="h-4 w-4" />
             Observação
           </ActionButton>
-          <ActionButton onClick={onViewScore} primary>
-            <BarChart3 className="h-4 w-4" />
-            Ver score
-          </ActionButton>
+          <HeaderMoreActionsMenu
+            actions={[
+              { key: "edit", label: "Editar candidato", onClick: onEdit },
+              { key: "score", label: "Ver score", onClick: onViewScore },
+              {
+                key: "manual-stage",
+                label: "Alterar etapa manualmente",
+                onClick: onOpenManualStage,
+                visible: canShowManualStage,
+              },
+              {
+                key: "transfer-job",
+                label: "Transferir vaga",
+                onClick: onOpenTransferJob,
+                visible: canShowTransferJob,
+              },
+            ]}
+          />
         </div>
       </div>
     </section>
   );
 }
 
+function HeaderMoreActionsMenu({
+  actions,
+}: {
+  actions: Array<{
+    key: string;
+    label: string;
+    onClick: () => void;
+    visible?: boolean;
+  }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const visibleActions = actions.filter((action) => action.visible !== false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  if (visibleActions.length === 0) return null;
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        data-testid="candidate-profile-more-actions"
+        className="inline-flex h-9 items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-xs font-bold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+      >
+        Mais ações
+        <ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-1 shadow-lg">
+          {visibleActions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              onClick={() => {
+                action.onClick();
+                setOpen(false);
+              }}
+              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DecisionCards({
   overview,
   activeEntry,
+  nextAction,
   activeScore,
   onPrimaryAction,
 }: {
   overview: CandidateOverview;
   activeEntry: CandidatePipelineEntryOverview | null;
+  nextAction: NextActionSuggestion;
   activeScore: number | null;
-  onPrimaryAction: (targetTab?: string) => void;
+  onPrimaryAction?: () => void;
 }) {
   const pendencies = derivePendencies(overview);
-  const next = deriveNextAction(overview, activeEntry);
   const analysis = overview.latest_analysis;
+  const showPrimaryAction = Boolean(onPrimaryAction && nextAction.actionable !== false);
 
   return (
     <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1061,15 +1284,18 @@ function DecisionCards({
       </InfoCard>
 
       <InfoCard icon={<Calendar className="h-5 w-5" />} title="Próxima ação">
-        <p className="text-base font-bold text-[hsl(var(--text))]">{next.label}</p>
-        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{next.hint}</p>
-        <button
-          type="button"
-          onClick={() => onPrimaryAction(next.targetTab)}
-          className="mt-3 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
-        >
-          Abrir ação
-        </button>
+        <p className="text-base font-bold text-[hsl(var(--text))]">{nextAction.label}</p>
+        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{nextAction.hint}</p>
+        {showPrimaryAction ? (
+          <button
+            type="button"
+            onClick={onPrimaryAction}
+            data-testid="candidate-profile-next-action-button"
+            className="mt-3 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+          >
+            {nextAction.label}
+          </button>
+        ) : null}
       </InfoCard>
     </section>
   );
@@ -1149,6 +1375,7 @@ function WorkflowTab({
   onOpenHistory,
   hiringDecisionFocusToken,
   onDecisionSubmitted,
+  hiringDecisionOutcome = null,
 }: {
   overview: CandidateOverview;
   activeEntry: CandidatePipelineEntryOverview | null;
@@ -1167,6 +1394,7 @@ function WorkflowTab({
   onOpenHistory: () => void;
   hiringDecisionFocusToken: number;
   onDecisionSubmitted: () => Promise<void>;
+  hiringDecisionOutcome?: string | null;
 }) {
   const [stage, setStage] = useState<PipelineStage>(activeEntry?.stage ?? "entry");
   const [reason, setReason] = useState("");
@@ -1180,7 +1408,9 @@ function WorkflowTab({
   const rejected = activeEntry?.stage === "rejected" || activeEntry?.relationship_status === "rejected";
   const terminal = rejected || admitted;
   const canMoveToHired = activeEntry?.stage === "offer" && !terminal;
-  const canMoveToPreAdmission = activeEntry?.stage === "hired" && !terminal;
+  // "Mover para Pré-admissão" só aparece quando existe decisão de contratar (outcome === "hire")
+  const canMoveToPreAdmission =
+    activeEntry?.stage === "hired" && !terminal && hiringDecisionOutcome === "hire";
   const canMoveToProtheus = activeEntry?.stage === "pre_admission" && !terminal;
   const canMoveToAdmitted = activeEntry?.stage === "protheus" && !terminal;
   const preAdmissionNeedsAction = (overview.preview_pendencies ?? []).some(
@@ -3661,17 +3891,20 @@ function ActionButton({
   onClick,
   disabled = false,
   primary = false,
+  dataTestId,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
   primary?: boolean;
+  dataTestId?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      data-testid={dataTestId}
       className={[
         "inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50",
         primary

@@ -3,6 +3,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
+from src.interface.api.schemas.pre_admission_schemas import (
+    CandidatePortalPreAdmissionSummary,
+)
+
 
 class CandidateAuthRegisterRequest(BaseModel):
     email: EmailStr
@@ -82,12 +86,18 @@ class CandidatePortalActiveApplicationResponse(BaseModel):
 
 
 class CandidatePortalPublicInterviewResponse(BaseModel):
+    id: UUID | None = None
     status: str
+    status_label: str
     scheduled_at: datetime | None = None
+    interview_type: str | None = None
+    interview_type_label: str | None = None
     interview_format: str | None = None
+    interview_format_label: str | None = None
     location: str | None = None
     meeting_url: str | None = None
     public_notes: str | None = None
+    is_online: bool | None = None
 
 
 class CandidatePortalTimelineStepResponse(BaseModel):
@@ -109,6 +119,7 @@ class CandidatePortalOverviewResponse(BaseModel):
     active_application: CandidatePortalActiveApplicationResponse | None = None
     application_history: list["CandidatePortalApplicationResponse"] = []
     latest_resume: CandidatePortalResumeResponse | None = None
+    public_interview: CandidatePortalPublicInterviewResponse | None = None
     talent_pool: bool
     status_public: str
     application_status: str
@@ -118,6 +129,7 @@ class CandidatePortalOverviewResponse(BaseModel):
     can_request_contact: bool = True
     can_apply_to_other_jobs: bool = True
     public_timeline: CandidatePortalTimelineResponse | None = None
+    pre_admission: "CandidatePortalPreAdmissionSummary | None" = None
 
 
 class CandidatePortalApplicationResponse(BaseModel):
@@ -150,3 +162,23 @@ class CandidatePortalResumeUploadResponse(BaseModel):
 
 
 CandidatePortalOverviewResponse.model_rebuild()
+
+__all__ = [
+    "CandidateAuthRegisterRequest",
+    "CandidateAuthLoginRequest",
+    "CandidateAuthLoginResponse",
+    "CandidateAuthGoogleRequest",
+    "CandidateAuthGoogleResponse",
+    "CandidateAuthGoogleCandidateResponse",
+    "CandidatePortalResumeResponse",
+    "CandidatePortalCandidateSummaryResponse",
+    "CandidatePortalActiveApplicationResponse",
+    "CandidatePortalPublicInterviewResponse",
+    "CandidatePortalTimelineStepResponse",
+    "CandidatePortalTimelineResponse",
+    "CandidatePortalOverviewResponse",
+    "CandidatePortalApplicationResponse",
+    "CandidatePortalUpdateProfileRequest",
+    "CandidatePortalResumeUploadResponse",
+    "CandidatePortalPreAdmissionSummary",
+]

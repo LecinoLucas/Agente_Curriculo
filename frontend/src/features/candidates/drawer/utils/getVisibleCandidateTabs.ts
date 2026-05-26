@@ -43,6 +43,7 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     userRole === "admin" ||
     userRole === "manager" ||
     userRole === "hr";
+  const canSeePreAdmission = userRole === "admin" || userRole === "hr";
 
   // Resume is always visible
   visible.add("overview");
@@ -50,7 +51,11 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
   // If showing all, return all tabs
   if (showAll) {
     const allTabs: TabKey[] = ["overview", "score", "documents", "interview", "assessment", "communications", "collaboration", "notes", "pre_admission"];
-    return canSeeInternalNotes ? allTabs : allTabs.filter((tab) => tab !== "notes");
+    return allTabs.filter((tab) => {
+      if (tab === "notes" && !canSeeInternalNotes) return false;
+      if (tab === "pre_admission" && !canSeePreAdmission) return false;
+      return true;
+    });
   }
 
   if (canSeeInternalNotes) {
@@ -101,13 +106,14 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
   ) {
     // Pre-admission/Contratado stage
     if (
-      hasHiringDecision ||
-      hasPreAdmission ||
-      hasAdmissionPackage ||
-      pipelineStage === "hired" ||
-      pipelineStage === "pre_admission" ||
-      pipelineStage === "protheus" ||
-      pipelineStage === "admitted"
+      canSeePreAdmission &&
+      (hasHiringDecision ||
+        hasPreAdmission ||
+        hasAdmissionPackage ||
+        pipelineStage === "hired" ||
+        pipelineStage === "pre_admission" ||
+        pipelineStage === "protheus" ||
+        pipelineStage === "admitted")
     ) {
       visible.add("pre_admission");
     }

@@ -8,7 +8,6 @@ export type AIProviderCredential = {
   model_id: string | null;
   label: string;
   masked_key: string;
-  key_last4: string;
   status: AIProviderCredentialStatus;
   priority: number;
   cooldown_until: string | null;

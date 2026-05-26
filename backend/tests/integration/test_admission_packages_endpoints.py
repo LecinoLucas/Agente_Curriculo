@@ -2,23 +2,21 @@
 
 import json
 from datetime import UTC, datetime
-from decimal import Decimal
 from uuid import uuid4
 
-import pytest
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.admission_package_service import AdmissionPackageService
 from src.infrastructure.database.models import (
-    PreAdmissionCaseModel,
-    PreAdmissionChecklistItemModel,
+    CandidateJobHiringDecisionModel,
+    CandidateJobPipelineModel,
     CandidateModel,
     JobModel,
-    UserModel,
-    CandidateJobPipelineModel,
-    CandidateJobHiringDecisionModel,
+    PreAdmissionCaseModel,
+    PreAdmissionChecklistItemModel,
     PreAdmissionEventModel,
+    UserModel,
 )
 from src.infrastructure.security.password_service import hash_password
 
@@ -38,15 +36,20 @@ async def _create_user(session: AsyncSession, role: str = "recruiter") -> UserMo
     return user
 
 
-async def _auth_headers(client: httpx.AsyncClient, db_session: AsyncSession) -> dict[str, str]:
-    email = f"recruiter-{uuid4()}@example.com"
+async def _auth_headers(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    *,
+    role: str = "hr",
+) -> dict[str, str]:
+    email = f"{role}-{uuid4()}@example.com"
     password = "password123"
     user = UserModel(
         id=uuid4(),
         email=email,
-        full_name="Recruiter Test",
+        full_name=f"{role.upper()} Test",
         password_hash=hash_password(password),
-        role="recruiter",
+        role=role,
         status="active",
     )
     db_session.add(user)
@@ -171,6 +174,7 @@ async def _create_hiring_decision(
 
 
 # Tests
+
 
 @pytest.mark.asyncio
 async def test_post_creates_package_when_case_ready(
@@ -419,6 +423,45 @@ async def test_export_json_returns_payload(
 
 
 @pytest.mark.asyncio
+async def test_recruiter_cannot_export_or_use_protheus_endpoints(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    hr_headers = await _auth_headers(client, db_session, role="hr")
+    client.headers.update(hr_headers)
+    candidate = await _create_candidate(db_session)
+    job = await _create_job(db_session)
+    decision = await _create_hiring_decision(db_session, job.id, candidate.id)
+    case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
+    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await db_session.commit()
+
+    create_resp = await client.post(f"/api/v1/pre-admission/{case.id}/admission-package", json={})
+    assert create_resp.status_code == 201
+    package_id = create_resp.json()["id"]
+    approve_resp = await client.post(f"/api/v1/admission-packages/{package_id}/approve", json={})
+    assert approve_resp.status_code == 200
+
+    recruiter_headers = await _auth_headers(client, db_session, role="recruiter")
+    export_response = await client.get(
+        f"/api/v1/admission-packages/{package_id}/export-json",
+        headers=recruiter_headers,
+    )
+    capabilities_response = await client.get(
+        "/api/v1/admission-packages/erp/protheus/capabilities",
+        headers=recruiter_headers,
+    )
+    dry_run_response = await client.post(
+        f"/api/v1/admission-packages/{package_id}/erp/protheus/dry-run",
+        headers=recruiter_headers,
+    )
+
+    assert export_response.status_code == 403
+    assert capabilities_response.status_code == 403
+    assert dry_run_response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_export_csv_returns_csv(
     client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -498,9 +541,12 @@ async def test_events_are_registered(
 
     # Check events were created
     import sqlalchemy as sa
-    stmt = sa.select(PreAdmissionEventModel).where(
-        PreAdmissionEventModel.case_id == case.id
-    ).order_by(PreAdmissionEventModel.created_at.asc())
+
+    stmt = (
+        sa.select(PreAdmissionEventModel)
+        .where(PreAdmissionEventModel.case_id == case.id)
+        .order_by(PreAdmissionEventModel.created_at.asc())
+    )
     result = await db_session.execute(stmt)
     events = result.scalars().all()
 

@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { AnalisesIaPage } from "../AnalisesIaPage";
+import { ProtectedRoute } from "../../app/ProtectedRoute";
 import { analysisService } from "../../services/analysisService";
 import { listBehavioralAIQueue, retryBehavioralAI } from "../../services/behavioralAIEvaluationService";
+
+const { mockUseAuth } = vi.hoisted(() => ({
+  mockUseAuth: vi.fn(),
+}));
 
 const routerFuture = {
   v7_startTransition: true,
@@ -18,6 +23,10 @@ vi.mock("../../features/pipeline/PipelineContext", () => ({
     syncAnalysisStart: vi.fn(),
     startPolling: vi.fn(),
   }),
+}));
+
+vi.mock("../../features/auth/useAuth", () => ({
+  useAuth: mockUseAuth,
 }));
 
 vi.mock("../../features/candidates/components/CandidatePreviewDrawer", () => ({
@@ -64,8 +73,34 @@ function renderPage() {
   );
 }
 
+function renderProtectedPage() {
+  return render(
+    <MemoryRouter initialEntries={["/analises-ia"]} future={routerFuture}>
+      <Routes>
+        <Route
+          path="/analises-ia"
+          element={
+            <ProtectedRoute allowedRoles={["admin", "recruiter"]}>
+              <AnalisesIaPage />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUseAuth.mockReturnValue({
+    isAuthenticated: true,
+    isLoading: false,
+    user: {
+      id: "user-1",
+      role: "recruiter",
+      must_change_password: false,
+    },
+  });
   listGlobalMock.mockResolvedValue({
     data: [],
     total: 0,
@@ -154,6 +189,33 @@ beforeEach(() => {
 });
 
 describe("AnalisesIaPage", () => {
+  it("bloqueia acesso direto para viewer na rota protegida", async () => {
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: "user-viewer",
+        role: "viewer",
+        must_change_password: false,
+      },
+    });
+
+    renderProtectedPage();
+
+    expect(await screen.findByText("Acesso negado")).toBeInTheDocument();
+    expect(screen.getByText("Você não tem permissão para acessar esta página")).toBeInTheDocument();
+    expect(listGlobalMock).not.toHaveBeenCalled();
+  });
+
+  it("mantém acesso direto para recruiter na rota protegida", async () => {
+    renderProtectedPage();
+
+    expect(await screen.findByText("Análises IA")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(listGlobalMock).toHaveBeenCalled();
+    });
+  });
+
   it("mostra análises pending e waiting_extraction imediatamente", async () => {
     const user = userEvent.setup();
     listGlobalMock.mockResolvedValueOnce({
