@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 from src.application.services.admission_package_service import AdmissionPackageService
 from src.application.services.erp_integration_service import ErpIntegrationService
+from src.core.settings import settings
 from src.domain.exceptions import ValidationException
 from src.infrastructure.database.models import (
     PreAdmissionCaseModel,
@@ -21,6 +22,13 @@ from src.infrastructure.database.models import (
     CandidateJobHiringDecisionModel,
     AdmissionExportPackageModel,
 )
+
+
+@pytest.fixture(autouse=True)
+def enable_protheus_real_send_feature_for_homolog_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "PROTHEUS_REAL_SEND_ENABLED", True)
 
 
 async def _create_user(session: AsyncSession, role: str = "recruiter") -> UserModel:
@@ -183,6 +191,33 @@ async def test_homolog_send_blocked_without_flag(
                     user_id=uuid4(),
                 )
             assert "desabilitado" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_homolog_send_blocked_without_protheus_feature_flag(
+    db_session: AsyncSession,
+) -> None:
+    """Test that homolog send requires the explicit Protheus real-send flag."""
+    candidate = await _create_candidate(db_session)
+    job = await _create_job(db_session)
+    decision = await _create_hiring_decision(db_session, job.id, candidate.id)
+    case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
+    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+
+    pkg_service = AdmissionPackageService(db_session)
+    package = await pkg_service.create_package(case.id)
+
+    erp_service = ErpIntegrationService(db_session)
+
+    with patch("src.core.settings.settings.APP_ENV", "development"):
+        with patch("src.core.settings.settings.ERP_ALLOW_REAL_SEND", True):
+            with patch("src.core.settings.settings.PROTHEUS_REAL_SEND_ENABLED", False):
+                with pytest.raises(ValidationException) as exc_info:
+                    await erp_service.create_protheus_homolog_attempt(
+                        package_id=package.id,
+                        user_id=uuid4(),
+                    )
+                assert "protheus_real_send_enabled" in str(exc_info.value).lower()
 
 
 @pytest.mark.asyncio

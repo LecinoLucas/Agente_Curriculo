@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClipboardCheck, FileText, LoaderCircle, X } from "lucide-react";
 
@@ -10,7 +10,7 @@ import {
   usePipelineGateActionResolver,
   usePipelineTransitionBlockedHandler,
 } from "../../pipeline/usePipelineTransitionBlocked";
-import { useCandidateOverview } from "../hooks/useCandidateOverview";
+import { usePipeline } from "../../pipeline/PipelineContext";
 import { formatContextError } from "../../../services/errorMessages";
 import { pipelineService } from "../../../services/pipelineService";
 import { toast } from "../../../shared/utils/toast";
@@ -32,17 +32,15 @@ export type CandidatePreviewDrawerProps = {
   candidateId: string | null;
   onClose: () => void;
   onPipelineChanged?: () => Promise<void> | void;
-  refreshToken?: number;
 };
 
-export function CandidatePreviewDrawer({ candidateId, onClose, onPipelineChanged, refreshToken = 0 }: CandidatePreviewDrawerProps) {
+export function CandidatePreviewDrawer({ candidateId, onClose, onPipelineChanged }: CandidatePreviewDrawerProps) {
   if (!candidateId) return null;
   return (
     <DrawerPanel
       candidateId={candidateId}
       onClose={onClose}
       onPipelineChanged={onPipelineChanged}
-      refreshToken={refreshToken}
     />
   );
 }
@@ -78,6 +76,10 @@ function getAiProcessingNotice(overview: CandidateOverview | null) {
       .find((value) => value != null && value !== "") ?? "",
   ).toLowerCase();
 
+  if (status === "waiting_extraction") {
+    return "Aguardando extração do currículo.";
+  }
+
   if (status === "pending" || status === "queued" || status === "retry_scheduled") {
     return "Análise IA na fila.";
   }
@@ -101,15 +103,19 @@ function DrawerPanel({
   candidateId,
   onClose,
   onPipelineChanged,
-  refreshToken,
 }: {
   candidateId: string;
   onClose: () => void;
   onPipelineChanged?: () => Promise<void> | void;
-  refreshToken: number;
 }) {
   const navigate = useNavigate();
-  const { overview, loading, error, notFound, reload } = useCandidateOverview(candidateId);
+  const {
+    candidateOverview: overview,
+    candidateLoading: loading,
+    candidateError: error,
+    refreshCandidateOverview,
+  } = usePipeline();
+  const reload = refreshCandidateOverview;
   const [stageSaving, setStageSaving] = useState(false);
   const [interviewStageToSchedule, setInterviewStageToSchedule] = useState<PipelineStage | null>(null);
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
@@ -142,18 +148,17 @@ function DrawerPanel({
     .join(", ");
   const nextStage = activeEntry ? NEXT_PIPELINE_STAGE[activeEntry.stage] ?? null : null;
   const hasBehavioralPendency = pendencies.some((pendency) => pendency.id.startsWith("behavioral"));
+  const hasPreAdmissionPendency = pendencies.some((pendency) => pendency.action === "open_pre_admission");
+  const hasAdmissionAccess =
+    hasPreAdmissionPendency ||
+    activeEntry?.stage === "hired" ||
+    activeEntry?.stage === "pre_admission" ||
+    activeEntry?.stage === "protheus" ||
+    activeEntry?.stage === "admitted";
 
   const openFullProfile = () => {
     navigate(`/candidatos/${candidateId}`);
   };
-
-  const lastRefreshTokenRef = useRef(refreshToken);
-
-  useEffect(() => {
-    if (lastRefreshTokenRef.current === refreshToken) return;
-    lastRefreshTokenRef.current = refreshToken;
-    void reload();
-  }, [refreshToken, reload]);
 
   const openResume = () => {
     navigate(`/candidatos/${candidateId}?tab=documents`);
@@ -161,6 +166,10 @@ function DrawerPanel({
 
   const openAssessments = () => {
     navigate(`/candidatos/${candidateId}?tab=assessments`);
+  };
+
+  const openPreAdmission = () => {
+    navigate(`/candidatos/${candidateId}?tab=pre_admission`);
   };
 
   const syncAfterPipelineChange = async () => {
@@ -305,12 +314,6 @@ function DrawerPanel({
       >
         {loading ? <PreviewSkeleton /> : null}
 
-        {!loading && notFound ? (
-          <div className="flex flex-1 items-center justify-center p-8 text-center">
-            <p className="text-sm text-[hsl(var(--text-muted))]">Candidato não encontrado.</p>
-          </div>
-        ) : null}
-
         {!loading && error ? (
           <div
             className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
@@ -327,7 +330,7 @@ function DrawerPanel({
           </div>
         ) : null}
 
-        {!loading && !error && !notFound && overview && candidate ? (
+        {!loading && !error && overview && candidate ? (
           <>
             <div className="flex items-start gap-3 border-b border-[hsl(var(--border))] p-5">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-base font-semibold text-[hsl(var(--primary))]">
@@ -424,6 +427,30 @@ function DrawerPanel({
                   ) : null}
                 </div>
               </SectionCard>
+
+              {hasAdmissionAccess ? (
+                <SectionCard testId="preview-pre-admission">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <SectionLabel>Pré-admissão</SectionLabel>
+                      <p className="mt-1.5 text-sm text-[hsl(var(--text-muted))]">
+                        {activeEntry?.stage === "hired"
+                          ? "Contratação concluída. Abra o caso admissional para iniciar o checklist."
+                          : "Caso admissional disponível na macroárea de Admissão."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openPreAdmission}
+                      data-testid="preview-open-pre-admission"
+                      className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[hsl(var(--primary))]/90"
+                    >
+                      <ClipboardCheck className="h-3.5 w-3.5" />
+                      Abrir
+                    </button>
+                  </div>
+                </SectionCard>
+              ) : null}
 
               {activeEntry ? <CandidateScoreDimensionsCard dimensions={scoreDimensions} /> : null}
 

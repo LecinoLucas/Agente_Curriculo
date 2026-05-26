@@ -48,11 +48,13 @@ describe("AdmissionPackagePanel", () => {
     vi.mocked(mockService.listErpAttempts).mockResolvedValue({ attempts: [] });
   });
 
-  it("shows nothing when case is not ready_for_admission", () => {
-    const { container } = render(
+  it("shows pending package state when case is not ready_for_admission", () => {
+    render(
       <AdmissionPackagePanel caseId="case-123" caseStatus="documents_pending" />
     );
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText("Pacote admissional")).toBeInTheDocument();
+    expect(screen.getByText("Pacote pendente")).toBeInTheDocument();
+    expect(screen.getByText(/conclua a liberação operacional/i)).toBeInTheDocument();
   });
 
   it("shows generate button when no package exists", async () => {
@@ -139,6 +141,25 @@ describe("AdmissionPackagePanel", () => {
       expect(screen.getByText(/Exportar JSON/i)).toBeInTheDocument();
       expect(screen.getByText(/Exportar CSV/i)).toBeInTheDocument();
     });
+  });
+
+  it("does not render Protheus technical details directly", async () => {
+    const approvedPackage = {
+      ...mockPackage,
+      status: "approved_for_export" as const,
+      approved_by: "user-1",
+      approved_at: "2026-05-14T10:30:00Z",
+    };
+    vi.mocked(mockService.getPackageByCaseId).mockResolvedValue(approvedPackage);
+
+    render(<AdmissionPackagePanel caseId="case-123" caseStatus="ready_for_admission" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Exportar JSON/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Simulação Protheus/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tentativas de Integração/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Preview do Payload Protheus/i)).not.toBeInTheDocument();
   });
 
   it("downloads JSON on button click", async () => {

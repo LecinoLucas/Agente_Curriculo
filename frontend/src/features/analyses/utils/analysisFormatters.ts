@@ -1,4 +1,5 @@
 export const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
+  waiting_extraction: { label: "Aguardando extração", cls: "ui-badge-warning" },
   pending: { label: "Na fila", cls: "ui-badge-neutral" },
   processing: { label: "Processando", cls: "ui-badge-info" },
   retry_scheduled: { label: "Retry agendado", cls: "ui-badge-warning" },

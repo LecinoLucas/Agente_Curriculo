@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CandidatePortalPage } from "../CandidatePortalPage";
@@ -76,7 +76,7 @@ function renderPortal() {
       <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
         <Routes>
           <Route path="/candidato/portal" element={<CandidatePortalPage />} />
-          <Route path="/candidato/login" element={<div>Login destino</div>} />
+          <Route path="/candidato" element={<div>Login destino</div>} />
         </Routes>
       </MemoryRouter>
     </VisualThemeProvider>,
@@ -179,7 +179,7 @@ describe("CandidatePortalPage.behavioralAssessment", () => {
 
     renderPortal();
 
-    await screen.findByText("Resumo da situação");
+    await screen.findByText("Sua jornada de candidatura");
     fireEvent.click(await screen.findByRole("button", { name: /responder avaliação/i }));
     fireEvent.click(await screen.findByRole("button", { name: /responder avaliação/i }));
     fireEvent.change(await screen.findByRole("textbox"), {
@@ -250,7 +250,7 @@ describe("CandidatePortalPage.nextSteps", () => {
     expect(jornadaTitle).toBeInTheDocument();
 
     expect(screen.getByText("Inscrição recebida")).toBeInTheDocument();
-    expect(screen.getByText("Currículo em análise")).toBeInTheDocument();
+    expect(screen.getAllByText("Currículo em análise").length).toBeGreaterThan(0);
     expect(screen.getByText("Próxima etapa")).toBeInTheDocument();
     expect(screen.getByText("Avisaremos por aqui quando houver novidades.")).toBeInTheDocument();
 
@@ -279,8 +279,8 @@ describe("CandidatePortalPage.nextSteps", () => {
 
     await screen.findByText("Sua jornada de candidatura");
 
-    expect(screen.getByText("Entrevista")).toBeInTheDocument();
-    expect(screen.getByText(/Entrevista agendada para/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Entrevista").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Entrevista agendada para/i).length).toBeGreaterThan(0);
   });
 
   it("mostra Resultado apenas quando o processo estiver finalizado", async () => {
@@ -300,8 +300,8 @@ describe("CandidatePortalPage.nextSteps", () => {
 
     await screen.findByText("Sua jornada de candidatura");
 
-    expect(screen.getByText("Resultado")).toBeInTheDocument();
-    expect(screen.getByText("Você será atualizado sobre o resultado do processo.")).toBeInTheDocument();
+    expect(screen.getAllByText("Resultado").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Você será atualizado sobre o resultado do processo.").length).toBeGreaterThan(0);
   });
 
   it("mantém pré-admissão como processo ativo e não mostra processo encerrado", async () => {
@@ -376,6 +376,9 @@ describe("CandidatePortalPage.nextSteps", () => {
 
     renderPortal();
 
+    // Navega para Situação
+    fireEvent.click(await screen.findByTitle("Situação"));
+
     expect((await screen.findAllByText("Pré-admissão")).length).toBeGreaterThan(0);
     expect(screen.getByText("Analista de Suporte N1")).toBeInTheDocument();
     expect(screen.queryByText("Processo encerrado")).not.toBeInTheDocument();
@@ -448,6 +451,9 @@ describe("CandidatePortalPage.nextSteps", () => {
     });
 
     renderPortal();
+
+    // Navega para Situação
+    fireEvent.click(await screen.findByTitle("Situação"));
 
     expect((await screen.findAllByText("Admitido")).length).toBeGreaterThan(0);
     expect(screen.getByText("Analista de Suporte N1")).toBeInTheDocument();
@@ -538,6 +544,9 @@ describe("CandidatePortalPage.nextSteps", () => {
     ]);
 
     renderPortal();
+
+    // Navega para Situação
+    fireEvent.click(await screen.findByTitle("Situação"));
 
     await screen.findByText("Analista de Suporte N1");
 
@@ -636,7 +645,7 @@ describe("CandidatePortalPage.rejectedProcess", () => {
     expect((await screen.findAllByText("Processo encerrado")).length).toBeGreaterThan(0);
     expect(screen.getByText("Você não foi selecionado para esta vaga no momento.")).toBeInTheDocument();
     expect(screen.getAllByText(/Seu perfil continuará disponível em nosso banco de talentos/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("Resultado")).toBeInTheDocument();
+    expect(screen.getAllByText("Resultado").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Não selecionado").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /solicitar contato com o rh/i })).toBeInTheDocument();
     expect(screen.queryByText("Próxima atualização")).not.toBeInTheDocument();
@@ -709,6 +718,10 @@ describe("CandidatePortalPage.premiumLightThemeAndEmptyStates", () => {
 
     renderPortal();
 
+    // Navegar para a aba de Mensagens
+    const mensagensBtn = await screen.findByTitle("Mensagens");
+    fireEvent.click(mensagensBtn);
+
     expect(await screen.findByText("Mais novidades em breve!")).toBeInTheDocument();
     expect(screen.getByText("Quando tivermos atualizações, avisaremos por aqui.")).toBeInTheDocument();
   });
@@ -718,9 +731,48 @@ describe("CandidatePortalPage.premiumLightThemeAndEmptyStates", () => {
     renderPortal();
 
     expect(await screen.findByText("Sua jornada de candidatura")).toBeInTheDocument();
-    expect(screen.getByText("Resumo da situação")).toBeInTheDocument();
+    expect(screen.queryByText("Resumo da situação")).not.toBeInTheDocument();
     expect(screen.getByText("Próxima atualização")).toBeInTheDocument();
-    expect(screen.getByText("Dicas para sua candidatura")).toBeInTheDocument();
+    expect(screen.getByTitle("Dicas de Candidatura")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Dicas de Candidatura"));
+    expect(screen.getByText("Dicas Úteis")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Fechar"));
+
+    // Navega para Situação
+    const situacaoBtn = screen.getByTitle("Situação");
+    fireEvent.click(situacaoBtn);
+    expect(screen.getByText("Resumo da situação")).toBeInTheDocument();
+    expect(screen.getByText("Situação da candidatura")).toBeInTheDocument();
+  });
+
+  it("botão de correio no header exibe badge se houver mensagens não lidas e navega ao clicar", async () => {
+    mockBaseOverview();
+    (communicationService.getCandidateCommunications as any).mockResolvedValue({
+      communications: [
+        {
+          id: "msg-1",
+          subject: "Teste",
+          body: "Olá",
+          status: "sent",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    renderPortal();
+
+    // Aguarda o header e verifica se o badge "1" aparece no botão do correio
+    const headerMailBtn = await screen.findByTestId("header-mail-button");
+    expect(headerMailBtn).toBeInTheDocument();
+
+    // Verifica que o badge de não lidas com o número 1 é renderizado no botão do header
+    expect(within(headerMailBtn).getByText("1")).toBeInTheDocument();
+
+    // Ao clicar no botão do header, navega para a aba de Mensagens
+    fireEvent.click(headerMailBtn);
+
+    // Verifica se estamos na tela de mensagens
+    expect(await screen.findByText("Fique por dentro das comunicações enviadas pelo time de recrutamento.")).toBeInTheDocument();
   });
 
   it("logout limpa chaves de tema sem persistir novas", async () => {
@@ -744,5 +796,43 @@ describe("CandidatePortalPage.premiumLightThemeAndEmptyStates", () => {
     expect(themeCalls.length).toBe(0);
 
     setItemSpy.mockRestore();
+  });
+
+  it("valida o novo layout premium do Dashboard no portal do candidato", async () => {
+    mockBaseOverview();
+    renderPortal();
+
+    // 1. Dashboard renderiza os novos cards
+    expect(await screen.findByText("Sua jornada de candidatura")).toBeInTheDocument();
+    expect(screen.getByText("Próxima atualização")).toBeInTheDocument();
+    expect(screen.getByText("Resumo rápido")).toBeInTheDocument();
+    expect(screen.getByText("Você está no caminho certo.")).toBeInTheDocument();
+
+    // 2. Dashboard não renderiza o card completo Resumo da situação nem as mensagens
+    expect(screen.queryByText("Resumo da situação")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fique por dentro das comunicações enviadas pelo time de recrutamento.")).not.toBeInTheDocument();
+
+    // 3. Clique em "Ver situação completa" abre a aba de situação
+    const verSituacaoCompletaBtn = screen.getByTestId("status-hero-view-details");
+    fireEvent.click(verSituacaoCompletaBtn);
+    expect(await screen.findByText("Resumo da situação")).toBeInTheDocument();
+    expect(screen.getByText("Situação da candidatura")).toBeInTheDocument();
+
+    // Reset para voltar ao início
+    fireEvent.click(screen.getByTitle("Dashboard"));
+    expect(screen.queryByText("Resumo da situação")).not.toBeInTheDocument();
+
+    // 4. Clique em "Abrir situação" abre a aba de situação
+    const abrirSituacaoBtn = screen.getByTestId("quick-summary-open-status");
+    fireEvent.click(abrirSituacaoBtn);
+    expect(await screen.findByText("Resumo da situação")).toBeInTheDocument();
+
+    // Reset para voltar ao início
+    fireEvent.click(screen.getByTitle("Dashboard"));
+
+    // 5. Clique no botão de envelope no header abre a aba de Mensagens
+    const headerMailBtn = screen.getByTestId("header-mail-button");
+    fireEvent.click(headerMailBtn);
+    expect(await screen.findByText("Fique por dentro das comunicações enviadas pelo time de recrutamento.")).toBeInTheDocument();
   });
 });

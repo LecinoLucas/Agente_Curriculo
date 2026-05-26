@@ -19,6 +19,33 @@ from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 
 
+@pytest.fixture
+def valid_pdf_bytes() -> bytes:
+    """Minimal valid PDF for testing."""
+    return b"""%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+xref
+0 4
+0000000000 65535 f
+0000000009 00000 n
+0000000052 00000 n
+0000000101 00000 n
+trailer
+<< /Size 4 /Root 1 0 R >>
+startxref
+160
+%%EOF
+"""
+
+
 async def _get_candidate_created_by(
     db_session: AsyncSession,
     candidate_id: UUID,
@@ -170,8 +197,8 @@ async def test_public_apply_duplicate_cpf_returns_422(
             "works_at_marajo_group": False,
             "job_id": str(published_job.id),
             "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
+            "password": "SenhaOriginal123",
+            "confirm_password": "SenhaOriginal123",
         },
         files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
     )
@@ -192,16 +219,16 @@ async def test_public_apply_duplicate_cpf_returns_422(
             "works_at_marajo_group": False,
             "job_id": str(published_job.id),
             "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
+            "password": "SenhaOutra123",
+            "confirm_password": "SenhaOutra123",
         },
         files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
     )
     
-    # Should reject with 422 (UnprocessableEntity), not 500
-    assert response2.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response2.status_code == status.HTTP_409_CONFLICT
     detail = response2.json()["detail"]
-    assert "CPF" in detail or "registrado" in detail
+    assert detail == "Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH."
+    assert cpf not in detail
 
 
 @pytest.mark.asyncio
@@ -229,8 +256,8 @@ async def test_public_apply_duplicate_email_returns_422(
             "works_at_marajo_group": False,
             "job_id": str(published_job.id),
             "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
+            "password": "SenhaOriginal123",
+            "confirm_password": "SenhaOriginal123",
         },
         files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
     )
@@ -251,15 +278,16 @@ async def test_public_apply_duplicate_email_returns_422(
             "works_at_marajo_group": False,
             "job_id": str(published_job.id),
             "lgpd_consent": True,
-            "password": "SenhaSegura123",
-            "confirm_password": "SenhaSegura123",
+            "password": "SenhaOutra123",
+            "confirm_password": "SenhaOutra123",
         },
         files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
     )
     
-    assert response2.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response2.status_code == status.HTTP_409_CONFLICT
     detail = response2.json()["detail"]
-    assert "email" in detail.lower() or "registrado" in detail.lower()
+    assert detail == "Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH."
+    assert email not in detail
 
 
 @pytest.mark.asyncio

@@ -36,7 +36,7 @@ from src.core.settings import settings
 from src.domain.exceptions import ValidationException
 from src.infrastructure.repositories.sqlalchemy_job_repository import SQLAlchemyJobRepository
 from src.interface.api.dependencies import CurrentCandidateSession, candidate_profile_incomplete_detail, get_db
-from src.interface.api.rate_limiting import rate_limit_public_apply
+from src.interface.api.rate_limiting import rate_limit_public_apply, rate_limit_public_check_exists
 from src.interface.api.schemas.candidate_portal_schemas import (
     CandidateAuthGoogleRequest,
     CandidateAuthGoogleResponse,
@@ -80,44 +80,17 @@ async def list_public_jobs(
 
 @router.get("/candidates/check-exists")
 async def check_candidate_exists(
-    request: Request,
-    email: str | None = None,
-    cpf: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit_public_check_exists),
 ):
     """
-    Verifica se um candidato com o email ou CPF especificado já está cadastrado.
-    """
-    from src.infrastructure.repositories.sqlalchemy_candidate_repository import SQLAlchemyCandidateRepository
-    from src.application.services.candidate_portal_auth_service import CANDIDATE_PORTAL_COOKIE_NAME, CandidatePortalAuthService
-    
-    token = request.cookies.get(CANDIDATE_PORTAL_COOKIE_NAME)
-    current_candidate_id = None
-    if token:
-        try:
-            session = await CandidatePortalAuthService(db).authenticate(token)
-            current_candidate_id = session.candidate_id
-        except Exception:
-            pass
+    Compatibilidade para clientes antigos.
 
-    email_exists = False
-    cpf_exists = False
-    
-    if email:
-        email_clean = email.lower().strip()
-        candidate = await SQLAlchemyCandidateRepository(db).find_active_by_email(email_clean)
-        if candidate and candidate.id != current_candidate_id:
-            email_exists = True
-            
-    if cpf:
-        cpf_clean = cpf.strip()
-        candidate = await SQLAlchemyCandidateRepository(db).find_active_by_cpf(cpf_clean)
-        if candidate and candidate.id != current_candidate_id:
-            cpf_exists = True
-            
+    Nunca expõe existência de CPF/e-mail para usuários anônimos; a validação de
+    duplicidade acontece somente no submit da candidatura.
+    """
     return {
-        "email_exists": email_exists,
-        "cpf_exists": cpf_exists,
+        "status": "ok",
+        "message": "Os dados serão validados ao enviar a candidatura.",
     }
 
 
@@ -226,17 +199,17 @@ async def apply(
         enqueue_resume_extraction(result.resume_version_id)
         return result
 
-    except PublicApplicationEmailError as exc:
+    except PublicApplicationEmailError:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            detail="Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH.",
         )
-    except PublicApplicationExistingAccountError as exc:
+    except PublicApplicationExistingAccountError:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            detail="Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH.",
         )
     except PublicApplicationFileError as exc:
         await db.rollback()
@@ -265,15 +238,10 @@ async def apply(
     except IntegrityError as exc:
         await db.rollback()
         message = str(exc.orig)
-        if "uq_candidates_active_email" in message:
+        if "uq_candidates_active_email" in message or "uq_candidates_active_cpf" in message:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Este e-mail já está cadastrado",
-            )
-        if "uq_candidates_active_cpf" in message:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Já existe um cadastro com este CPF",
+                detail="Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH.",
             )
         logger.exception("integrity_error_apply", exc_info=exc)
         raise HTTPException(

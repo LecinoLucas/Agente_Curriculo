@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 
 class AnalysisStatus(str, Enum):
+    WAITING_EXTRACTION = "waiting_extraction"
     PENDING = "pending"
     PROCESSING = "processing"
     RETRY_SCHEDULED = "retry_scheduled"

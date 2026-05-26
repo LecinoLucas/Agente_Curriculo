@@ -11,6 +11,7 @@ import { toast } from "../../../shared/utils/toast";
 
 export type StatusFilter =
   | "all"
+  | "waiting_extraction"
   | "pending"
   | "processing"
   | "retry_scheduled"
@@ -19,9 +20,28 @@ export type StatusFilter =
   | "cancelled"
   | "discarded";
 export type AiFilter = "all" | "real" | "mock";
-export type AnalysisTypeFilter = "resume" | "behavioral_ai";
+export type AnalysisTypeFilter = "all" | "resume" | "behavioral_ai";
 
 const PAGE_SIZE = 20;
+
+const BEHAVIORAL_QUEUE_STATUSES = new Set([
+  "all",
+  "pending",
+  "processing",
+  "retry_scheduled",
+  "completed",
+  "failed",
+]);
+
+function getItemTime(item: AnalysisGlobalItem): number {
+  return new Date(
+    item.completed_at ??
+      item.failed_at ??
+      item.updated_at ??
+      item.started_at ??
+      item.created_at,
+  ).getTime();
+}
 
 export function useAnalysesPage() {
   const { syncAnalysisStart, startPolling, analysesSyncTick } = usePipeline();
@@ -31,7 +51,7 @@ export function useAnalysesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [aiFilter, setAiFilter] = useState<AiFilter>("all");
-  const [typeFilter, setTypeFilter] = useState<AnalysisTypeFilter>("resume");
+  const [typeFilter, setTypeFilter] = useState<AnalysisTypeFilter>("all");
   const [providerFilter, setProviderFilter] = useState("all");
   const [modelFilter, setModelFilter] = useState("all");
   const [actionId, setActionId] = useState<string | null>(null);
@@ -53,7 +73,7 @@ export function useAnalysesPage() {
     Boolean(search) ||
     statusFilter !== "all" ||
     aiFilter !== "all" ||
-    typeFilter !== "resume" ||
+    typeFilter !== "all" ||
     providerFilter !== "all" ||
     modelFilter !== "all";
 
@@ -61,21 +81,48 @@ export function useAnalysesPage() {
     const usedRealAi = aiFilter === "real" ? true : aiFilter === "mock" ? false : undefined;
 
     void run(() => {
+      const normalizedStatus = statusFilter === "all" ? undefined : statusFilter;
       const request =
         typeFilter === "behavioral_ai"
-          ? listBehavioralAIQueue(
-              page,
-              PAGE_SIZE,
-              statusFilter === "all" ? undefined : statusFilter,
-              search || undefined,
-            )
-          : analysisService.listGlobal(
-              page,
-              PAGE_SIZE,
-              statusFilter === "all" ? undefined : statusFilter,
-              search || undefined,
-              usedRealAi,
-            );
+          ? listBehavioralAIQueue(page, PAGE_SIZE, normalizedStatus, search || undefined)
+          : typeFilter === "resume"
+            ? analysisService.listGlobal(page, PAGE_SIZE, normalizedStatus, search || undefined, usedRealAi)
+            : Promise.all([
+                analysisService.listGlobal(
+                  1,
+                  page * PAGE_SIZE,
+                  normalizedStatus,
+                  search || undefined,
+                  usedRealAi,
+                ),
+                BEHAVIORAL_QUEUE_STATUSES.has(statusFilter)
+                  ? listBehavioralAIQueue(
+                      1,
+                      page * PAGE_SIZE,
+                      normalizedStatus,
+                      search || undefined,
+                    )
+                  : Promise.resolve({
+                      data: [],
+                      total: 0,
+                      page: 1,
+                      page_size: page * PAGE_SIZE,
+                      total_pages: 1,
+                    }),
+              ]).then(([resumePayload, behavioralPayload]) => {
+                const combined = [...resumePayload.data, ...behavioralPayload.data].sort(
+                  (a, b) => getItemTime(b) - getItemTime(a),
+                );
+                const start = (page - 1) * PAGE_SIZE;
+                const total = resumePayload.total + behavioralPayload.total;
+                return {
+                  data: combined.slice(start, start + PAGE_SIZE),
+                  total,
+                  page,
+                  page_size: PAGE_SIZE,
+                  total_pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+                };
+              });
       return request.catch((err: unknown) => {
         throw new Error(
           formatContextError(
@@ -127,7 +174,7 @@ export function useAnalysesPage() {
     setSearchInput("");
     setStatusFilter("all");
     setAiFilter("all");
-    setTypeFilter("resume");
+    setTypeFilter("all");
     setProviderFilter("all");
     setModelFilter("all");
   }
@@ -219,6 +266,7 @@ export function useAnalysesPage() {
   const hasInFlightAnalyses = items.some(
     (item) =>
       item.status === "pending" ||
+      item.status === "waiting_extraction" ||
       item.status === "processing" ||
       item.status === "retry_scheduled",
   );

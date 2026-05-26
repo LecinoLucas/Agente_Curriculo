@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     PROTHEUS_PASSWORD: str = ""
     PROTHEUS_TOKEN: str = ""
     PROTHEUS_TIMEOUT_SECONDS: float = 30.0
+    PROTHEUS_REAL_SEND_ENABLED: bool = False
     ERP_ALLOW_REAL_SEND: bool = False  # CRITICAL: only true in homologation
 
     # Celery
@@ -120,6 +121,7 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_AUTH_LOGIN: str = "5/minute"
+    RATE_LIMIT_PUBLIC_CHECK_EXISTS: str = "5/minute"
     RATE_LIMIT_PUBLIC_APPLY: str = "10/minute"
     RATE_LIMIT_ANALYSIS_REQUEST: str = "5/minute"
     RATE_LIMIT_ANALYSIS_RETRY: str = "3/minute"
@@ -200,6 +202,10 @@ class Settings(BaseSettings):
                 return [str(item).strip().lower() for item in decoded if str(item).strip()]
             return [item.strip().lower() for item in raw.split(",") if item.strip()]
         raise ValueError("MIME types must be a list or comma-separated string")
+
+    @property
+    def protheus_real_send_allowed(self) -> bool:
+        return bool(self.PROTHEUS_REAL_SEND_ENABLED and self.ERP_ALLOW_REAL_SEND)
 
     def model_post_init(self, __context: object) -> None:
         if self.ENABLE_DEV_MOCK and self.APP_ENV == "production":

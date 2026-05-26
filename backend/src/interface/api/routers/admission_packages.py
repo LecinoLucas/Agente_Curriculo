@@ -23,6 +23,7 @@ from src.interface.api.schemas.admission_package_schemas import (
     ErpIntegrationAttemptResponse,
     ProtheusMockSendRequest,
     ErpRetryRequest,
+    ProtheusCapabilitiesResponse,
 )
 
 router = APIRouter(tags=["admission-packages"])
@@ -251,6 +252,19 @@ async def export_package_csv(
         raise
 
 
+@router.get(
+    "/admission-packages/erp/protheus/capabilities",
+    response_model=ProtheusCapabilitiesResponse,
+)
+async def get_protheus_capabilities(
+    _current_user: RecruiterHrOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> ProtheusCapabilitiesResponse:
+    return ProtheusCapabilitiesResponse.model_validate(
+        _erp_service(db).get_protheus_capabilities()
+    )
+
+
 @router.post(
     "/admission-packages/{package_id}/erp/protheus/dry-run",
     response_model=ErpIntegrationAttemptResponse,
@@ -311,6 +325,7 @@ async def create_protheus_homolog_send_attempt(
 
     Security gates enforced:
     - Only in development/staging (APP_ENV != production)
+    - Requires PROTHEUS_REAL_SEND_ENABLED=true
     - Requires ERP_ALLOW_REAL_SEND=true
     - All requests idempotent via idempotency_key
     - Audit logged with masked secrets

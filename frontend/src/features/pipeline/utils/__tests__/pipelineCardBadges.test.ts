@@ -34,6 +34,15 @@ describe("derivePipelineCardBadges", () => {
     expect(labels(badges)[0]).toBe("Análise em andamento");
   });
 
+  it("distingue análise aguardando extração de análise processando", () => {
+    const badges = derivePipelineCardBadges(candidate({ ai_status: "waiting_extraction", job_fit_score: null }), {
+      now,
+    });
+
+    expect(labels(badges)[0]).toBe("Aguardando extração");
+    expect(labels(badges)).not.toContain("Análise em andamento");
+  });
+
   it("retorna avaliação respondida quando há submissão comportamental", () => {
     const badges = derivePipelineCardBadges(
       candidate({

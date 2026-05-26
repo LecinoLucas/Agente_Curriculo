@@ -105,7 +105,7 @@ describe("getVisibleCandidateTabs", () => {
   it.each(["hired", "pre_admission", "protheus", "admitted"] as const)(
     "should show pre_admission in %s stage",
     (pipelineStage) => {
-    const input = { ...defaultInput, pipelineStage, hasPreAdmission: true };
+    const input = { ...defaultInput, pipelineStage };
     const result = getVisibleCandidateTabs(input);
     expect(result).toContain("pre_admission");
     },

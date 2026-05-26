@@ -111,12 +111,22 @@ export type CandidateResumeOverview = {
   document_url?: string | null;
 };
 
+export type ResumeAnalysisStatus =
+  | "waiting_extraction"
+  | "pending"
+  | "processing"
+  | "retry_scheduled"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "discarded";
+
 export type CandidateLatestAnalysisOverview = {
   analysis_id: string;
   job_id: string | null;
   resume_id: string;
   resume_title: string;
-  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
+  status: ResumeAnalysisStatus;
   started_at: string | null;
   completed_at: string | null;
   failed_at: string | null;
@@ -360,7 +370,7 @@ export type ResumeFileUploadResponse = {
   version_id: string;
   analysis_auto_requested: boolean;
   analysis_id: string | null;
-  analysis_status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded" | null;
+  analysis_status: ResumeAnalysisStatus | null;
   original_file_name: string;
   file_size_bytes: number;
   file_hash_sha256: string;
@@ -534,7 +544,7 @@ export type JobRanking = {
   total_pages?: number;
 };
 
-export type AIAnalysisStatus = "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
+export type AIAnalysisStatus = ResumeAnalysisStatus;
 
 export type JobCandidate = {
   candidate_id: string;
@@ -763,7 +773,7 @@ export type TransferCandidateJobResponse = {
 
 export type AnalysisStatus = {
   analysis_id: string;
-  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
+  status: ResumeAnalysisStatus;
   retry_count: number;
   stuck: boolean;
   reason: string | null;
@@ -787,7 +797,7 @@ export type AnalysisPipelineMatch = {
 export type AnalysisPipelineStatus = {
   analysis_id: string;
   job_id: string | null;
-  analysis_status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
+  analysis_status: ResumeAnalysisStatus;
   matching_status: "waiting_analysis" | "processing" | "completed" | "blocked" | "idle";
   matching_error?: string | null;
   published_jobs_total: number;
@@ -861,7 +871,7 @@ export type AnalysisGlobalItem = {
   candidate_email: string | null;
   resume_file_name: string | null;
   resume_version_id: string | null;
-  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
+  status: ResumeAnalysisStatus;
   failure_reason: string | null;
   discarded_at?: string | null;
   discarded_by?: string | null;
@@ -892,7 +902,7 @@ export type AnalysisSummary = {
   resume_title: string | null;
   resume_file_name: string | null;
   job_id: string | null;
-  status: "pending" | "processing" | "retry_scheduled" | "completed" | "failed" | "cancelled" | "discarded";
+  status: ResumeAnalysisStatus;
   priority: number;
   retry_count: number;
   requested_by: string;
@@ -1340,6 +1350,123 @@ export type PreAdmissionDocumentsResponse = {
   documents: PreAdmissionDocument[];
 };
 
+export type AdmissionWorkspaceCaseStatus = PreAdmissionStatus | "in_progress";
+
+export type AdmissionWorkspaceStage =
+  | "hired"
+  | "pre_admission"
+  | "protheus"
+  | "admitted"
+  | "rejected"
+  | string;
+
+export type AdmissionWorkspaceChecklistItemStatus =
+  | "pending"
+  | "received"
+  | "approved"
+  | "rejected"
+  | "not_required";
+
+export type AdmissionWorkspaceBlockerSeverity = "high" | "medium" | "low" | string;
+
+export type AdmissionWorkspaceReadinessStatus = "ready" | "not_ready" | string;
+
+export type AdmissionWorkspaceDocumentStatus =
+  | PreAdmissionDocumentStatus
+  | "pending"
+  | string;
+
+export type AdmissionWorkspaceCase = {
+  id: string;
+  status: AdmissionWorkspaceCaseStatus;
+  current_stage: AdmissionWorkspaceStage;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdmissionWorkspaceCandidate = {
+  id: string;
+  name: string;
+  initials: string;
+  avatar_url: string | null;
+};
+
+export type AdmissionWorkspaceJob = {
+  id: string;
+  title: string;
+};
+
+export type AdmissionWorkspaceChecklistItem = {
+  id: string;
+  title: string;
+  status: AdmissionWorkspaceChecklistItemStatus;
+  required: boolean;
+  position: number;
+  updated_at: string;
+  updated_by_name: string | null;
+  document_id: string | null;
+};
+
+export type AdmissionWorkspaceChecklist = {
+  total: number;
+  approved: number;
+  pending: number;
+  blocked: number;
+  items: AdmissionWorkspaceChecklistItem[];
+};
+
+export type AdmissionWorkspaceDocument = {
+  id: string;
+  filename: string;
+  document_type: PreAdmissionChecklistItemType | string;
+  status: AdmissionWorkspaceDocumentStatus;
+  uploaded_at: string;
+  approved_at: string | null;
+};
+
+export type AdmissionWorkspaceBlocker = {
+  type: string;
+  severity: AdmissionWorkspaceBlockerSeverity;
+  title: string;
+  description: string;
+  action: string;
+};
+
+export type AdmissionWorkspaceNextAction = {
+  type: string;
+  label: string;
+  enabled: boolean;
+  disabled_reason?: string | null;
+};
+
+export type AdmissionWorkspaceSummary = {
+  responsible_name: string | null;
+  created_at: string;
+  last_update_at: string;
+  readiness_status: AdmissionWorkspaceReadinessStatus;
+  ready_for_export: boolean;
+};
+
+export type AdmissionWorkspaceRecentEvent = {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  created_at: string;
+};
+
+export type AdmissionCaseWorkspace = {
+  case: AdmissionWorkspaceCase;
+  candidate: AdmissionWorkspaceCandidate;
+  job: AdmissionWorkspaceJob;
+  checklist: AdmissionWorkspaceChecklist;
+  documents: AdmissionWorkspaceDocument[];
+  main_blockers: AdmissionWorkspaceBlocker[];
+  next_actions: AdmissionWorkspaceNextAction[];
+  summary: AdmissionWorkspaceSummary;
+  recent_events: AdmissionWorkspaceRecentEvent[];
+};
+
 // Admission Packages
 export type AdmissionPackageStatus =
   | "draft"
@@ -1419,7 +1546,7 @@ export type AdmissionPackage = {
   cancelled_at: string | null;
 };
 
-export type ErpIntegrationAttemptMode = "dry_run" | "real";
+export type ErpIntegrationAttemptMode = "dry_run" | "mock" | "real";
 
 export type ErpIntegrationAttemptStatus =
   | "draft"
@@ -1487,6 +1614,26 @@ export type ErpIntegrationAttempt = {
 
 export type ErpIntegrationAttemptListResponse = {
   attempts: ErpIntegrationAttempt[];
+};
+
+export type ProtheusCapabilityState = {
+  available: boolean;
+  disabled_reason: string | null;
+};
+
+export type ProtheusRealSendCapabilityState = ProtheusCapabilityState & {
+  missing_configuration: string[];
+  blocking_flags: string[];
+};
+
+export type ProtheusCapabilities = {
+  provider: "protheus";
+  environment: string;
+  integration_mode: "disabled" | "dry_run" | "mock" | "real" | string;
+  dry_run: ProtheusCapabilityState;
+  simulation: ProtheusCapabilityState;
+  mock: ProtheusCapabilityState;
+  real_send: ProtheusRealSendCapabilityState;
 };
 
 // Manager View Types

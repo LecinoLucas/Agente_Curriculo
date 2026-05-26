@@ -2,11 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { candidatesService } from "../../../../services/candidatesService";
-import { HttpError } from "../../../../services/http";
 import { pipelineService } from "../../../../services/pipelineService";
 import { toast } from "../../../../shared/utils/toast";
 import type { CandidateOverview } from "../../../../types/domain";
+import type { PipelineContextValue } from "../../../../features/pipeline/PipelineContext";
+import { usePipeline } from "../../../../features/pipeline/PipelineContext";
 import { CandidatePreviewDrawer } from "../CandidatePreviewDrawer";
 
 const routerFuture = {
@@ -14,11 +14,8 @@ const routerFuture = {
   v7_relativeSplatPath: true,
 } as const;
 
-vi.mock("../../../../services/candidatesService", () => ({
-  candidatesService: {
-    getOverview: vi.fn(),
-    getProcessHistory: vi.fn(),
-  },
+vi.mock("../../../../features/pipeline/PipelineContext", () => ({
+  usePipeline: vi.fn(),
 }));
 
 vi.mock("../../../../services/pipelineService", async () => {
@@ -172,11 +169,62 @@ const baseOverview: CandidateOverview = {
   },
 };
 
-function mockOverview(override: Partial<CandidateOverview> = {}) {
-  vi.mocked(candidatesService.getOverview).mockResolvedValue({
-    ...baseOverview,
+const mockRefreshCandidateOverview = vi.fn().mockResolvedValue(undefined);
+
+function createMockContext(override: Partial<PipelineContextValue> = {}): PipelineContextValue {
+  return {
+    jobs: [],
+    jobsLoading: false,
+    jobsError: null,
+    activeJobId: null,
+    board: null,
+    boardLoading: false,
+    boardError: null,
+    selectedCandidateId: "candidate-1",
+    candidateOverview: null,
+    candidateLoading: false,
+    candidateError: null,
+    activePanelTab: "summary",
+    pollingAnalysisId: null,
+    pollingStatus: null,
+    candidatesSyncTick: 0,
+    analysesSyncTick: 0,
+    rankingSyncTick: 0,
+    loadJobs: vi.fn(),
+    invalidateJobs: vi.fn(),
+    setActiveJob: vi.fn(),
+    refreshBoard: vi.fn(),
+    invalidateBoard: vi.fn(),
+    openCandidate: vi.fn(),
+    closeCandidate: vi.fn(),
+    switchPanelTab: vi.fn(),
+    refreshCandidateOverview: mockRefreshCandidateOverview,
+    syncCandidateOverview: vi.fn(),
+    invalidateCandidateOverview: vi.fn(),
+    invalidateCandidate: vi.fn(),
+    patchCandidate: vi.fn(),
+    moveCandidateStage: vi.fn(),
+    setCandidateAiStatus: vi.fn(),
+    syncAnalysisStart: vi.fn(),
+    ensureAnalysisMatch: vi.fn(),
+    notifyCandidatesChanged: vi.fn(),
+    notifyAnalysesChanged: vi.fn(),
+    invalidateJobState: vi.fn(),
+    invalidateRanking: vi.fn(),
+    startPolling: vi.fn(),
+    stopPolling: vi.fn(),
     ...override,
-  });
+  } as PipelineContextValue;
+}
+
+function mockOverview(override: Partial<CandidateOverview> = {}) {
+  vi.mocked(usePipeline).mockReturnValue(
+    createMockContext({
+      candidateOverview: { ...baseOverview, ...override },
+      candidateLoading: false,
+      candidateError: null,
+    }),
+  );
 }
 
 function renderDrawer(onClose = vi.fn(), onPipelineChanged?: () => Promise<void> | void) {
@@ -196,6 +244,7 @@ function renderDrawer(onClose = vi.fn(), onPipelineChanged?: () => Promise<void>
 describe("CandidatePreviewDrawer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRefreshCandidateOverview.mockResolvedValue(undefined);
     vi.mocked(pipelineService.moveCandidateStage).mockResolvedValue({
       candidate_id: "candidate-1",
       job_id: "job-1",
@@ -409,7 +458,7 @@ describe("CandidatePreviewDrawer", () => {
       force_requires_reason: true,
     };
     vi.mocked(pipelineService.moveCandidateStage).mockRejectedValueOnce(
-      new HttpError(409, "Conflict", undefined, blockedPayload, undefined),
+      new (await import("../../../../services/http")).HttpError(409, "Conflict", undefined, blockedPayload, undefined),
     );
 
     mockOverview({
@@ -425,21 +474,15 @@ describe("CandidatePreviewDrawer", () => {
 
     await user.click(await screen.findByRole("button", { name: /Avançar para fase Final/i }));
 
-    // Modal opened with structured pendencies (including the unknown-action one).
     const modal = await screen.findByTestId("pipeline-transition-blocked-modal");
     expect(modal).toBeInTheDocument();
     expect(screen.getByTestId("pipeline-blocked-gate-scorecard_not_submitted")).toBeInTheDocument();
-    // Unknown action is NOT discarded — it is still listed so we don't mask a backend regression.
     expect(screen.getByTestId("pipeline-blocked-gate-exotic_gate")).toBeInTheDocument();
-    // The unknown action falls back to "Abrir perfil" on its button.
     expect(
       screen.getByTestId("pipeline-blocked-gate-exotic_gate-action"),
     ).toHaveTextContent(/abrir perfil/i);
 
-    // No generic move-error toast was issued.
     expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
-
-    // can_force=false → no force button.
     expect(screen.queryByText(/forçar avanço/i)).not.toBeInTheDocument();
   });
 
@@ -549,6 +592,31 @@ describe("CandidatePreviewDrawer", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/candidatos/candidate-1");
   });
 
+  it("mostra atalho claro para pré-admissão quando candidato está contratado", async () => {
+    const user = userEvent.setup();
+    mockOverview({
+      pipeline_entries: [
+        {
+          ...baseOverview.pipeline_entries[0],
+          stage: "hired",
+          relationship_status: "active",
+          candidate_status: "Contratado",
+        },
+      ],
+      preview_pendencies: [],
+    });
+    renderDrawer();
+
+    const section = await screen.findByTestId("preview-pre-admission");
+    expect(within(section).getByText("Pré-admissão")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("preview-open-pre-admission"));
+
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/candidatos/candidate-1?tab=pre_admission",
+    );
+  });
+
   it("continua fechando por X, backdrop e footer", async () => {
     const user = userEvent.setup();
     mockOverview();
@@ -559,5 +627,48 @@ describe("CandidatePreviewDrawer", () => {
     await user.click(screen.getByTestId("preview-close-action"));
 
     expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  it("exibe esqueleto de loading quando candidateLoading é verdadeiro", () => {
+    vi.mocked(usePipeline).mockReturnValue(
+      createMockContext({ candidateOverview: null, candidateLoading: true, candidateError: null }),
+    );
+    renderDrawer();
+
+    expect(screen.getByTestId("preview-skeleton")).toBeInTheDocument();
+    expect(screen.queryByTestId("preview-name")).not.toBeInTheDocument();
+  });
+
+  it("exibe mensagem de erro e botão de retry quando o overview falha", async () => {
+    vi.mocked(usePipeline).mockReturnValue(
+      createMockContext({
+        candidateOverview: null,
+        candidateLoading: false,
+        candidateError: "Falha ao carregar candidato.",
+      }),
+    );
+    renderDrawer();
+
+    expect(await screen.findByTestId("preview-error")).toBeInTheDocument();
+    expect(screen.getByText("Falha ao carregar candidato.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /tentar novamente/i })).toBeInTheDocument();
+  });
+
+  it("chama refreshCandidateOverview ao clicar Tentar novamente", async () => {
+    const user = userEvent.setup();
+    const mockRefresh = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(usePipeline).mockReturnValue(
+      createMockContext({
+        candidateOverview: null,
+        candidateLoading: false,
+        candidateError: "Falha ao carregar candidato.",
+        refreshCandidateOverview: mockRefresh,
+      }),
+    );
+    renderDrawer();
+
+    await user.click(await screen.findByRole("button", { name: /tentar novamente/i }));
+
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 });

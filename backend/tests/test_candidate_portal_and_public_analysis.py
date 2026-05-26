@@ -30,6 +30,7 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.database.models.user_model import UserModel
 from src.interface.workers.resume_extraction_tasks import _process_resume_extraction_async
 from src.domain.entities.user import UserRole
 from tests.integration.helpers import _auth_headers, _create_active_user
@@ -280,7 +281,7 @@ async def test_candidate_portal_only_returns_authenticated_candidate_data(
 
 
 @pytest.mark.asyncio
-async def test_public_application_with_job_creates_pending_analysis_and_pipeline_link(
+async def test_public_application_with_job_creates_waiting_analysis_and_pipeline_link(
     client: AsyncClient,
     db_session: AsyncSession,
     published_job,
@@ -311,7 +312,7 @@ async def test_public_application_with_job_creates_pending_analysis_and_pipeline
     assert response.status_code == status.HTTP_201_CREATED
     payload = response.json()
     assert payload["analysis_auto_requested"] is True
-    assert payload["analysis_status"] == "pending"
+    assert payload["analysis_status"] == "waiting_extraction"
     assert payload["analysis_id"] is not None
     assert payload["pipeline_id"] is not None
 
@@ -336,8 +337,88 @@ async def test_public_application_with_job_creates_pending_analysis_and_pipeline
     )
     analysis = analysis_row.mappings().first()
     assert analysis is not None
-    assert analysis["status"] == "pending"
+    assert analysis["status"] == "waiting_extraction"
     assert analysis["job_id"] == published_job.id
+
+
+@pytest.mark.asyncio
+async def test_public_application_creates_analysis_when_system_user_is_missing(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    valid_pdf_bytes: bytes,
+) -> None:
+    admin = await _create_active_user(
+        db_session,
+        f"analysis-config-{uuid4().hex[:8]}@test.com",
+        "password123",
+        UserRole.ADMIN,
+    )
+    ai_model = AIModelModel(
+        id=uuid4(),
+        provider="google",
+        model_id=f"gemini-missing-system-{uuid4().hex[:8]}",
+        model_name="Gemini Missing System User Test",
+        is_active=True,
+    )
+    prompt = PromptTemplateModel(
+        id=uuid4(),
+        name=f"Full Analysis Missing System User {uuid4().hex[:8]}",
+        version=1,
+        template_type="full_analysis",
+        user_prompt_template="Analise o curriculo {{ resume_text }} para a vaga {{ job_text }}",
+        max_tokens=2048,
+        temperature=Decimal("0.1"),
+        is_active=True,
+        activated_at=datetime.now(UTC),
+        created_by=admin.id,
+    )
+    db_session.add_all([ai_model, prompt])
+    published_job = JobModel(
+        id=uuid4(),
+        title="Vaga Sem Usuario Sistema",
+        description="Teste de submissao publica sem usuario tecnico preexistente",
+        status="published",
+        created_by=admin.id,
+        location="São Paulo, SP",
+        job_area="Technology",
+    )
+    db_session.add(published_job)
+    await db_session.commit()
+    await db_session.execute(sa.delete(UserModel).where(UserModel.id == SYSTEM_USER_ID))
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Paulo Sem Usuario Sistema",
+            "cpf": "75948752005",
+            "email": "paulo.sem.usuario@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "8000",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    payload = response.json()
+    assert payload["analysis_id"] is not None
+    assert payload["analysis_status"] == "waiting_extraction"
+
+    pipeline_current_analysis_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.current_analysis_id).where(
+            CandidateJobPipelineModel.candidate_id == UUID(payload["candidate_id"]),
+            CandidateJobPipelineModel.job_id == published_job.id,
+        )
+    )
+    assert pipeline_current_analysis_id == UUID(payload["analysis_id"])
 
 
 @pytest.mark.asyncio
@@ -489,7 +570,7 @@ async def test_resume_extraction_enqueues_pending_analysis_only_once(
         sa.update(AnalysisModel)
         .where(AnalysisModel.id == UUID(payload["analysis_id"]))
         .values(
-            status="pending",
+            status="waiting_extraction",
             task_id=None,
         )
     )
@@ -605,11 +686,132 @@ async def test_resume_extraction_enqueues_pending_analysis_only_once(
     assert enqueued == [payload["analysis_id"]]
 
     analysis_row = await db_session.execute(
-        sa.select(AnalysisModel.task_id).where(AnalysisModel.id == UUID(payload["analysis_id"]))
+        sa.select(AnalysisModel.status, AnalysisModel.task_id).where(
+            AnalysisModel.id == UUID(payload["analysis_id"])
+        )
     )
     analysis = analysis_row.mappings().first()
     assert analysis is not None
+    assert analysis["status"] == "pending"
     assert analysis["task_id"] == f"analysis:{payload['analysis_id']}"
+
+
+@pytest.mark.asyncio
+async def test_resume_extraction_failure_marks_waiting_analysis_failed(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    published_job,
+    valid_pdf_bytes: bytes,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from src.infrastructure.pdf.text_extractor import PdfTextExtractionError
+
+    await _create_ai_config(db_session)
+    monkeypatch.setattr(
+        "src.interface.api.routers.public.enqueue_resume_extraction",
+        lambda resume_version_id: None,
+    )
+
+    response = await client.post(
+        "/api/v1/public/candidates/apply",
+        data={
+            "full_name": "Falha Extracao",
+            "cpf": "18120474008",
+            "email": "falha.extracao@example.com",
+            "phone": "11987654321",
+            "city": "São Paulo",
+            "state": "SP",
+            "salary_expectation": "8500",
+            "desired_contract_type": "CLT",
+            "works_at_marajo_group": False,
+            "job_id": str(published_job.id),
+            "lgpd_consent": True,
+            "password": "SenhaSegura123",
+            "confirm_password": "SenhaSegura123",
+        },
+        files={"resume_file": ("resume.pdf", io.BytesIO(valid_pdf_bytes), "application/pdf")},
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    payload = response.json()
+    assert payload["analysis_status"] == "waiting_extraction"
+
+    resume_path = tmp_path / "resume.pdf"
+    resume_path.write_bytes(valid_pdf_bytes)
+
+    async def _fake_claim_resume_version_for_processing(**kwargs) -> bool:
+        return True
+
+    async def _fake_load_resume_context(**kwargs):
+        return (
+            SimpleNamespace(
+                id=UUID(payload["resume_version_id"]),
+                resume_id=UUID(payload["resume_id"]),
+                s3_key="resumes/test.pdf",
+                extracted_text=None,
+                extraction_status="processing",
+                extraction_error=None,
+                page_count=None,
+                word_count=None,
+            ),
+            SimpleNamespace(id=UUID(payload["resume_id"]), candidate_id=UUID(payload["candidate_id"])),
+            SimpleNamespace(id=UUID(payload["candidate_id"])),
+        )
+
+    class _FakeCeleryEngine:
+        async def dispose(self) -> None:
+            return None
+
+    async def _fake_create_celery_async_sessionmaker():
+        assert db_session.bind is not None
+        return _FakeCeleryEngine(), async_sessionmaker(
+            db_session.bind,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False,
+        )
+
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks._claim_resume_version_for_processing",
+        _fake_claim_resume_version_for_processing,
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks._load_resume_context",
+        _fake_load_resume_context,
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks.resolve_resume_storage_path",
+        lambda _s3_key: resume_path,
+    )
+    monkeypatch.setattr(
+        "src.interface.workers.resume_extraction_tasks.extract_pdf_text",
+        lambda _content: (_ for _ in ()).throw(PdfTextExtractionError("PDF inválido")),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.database.connection.create_celery_async_sessionmaker",
+        _fake_create_celery_async_sessionmaker,
+    )
+
+    result = await _process_resume_extraction_async(resume_version_id=payload["resume_version_id"])
+    assert result["status"] == "failed"
+
+    rows = await db_session.execute(
+        sa.select(
+            ResumeVersionModel.extraction_status,
+            AnalysisModel.status,
+            AnalysisModel.failure_reason,
+            AnalysisModel.provider_error_type,
+        )
+        .join(AnalysisModel, AnalysisModel.resume_version_id == ResumeVersionModel.id)
+        .where(AnalysisModel.id == UUID(payload["analysis_id"]))
+    )
+    row = rows.mappings().first()
+    assert row is not None
+    assert row["extraction_status"] == "failed"
+    assert row["status"] == "failed"
+    assert row["failure_reason"] == "resume_extraction_failed"
+    assert row["provider_error_type"] == "resume_extraction_failed"
 
 
 @pytest.mark.asyncio
@@ -672,7 +874,7 @@ async def test_portal_overview_uses_active_pipeline_instead_of_latest_updated_pi
 
     assert overview_payload["active_application"] is not None
     assert overview_payload["active_application"]["job_id"] == str(published_job.id)
-    assert overview_payload["active_application"]["status_public"] == "Currículo em análise"
+    assert overview_payload["active_application"]["status_public"] == "Aguardando extração"
     assert any(
         item["job_id"] == str(closed_job.id)
         for item in overview_payload["application_history"]
@@ -745,8 +947,8 @@ async def test_portal_overview_uses_current_analysis_id_instead_of_latest_analys
 
     assert overview_payload["active_application"] is not None
     assert overview_payload["active_application"]["current_analysis_id"] == str(current_analysis_id)
-    assert overview_payload["active_application"]["analysis_status"] == "pending"
-    assert overview_payload["active_application"]["status_public"] == "Currículo em análise"
+    assert overview_payload["active_application"]["analysis_status"] == "waiting_extraction"
+    assert overview_payload["active_application"]["status_public"] == "Aguardando extração"
 
 
 @pytest.mark.asyncio

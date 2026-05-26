@@ -4,17 +4,23 @@ import re
 import unicodedata
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
-from fastapi.responses import FileResponse
 import sqlalchemy as sa
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.admission_case_workspace_service import (
+    AdmissionCaseWorkspaceService,
+    AdmissionReadinessError,
+)
 from src.application.services.pre_admission_service import (
     MAX_PRE_ADMISSION_DOCUMENT_BYTES,
     PreAdmissionService,
 )
-from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import SQLAlchemyPreAdmissionRepository
 from src.infrastructure.database.models.pre_admission_model import PreAdmissionChecklistItemModel
+from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import (
+    SQLAlchemyPreAdmissionRepository,
+)
 from src.interface.api.dependencies import (
     CurrentCompleteCandidateSession,
     PreAdmissionDocumentDownloadStaff,
@@ -23,6 +29,7 @@ from src.interface.api.dependencies import (
 )
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.pre_admission_schemas import (
+    AdmissionCaseWorkspaceResponse,
     CandidatePortalPreAdmissionEnvelopeResponse,
     PreAdmissionCaseResponse,
     PreAdmissionChecklistItemCreateRequest,
@@ -55,6 +62,10 @@ def _service(db: AsyncSession) -> PreAdmissionService:
     return PreAdmissionService(SQLAlchemyPreAdmissionRepository(db))
 
 
+def _workspace_service(db: AsyncSession) -> AdmissionCaseWorkspaceService:
+    return AdmissionCaseWorkspaceService(SQLAlchemyPreAdmissionRepository(db))
+
+
 @router.get(
     "/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
     response_model=PreAdmissionEnvelopeResponse,
@@ -66,6 +77,132 @@ async def get_pre_admission(
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionEnvelopeResponse:
     return await _service(db).get(candidate_id=candidate_id, job_id=job_id)
+
+
+@router.get(
+    "/admission/cases/{case_id}/workspace",
+    response_model=AdmissionCaseWorkspaceResponse,
+)
+async def get_admission_case_workspace(
+    case_id: UUID,
+    _current_user: RecruiterHrOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseWorkspaceResponse:
+    return await _workspace_service(db).get_workspace(case_id=case_id)
+
+
+@router.post(
+    "/admission/checklist-items/{item_id}/approve",
+    response_model=AdmissionCaseWorkspaceResponse,
+)
+async def approve_admission_checklist_item(
+    item_id: UUID,
+    current_user: RecruiterHrOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseWorkspaceResponse:
+    try:
+        result = await _workspace_service(db).approve_checklist_item(
+            item_id=item_id,
+            actor_id=current_user.id,
+        )
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admission/checklist-items/{item_id}/reject",
+    response_model=AdmissionCaseWorkspaceResponse,
+)
+async def reject_admission_checklist_item(
+    item_id: UUID,
+    current_user: RecruiterHrOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseWorkspaceResponse:
+    try:
+        result = await _workspace_service(db).reject_checklist_item(
+            item_id=item_id,
+            actor_id=current_user.id,
+        )
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admission/checklist-items/{item_id}/request-correction",
+    response_model=AdmissionCaseWorkspaceResponse,
+)
+async def request_admission_checklist_item_correction(
+    item_id: UUID,
+    current_user: RecruiterHrOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseWorkspaceResponse:
+    try:
+        result = await _workspace_service(db).request_checklist_item_correction(
+            item_id=item_id,
+            actor_id=current_user.id,
+        )
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admission/checklist-items/{item_id}/mark-not-required",
+    response_model=AdmissionCaseWorkspaceResponse,
+)
+async def mark_admission_checklist_item_not_required(
+    item_id: UUID,
+    current_user: RecruiterHrOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseWorkspaceResponse:
+    try:
+        result = await _workspace_service(db).mark_checklist_item_not_required(
+            item_id=item_id,
+            actor_id=current_user.id,
+        )
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admission/cases/{case_id}/mark-ready-for-export",
+    response_model=AdmissionCaseWorkspaceResponse,
+)
+async def mark_admission_case_ready_for_export(
+    case_id: UUID,
+    current_user: RecruiterHrOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseWorkspaceResponse:
+    try:
+        result = await _workspace_service(db).mark_ready_for_export(
+            case_id=case_id,
+            actor_id=current_user.id,
+        )
+        await db.commit()
+        return result
+    except AdmissionReadinessError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Caso de pré-admissão possui pendências para exportação.",
+                "blockers": [blocker.model_dump(mode="json") for blocker in exc.blockers],
+            },
+        ) from exc
+    except Exception:
+        await db.rollback()
+        raise
 
 
 @router.post(
@@ -134,7 +271,11 @@ async def create_pre_admission_checklist_item(
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionChecklistItemResponse:
     try:
-        result = await _service(db).add_checklist_item(case_id=case_id, actor_id=current_user.id, body=body)
+        result = await _service(db).add_checklist_item(
+            case_id=case_id,
+            actor_id=current_user.id,
+            body=body,
+        )
         await db.commit()
         return result
     except Exception:
@@ -201,7 +342,10 @@ async def approve_pre_admission_document(
     db: AsyncSession = Depends(get_db),
 ) -> PreAdmissionDocumentResponse:
     try:
-        result = await _service(db).approve_document(document_id=document_id, actor_id=current_user.id)
+        result = await _service(db).approve_document(
+            document_id=document_id,
+            actor_id=current_user.id,
+        )
         await db.commit()
         return result
     except Exception:

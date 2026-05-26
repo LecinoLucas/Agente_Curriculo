@@ -58,6 +58,7 @@ export type UpdateJobRequestPayload = {
 
 function normalizeAiStatus(value: unknown): JobCandidate["ai_status"] {
   if (
+    value === "waiting_extraction" ||
     value === "pending" ||
     value === "processing" ||
     value === "retry_scheduled" ||

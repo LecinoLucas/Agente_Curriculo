@@ -76,6 +76,7 @@ async def _mark_analysis_enqueue_failed(
         return
     analysis.status = "failed"
     analysis.failure_reason = reason
+    analysis.provider_error_type = "enqueue_failed"
     analysis.failed_at = now
     analysis.next_retry_at = None
     analysis.worker_claim_id = None

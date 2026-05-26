@@ -26,6 +26,7 @@ from src.infrastructure.database.models.scoring_model import (
 from src.infrastructure.repositories.sqlalchemy_pipeline_repository import (
     SQLAlchemyPipelineRepository,
 )
+from src.application.services.pipeline_service import PipelineService
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -356,6 +357,30 @@ async def test_ai_status_from_current_analysis(db_session: AsyncSession) -> None
 
     assert len(rows) == 1
     assert rows[0]["ai_status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_board_accepts_waiting_extraction_ai_status(db_session: AsyncSession) -> None:
+    """Board response must not fail validation while extraction is still pending."""
+    repo = SQLAlchemyPipelineRepository(db_session)
+    service = PipelineService(repo, db_session)
+    job = await _make_job(db_session)
+    c = await _make_candidate(db_session, "wait")
+
+    _, _, analysis = await _make_resume_with_analysis(
+        db_session,
+        c.id,
+        job_id=job.id,
+        status="waiting_extraction",
+    )
+    await _make_pipeline(db_session, c.id, job.id, current_analysis_id=analysis.id)
+    await db_session.commit()
+
+    board = await service.get_board(job.id)
+    candidates = [candidate for column in board.columns for candidate in column.candidates]
+
+    assert len(candidates) == 1
+    assert candidates[0].ai_status == "waiting_extraction"
 
 
 @pytest.mark.asyncio

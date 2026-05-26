@@ -64,6 +64,19 @@ describe("KanbanCard", () => {
     expect(screen.getByText("Aguardando IA")).toBeInTheDocument();
   });
 
+  it("mostra extração pendente quando ai_status é waiting_extraction", () => {
+    render(
+      <KanbanCard
+        candidate={{ ...mockCandidate, ai_status: "waiting_extraction", job_fit_score: null }}
+        isSaving={false}
+        enterDelay={0}
+      />
+    );
+
+    expect(screen.getByTestId("kanban-ai-status-badge")).toHaveTextContent("Aguardando extração");
+    expect(screen.getByText("Aguardando IA")).toBeInTheDocument();
+  });
+
   it("mostra IA analisando quando ai_status é processing", () => {
     render(
       <KanbanCard

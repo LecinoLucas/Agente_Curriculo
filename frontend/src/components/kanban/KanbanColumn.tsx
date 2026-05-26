@@ -2,8 +2,23 @@ import { memo, type CSSProperties, type DragEvent } from "react";
 import type { JobCandidate, PipelineColumn, PipelineStage } from "../../types/domain";
 import { KanbanCard } from "./KanbanCard";
 import { Plus } from "lucide-react";
+import type { PipelineMacroColumnId } from "../../features/pipeline/utils/pipelineKanbanColumns";
 
-const COL_THEMES: Record<PipelineStage, { border: string; bg: string; accent: string; desc: string }> = {
+type KanbanColumnData = PipelineColumn & {
+  macroId?: PipelineMacroColumnId;
+  description?: string;
+  dropTargetStage?: PipelineStage | null;
+  dropDisabledReason?: string;
+};
+
+const DEFAULT_THEME = {
+  border: "border-[hsl(var(--border))]/55",
+  bg: "bg-[hsl(var(--surface-muted))]/45",
+  accent: "border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]",
+  desc: "Etapa do processo",
+};
+
+const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, { border: string; bg: string; accent: string; desc: string }>> = {
   entry: {
     border: "border-[hsl(var(--border))]/55",
     bg: "bg-[hsl(var(--surface-muted))]/45",
@@ -52,10 +67,42 @@ const COL_THEMES: Record<PipelineStage, { border: string; bg: string; accent: st
     accent: "bg-[hsl(var(--danger))] text-white",
     desc: "Desclassificado",
   },
+  entrada: {
+    ...DEFAULT_THEME,
+    desc: "Inscrições e currículos recebidos",
+  },
+  analise: {
+    ...DEFAULT_THEME,
+    desc: "Triagem e análise inicial",
+  },
+  avaliacao: {
+    ...DEFAULT_THEME,
+    desc: "Avaliações e etapa final",
+  },
+  entrevista: {
+    ...DEFAULT_THEME,
+    desc: "Entrevistas RH, técnica e scorecard",
+  },
+  decisao: {
+    ...DEFAULT_THEME,
+    desc: "Oferta, decisão e negociação",
+  },
+  admissao: {
+    border: "border-[hsl(var(--primary))]/30",
+    bg: "bg-[hsl(var(--primary))]/[0.035]",
+    accent: "border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]",
+    desc: "Contratação, pré-admissão e Protheus",
+  },
+  finalizado: {
+    border: "border-[hsl(var(--success))]/35",
+    bg: "bg-[hsl(var(--success-soft))]/40",
+    accent: "bg-[hsl(var(--success))] text-white",
+    desc: "Admitidos e encerrados",
+  },
 };
 
 interface KanbanColumnProps {
-  column: PipelineColumn;
+  column: KanbanColumnData;
   colIndex: number;
   onCardClick?: (candidateId: string) => void;
   disabled?: boolean;
@@ -89,43 +136,46 @@ export const KanbanColumn = memo(function KanbanColumn({
   onColumnDragLeave,
   onColumnDrop,
 }: KanbanColumnProps) {
-  const theme = COL_THEMES[column.stage] || COL_THEMES.entry;
+  const theme = COL_THEMES[column.macroId ?? column.stage] || COL_THEMES[column.stage] || DEFAULT_THEME;
+  const columnTestId = column.macroId ?? column.stage;
+  const targetStage = column.dropTargetStage ?? column.stage;
+  const dropDisabled = column.dropTargetStage === null;
   const disabledCls = disabled ? "opacity-60 pointer-events-none" : "";
   const isFiltered = totalCount !== undefined && totalCount !== column.candidates.length;
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (disabled || !draggingCandidateId) return;
+    if (disabled || dropDisabled || !draggingCandidateId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    onColumnDragOver?.(column.stage);
+    onColumnDragOver?.(targetStage);
   };
 
   const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-      onColumnDragLeave?.(column.stage);
+      onColumnDragLeave?.(targetStage);
     }
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (disabled || !draggingCandidateId) return;
+    if (disabled || dropDisabled || !draggingCandidateId) return;
     event.preventDefault();
-    onColumnDrop?.(column.stage);
+    onColumnDrop?.(targetStage);
   };
 
   return (
     <div
       className={[
-        "flex w-full min-w-[19rem] basis-[clamp(19rem,21vw,24rem)] grow flex-col rounded-2xl border p-4 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.03)] xl:min-w-[20rem] 2xl:min-w-[21rem]",
+        "flex w-full min-w-[15rem] basis-[clamp(15rem,14vw,18rem)] grow flex-col rounded-2xl border p-3 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.03)] xl:min-w-[15.5rem] 2xl:min-w-[16.5rem]",
         "kanban-column-enter",
         theme.border,
         theme.bg,
-        isDropTarget ? "border-[hsl(var(--primary))]/45 bg-[hsl(var(--primary))]/[0.04] shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]" : "",
+        isDropTarget && !dropDisabled ? "border-[hsl(var(--primary))]/45 bg-[hsl(var(--primary))]/[0.04] shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]" : "",
         disabledCls,
       ]
         .filter(Boolean)
         .join(" ")}
       style={{ "--enter-delay": `${colIndex * 55}ms` } as CSSProperties}
-      data-testid={`kanban-column-${column.stage}`}
+      data-testid={`kanban-column-${columnTestId}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -146,9 +196,14 @@ export const KanbanColumn = memo(function KanbanColumn({
             {isFiltered ? `${column.candidates.length}/${totalCount}` : column.candidates.length}
           </span>
         </div>
-        <p className="text-[10px] font-medium text-[hsl(var(--text-muted))] truncate" title={theme.desc}>
-          {theme.desc}
+        <p className="text-[10px] font-medium text-[hsl(var(--text-muted))] truncate" title={column.description ?? theme.desc}>
+          {column.description ?? theme.desc}
         </p>
+        {dropDisabled && column.dropDisabledReason ? (
+          <p className="text-[9px] font-semibold text-[hsl(var(--text-muted))]/80" title={column.dropDisabledReason}>
+            Movimento pelo perfil
+          </p>
+        ) : null}
       </div>
 
       {/* Candidate Cards list */}
@@ -191,7 +246,7 @@ export const KanbanColumn = memo(function KanbanColumn({
       {onAddCandidate && colIndex === 0 && column.stage !== "hired" && column.stage !== "rejected" && (
         <button
           type="button"
-          onClick={() => onAddCandidate(column.stage)}
+          onClick={() => onAddCandidate(targetStage)}
           className="mt-3 flex items-center justify-center gap-1.5 w-full rounded-xl border border-dashed border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))]/60 py-2.5 text-xs font-bold text-[hsl(var(--text-muted))] transition-all hover:border-[hsl(var(--primary))]/30 hover:bg-[hsl(var(--surface-muted))]/80 hover:text-[hsl(var(--primary))] hover:shadow-[0_2px_4px_rgba(0,0,0,0.02)]"
         >
           <Plus className="h-3.5 w-3.5" />

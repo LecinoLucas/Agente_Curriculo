@@ -9,8 +9,10 @@ import { resumeService } from "../../../../services/resumeService";
 import { toast } from "../../../../shared/utils/toast";
 
 type AnalysisStatus =
+  | "waiting_extraction"
   | "pending"
   | "processing"
+  | "retry_scheduled"
   | "completed"
   | "failed"
   | "cancelled";
@@ -44,8 +46,10 @@ type DocumentsTabProps = {
 };
 
 const ANALYSIS_STATUS_LABEL: Record<AnalysisStatus, string> = {
+  waiting_extraction: "Aguardando extração",
   pending: "Na fila",
   processing: "Processando",
+  retry_scheduled: "Nova tentativa agendada",
   completed: "Concluída",
   failed: "Falhou",
   cancelled: "Cancelada",

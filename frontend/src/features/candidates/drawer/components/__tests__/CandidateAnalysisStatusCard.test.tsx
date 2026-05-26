@@ -46,8 +46,8 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Analisando com IA")).toBeInTheDocument();
-    expect(screen.getByText("Analisando currículo com IA...")).toBeInTheDocument();
+    expect(screen.getByText("Análise em processamento")).toBeInTheDocument();
+    expect(screen.getByText("A análise do currículo está em processamento.")).toBeInTheDocument();
   });
 
   it("mostra score principal quando a aderência está pronta", () => {
@@ -148,8 +148,24 @@ describe("CandidateAnalysisStatusCard", () => {
       />,
     );
 
-    expect(screen.getByText("Analisando com IA")).toBeInTheDocument();
+    expect(screen.getByText("Análise na fila")).toBeInTheDocument();
     expect(screen.queryByText("Extraindo currículo")).not.toBeInTheDocument();
+  });
+
+  it("mostra analysis waiting_extraction quando a análise já foi persistida", () => {
+    render(
+      <CandidateAnalysisStatusCard
+        hasResume={true}
+        activeJobId="job-1"
+        analysisStatus="waiting_extraction"
+        jobFitScore={null}
+        aiStatus="waiting_extraction"
+        extractionStatus="pending"
+      />,
+    );
+
+    expect(screen.getByText("Aguardando extração")).toBeInTheDocument();
+    expect(screen.getByText("A análise já foi criada e aguarda a extração do currículo.")).toBeInTheDocument();
   });
 
   it("prioriza extraction_status failed sobre analysis completed", () => {

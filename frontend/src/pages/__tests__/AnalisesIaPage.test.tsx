@@ -154,6 +154,96 @@ beforeEach(() => {
 });
 
 describe("AnalisesIaPage", () => {
+  it("mostra análises pending e waiting_extraction imediatamente", async () => {
+    const user = userEvent.setup();
+    listGlobalMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: "analysis-waiting",
+          type: "resume",
+          job_id: "job-1",
+          job_title: null,
+          candidate_id: "candidate-1",
+          candidate_name: "Candidata Extração",
+          candidate_email: "extracao@example.com",
+          resume_file_name: "curriculo.pdf",
+          resume_version_id: "version-1",
+          status: "waiting_extraction",
+          failure_reason: null,
+          discarded_at: null,
+          discarded_by: null,
+          discard_reason: null,
+          discard_reason_note: null,
+          used_real_ai: null,
+          retry_count: 0,
+          next_retry_at: null,
+          provider_error_type: null,
+          provider_status_code: null,
+          stuck: false,
+          reason: null,
+          created_at: "2026-05-24T21:00:00Z",
+          updated_at: "2026-05-24T21:00:00Z",
+          started_at: null,
+          completed_at: null,
+          failed_at: null,
+        },
+        {
+          id: "analysis-pending",
+          type: "resume",
+          job_id: "job-2",
+          job_title: null,
+          candidate_id: "candidate-2",
+          candidate_name: "Candidato Fila",
+          candidate_email: "fila@example.com",
+          resume_file_name: "fila.pdf",
+          resume_version_id: "version-2",
+          status: "pending",
+          failure_reason: null,
+          discarded_at: null,
+          discarded_by: null,
+          discard_reason: null,
+          discard_reason_note: null,
+          used_real_ai: null,
+          retry_count: 0,
+          next_retry_at: null,
+          provider_error_type: null,
+          provider_status_code: null,
+          stuck: false,
+          reason: null,
+          created_at: "2026-05-24T21:01:00Z",
+          updated_at: "2026-05-24T21:01:00Z",
+          started_at: null,
+          completed_at: null,
+          failed_at: null,
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Candidata Extração")).toBeInTheDocument();
+    expect(screen.getAllByText("Aguardando extração").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("A análise já foi criada e aguarda a extração do currículo.")).toBeInTheDocument();
+    expect(screen.getByText("Candidato Fila")).toBeInTheDocument();
+    expect(screen.getByText("Na fila")).toBeInTheDocument();
+
+    listGlobalMock.mockResolvedValueOnce({
+      data: [],
+      total: 0,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+    await user.click(screen.getByRole("button", { name: /Atualizar/i }));
+    await waitFor(() => {
+      expect(listGlobalMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("mostra avaliações comportamentais na tela de acompanhamento ao selecionar o tipo", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -161,11 +251,14 @@ describe("AnalisesIaPage", () => {
     await waitFor(() => {
       expect(listGlobalMock).toHaveBeenCalledWith(1, 20, undefined, undefined, undefined);
     });
-
-    await user.selectOptions(screen.getByDisplayValue("Currículo"), "behavioral_ai");
-
     await waitFor(() => {
       expect(listBehavioralAIQueueMock).toHaveBeenCalledWith(1, 20, undefined, undefined);
+    });
+
+    await user.selectOptions(screen.getByDisplayValue("Todas"), "behavioral_ai");
+
+    await waitFor(() => {
+      expect(listBehavioralAIQueueMock).toHaveBeenLastCalledWith(1, 20, undefined, undefined);
     });
 
     expect(await screen.findByText("Ana Candidata")).toBeInTheDocument();
@@ -182,11 +275,104 @@ describe("AnalisesIaPage", () => {
     expect(screen.getByDisplayValue("Todos os modelos")).toBeInTheDocument();
   });
 
+  it("filtro de concluídas mostra análises de currículo e comportamentais quando tipo é Todas", async () => {
+    const user = userEvent.setup();
+    listGlobalMock.mockResolvedValue({
+      data: [
+        {
+          id: "resume-completed",
+          type: "resume",
+          job_id: "job-resume",
+          job_title: "Analista de DP",
+          candidate_id: "candidate-resume",
+          candidate_name: "Carla Currículo",
+          candidate_email: "carla@example.com",
+          resume_file_name: "carla.pdf",
+          resume_version_id: "version-resume",
+          status: "completed",
+          failure_reason: null,
+          discarded_at: null,
+          discarded_by: null,
+          discard_reason: null,
+          discard_reason_note: null,
+          used_real_ai: true,
+          retry_count: 0,
+          next_retry_at: null,
+          provider_error_type: null,
+          provider_status_code: null,
+          stuck: false,
+          reason: null,
+          created_at: "2026-05-24T19:00:00Z",
+          updated_at: "2026-05-24T19:20:00Z",
+          started_at: "2026-05-24T19:01:00Z",
+          completed_at: "2026-05-24T19:20:00Z",
+          failed_at: null,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+    listBehavioralAIQueueMock.mockResolvedValue({
+      data: [
+        {
+          id: "behavioral-completed",
+          type: "behavioral_ai",
+          job_id: "job-behavioral",
+          job_title: "Assistente de RH",
+          candidate_id: "candidate-behavioral",
+          candidate_name: "Bruna Comportamental",
+          candidate_email: "bruna@example.com",
+          resume_file_name: null,
+          resume_version_id: null,
+          status: "completed",
+          failure_reason: null,
+          discarded_at: null,
+          discarded_by: null,
+          discard_reason: null,
+          discard_reason_note: null,
+          used_real_ai: null,
+          retry_count: 0,
+          next_retry_at: null,
+          provider_error_type: null,
+          provider_status_code: null,
+          provider: "google",
+          model: "gemini-2.5-flash",
+          stuck: false,
+          reason: null,
+          created_at: "2026-05-24T20:00:00Z",
+          updated_at: "2026-05-24T20:10:00Z",
+          started_at: "2026-05-24T20:01:00Z",
+          completed_at: "2026-05-24T20:10:00Z",
+          failed_at: null,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      total_pages: 1,
+    });
+
+    renderPage();
+    await user.selectOptions(await screen.findByDisplayValue("Todos os status"), "completed");
+
+    await waitFor(() => {
+      expect(listGlobalMock).toHaveBeenLastCalledWith(1, 20, "completed", undefined, undefined);
+    });
+    await waitFor(() => {
+      expect(listBehavioralAIQueueMock).toHaveBeenLastCalledWith(1, 20, "completed", undefined);
+    });
+    expect(await screen.findByText("Carla Currículo")).toBeInTheDocument();
+    expect(screen.getByText("Bruna Comportamental")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Todas")).toBeInTheDocument();
+  });
+
   it("permite retry contextual para IA comportamental com falha", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.selectOptions(await screen.findByDisplayValue("Currículo"), "behavioral_ai");
+    await user.selectOptions(await screen.findByDisplayValue("Todas"), "behavioral_ai");
     await screen.findByText("Bruno Candidato");
 
     const actionButtons = screen.getAllByLabelText(/Ações da análise/);
@@ -197,7 +383,7 @@ describe("AnalisesIaPage", () => {
       expect(retryBehavioralAIMock).toHaveBeenCalledWith("behavioral-eval-2");
     });
     await waitFor(() => {
-      expect(listBehavioralAIQueueMock).toHaveBeenCalledTimes(2);
+      expect(listBehavioralAIQueueMock).toHaveBeenCalledTimes(3);
     });
   });
 });

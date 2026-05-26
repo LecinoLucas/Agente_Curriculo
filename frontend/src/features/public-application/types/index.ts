@@ -1,6 +1,15 @@
 export type Step = "method" | "personal-data" | "job-resume" | "review";
 
 export type ApplicationStatus = "awaiting_job" | "entered_pipeline";
+export type PublicApplyAnalysisStatus =
+  | "waiting_extraction"
+  | "pending"
+  | "processing"
+  | "retry_scheduled"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "discarded";
 
 export interface FormData {
   authMethod: "manual" | "google";
@@ -47,7 +56,7 @@ export interface ApplyResponse {
   pipeline_id: string | null;
   analysis_auto_requested: boolean;
   analysis_id: string | null;
-  analysis_status: "pending" | "processing" | "completed" | "failed" | null;
+  analysis_status: PublicApplyAnalysisStatus | null;
   talent_pool: boolean;
   talent_pool_profile_status: "pending" | "processing" | "completed" | "failed" | null;
   portal_access_hint: string | null;

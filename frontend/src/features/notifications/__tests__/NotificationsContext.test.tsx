@@ -94,7 +94,7 @@ describe("NotificationsContext", () => {
   });
 
   it("não chama notificationService quando o usuário não está autenticado", async () => {
-    renderProvider({ route: "/candidato/login", token: null });
+    renderProvider({ route: "/candidato", token: null });
 
     await waitFor(() => {
       expect(notificationService.getNotifications).not.toHaveBeenCalled();

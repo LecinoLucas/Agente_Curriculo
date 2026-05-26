@@ -161,6 +161,26 @@ class ErpIntegrationAttemptListResponse(BaseModel):
     attempts: list[ErpIntegrationAttemptResponse]
 
 
+class ProtheusCapabilityState(BaseModel):
+    available: bool
+    disabled_reason: str | None = None
+
+
+class ProtheusRealSendCapabilityState(ProtheusCapabilityState):
+    missing_configuration: list[str] = Field(default_factory=list)
+    blocking_flags: list[str] = Field(default_factory=list)
+
+
+class ProtheusCapabilitiesResponse(BaseModel):
+    provider: str = "protheus"
+    environment: str
+    integration_mode: str
+    dry_run: ProtheusCapabilityState
+    simulation: ProtheusCapabilityState
+    mock: ProtheusCapabilityState
+    real_send: ProtheusRealSendCapabilityState
+
+
 class ProtheusMockSendRequest(BaseModel):
     simulate_failure: bool = False
 

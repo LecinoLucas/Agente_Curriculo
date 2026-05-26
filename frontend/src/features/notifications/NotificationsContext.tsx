@@ -94,7 +94,7 @@ function isTransientNotificationError(error: unknown): boolean {
 }
 
 function isPublicNotificationRoute(pathname: string, isAuthenticated: boolean): boolean {
-  if (pathname === "/login" || pathname === "/candidato/login" || pathname === "/candidato/cadastro") {
+  if (pathname === "/login" || pathname === "/candidato" || pathname === "/candidato/cadastro") {
     return true;
   }
 

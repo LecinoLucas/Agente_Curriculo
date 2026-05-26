@@ -26,16 +26,4 @@ export const publicApplicationService = {
     });
   },
 
-  /**
-   * Verifica se CPF ou Email já estão cadastrados
-   */
-  async checkExists(params: { email?: string; cpf?: string }): Promise<{ email_exists: boolean; cpf_exists: boolean }> {
-    const query = new URLSearchParams();
-    if (params.email) query.append("email", params.email);
-    if (params.cpf) query.append("cpf", params.cpf);
-    return httpRequest<{ email_exists: boolean; cpf_exists: boolean }>(`${API_BASE}/candidates/check-exists?${query.toString()}`, {
-      method: "GET",
-      withAuth: false,
-    });
-  },
 };

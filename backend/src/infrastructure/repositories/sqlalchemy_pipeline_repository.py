@@ -305,6 +305,7 @@ class SQLAlchemyPipelineRepository:
         return entry
 
     async def list_job_matches(self, job_id: UUID) -> list[dict]:
+        # Non-correlated scalar — runs once, resolved before the main query.
         active_score_version = (
             sa.select(ScoreModelVersionModel.id)
             .where(ScoreModelVersionModel.is_active.is_(True))
@@ -312,101 +313,150 @@ class SQLAlchemyPipelineRepository:
             .scalar_subquery()
         )
 
-        latest_behavioral_assignment_id = (
-            sa.select(BehavioralAssessmentAssignmentModel.id)
+        # ── CTE 1: latest behavioral assignment per pipeline cycle ─────────
+        # ROW_NUMBER() OVER(PARTITION BY pipeline_id ORDER BY created_at DESC)
+        # gives rn=1 to the most-recently created assignment.
+        # Filters to this job upfront so the window only ranges over relevant rows.
+        behavioral_ranked_cte = (
+            sa.select(
+                BehavioralAssessmentAssignmentModel.id.label("assignment_id"),
+                BehavioralAssessmentAssignmentModel.pipeline_id,
+                BehavioralAssessmentAssignmentModel.status.label("behavioral_assessment_status"),
+                BehavioralAssessmentAssignmentModel.submitted_at.label("behavioral_submitted_at"),
+                sa.func.row_number()
+                .over(
+                    partition_by=BehavioralAssessmentAssignmentModel.pipeline_id,
+                    order_by=[
+                        BehavioralAssessmentAssignmentModel.created_at.desc(),
+                        BehavioralAssessmentAssignmentModel.id.desc(),
+                    ],
+                )
+                .label("rn"),
+            )
+            .where(BehavioralAssessmentAssignmentModel.job_id == job_id)
+            .cte("behavioral_ranked")
+        )
+
+        latest_behavioral_cte = (
+            sa.select(behavioral_ranked_cte)
+            .where(behavioral_ranked_cte.c.rn == 1)
+            .cte("latest_behavioral")
+        )
+
+        # ── CTE 2: latest AI evaluation per latest behavioral assignment ───
+        # Joins to latest_behavioral so we only rank evaluations for assignments
+        # that are already "latest" — avoids scanning the whole AI eval table.
+        behavioral_ai_ranked_cte = (
+            sa.select(
+                BehavioralAssessmentAIEvaluationModel.assignment_id,
+                BehavioralAssessmentAIEvaluationModel.status.label("behavioral_ai_evaluation_status"),
+                sa.func.row_number()
+                .over(
+                    partition_by=BehavioralAssessmentAIEvaluationModel.assignment_id,
+                    order_by=[
+                        BehavioralAssessmentAIEvaluationModel.completed_at.desc().nullslast(),
+                        BehavioralAssessmentAIEvaluationModel.created_at.desc(),
+                    ],
+                )
+                .label("rn"),
+            )
+            .join(
+                latest_behavioral_cte,
+                BehavioralAssessmentAIEvaluationModel.assignment_id
+                == latest_behavioral_cte.c.assignment_id,
+            )
+            .cte("behavioral_ai_ranked")
+        )
+
+        latest_behavioral_ai_cte = (
+            sa.select(behavioral_ai_ranked_cte)
+            .where(behavioral_ai_ranked_cte.c.rn == 1)
+            .cte("latest_behavioral_ai")
+        )
+
+        # ── CTE 3: latest interview status per pipeline cycle ─────────────
+        interview_ranked_cte = (
+            sa.select(
+                InterviewScheduleModel.pipeline_id,
+                InterviewScheduleModel.status.label("interview_status"),
+                sa.func.row_number()
+                .over(
+                    partition_by=InterviewScheduleModel.pipeline_id,
+                    order_by=[
+                        InterviewScheduleModel.scheduled_start.desc().nullslast(),
+                        InterviewScheduleModel.updated_at.desc(),
+                    ],
+                )
+                .label("rn"),
+            )
+            .where(InterviewScheduleModel.job_id == job_id)
+            .cte("interview_ranked")
+        )
+
+        latest_interview_cte = (
+            sa.select(interview_ranked_cte)
+            .where(interview_ranked_cte.c.rn == 1)
+            .cte("latest_interview")
+        )
+
+        # ── CTE 4: soonest upcoming interview per pipeline cycle ──────────
+        # Only considers scheduled/rescheduled rows, sorted ASC to find next.
+        next_interview_ranked_cte = (
+            sa.select(
+                InterviewScheduleModel.pipeline_id,
+                InterviewScheduleModel.scheduled_start.label("interview_scheduled_start"),
+                sa.func.row_number()
+                .over(
+                    partition_by=InterviewScheduleModel.pipeline_id,
+                    order_by=[
+                        InterviewScheduleModel.scheduled_start.asc(),
+                        InterviewScheduleModel.updated_at.desc(),
+                    ],
+                )
+                .label("rn"),
+            )
             .where(
-                BehavioralAssessmentAssignmentModel.candidate_id == CandidateJobPipelineModel.candidate_id,
-                BehavioralAssessmentAssignmentModel.job_id == CandidateJobPipelineModel.job_id,
-                BehavioralAssessmentAssignmentModel.pipeline_id
-                == CandidateJobPipelineModel.candidate_job_pipeline_id,
-            )
-            .order_by(
-                BehavioralAssessmentAssignmentModel.created_at.desc(),
-                BehavioralAssessmentAssignmentModel.id.desc(),
-            )
-            .limit(1)
-            .correlate(CandidateJobPipelineModel)
-            .scalar_subquery()
-        )
-
-        behavioral_assessment_status = (
-            sa.select(BehavioralAssessmentAssignmentModel.status)
-            .where(BehavioralAssessmentAssignmentModel.id == latest_behavioral_assignment_id)
-            .limit(1)
-            .correlate(CandidateJobPipelineModel)
-            .scalar_subquery()
-        )
-
-        behavioral_submitted_at = (
-            sa.select(BehavioralAssessmentAssignmentModel.submitted_at)
-            .where(BehavioralAssessmentAssignmentModel.id == latest_behavioral_assignment_id)
-            .limit(1)
-            .correlate(CandidateJobPipelineModel)
-            .scalar_subquery()
-        )
-
-        behavioral_ai_evaluation_status = (
-            sa.select(BehavioralAssessmentAIEvaluationModel.status)
-            .where(BehavioralAssessmentAIEvaluationModel.assignment_id == latest_behavioral_assignment_id)
-            .order_by(
-                BehavioralAssessmentAIEvaluationModel.completed_at.desc().nullslast(),
-                BehavioralAssessmentAIEvaluationModel.created_at.desc(),
-            )
-            .limit(1)
-            .correlate(CandidateJobPipelineModel)
-            .scalar_subquery()
-        )
-
-        latest_interview_status = (
-            sa.select(InterviewScheduleModel.status)
-            .where(
-                InterviewScheduleModel.candidate_id == CandidateJobPipelineModel.candidate_id,
-                InterviewScheduleModel.job_id == CandidateJobPipelineModel.job_id,
-                InterviewScheduleModel.pipeline_id == CandidateJobPipelineModel.candidate_job_pipeline_id,
-            )
-            .order_by(
-                InterviewScheduleModel.scheduled_start.desc().nullslast(),
-                InterviewScheduleModel.updated_at.desc(),
-            )
-            .limit(1)
-            .correlate(CandidateJobPipelineModel)
-            .scalar_subquery()
-        )
-
-        latest_interview_start = (
-            sa.select(InterviewScheduleModel.scheduled_start)
-            .where(
-                InterviewScheduleModel.candidate_id == CandidateJobPipelineModel.candidate_id,
-                InterviewScheduleModel.job_id == CandidateJobPipelineModel.job_id,
-                InterviewScheduleModel.pipeline_id == CandidateJobPipelineModel.candidate_job_pipeline_id,
+                InterviewScheduleModel.job_id == job_id,
                 InterviewScheduleModel.status.in_(("scheduled", "rescheduled")),
             )
-            .order_by(
-                InterviewScheduleModel.scheduled_start.asc(),
-                InterviewScheduleModel.updated_at.desc(),
-            )
-            .limit(1)
-            .correlate(CandidateJobPipelineModel)
-            .scalar_subquery()
+            .cte("next_interview_ranked")
         )
 
-        latest_scorecard_status = (
-            sa.select(InterviewScorecardModel.status)
-            .where(
-                InterviewScorecardModel.candidate_id == CandidateJobPipelineModel.candidate_id,
-                InterviewScorecardModel.job_id == CandidateJobPipelineModel.job_id,
-                InterviewScorecardModel.pipeline_id == CandidateJobPipelineModel.candidate_job_pipeline_id,
-            )
-            .order_by(
-                InterviewScorecardModel.submitted_at.desc().nullslast(),
-                InterviewScorecardModel.updated_at.desc(),
-                InterviewScorecardModel.created_at.desc(),
-            )
-            .limit(1)
-            .correlate(CandidateJobPipelineModel)
-            .scalar_subquery()
+        next_interview_cte = (
+            sa.select(next_interview_ranked_cte)
+            .where(next_interview_ranked_cte.c.rn == 1)
+            .cte("next_interview")
         )
 
+        # ── CTE 5: latest scorecard per pipeline cycle ────────────────────
+        scorecard_ranked_cte = (
+            sa.select(
+                InterviewScorecardModel.pipeline_id,
+                InterviewScorecardModel.status.label("interview_scorecard_status"),
+                sa.func.row_number()
+                .over(
+                    partition_by=InterviewScorecardModel.pipeline_id,
+                    order_by=[
+                        InterviewScorecardModel.submitted_at.desc().nullslast(),
+                        InterviewScorecardModel.updated_at.desc(),
+                        InterviewScorecardModel.created_at.desc(),
+                    ],
+                )
+                .label("rn"),
+            )
+            .where(InterviewScorecardModel.job_id == job_id)
+            .cte("scorecard_ranked")
+        )
+
+        latest_scorecard_cte = (
+            sa.select(scorecard_ranked_cte)
+            .where(scorecard_ranked_cte.c.rn == 1)
+            .cte("latest_scorecard")
+        )
+
+        # ── Main query — drives from active pipeline rows for this job ────
+        # Five LEFT JOINs to pre-computed CTEs replace seven correlated
+        # scalar subqueries that previously executed once per candidate row.
         result = await self._session.execute(
             sa.select(
                 CandidateJobPipelineModel.candidate_id,
@@ -423,12 +473,12 @@ class SQLAlchemyPipelineRepository:
                 JobModel.requires_behavioral_ai_evaluation,
                 JobModel.requires_interview,
                 JobModel.requires_scorecard,
-                behavioral_assessment_status.label("behavioral_assessment_status"),
-                behavioral_submitted_at.label("behavioral_submitted_at"),
-                behavioral_ai_evaluation_status.label("behavioral_ai_evaluation_status"),
-                latest_interview_status.label("interview_status"),
-                latest_interview_start.label("interview_scheduled_start"),
-                latest_scorecard_status.label("interview_scorecard_status"),
+                latest_behavioral_cte.c.behavioral_assessment_status,
+                latest_behavioral_cte.c.behavioral_submitted_at,
+                latest_behavioral_ai_cte.c.behavioral_ai_evaluation_status,
+                latest_interview_cte.c.interview_status,
+                next_interview_cte.c.interview_scheduled_start,
+                latest_scorecard_cte.c.interview_scorecard_status,
             )
             .join(CandidateModel, CandidateModel.id == CandidateJobPipelineModel.candidate_id)
             .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
@@ -453,6 +503,30 @@ class SQLAlchemyPipelineRepository:
                     == CandidateJobPipelineModel.current_analysis_id,
                     CandidateJobScoreModel.freshness_status == "fresh",
                 ),
+            )
+            .outerjoin(
+                latest_behavioral_cte,
+                latest_behavioral_cte.c.pipeline_id
+                == CandidateJobPipelineModel.candidate_job_pipeline_id,
+            )
+            .outerjoin(
+                latest_behavioral_ai_cte,
+                latest_behavioral_ai_cte.c.assignment_id == latest_behavioral_cte.c.assignment_id,
+            )
+            .outerjoin(
+                latest_interview_cte,
+                latest_interview_cte.c.pipeline_id
+                == CandidateJobPipelineModel.candidate_job_pipeline_id,
+            )
+            .outerjoin(
+                next_interview_cte,
+                next_interview_cte.c.pipeline_id
+                == CandidateJobPipelineModel.candidate_job_pipeline_id,
+            )
+            .outerjoin(
+                latest_scorecard_cte,
+                latest_scorecard_cte.c.pipeline_id
+                == CandidateJobPipelineModel.candidate_job_pipeline_id,
             )
             .where(
                 CandidateJobPipelineModel.job_id == job_id,
@@ -924,6 +998,7 @@ class SQLAlchemyPipelineRepository:
                 CandidateJobPipelineEventModel.job_id == job_id,
             )
             .order_by(CandidateJobPipelineEventModel.created_at.asc())
+            .limit(100)
         )
         rows: list[dict] = []
         for row in result.mappings().all():

@@ -66,6 +66,7 @@ async def _mark_resume_version_failed(
     sessionmaker,
 ) -> None:
     async with sessionmaker() as session:
+        now = datetime.now(UTC)
         await session.execute(
             sa.update(ResumeVersionModel)
             .where(ResumeVersionModel.id == parsed_resume_version_id)
@@ -75,6 +76,25 @@ async def _mark_resume_version_failed(
                 extracted_text=None,
                 page_count=None,
                 word_count=None,
+            )
+        )
+        await session.execute(
+            sa.update(AnalysisModel)
+            .where(
+                AnalysisModel.resume_version_id == parsed_resume_version_id,
+                AnalysisModel.status.in_(("waiting_extraction", "pending")),
+                AnalysisModel.task_id.is_(None),
+            )
+            .values(
+                status="failed",
+                failure_reason="resume_extraction_failed",
+                provider_error_type="resume_extraction_failed",
+                failed_at=now,
+                next_retry_at=None,
+                worker_claim_id=None,
+                claimed_at=None,
+                stale_at=None,
+                updated_at=now,
             )
         )
         await session.commit()
@@ -199,7 +219,7 @@ async def _process_resume_extraction_async(
                         sa.select(AnalysisModel.id).where(
                             AnalysisModel.resume_version_id == parsed_resume_version_id,
                             AnalysisModel.job_id.is_not(None),
-                            AnalysisModel.status == "pending",
+                            AnalysisModel.status.in_(("waiting_extraction", "pending")),
                             AnalysisModel.task_id.is_(None),
                         )
                     )
@@ -210,6 +230,7 @@ async def _process_resume_extraction_async(
                     sa.update(AnalysisModel)
                     .where(AnalysisModel.id == analysis_id)
                     .values(
+                        status="pending",
                         queue_name=ANALYSIS_QUEUE,
                         task_id=f"analysis:{analysis_id}",
                         updated_at=now,
@@ -228,6 +249,7 @@ async def _process_resume_extraction_async(
                         if failed is not None:
                             failed.status = "failed"
                             failed.failure_reason = "analysis_enqueue_failed"
+                            failed.provider_error_type = "enqueue_failed"
                             failed.failed_at = now
                             failed.next_retry_at = None
                             failed.worker_claim_id = None

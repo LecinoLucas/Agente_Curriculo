@@ -10,6 +10,8 @@ import { PublicApplicationPage } from "../PublicApplicationPage";
 import { candidateAuthService } from "../../services/candidateAuthService";
 import { publicApplicationService } from "../../features/public-application/services/publicApplicationService";
 import { __resetGoogleIdentityForTests } from "../../services/googleIdentityService";
+import { HttpError } from "../../services/http";
+import { toast } from "../../shared/utils/toast";
 
 vi.mock("../../services/candidateAuthService", () => ({
   candidateAuthService: {
@@ -21,7 +23,7 @@ vi.mock("../../features/public-application/services/publicApplicationService", (
   publicApplicationService: {
     listPublishedJobs: vi.fn(),
     submitApplication: vi.fn(),
-    checkExists: vi.fn(() => Promise.resolve({ email_exists: false, cpf_exists: false })),
+    checkExists: vi.fn(() => Promise.resolve({ status: "ok" })),
   },
 }));
 
@@ -185,7 +187,7 @@ describe("PublicApplicationPage", () => {
     expect(screen.getByRole("button", { name: /continuar/i })).toBeInTheDocument();
   });
 
-  it("valida automaticamente e-mail pré-preenchido pelo Google ao abrir dados pessoais", async () => {
+  it("não consulta duplicidade para e-mail pré-preenchido pelo Google", async () => {
     (candidateAuthService.googleLogin as any).mockResolvedValue({
       status: "needs_completion",
       message: "Complete os dados restantes para finalizar sua candidatura.",
@@ -204,21 +206,14 @@ describe("PublicApplicationPage", () => {
       },
       missing_fields: ["phone", "salary_expectation", "resume", "lgpd_consent", "cpf"],
     });
-    (publicApplicationService.checkExists as any).mockResolvedValue({
-      email_exists: true,
-      cpf_exists: false,
-    });
-
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /continuar com google/i }));
 
     expect(await screen.findByDisplayValue("maria.google@example.com")).toBeDisabled();
     await waitFor(() => {
-      expect(publicApplicationService.checkExists).toHaveBeenCalledWith({
-        email: "maria.google@example.com",
-      });
+      expect((publicApplicationService as any).checkExists).not.toHaveBeenCalled();
     });
-    expect(await screen.findByText("Este e-mail já está cadastrado. Faça login para continuar.")).toBeInTheDocument();
+    expect(screen.queryByText(/e-mail já está cadastrado/i)).not.toBeInTheDocument();
   });
 
   it("google authenticated redireciona para o portal", async () => {
@@ -256,12 +251,7 @@ describe("PublicApplicationPage", () => {
     expect(await screen.findByText("Google indisponível.")).toBeInTheDocument();
   });
 
-  it("exibe erro se e-mail ou CPF já estiver cadastrado", async () => {
-    (publicApplicationService.checkExists as any).mockResolvedValue({
-      email_exists: true,
-      cpf_exists: true,
-    });
-
+  it("não chama check-exists nem mostra erro de CPF/e-mail cadastrado para anônimo", async () => {
     renderPage();
     
     // Avançar para dados pessoais
@@ -279,8 +269,33 @@ describe("PublicApplicationPage", () => {
     // Tentar avançar
     fireEvent.click(screen.getByRole("button", { name: /continuar/i }));
 
-    // Deve exibir erros na tela e não avançar
-    expect(await screen.findByText("Este e-mail já está cadastrado. Faça login para continuar.")).toBeInTheDocument();
-    expect(screen.getByText("Já existe um cadastro com este CPF. Faça login para continuar.")).toBeInTheDocument();
+    await screen.findByText(/Nenhuma vaga publicada no momento/i);
+    expect((publicApplicationService as any).checkExists).not.toHaveBeenCalled();
+    expect(screen.queryByText(/CPF já cadastrado/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/e-mail já cadastrado/i)).not.toBeInTheDocument();
+  });
+
+  it("exibe mensagem genérica segura quando o submit retorna conflito", async () => {
+    (publicApplicationService.submitApplication as any).mockRejectedValue(
+      new HttpError(409, "Já existe um cadastro com este CPF. Faça login para continuar.")
+    );
+
+    renderPage();
+    await advanceToJobResume();
+
+    fireEvent.change(screen.getByLabelText(/pretensão salarial/i), { target: { value: "250000" } });
+    const file = new File(["curriculo"], "curriculo.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText(/clique para selecionar ou arraste um arquivo/i), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continuar/i }));
+    fireEvent.click(screen.getByLabelText(/ao enviar sua candidatura/i));
+    fireEvent.click(screen.getByRole("button", { name: /enviar candidatura/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH."
+      );
+    });
   });
 });

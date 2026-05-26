@@ -162,6 +162,9 @@ class PreAdmissionCaseResponse(BaseModel):
     work_model: str | None = None
     notes: str | None = None
     created_by: UUID | None = None
+    ready_for_export: bool = False
+    ready_for_export_at: datetime | None = None
+    ready_for_export_by: UUID | None = None
     created_at: datetime
     updated_at: datetime
     closed_at: datetime | None = None
@@ -193,3 +196,94 @@ class CandidatePortalPreAdmissionCaseResponse(BaseModel):
 
 class CandidatePortalPreAdmissionEnvelopeResponse(BaseModel):
     case: CandidatePortalPreAdmissionCaseResponse | None = None
+
+
+class AdmissionCaseSummarySchema(BaseModel):
+    id: UUID
+    status: str
+    current_stage: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdmissionCandidateSummarySchema(BaseModel):
+    id: UUID
+    name: str
+    initials: str
+    avatar_url: str | None = None
+
+
+class AdmissionJobSummarySchema(BaseModel):
+    id: UUID
+    title: str
+
+
+class AdmissionChecklistItemSchema(BaseModel):
+    id: UUID
+    title: str
+    status: str
+    required: bool
+    position: int
+    updated_at: datetime
+    updated_by_name: str | None = None
+    document_id: UUID | None = None
+
+
+class AdmissionChecklistSummarySchema(BaseModel):
+    total: int
+    approved: int
+    pending: int
+    blocked: int
+    items: list[AdmissionChecklistItemSchema] = Field(default_factory=list)
+
+
+class AdmissionDocumentSummarySchema(BaseModel):
+    id: UUID
+    filename: str
+    document_type: str
+    status: str
+    uploaded_at: datetime
+    approved_at: datetime | None = None
+
+
+class AdmissionBlockerSchema(BaseModel):
+    type: str
+    severity: str
+    title: str
+    description: str
+    action: str
+
+
+class AdmissionNextActionSchema(BaseModel):
+    type: str
+    label: str
+    enabled: bool
+    disabled_reason: str | None = None
+
+
+class AdmissionCaseWorkspaceSummarySchema(BaseModel):
+    responsible_name: str | None = None
+    created_at: datetime
+    last_update_at: datetime
+    readiness_status: str
+    ready_for_export: bool
+
+
+class AdmissionRecentEventSchema(BaseModel):
+    id: UUID
+    type: str
+    title: str
+    description: str
+    created_at: datetime
+
+
+class AdmissionCaseWorkspaceResponse(BaseModel):
+    case: AdmissionCaseSummarySchema
+    candidate: AdmissionCandidateSummarySchema
+    job: AdmissionJobSummarySchema
+    checklist: AdmissionChecklistSummarySchema
+    documents: list[AdmissionDocumentSummarySchema] = Field(default_factory=list)
+    main_blockers: list[AdmissionBlockerSchema] = Field(default_factory=list)
+    next_actions: list[AdmissionNextActionSchema] = Field(default_factory=list)
+    summary: AdmissionCaseWorkspaceSummarySchema
+    recent_events: list[AdmissionRecentEventSchema] = Field(default_factory=list)

@@ -237,6 +237,24 @@ async def test_request_analysis_enqueue_failure_marks_analysis_failed(
     )
     assert failed is not None
     assert failed.failure_reason == "analysis_enqueue_failed"
+    assert failed.provider_error_type == "enqueue_failed"
+
+
+@pytest.mark.asyncio
+async def test_list_global_includes_waiting_extraction_analysis(db_session: AsyncSession) -> None:
+    _, _, _, analysis = await _seed_retry_scheduled_analysis(db_session)
+    analysis.status = "waiting_extraction"
+    analysis.task_id = None
+    analysis.next_retry_at = None
+    analysis.failure_reason = None
+    await db_session.commit()
+
+    service = AnalysisService(SQLAlchemyAnalysisRepository(db_session))
+    items, _ = await service.list_global(page=1, page_size=20)
+
+    item = next(item for item in items if item.id == analysis.id)
+    assert item.status == "waiting_extraction"
+    assert item.stuck is False
 
 
 @pytest.mark.asyncio

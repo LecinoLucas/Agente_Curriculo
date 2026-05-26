@@ -118,6 +118,19 @@ class AnalysisRequestPolicy:
                 trigger_source=trigger_source,
             )
 
+        if existing_active_status == "waiting_extraction":
+            return AnalysisDispatchDecision(
+                analysis_id=None,
+                status=existing_active_status,
+                created=False,
+                blocked=False,
+                reused=True,
+                stuck=False,
+                reason="auto_analysis_skipped_waiting_extraction",
+                stage=stage,
+                trigger_source=trigger_source,
+            )
+
         if existing_active_status in {"pending", "retry_scheduled"}:
             return AnalysisDispatchDecision(
                 analysis_id=None,
@@ -355,7 +368,7 @@ class CandidateJobAnalysisDispatcher:
             if not enqueue_ok:
                 return AnalysisDispatchDecision(
                     analysis_id=result.analysis_id,
-                    status=analysis_status,
+                    status="failed",
                     created=False,
                     blocked=False,
                     reused=False,
@@ -382,6 +395,19 @@ class CandidateJobAnalysisDispatcher:
                 reused=False,
                 stuck=False,
                 reason="analysis_created",
+                stage=stage,
+                trigger_source=trigger_source,
+            )
+
+        if analysis_status == "waiting_extraction":
+            return AnalysisDispatchDecision(
+                analysis_id=result.analysis_id,
+                status=analysis_status,
+                created=result.created,
+                blocked=False,
+                reused=result.reused,
+                stuck=False,
+                reason="analysis_created_waiting_resume_extraction",
                 stage=stage,
                 trigger_source=trigger_source,
             )
@@ -490,6 +516,7 @@ class CandidateJobAnalysisDispatcher:
                 now = datetime.now(UTC)
                 failed.status = "failed"
                 failed.failure_reason = "analysis_enqueue_failed"
+                failed.provider_error_type = "enqueue_failed"
                 failed.failed_at = now
                 failed.next_retry_at = None
                 failed.worker_claim_id = None

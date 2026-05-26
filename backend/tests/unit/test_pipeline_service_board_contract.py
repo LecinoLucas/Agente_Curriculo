@@ -47,3 +47,23 @@ def test_row_to_match_response_preserves_job_fit_score_for_board() -> None:
         "interview_scheduled_start",
         "interview_scorecard_status",
     }
+
+
+def test_row_to_match_response_preserves_waiting_extraction_ai_status() -> None:
+    row = {
+        "candidate_id": uuid4(),
+        "candidate_name": "Ana Waiting",
+        "job_id": uuid4(),
+        "stage": "entry",
+        "status": "active",
+        "entered_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
+        "top_skills": "[]",
+        "ai_status": "waiting_extraction",
+        "job_fit_score": None,
+    }
+
+    result = PipelineService._row_to_match_response(row)
+
+    assert result.ai_status == "waiting_extraction"
+    assert result.model_dump()["ai_status"] == "waiting_extraction"

@@ -6,6 +6,10 @@ import {
   derivePipelineCardBadges,
   type PipelineCardBadgeTone,
 } from "../../features/pipeline/utils/pipelineCardBadges";
+import {
+  PIPELINE_STAGE_OPERATIONAL_SUMMARY,
+  PIPELINE_STAGE_SUBSTATUS_LABEL,
+} from "../../features/pipeline/utils/pipelineKanbanColumns";
 
 interface KanbanCardProps {
   candidate: JobCandidate;
@@ -55,6 +59,10 @@ function getAiProcessingState(candidate: JobCandidate): { label: string; tone: "
       rawCandidate.extraction_status ??
       "",
   ).toLowerCase();
+
+  if (status === "waiting_extraction") {
+    return { label: "Aguardando extração", tone: "pending" };
+  }
 
   if (status === "pending" || status === "queued" || status === "retry_scheduled") {
     return { label: "IA na fila", tone: "pending" };
@@ -113,6 +121,8 @@ export const KanbanCard = memo(function KanbanCard({
   const hasWarning = rawCandidate.candidate_status === "blocked" || rawCandidate.candidate_status === "error";
   const operationalBadges = derivePipelineCardBadges(candidate);
   const aiProcessingState = getAiProcessingState(candidate);
+  const stageSubstatus = candidate.stage ? PIPELINE_STAGE_SUBSTATUS_LABEL[candidate.stage] : null;
+  const stageSummary = candidate.stage ? PIPELINE_STAGE_OPERATIONAL_SUMMARY[candidate.stage] : null;
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
     if (!draggable) {
@@ -195,6 +205,27 @@ export const KanbanCard = memo(function KanbanCard({
           {dateLabel && <span>{dateLabel}</span>}
         </div>
       )}
+
+      {stageSubstatus ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <span
+            className="inline-flex max-w-full items-center truncate rounded border border-[hsl(var(--border))]/50 bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-[9px] font-black uppercase text-[hsl(var(--text-muted))]"
+            title={`Status real: ${stageSubstatus}`}
+            data-testid="kanban-card-real-stage"
+          >
+            {stageSubstatus}
+          </span>
+          {stageSummary ? (
+            <span
+              className="inline-flex max-w-full items-center truncate rounded border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-[hsl(var(--primary))]"
+              title={stageSummary}
+              data-testid="kanban-card-admission-summary"
+            >
+              {stageSummary}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Top skills tags */}
       {operationalBadges.length > 0 && (

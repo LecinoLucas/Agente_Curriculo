@@ -52,6 +52,7 @@ _storage: Storage = _build_storage()
 _limiter = strategies.MovingWindowRateLimiter(_storage)
 
 _login_item = parse_limit(settings.RATE_LIMIT_AUTH_LOGIN)
+_public_check_exists_item = parse_limit(settings.RATE_LIMIT_PUBLIC_CHECK_EXISTS)
 _apply_item = parse_limit(settings.RATE_LIMIT_PUBLIC_APPLY)
 _analysis_item = parse_limit(settings.RATE_LIMIT_ANALYSIS_REQUEST)
 _retry_item = parse_limit(settings.RATE_LIMIT_ANALYSIS_RETRY)
@@ -93,6 +94,16 @@ async def rate_limit_public_apply(request: Request) -> None:
         _ip(request),
         "public:apply",
         message="Muitas candidaturas enviadas. Aguarde 1 minuto e tente novamente.",
+    )
+
+
+async def rate_limit_public_check_exists(request: Request) -> None:
+    """Legacy public duplicate-check endpoint: IP-based and non-enumerating."""
+    await _check(
+        _public_check_exists_item,
+        _ip(request),
+        "public:check-exists",
+        message="Muitas validações enviadas. Aguarde 1 minuto e tente novamente.",
     )
 
 

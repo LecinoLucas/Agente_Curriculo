@@ -47,6 +47,20 @@ class ErpIntegrationService:
         self.payload_validator = ProtheusPayloadValidator()
         self.mock_adapter = ProtheusMockAdapter()
 
+    def get_protheus_capabilities(self) -> dict:
+        mode = self._configured_mode()
+        dry_run = self._dry_run_capability(mode)
+        mock = self._mock_capability(mode)
+        return {
+            "provider": PROVIDER_PROTHEUS,
+            "environment": settings.APP_ENV,
+            "integration_mode": mode,
+            "dry_run": dry_run,
+            "simulation": dry_run,
+            "mock": mock,
+            "real_send": self._real_send_capability(),
+        }
+
     async def create_protheus_dry_run_attempt(
         self,
         *,
@@ -239,6 +253,12 @@ class ErpIntegrationService:
                 "Configure APP_ENV != production."
             )
 
+        if not settings.PROTHEUS_REAL_SEND_ENABLED:
+            raise ValidationException(
+                "Envio real para Protheus está desabilitado pela feature flag. "
+                "Configure PROTHEUS_REAL_SEND_ENABLED=true apenas em homologação controlada."
+            )
+
         if not settings.ERP_ALLOW_REAL_SEND:
             raise ValidationException(
                 "Envio real para Protheus está desabilitado. "
@@ -322,7 +342,7 @@ class ErpIntegrationService:
             token=settings.PROTHEUS_TOKEN if settings.PROTHEUS_AUTH_MODE == "token" else None,
             timeout_seconds=settings.PROTHEUS_TIMEOUT_SECONDS,
             app_env=settings.APP_ENV,
-            allow_real_send=settings.ERP_ALLOW_REAL_SEND,
+            allow_real_send=settings.protheus_real_send_allowed,
         )
 
         # Send to Protheus
@@ -462,6 +482,82 @@ class ErpIntegrationService:
 
     def _configured_mode(self) -> str:
         return (settings.ERP_INTEGRATION_MODE or MODE_DRY_RUN).strip().lower()
+
+    @staticmethod
+    def _dry_run_capability(mode: str) -> dict:
+        if mode == MODE_DISABLED:
+            return {
+                "available": False,
+                "disabled_reason": "Integração ERP está desabilitada.",
+            }
+        if mode == MODE_REAL:
+            return {
+                "available": False,
+                "disabled_reason": "mode=real bloqueado nesta fase.",
+            }
+        return {"available": True, "disabled_reason": None}
+
+    @staticmethod
+    def _mock_capability(mode: str) -> dict:
+        if mode == MODE_MOCK:
+            return {"available": True, "disabled_reason": None}
+        if mode == MODE_DISABLED:
+            return {
+                "available": False,
+                "disabled_reason": "Integração ERP está desabilitada.",
+            }
+        return {
+            "available": False,
+            "disabled_reason": "Mock send permitido apenas quando ERP_INTEGRATION_MODE=mock.",
+        }
+
+    @staticmethod
+    def _real_send_capability() -> dict:
+        blockers: list[str] = []
+        missing_configuration: list[str] = []
+        blocking_flags: list[str] = []
+
+        if settings.APP_ENV == "production":
+            blockers.append("Envio real para Protheus é proibido em produção.")
+        if not settings.PROTHEUS_REAL_SEND_ENABLED:
+            blocking_flags.append("PROTHEUS_REAL_SEND_ENABLED")
+        if not settings.ERP_ALLOW_REAL_SEND:
+            blocking_flags.append("ERP_ALLOW_REAL_SEND")
+
+        if not settings.PROTHEUS_BASE_URL:
+            missing_configuration.append("PROTHEUS_BASE_URL")
+        auth_mode = (settings.PROTHEUS_AUTH_MODE or "").strip().lower()
+        if auth_mode == "basic":
+            if not settings.PROTHEUS_USERNAME:
+                missing_configuration.append("PROTHEUS_USERNAME")
+            if not settings.PROTHEUS_PASSWORD:
+                missing_configuration.append("PROTHEUS_PASSWORD")
+        elif auth_mode == "token":
+            if not settings.PROTHEUS_TOKEN:
+                missing_configuration.append("PROTHEUS_TOKEN")
+        else:
+            missing_configuration.append("PROTHEUS_AUTH_MODE")
+
+        reasons = blockers.copy()
+        if blocking_flags:
+            reasons.append(
+                "Feature flags de envio real desligadas: "
+                + ", ".join(blocking_flags)
+                + "."
+            )
+        if missing_configuration:
+            reasons.append(
+                "Configuração Protheus incompleta: "
+                + ", ".join(missing_configuration)
+                + "."
+            )
+
+        return {
+            "available": not reasons,
+            "disabled_reason": " ".join(reasons) if reasons else None,
+            "missing_configuration": missing_configuration,
+            "blocking_flags": blocking_flags,
+        }
 
     def _ensure_allowed_for_phase(self) -> None:
         if self._configured_mode() == MODE_REAL:

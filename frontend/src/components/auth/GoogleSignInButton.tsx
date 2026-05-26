@@ -30,13 +30,14 @@ type GoogleSignInButtonProps = {
   disabled?: boolean;
   onCredential: (idToken: string) => void | Promise<void>;
   onError?: (message: string) => void;
+  width?: number;
 };
 
 function getGoogleClientId(): string {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? "";
 }
 
-export function GoogleSignInButton({ disabled = false, onCredential, onError }: GoogleSignInButtonProps) {
+export function GoogleSignInButton({ disabled = false, onCredential, onError, width = 400 }: GoogleSignInButtonProps) {
   const clientId = getGoogleClientId();
   // Container where Google Identity Services renders its OFFICIAL button.
   // We do NOT use a hidden proxy + .click() any more — that pattern fails
@@ -47,6 +48,7 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
   const onErrorRef = useRef(onError);
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(Boolean(clientId));
+  const [renderedWidth, setRenderedWidth] = useState(width);
 
   useEffect(() => {
     onCredentialRef.current = onCredential;
@@ -55,6 +57,18 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
   useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
+
+  // Automeasure parent element width on mount to scale the Google iframe button perfectly
+  useEffect(() => {
+    if (containerRef.current) {
+      const parentWidth = containerRef.current.parentElement?.clientWidth;
+      if (parentWidth && parentWidth > 0) {
+        // Clamp official button width between GIS API limits (200px - 400px)
+        const clamped = Math.max(200, Math.min(400, Math.floor(parentWidth)));
+        setRenderedWidth(clamped);
+      }
+    }
+  }, [width]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,14 +117,14 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
           renderGoogleButton(containerRef.current, {
             theme: "outline",
             size: "large",
-            text: "continue_with",
+            text: "signin_with",
             shape: "rectangular",
             logo_alignment: "left",
-            width: 320,
+            width: renderedWidth,
           });
           if (import.meta.env.DEV) {
             // eslint-disable-next-line no-console
-            console.debug("[google] button rendered");
+            console.debug("[google] button rendered", { width: renderedWidth });
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -141,7 +155,7 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
       window.removeEventListener("error", handleGoogleError);
       setCredentialHandler(null);
     };
-  }, [clientId]);
+  }, [clientId, renderedWidth]);
 
   const unavailableInDev = !clientId && import.meta.env.DEV;
 
@@ -177,3 +191,4 @@ export function GoogleSignInButton({ disabled = false, onCredential, onError }: 
     </div>
   );
 }
+

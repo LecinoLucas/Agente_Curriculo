@@ -445,8 +445,8 @@ class CandidatePortalService:
             ),
             (
                 "resume_analysis",
-                "Currículo em análise",
-                "Seu currículo está sendo avaliado.",
+                self._resume_analysis_public_label(analysis_status),
+                self._resume_analysis_public_description(analysis_status),
             ),
         ]
         definitions.extend(
@@ -564,9 +564,43 @@ class CandidatePortalService:
             return "interview"
         if stage == "screening":
             return "screening"
-        if (analysis_status or "").lower() in {"pending", "processing", "retry_scheduled"}:
+        if (analysis_status or "").lower() in {"waiting_extraction", "pending", "processing", "retry_scheduled"}:
             return "resume_analysis"
         return "application_received"
+
+    @staticmethod
+    def _resume_analysis_public_label(analysis_status: str | None) -> str:
+        normalized = (analysis_status or "").lower()
+        if normalized == "waiting_extraction":
+            return "Aguardando extração"
+        if normalized == "pending":
+            return "Análise na fila"
+        if normalized == "processing":
+            return "Análise em processamento"
+        if normalized == "retry_scheduled":
+            return "Nova tentativa agendada"
+        if normalized == "completed":
+            return "Análise concluída"
+        if normalized in {"failed", "cancelled"}:
+            return "Falha na análise"
+        return "Currículo recebido"
+
+    @staticmethod
+    def _resume_analysis_public_description(analysis_status: str | None) -> str:
+        normalized = (analysis_status or "").lower()
+        if normalized == "waiting_extraction":
+            return "Estamos extraindo os dados do currículo antes de iniciar a análise."
+        if normalized == "pending":
+            return "A análise do currículo já está na fila."
+        if normalized == "processing":
+            return "A análise do currículo está em processamento."
+        if normalized == "retry_scheduled":
+            return "Uma nova tentativa automática já foi agendada."
+        if normalized == "completed":
+            return "O currículo foi analisado."
+        if normalized in {"failed", "cancelled"}:
+            return "Não foi possível concluir a análise do currículo."
+        return "Recebemos seu currículo."
 
     @staticmethod
     def _interview_description(
@@ -614,11 +648,19 @@ class CandidatePortalService:
             return "Admitido"
         if is_post_hiring_active_stage(stage):
             return _POST_HIRING_STATUS_LABELS[stage]
-        if normalized_analysis in {"pending", "processing", "retry_scheduled"}:
-            return "Currículo em análise"
+        if normalized_analysis == "waiting_extraction":
+            return "Aguardando extração"
+        if normalized_analysis == "pending":
+            return "Análise na fila"
+        if normalized_analysis == "processing":
+            return "Análise em processamento"
+        if normalized_analysis == "retry_scheduled":
+            return "Nova tentativa agendada"
+        if normalized_analysis in {"failed", "cancelled"}:
+            return "Falha na análise"
         if normalized_analysis == "completed":
             if stage == "entry":
-                return "Currículo analisado"
+                return "Análise concluída"
         if stage in {"entry"}:
             return "Inscrição recebida"
         if stage in {"screening"}:
@@ -629,8 +671,16 @@ class CandidatePortalService:
 
     @staticmethod
     def _status_code_from_public_label(status_public: str) -> str:
-        if status_public == "Currículo em análise":
+        if status_public in {"Currículo em análise", "Análise na fila", "Análise em processamento"}:
             return "analysis"
+        if status_public == "Aguardando extração":
+            return "waiting_extraction"
+        if status_public == "Nova tentativa agendada":
+            return "retry_scheduled"
+        if status_public == "Falha na análise":
+            return "analysis_failed"
+        if status_public == "Análise concluída":
+            return "analyzed"
         if status_public == "Currículo analisado":
             return "analyzed"
         if status_public == "Em triagem":

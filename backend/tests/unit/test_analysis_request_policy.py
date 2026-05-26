@@ -49,7 +49,16 @@ def test_auto_analysis_blocked_for_terminal_pipeline() -> None:
     assert decision.reason == "auto_analysis_blocked_terminal_pipeline"
 
 
-def test_auto_analysis_reuses_pending_and_processing() -> None:
+def test_auto_analysis_reuses_waiting_pending_and_processing() -> None:
+    waiting = AnalysisRequestPolicy.decide(
+        trigger_source="automatic",
+        stage="screening",
+        pipeline_status="active",
+        link_status="active",
+        requested_by_user_id=uuid4(),
+        existing_active_status="waiting_extraction",
+        has_reusable_completed=False,
+    )
     pending = AnalysisRequestPolicy.decide(
         trigger_source="automatic",
         stage="screening",
@@ -69,6 +78,8 @@ def test_auto_analysis_reuses_pending_and_processing() -> None:
         has_reusable_completed=False,
     )
 
+    assert waiting.reused is True
+    assert waiting.reason == "auto_analysis_skipped_waiting_extraction"
     assert pending.reused is True
     assert pending.reason == "auto_analysis_skipped_duplicate_pending"
     assert processing.reused is True

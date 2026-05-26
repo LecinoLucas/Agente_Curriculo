@@ -37,19 +37,8 @@ import {
   buildDealBreakerViolationDisplay,
   isDealBreakerReasonCode,
 } from "../features/pipeline/dealBreakerDisplay";
+import { groupCandidatesByMacroColumn } from "../features/pipeline/utils/pipelineKanbanColumns";
 
-const MAIN_STAGES: ReadonlyArray<PipelineStage> = [
-  "entry",
-  "screening",
-  "hr_interview",
-  "technical_interview",
-  "final",
-  "offer",
-  "hired",
-  "pre_admission",
-  "protheus",
-  "admitted",
-];
 const PIPELINE_SHOW_RANKING_STORAGE_KEY = "pipeline:showRanking";
 const PIPELINE_LAST_SELECTED_JOB_KEY = "pipeline:lastSelectedJobId";
 const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
@@ -149,36 +138,24 @@ export function PipelinePage() {
     setActiveJob,
     moveCandidateStage,
     refreshBoard,
+    openCandidate,
+    closeCandidate,
+    syncCandidateOverview,
   } = usePipeline();
 
-  // ── Auto-Refresh & Countdown states ──
-  const [autoRefreshActive, setAutoRefreshActive] = useState(true);
-  const [secondsLeft, setSecondsLeft] = useState(30);
   const [lastUpdated, setLastUpdated] = useState(() =>
     new Date().toLocaleTimeString("pt-BR", { hour12: false })
   );
-  const [isTabVisible, setIsTabVisible] = useState(true);
 
-  const autoRefreshActiveRef = useRef(autoRefreshActive);
-  const isTabVisibleRef = useRef(isTabVisible);
   const activeJobIdRef = useRef(activeJobId);
   const boardLoadingRef = useRef(boardLoading);
   const rankingLoadingRef = useRef(rankingLoading);
   const showRankingRef = useRef(showRanking);
-  const triggerRefreshRef = useRef<(() => Promise<void>) | null>(null);
   const kanbanScrollRef = useRef<HTMLDivElement | null>(null);
   const topKanbanScrollRef = useRef<HTMLDivElement | null>(null);
-  const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
+  const previewCandidateIdRef = useRef(previewCandidateId);
   const [kanbanScrollWidth, setKanbanScrollWidth] = useState(0);
   const [kanbanHasHorizontalOverflow, setKanbanHasHorizontalOverflow] = useState(false);
-
-  useEffect(() => {
-    autoRefreshActiveRef.current = autoRefreshActive;
-  }, [autoRefreshActive]);
-
-  useEffect(() => {
-    isTabVisibleRef.current = isTabVisible;
-  }, [isTabVisible]);
 
   useEffect(() => {
     activeJobIdRef.current = activeJobId;
@@ -196,15 +173,11 @@ export function PipelinePage() {
     showRankingRef.current = showRanking;
   }, [showRanking]);
 
-  // Reset timer on job selection change
   useEffect(() => {
-    if (activeJobId) {
-      setSecondsLeft(30);
-      setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
-    }
-  }, [activeJobId]);
+    previewCandidateIdRef.current = previewCandidateId;
+  }, [previewCandidateId]);
 
-  // Unified refresh function
+  // Manual refresh function
   const triggerRefresh = async () => {
     if (boardLoadingRef.current || rankingLoadingRef.current || !activeJobIdRef.current) return;
 
@@ -236,7 +209,6 @@ export function PipelinePage() {
     await Promise.all(promises);
     setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
   };
-  triggerRefreshRef.current = triggerRefresh;
 
   const updateKanbanScrollMetrics = useCallback(() => {
     const scrollElement = kanbanScrollRef.current;
@@ -267,59 +239,11 @@ export function PipelinePage() {
     topScroll.scrollLeft = kanbanScroll.scrollLeft;
   }, []);
 
-  // Refresh immediately when the user returns to the pipeline.
-  useEffect(() => {
-    const handleVisibleRefresh = () => {
-      const visible = document.visibilityState === "visible";
-      setIsTabVisible(visible);
-
-      if (!visible || !autoRefreshActiveRef.current || !activeJobIdRef.current) return;
-      setSecondsLeft(30);
-      void triggerRefreshRef.current?.();
-    };
-
-    document.addEventListener("visibilitychange", handleVisibleRefresh);
-    window.addEventListener("focus", handleVisibleRefresh);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibleRefresh);
-      window.removeEventListener("focus", handleVisibleRefresh);
-    };
-  }, []);
-
   // Manual refresh handler
   const handleManualRefresh = async () => {
     if (boardLoading || !activeJobId) return;
-    setSecondsLeft(30);
     await triggerRefresh();
   };
-
-  // 1-second countdown ticker
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!autoRefreshActiveRef.current || !isTabVisibleRef.current || !activeJobIdRef.current) {
-        return;
-      }
-
-      // Read current value via ref-like pattern: check if we should refresh
-      // BEFORE entering a setState updater (avoids updating PipelineProvider
-      // from inside PipelinePage's setState — the "Cannot update a component
-      // while rendering" warning).
-      let shouldRefresh = false;
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          shouldRefresh = true;
-          return 30;
-        }
-        return prev - 1;
-      });
-
-      if (shouldRefresh) {
-        void triggerRefresh();
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -474,26 +398,15 @@ export function PipelinePage() {
     [pipelineJobs, activeJobId],
   );
 
-  // Sort columns without local filtering; candidate discovery/search lives in CandidateSearchModal.
+  // Macro grouping is visual only. Each card keeps its real candidate.stage from the API.
   const mainCols = useMemo(
     () =>
-      (board?.columns ?? [])
-        .filter((c) => (MAIN_STAGES as ReadonlyArray<string>).includes(c.stage))
-        .map((col) => ({
-          ...col,
-          candidates: sortCandidatesByScore(col.candidates, sortOrder),
-        })),
+      groupCandidatesByMacroColumn(board?.columns ?? []).map((col) => ({
+        ...col,
+        candidates: sortCandidatesByScore(col.candidates, sortOrder),
+      })),
     [board, sortOrder],
   );
-
-  const rejectedCol = useMemo(() => {
-    const col = board?.columns.find((c) => c.stage === "rejected") ?? null;
-    if (!col) return null;
-    return {
-      ...col,
-      candidates: sortCandidatesByScore(col.candidates, sortOrder),
-    };
-  }, [board, sortOrder]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(updateKanbanScrollMetrics);
@@ -502,11 +415,13 @@ export function PipelinePage() {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateKanbanScrollMetrics);
     };
-  }, [board, mainCols.length, rejectedCol?.stage, showRanking, updateKanbanScrollMetrics]);
+  }, [board, mainCols.length, showRanking, updateKanbanScrollMetrics]);
 
   // Dynamic KPI calculation
   const totalActive = useMemo(() => {
-    return mainCols.reduce((n, c) => n + c.candidates.length, 0);
+    return mainCols
+      .filter((column) => column.macroId !== "finalizado")
+      .reduce((n, c) => n + c.candidates.length, 0);
   }, [mainCols]);
 
   const totalCandidatos = useMemo(() => {
@@ -578,15 +493,27 @@ export function PipelinePage() {
     setDropTargetStage(null);
   }, []);
 
-  const syncAfterStageMutation = useCallback(async () => {
+  const handleOpenCandidate = useCallback((candidateId: string) => {
+    setPreviewCandidateId(candidateId);
+    void openCandidate(candidateId);
+  }, [openCandidate]);
+
+  const handleCloseDrawer = useCallback(() => {
+    setPreviewCandidateId(null);
+    closeCandidate();
+  }, [closeCandidate]);
+
+  const syncAfterStageMutation = useCallback(async (affectedCandidateId?: string) => {
     try {
       await refreshBoard();
-      setPreviewRefreshToken((current) => current + 1);
+      if (affectedCandidateId && affectedCandidateId === previewCandidateIdRef.current) {
+        void syncCandidateOverview(affectedCandidateId);
+      }
+      setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
     } catch {
       // The board already receives an optimistic update; keep the UI usable.
     }
-    setLastUpdated(new Date().toLocaleTimeString("pt-BR", { hour12: false }));
-  }, [refreshBoard]);
+  }, [refreshBoard, syncCandidateOverview]);
 
   const moveCandidateOnBoard = useCallback(
     async (candidateId: string, toStage: PipelineStage, candidateName?: string | null) => {
@@ -594,7 +521,7 @@ export function PipelinePage() {
       setIsStageMoveSaving(true);
       try {
         await moveCandidateStage(candidateId, toStage);
-        await syncAfterStageMutation();
+        await syncAfterStageMutation(candidateId);
         feedback.moveCandidate.success();
       } catch (err: unknown) {
         const handled = handleBlockedError(err, { candidateId, candidateName });
@@ -603,7 +530,7 @@ export function PipelinePage() {
           // already restored the card to its original column; force a server
           // refetch to be safe.
           toast.dismissKey(MOVE_CANDIDATE_TOAST_KEY);
-          await syncAfterStageMutation();
+          await syncAfterStageMutation(candidateId);
         } else {
           feedback.moveCandidate.error(err);
         }
@@ -676,6 +603,13 @@ export function PipelinePage() {
     [canUse, draggingCandidate, isStageMoveSaving, moveCandidateOnBoard, resetDragState],
   );
 
+  const handleColumnDropVoid = useCallback(
+    (stage: PipelineStage) => {
+      void handleColumnDrop(stage);
+    },
+    [handleColumnDrop],
+  );
+
   const handleMoveInterviewWithoutScheduling = useCallback(async () => {
     if (!interviewCandidate) return;
     const pending = interviewCandidate;
@@ -696,27 +630,28 @@ export function PipelinePage() {
     }) => {
       if (!activeJobId || !interviewCandidate) return;
 
+      const affectedId = interviewCandidate.candidateId;
       feedback.moveCandidate.processing();
       setIsStageMoveSaving(true);
       try {
-        await pipelineService.schedulePipelineInterview(activeJobId, interviewCandidate.candidateId, {
+        await pipelineService.schedulePipelineInterview(activeJobId, affectedId, {
           ...payload,
           timezone: SCHEDULE_TIMEZONE,
           title: "Entrevista com candidato",
           interview_type: interviewTypeForStage(interviewCandidate.targetStage),
         });
         setInterviewCandidate(null);
-        await syncAfterStageMutation();
+        await syncAfterStageMutation(affectedId);
         feedback.moveCandidate.success();
       } catch (err: unknown) {
         const handled = handleBlockedError(err, {
-          candidateId: interviewCandidate.candidateId,
+          candidateId: affectedId,
           candidateName: interviewCandidate.candidateName,
         });
         if (handled) {
           toast.dismissKey(MOVE_CANDIDATE_TOAST_KEY);
           setInterviewCandidate(null);
-          await syncAfterStageMutation();
+          await syncAfterStageMutation(affectedId);
         } else {
           feedback.moveCandidate.error(err);
         }
@@ -744,15 +679,16 @@ export function PipelinePage() {
   const handleRejectionConfirm = useCallback(
     async (reason: string) => {
       if (!rejectionCandidate || !activeJobId) return;
+      const affectedId = rejectionCandidate.candidateId;
       setRejectionSubmitting(true);
       feedback.moveCandidate.processing();
       try {
-        await pipelineService.moveCandidateStage(activeJobId, rejectionCandidate.candidateId, {
+        await pipelineService.moveCandidateStage(activeJobId, affectedId, {
           stage: "rejected",
           reason,
         });
         setRejectionCandidate(null);
-        await syncAfterStageMutation();
+        await syncAfterStageMutation(affectedId);
         feedback.moveCandidate.success();
       } catch (err: unknown) {
         feedback.moveCandidate.error(err);
@@ -779,7 +715,7 @@ export function PipelinePage() {
             Pipeline
           </h1>
           <p className="mt-0.5 text-[11px] font-medium text-slate-400 dark:text-slate-500">
-            Acompanhe o andamento dos candidatos em cada etapa do processo seletivo.
+            Visão macro do funil de candidatos.
           </p>
         </div>
 
@@ -931,6 +867,9 @@ export function PipelinePage() {
                       </span>
                     ))}
                   </div>
+                  <p className="mt-1 text-[10px] font-semibold text-[hsl(var(--text-muted))]/80">
+                    Detalhes de admissão e ERP ficam em áreas próprias.
+                  </p>
                 </div>
  
                 {/* Filters and Refresh State */}
@@ -952,24 +891,16 @@ export function PipelinePage() {
 
                   {activeJobId && (
                     <div className="flex w-full sm:w-auto flex-wrap items-center justify-between sm:justify-start gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-                      <span className={`h-2 w-2 rounded-full ${autoRefreshActive ? "bg-cyan-500" : "bg-slate-300 dark:bg-slate-700"}`} />
                       <span>Atualizado às <strong className="font-mono font-semibold">{lastUpdated}</strong></span>
-                      <span>· Auto em <strong className="font-mono text-[hsl(var(--primary))]">{autoRefreshActive ? `${secondsLeft}s` : "Pausada"}</strong></span>
-                      <button
-                        type="button"
-                        onClick={() => setAutoRefreshActive((prev) => !prev)}
-                        className="font-bold text-[hsl(var(--primary))] hover:underline"
-                      >
-                        {autoRefreshActive ? "Pausar" : "Iniciar"}
-                      </button>
                       <button
                         type="button"
                         onClick={() => void handleManualRefresh()}
                         disabled={boardLoading}
+                        aria-label="Atualizar board"
                         className="inline-flex items-center gap-1 font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200"
                       >
                         <RefreshCw className={["h-3.5 w-3.5", boardLoading ? "animate-spin" : ""].join(" ")} />
-                        {boardLoading ? "Sincronizando" : "Sincronizar"}
+                        {boardLoading ? "Sincronizando" : "Atualizar"}
                       </button>
                     </div>
                   )}
@@ -1033,47 +964,26 @@ export function PipelinePage() {
                   onScroll={syncMainKanbanScroll}
                   data-testid="kanban-scroll-container"
                 >
-                  <div className="flex w-full min-w-max items-stretch gap-3 min-h-[620px] h-[calc(100vh-280px)] max-h-[calc(100vh-220px)] xl:gap-4">
+                  <div className="flex w-full min-w-0 items-stretch gap-3 min-h-[620px] h-[calc(100vh-280px)] max-h-[calc(100vh-220px)] xl:gap-3">
                     {mainCols.map((col, idx) => (
                       <KanbanColumn
-                        key={col.stage}
+                        key={col.macroId}
                         column={col}
                         colIndex={idx}
-                        onCardClick={setPreviewCandidateId}
+                        onCardClick={handleOpenCandidate}
                         disabled={!canUse}
                         showTopMatchHighlight={sortOrder === "score_desc"}
                         onAddCandidate={activeJobAcceptsCandidates ? () => handleOpenSourceCandidates() : undefined}
                         draggableCards={canUse && !isStageMoveSaving}
                         draggingCandidateId={draggingCandidate?.candidateId ?? null}
-                        isDropTarget={dropTargetStage === col.stage}
+                        isDropTarget={col.dropTargetStage !== null && dropTargetStage === (col.dropTargetStage ?? col.stage)}
                         onCardDragStart={handleCardDragStart}
                         onCardDragEnd={resetDragState}
                         onColumnDragOver={handleColumnDragOver}
                         onColumnDragLeave={handleColumnDragLeave}
-                        onColumnDrop={(stage) => void handleColumnDrop(stage)}
+                        onColumnDrop={handleColumnDropVoid}
                       />
                     ))}
-
-                    {rejectedCol && (
-                      <>
-                        <div className="mx-0.5 w-px self-stretch border-r border-dashed border-slate-200 bg-slate-100 dark:border-slate-800/80 dark:bg-slate-800" />
-                        <KanbanColumn
-                          column={rejectedCol}
-                          colIndex={mainCols.length}
-                          onCardClick={setPreviewCandidateId}
-                          disabled={!canUse}
-                          showTopMatchHighlight={sortOrder === "score_desc"}
-                          draggableCards={canUse && !isStageMoveSaving}
-                          draggingCandidateId={draggingCandidate?.candidateId ?? null}
-                          isDropTarget={dropTargetStage === rejectedCol.stage}
-                          onCardDragStart={handleCardDragStart}
-                          onCardDragEnd={resetDragState}
-                          onColumnDragOver={handleColumnDragOver}
-                          onColumnDragLeave={handleColumnDragLeave}
-                          onColumnDrop={(stage) => void handleColumnDrop(stage)}
-                        />
-                      </>
-                    )}
                   </div>
                 </div>
                 </>
@@ -1126,7 +1036,7 @@ export function PipelinePage() {
                 isRefreshing={isRankingRefreshing}
                 error={rankingError}
                 onToggle={() => setShowRanking(false)}
-                onOpenCandidate={setPreviewCandidateId}
+                onOpenCandidate={handleOpenCandidate}
                 onRefresh={
                   activeJobId
                     ? () => {
@@ -1175,7 +1085,7 @@ export function PipelinePage() {
             navigate(targetUrl);
             return;
           }
-          setPreviewCandidateId(candidateId);
+          handleOpenCandidate(candidateId);
         }}
       />
 
@@ -1209,10 +1119,8 @@ export function PipelinePage() {
 
       <CandidatePreviewDrawer
         candidateId={previewCandidateId}
-        onClose={() => setPreviewCandidateId(null)}
-        refreshToken={previewRefreshToken}
+        onClose={handleCloseDrawer}
         onPipelineChanged={async () => {
-          setSecondsLeft(30);
           await triggerRefresh();
         }}
       />
@@ -1236,7 +1144,7 @@ export function PipelinePage() {
             forceReason,
           });
           if (result) {
-            await syncAfterStageMutation();
+            await syncAfterStageMutation(candidateId);
             feedback.moveCandidate.success();
           }
         }}

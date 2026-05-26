@@ -7,7 +7,7 @@ const routerFuture = {
 } as const;
 
 import { CandidateEntryPage } from "../CandidateEntryPage";
-import { CandidateLoginPage } from "../CandidateLoginPage";
+
 import { CandidatePortalPage } from "../CandidatePortalPage";
 import { candidatePortalService } from "../../services/candidatePortalService";
 import { communicationService } from "../../services/communicationService";
@@ -68,30 +68,27 @@ describe("Candidate portal flow", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("link", { name: /iniciar candidatura/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /criar cadastro/i })).toHaveAttribute(
       "href",
       "/candidato/cadastro"
     );
-    expect(screen.getByRole("link", { name: /entrar no portal/i })).toHaveAttribute(
-      "href",
-      "/candidato/login"
-    );
+    expect(screen.getByRole("button", { name: /entrar no portal/i })).toBeInTheDocument();
   });
 
   it("renderiza login e valida e-mail e senha obrigatórios", async () => {
     render(
-      <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
-        <CandidateLoginPage />
+      <MemoryRouter future={routerFuture} initialEntries={["/candidato"]}>
+        <CandidateEntryPage />
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Acessar minha conta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Entrar no portal" }));
     expect(await screen.findByText("E-mail é obrigatório.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("E-mail"), {
       target: { value: "maria.portal@example.com" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Acessar minha conta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Entrar no portal" }));
     expect(await screen.findByText("Senha é obrigatória.")).toBeInTheDocument();
   });
 
@@ -104,11 +101,11 @@ describe("Candidate portal flow", () => {
 
     render(
       <VisualThemeProvider>
-        <MemoryRouter future={routerFuture} initialEntries={["/candidato/login"]}>
+        <MemoryRouter future={routerFuture} initialEntries={["/candidato"]}>
           <Routes>
-            <Route path="/candidato/login" element={
+            <Route path="/candidato" element={
               <AuthProvider>
-                <CandidateLoginPage />
+                <CandidateEntryPage />
               </AuthProvider>
             } />
             <Route path="/candidato/portal" element={<div>Portal destino</div>} />
@@ -123,7 +120,7 @@ describe("Candidate portal flow", () => {
     fireEvent.change(screen.getByLabelText("Senha"), {
       target: { value: "SenhaSegura123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Acessar minha conta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Entrar no portal" }));
 
     expect(await screen.findByText("Portal destino")).toBeInTheDocument();
   });
@@ -217,7 +214,7 @@ describe("Candidate portal flow", () => {
         <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
           <Routes>
             <Route path="/candidato/portal" element={<CandidatePortalPage />} />
-            <Route path="/candidato/login" element={<div>Login candidato</div>} />
+            <Route path="/candidato" element={<div>Login candidato</div>} />
           </Routes>
         </MemoryRouter>
       </VisualThemeProvider>
@@ -395,7 +392,7 @@ describe("Candidate portal flow", () => {
         <MemoryRouter future={routerFuture} initialEntries={["/candidato/portal"]}>
           <Routes>
             <Route path="/candidato/portal" element={<CandidatePortalPage />} />
-            <Route path="/candidato/login" element={<div>Login candidato</div>} />
+            <Route path="/candidato" element={<div>Login candidato</div>} />
           </Routes>
         </MemoryRouter>
       </VisualThemeProvider>

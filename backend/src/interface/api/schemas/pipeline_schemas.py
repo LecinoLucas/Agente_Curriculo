@@ -6,6 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
 from src.interface.api.schemas.job_schemas import DealBreaker
 
 # ---------------------------------------------------------------------------
@@ -33,7 +34,16 @@ CandidateOutcomeStatus = Literal["active", "removed", "hired", "rejected", "tran
 
 # AI analysis processing status — completely independent of pipeline stage.
 # Controlled exclusively by the analysis worker; never set by stage moves.
-AIAnalysisStatus = Literal["pending", "processing", "retry_scheduled", "completed", "failed", "cancelled", "discarded"]
+AIAnalysisStatus = Literal[
+    "waiting_extraction",
+    "pending",
+    "processing",
+    "retry_scheduled",
+    "completed",
+    "failed",
+    "cancelled",
+    "discarded",
+]
 
 # ---------------------------------------------------------------------------
 # Board — existing schemas (unchanged)

@@ -117,7 +117,8 @@ class ProtheusRealAdapter:
         if not self.allow_real_send:
             raise RuntimeError(
                 "Envio real para Protheus está desabilitado. "
-                "Configure ERP_ALLOW_REAL_SEND=true apenas em homologação."
+                "Configure PROTHEUS_REAL_SEND_ENABLED=true e ERP_ALLOW_REAL_SEND=true "
+                "apenas em homologação controlada."
             )
 
         if self.app_env == "production":

@@ -755,10 +755,6 @@ describe("Candidate workspace flow", () => {
     expect(screen.getByText("Visualizar currículo")).toBeInTheDocument();
     expect(screen.getByText("Versões do currículo")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Entrevistas/i }));
-    expect(await screen.findByRole("button", { name: /Agendar entrevista/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Scorecard/i })).not.toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: /Score e análise/i }));
     expect(await screen.findByText("Análise da vaga ativa")).toBeInTheDocument();
     expect(screen.getByText("Explicação resumida da vaga ativa com boa aderência técnica.")).toBeInTheDocument();
@@ -833,6 +829,163 @@ describe("Candidate workspace flow", () => {
     expect(await screen.findByText("Processo atual")).toBeInTheDocument();
     expect(screen.getByText("Processos anteriores")).toBeInTheDocument();
     expect(screen.getByText(/Resultado: Não selecionado/i)).toBeInTheDocument();
+  });
+
+  it("abas progressivas: candidato sem vaga ativa não mostra entrevistas, avaliações ou pré-admissão", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      active_job_id: null,
+      active_job: null,
+      pipeline_entries: [],
+      active_job_decision: null,
+      preview_pendencies: [],
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Ana Souza" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Visão geral/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Currículo e documentos/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Comunicação/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Observações/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Histórico/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Entrevistas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Avaliações/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pré-admissão/i })).not.toBeInTheDocument();
+  });
+
+  it("abas progressivas: candidato em entrevista mostra Entrevistas", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "technical_interview",
+      })),
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: /Entrevistas/i })).toBeInTheDocument();
+  });
+
+  it.each(["final", "offer"] as const)(
+    "abas progressivas: candidato em %s mostra Ações, Score, Entrevistas e Histórico",
+    async (stage) => {
+      vi.mocked(candidatesService.getOverview).mockResolvedValue({
+        ...overview,
+        pipeline_entries: overview.pipeline_entries.map((entry) => ({
+          ...entry,
+          stage,
+        })),
+      });
+
+      render(
+        <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+          <Routes>
+            <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByRole("button", { name: /^Ações$/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Score e análise/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Entrevistas/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Histórico/i })).toBeInTheDocument();
+    },
+  );
+
+  it("abas progressivas: candidato contratado mostra Pré-admissão", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "hired",
+        candidate_status: "Contratado",
+      })),
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: /Pré-admissão/i })).toBeInTheDocument();
+  });
+
+  it("abas progressivas: candidato reprovado mostra Histórico e Comunicação sem Score ou Entrevistas", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "rejected",
+        relationship_status: "rejected",
+        is_terminal: true,
+        terminated_at: "2026-05-25T12:00:00Z",
+        candidate_status: "Reprovado",
+      })),
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: /Comunicação/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Histórico/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Score e análise/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Entrevistas/i })).not.toBeInTheDocument();
+  });
+
+  it("deep link tab=interviews mantém Entrevistas visível mesmo quando a matriz esconderia", async () => {
+    vi.mocked(candidatesService.getOverview).mockResolvedValue({
+      ...overview,
+      pipeline_entries: overview.pipeline_entries.map((entry) => ({
+        ...entry,
+        stage: "entry",
+      })),
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=interviews"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: /Entrevistas/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Agendar entrevista/i })).toBeInTheDocument();
+  });
+
+  it("tab inválida cai para Visão geral", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/candidatos/candidate-1?tab=invalida"]}>
+        <Routes>
+          <Route path="/candidatos/:candidateId" element={<CandidateProfilePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Resumo do processo")).toBeInTheDocument();
+    expect(screen.getByText("Dados principais")).toBeInTheDocument();
   });
 
   it("aba Entrevistas mostra scorecard inline na entrevista técnica indicada pelo gate", async () => {

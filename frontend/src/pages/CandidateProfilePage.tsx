@@ -37,6 +37,11 @@ import { useCandidateDecision } from "../features/candidates/drawer/hooks/useCan
 import { ScoreTab as CandidateScoreDetailsTab } from "../features/candidates/drawer/tabs/ScoreTab";
 import { useCandidateOverview } from "../features/candidates/hooks/useCandidateOverview";
 import {
+  getVisibleCandidateProfileTabs,
+  isCandidateProfileTabKey,
+  type CandidateProfileTabKey,
+} from "../features/candidates/profile/utils/getVisibleCandidateProfileTabs";
+import {
   ANALYSIS_STATUS_LABEL,
   STAGE_LABEL,
   deriveNextAction,
@@ -99,18 +104,6 @@ import type {
 } from "../types/domain";
 import type { InterviewFormat, InterviewSchedule, InterviewType } from "../types/agenda";
 
-type CandidateProfileTabKey =
-  | "overview"
-  | "workflow"
-  | "pre_admission"
-  | "score"
-  | "documents"
-  | "interviews"
-  | "assessments"
-  | "communications"
-  | "notes"
-  | "history";
-
 const PROFILE_TABS: Tab[] = [
   { key: "overview", label: "Visão geral" },
   { key: "workflow", label: "Ações" },
@@ -124,22 +117,13 @@ const PROFILE_TABS: Tab[] = [
   { key: "history", label: "Histórico" },
 ];
 
-function resolveInitialTab(search: string): CandidateProfileTabKey {
+function resolveSearchTab(search: string): CandidateProfileTabKey | null {
   const tab = new URLSearchParams(search).get("tab");
-  if (
-    tab === "workflow" ||
-    tab === "pre_admission" ||
-    tab === "score" ||
-    tab === "documents" ||
-    tab === "interviews" ||
-    tab === "assessments" ||
-    tab === "communications" ||
-    tab === "notes" ||
-    tab === "history"
-  ) {
-    return tab;
-  }
-  return "overview";
+  return isCandidateProfileTabKey(tab) ? tab : null;
+}
+
+function resolveInitialTab(search: string): CandidateProfileTabKey {
+  return resolveSearchTab(search) ?? "overview";
 }
 
 type CandidateProfileFocus = "behavioral_ai" | "scorecard" | "hiring_decision" | "manager_review";
@@ -252,6 +236,105 @@ export function CandidateProfilePage() {
     jobs,
     rankingEntry,
   });
+  const explicitProfileTab = useMemo(() => resolveSearchTab(location.search), [location.search]);
+  const hasBehavioralAssessmentForProfileTabs = useMemo(
+    () =>
+      Boolean(activeJob?.requires_behavioral_assessment) ||
+      (overview?.preview_pendencies ?? []).some(
+        (pendency) => pendency.action === "open_behavioral_assessment",
+      ),
+    [activeJob?.requires_behavioral_assessment, overview?.preview_pendencies],
+  );
+  const hasBehavioralAiForProfileTabs = useMemo(
+    () =>
+      Boolean(activeJob?.requires_behavioral_ai_evaluation) ||
+      (overview?.preview_pendencies ?? []).some(
+        (pendency) => pendency.action === "open_behavioral_ai",
+      ),
+    [activeJob?.requires_behavioral_ai_evaluation, overview?.preview_pendencies],
+  );
+  const hasInterviewsForProfileTabs = useMemo(
+    () =>
+      (overview?.preview_pendencies ?? []).some(
+        (pendency) => pendency.action === "open_interview" || pendency.action === "open_scorecard",
+      ) ||
+      profileEntry?.stage === "hr_interview" ||
+      profileEntry?.stage === "technical_interview" ||
+      profileEntry?.stage === "final" ||
+      profileEntry?.stage === "offer",
+    [
+      overview?.preview_pendencies,
+      profileEntry?.stage,
+    ],
+  );
+  const hasHiringDecisionForProfileTabs = useMemo(
+    () =>
+      (overview?.preview_pendencies ?? []).some((pendency) => pendency.action === "open_decision") ||
+      profileEntry?.stage === "offer" ||
+      profileEntry?.stage === "hired" ||
+      profileEntry?.stage === "pre_admission" ||
+      profileEntry?.stage === "protheus" ||
+      profileEntry?.stage === "admitted",
+    [overview?.preview_pendencies, profileEntry?.stage],
+  );
+  const hasPreAdmissionForProfileTabs = useMemo(
+    () =>
+      (overview?.preview_pendencies ?? []).some((pendency) => pendency.action === "open_pre_admission") ||
+      profileEntry?.stage === "hired" ||
+      profileEntry?.stage === "pre_admission" ||
+      profileEntry?.stage === "protheus" ||
+      profileEntry?.stage === "admitted",
+    [overview?.preview_pendencies, profileEntry?.stage],
+  );
+  const visibleProfileTabKeys = useMemo(
+    () =>
+      getVisibleCandidateProfileTabs({
+        activeJobId: profileJobId,
+        pipelineStage: profileEntry?.stage ?? null,
+        relationshipStatus: profileEntry?.relationship_status ?? null,
+        isTerminal:
+          Boolean(profileEntry?.is_terminal) ||
+          isSuccessTerminalStage(profileEntry?.stage) ||
+          profileEntry?.stage === "rejected" ||
+          profileEntry?.relationship_status === "rejected",
+        hasAnalysis: Boolean(overview?.latest_analysis),
+        hasScore: activeScore !== null,
+        hasBehavioralAssessment: hasBehavioralAssessmentForProfileTabs,
+        hasBehavioralAi: hasBehavioralAiForProfileTabs,
+        hasInterviews: hasInterviewsForProfileTabs,
+        hasHiringDecision: hasHiringDecisionForProfileTabs,
+        hasPreAdmissionCase: hasPreAdmissionForProfileTabs,
+        hasCommunication: true,
+        hasNotes: true,
+        hasProcessHistory: true,
+        userRole: user?.role ?? "viewer",
+        explicitTab: explicitProfileTab,
+      }),
+    [
+      activeScore,
+      explicitProfileTab,
+      hasBehavioralAiForProfileTabs,
+      hasBehavioralAssessmentForProfileTabs,
+      hasHiringDecisionForProfileTabs,
+      hasInterviewsForProfileTabs,
+      hasPreAdmissionForProfileTabs,
+      overview?.latest_analysis,
+      profileEntry?.is_terminal,
+      profileEntry?.relationship_status,
+      profileEntry?.stage,
+      profileJobId,
+      user?.role,
+    ],
+  );
+  const visibleProfileTabs = useMemo(
+    () => PROFILE_TABS.filter((tab) => visibleProfileTabKeys.includes(tab.key as CandidateProfileTabKey)),
+    [visibleProfileTabKeys],
+  );
+
+  useEffect(() => {
+    if (visibleProfileTabKeys.includes(activeTab)) return;
+    setActiveTab(visibleProfileTabKeys[0] ?? "overview");
+  }, [activeTab, visibleProfileTabKeys]);
 
   const reloadWorkspace = useCallback(async () => {
     await reload();
@@ -412,7 +495,7 @@ export function CandidateProfilePage() {
 
   const handleMoveStage = useCallback(
     async (stage: PipelineStage, reason?: string | null) => {
-      if (!candidateId || !profileJobId) return;
+      if (!candidateId || !profileJobId) return false;
       setWorkflowSaving(true);
       try {
         await pipelineService.moveCandidateStage(profileJobId, candidateId, {
@@ -422,6 +505,7 @@ export function CandidateProfilePage() {
         });
         toast.success("Etapa atualizada.");
         await reloadWorkspace();
+        return true;
       } catch (err: unknown) {
         const handled = handleBlockedError(err, {
           candidateId,
@@ -440,6 +524,7 @@ export function CandidateProfilePage() {
             ),
           );
         }
+        return false;
       } finally {
         setWorkflowSaving(false);
       }
@@ -584,7 +669,7 @@ export function CandidateProfilePage() {
       <section className="mt-8 overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] shadow-sm">
         <div className="overflow-x-auto px-2">
           <Tabs
-            tabs={PROFILE_TABS}
+            tabs={visibleProfileTabs}
             active={activeTab}
             onChange={(key) => setActiveTab(key as CandidateProfileTabKey)}
           />
@@ -619,9 +704,15 @@ export function CandidateProfilePage() {
             <CandidatePreAdmissionPanel
               jobId={profileJobId}
               candidateId={candidateId}
+              candidateName={overview?.candidate.full_name ?? null}
+              jobTitle={activeEntry?.job_title ?? activeJob?.title ?? null}
               currentStage={profileEntry?.stage ?? null}
               sendingToProtheus={workflowSaving && profileEntry?.stage === "pre_admission"}
               onSendToProtheus={() => handleMoveStage("protheus", "Pré-admissão concluída.")}
+              onOpenHiringDecision={() => {
+                setActiveTab("workflow");
+                setHiringDecisionFocusTick((current) => current + 1);
+              }}
             />
           ) : null}
           {activeTab === "score" ? (
@@ -1066,7 +1157,7 @@ function WorkflowTab({
   transferJobs: Job[];
   canTransfer: boolean;
   saving: boolean;
-  onMoveStage: (stage: PipelineStage, reason?: string | null) => Promise<void>;
+  onMoveStage: (stage: PipelineStage, reason?: string | null) => Promise<boolean>;
   onRequestReject: () => void;
   onTransfer: (toJobId: string, reason: string) => Promise<void>;
   onLinkJob: () => void;
@@ -1186,7 +1277,11 @@ function WorkflowTab({
                 ) : null}
                 {canMoveToPreAdmission ? (
                   <ActionButton
-                    onClick={() => void onMoveStage("pre_admission", reason || "Pré-admissão iniciada.")}
+                    onClick={() => {
+                      void onMoveStage("pre_admission", reason || "Pré-admissão iniciada.").then((moved) => {
+                        if (moved) onOpenPreAdmission();
+                      });
+                    }}
                     disabled={saving}
                     primary
                   >

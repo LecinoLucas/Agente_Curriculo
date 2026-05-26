@@ -27,6 +27,7 @@ import {
   Bell,
   Moon,
   Sun,
+  Flag,
 } from "lucide-react";
 import { ChangeEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -394,14 +395,14 @@ function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOve
   const isRejected = overview?.application_status === "rejected";
 
   return (
-    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-5 sm:p-6 lg:p-7">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-4 sm:p-5">
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
           <TrendingUp className="h-5 w-5" />
         </div>
         <div>
-          <CardTitle className="text-lg font-bold text-foreground">Sua jornada de candidatura</CardTitle>
-          <CardDescription className="text-sm font-semibold text-muted-foreground mt-0.5">
+          <CardTitle className="text-base font-bold text-foreground">Sua jornada de candidatura</CardTitle>
+          <CardDescription className="text-xs font-semibold text-muted-foreground mt-0.5">
             {isRejected
               ? "O processo desta vaga foi encerrado."
               : "Acompanhe as etapas do seu processo seletivo."}
@@ -409,7 +410,7 @@ function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOve
         </div>
       </div>
 
-      <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 md:gap-4 py-4 px-1 md:px-4">
+      <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-3 py-2 px-1 md:px-2">
         {/* Connecting lines for desktop */}
         <div className="absolute left-[34px] right-[34px] top-[38px] hidden md:block h-0.5 bg-border -z-0">
           <div
@@ -481,33 +482,98 @@ function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOve
 
 function NextUpdateCard() {
   return (
-    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-5 flex flex-col justify-between h-full">
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-5 flex flex-col justify-between h-full min-h-[220px]">
       <div>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Calendar className="h-5 w-5" />
-          </div>
-          <CardTitle className="text-sm font-bold text-foreground">Próxima atualização</CardTitle>
-        </div>
+        <CardTitle className="text-sm font-bold text-foreground mb-4">Próxima atualização</CardTitle>
 
-        <div className="flex items-center gap-4 py-4">
-          {/* Hourglass Icon */}
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-muted text-primary border border-border">
-            <Hourglass className="h-8 w-8 animate-pulse" />
+        <div className="flex items-center gap-4 py-2">
+          {/* Hourglass Icon inside a soft red circle */}
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/5">
+            <Hourglass className="h-6 w-6 text-primary animate-pulse" />
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Previsão de retorno</p>
-            <p className="text-xl font-bold text-primary mt-0.5">Em breve</p>
-            <p className="text-xs text-muted-foreground mt-1 font-medium leading-relaxed">
-              Enviaremos uma mensagem assim que tivermos novidades para você.
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">Previsão de retorno</p>
+            <p className="text-lg font-black text-primary mt-1 leading-none">Em breve</p>
+            <p className="text-xs text-muted-foreground mt-1.5 font-medium leading-relaxed">
+              Avisaremos assim que houver novidades.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 rounded-xl bg-muted p-3 text-[11px] font-semibold text-muted-foreground">
+      <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-muted/60 border border-border/50 p-3 text-xs font-semibold text-muted-foreground leading-tight">
         <Bell className="h-4 w-4 text-primary shrink-0" />
         <span>Fique atento ao seu e-mail e ao portal.</span>
+      </div>
+    </Card>
+  );
+}
+
+function QuickSummaryCard({
+  overview,
+  activeApplication,
+  closedProcessApplication,
+  onOpenStatus,
+}: {
+  overview: CandidatePortalOverview | null;
+  activeApplication: CandidatePortalActiveApplication | null;
+  closedProcessApplication: CandidatePortalApplication | null;
+  onOpenStatus: () => void;
+}) {
+  const vaga = activeApplication?.job_title || closedProcessApplication?.job_title || "Nenhuma vaga ativa";
+  const etapa = activeApplication?.pipeline_stage || "Aguardando atualização";
+  
+  const resumeDate = overview?.latest_resume?.uploaded_at
+    ? `recebido em ${new Date(overview.latest_resume.uploaded_at).toLocaleDateString("pt-BR")}`
+    : "Não informado";
+
+  const formatDateTime = (dateStr?: string | null) => {
+    if (!dateStr) return "Não informado";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "Não informado";
+      const date = d.toLocaleDateString("pt-BR");
+      const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      return `${date} às ${time}`;
+    } catch {
+      return "Não informado";
+    }
+  };
+
+  const ultimaAtualizacao = formatDateTime(activeApplication?.submitted_at || overview?.latest_resume?.uploaded_at);
+
+  return (
+    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-5 flex flex-col justify-between h-full min-h-[220px]">
+      <div>
+        <CardTitle className="text-sm font-bold text-foreground mb-4">Resumo rápido</CardTitle>
+        <div className="divide-y divide-border/60 text-xs font-semibold">
+          {[
+            { label: "Vaga", val: vaga, icon: <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" /> },
+            { label: "Etapa", val: etapa, icon: <Flag className="h-4 w-4 text-muted-foreground shrink-0" /> },
+            { label: "Currículo", val: resumeDate, icon: <FileText className="h-4 w-4 text-muted-foreground shrink-0" /> },
+            { label: "Última atualização", val: ultimaAtualizacao, icon: <Calendar className="h-4 w-4 text-muted-foreground shrink-0" /> },
+          ].map((item, idx) => (
+            <div key={idx} className="flex justify-between items-center py-2.5 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-2.5 text-muted-foreground">
+                {item.icon}
+                <span>{item.label}</span>
+              </div>
+              <span className="text-foreground font-bold text-right truncate pl-4 flex-1 max-w-[220px]">
+                {item.val}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 pt-3 flex justify-end border-t border-border/40">
+        <button
+          onClick={onOpenStatus}
+          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
+          data-testid="quick-summary-open-status"
+        >
+          Abrir situação
+          <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
     </Card>
   );
@@ -566,23 +632,34 @@ function TipsCard() {
   );
 }
 
-function MotivationalBanner() {
+function BottomIncentiveCard() {
   return (
-    <Card className="overflow-hidden border border-primary/20 dark:border-primary/30 rounded-[1.25rem] bg-primary/5 dark:bg-card/70 dark:backdrop-blur-md p-4 sm:p-5 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+    <Card className="overflow-hidden border border-primary/20 dark:border-primary/30 rounded-[1.25rem] bg-primary/5 dark:bg-card/75 dark:backdrop-blur-md p-4 sm:p-5 shadow-xs flex items-center justify-between gap-4">
       <div className="flex items-center gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-primary border border-border dark:bg-primary/10 dark:border-primary/20">
-          <Heart className="h-6 w-6 fill-primary text-primary" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white dark:bg-muted text-primary border border-primary/10 shadow-xs">
+          <Heart className="h-5 w-5 fill-primary text-primary" />
         </div>
         <div>
-          <h4 className="text-sm font-black text-foreground">Agradecemos o seu interesse em fazer parte do time Marajó RH.</h4>
-          <p className="text-xs font-medium text-muted-foreground mt-0.5">
-            Nosso propósito é conectar talentos incríveis a oportunidades transformadoras.
+          <h4 className="text-sm font-extrabold text-foreground leading-tight">Você está no caminho certo.</h4>
+          <p className="text-xs font-semibold text-muted-foreground mt-0.5">
+            Nosso time está analisando seu perfil com cuidado.
           </p>
         </div>
       </div>
-      <div className="text-lg sm:text-xl font-black italic text-primary shrink-0 font-serif leading-none tracking-tight">
-        Você está no caminho certo!
-      </div>
+
+      {/* Mountain and Flag illustration */}
+      <svg className="hidden md:block h-14 w-40 text-primary/15 shrink-0" viewBox="0 0 160 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 50 C 40 50, 70 35, 120 20" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" fill="none" />
+        <path d="M60 20 L61.5 23 L64 24 L61.5 25 L60 28 L58.5 25 L56 24 L58.5 23 Z" fill="currentColor" opacity="0.6" />
+        <path d="M100 12 L101 14 L103 14.5 L101 15 L100 17 L99 15 L97 14.5 L99 14 Z" fill="currentColor" opacity="0.4" />
+        {/* Mountain */}
+        <path d="M105 60 L125 20 L145 60 Z" fill="currentColor" opacity="0.2" />
+        <path d="M115 60 L125 32 L135 60 Z" fill="currentColor" opacity="0.3" />
+        {/* Flagpole */}
+        <line x1="125" y1="20" x2="125" y2="5" stroke="currentColor" strokeWidth="1.5" />
+        {/* Flag */}
+        <path d="M125 5 L140 9 L125 13 Z" fill="currentColor" className="text-primary" />
+      </svg>
     </Card>
   );
 }
@@ -801,14 +878,19 @@ export function CandidatePortalPage() {
   const [activeMenuId, setActiveMenuId] = useState("inicio");
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [isRequestingContact, setIsRequestingContact] = useState(false);
+  const [isTipsOpen, setIsTipsOpen] = useState(false);
 
   useEffect(() => {
     if (currentTab === "inicio" && activeMenuId !== "inicio") {
       setActiveMenuId("inicio");
+    } else if (currentTab === "situacao" && activeMenuId !== "situacao") {
+      setActiveMenuId("situacao");
     } else if (currentTab === "vagas" && activeMenuId !== "vagas" && activeMenuId !== "candidaturas") {
       setActiveMenuId("vagas");
     } else if (currentTab === "avaliacoes" && activeMenuId !== "avaliacoes") {
       setActiveMenuId("avaliacoes");
+    } else if (currentTab === "mensagens" && activeMenuId !== "mensagens") {
+      setActiveMenuId("mensagens");
     } else if (currentTab === "perfil" && activeMenuId !== "perfil") {
       setActiveMenuId("perfil");
     }
@@ -829,6 +911,11 @@ export function CandidatePortalPage() {
       : behavioralAssessments.filter(
           (item) => item.status === "pending" || item.status === "in_progress",
         );
+
+  const visibleSteps = buildCandidateVisibleSteps(overview);
+  const currentStepObj = visibleSteps.find(s => s.status === "current") || (visibleSteps.length > 0 ? visibleSteps[visibleSteps.length - 1] : null);
+  const currentStatusTitle = currentStepObj?.title || overview?.status_public || "Currículo em análise";
+  const currentStatusDesc = currentStepObj?.description || "Seu currículo está sendo avaliado pelo nosso time.";
 
   async function loadPortalData(refresh = false) {
     if (refresh) {
@@ -856,7 +943,7 @@ export function CandidatePortalPage() {
       setUnreadMessagesCount(unreadCount);
     } catch (error) {
       if (error instanceof HttpError && error.status === 401) {
-        navigate("/candidato/login", { replace: true });
+        navigate("/candidato", { replace: true });
         return;
       }
       if (isIncompleteCandidateProfileError(error)) {
@@ -972,7 +1059,7 @@ export function CandidatePortalPage() {
       // bloquear a saída do portal. A sessão local é limpa abaixo no finally.
       console.warn("candidate.logout_failed", error);
     } finally {
-      navigate("/candidato/login", { replace: true });
+      navigate("/candidato", { replace: true });
     }
   };
 
@@ -1049,13 +1136,9 @@ export function CandidatePortalPage() {
     } else if (menuId === "perfil") {
       setCurrentTab("perfil");
     } else if (menuId === "mensagens") {
-      setCurrentTab("inicio");
-      setTimeout(() => {
-        const element = document.getElementById("candidate-messages-section");
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }, 100);
+      setCurrentTab("mensagens");
+    } else if (menuId === "situacao") {
+      setCurrentTab("situacao");
     } else {
       setCurrentTab("inicio");
     }
@@ -1087,7 +1170,7 @@ export function CandidatePortalPage() {
                 Tentar reconectar
               </Button>
               <Button variant="ghost" asChild className="text-muted-foreground hover:text-foreground font-bold">
-                <Link to="/candidato/login">Voltar ao login</Link>
+                <Link to="/candidato">Voltar ao login</Link>
               </Button>
             </div>
           </CardContent>
@@ -1100,25 +1183,25 @@ export function CandidatePortalPage() {
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 bg-card border-r border-border transition-all duration-300 transform ${
+        className={`fixed inset-y-0 left-0 z-50 bg-[hsl(var(--nav-bg))] border-r border-[hsl(var(--nav-border))] transition-all duration-300 transform ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col w-56 shrink-0 shadow-xs dark:bg-[hsl(var(--nav-bg))]`}
+        } md:translate-x-0 md:sticky md:top-0 md:h-screen md:flex md:flex-col w-56 shrink-0 shadow-xs`}
       >
-        <div className="flex items-center h-14 px-5 border-b border-border justify-between">
+        <div className="flex items-center h-14 px-5 border-b border-[hsl(var(--nav-border))] justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shrink-0 shadow-sm font-bold text-lg">
               M
             </div>
             <div className="flex flex-col text-left">
-              <span className="font-heading text-sm font-black tracking-widest text-foreground dark:text-[hsl(var(--nav-text))] leading-none">
+              <span className="font-heading text-sm font-black tracking-widest text-[hsl(var(--nav-text))] leading-none">
                 MARAJÓ
               </span>
-              <span className="text-[10px] font-extrabold text-muted-foreground dark:text-[hsl(var(--nav-muted))] tracking-widest leading-none mt-1">
+              <span className="text-[10px] font-extrabold text-[hsl(var(--nav-muted))] tracking-widest leading-none mt-1">
                 RH
               </span>
             </div>
           </div>
-          <button className="md:hidden p-1.5 rounded-lg hover:bg-muted text-muted-foreground" onClick={() => setIsSidebarOpen(false)}>
+          <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10 text-[hsl(var(--nav-muted))] hover:text-[hsl(var(--nav-text))]" onClick={() => setIsSidebarOpen(false)}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -1126,6 +1209,7 @@ export function CandidatePortalPage() {
         <nav className="flex-1 py-4 px-3 space-y-1">
           {[
             { id: "inicio", label: "Dashboard", title: "Dashboard", icon: <Home className="h-5 w-5" /> },
+            { id: "situacao", label: "Situação", title: "Situação", icon: <ShieldCheck className="h-5 w-5" /> },
             { id: "candidaturas", label: "Candidaturas", title: "Candidaturas", icon: <Briefcase className="h-5 w-5" /> },
             { id: "mensagens", label: "Mensagens", title: "Mensagens", icon: <Mail className="h-5 w-5" /> },
             { id: "perfil", label: "Perfil", title: "Perfil", icon: <User className="h-5 w-5" /> },
@@ -1138,8 +1222,8 @@ export function CandidatePortalPage() {
                 title={item.title}
                 className={`flex items-center justify-between px-3.5 py-2.5 w-full text-sm rounded-xl transition-all duration-200 ${
                   isActive
-                    ? "bg-primary/10 text-primary dark:bg-[hsl(var(--nav-active-bg))/0.1] font-bold shadow-xs"
-                    : "text-muted-foreground dark:text-[hsl(var(--nav-muted))] hover:bg-muted dark:hover:bg-muted/10 hover:text-foreground dark:hover:text-[hsl(var(--nav-text))] font-semibold"
+                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-text))] font-bold shadow-xs"
+                    : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))] font-semibold"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
@@ -1156,12 +1240,12 @@ export function CandidatePortalPage() {
           })}
         </nav>
         
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-[hsl(var(--nav-border))]">
           <Button 
             variant="outline" 
             onClick={handleLogout} 
             title="Sair"
-            className="w-full h-11 border-border bg-muted dark:bg-[hsl(var(--nav-bg))] font-bold text-muted-foreground dark:text-[hsl(var(--nav-muted))] hover:bg-primary/10 hover:text-primary hover:border-primary/20 transition-all rounded-xl flex items-center justify-center text-xs"
+            className="w-full h-11 border-[hsl(var(--nav-border))] bg-transparent font-bold text-[hsl(var(--nav-muted))] hover:bg-rose-600 hover:text-white hover:border-transparent transition-all rounded-xl flex items-center justify-center text-xs"
           >
             <LogOut className="h-4 w-4 mr-2" />
             <span className="truncate">Sair da conta</span>
@@ -1209,6 +1293,27 @@ export function CandidatePortalPage() {
               Sincronizar
             </button>
             <button
+              onClick={() => setIsTipsOpen(true)}
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-xs transition-colors hover:bg-muted"
+              title="Dicas de Candidatura"
+              data-testid="header-tips-button"
+            >
+              <Lightbulb className="h-4 w-4 text-amber-500" />
+            </button>
+            <button
+              onClick={() => handleMenuClick("mensagens")}
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-xs transition-colors hover:bg-muted"
+              title="Mensagens do sistema"
+              data-testid="header-mail-button"
+            >
+              <Mail className="h-4 w-4 text-primary" />
+              {unreadMessagesCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black text-primary-foreground">
+                  {unreadMessagesCount > 99 ? "99+" : unreadMessagesCount}
+                </span>
+              )}
+            </button>
+            <button
               onClick={toggleCandidateTheme}
               className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-foreground shadow-xs transition-colors hover:bg-muted"
               title={isDarkCandidate ? "Mudar para tema claro" : "Mudar para tema escuro"}
@@ -1219,7 +1324,7 @@ export function CandidatePortalPage() {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6 max-w-7xl w-full mx-auto">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 max-w-7xl w-full mx-auto">
           {loading ? (
             <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] animate-pulse">
               <div className="space-y-6">
@@ -1258,6 +1363,37 @@ export function CandidatePortalPage() {
             <>
               {currentTab === "inicio" && overview && (
                 <div className="space-y-6">
+                  {/* Status Hero Card */}
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
+                    <Card className="overflow-hidden border border-border rounded-2xl bg-card p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/5">
+                          <TrendingUp className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary block leading-none">
+                            STATUS ATUAL
+                          </span>
+                          <h3 className="text-lg font-black text-foreground mt-1.5 leading-none">
+                            {currentStatusTitle}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-1.5 font-medium leading-relaxed">
+                            {currentStatusDesc}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        onClick={() => handleMenuClick("situacao")}
+                        className="h-10 text-primary hover:text-primary/95 hover:bg-primary/5 font-extrabold rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-center shrink-0 border border-transparent hover:border-primary/15 transition-all"
+                        data-testid="status-hero-view-details"
+                      >
+                        Ver situação completa
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </Card>
+                  </div>
+
                   {isRejectedProcess ? (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <ProcessClosedCard
@@ -1276,77 +1412,12 @@ export function CandidatePortalPage() {
                     </div>
                   ) : null}
 
-                  {/* Top Row: Stepper Horizontal & Resumo */}
-                  <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                    {/* Stepper Card */}
-                    {!isTalentPoolOnly ? (
-                      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <CandidateHorizontalStepper overview={overview} />
-                      </div>
-                    ) : null}
-
-                    {/* Resumo da situação Card */}
-                    <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs animate-in fade-in slide-in-from-right-4 duration-500">
-                      <CardHeader className="p-5 pb-3 border-b border-border">
-                        <CardTitle className="text-base font-bold text-foreground">Resumo da situação</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-5">
-                        <div className="grid grid-cols-2 gap-4">
-                          {[
-                            {
-                              label: isRejectedProcess || isAdmittedProcess ? "Vaga de origem" : "Vaga ativa",
-                              val: activeApplication?.job_title || closedProcessApplication?.job_title || "Banco de Talentos Marajó",
-                              icon: <Briefcase className="h-5 w-5" />,
-                            },
-                            {
-                              label: "Status",
-                              val: overview.status_public,
-                              icon: <ShieldCheck className="h-5 w-5" />,
-                              highlight: true,
-                            },
-                            {
-                              label: "Localização",
-                              val: overview.candidate.city
-                                ? `${overview.candidate.city}/${overview.candidate.state}`
-                                : "Não informado",
-                              icon: <MapPin className="h-5 w-5" />,
-                            },
-                            {
-                              label: "Currículo",
-                              val: overview.latest_resume?.file_name ? "Enviado" : "Pendente",
-                              icon: <FileText className="h-5 w-5" />,
-                              isSuccess: overview.latest_resume?.file_name ? true : false,
-                            },
-                          ].map((item, i) => (
-                            <div
-                              key={i}
-                              className="rounded-xl border border-border bg-muted/30 p-3.5 flex gap-3 items-center min-w-0"
-                            >
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                {item.icon}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
-                                  {item.label}
-                                </p>
-                                <p
-                                  className={`mt-1.5 text-xs font-bold truncate leading-tight ${
-                                    item.highlight
-                                      ? "text-primary"
-                                      : item.isSuccess
-                                      ? "text-emerald-600 font-extrabold"
-                                      : "text-foreground"
-                                  }`}
-                                >
-                                  {item.val}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                  {/* Top Row: Stepper Horizontal (Full Width) */}
+                  {!isTalentPoolOnly ? (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
+                      <CandidateHorizontalStepper overview={overview} />
+                    </div>
+                  ) : null}
 
                   {pendingBehavioralAssessments.length > 0 ? (
                     <Card className="border border-amber-200 bg-amber-50/40 rounded-[1.25rem] shadow-xs animate-in fade-in duration-500 p-5">
@@ -1402,27 +1473,179 @@ export function CandidatePortalPage() {
                     </Card>
                   ) : null}
 
-                  {/* Secondary Row: 3 columns */}
-                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {!isRejectedProcess ? (
+                  {/* Grid layout */}
+                  <div className={!isRejectedProcess ? "grid grid-cols-1 lg:grid-cols-2 gap-4 w-full" : "w-full"}>
+                    {!isRejectedProcess && (
                       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
                         <NextUpdateCard />
                       </div>
-                    ) : null}
+                    )}
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
-                      <TipsCard />
-                    </div>
-                    <div id="candidate-messages-section" className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
-                      <CandidateMessagesCard 
-                        refreshTrigger={messagesRefreshTrigger} 
-                        onMessageRead={() => void loadPortalData(true)}
+                      <QuickSummaryCard
+                        overview={overview}
+                        activeApplication={activeApplication}
+                        closedProcessApplication={closedProcessApplication}
+                        onOpenStatus={() => handleMenuClick("situacao")}
                       />
                     </div>
                   </div>
 
-                  {/* Motivational Banner */}
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
-                    <MotivationalBanner />
+                  {/* Bottom Incentive Card */}
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300 w-full">
+                    <BottomIncentiveCard />
+                  </div>
+                </div>
+              )}
+
+              {currentTab === "situacao" && overview && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  {/* Page Title */}
+                  <div className="flex flex-col gap-1 border-b border-border pb-4">
+                    <h2 className="text-2xl font-black text-foreground tracking-tight">
+                      Situação da candidatura
+                    </h2>
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Acompanhe o andamento geral e os detalhes do seu processo seletivo ativo.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+                    {/* Status Overview Card - Main stats */}
+                    <Card className="lg:col-span-2 overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs">
+                      <CardHeader className="p-5 pb-3 border-b border-border">
+                        <CardTitle className="text-base font-bold text-foreground">
+                          Resumo da situação
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {[
+                            {
+                              label: isRejectedProcess || isAdmittedProcess ? "Vaga de origem" : "Vaga ativa",
+                              val: activeApplication?.job_title || closedProcessApplication?.job_title || "Banco de Talentos Marajó",
+                              icon: <Briefcase className="h-5 w-5" />,
+                            },
+                            {
+                              label: "Status",
+                              val: overview.status_public,
+                              icon: <ShieldCheck className="h-5 w-5" />,
+                              highlight: true,
+                            },
+                            {
+                              label: "Localização",
+                              val: overview.candidate.city
+                                ? `${overview.candidate.city}/${overview.candidate.state}`
+                                : "Não informado",
+                              icon: <MapPin className="h-5 w-5" />,
+                            },
+                            {
+                              label: "Currículo",
+                              val: overview.latest_resume?.file_name ? "Enviado" : "Pendente",
+                              icon: <FileText className="h-5 w-5" />,
+                              isSuccess: overview.latest_resume?.file_name ? true : false,
+                            },
+                          ].map((item, i) => (
+                            <div
+                              key={i}
+                              className="rounded-xl border border-border bg-muted/30 p-4 flex gap-3.5 items-center min-w-0"
+                            >
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                {item.icon}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
+                                  {item.label}
+                                </p>
+                                <p
+                                  className={`mt-2 text-sm font-bold truncate leading-tight ${
+                                    item.highlight
+                                      ? "text-primary"
+                                      : item.isSuccess
+                                      ? "text-emerald-600 font-extrabold"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {item.val}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Next Update Card & Basic Candidate Info - Side column */}
+                    <div className="flex flex-col gap-6">
+                      {!isRejectedProcess && <NextUpdateCard />}
+                      
+                      {/* Basic Candidate Metadata */}
+                      <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs flex-1">
+                        <CardHeader className="p-5 pb-3 border-b border-border">
+                          <CardTitle className="text-base font-bold text-foreground">
+                            Dados da Candidatura
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-4">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
+                              Candidato
+                            </p>
+                            <p className="mt-1.5 text-xs font-semibold text-foreground">
+                              {overview.candidate.full_name}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
+                              Contato
+                            </p>
+                            <p className="mt-1.5 text-xs font-semibold text-foreground">
+                              {overview.candidate.email} {overview.candidate.phone ? `| ${overview.candidate.phone}` : ""}
+                            </p>
+                          </div>
+                          {overview.candidate.desired_contract_type && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
+                                Contrato Desejado
+                              </p>
+                              <p className="mt-1.5 text-xs font-semibold text-foreground">
+                                {overview.candidate.desired_contract_type}
+                              </p>
+                            </div>
+                          )}
+                          {overview.candidate.salary_expectation && (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
+                                Pretensão Salarial
+                              </p>
+                              <p className="mt-1.5 text-xs font-semibold text-foreground">
+                                R$ {Number(overview.candidate.salary_expectation).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentTab === "mensagens" && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  {/* Page Title */}
+                  <div className="flex flex-col gap-1 border-b border-border pb-4">
+                    <h2 className="text-2xl font-black text-foreground tracking-tight">
+                      Mensagens
+                    </h2>
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Fique por dentro das comunicações enviadas pelo time de recrutamento.
+                    </p>
+                  </div>
+
+                  <div className="w-full">
+                    <CandidateMessagesCard 
+                      refreshTrigger={messagesRefreshTrigger} 
+                      onMessageRead={() => void loadPortalData(true)}
+                    />
                   </div>
                 </div>
               )}
@@ -1676,6 +1899,44 @@ export function CandidatePortalPage() {
             </>
           )}
         </div>
+      {isTipsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <Card className="w-full max-w-sm border border-border rounded-2xl bg-card p-6 shadow-lg animate-in zoom-in-95 duration-200">
+            <CardHeader className="p-0 pb-4 border-b border-border flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+                  <Lightbulb className="h-5 w-5" />
+                </div>
+                <CardTitle className="text-base font-bold text-foreground">Dicas Úteis</CardTitle>
+              </div>
+              <button 
+                onClick={() => setIsTipsOpen(false)}
+                className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+                title="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </CardHeader>
+            <CardContent className="p-0 pt-4 space-y-4">
+              {[
+                { title: "Mantenha seu perfil atualizado", desc: "Isso aumenta suas chances de ser selecionado." },
+                { title: "Destaque experiências relevantes", desc: "Mostre de forma clara as suas conquistas passadas." },
+                { title: "Acompanhe seu e-mail", desc: "Sempre verifique sua caixa de spam para não perder avisos." }
+              ].map((tip, idx) => (
+                <div key={idx} className="flex gap-3">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 text-xs font-bold mt-0.5">
+                    {idx + 1}
+                  </span>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">{tip.title}</h4>
+                    <p className="text-[11px] text-muted-foreground font-medium mt-0.5 leading-relaxed">{tip.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
       </div>
     </div>
   );

@@ -58,14 +58,12 @@ vi.mock("../../features/pipeline/CandidateSearchModal", () => ({
 vi.mock("../../features/candidates/components/CandidatePreviewDrawer", () => ({
   CandidatePreviewDrawer: ({
     candidateId,
-    refreshToken,
   }: {
     candidateId: string | null;
-    refreshToken?: number;
   }) =>
     candidateId ? (
       <div data-testid="candidate-preview-drawer">
-        {candidateId}:{refreshToken ?? 0}
+        {candidateId}
       </div>
     ) : null,
 }));
@@ -74,6 +72,9 @@ describe("PipelinePage", () => {
   const mockSetActiveJob = vi.fn();
   const mockRefreshBoard = vi.fn();
   const mockMoveCandidateStage = vi.fn();
+  const mockOpenCandidate = vi.fn().mockResolvedValue(undefined);
+  const mockCloseCandidate = vi.fn();
+  const mockSyncCandidateOverview = vi.fn().mockResolvedValue(undefined);
 
   const mockJobs = [
     {
@@ -210,6 +211,9 @@ describe("PipelinePage", () => {
       setActiveJob: mockSetActiveJob,
       moveCandidateStage: mockMoveCandidateStage,
       refreshBoard: mockRefreshBoard,
+      openCandidate: mockOpenCandidate,
+      closeCandidate: mockCloseCandidate,
+      syncCandidateOverview: mockSyncCandidateOverview,
     });
   });
 
@@ -278,7 +282,7 @@ describe("PipelinePage", () => {
     expect(screen.getAllByText("2")[0]).toBeInTheDocument(); // total
   });
 
-  it("5. Renderiza a lista horizontal de colunas do Kanban", async () => {
+  it("5. Renderiza a lista horizontal de macrocolunas do Kanban", async () => {
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -288,11 +292,15 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("kanban-column-entry")).toBeInTheDocument();
-      expect(screen.getByTestId("kanban-column-screening")).toBeInTheDocument();
-      expect(screen.getByTestId("kanban-column-hr_interview")).toBeInTheDocument();
-      expect(screen.getByTestId("kanban-column-technical_interview")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-entrada")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-analise")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-avaliacao")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-entrevista")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-decisao")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-admissao")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-finalizado")).toBeInTheDocument();
     });
+    expect(screen.queryByTestId("kanban-column-protheus")).not.toBeInTheDocument();
   });
 
   it("6. Renderiza os cards dos candidatos com dados reais", async () => {
@@ -308,6 +316,61 @@ describe("PipelinePage", () => {
       expect(screen.getByText("Aline Santos")).toBeInTheDocument();
       expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
     });
+    expect(screen.getByText("Currículo recebido")).toBeInTheDocument();
+    expect(screen.getByText("Entrevista RH")).toBeInTheDocument();
+  });
+
+  it("6.1. Agrupa Protheus em Admissão com substatus real e sem detalhes técnicos", async () => {
+    const boardWithProtheus = {
+      ...mockBoard,
+      columns: mockBoard.columns.map((column) =>
+        column.stage === "protheus"
+          ? {
+              ...column,
+              candidates: [
+                {
+                  candidate_id: "c-protheus",
+                  candidate_name: "Paula Protheus",
+                  job_fit_score: 74,
+                  top_skills: ["Departamento pessoal"],
+                  seniority_level: "mid",
+                  total_experience_years: 3,
+                  updated_at: "2026-05-17T12:00:00Z",
+                  ai_status: "completed",
+                },
+              ],
+            }
+          : column,
+      ),
+    };
+
+    (usePipeline as any).mockReturnValue({
+      activeJobId: "job-1",
+      board: boardWithProtheus,
+      boardLoading: false,
+      boardError: null,
+      rankingSyncTick: 0,
+      setActiveJob: mockSetActiveJob,
+      moveCandidateStage: mockMoveCandidateStage,
+      refreshBoard: mockRefreshBoard,
+    });
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const admissionColumn = await screen.findByTestId("kanban-column-admissao");
+    expect(admissionColumn).toContainElement(screen.getByText("Paula Protheus"));
+    expect(admissionColumn).toContainElement(screen.getByText("Protheus"));
+    expect(admissionColumn).toContainElement(screen.getByText("Protheus pendente"));
+    expect(screen.queryByTestId("kanban-column-protheus")).not.toBeInTheDocument();
+    expect(screen.queryByText(/payload/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tentativas/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/checklist/i)).not.toBeInTheDocument();
   });
 
   it("7. Coluna vazia exibe a mensagem 'Vazio'", async () => {
@@ -344,6 +407,7 @@ describe("PipelinePage", () => {
     fireEvent.click(card!);
 
     expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1");
+    expect(mockOpenCandidate).toHaveBeenCalledWith("c-1");
   });
 
   it("9. Mantém candidatos visíveis sem campo de busca local", async () => {
@@ -398,12 +462,12 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("kanban-card-c-1")).toBeInTheDocument();
-      expect(screen.getByTestId("kanban-column-screening")).toBeInTheDocument();
+      expect(screen.getByTestId("kanban-column-analise")).toBeInTheDocument();
     });
 
     fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
-    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
-    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await waitFor(() => {
       expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
@@ -478,8 +542,8 @@ describe("PipelinePage", () => {
     await screen.findByTestId("kanban-card-c-1");
 
     fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
-    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
-    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     const modal = await screen.findByTestId("pipeline-transition-blocked-modal");
     expect(modal).toBeInTheDocument();
@@ -492,7 +556,7 @@ describe("PipelinePage", () => {
     expect(screen.getByTestId("pipeline-blocked-gate-scorecard_not_submitted")).toBeInTheDocument();
 
     // Card must still belong to the original column (entry).
-    const entryColumn = screen.getByTestId("kanban-column-entry");
+    const entryColumn = screen.getByTestId("kanban-column-entrada");
     expect(entryColumn).toContainElement(screen.getByTestId("kanban-card-c-1"));
 
     // Board was refetched after the blocked response.
@@ -542,8 +606,8 @@ describe("PipelinePage", () => {
 
     await screen.findByTestId("kanban-card-c-1");
     fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
-    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
-    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await screen.findByTestId("pipeline-transition-blocked-modal");
 
@@ -593,8 +657,8 @@ describe("PipelinePage", () => {
 
     await screen.findByTestId("kanban-card-c-1");
     fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
-    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
-    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await screen.findByTestId("pipeline-transition-blocked-modal");
     fireEvent.click(
@@ -621,8 +685,8 @@ describe("PipelinePage", () => {
 
     await screen.findByTestId("kanban-card-c-1");
     fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
-    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
-    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await waitFor(() => {
       expect(feedback.moveCandidate.error).toHaveBeenCalled();
@@ -630,7 +694,38 @@ describe("PipelinePage", () => {
     expect(screen.queryByTestId("pipeline-transition-blocked-modal")).not.toBeInTheDocument();
   });
 
-  it("13. Mover candidato atualiza Kanban e força refresh do drawer aberto", async () => {
+  it("13. Mover candidato aberto no drawer chama syncCandidateOverview uma vez", async () => {
+    const dataTransfer = {
+      effectAllowed: "move",
+      setData: vi.fn(),
+      dropEffect: "move",
+    };
+    mockRefreshBoard.mockResolvedValue(undefined);
+    mockSyncCandidateOverview.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.click(screen.getByText("Aline Santos"));
+    expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1");
+
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(mockRefreshBoard).toHaveBeenCalled();
+      expect(mockSyncCandidateOverview).toHaveBeenCalledWith("c-1");
+    });
+  });
+
+  it("13b. Mover candidato diferente do aberto no drawer não chama syncCandidateOverview", async () => {
     const dataTransfer = {
       effectAllowed: "move",
       setData: vi.fn(),
@@ -647,16 +742,196 @@ describe("PipelinePage", () => {
     );
 
     await screen.findByTestId("kanban-card-c-1");
+    // Open c-1 in the drawer
     fireEvent.click(screen.getByText("Aline Santos"));
-    expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1:0");
+    expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1");
 
-    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
-    fireEvent.dragOver(screen.getByTestId("kanban-column-screening"), { dataTransfer });
-    fireEvent.drop(screen.getByTestId("kanban-column-screening"), { dataTransfer });
+    // Drag c-2 (different candidate) to "analise" column
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-2"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
 
     await waitFor(() => {
       expect(mockRefreshBoard).toHaveBeenCalled();
-      expect(screen.getByTestId("candidate-preview-drawer")).toHaveTextContent("c-1:1");
+    });
+    // c-2 was moved but c-1 is open — syncCandidateOverview should NOT be called
+    expect(mockSyncCandidateOverview).not.toHaveBeenCalled();
+  });
+
+  it("13c. Mover candidato com drawer fechado não chama syncCandidateOverview", async () => {
+    const dataTransfer = {
+      effectAllowed: "move",
+      setData: vi.fn(),
+      dropEffect: "move",
+    };
+    mockRefreshBoard.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    // Do NOT open the drawer — keep previewCandidateId null
+
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(mockRefreshBoard).toHaveBeenCalled();
+    });
+    expect(mockSyncCandidateOverview).not.toHaveBeenCalled();
+  });
+
+  // ── Testes de remoção do auto-refresh ──────────────────────────────────────
+
+  it("18. Botão 'Atualizar' está presente e chama refreshBoard ao ser clicado", async () => {
+    mockRefreshBoard.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const refreshBtn = await screen.findByRole("button", { name: /atualizar board/i });
+    expect(refreshBtn).toBeInTheDocument();
+
+    fireEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(mockRefreshBoard).toHaveBeenCalled();
+    });
+  });
+
+  it("19. Não existe texto de 'Auto em', 'atualiza em' ou contador regressivo", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+
+    expect(screen.queryByText(/auto em/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/atualiza em/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto-refresh/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pausar/i)).not.toBeInTheDocument();
+  });
+
+  it("20. PipelinePage não chama refreshBoard automaticamente por timer", async () => {
+    vi.useFakeTimers();
+    mockRefreshBoard.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // Avança 60 segundos sem nenhuma ação do usuário
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // refreshBoard não deve ter sido chamado automaticamente
+    expect(mockRefreshBoard).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  it("21. Mover etapa ainda chama refreshBoard após mutação bem-sucedida", async () => {
+    mockRefreshBoard.mockResolvedValue(undefined);
+    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
+      expect(mockRefreshBoard).toHaveBeenCalled();
+    });
+  });
+
+  // ── Testes de remoção do auto-refresh ──────────────────────────────────────
+
+  it("18. Botão 'Atualizar' está presente e chama refreshBoard ao ser clicado", async () => {
+    mockRefreshBoard.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const refreshBtn = await screen.findByRole("button", { name: /atualizar board/i });
+    expect(refreshBtn).toBeInTheDocument();
+
+    fireEvent.click(refreshBtn);
+
+    await waitFor(() => {
+      expect(mockRefreshBoard).toHaveBeenCalled();
+    });
+  });
+
+  it("19. Não existe texto de 'Auto em', 'atualiza em' ou contador regressivo", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+
+    expect(screen.queryByText(/auto em/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/atualiza em/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto-refresh/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pausar/i)).not.toBeInTheDocument();
+  });
+
+
+  it("21. Mover etapa ainda chama refreshBoard após mutação bem-sucedida", async () => {
+    mockRefreshBoard.mockResolvedValue(undefined);
+    const dataTransfer = { effectAllowed: "move", setData: vi.fn(), dropEffect: "move" };
+
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId("kanban-card-c-1");
+    fireEvent.dragStart(screen.getByTestId("kanban-card-c-1"), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+    fireEvent.drop(screen.getByTestId("kanban-column-analise"), { dataTransfer });
+
+    await waitFor(() => {
+      expect(mockMoveCandidateStage).toHaveBeenCalledWith("c-1", "screening");
+      expect(mockRefreshBoard).toHaveBeenCalled();
     });
   });
 });

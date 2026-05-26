@@ -75,6 +75,10 @@ function isAnalysisInProgress(status: AIAnalysisStatus | null | undefined) {
   return status === "processing" || status === "retry_scheduled";
 }
 
+function isAnalysisWaitingExtraction(status: AIAnalysisStatus | null | undefined) {
+  return status === "waiting_extraction";
+}
+
 function isAnalysisPending(status: AIAnalysisStatus | null | undefined) {
   return status === null || status === undefined || status === "pending";
 }
@@ -147,7 +151,15 @@ export function derivePipelineCardBadges(
   const aiStatus = candidate.ai_status ?? null;
   const hasScore = typeof candidate.job_fit_score === "number" && Number.isFinite(candidate.job_fit_score);
 
-  if (isAnalysisInProgress(aiStatus)) {
+  if (isAnalysisWaitingExtraction(aiStatus)) {
+    badges.push({
+      label: "Aguardando extração",
+      tone: "warning",
+      priority: 91,
+      reason: "O currículo ainda precisa ser extraído antes da análise de IA.",
+      icon: "ai",
+    });
+  } else if (isAnalysisInProgress(aiStatus)) {
     badges.push({
       label: "Análise em andamento",
       tone: "progress",

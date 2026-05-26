@@ -60,7 +60,7 @@ describe("buildCandidateAnalysisSummary", () => {
       pollingAnalysisId: "analysis-1",
     });
 
-    expect(summary.label).toBe("Analisando com IA");
+    expect(summary.label).toBe("Análise em processamento");
     expect(summary.inProgress).toBe(true);
   });
 
@@ -265,8 +265,23 @@ describe("getCandidateAnalysisUiState", () => {
       extractionStatus: "completed",
     });
 
-    expect(state.state).toBe("processing");
-    expect(state.title).toBe("Analisando com IA");
+    expect(state.state).toBe("queued");
+    expect(state.title).toBe("Análise na fila");
+  });
+
+  it("mostra análise aguardando extração quando existe analysis persistida em waiting_extraction", () => {
+    const state = getCandidateAnalysisUiState({
+      hasResume: true,
+      activeJobId: "job-1",
+      analysisStatus: "waiting_extraction",
+      jobFitScore: null,
+      aiStatus: "waiting_extraction",
+      extractionStatus: "pending",
+    });
+
+    expect(state.state).toBe("waiting_extraction");
+    expect(state.title).toBe("Aguardando extração");
+    expect(state.description).toContain("aguarda a extração do currículo");
   });
 
   it("mostra análise em processamento quando extraction completed e aiStatus processing", () => {
@@ -280,7 +295,7 @@ describe("getCandidateAnalysisUiState", () => {
     });
 
     expect(state.state).toBe("processing");
-    expect(state.title).toBe("Analisando com IA");
+    expect(state.title).toBe("Análise em processamento");
     expect(state.inProgress).toBe(true);
   });
 

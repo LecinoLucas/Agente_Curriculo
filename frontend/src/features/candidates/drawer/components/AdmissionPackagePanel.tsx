@@ -2,22 +2,30 @@
 
 import { useEffect, useState } from "react";
 import {
-  createPackage,
-  getPackageByCaseId,
   approvePackage,
   cancelPackage,
-  downloadJson,
+  createPackage,
   downloadCsv,
+  downloadJson,
+  getPackageByCaseId,
 } from "../../../../services/admissionPackageService";
-import type { PreAdmissionStatus, AdmissionPackage } from "../../../../types/domain";
+import type { AdmissionPackage, PreAdmissionStatus } from "../../../../types/domain";
 import { AdmissionPackagePreview } from "./AdmissionPackagePreview";
 import { AdmissionPackageValidationList } from "./AdmissionPackageValidationList";
-import { ErpDryRunPanel } from "./ErpDryRunPanel";
 
 interface Props {
   caseId: string;
   caseStatus: PreAdmissionStatus;
+  onPackageChange?: (pkg: AdmissionPackage | null) => void;
 }
+
+const packageStatusLabels: Record<AdmissionPackage["status"], string> = {
+  draft: "Com validações pendentes",
+  ready_for_review: "Pronto para revisão",
+  approved_for_export: "Aprovado para exportação",
+  exported: "Exportado",
+  cancelled: "Cancelado",
+};
 
 function formatDateTime(value: string | null): string {
   if (!value) return "";
@@ -32,39 +40,60 @@ function formatDateTime(value: string | null): string {
   });
 }
 
-export function AdmissionPackagePanel({ caseId, caseStatus }: Props) {
+export function AdmissionPackagePanel({ caseId, caseStatus, onPackageChange }: Props) {
   const [pkg, setPkg] = useState<AdmissionPackage | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const caseIsReady = caseStatus === "ready_for_admission";
+  const summaryLabel = !caseIsReady
+    ? "Pacote pendente"
+    : pkg
+      ? packageStatusLabels[pkg.status]
+      : "Pacote não gerado";
 
-  // Load package on mount (only if case is ready)
+  const publishPackage = (nextPackage: AdmissionPackage | null) => {
+    setPkg(nextPackage);
+    onPackageChange?.(nextPackage);
+  };
+
   useEffect(() => {
-    if (caseStatus !== "ready_for_admission") {
+    if (!caseIsReady) {
+      publishPackage(null);
       return;
     }
 
+    let cancelled = false;
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
         const data = await getPackageByCaseId(caseId);
-        setPkg(data);
+        if (!cancelled) {
+          publishPackage(data);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro ao carregar pacote");
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Erro ao carregar pacote");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
-    load();
-  }, [caseId, caseStatus]);
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, caseIsReady]);
 
   const handleCreate = async () => {
     try {
       setSaving(true);
       setError(null);
       const data = await createPackage(caseId);
-      setPkg(data);
+      publishPackage(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar pacote");
     } finally {
@@ -78,7 +107,7 @@ export function AdmissionPackagePanel({ caseId, caseStatus }: Props) {
       setSaving(true);
       setError(null);
       const data = await approvePackage(pkg.id);
-      setPkg(data);
+      publishPackage(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao aprovar pacote");
     } finally {
@@ -92,7 +121,7 @@ export function AdmissionPackagePanel({ caseId, caseStatus }: Props) {
       setSaving(true);
       setError(null);
       const data = await cancelPackage(pkg.id, "Cancelado pelo usuário");
-      setPkg(data);
+      publishPackage(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cancelar pacote");
     } finally {
@@ -118,9 +147,8 @@ export function AdmissionPackagePanel({ caseId, caseStatus }: Props) {
       setError(null);
       const blob = await downloadJson(pkg.id);
       triggerDownload(blob, `admission-package-${pkg.id}.json`);
-      // Refresh to get updated status (exported)
       const updated = await getPackageByCaseId(caseId);
-      setPkg(updated);
+      publishPackage(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao exportar JSON");
     } finally {
@@ -135,9 +163,8 @@ export function AdmissionPackagePanel({ caseId, caseStatus }: Props) {
       setError(null);
       const blob = await downloadCsv(pkg.id);
       triggerDownload(blob, `admission-package-${pkg.id}.csv`);
-      // Refresh to get updated status (exported)
       const updated = await getPackageByCaseId(caseId);
-      setPkg(updated);
+      publishPackage(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao exportar CSV");
     } finally {
@@ -145,108 +172,135 @@ export function AdmissionPackagePanel({ caseId, caseStatus }: Props) {
     }
   };
 
-  // If case is not ready, don't show anything
-  if (caseStatus !== "ready_for_admission") {
-    return null;
-  }
-
-  // Loading state
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6">
-        <div className="flex items-center justify-center">
-          <div className="text-sm text-gray-600">Carregando...</div>
-        </div>
+  const header = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          Pacote admissional
+        </p>
+        <h3 className="text-base font-semibold text-[hsl(var(--text))]">Pacote de Admissão</h3>
+        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          Gere, revise e exporte os dados admissionais antes da integração Protheus.
+        </p>
       </div>
+      <span className="inline-flex w-fit rounded-lg border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-2.5 py-1 text-xs font-semibold text-[hsl(var(--brand-dark))]">
+        {summaryLabel}
+      </span>
+    </div>
+  );
+
+  if (!caseIsReady) {
+    return (
+      <section
+        data-testid="admission-package-panel"
+        className="admission-embedded-card space-y-4 p-4"
+      >
+        {header}
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Pacote pendente: conclua a liberação operacional antes de gerar o pacote admissional.
+        </div>
+      </section>
     );
   }
 
-  // Error state
+  if (loading) {
+    return (
+      <section
+        data-testid="admission-package-panel"
+        className="admission-embedded-card space-y-4 p-4"
+      >
+        {header}
+        <div className="flex items-center justify-center">
+          <div className="text-sm text-[hsl(var(--text-muted))]">Carregando...</div>
+        </div>
+      </section>
+    );
+  }
+
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-6">
-        <p className="text-sm text-red-700">{error}</p>
-      </div>
+      <section
+        data-testid="admission-package-panel"
+        className="admission-embedded-card space-y-4 p-4"
+      >
+        {header}
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      </section>
     );
   }
 
   return (
-    <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900">Pacote de Admissão</h3>
-        <p className="text-sm text-gray-600">
-          Gere e exporte o pacote de dados para ERP manual
-        </p>
-      </div>
+    <section
+      data-testid="admission-package-panel"
+      className="admission-embedded-card space-y-4 p-4"
+    >
+      {header}
 
       {!pkg ? (
-        // No package yet
         <button
           onClick={handleCreate}
           disabled={saving}
-          className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="ui-btn-primary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
         >
           {saving ? "Gerando..." : "Gerar Pacote de Admissão"}
         </button>
       ) : pkg.status === "draft" ? (
-        // Draft with errors
         <>
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-            <p className="text-sm text-yellow-800">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm text-amber-900">
               Pacote com erros de validação. Corrija as pendências antes de prosseguir.
             </p>
           </div>
-          {pkg.validation_errors && (
+          {pkg.validation_errors ? (
             <AdmissionPackageValidationList errors={pkg.validation_errors} />
-          )}
+          ) : null}
         </>
       ) : pkg.status === "ready_for_review" ? (
-        // Ready for review
         <>
           <AdmissionPackagePreview payload={pkg.payload} />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleApprove}
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              className="ui-btn-primary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Aprovando..." : "Aprovar Pacote"}
             </button>
             <button
               onClick={handleCancel}
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-md bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Cancelando..." : "Cancelar"}
             </button>
           </div>
         </>
       ) : pkg.status === "approved_for_export" ? (
-        // Approved, ready to export
         <>
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <p className="text-sm text-blue-800">Pacote aprovado. Você pode exportar agora.</p>
+          <div className="rounded-lg border border-[hsl(var(--success))]/25 bg-[hsl(var(--success-soft))] p-4">
+            <p className="text-sm text-[hsl(var(--success))]">Pacote aprovado. Você pode exportar agora.</p>
           </div>
           <AdmissionPackagePreview payload={pkg.payload} readOnly />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleDownloadJson}
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Exportar JSON"}
             </button>
             <button
               onClick={handleDownloadCsv}
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Exportar CSV"}
             </button>
           </div>
         </>
       ) : pkg.status === "exported" ? (
-        // Exported
         <>
           <div className="rounded-lg border border-green-200 bg-green-50 p-4">
             <p className="text-sm text-green-800">
@@ -254,33 +308,30 @@ export function AdmissionPackagePanel({ caseId, caseStatus }: Props) {
             </p>
           </div>
           <AdmissionPackagePreview payload={pkg.payload} readOnly />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleDownloadJson}
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Baixar JSON"}
             </button>
             <button
               onClick={handleDownloadCsv}
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Baixar CSV"}
             </button>
           </div>
         </>
       ) : pkg.status === "cancelled" ? (
-        // Cancelled
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <p className="text-sm text-gray-700">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 p-4">
+          <p className="text-sm text-[hsl(var(--text-muted))]">
             Pacote cancelado em {formatDateTime(pkg.cancelled_at)}
           </p>
         </div>
       ) : null}
-
-      {pkg ? <ErpDryRunPanel pkg={pkg} /> : null}
     </section>
   );
 }

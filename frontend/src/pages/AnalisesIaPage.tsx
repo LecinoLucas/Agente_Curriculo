@@ -46,7 +46,7 @@ export function AnalisesIaPage() {
   } = useAnalysesPage();
 
   const summary = {
-    pending: items.filter((item) => item.status === "pending").length,
+    pending: items.filter((item) => item.status === "waiting_extraction" || item.status === "pending").length,
     processing: items.filter((item) => item.status === "processing").length,
     completed: items.filter((item) => item.status === "completed").length,
     issues: items.filter((item) => item.status === "failed" || item.status === "retry_scheduled").length,
@@ -122,7 +122,11 @@ export function AnalisesIaPage() {
                 </div>
                 <p className="mt-2 text-2xl font-semibold text-[hsl(var(--text))]">{value}</p>
                 <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                  {typeFilter === "behavioral_ai" ? "IA comportamental" : "Currículos"}
+                  {typeFilter === "all"
+                    ? "Todos os tipos"
+                    : typeFilter === "behavioral_ai"
+                      ? "IA comportamental"
+                      : "Currículos"}
                 </p>
               </div>
             ))}

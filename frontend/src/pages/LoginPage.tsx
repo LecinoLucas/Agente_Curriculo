@@ -6,13 +6,15 @@ import {
   EyeOff,
   User,
   Mail,
-  ArrowRight,
   Shield,
   Sparkles,
-  Layers,
+  BarChart,
   Users,
-  Calendar,
-  Target,
+  ShieldCheck,
+  Lock,
+  ArrowRightToLine,
+  TrendingUp,
+  CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -69,7 +71,6 @@ export function LoginPage() {
       await loginWithGoogle(idToken);
       navigate(from, { replace: true });
     } catch (err) {
-      // The backend returns structured 4xx codes; map the ones the UI cares about.
       if (err instanceof HttpError) {
         const code = err.code;
         if (code === "google_domain_not_allowed") {
@@ -96,163 +97,249 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground flex flex-col justify-between selection:bg-primary/10 selection:text-primary relative">
-      {/* Decorative background glow */}
-      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10">
-        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-primary/5 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-secondary/30 blur-[120px] rounded-full" />
+    <div className="lg:h-screen w-full relative overflow-x-hidden overflow-y-auto lg:overflow-hidden font-sans text-foreground selection:bg-[#8a1c31]/10 selection:text-[#8a1c31] flex flex-col justify-between bg-[#FDFBF7]">
+      
+      {/* Layered SVG Wave Background - Compact and subtle in the top-left corner */}
+      <div className="absolute top-0 left-0 w-[395px] h-[220px] z-0 overflow-hidden pointer-events-none">
+        <svg viewBox="0 0 395 220" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path 
+            d="M0 0 H395 C335 130, 205 205, 0 205 Z" 
+            fill="#8a1c31" 
+            opacity="0.08"
+          />
+          <path 
+            d="M0 0 H380 C320 120, 195 190, 0 190 Z" 
+            fill="#751227" 
+            opacity="0.15"
+          />
+          <path 
+            d="M0 0 H360 C300 110, 185 170, 0 170 Z" 
+            fill="#4A0E1A" 
+          />
+        </svg>
       </div>
 
-      {/* Header */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-3 lg:py-4 flex items-center justify-between shrink-0 z-10">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-base font-black text-white shadow-sm">
-            RA
-          </span>
-          <div className="flex flex-col text-left">
-            <span className="font-heading text-lg font-black leading-none tracking-tight text-foreground">
-              Marajó RH
-            </span>
-            <span className="text-[11px] text-muted-foreground uppercase tracking-widest mt-1 font-bold">
-              ATS & Recrutamento IA
-            </span>
-          </div>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          asChild
-          className="gap-2 text-[12px] font-bold uppercase tracking-wider text-muted-foreground hover:bg-primary/5 hover:text-primary rounded-lg transition-colors duration-200"
-        >
-          <Link to="/candidato">
-            <User className="h-4 w-4 text-primary" />
-            Portal do candidato
-          </Link>
-        </Button>
-      </header>
-
-      {/* Main Grid */}
-      <main className="w-full max-w-7xl mx-auto px-6 py-4 lg:py-6 lg:px-12 grid lg:grid-cols-[1.15fr_0.85fr] gap-8 lg:gap-12 items-start flex-1">
-        {/* Left Column - Editorial Showcase (Hidden on Mobile/Tablet) */}
-        <section className="hidden lg:flex flex-col justify-start gap-4 lg:gap-5 py-1">
-          <div className="flex flex-col gap-3 lg:gap-4">
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/5 border border-primary/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-primary">
-              <Sparkles className="h-3 w-3" />
-              Marajo RH AI System
-            </span>
-            <h1 className="font-serif-display text-3xl lg:text-4xl xl:text-[44px] font-normal leading-[1.1] tracking-tight text-foreground">
-              Recrutamento com <br />
-              <span className="not-italic font-bold text-primary">mais contexto</span>,<br />
-              menos retrabalho.
-            </h1>
-            <p className="max-w-md text-sm lg:text-base leading-relaxed text-muted-foreground mt-2">
-              Centralize vagas, candidatos, pipeline e decisões em uma operação mais clara para o RH.
-            </p>
-          </div>
-
-          {/* Pipeline Mockup Card */}
-          <div className="w-full max-w-lg bg-card border border-border rounded-[1.5rem] p-4 shadow-sm relative overflow-hidden mt-3">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Pipeline de Recrutamento</p>
-            
-            <div className="grid grid-cols-4 gap-3 relative min-h-[110px]">
-              {/* Column 1 */}
-              <div className="space-y-2">
-                <p className="text-xs font-extrabold text-foreground leading-none">Triagem</p>
-                <p className="text-[10px] text-muted-foreground font-semibold">12 cand.</p>
-                <div className="space-y-1.5 pt-1">
-                  <div className="h-8 bg-muted/50 border border-border rounded-lg p-1 px-1.5 flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded-full bg-border" />
-                    <div className="h-1.5 w-8 bg-border rounded-full" />
-                  </div>
-                  <div className="h-8 bg-muted/50 border border-border rounded-lg p-1 px-1.5 flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded-full bg-border" />
-                    <div className="h-1.5 w-6 bg-border rounded-full" />
-                  </div>
-                  <div className="h-8 bg-muted/50 border border-border rounded-lg p-1 px-1.5 flex items-center gap-1.5 opacity-50">
-                    <div className="h-4 w-4 rounded-full bg-border" />
-                    <div className="h-1.5 w-5 bg-border rounded-full" />
-                  </div>
-                </div>
+      {/* Main Container - Locked height on desktop to prevent scrollbars */}
+      <main className="w-full max-w-[1440px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10 lg:h-[calc(100vh-76px)] lg:overflow-hidden">
+        
+        {/* Left Column - Hero */}
+        <div className="hidden lg:flex w-full lg:w-[50%] flex-col justify-between py-8 px-10 xl:pl-16 xl:pr-8 relative h-full shrink-0 z-10 overflow-hidden">
+          
+          {/* Header Logo - Nested elegantly inside the SVG wave */}
+          <div className="relative pl-0 pt-2">
+            <div className="flex items-center gap-3.5 text-white drop-shadow-sm">
+              <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-xl bg-[#751227] text-xl font-bold shadow-md border border-white/10">
+                RA
               </div>
-
-              {/* Column 2 */}
-              <div className="space-y-2">
-                <p className="text-xs font-extrabold text-foreground leading-none">Entrevista</p>
-                <p className="text-[10px] text-muted-foreground font-semibold">8 cand.</p>
-                <div className="space-y-1.5 pt-1">
-                  <div className="h-8 bg-muted/50 border border-border rounded-lg p-1 px-1.5 flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded-full bg-border" />
-                    <div className="h-1.5 w-6 bg-border rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Column 3 */}
-              <div className="space-y-2">
-                <p className="text-xs font-extrabold text-foreground leading-none">Avaliação</p>
-                <p className="text-[10px] text-muted-foreground font-semibold">5 cand.</p>
-                <div className="space-y-1.5 pt-1">
-                  <div className="h-8 bg-muted/50 border border-border rounded-lg p-1 px-1.5 flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded-full bg-border" />
-                    <div className="h-1.5 w-8 bg-border rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Column 4 */}
-              <div className="space-y-2">
-                <p className="text-xs font-extrabold text-foreground leading-none">Proposta</p>
-                <p className="text-[10px] text-muted-foreground font-semibold">3 cand.</p>
-                <div className="space-y-1.5 pt-1">
-                  <div className="h-8 bg-muted/50 border border-border rounded-lg p-1 px-1.5 flex items-center gap-1.5">
-                    <div className="h-4 w-4 rounded-full bg-border" />
-                    <div className="h-1.5 w-6 bg-border rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Dotted paths */}
-              <svg className="absolute inset-0 pointer-events-none w-full h-full" viewBox="0 0 400 140" fill="none" preserveAspectRatio="none">
-                <path d="M 45,75 C 100,75 110,105 200,80" className="stroke-primary" strokeWidth="2" strokeDasharray="4 4" />
-                <circle cx="45" cy="75" r="4" className="fill-primary" />
-                <circle cx="200" cy="80" r="4" className="fill-primary" />
-              </svg>
-
-              {/* Floating Match Card */}
-              <div className="absolute top-[55px] left-[130px] bg-card border border-border/80 shadow-xl shadow-primary/5 rounded-xl p-2 flex items-center gap-2.5 max-w-[160px] w-full z-10 transition-transform hover:-translate-y-0.5">
-                <div className="h-7 w-7 rounded-full bg-border flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-black text-foreground truncate leading-none">João Vieira</p>
-                  <p className="text-[8px] text-muted-foreground truncate mt-1 font-semibold">Analista de Dados</p>
-                </div>
-                <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-black px-2 py-0.5 rounded-full">
-                  85%
-                </div>
+              <div className="flex flex-col text-left">
+                <span className="font-sans text-[22px] font-bold leading-none tracking-tight">
+                  Maraj<span className="relative inline-block after:content-['´'] after:absolute after:-top-[5px] after:left-[2px] after:text-[12px] after:font-bold after:text-white after:select-none after:pointer-events-none">o</span> RH
+                </span>
+                <span className="text-[10px] text-white/80 uppercase tracking-[0.18em] mt-1.5 font-bold">
+                  ATS & RECRUTAMENTO IA
+                </span>
               </div>
             </div>
           </div>
-        </section>
+          
+          {/* Institutional Content */}
+          <div className="max-w-[460px] my-auto py-4">
+             {/* Badge */}
+             <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-[#FDF0EE]/85 border border-[#e8dcdc]/60 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-widest text-[#751227] shadow-sm">
+               <Sparkles className="h-3 w-3" />
+               MARAJÓ RH AI SYSTEM
+             </div>
+
+             {/* Headline */}
+             <h1 className="font-serif-display text-[38px] xl:text-[48px] font-bold tracking-tight text-[#1a0509] leading-[1.1] mb-5">
+               Recrutamento com mais contexto, menos retrabalho.
+             </h1>
+
+             {/* Subtitle */}
+             <p className="text-[14px] font-medium text-[#5c4a4d] leading-relaxed mb-6">
+               Centralize vagas, candidatos, pipeline e decisões em uma plataforma inteligente que transforma dados em contratações de qualidade.
+             </p>
+
+             {/* Benefit Stacked Container */}
+             <div className="bg-white/80 border border-[#e8dcdc] backdrop-blur-sm rounded-2xl p-5 shadow-sm space-y-4">
+               {/* Benefit 1 */}
+               <div className="flex items-start gap-3.5">
+                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
+                   <Users className="h-4.5 w-4.5" />
+                 </div>
+                 <div className="flex flex-col justify-center">
+                   <h4 className="text-[12px] font-bold text-[#3d0815] leading-tight">Pipeline organizado</h4>
+                   <p className="text-[10px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
+                     Acompanhe cada etapa do processo seletivo com total visibilidade.
+                   </p>
+                 </div>
+               </div>
+               {/* Benefit 2 */}
+               <div className="flex items-start gap-3.5">
+                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
+                   <BarChart className="h-4.5 w-4.5" />
+                 </div>
+                 <div className="flex flex-col justify-center">
+                   <h4 className="text-[12px] font-bold text-[#3d0815] leading-tight">Decisões orientadas por IA</h4>
+                   <p className="text-[10px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
+                     Insights inteligentes para avaliar candidatos com mais precisão.
+                   </p>
+                 </div>
+               </div>
+               {/* Benefit 3 */}
+               <div className="flex items-start gap-3.5">
+                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5c091d] text-white shadow-sm">
+                   <ShieldCheck className="h-4.5 w-4.5" />
+                 </div>
+                 <div className="flex flex-col justify-center">
+                   <h4 className="text-[12px] font-bold text-[#3d0815] leading-tight">Segurança e conformidade</h4>
+                   <p className="text-[10px] text-[#5c4a4d] font-medium mt-0.5 leading-snug">
+                     Proteção de dados e aderência à LGPD em todas as etapas.
+                   </p>
+                 </div>
+               </div>
+             </div>
+          </div>
+          
+          <div className="h-4" />
+        </div>
+
+        {/* Dashboard Graphic Mock - Center/Left position, rotated and translucent */}
+        <div className="hidden xl:block absolute left-[44%] top-[50%] -translate-y-1/2 w-[440px] pointer-events-none transform -rotate-[3deg] z-0 opacity-30 select-none transition-all duration-300">
+           <div className="w-[440px] flex flex-col gap-4">
+              {/* Decoration dots */}
+              <div className="flex gap-1.5 mb-1 pl-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#8a1c31]/30"></div>
+                <div className="w-1.5 h-1.5 rounded-full bg-[#8a1c31]/30"></div>
+                <div className="w-1.5 h-1.5 rounded-full bg-[#8a1c31]/30"></div>
+                <div className="w-1.5 h-1.5 rounded-full bg-[#8a1c31]/30"></div>
+              </div>
+
+              {/* Visão Geral Card */}
+              <div className="w-full bg-white/50 backdrop-blur-[2.5px] rounded-3xl p-5 border border-white/40 shadow-sm">
+                <p className="text-[10px] font-bold text-gray-400 mb-3">Visão geral</p>
+                
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-white/80 rounded-2xl p-3 border border-gray-100/50 shadow-sm">
+                    <p className="text-[9px] font-bold text-gray-400 mb-1">Vagas abertas</p>
+                    <div className="flex items-end gap-2">
+                      <span className="text-2xl font-serif text-[#1a0509]">28</span>
+                      <div className="flex items-center gap-0.5 bg-[#FDF0EE] text-[#751227] px-1.5 py-0.5 rounded-full text-[8px] font-bold mb-1">
+                        <TrendingUp className="h-2 w-2" /> 12%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-[#FCF5F5]/80 rounded-2xl p-3 border border-gray-100/50 shadow-sm">
+                    <p className="text-[9px] font-bold text-gray-400 mb-1">Candidatos no pipeline</p>
+                    <div className="flex items-end gap-2">
+                      <span className="text-2xl font-serif text-[#1a0509]">128</span>
+                      <div className="flex items-center gap-0.5 bg-white/80 text-emerald-600 px-1.5 py-0.5 rounded-full text-[8px] font-bold mb-1 shadow-sm">
+                        <TrendingUp className="h-2 w-2" /> 8%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] font-bold text-gray-400 mb-2.5">Pipeline</p>
+                <div className="bg-white/80 rounded-2xl p-3.5 border border-gray-100/50 shadow-sm space-y-2">
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-[#5c4a4d]">
+                    <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#8a1c31]"></div> Triagem</div>
+                    <span className="text-gray-400">42</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-[#5c4a4d]">
+                    <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Entrevista</div>
+                    <span className="text-gray-400">36</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-[#5c4a4d]">
+                    <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div> Avaliação</div>
+                    <span className="text-gray-400">28</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-[#5c4a4d]">
+                    <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Proposta</div>
+                    <span className="text-gray-400">12</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-[#5c4a4d]">
+                    <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Contratados</div>
+                    <span className="text-gray-400">10</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Atividades Recentes Card */}
+              <div className="w-full bg-white/40 backdrop-blur-[2px] rounded-3xl p-5 border border-white/20 shadow-sm mt-1">
+                <p className="text-[10px] font-bold text-gray-400 mb-3">Atividades recentes</p>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-[#FDF0EE]/80 flex items-center justify-center text-[#751227] shrink-0"><Users className="h-3 w-3" /></div>
+                    <div>
+                      <p className="text-[9px] font-bold text-[#1a0509]">Entrevista agendada</p>
+                      <p className="text-[8px] text-gray-400 font-medium">para Analista de RH Sênior</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-white/80 flex items-center justify-center text-gray-500 shrink-0"><User className="h-3 w-3" /></div>
+                    <div>
+                      <p className="text-[9px] font-bold text-[#1a0509]">Novo candidato adicionado</p>
+                      <p className="text-[8px] text-gray-400 font-medium">para Desenv. Full Stack</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-emerald-50/80 flex items-center justify-center text-emerald-600 shrink-0"><CheckCircle2 className="h-3 w-3" /></div>
+                    <div>
+                      <p className="text-[9px] font-bold text-[#1a0509]">Avaliação concluída</p>
+                      <p className="text-[8px] text-gray-400 font-medium">para Product Designer</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+           </div>
+        </div>
 
         {/* Right Column - Login Panel */}
-        <section className="flex items-start justify-center w-full z-10 lg:pt-1">
-          <div className="w-full max-w-[420px] bg-card border border-primary/20 rounded-[1.5rem] p-5 lg:p-7 shadow-2xl shadow-primary/8 ring-1 ring-primary/5 relative overflow-hidden backdrop-blur-xl">
-            {/* Top tiny red gradient bar */}
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-primary/20 via-primary to-primary/20" />
+        <div className="w-full lg:w-[50%] flex flex-col items-center justify-center px-6 py-10 lg:px-12 xl:pr-24 relative z-10 h-full overflow-hidden">
+          
+          {/* Top Absolute Link for Candidate Portal - positioned top-right on desktop */}
+          <div className="lg:absolute lg:top-8 lg:right-12 mb-6 lg:mb-0 self-end lg:self-auto z-20">
+            <Link 
+              to="/candidato" 
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#4A0E1A] hover:text-[#8a1c31] transition-colors"
+            >
+              <User className="h-4 w-4" />
+              <span>Portal do Candidato</span>
+            </Link>
+          </div>
 
-            <div className="flex flex-col gap-1 pb-4 border-b border-border/50">
-              <h2 className="text-[26px] sm:text-[28px] font-normal font-serif-display tracking-tight text-foreground">Acessar plataforma</h2>
-              <p className="text-xs text-muted-foreground leading-relaxed font-medium">
+          {/* Login Card */}
+          <div className="w-full max-w-[420px] bg-white rounded-[2.5rem] p-8 shadow-[0_25px_60px_-15px_rgba(74,14,26,0.05)] border border-[#e8dcdc] flex flex-col relative transition-all duration-500 ease-out hover:bg-[#FAF8F6] hover:border-[#8a1c31]/40 hover:shadow-[0_35px_70px_-10px_rgba(74,14,26,0.09)]">
+            
+            {/* Mobile Branding (Visible only on mobile, required by E2E tests) */}
+            <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#751227] text-xs font-bold text-white shadow-md">
+                RA
+              </div>
+              <span className="font-sans text-base font-bold text-[#1a0509]">
+                Maraj<span className="relative inline-block after:content-['´'] after:absolute after:-top-[4px] after:left-[1.5px] after:text-[10px] after:font-bold after:text-[#1a0509] after:select-none after:pointer-events-none">o</span> RH
+              </span>
+            </div>
+
+            {/* Circular Logo at Top Center */}
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#4A0E1A] text-xl font-serif-display font-bold text-white shadow-md mb-4">
+                RA
+              </div>
+              <h2 className="text-2xl xl:text-3xl font-serif-display font-bold tracking-tight text-[#1a0509]">Acessar plataforma</h2>
+              <p className="text-[12px] xl:text-[13px] font-medium text-[#8a8183] mt-2 leading-relaxed px-2">
                 Entre com sua conta corporativa para continuar no painel de recrutamento.
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3 mt-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="email" className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                <label htmlFor="email" className="text-[11px] font-bold text-[#1a0509]">
                   E-mail
                 </label>
                 <div className="relative flex items-center">
+                  <Mail className="absolute left-4 h-4 w-4 text-[#8a8183] pointer-events-none" />
                   <input
                     id="email"
                     type="email"
@@ -260,18 +347,23 @@ export function LoginPage() {
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="contato@empresa.com"
-                    className="h-11 w-full bg-background border border-border rounded-xl px-4 pr-10 text-[13px] font-semibold text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 shadow-sm"
+                    placeholder="seu@email.com"
+                    className="h-[48px] w-full bg-white border border-[#e8dcdc] rounded-xl pl-11 pr-4 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
                   />
-                  <Mail className="absolute right-4 h-4 w-4 text-muted-foreground pointer-events-none" />
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="password" className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Senha
-                </label>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-[11px] font-bold text-[#1a0509]">
+                    Senha
+                  </label>
+                  <Link to="#" className="text-[11px] font-bold text-[#8a1c31] hover:text-[#5c091d] transition-colors">
+                    Esqueceu a senha?
+                  </Link>
+                </div>
                 <div className="relative flex items-center">
+                  <Lock className="absolute left-4 h-4 w-4 text-[#8a8183] pointer-events-none" />
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
@@ -280,43 +372,43 @@ export function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="h-11 w-full bg-background border border-border rounded-xl px-4 pr-10 text-[13px] font-semibold text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 shadow-sm"
+                    className="h-[48px] w-full bg-white border border-[#e8dcdc] rounded-xl pl-11 pr-12 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword((current) => !current)}
-                    className="absolute right-4 text-muted-foreground hover:text-foreground transition-colors outline-none"
+                    onClick={() => setShowPassword((c) => !c)}
+                    className="absolute right-4 text-[#a8a1a3] hover:text-[#1a0509] transition-colors outline-none h-8 w-8 flex items-center justify-center"
                     aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
                   </button>
                 </div>
               </div>
 
               {error ? (
-                <Alert variant="destructive" className="border-destructive/20 bg-destructive/5 text-destructive rounded-xl p-3 mt-1">
+                <Alert variant="destructive" className="border-red-500/20 bg-red-50 text-red-700 rounded-xl p-2.5">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-xs font-semibold">{error}</AlertDescription>
+                  <AlertDescription className="text-xs font-bold ml-1">{error}</AlertDescription>
                 </Alert>
               ) : null}
 
               <Button 
                 type="submit" 
                 disabled={loading} 
-                className="h-11 mt-1 text-[13px] font-bold tracking-wide bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group transition-all duration-300"
+                className="h-[48px] w-full mt-2 text-[14px] font-bold tracking-wide bg-[#6b1626] hover:bg-[#4A0E1A] text-white rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-300"
               >
-                {loading ? "Entrando…" : "Entrar no painel"}
-                {!loading && <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />}
+                {!loading && <ArrowRightToLine className="h-4 w-4" />}
+                {loading ? "Entrando no painel…" : "Entrar no painel"}
               </Button>
             </form>
 
-            <div className="flex items-center gap-3 my-4">
-              <span className="h-px flex-1 bg-border/50" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60">ou entrar com</span>
-              <span className="h-px flex-1 bg-border/50" />
+            <div className="flex items-center gap-4 my-5">
+              <span className="h-[1px] flex-1 bg-[#e8dcdc]" />
+              <span className="text-[11px] text-[#a8a1a3] font-medium">ou entrar com</span>
+              <span className="h-[1px] flex-1 bg-[#e8dcdc]" />
             </div>
 
-            <div className="flex justify-center w-full">
+            <div className="w-full flex justify-center">
               <GoogleSignInButton
                 disabled={loading}
                 onCredential={handleGoogleCredential}
@@ -324,45 +416,28 @@ export function LoginPage() {
               />
             </div>
 
-            <div className="flex items-start gap-2.5 text-[10.5px] leading-relaxed text-muted-foreground font-medium mt-4 bg-secondary/50 border border-border/50 p-3 rounded-xl">
-              <Shield className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 text-[10px] leading-snug text-[#8a8183] font-medium mt-5 bg-[#FCF5F5] border border-[#f4e4e2] p-3.5 rounded-xl">
+              <Shield className="h-4.5 w-4.5 text-[#8a1c31] shrink-0" />
               <p>
-                Apenas contas corporativas com final <strong className="text-foreground font-bold">@redemarajo.com.br</strong> possuem acesso via Google.
+                <strong className="text-[#3d0815] font-bold block mb-0.5">Acesso restrito a colaboradores autorizados.</strong>
+                Ao continuar, você concorda com as políticas da empresa.
               </p>
             </div>
           </div>
-        </section>
+          
+        </div>
       </main>
 
-      {/* Checklist Section - Full width, below the fold */}
-      <section className="w-full border-t border-border/30 bg-card/20 py-8 lg:py-10 z-10">
-        <div className="w-full max-w-7xl mx-auto px-6 lg:px-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 max-w-4xl mx-auto">
-            {[
-              { id: "01. Pipeline", label: "Triagem unificada de perfis", icon: <Layers className="h-4 w-4 text-primary" /> },
-              { id: "02. Candidatos", label: "Histórico e currículos centralizados", icon: <Users className="h-4 w-4 text-primary" /> },
-              { id: "03. Agenda", label: "Entrevistas e feedbacks unificados", icon: <Calendar className="h-4 w-4 text-primary" /> },
-              { id: "04. Decisão", label: "Fórmula de matching com IA", icon: <Target className="h-4 w-4 text-primary" /> },
-            ].map((item) => (
-              <div key={item.id} className="flex gap-3 items-start bg-card/50 border border-border/50 p-4 rounded-2xl backdrop-blur-sm shadow-sm transition-all duration-300 hover:border-primary/20 hover:shadow-md">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/5 border border-primary/10">
-                  {item.icon}
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-black text-foreground leading-none">{item.id}</p>
-                  <p className="text-[11px] leading-snug text-muted-foreground font-semibold mt-1">{item.label}</p>
-                </div>
-              </div>
-            ))}
+      {/* Global Footer */}
+      <footer className="w-full text-center py-6 relative z-10 shrink-0 border-t border-[#e8dcdc]/30 bg-[#FDFBF7]/80 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-[11px] font-medium text-[#8a8183]">
+          <div className="flex items-center gap-1.5 text-emerald-700">
+            <Shield className="h-3.5 w-3.5" />
+            <span>Proteção de dados em conformidade com a LGPD</span>
           </div>
+          <span className="hidden sm:inline text-[#e8dcdc]">|</span>
+          <span>© 2026 Marajó RH AI System. Todos os direitos reservados.</span>
         </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="w-full text-center py-3 border-t border-border/40 shrink-0 bg-card/30 backdrop-blur-sm z-10">
-        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-          © {new Date().getFullYear()} Marajó RH IA · Sistema Operacional Corporativo · V1.0
-        </p>
       </footer>
     </div>
   );

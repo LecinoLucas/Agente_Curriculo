@@ -1,295 +1,293 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CandidatePreAdmissionPanel } from "../CandidatePreAdmissionPanel";
-import * as preAdmissionService from "../../../../../services/preAdmissionService";
-import type { PreAdmissionCase, PreAdmissionDocument, PreAdmissionEvent } from "../../../../../types/domain";
+import { admissionWorkspaceService } from "../../../../../services/admissionWorkspaceService";
+import { getPreAdmission } from "../../../../../services/preAdmissionService";
+import { toast } from "../../../../../shared/utils/toast";
+import type { AdmissionCaseWorkspace } from "../../../../../types/domain";
 
-vi.mock("../../../../../services/preAdmissionService");
+vi.mock("../../../../../services/admissionWorkspaceService", () => ({
+  admissionWorkspaceService: {
+    getWorkspace: vi.fn(),
+    approveChecklistItem: vi.fn(),
+    rejectChecklistItem: vi.fn(),
+    requestChecklistItemCorrection: vi.fn(),
+    markChecklistItemNotRequired: vi.fn(),
+    markCaseReadyForExport: vi.fn(),
+  },
+}));
 
-const preAdmissionCase: PreAdmissionCase = {
-  id: "case-1",
-  candidate_id: "candidate-1",
-  job_id: "job-1",
-  hiring_decision_id: "decision-1",
-  status: "offer_preparing",
-  salary_offer: "12000.00",
-  start_date: "2026-06-01",
-  work_model: "Híbrido",
-  notes: "Oferta em preparação.",
-  created_by: "user-1",
-  created_at: "2026-05-14T10:00:00Z",
-  updated_at: "2026-05-14T10:00:00Z",
-  closed_at: null,
-  checklist_items: [
+vi.mock("../../../../../services/preAdmissionService", () => ({
+  getPreAdmission: vi.fn(),
+}));
+
+vi.mock("../../../../../shared/utils/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+const baseWorkspace: AdmissionCaseWorkspace = {
+  case: {
+    id: "case-1",
+    status: "draft",
+    current_stage: "pre_admission",
+    created_at: "2026-05-24T10:00:00Z",
+    updated_at: "2026-05-25T14:00:00Z",
+  },
+  candidate: {
+    id: "cand-1",
+    name: "Larissa Oliveira",
+    initials: "LO",
+    avatar_url: null,
+  },
+  job: {
+    id: "job-1",
+    title: "Assistente Administrativo",
+  },
+  checklist: {
+    total: 8,
+    approved: 3,
+    pending: 4,
+    blocked: 1,
+    items: [
+      {
+        id: "item-1",
+        title: "Documento de identidade",
+        status: "pending",
+        required: true,
+        position: 1,
+        updated_at: "2026-05-25T13:00:00Z",
+        updated_by_name: "Ana Paula",
+        document_id: "doc-1",
+      },
+      {
+        id: "item-2",
+        title: "Foto 3x4",
+        status: "rejected",
+        required: true,
+        position: 2,
+        updated_at: "2026-05-25T12:00:00Z",
+        updated_by_name: "Ana Paula",
+        document_id: null,
+      },
+    ],
+  },
+  documents: [
     {
-      id: "item-1",
-      case_id: "case-1",
-      item_type: "cpf",
-      title: "CPF",
-      status: "pending",
-      required: true,
-      notes: null,
-      created_at: "2026-05-14T10:00:00Z",
-      updated_at: "2026-05-14T10:00:00Z",
+      id: "doc-1",
+      filename: "RG_Larissa.pdf",
+      document_type: "rg",
+      status: "uploaded",
+      uploaded_at: "2026-05-25T11:30:00Z",
+      approved_at: null,
+    },
+  ],
+  main_blockers: [
+    {
+      type: "missing_document",
+      severity: "high",
+      title: "Foto 3x4 ausente",
+      description: "Solicite o envio para prosseguir com o checklist.",
+      action: "request_document",
+    },
+  ],
+  next_actions: [
+    {
+      type: "approve_document",
+      label: "Aprovar documento",
+      enabled: true,
+      disabled_reason: null,
+    },
+    {
+      type: "request_correction",
+      label: "Solicitar correção",
+      enabled: true,
+      disabled_reason: null,
+    },
+    {
+      type: "open_protheus_integration",
+      label: "Abrir integração Protheus",
+      enabled: false,
+      disabled_reason: "Checklist incompleto",
+    },
+  ],
+  summary: {
+    responsible_name: "Ana Paula",
+    created_at: "2026-05-24T10:00:00Z",
+    last_update_at: "2026-05-25T14:00:00Z",
+    readiness_status: "not_ready",
+    ready_for_export: false,
+  },
+  recent_events: [
+    {
+      id: "evt-1",
+      type: "document_uploaded",
+      title: "Documento enviado",
+      description: "RG_Larissa.pdf foi enviado pelo candidato.",
+      created_at: "2026-05-25T11:30:00Z",
+    },
+    {
+      id: "evt-2",
+      type: "checklist_item_rejected",
+      title: "Item rejeitado",
+      description: "Foi solicitada correção para um item do checklist.",
+      created_at: "2026-05-25T12:00:00Z",
     },
   ],
 };
 
-const event: PreAdmissionEvent = {
-  id: "event-1",
-  case_id: "case-1",
-  event_type: "case_created",
-  actor_id: "user-1",
-  payload_json: { status: "draft" },
-  created_at: "2026-05-14T10:00:00Z",
+const readyWorkspace: AdmissionCaseWorkspace = {
+  ...baseWorkspace,
+  case: {
+    ...baseWorkspace.case,
+    status: "ready_for_admission",
+    updated_at: "2026-05-25T15:00:00Z",
+  },
+  checklist: {
+    ...baseWorkspace.checklist,
+    approved: 8,
+    pending: 0,
+    blocked: 0,
+    items: [
+      {
+        ...baseWorkspace.checklist.items[0],
+        status: "approved",
+      },
+      {
+        ...baseWorkspace.checklist.items[1],
+        status: "not_required",
+      },
+    ],
+  },
+  main_blockers: [],
+  next_actions: [
+    {
+      type: "approve_document",
+      label: "Aprovar documento",
+      enabled: true,
+      disabled_reason: null,
+    },
+    {
+      type: "request_correction",
+      label: "Solicitar correção",
+      enabled: true,
+      disabled_reason: null,
+    },
+    {
+      type: "open_protheus_integration",
+      label: "Abrir integração Protheus",
+      enabled: true,
+      disabled_reason: null,
+    },
+  ],
+  summary: {
+    ...baseWorkspace.summary,
+    readiness_status: "ready",
+    ready_for_export: true,
+  },
 };
 
-const document: PreAdmissionDocument = {
-  id: "doc-1",
-  case_id: "case-1",
-  checklist_item_id: "item-1",
-  candidate_id: "candidate-1",
-  original_filename: "cpf.pdf",
-  mime_type: "application/pdf",
-  size_bytes: 42,
-  status: "uploaded",
-  uploaded_at: "2026-05-14T10:00:00Z",
-  reviewed_at: null,
-  reviewed_by: null,
-  review_notes: null,
-  created_at: "2026-05-14T10:00:00Z",
-  updated_at: "2026-05-14T10:00:00Z",
-};
+function renderPanel(props?: Partial<ComponentProps<typeof CandidatePreAdmissionPanel>>) {
+  return render(
+    <MemoryRouter>
+      <CandidatePreAdmissionPanel
+        caseId="case-1"
+        jobId={null}
+        candidateId={null}
+        {...props}
+      />
+    </MemoryRouter>,
+  );
+}
 
-describe("CandidatePreAdmissionPanel", () => {
+describe("CandidatePreAdmissionPanel.workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
+    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(baseWorkspace);
+  });
+
+  it("renderiza dados do workspace, blockers e histórico recente", async () => {
+    renderPanel();
+
+    expect(await screen.findByText("Larissa Oliveira")).toBeInTheDocument();
+    expect(screen.getByText("Assistente Administrativo")).toBeInTheDocument();
+    expect(screen.getByText("Foto 3x4 ausente")).toBeInTheDocument();
+    expect(screen.getByText("Documento enviado")).toBeInTheDocument();
+    expect(screen.getByText("RG_Larissa.pdf")).toBeInTheDocument();
+  });
+
+  it("mostra o progresso 3/8 corretamente", async () => {
+    renderPanel();
+
+    expect(await screen.findByText("3/8")).toBeInTheDocument();
+    expect(screen.getByText("itens concluídos")).toBeInTheDocument();
+  });
+
+  it("mantém o botão Protheus bloqueado quando ready_for_export=false", async () => {
+    renderPanel();
+
+    const button = await screen.findByRole("button", {
+      name: /abrir integração protheus/i,
+    });
+    expect(button).toBeDisabled();
+  });
+
+  it("habilita a navegação para Protheus quando ready_for_export=true", async () => {
+    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(readyWorkspace);
+    renderPanel();
+
+    const link = await screen.findByRole("link", {
+      name: /abrir integração protheus/i,
+    });
+    expect(link).toHaveAttribute("href", "/admission/cases/case-1/integration");
+  });
+
+  it("executa ação de aprovação, chama o endpoint correto e recarrega o workspace", async () => {
+    vi.mocked(admissionWorkspaceService.getWorkspace)
+      .mockResolvedValueOnce(baseWorkspace)
+      .mockResolvedValueOnce(readyWorkspace);
+    vi.mocked(admissionWorkspaceService.approveChecklistItem).mockResolvedValue(baseWorkspace);
+
+    renderPanel();
+
+    const approveButtons = await screen.findAllByRole("button", { name: /^aprovar$/i });
+    const approveButton = approveButtons.find((button) => !(button as HTMLButtonElement).disabled);
+    expect(approveButton).toBeDefined();
+    fireEvent.click(approveButton as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(admissionWorkspaceService.approveChecklistItem).toHaveBeenCalledWith("item-1");
+    });
+    await waitFor(() => {
+      expect(admissionWorkspaceService.getWorkspace).toHaveBeenCalledTimes(2);
+    });
+    expect(toast.success).toHaveBeenCalledWith("Item aprovado.");
+  });
+
+  it("mostra estado vazio quando não existe caso ativo", async () => {
+    vi.mocked(getPreAdmission).mockResolvedValue({
       case: null,
-      hiring_decision_outcome: "hold",
       can_create: false,
-    });
-    vi.mocked(preAdmissionService.getPreAdmissionEvents).mockResolvedValue({ events: [] });
-    vi.mocked(preAdmissionService.listPreAdmissionDocuments).mockResolvedValue({ documents: [] });
-    vi.mocked(preAdmissionService.createPreAdmission).mockResolvedValue(preAdmissionCase);
-    vi.mocked(preAdmissionService.updatePreAdmission).mockResolvedValue(preAdmissionCase);
-    vi.mocked(preAdmissionService.createPreAdmissionChecklistItem).mockResolvedValue(
-      preAdmissionCase.checklist_items[0],
-    );
-    vi.mocked(preAdmissionService.updatePreAdmissionChecklistItem).mockResolvedValue({
-      ...preAdmissionCase.checklist_items[0],
-      status: "received",
-    });
-    vi.mocked(preAdmissionService.approvePreAdmissionDocument).mockResolvedValue({
-      ...document,
-      status: "approved",
-    });
-    vi.mocked(preAdmissionService.rejectPreAdmissionDocument).mockResolvedValue({
-      ...document,
-      status: "rejected",
-      review_notes: "Documento ilegível.",
-    });
-    vi.mocked(preAdmissionService.downloadPreAdmissionDocument).mockResolvedValue(new Blob(["pdf"]));
-  });
-
-  it("mostra bloqueio sem decisão hire", async () => {
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    expect(await screen.findByText(/Pré-admissão disponível apenas após decisão de contratação/i)).toBeInTheDocument();
-  });
-
-  it("mostra botão criar quando há decisão hire", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: null,
       hiring_decision_outcome: "hire",
-      can_create: true,
     });
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    expect(await screen.findByRole("button", { name: /Criar pré-admissão/i })).toBeInTheDocument();
-  });
-
-  it("cria pré-admissão", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: null,
-      hiring_decision_outcome: "hire",
-      can_create: true,
-    });
-    vi.mocked(preAdmissionService.getPreAdmissionEvents).mockResolvedValue({ events: [event] });
-    const user = userEvent.setup();
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    await user.type(await screen.findByLabelText(/Oferta salarial/i), "12000.00");
-    await user.type(screen.getByLabelText(/Data prevista/i), "2026-06-01");
-    await user.type(screen.getByLabelText(/Modelo de trabalho/i), "Híbrido");
-    await user.click(screen.getByRole("button", { name: /Criar pré-admissão/i }));
-
-    await waitFor(() => {
-      expect(preAdmissionService.createPreAdmission).toHaveBeenCalledWith(
-        "job-1",
-        "candidate-1",
-        expect.objectContaining({ salary_offer: "12000.00", start_date: "2026-06-01" }),
-      );
-    });
-  });
-
-  it("renderiza status", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: preAdmissionCase,
-      hiring_decision_outcome: "hire",
-      can_create: false,
-    });
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    expect((await screen.findAllByText("Oferta em preparação")).length).toBeGreaterThan(0);
-    expect(screen.getByText(/R\$\s?12\.000,00/)).toBeInTheDocument();
-  });
-
-  it("renderiza checklist", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: preAdmissionCase,
-      hiring_decision_outcome: "hire",
-      can_create: false,
-    });
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    expect(await screen.findByText("Documentos e pendências")).toBeInTheDocument();
-    expect(screen.getAllByText("CPF").length).toBeGreaterThan(0);
-  });
-
-  it("atualiza item de checklist", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: preAdmissionCase,
-      hiring_decision_outcome: "hire",
-      can_create: false,
-    });
-    const user = userEvent.setup();
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    await screen.findByText("Documentos e pendências");
-    await user.selectOptions(screen.getByDisplayValue("Pendente"), "received");
-
-    await waitFor(() => {
-      expect(preAdmissionService.updatePreAdmissionChecklistItem).toHaveBeenCalledWith(
-        "case-1",
-        "item-1",
-        { status: "received" },
-      );
-    });
-  });
-
-  it("aprova documento enviado", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: preAdmissionCase,
-      hiring_decision_outcome: "hire",
-      can_create: false,
-    });
-    vi.mocked(preAdmissionService.listPreAdmissionDocuments).mockResolvedValue({ documents: [document] });
-    const user = userEvent.setup();
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    await screen.findByText("cpf.pdf");
-    await user.click(screen.getByRole("button", { name: /Aprovar/i }));
-
-    await waitFor(() => {
-      expect(preAdmissionService.approvePreAdmissionDocument).toHaveBeenCalledWith("doc-1");
-    });
-  });
-
-  it("rejeita documento com motivo", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: preAdmissionCase,
-      hiring_decision_outcome: "hire",
-      can_create: false,
-    });
-    vi.mocked(preAdmissionService.listPreAdmissionDocuments).mockResolvedValue({ documents: [document] });
-    const user = userEvent.setup();
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    await screen.findByText("cpf.pdf");
-    await user.click(screen.getByRole("button", { name: /Solicitar correção/i }));
-    await user.type(screen.getByPlaceholderText(/Motivo da rejeição/i), "Documento ilegível.");
-    await user.click(screen.getByRole("button", { name: /Confirmar correção/i }));
-
-    await waitFor(() => {
-      expect(preAdmissionService.rejectPreAdmissionDocument).toHaveBeenCalledWith(
-        "doc-1",
-        "Documento ilegível.",
-      );
-    });
-  });
-
-  it("mostra timeline", async () => {
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: preAdmissionCase,
-      hiring_decision_outcome: "hire",
-      can_create: false,
-    });
-    vi.mocked(preAdmissionService.getPreAdmissionEvents).mockResolvedValue({ events: [event] });
-
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-
-    expect(await screen.findByText("Timeline de eventos")).toBeInTheDocument();
-    expect(await screen.findByText("Caso criado")).toBeInTheDocument();
-  });
-
-  it("renderiza loading, error e empty states", async () => {
-    const pending = new Promise<never>(() => undefined);
-    vi.mocked(preAdmissionService.getPreAdmission).mockReturnValueOnce(pending);
-    const { unmount } = render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-    expect(screen.getByRole("status", { hidden: true })).toBeInTheDocument();
-    unmount();
-
-    vi.mocked(preAdmissionService.getPreAdmission).mockRejectedValueOnce(new Error("fail"));
-    render(<CandidatePreAdmissionPanel jobId="job-1" candidateId="candidate-1" />);
-    expect(await screen.findByText(/Não foi possível carregar a pré-admissão/i)).toBeInTheDocument();
-  });
-
-  it("habilita envio para Protheus apenas quando checklist obrigatório está pronto", async () => {
-    const onSendToProtheus = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(preAdmissionService.getPreAdmission).mockResolvedValue({
-      case: {
-        ...preAdmissionCase,
-        checklist_items: [{ ...preAdmissionCase.checklist_items[0], status: "approved" }],
-      },
-      hiring_decision_outcome: "hire",
-      can_create: false,
-    });
-    vi.mocked(preAdmissionService.updatePreAdmission).mockResolvedValue({
-      ...preAdmissionCase,
-      status: "ready_for_admission",
-      checklist_items: [{ ...preAdmissionCase.checklist_items[0], status: "approved" }],
-    });
-    const user = userEvent.setup();
 
     render(
-      <CandidatePreAdmissionPanel
-        jobId="job-1"
-        candidateId="candidate-1"
-        currentStage="pre_admission"
-        onSendToProtheus={onSendToProtheus}
-      />,
+      <MemoryRouter>
+        <CandidatePreAdmissionPanel
+          jobId="job-1"
+          candidateId="cand-1"
+          onOpenHiringDecision={vi.fn()}
+        />
+      </MemoryRouter>,
     );
 
-    const button = await screen.findByRole("button", { name: /Enviar para Protheus/i });
-    expect(button).toBeEnabled();
-
-    await user.click(button);
-
-    await waitFor(() => {
-      expect(preAdmissionService.updatePreAdmission).toHaveBeenCalledWith("case-1", {
-        status: "ready_for_admission",
-      });
-      expect(onSendToProtheus).toHaveBeenCalled();
-    });
+    expect(
+      await screen.findByText("Caso admissional ainda não aberto"),
+    ).toBeInTheDocument();
   });
 });

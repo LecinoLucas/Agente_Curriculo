@@ -38,7 +38,24 @@
       "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/application/services/pipeline_service.py)",
       "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/application/services/erp_integration_service.py)",
       "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/interface/api/routers/pipeline.py)",
-      "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/interface/api/schemas/admission_package_schemas.py)"
+      "Bash(python3 -m py_compile /Users/lecinolucas/Desktop/projetos/agentes/resume-ai-system/backend/src/interface/api/schemas/admission_package_schemas.py)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(node_modules/.bin/vitest run *)",
+      "Bash(node_modules/.bin/tsc --noEmit --pretty false)",
+      "Bash(echo \"TSC_EXIT:$?\")",
+      "Bash(python3 -m alembic heads)",
+      "Bash(alembic --version)",
+      "Bash(.venv/bin/pytest backend/tests/unit/test_analysis_request_policy.py -q)",
+      "Bash(.venv/bin/pytest tests/integration/test_analysis_retry_resilience.py tests/test_candidate_portal_and_public_analysis.py tests/unit/test_analysis_request_policy.py -q)",
+      "Bash(python3.13 -c \"import sqlite3; print\\(sqlite3.sqlite_version\\)\")",
+      "Bash(.venv/bin/pytest tests/integration/test_list_job_matches_contract.py -v)",
+      "Bash(.venv/bin/pytest tests/integration/test_pipeline_stage_gates.py tests/integration/test_pipeline_endpoints_integration.py tests/integration/test_candidate_job_pipeline_invariants.py -q)",
+      "Bash(.venv/bin/pytest tests/integration/test_behavioral_assignments.py tests/integration/test_behavioral_assessment_e2e.py tests/integration/test_interview_scorecards.py tests/integration/test_interview_operational_flow.py tests/integration/test_recruiter_pipeline_behavioral_link.py -q)",
+      "Bash(.venv/bin/pytest tests/unit/test_crud_services.py::test_candidate_list_summaries_includes_linked_job_count -v)",
+      "Bash(.venv/bin/pytest tests/unit/test_crud_services.py::test_candidate_list_summaries_includes_linked_job_count -q)",
+      "Bash(npm --prefix frontend test -- --run src/features/candidates/components/__tests__/CandidatePreviewDrawer.test.tsx)",
+      "Bash(npm --prefix frontend test -- --run src/pages/__tests__/PipelinePage.test.tsx)",
+      "Bash(grep -v \"^--$\")"
     ],
     "additionalDirectories": [
       "/Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/versions"

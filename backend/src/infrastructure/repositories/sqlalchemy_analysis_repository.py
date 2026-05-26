@@ -147,7 +147,7 @@ class SQLAlchemyAnalysisRepository:
             sa.update(AnalysisModel)
             .where(
                 AnalysisModel.resume_version_id.in_(candidate_resume_versions),
-                sa.cast(AnalysisModel.status, sa.String).in_(["queued", "pending", "processing", "retry_scheduled"]),
+                sa.cast(AnalysisModel.status, sa.String).in_(["waiting_extraction", "queued", "pending", "processing", "retry_scheduled"]),
             )
             .values(
                 status="cancelled",
@@ -193,7 +193,7 @@ class SQLAlchemyAnalysisRepository:
     ) -> AnalysisModel | None:
         conditions = [
             AnalysisModel.resume_version_id == resume_version_id,
-            sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing", "retry_scheduled"]),
+                sa.cast(AnalysisModel.status, sa.String).in_(["waiting_extraction", "pending", "processing", "retry_scheduled"]),
         ]
         if job_id:
             conditions.append(AnalysisModel.job_id == job_id)
@@ -1076,7 +1076,7 @@ class SQLAlchemyAnalysisRepository:
         """Count pending and processing analyses in the queue."""
         result = await self._session.scalar(
             sa.select(sa.func.count()).select_from(AnalysisModel).where(
-                sa.cast(AnalysisModel.status, sa.String).in_(["pending", "processing", "retry_scheduled"])
+                sa.cast(AnalysisModel.status, sa.String).in_(["waiting_extraction", "pending", "processing", "retry_scheduled"])
             )
         )
         return int(result or 0)

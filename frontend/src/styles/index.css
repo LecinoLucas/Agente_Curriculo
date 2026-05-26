@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Instrument+Serif:ital,wght@0,400..900;1,400..900&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -1104,6 +1102,102 @@
     box-shadow:
       0 18px 46px -30px rgba(0, 0, 0, 0.72),
       inset 0 1px 0 hsl(0 0% 100% / 0.04);
+  }
+
+  /* --------------------------------------------------------------------------
+     Admission cockpit
+     -------------------------------------------------------------------------- */
+
+  .admission-cockpit {
+    color: hsl(var(--text));
+  }
+
+  .admission-cockpit-shell {
+    position: relative;
+    border: 1px solid hsl(var(--border) / 0.52);
+    border-radius: 0.5rem;
+    background:
+      linear-gradient(180deg, hsl(var(--surface) / 0.70), hsl(var(--surface) / 0.42)),
+      linear-gradient(135deg, hsl(var(--primary) / 0.045), transparent 34%);
+    box-shadow:
+      0 24px 58px -46px hsl(var(--brand-dark) / 0.42),
+      inset 0 1px 0 hsl(0 0% 100% / 0.42);
+  }
+
+  .admission-executive-header,
+  .admission-section-card {
+    border: 1px solid hsl(var(--border) / 0.72);
+    border-radius: 0.5rem;
+    background: hsl(var(--surface) / 0.94);
+    box-shadow:
+      0 18px 44px -38px hsl(var(--text) / 0.28),
+      inset 0 1px 0 hsl(0 0% 100% / 0.58);
+  }
+
+  :root[data-theme="dark"] .admission-cockpit-shell {
+    background:
+      linear-gradient(180deg, hsl(var(--surface) / 0.64), hsl(var(--surface) / 0.42)),
+      linear-gradient(135deg, hsl(var(--primary) / 0.08), transparent 38%);
+    box-shadow:
+      0 26px 58px -42px rgba(0, 0, 0, 0.72),
+      inset 0 1px 0 hsl(0 0% 100% / 0.05);
+  }
+
+  :root[data-theme="dark"] .admission-executive-header,
+  :root[data-theme="dark"] .admission-section-card {
+    background: hsl(var(--surface) / 0.88);
+    box-shadow:
+      0 20px 48px -36px rgba(0, 0, 0, 0.72),
+      inset 0 1px 0 hsl(0 0% 100% / 0.05);
+  }
+
+  .admission-section-card {
+    overflow: hidden;
+  }
+
+  .admission-section-card::before {
+    content: "";
+    display: block;
+    height: 3px;
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.08));
+  }
+
+  .admission-row {
+    border: 1px solid hsl(var(--border) / 0.66);
+    border-radius: 0.5rem;
+    background: linear-gradient(180deg, hsl(var(--surface)), hsl(var(--surface-muted) / 0.20));
+  }
+
+  .admission-embedded-card {
+    border: 1px solid hsl(var(--border) / 0.66);
+    border-radius: 0.5rem;
+    background: hsl(var(--surface) / 0.86);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.42);
+  }
+
+  .admission-row-strong {
+    border-color: hsl(var(--primary) / 0.18);
+    background:
+      linear-gradient(135deg, hsl(var(--primary) / 0.10), transparent 34%),
+      hsl(var(--surface));
+  }
+
+  .admission-metric {
+    border: 1px solid hsl(var(--border) / 0.62);
+    border-radius: 0.5rem;
+    background: hsl(var(--surface) / 0.72);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.38);
+  }
+
+  .admission-side-rail {
+    position: static;
+  }
+
+  @media (min-width: 1280px) {
+    .admission-side-rail {
+      position: sticky;
+      top: 5.5rem;
+    }
   }
 
   /* --------------------------------------------------------------------------

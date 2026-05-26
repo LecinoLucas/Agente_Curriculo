@@ -22,8 +22,9 @@ export const STAGE_LABEL: Record<PipelineStage, string> = {
 };
 
 export const ANALYSIS_STATUS_LABEL: Record<string, string> = {
-  pending: "Aguardando análise",
-  processing: "Em análise",
+  waiting_extraction: "Aguardando extração",
+  pending: "Análise na fila",
+  processing: "Análise em processamento",
   retry_scheduled: "Reprocessamento agendado",
   completed: "Análise pronta",
   failed: "Análise falhou",
@@ -350,11 +351,11 @@ export function deriveNextAction(
     case "offer":
       return { label: "Mover para Contratado", hint: "Finalize a etapa na pipeline", targetTab: "workflow" };
     case "hired":
-      return { label: "Mover para Pré-admissão", hint: "Inicie a preparação admissional", targetTab: "workflow" };
+      return { label: "Abrir pré-admissão", hint: "Inicie ou acompanhe o caso admissional", targetTab: "pre_admission" };
     case "pre_admission":
-      return { label: "Mover para Protheus", hint: "Avance após concluir a pré-admissão", targetTab: "workflow" };
+      return { label: "Abrir pré-admissão", hint: "Acompanhe checklist, pendências e readiness", targetTab: "pre_admission" };
     case "protheus":
-      return { label: "Mover para Admitido", hint: "Finalize a integração no ERP", targetTab: "workflow" };
+      return { label: "Abrir pré-admissão", hint: "Confira o caso admissional antes da integração", targetTab: "pre_admission" };
     case "admitted":
       return { label: "Sem ação pendente", hint: "Candidato admitido" };
     default:

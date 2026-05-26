@@ -54,6 +54,17 @@ class PreAdmissionCaseModel(Base):
     work_model: Mapped[str | None] = mapped_column(sa.String(80))
     notes: Mapped[str | None] = mapped_column(sa.Text)
     created_by: Mapped[UUID | None] = mapped_column(sa.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"))
+    ready_for_export: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa.text("false"),
+    )
+    ready_for_export_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    ready_for_export_by: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("users.id", ondelete="SET NULL"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
@@ -87,6 +98,7 @@ class PreAdmissionCaseModel(Base):
         ),
         sa.Index("idx_pre_admission_cases_job_candidate", "job_id", "candidate_id"),
         sa.Index("idx_pre_admission_cases_status", "status"),
+        sa.Index("idx_pre_admission_cases_ready_for_export", "ready_for_export"),
     )
 
 

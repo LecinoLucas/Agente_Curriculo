@@ -76,4 +76,64 @@ describe("profile terminal post-hire states", () => {
       hint: "Candidato admitido",
     });
   });
+
+  it.each([
+    ["hired", "Inicie ou acompanhe o caso admissional"],
+    ["pre_admission", "Acompanhe checklist, pendências e readiness"],
+    ["protheus", "Confira o caso admissional antes da integração"],
+  ] as const)("direciona %s para a aba robusta de pré-admissão", (stage, hint) => {
+    const overview: CandidateOverview = {
+      ...admittedOverview,
+      resumes: admittedOverview.resumes.length
+        ? admittedOverview.resumes
+        : [
+            {
+              resume_id: "resume-1",
+              title: "Currículo",
+              status: "active",
+              current_version: 1,
+              current_version_id: "version-1",
+              current_file_name: "curriculo.pdf",
+              extraction_status: "completed",
+              updated_at: "2026-05-25T10:00:00Z",
+            },
+          ],
+      latest_analysis: {
+        analysis_id: "analysis-1",
+        job_id: "job-1",
+        resume_id: "resume-1",
+        resume_title: "Currículo",
+        status: "completed",
+        started_at: null,
+        completed_at: "2026-05-25T10:00:00Z",
+        failed_at: null,
+        failure_reason: null,
+        used_real_ai: true,
+        task_id: null,
+        worker_id: null,
+        seniority_level: null,
+        total_experience_years: null,
+        created_at: "2026-05-25T09:00:00Z",
+        updated_at: "2026-05-25T10:00:00Z",
+      },
+      pipeline_entries: [
+        {
+          ...admittedOverview.pipeline_entries[0],
+          stage,
+          relationship_status: "active",
+          is_terminal: false,
+          candidate_status: stage,
+        },
+      ],
+      preview_pendencies: [],
+    };
+
+    const activeEntry = getActivePipelineEntry(overview);
+
+    expect(deriveNextAction(overview, activeEntry)).toEqual({
+      label: "Abrir pré-admissão",
+      hint,
+      targetTab: "pre_admission",
+    });
+  });
 });

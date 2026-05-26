@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import re
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+import sqlalchemy as sa
 from sqlalchemy import exc as sa_exc
 
 from src.application.services.candidate_service import CandidateService
@@ -25,6 +26,7 @@ from src.domain.exceptions import ValidationException
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
+from src.infrastructure.database.models.user_model import UserModel
 from src.infrastructure.repositories.sqlalchemy_analysis_repository import (
     SQLAlchemyAnalysisRepository,
 )
@@ -51,6 +53,9 @@ logger = structlog.get_logger(__name__)
 # NÃO usar para created_by de candidatos públicos (usar None)
 SYSTEM_USER_ID = UUID("00000000-0000-0000-0000-00000000000a")
 MAX_PDF_UPLOAD_BYTES = settings.max_upload_size_bytes
+GENERIC_EXISTING_ACCOUNT_MESSAGE = (
+    "Recebemos sua solicitação. Se já houver cadastro, atualizaremos seu processo conforme as regras do RH."
+)
 
 
 class PublicApplicationError(Exception):
@@ -118,6 +123,25 @@ class PublicApplicationService:
         if len(password) < 8:
             raise ValidationException("Senha deve ter no mínimo 8 caracteres")
 
+    async def _ensure_public_analysis_request_user(self) -> None:
+        user = await self.db.scalar(sa.select(UserModel).where(UserModel.id == SYSTEM_USER_ID))
+        if user is not None:
+            return
+
+        self.db.add(
+            UserModel(
+                id=SYSTEM_USER_ID,
+                email="public-submissions@system.internal",
+                full_name="Sistema - Submissões Públicas",
+                role="viewer",
+                status="inactive",
+                password_hash=hash_password("system"),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await self.db.flush()
+
     async def apply(
         self,
         full_name: str,
@@ -177,30 +201,20 @@ class PublicApplicationService:
                     "Não é possível alterar o e-mail validado pela conta Google."
                 )
             if existing_by_email and existing_by_email.id != existing_candidate.id:
-                raise PublicApplicationExistingAccountError(
-                    "Já existe um cadastro com este e-mail. Faça login para continuar sua candidatura."
-                )
+                raise PublicApplicationExistingAccountError(GENERIC_EXISTING_ACCOUNT_MESSAGE)
             if existing_by_cpf and existing_by_cpf.id != existing_candidate.id:
-                raise PublicApplicationExistingAccountError(
-                    "Já existe um cadastro com este CPF. Faça login para continuar sua candidatura."
-                )
+                raise PublicApplicationExistingAccountError(GENERIC_EXISTING_ACCOUNT_MESSAGE)
         else:
             self._validate_password(password)
             if existing_by_cpf and existing_by_email and existing_by_cpf.id != existing_by_email.id:
-                raise PublicApplicationExistingAccountError(
-                    "Já existe um cadastro com este e-mail ou CPF. Faça login para continuar sua candidatura."
-                )
+                raise PublicApplicationExistingAccountError(GENERIC_EXISTING_ACCOUNT_MESSAGE)
             if existing_by_cpf:
                 if not existing_by_cpf.password_hash or not verify_password(password, existing_by_cpf.password_hash):
-                    raise PublicApplicationExistingAccountError(
-                        "Já existe um cadastro com este CPF. Faça login para continuar sua candidatura."
-                    )
+                    raise PublicApplicationExistingAccountError(GENERIC_EXISTING_ACCOUNT_MESSAGE)
                 existing_candidate = existing_by_cpf
             elif existing_by_email:
                 if not existing_by_email.password_hash or not verify_password(password, existing_by_email.password_hash):
-                    raise PublicApplicationExistingAccountError(
-                        "Já existe um cadastro com este e-mail. Faça login para continuar sua candidatura."
-                    )
+                    raise PublicApplicationExistingAccountError(GENERIC_EXISTING_ACCOUNT_MESSAGE)
                 existing_candidate = existing_by_email
 
         if existing_candidate is not None:
@@ -255,13 +269,9 @@ class PublicApplicationService:
             except sa_exc.IntegrityError as e:
                 await self.db.rollback()
                 if "uq_candidates_active_cpf" in str(e):
-                    raise ValidationException(
-                        "CPF já registrado no sistema. Faça login para continuar sua candidatura."
-                    ) from e
+                    raise PublicApplicationExistingAccountError(GENERIC_EXISTING_ACCOUNT_MESSAGE) from e
                 if "uq_candidates_active_email" in str(e):
-                    raise ValidationException(
-                        "Email já registrado no sistema. Faça login para continuar sua candidatura."
-                    ) from e
+                    raise PublicApplicationExistingAccountError(GENERIC_EXISTING_ACCOUNT_MESSAGE) from e
                 logger.exception("integrity_error_candidate_creation", exc=str(e))
                 raise PublicApplicationError(
                     "Erro ao processar candidatura. Tente novamente."
@@ -434,6 +444,7 @@ class PublicApplicationService:
                 # (SYSTEM_USER_ID may not exist in prod) doesn't corrupt the
                 # outer transaction that holds the pipeline entry.
                 async with self.db.begin_nested():
+                    await self._ensure_public_analysis_request_user()
                     analysis_result = await RequestAnalysisUseCase(
                         SQLAlchemyAnalysisRepository(self.db),
                         self._resume_repo,

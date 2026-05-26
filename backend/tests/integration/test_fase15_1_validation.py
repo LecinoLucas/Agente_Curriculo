@@ -30,6 +30,7 @@ from src.application.services.protheus_real_adapter import (
     ProtheusRealAdapterResult,
     _mask_secrets,
 )
+from src.core.settings import settings
 from src.domain.exceptions import ValidationException
 from src.infrastructure.database.models import (
     PreAdmissionCaseModel,
@@ -40,6 +41,13 @@ from src.infrastructure.database.models import (
     CandidateJobHiringDecisionModel,
     PreAdmissionEventModel,
 )
+
+
+@pytest.fixture(autouse=True)
+def enable_protheus_real_send_feature_for_fase15_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "PROTHEUS_REAL_SEND_ENABLED", True)
 
 
 # ============================================================================

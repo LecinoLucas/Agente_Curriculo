@@ -4,6 +4,7 @@ import type {
   AdmissionPackage,
   ErpIntegrationAttempt,
   ErpIntegrationAttemptListResponse,
+  ProtheusCapabilities,
 } from "../types/domain";
 
 export async function createPackage(caseId: string): Promise<AdmissionPackage> {
@@ -110,6 +111,25 @@ export async function createProtheusDryRunAttempt(
   );
 }
 
+export async function getProtheusCapabilities(): Promise<ProtheusCapabilities> {
+  return httpRequest<ProtheusCapabilities>(
+    "/api/v1/admission-packages/erp/protheus/capabilities",
+  );
+}
+
+export async function createProtheusMockAttempt(
+  packageId: string,
+  simulateFailure = false,
+): Promise<ErpIntegrationAttempt> {
+  return httpRequest<ErpIntegrationAttempt>(
+    `/api/v1/admission-packages/${packageId}/erp/protheus/mock-send`,
+    {
+      method: "POST",
+      body: { simulate_failure: simulateFailure },
+    },
+  );
+}
+
 export async function listErpAttempts(
   packageId: string,
 ): Promise<ErpIntegrationAttemptListResponse> {
@@ -158,7 +178,9 @@ export const admissionPackageService = {
   cancelPackage,
   downloadJson,
   downloadCsv,
+  getProtheusCapabilities,
   createProtheusDryRunAttempt,
+  createProtheusMockAttempt,
   createProtheusHomologAttempt,
   listErpAttempts,
   getErpAttempt,

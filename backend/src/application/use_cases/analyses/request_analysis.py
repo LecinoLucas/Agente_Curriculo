@@ -38,6 +38,8 @@ _PROCESSING_STALE_AFTER = timedelta(minutes=30)
 def _is_stale_in_flight_analysis(analysis) -> bool:
     now = datetime.now(UTC)
     status = str(analysis.status)
+    if status == "waiting_extraction":
+        return False
     if status == "pending":
         return analysis.created_at is not None and analysis.created_at < now - _PENDING_STALE_AFTER
     if status == "processing":
@@ -139,7 +141,7 @@ class RequestAnalysisUseCase:
                 reused=True,
                 reason=(
                     "analysis_already_in_progress"
-                    if str(existing.status) in {"pending", "processing", "retry_scheduled"}
+                    if str(existing.status) in {"waiting_extraction", "pending", "processing", "retry_scheduled"}
                     else "analysis_reused_existing"
                 ),
             )
@@ -250,6 +252,7 @@ class RequestAnalysisUseCase:
             job_id=command.job_id,
             idempotency_key=idempotency_key,
             priority=command.priority,
+            status="pending" if extraction_ready else "waiting_extraction",
         )
         try:
             await self._analysis_repo.save(analysis)

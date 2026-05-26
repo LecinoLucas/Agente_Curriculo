@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { formatPhone } from "../utils/phone";
 import type { FormData, ApplicationErrors } from "../types";
 import { Link } from "react-router-dom";
@@ -7,7 +6,6 @@ interface Props {
   form: FormData;
   errors: ApplicationErrors;
   onChange: (field: keyof FormData, value: unknown) => void;
-  onBlurField?: (field: "email" | "cpf", value: string) => void;
 }
 
 const UF_OPTIONS = [
@@ -16,61 +14,7 @@ const UF_OPTIONS = [
   "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ];
 
-const DUPLICATE_CHECK_DELAY_MS = 500;
-
-function isReadyForDuplicateCheck(field: "email" | "cpf", value: string) {
-  if (field === "email") {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
-
-  return value.replace(/\D/g, "").length >= 11;
-}
-
-export function PersonalDataStep({ form, errors, onChange, onBlurField }: Props) {
-  const lastValidatedValueRef = useRef({ email: "", cpf: "" });
-
-  const triggerFieldValidation = (field: "email" | "cpf", value: string) => {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) return;
-
-    lastValidatedValueRef.current[field] = trimmedValue;
-    onBlurField?.(field, trimmedValue);
-  };
-
-  useEffect(() => {
-    const pendingFields: Array<{ field: "email" | "cpf"; value: string }> = [];
-    const email = form.email.trim();
-    const cpf = form.cpf.trim();
-
-    if (
-      email &&
-      email !== lastValidatedValueRef.current.email &&
-      isReadyForDuplicateCheck("email", email)
-    ) {
-      pendingFields.push({ field: "email", value: email });
-    }
-
-    if (
-      cpf &&
-      cpf !== lastValidatedValueRef.current.cpf &&
-      isReadyForDuplicateCheck("cpf", cpf)
-    ) {
-      pendingFields.push({ field: "cpf", value: cpf });
-    }
-
-    if (pendingFields.length === 0) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      pendingFields.forEach(({ field, value }) => {
-        triggerFieldValidation(field, value);
-      });
-    }, DUPLICATE_CHECK_DELAY_MS);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [form.email, form.cpf, onBlurField]);
-
+export function PersonalDataStep({ form, errors, onChange }: Props) {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -78,6 +22,9 @@ export function PersonalDataStep({ form, errors, onChange, onBlurField }: Props)
         <h2 className="text-2xl font-semibold tracking-tight text-[hsl(var(--text))]">Preencha seus dados principais</h2>
         <p className="text-sm text-[hsl(var(--text-muted))]">
           Usamos essas informações para identificar seu perfil e evitar cadastros duplicados.
+        </p>
+        <p className="text-sm text-[hsl(var(--text-muted))]">
+          Se você já tiver cadastro, suas informações serão vinculadas ao seu perfil existente quando possível.
         </p>
       </div>
 
@@ -111,7 +58,6 @@ export function PersonalDataStep({ form, errors, onChange, onBlurField }: Props)
             type="text"
             value={form.cpf}
             onChange={(e) => onChange("cpf", e.target.value)}
-            onBlur={(e) => triggerFieldValidation("cpf", e.target.value)}
             placeholder="Digite seu CPF"
             className={`mt-1 h-12 w-full rounded-2xl border px-4 py-2 ${
               errors.cpf ? "border-red-500" : "border-gray-300"
@@ -121,7 +67,7 @@ export function PersonalDataStep({ form, errors, onChange, onBlurField }: Props)
             <p className="mt-1 text-sm text-red-600">
               {errors.cpf}{" "}
               {errors.cpf.includes("Faça login") && (
-                <Link to="/candidato/login" className="font-semibold underline hover:text-red-800 ml-1">
+                <Link to="/candidato" className="font-semibold underline hover:text-red-800 ml-1">
                   Acessar Portal
                 </Link>
               )}
@@ -140,7 +86,6 @@ export function PersonalDataStep({ form, errors, onChange, onBlurField }: Props)
             autoComplete="email"
             value={form.email}
             onChange={(e) => onChange("email", e.target.value)}
-            onBlur={(e) => triggerFieldValidation("email", e.target.value)}
             placeholder="seu.email@example.com"
             disabled={form.emailLocked}
             className={`mt-1 h-12 w-full rounded-2xl border px-4 py-2 ${
@@ -151,7 +96,7 @@ export function PersonalDataStep({ form, errors, onChange, onBlurField }: Props)
             <p className="mt-1 text-sm text-red-600">
               {errors.email}{" "}
               {errors.email.includes("Faça login") && (
-                <Link to="/candidato/login" className="font-semibold underline hover:text-red-800 ml-1">
+                <Link to="/candidato" className="font-semibold underline hover:text-red-800 ml-1">
                   Acessar Portal
                 </Link>
               )}

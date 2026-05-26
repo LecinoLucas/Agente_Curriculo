@@ -64,6 +64,7 @@ export function AnalysisFilters({
         onChange={(e) => onTypeChange(e.target.value as AnalysisTypeFilter)}
         className="ui-input h-9 rounded-lg px-3 text-sm"
       >
+        <option value="all">Todas</option>
         <option value="resume">Currículo</option>
         <option value="behavioral_ai">Comportamental</option>
       </select>
@@ -74,6 +75,7 @@ export function AnalysisFilters({
         className="ui-input h-9 rounded-lg px-3 text-sm"
       >
         <option value="all">Todos os status</option>
+        <option value="waiting_extraction">Aguardando extração</option>
         <option value="pending">Aguardando</option>
         <option value="processing">Processando</option>
         <option value="retry_scheduled">Nova tentativa agendada</option>

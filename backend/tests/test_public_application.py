@@ -917,14 +917,16 @@ async def test_check_candidate_exists_endpoint(
     db_session: AsyncSession,
     client: AsyncClient,
 ) -> None:
-    # 1. Initially check an email/cpf that doesn't exist
     response = await client.get("/api/v1/public/candidates/check-exists?email=naoexiste@example.com&cpf=00000000000")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["email_exists"] is False
-    assert data["cpf_exists"] is False
+    assert data == {
+        "status": "ok",
+        "message": "Os dados serão validados ao enviar a candidatura.",
+    }
+    assert "email_exists" not in data
+    assert "cpf_exists" not in data
 
-    # 2. Seed a candidate
     candidate = CandidateModel(
         id=uuid4(),
         full_name="Candidate Test",
@@ -939,10 +941,12 @@ async def test_check_candidate_exists_endpoint(
     db_session.add(candidate)
     await db_session.commit()
 
-    # 3. Check again
     response = await client.get("/api/v1/public/candidates/check-exists?email=exists@example.com&cpf=11122233344")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["email_exists"] is True
-    assert data["cpf_exists"] is True
-
+    assert data == {
+        "status": "ok",
+        "message": "Os dados serão validados ao enviar a candidatura.",
+    }
+    assert "exists@example.com" not in response.text
+    assert "11122233344" not in response.text

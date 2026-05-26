@@ -156,6 +156,11 @@ export function AnalysisRow({
               {nextRetryLabel ? ` em ${nextRetryLabel}` : " agendada"}.
             </span>
           ) : null}
+          {item.status === "waiting_extraction" ? (
+            <span className="max-w-[240px] text-xs text-[hsl(var(--text-muted))]">
+              A análise já foi criada e aguarda a extração do currículo.
+            </span>
+          ) : null}
           {likelyStuck ? (
             <span className="max-w-[260px] text-xs text-[hsl(var(--warning))]">
               A análise está demorando mais que o esperado. Verifique o worker ou tente reprocessar.

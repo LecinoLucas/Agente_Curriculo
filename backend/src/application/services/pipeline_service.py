@@ -471,7 +471,9 @@ class PipelineService:
         bypass_gates: bool = False,
         actor_role: str | None = None,
     ) -> MoveCandidateResponse:
-        await self._ensure_active_job(body.job_id)
+        _active_job = await self._repository.find_active_job(body.job_id)
+        if _active_job is None:
+            raise PipelineJobNotFoundError
         await self._ensure_active_candidate(candidate_id)
 
         entry = await self._repository.find_active_entry(candidate_id, body.job_id)
@@ -511,9 +513,7 @@ class PipelineService:
         gates_at_check: list[MissingGate] = []
 
         if not bypass_gates and (is_forward or body.stage == "rejected"):
-            job = await self._repository.find_active_job(body.job_id)
-            if job is None:
-                raise PipelineJobNotFoundError
+            job = _active_job
             gate_result = await PipelineGateEvaluator(self._repository).evaluate(
                 candidate_id=candidate_id,
                 job_id=body.job_id,

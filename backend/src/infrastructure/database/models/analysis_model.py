@@ -116,6 +116,7 @@ class AnalysisModel(Base):
     )
     status: Mapped[str] = mapped_column(
         sa.Enum(
+            "waiting_extraction",
             "pending",
             "processing",
             "retry_scheduled",

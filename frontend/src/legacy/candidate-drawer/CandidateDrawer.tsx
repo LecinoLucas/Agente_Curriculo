@@ -941,6 +941,8 @@ export function CandidateDrawer({
                 <CandidatePreAdmissionPanel
                   jobId={candidateActiveJobId}
                   candidateId={candidate?.id ?? null}
+                  candidateName={candidate?.full_name ?? null}
+                  jobTitle={activeJobLabel ?? activeJob?.title ?? null}
                   currentStage={currentStage}
                   sendingToProtheus={stageSaving && currentStage === "pre_admission"}
                   onSendToProtheus={
@@ -948,6 +950,11 @@ export function CandidateDrawer({
                       ? async () => {
                           await handleStageChange("protheus");
                         }
+                      : undefined
+                  }
+                  onOpenHiringDecision={
+                    candidate?.id
+                      ? () => navigate(`/candidatos/${candidate.id}?tab=workflow&focus=hiring_decision`)
                       : undefined
                   }
                 />

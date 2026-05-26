@@ -1,446 +1,164 @@
-import { ClipboardList, Loader } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ClipboardList } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
-import {
-  approvePreAdmissionDocument,
-  createPreAdmission,
-  createPreAdmissionChecklistItem,
-  downloadPreAdmissionDocument,
-  getPreAdmission,
-  getPreAdmissionEvents,
-  listPreAdmissionDocuments,
-  rejectPreAdmissionDocument,
-  updatePreAdmission,
-  updatePreAdmissionChecklistItem,
-} from "../../../../services/preAdmissionService";
-import type {
-  PipelineStage,
-  PreAdmissionCase,
-  PreAdmissionChecklistItemStatus,
-  PreAdmissionChecklistItemType,
-  PreAdmissionDocument,
-  PreAdmissionEvent,
-  PreAdmissionStatus,
-} from "../../../../types/domain";
-import { AdmissionPackagePanel } from "./AdmissionPackagePanel";
-import { PreAdmissionChecklist } from "./PreAdmissionChecklist";
-import { PreAdmissionEventTimeline } from "./PreAdmissionEventTimeline";
-import { PreAdmissionStatusCard } from "./PreAdmissionStatusCard";
+import { EmptyState } from "@/components/common/EmptyState";
+import { SkeletonCards } from "@/components/common/Skeleton";
+import { AdmissionCaseWorkspacePanel } from "../../../admission-workspace/AdmissionCaseWorkspacePanel";
+import { formatContextError } from "../../../../services/errorMessages";
+import { getPreAdmission } from "../../../../services/preAdmissionService";
 
 interface CandidatePreAdmissionPanelProps {
+  caseId?: string | null;
   jobId: string | null;
   candidateId: string | null;
-  currentStage?: PipelineStage | null;
+  candidateName?: string | null;
+  jobTitle?: string | null;
+  currentStage?: string | null;
   sendingToProtheus?: boolean;
   onSendToProtheus?: () => Promise<void>;
+  onOpenHiringDecision?: () => void;
+}
+
+function BootstrapLoadingState() {
+  return (
+    <div className="space-y-4">
+      <div className="ui-card rounded-lg border border-[hsl(var(--border))] p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[hsl(var(--accent-soft))] text-[hsl(var(--brand-dark))]">
+            <ClipboardList className="h-5 w-5" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-4 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+            <div className="h-3 w-72 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+          </div>
+        </div>
+      </div>
+      <SkeletonCards count={4} columns={2} />
+    </div>
+  );
 }
 
 export function CandidatePreAdmissionPanel({
+  caseId = null,
   jobId,
   candidateId,
-  currentStage = null,
-  sendingToProtheus = false,
-  onSendToProtheus,
+  candidateName = null,
+  jobTitle = null,
+  onOpenHiringDecision,
 }: CandidatePreAdmissionPanelProps) {
-  const [preAdmissionCase, setPreAdmissionCase] = useState<PreAdmissionCase | null>(null);
-  const [events, setEvents] = useState<PreAdmissionEvent[]>([]);
-  const [documents, setDocuments] = useState<PreAdmissionDocument[]>([]);
-  const [canCreate, setCanCreate] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [resolvedCaseId, setResolvedCaseId] = useState<string | null>(caseId);
+  const [loading, setLoading] = useState(!caseId);
   const [error, setError] = useState<string | null>(null);
-  const [salaryOffer, setSalaryOffer] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [workModel, setWorkModel] = useState("");
-  const [notes, setNotes] = useState("");
 
-  const requiredItems = preAdmissionCase?.checklist_items.filter((item) => item.required) ?? [];
-  const blockingRequiredItems = requiredItems.filter(
-    (item) => item.status !== "approved" && item.status !== "waived",
-  );
-  const checklistIsReady =
-    (preAdmissionCase?.checklist_items.length ?? 0) > 0 && blockingRequiredItems.length === 0;
-  const canSendToProtheus =
-    Boolean(preAdmissionCase) &&
-    currentStage === "pre_admission" &&
-    checklistIsReady &&
-    !sendingToProtheus &&
-    !saving;
+  useEffect(() => {
+    setResolvedCaseId(caseId);
+  }, [caseId]);
 
-  const loadEvents = async (caseId: string) => {
-    const [eventsPayload, documentsPayload] = await Promise.all([
-      getPreAdmissionEvents(caseId),
-      listPreAdmissionDocuments(caseId),
-    ]);
-    setEvents(eventsPayload.events);
-    setDocuments(documentsPayload.documents);
-  };
-
-  const load = async () => {
-    if (!jobId || !candidateId) {
-      setPreAdmissionCase(null);
-      setCanCreate(false);
-      setEvents([]);
-      setDocuments([]);
+  useEffect(() => {
+    if (caseId) {
       setLoading(false);
+      setError(null);
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    try {
-      const payload = await getPreAdmission(jobId, candidateId);
-      setPreAdmissionCase(payload.case);
-      setCanCreate(payload.can_create);
-      if (payload.case) {
-        await loadEvents(payload.case.id);
-      } else {
-        setEvents([]);
-        setDocuments([]);
-      }
-    } catch {
-      setError("Não foi possível carregar a pré-admissão.");
-    } finally {
+    if (!jobId || !candidateId) {
+      setResolvedCaseId(null);
       setLoading(false);
+      setError(null);
+      return;
     }
-  };
 
-  useEffect(() => {
-    void load();
-  }, [candidateId, jobId]);
+    let cancelled = false;
 
-  const handleCreate = async () => {
-    if (!jobId || !candidateId) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const created = await createPreAdmission(jobId, candidateId, {
-        salary_offer: salaryOffer.trim() || null,
-        start_date: startDate || null,
-        work_model: workModel.trim() || null,
-        notes: notes.trim() || null,
-      });
-      setPreAdmissionCase(created);
-      setCanCreate(false);
-      await loadEvents(created.id);
-    } catch {
-      setError("Não foi possível criar a pré-admissão.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleStatusChange = async (status: PreAdmissionStatus) => {
-    if (!preAdmissionCase || status === preAdmissionCase.status) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await updatePreAdmission(preAdmissionCase.id, { status });
-      setPreAdmissionCase(updated);
-      await loadEvents(updated.id);
-    } catch {
-      setError("Não foi possível atualizar o status.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCreateItem = async (payload: {
-    item_type: PreAdmissionChecklistItemType;
-    title: string;
-    required: boolean;
-  }) => {
-    if (!preAdmissionCase) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const item = await createPreAdmissionChecklistItem(preAdmissionCase.id, payload);
-      setPreAdmissionCase((current) =>
-        current ? { ...current, checklist_items: [...current.checklist_items, item] } : current,
-      );
-      await loadEvents(preAdmissionCase.id);
-    } catch {
-      setError("Não foi possível criar o item de checklist.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleUpdateItem = async (itemId: string, status: PreAdmissionChecklistItemStatus) => {
-    if (!preAdmissionCase) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const item = await updatePreAdmissionChecklistItem(preAdmissionCase.id, itemId, { status });
-      setPreAdmissionCase((current) =>
-        current
-          ? {
-              ...current,
-              checklist_items: current.checklist_items.map((existing) =>
-                existing.id === item.id ? item : existing,
-              ),
-            }
-          : current,
-      );
-      await loadEvents(preAdmissionCase.id);
-    } catch {
-      setError("Não foi possível atualizar o item de checklist.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleApproveDocument = async (documentId: string) => {
-    if (!preAdmissionCase) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const document = await approvePreAdmissionDocument(documentId);
-      setDocuments((current) => current.map((item) => (item.id === document.id ? document : item)));
-      await load();
-    } catch {
-      setError("Não foi possível aprovar o documento.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRejectDocument = async (documentId: string, reviewNotes: string) => {
-    if (!preAdmissionCase) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const document = await rejectPreAdmissionDocument(documentId, reviewNotes);
-      setDocuments((current) => current.map((item) => (item.id === document.id ? document : item)));
-      await load();
-    } catch {
-      setError("Não foi possível rejeitar o documento.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDownloadDocument = async (documentId: string, filename: string) => {
-    setError(null);
-    try {
-      const blob = await downloadPreAdmissionDocument(documentId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError("Não foi possível baixar o documento.");
-    }
-  };
-
-  const handleSendToProtheus = async () => {
-    if (!preAdmissionCase || !canSendToProtheus) return;
-
-    setSaving(true);
-    setError(null);
-    try {
-      let nextCase = preAdmissionCase;
-      if (preAdmissionCase.status !== "ready_for_admission") {
-        nextCase = await updatePreAdmission(preAdmissionCase.id, { status: "ready_for_admission" });
-        setPreAdmissionCase(nextCase);
+    const bootstrapCase = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const payload = await getPreAdmission(jobId, candidateId);
+        if (cancelled) return;
+        setResolvedCaseId(payload.case?.id ?? null);
+      } catch (requestError) {
+        if (cancelled) return;
+        setResolvedCaseId(null);
+        setError(
+          formatContextError(
+            requestError,
+            "Não foi possível localizar o caso de pré-admissão.",
+            "Revise a decisão de contratação e tente novamente.",
+          ),
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
+    };
 
-      if (onSendToProtheus) {
-        await onSendToProtheus();
-      }
+    void bootstrapCase();
 
-      await loadEvents(nextCase.id);
-      await load();
-    } catch {
-      setError("Não foi possível liberar o candidato para Protheus.");
-    } finally {
-      setSaving(false);
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [candidateId, caseId, jobId]);
+
+  const openPageHref = useMemo(
+    () => (resolvedCaseId ? `/admission/cases/${resolvedCaseId}` : null),
+    [resolvedCaseId],
+  );
 
   if (loading) {
+    return <BootstrapLoadingState />;
+  }
+
+  if (error) {
     return (
-      <div role="status" className="flex items-center justify-center p-8">
-        <Loader className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+      <div className="ui-card rounded-lg border border-[hsl(var(--border))] p-6">
+        <EmptyState
+          icon="⚠️"
+          title="Pré-admissão indisponível"
+          description={error}
+          action={
+            onOpenHiringDecision
+              ? {
+                  label: "Ir para workflow",
+                  onClick: onOpenHiringDecision,
+                }
+              : undefined
+          }
+        />
       </div>
     );
   }
 
-  if (!jobId || !candidateId) {
+  if (!resolvedCaseId) {
     return (
-      <div className="p-6">
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-5 text-sm text-[hsl(var(--text-muted))]">
-          Vincule o candidato a uma vaga ativa para acompanhar pré-admissão.
-        </div>
+      <div className="ui-card rounded-lg border border-[hsl(var(--border))] p-6">
+        <EmptyState
+          icon="📋"
+          title="Caso admissional ainda não aberto"
+          description={
+            candidateName && jobTitle
+              ? `${candidateName} ainda não possui um caso ativo de pré-admissão para ${jobTitle}.`
+              : "Abra o caso após a decisão de contratação para começar o checklist operacional."
+          }
+          action={
+            onOpenHiringDecision
+              ? {
+                  label: "Abrir workflow",
+                  onClick: onOpenHiringDecision,
+                }
+              : undefined
+          }
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-[hsl(var(--accent-soft))] p-2 text-[hsl(var(--primary))]">
-          <ClipboardList className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-            Pós-decisão
-          </p>
-          <h3 className="text-base font-semibold text-[hsl(var(--text))]">
-            Pré-admissão manual
-          </h3>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-            Fluxo auditável para checklist, correções e liberação controlada para Protheus.
-          </p>
-        </div>
-      </div>
-
-      {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
-          {error}
-        </div>
-      ) : null}
-
-      {!preAdmissionCase && !canCreate ? (
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-5 text-sm text-[hsl(var(--text-muted))]">
-          Pré-admissão disponível apenas após decisão de contratação.
-        </div>
-      ) : null}
-
-      {!preAdmissionCase && canCreate ? (
-        <div className="space-y-4 rounded-lg border border-[hsl(var(--border))] bg-white p-4">
-          <div>
-            <h4 className="text-sm font-semibold text-[hsl(var(--text))]">Criar pré-admissão</h4>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
-              Registre a oferta inicial e acompanhe as pendências manualmente.
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="block space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                Oferta salarial
-              </span>
-              <input
-                value={salaryOffer}
-                onChange={(event) => setSalaryOffer(event.target.value)}
-                placeholder="12000.00"
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="block space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                Data prevista
-              </span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="block space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-                Modelo de trabalho
-              </span>
-              <input
-                value={workModel}
-                onChange={(event) => setWorkModel(event.target.value)}
-                placeholder="Híbrido"
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
-          <label className="block space-y-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Observações
-            </span>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => void handleCreate()}
-            disabled={saving}
-            className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-          >
-            {saving ? "Criando..." : "Criar pré-admissão"}
-          </button>
-        </div>
-      ) : null}
-
-      {preAdmissionCase ? (
-        <>
-          <div
-            className={[
-              "rounded-lg border px-4 py-3",
-              preAdmissionCase.checklist_items.length === 0
-                ? "border-slate-200 bg-slate-50 text-slate-800"
-                : checklistIsReady
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                  : "border-amber-200 bg-amber-50 text-amber-900",
-            ].join(" ")}
-          >
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide">
-                  Liberação operacional
-                </p>
-                <p className="mt-1 text-sm">
-                  {preAdmissionCase.checklist_items.length === 0
-                    ? "Cadastre ao menos um item no checklist antes de seguir para Protheus."
-                    : checklistIsReady
-                      ? "Todos os itens obrigatórios estão aprovados ou dispensados. O candidato pode seguir para Protheus."
-                      : `${blockingRequiredItems.length} item(ns) obrigatório(s) ainda bloqueiam o envio para Protheus.`}
-                </p>
-                {!checklistIsReady && blockingRequiredItems.length > 0 ? (
-                  <p className="mt-2 text-xs">
-                    Pendências: {blockingRequiredItems.map((item) => item.title).slice(0, 3).join(", ")}
-                    {blockingRequiredItems.length > 3 ? "..." : ""}
-                  </p>
-                ) : null}
-              </div>
-              {currentStage === "pre_admission" ? (
-                <button
-                  type="button"
-                  onClick={() => void handleSendToProtheus()}
-                  disabled={!canSendToProtheus}
-                  className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {sendingToProtheus || saving ? "Enviando..." : "Enviar para Protheus"}
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <PreAdmissionStatusCard
-            preAdmissionCase={preAdmissionCase}
-            updating={saving}
-            onStatusChange={handleStatusChange}
-          />
-          <PreAdmissionChecklist
-            items={preAdmissionCase.checklist_items}
-            documents={documents}
-            updating={saving}
-            onCreateItem={handleCreateItem}
-            onUpdateItem={handleUpdateItem}
-            onApproveDocument={handleApproveDocument}
-            onRejectDocument={handleRejectDocument}
-            onDownloadDocument={handleDownloadDocument}
-          />
-          <PreAdmissionEventTimeline events={events} />
-          <AdmissionPackagePanel
-            caseId={preAdmissionCase.id}
-            caseStatus={preAdmissionCase.status}
-          />
-        </>
-      ) : null}
-    </div>
+    <AdmissionCaseWorkspacePanel
+      caseId={resolvedCaseId}
+      openPageHref={openPageHref}
+      integrationHref={`/admission/cases/${resolvedCaseId}/integration`}
+    />
   );
 }

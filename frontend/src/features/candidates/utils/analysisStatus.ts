@@ -15,6 +15,8 @@ export type CandidateAnalysisSummary = {
 export type CandidateAnalysisUiStateValue =
   | "no_resume"
   | "waiting_job"
+  | "waiting_extraction"
+  | "queued"
   | "ready"
   | "processing"
   | "retry_scheduled"
@@ -184,6 +186,8 @@ export function getCandidateAnalysisUiState({
   pollingAnalysisId?: string | null;
   extractionStatus?: string | null | undefined;
 }): CandidateAnalysisUiState {
+  const normalizedStatus = analysisStatus ?? aiStatus ?? null;
+
   // Handle document extraction failures separately
   if (extractionStatus === "failed") {
     return {
@@ -193,6 +197,17 @@ export function getCandidateAnalysisUiState({
       primaryAction: "Tentar novamente",
       severity: "danger",
       inProgress: false,
+    };
+  }
+
+  if (normalizedStatus === "waiting_extraction") {
+    return {
+      state: "waiting_extraction",
+      title: "Aguardando extração",
+      description: "A análise já foi criada e aguarda a extração do currículo.",
+      primaryAction: "Acompanhar extração",
+      severity: "info",
+      inProgress: true,
     };
   }
 
@@ -230,7 +245,6 @@ export function getCandidateAnalysisUiState({
     };
   }
 
-  const normalizedStatus = analysisStatus ?? aiStatus ?? null;
   const hasScore = jobFitScore !== null && jobFitScore !== undefined;
 
   if (hasScore || normalizedStatus === "completed") {
@@ -266,15 +280,22 @@ export function getCandidateAnalysisUiState({
     };
   }
 
-  if (
-    pollingAnalysisId ||
-    normalizedStatus === "pending" ||
-    normalizedStatus === "processing"
-  ) {
+  if (normalizedStatus === "pending") {
+    return {
+      state: "queued",
+      title: "Análise na fila",
+      description: "A análise do currículo já está na fila.",
+      primaryAction: "Acompanhar análise",
+      severity: "info",
+      inProgress: true,
+    };
+  }
+
+  if (pollingAnalysisId || normalizedStatus === "processing") {
     return {
       state: "processing",
-      title: "Analisando com IA",
-      description: "Analisando currículo com IA...",
+      title: "Análise em processamento",
+      description: "A análise do currículo está em processamento.",
       primaryAction: "Acompanhar análise",
       severity: "info",
       inProgress: true,

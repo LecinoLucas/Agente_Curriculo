@@ -100,7 +100,15 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     pipelineStage === "admitted"
   ) {
     // Pre-admission/Contratado stage
-    if (hasHiringDecision || hasPreAdmission || hasAdmissionPackage) {
+    if (
+      hasHiringDecision ||
+      hasPreAdmission ||
+      hasAdmissionPackage ||
+      pipelineStage === "hired" ||
+      pipelineStage === "pre_admission" ||
+      pipelineStage === "protheus" ||
+      pipelineStage === "admitted"
+    ) {
       visible.add("pre_admission");
     }
 

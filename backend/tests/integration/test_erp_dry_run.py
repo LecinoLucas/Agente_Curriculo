@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.admission_package_service import AdmissionPackageService
 from src.application.services.erp_integration_service import ErpIntegrationService
+from src.core.settings import settings
 from src.infrastructure.security.password_service import hash_password
 from src.infrastructure.database.models import (
     CandidateJobHiringDecisionModel,
@@ -244,6 +245,87 @@ async def test_blocks_dry_run_if_package_not_approved(
     )
     assert resp.status_code == 422
     assert "approved_for_export" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_protheus_capabilities_default_blocks_real_send(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "dry_run")
+    monkeypatch.setattr(settings, "PROTHEUS_REAL_SEND_ENABLED", False)
+    monkeypatch.setattr(settings, "ERP_ALLOW_REAL_SEND", False)
+    monkeypatch.setattr(settings, "PROTHEUS_BASE_URL", "")
+
+    headers = await _auth_headers(client, db_session)
+
+    resp = await client.get(
+        "/api/v1/admission-packages/erp/protheus/capabilities",
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["environment"] == "development"
+    assert body["integration_mode"] == "dry_run"
+    assert body["dry_run"]["available"] is True
+    assert body["simulation"]["available"] is True
+    assert body["mock"]["available"] is False
+    assert body["real_send"]["available"] is False
+    assert "PROTHEUS_REAL_SEND_ENABLED" in body["real_send"]["blocking_flags"]
+    assert "ERP_ALLOW_REAL_SEND" in body["real_send"]["blocking_flags"]
+    assert "PROTHEUS_BASE_URL" in body["real_send"]["missing_configuration"]
+
+
+@pytest.mark.asyncio
+async def test_protheus_capabilities_reports_mock_mode(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+
+    resp = await client.get(
+        "/api/v1/admission-packages/erp/protheus/capabilities",
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["integration_mode"] == "mock"
+    assert body["dry_run"]["available"] is True
+    assert body["mock"]["available"] is True
+
+
+@pytest.mark.asyncio
+async def test_protheus_capabilities_allows_real_send_only_when_fully_configured(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "staging")
+    monkeypatch.setattr(settings, "PROTHEUS_REAL_SEND_ENABLED", True)
+    monkeypatch.setattr(settings, "ERP_ALLOW_REAL_SEND", True)
+    monkeypatch.setattr(settings, "PROTHEUS_BASE_URL", "https://homolog.protheus.test")
+    monkeypatch.setattr(settings, "PROTHEUS_AUTH_MODE", "basic")
+    monkeypatch.setattr(settings, "PROTHEUS_USERNAME", "homolog-user")
+    monkeypatch.setattr(settings, "PROTHEUS_PASSWORD", "homolog-pass")
+    headers = await _auth_headers(client, db_session)
+
+    resp = await client.get(
+        "/api/v1/admission-packages/erp/protheus/capabilities",
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["real_send"]["available"] is True
+    assert body["real_send"]["disabled_reason"] is None
+    assert body["real_send"]["missing_configuration"] == []
+    assert body["real_send"]["blocking_flags"] == []
 
 
 @pytest.mark.asyncio
