@@ -64,7 +64,8 @@
       "Bash(python3 -c ' *)",
       "Bash(.venv/bin/python -c \"from src.interface.api.dependencies import PreAdmissionAdmin; print\\('OK'\\)\")",
       "Bash(python3 -m py_compile src/interface/api/dependencies.py src/interface/api/routers/pre_admission.py src/interface/api/schemas/pipeline_schemas.py src/application/services/pipeline_service.py)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(xargs ls -1)"
     ],
     "additionalDirectories": [
       "/Users/lecinolucas/Developer/Agente_Curriculo/backend/alembic/versions"
