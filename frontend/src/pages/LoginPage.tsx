@@ -97,7 +97,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="lg:h-screen w-full relative overflow-x-hidden overflow-y-auto lg:overflow-hidden font-sans text-foreground selection:bg-[#8a1c31]/10 selection:text-[#8a1c31] flex flex-col justify-between bg-[#FDFBF7]">
+    <div className="min-h-screen w-full relative overflow-x-hidden font-sans text-foreground selection:bg-[#8a1c31]/10 selection:text-[#8a1c31] flex flex-col bg-[#FDFBF7]">
       
       {/* Layered SVG Wave Background - Compact and subtle in the top-left corner */}
       <div className="absolute top-0 left-0 w-[395px] h-[220px] z-0 overflow-hidden pointer-events-none">
@@ -120,7 +120,7 @@ export function LoginPage() {
       </div>
 
       {/* Main Container - Locked height on desktop to prevent scrollbars */}
-      <main className="w-full max-w-[1440px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10 lg:h-[calc(100vh-76px)] lg:overflow-hidden">
+      <main className="w-full max-w-[1440px] mx-auto flex-1 flex flex-col lg:flex-row relative z-10">
         
         {/* Left Column - Hero */}
         <div className="hidden lg:flex w-full lg:w-[50%] flex-col justify-between py-8 px-10 xl:pl-16 xl:pr-8 relative h-full shrink-0 z-10 overflow-hidden">
@@ -296,24 +296,37 @@ export function LoginPage() {
         </div>
 
         {/* Right Column - Login Panel */}
-        <div className="w-full lg:w-[50%] flex flex-col items-center justify-center px-6 py-10 lg:px-12 xl:pr-24 relative z-10 h-full overflow-hidden">
+        <div className="w-full lg:w-[50%] flex flex-col items-center justify-center px-5 py-10 lg:px-10 lg:py-8 xl:pr-20 relative z-10 lg:min-h-full lg:overflow-y-auto">
           
-          {/* Top Absolute Link for Candidate Portal - positioned top-right on desktop */}
-          <div className="lg:absolute lg:top-8 lg:right-12 mb-6 lg:mb-0 self-end lg:self-auto z-20">
-            <Link 
-              to="/candidato" 
-              className="flex items-center gap-1.5 text-xs font-semibold text-[#4A0E1A] hover:text-[#8a1c31] transition-colors"
+          {/* Portal do Candidato — fixed discreetly at top-right corner */}
+          <div className="absolute top-5 right-5 xl:right-8 z-20 hidden lg:flex">
+            <Link
+              to="/candidato"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-[#5c091d]/12 bg-white/60 px-3 text-[10px] font-semibold text-[#74676a] shadow-sm backdrop-blur-sm transition-all hover:border-[#8a1c31]/25 hover:bg-white hover:text-[#751227]"
             >
-              <User className="h-4 w-4" />
+              <User className="h-3 w-3" />
+              <span>Portal do Candidato</span>
+            </Link>
+          </div>
+
+          {/* Mobile: Portal button visible inline */}
+          <div className="mb-5 flex w-full max-w-[380px] justify-end lg:hidden">
+            <Link
+              to="/candidato"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-[#5c091d]/16 bg-white/72 px-3.5 text-[11px] font-bold text-[#4A0E1A] shadow-[0_10px_24px_-20px_rgba(74,14,26,0.9)] backdrop-blur transition-all hover:border-[#8a1c31]/35 hover:bg-white hover:text-[#751227] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8a1c31]/15"
+            >
+              <User className="h-3.5 w-3.5" />
               <span>Portal do Candidato</span>
             </Link>
           </div>
 
           {/* Login Card */}
-          <div className="w-full max-w-[420px] bg-white rounded-[2.5rem] p-8 shadow-[0_25px_60px_-15px_rgba(74,14,26,0.05)] border border-[#e8dcdc] flex flex-col relative transition-all duration-500 ease-out hover:bg-[#FAF8F6] hover:border-[#8a1c31]/40 hover:shadow-[0_35px_70px_-10px_rgba(74,14,26,0.09)]">
+          <div className="w-full max-w-[380px] overflow-hidden rounded-[1.75rem] border border-[#7A1830]/25 bg-[#fffaf8] shadow-[0_24px_70px_-24px_rgba(74,14,26,0.55)] flex flex-col relative transition-all duration-300 ease-out hover:border-[#8a1c31]/45 hover:shadow-[0_28px_80px_-24px_rgba(74,14,26,0.68)]">
+            <div className="h-1.5 w-full bg-gradient-to-r from-[#4A0E1A] via-[#8a1c31] to-[#C1121F]" />
+            <div className="p-6 xl:p-7">
             
             {/* Mobile Branding (Visible only on mobile, required by E2E tests) */}
-            <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
+            <div className="lg:hidden flex items-center justify-center gap-2 mb-5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#751227] text-xs font-bold text-white shadow-md">
                 RA
               </div>
@@ -323,17 +336,17 @@ export function LoginPage() {
             </div>
 
             {/* Circular Logo at Top Center */}
-            <div className="flex flex-col items-center text-center mb-5">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#4A0E1A] text-xl font-serif-display font-bold text-white shadow-md mb-4">
+            <div className="flex flex-col items-center text-center mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4A0E1A] to-[#8a1c31] text-lg font-serif-display font-bold text-white shadow-[0_14px_30px_-16px_rgba(74,14,26,0.9)] mb-3">
                 RA
               </div>
-              <h2 className="text-2xl xl:text-3xl font-serif-display font-bold tracking-tight text-[#1a0509]">Acessar plataforma</h2>
-              <p className="text-[12px] xl:text-[13px] font-medium text-[#8a8183] mt-2 leading-relaxed px-2">
+              <h2 className="text-[24px] xl:text-[26px] font-serif-display font-bold tracking-tight text-[#1a0509]">Acessar plataforma</h2>
+              <p className="text-[12px] font-medium text-[#74676a] mt-1.5 leading-relaxed px-2">
                 Entre com sua conta corporativa para continuar no painel de recrutamento.
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="email" className="text-[11px] font-bold text-[#1a0509]">
                   E-mail
@@ -348,7 +361,7 @@ export function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="seu@email.com"
-                    className="h-[48px] w-full bg-white border border-[#e8dcdc] rounded-xl pl-11 pr-4 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
+                    className="h-11 w-full bg-white border border-[#d9c6c8] rounded-xl pl-11 pr-4 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
                   />
                 </div>
               </div>
@@ -372,7 +385,7 @@ export function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="h-[48px] w-full bg-white border border-[#e8dcdc] rounded-xl pl-11 pr-12 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
+                    className="h-11 w-full bg-white border border-[#d9c6c8] rounded-xl pl-11 pr-12 text-[13px] font-semibold text-[#1a0509] placeholder:text-[#a8a1a3] outline-none focus:border-[#8a1c31] focus:ring-4 focus:ring-[#8a1c31]/10 transition-all duration-200"
                   />
                   <button
                     type="button"
@@ -395,14 +408,14 @@ export function LoginPage() {
               <Button 
                 type="submit" 
                 disabled={loading} 
-                className="h-[48px] w-full mt-2 text-[14px] font-bold tracking-wide bg-[#6b1626] hover:bg-[#4A0E1A] text-white rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-300"
+                className="h-11 w-full mt-2 text-[13px] font-extrabold tracking-wide bg-gradient-to-r from-[#4A0E1A] via-[#7A1830] to-[#C1121F] hover:brightness-105 text-white rounded-xl flex items-center justify-center gap-2 shadow-[0_16px_34px_-18px_rgba(74,14,26,0.95)] hover:shadow-[0_18px_40px_-18px_rgba(74,14,26,1)] transition-all duration-300"
               >
                 {!loading && <ArrowRightToLine className="h-4 w-4" />}
                 {loading ? "Entrando no painel…" : "Entrar no painel"}
               </Button>
             </form>
 
-            <div className="flex items-center gap-4 my-5">
+            <div className="flex items-center gap-4 my-4">
               <span className="h-[1px] flex-1 bg-[#e8dcdc]" />
               <span className="text-[11px] text-[#a8a1a3] font-medium">ou entrar com</span>
               <span className="h-[1px] flex-1 bg-[#e8dcdc]" />
@@ -416,15 +429,16 @@ export function LoginPage() {
               />
             </div>
 
-            <div className="flex items-start gap-2.5 text-[10px] leading-snug text-[#8a8183] font-medium mt-5 bg-[#FCF5F5] border border-[#f4e4e2] p-3.5 rounded-xl">
+            <div className="flex items-start gap-2.5 text-[10px] leading-snug text-[#74676a] font-medium mt-4 bg-[#F7E9E8] border border-[#e4caca] p-3 rounded-xl">
               <Shield className="h-4.5 w-4.5 text-[#8a1c31] shrink-0" />
               <p>
                 <strong className="text-[#3d0815] font-bold block mb-0.5">Acesso restrito a colaboradores autorizados.</strong>
                 Ao continuar, você concorda com as políticas da empresa.
               </p>
             </div>
+            </div>
           </div>
-          
+
         </div>
       </main>
 

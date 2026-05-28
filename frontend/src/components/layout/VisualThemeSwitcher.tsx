@@ -18,7 +18,7 @@ const THEMES: Array<{
   {
     value: "theme-2",
     label: "Tema 2",
-    description: "Azul Industrial",
+    description: "Botânico Floral",
   },
 ];
 

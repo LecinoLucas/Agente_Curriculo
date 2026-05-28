@@ -43,195 +43,180 @@
 
 @layer base {
   /* ==========================================================================
-     LIGHT THEME — MARAJÓ WARM BRAND
+     LIGHT THEME — ELECTRIC AMETHYST
      --------------------------------------------------------------------------
      Direção visual:
-     - Fundo palha/bege para sensação premium e menos "SaaS cinza genérico".
-     - Cards claros em creme.
-     - Texto principal marrom/grafite para boa leitura.
-     - Vermelho Marajó como cor principal de ação, foco e destaque.
-     - Navbar vinho/marrom avermelhada para conversar com a marca.
+     - Fundo gelo ultra-limpo, quase branco com levíssimo toque violeta.
+     - Cards brancos puros com sombra muito sutil.
+     - Texto grafite frio para máxima legibilidade.
+     - Roxo elétrico vibrante como cor de ação, foco e CTA.
+     - Navbar midnight profundo para presença premium.
      ========================================================================== */
 
   :root {
     /* -----------------------------------------------------------------------
-       Brand colors — Marajó
-       -----------------------------------------------------------------------
-       Tokens auxiliares da marca.
-       Eles não substituem todos os tokens shadcn, mas ajudam em casos
-       específicos onde a marca precisa aparecer com clareza.
+       Brand colors — Electric Amethyst
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca no tema atual. */
-    --brand:           356 86% 55%;
-    /* Versão mais escura da marca, usada em bordas, hover e profundidade. */
-    --brand-dark:      356 78% 42%;
-    /* Versão suave da marca, usada em fundos leves e badges. */
-    --brand-soft:      356 88% 95%;
-    /* Tom luminoso da marca, usado em brilhos e gradientes. */
-    --brand-glow:      356 90% 62%;
+    /* Cor principal da marca: roxo elétrico vibrante. */
+    --brand:           263 85% 58%;
+    /* Versão mais escura da marca para hover e profundidade. */
+    --brand-dark:      263 78% 42%;
+    /* Versão suave da marca para fundos de badges e highlights. */
+    --brand-soft:      263 88% 95%;
+    /* Tom luminoso da marca para glows e gradientes. */
+    --brand-glow:      263 90% 70%;
 
     /* -----------------------------------------------------------------------
-       Core surfaces
-       -----------------------------------------------------------------------
-       Superfícies principais do tema claro.
-       --bg: fundo geral da aplicação.
-       --surface: cards, painéis e caixas principais.
-       --surface-muted: áreas secundárias, hover suave, blocos e divisórias.
+       Core surfaces — Light
        ----------------------------------------------------------------------- */
 
-    /* Fundo principal da aplicação. */
-    --bg:             42 50% 93%;
-    /* Superfície principal de cards, painéis e caixas. */
-    --surface:        42 44% 98%;
-    /* Superfície secundária para áreas discretas, hovers e blocos internos. */
-    --surface-muted:  39 34% 90%;
-    /* Borda padrão do tema. */
-    --border:         34 26% 77%;
-    /* Borda mais forte para destaque visual. */
-    --border-strong:  32 22% 62%;
+    /* Fundo principal: gelo levemente violeta. */
+    --bg:             250 30% 96%;
+    /* Superfície de cards e painéis: branco quase puro. */
+    --surface:        250 20% 99%;
+    /* Superfície secundária: gelo levemente acinzentado. */
+    --surface-muted:  248 22% 92%;
+    /* Borda padrão: frio e sutil. */
+    --border:         248 18% 84%;
+    /* Borda forte: mais definida para separação visual. */
+    --border-strong:  248 16% 70%;
 
     /* -----------------------------------------------------------------------
        Typography
-       -----------------------------------------------------------------------
-       Texto com marrom/grafite em vez de cinza frio.
-       Isso combina melhor com fundo palha e com a marca vermelha.
        ----------------------------------------------------------------------- */
 
-    /* Cor principal de texto. */
-    --text:           24 34% 14%;
-    /* Cor de texto secundário ou menos importante. */
-    --text-muted:     26 16% 40%;
+    /* Texto principal: grafite frio escuro. */
+    --text:           240 18% 12%;
+    /* Texto secundário: slate médio. */
+    --text-muted:     240 10% 44%;
 
     /* -----------------------------------------------------------------------
        Semantic colors
-       -----------------------------------------------------------------------
-       Cores semânticas.
-       Cuidado: danger é diferente do vermelho da marca para evitar confusão.
        ----------------------------------------------------------------------- */
 
-    /* Cor semântica para sucesso/aprovado. */
-    --success:        154 58% 30%;
-    /* Fundo suave para estados de sucesso. */
-    --success-soft:   145 44% 91%;
+    /* Sucesso: verde esmeralda. */
+    --success:        158 64% 32%;
+    /* Fundo suave de sucesso. */
+    --success-soft:   152 50% 92%;
 
-    /* Cor semântica para alerta/atenção. */
-    --warning:        36 88% 38%;
-    /* Fundo suave para estados de alerta. */
-    --warning-soft:   42 86% 90%;
+    /* Alerta: âmbar vibrante. */
+    --warning:        38 92% 40%;
+    /* Fundo suave de alerta. */
+    --warning-soft:   44 88% 92%;
 
-    /* Cor semântica para erro/risco, separada do vermelho da marca. */
-    --danger:         348 72% 42%;
-    /* Fundo suave para estados de erro/risco. */
-    --danger-soft:    350 70% 95%;
+    /* Erro/risco: vermelho vivo (diferenciado do primary). */
+    --danger:         4 80% 48%;
+    /* Fundo suave de erro. */
+    --danger-soft:    4 74% 95%;
 
     /* -----------------------------------------------------------------------
        Accent
-       -----------------------------------------------------------------------
-       Accent suave em vermelho claro para badges, selected states e destaques.
        ----------------------------------------------------------------------- */
 
-    /* Fundo de destaque suave. */
-    --accent-soft:     356 88% 95%;
-    /* Texto usado sobre áreas de destaque suave. */
-    --accent-contrast: 24 34% 14%;
-
-    /* -----------------------------------------------------------------------
-       Navbar
-       -----------------------------------------------------------------------
-       Navbar institucional em vinho escuro.
-       A cor precisa conversar com a logo sem virar vermelho berrante.
-       ----------------------------------------------------------------------- */
+    /* Fundo de destaque suave violeta. */
+    --accent-soft:     263 88% 95%;
+    /* Texto sobre destaque suave. */
+    --accent-contrast: 240 18% 12%;
 
     /* -----------------------------------------------------------------------
        shadcn/radix token contract
-       -----------------------------------------------------------------------
-       Tokens esperados por componentes baseados em shadcn/ui e Radix.
        ----------------------------------------------------------------------- */
 
-    /* Token shadcn/Radix para fundo geral. */
-    --background:          42 50% 93%;
-    /* Token shadcn/Radix para texto principal. */
-    --foreground:          24 34% 14%;
+    /* Fundo geral. */
+    --background:          250 30% 96%;
+    /* Texto principal. */
+    --foreground:          240 18% 12%;
 
-    /* Token shadcn/Radix para fundo de cards. */
-    --card:                42 44% 98%;
-    /* Token shadcn/Radix para texto dentro de cards. */
-    --card-foreground:     24 34% 14%;
+    /* Fundo de cards. */
+    --card:                250 20% 99%;
+    /* Texto dentro de cards. */
+    --card-foreground:     240 18% 12%;
 
-    /* Token shadcn/Radix para fundo de popovers/dropdowns. */
-    --popover:             42 44% 98%;
-    /* Token shadcn/Radix para texto em popovers/dropdowns. */
-    --popover-foreground:  24 34% 14%;
+    /* Fundo de popovers/dropdowns. */
+    --popover:             250 20% 99%;
+    /* Texto em popovers. */
+    --popover-foreground:  240 18% 12%;
 
-    /* Cor principal de ação: botões, foco e CTA. */
-    --primary:             356 86% 55%;
-    /* Texto usado sobre a cor primary. */
+    /* Cor principal de ação: roxo elétrico. */
+    --primary:             263 85% 58%;
+    /* Texto sobre primary. */
     --primary-foreground:  0 0% 100%;
 
-    /* Token shadcn/Radix para áreas secundárias. */
-    --secondary:           39 34% 90%;
-    /* Texto usado sobre áreas secundárias. */
-    --secondary-foreground:24 34% 14%;
+    /* Áreas secundárias. */
+    --secondary:           248 22% 92%;
+    /* Texto sobre secundário. */
+    --secondary-foreground:240 18% 12%;
 
-    /* Token shadcn/Radix para fundos discretos. */
-    --muted:               39 34% 90%;
-    /* Texto secundário em componentes shadcn/Radix. */
-    --muted-foreground:    26 16% 40%;
+    /* Fundos discretos. */
+    --muted:               248 22% 92%;
+    /* Texto discreto. */
+    --muted-foreground:    240 10% 44%;
 
-    /* Token shadcn/Radix para área de destaque. */
-    --accent:              356 88% 95%;
-    /* Texto usado sobre o accent. */
-    --accent-foreground:   356 78% 38%;
+    /* Área de destaque. */
+    --accent:              263 88% 95%;
+    /* Texto sobre accent. */
+    --accent-foreground:   263 75% 38%;
 
-    /* Token shadcn/Radix para ações destrutivas. */
-    --destructive:         348 72% 42%;
-    /* Texto usado sobre destructive. */
+    /* Ações destrutivas. */
+    --destructive:         4 80% 48%;
+    /* Texto sobre destructive. */
     --destructive-foreground: 0 0% 100%;
 
-    /* Borda/fundo base de inputs. */
-    --input:               34 26% 77%;
-    /* Cor do anel de foco acessível. */
-    --ring:                356 86% 55%;
-    /* Raio padrão global dos componentes. */
+    /* Base de inputs. */
+    --input:               248 18% 84%;
+    /* Anel de foco. */
+    --ring:                263 85% 58%;
+    /* Raio padrão. */
     --radius:              0.75rem;
 
     /* -----------------------------------------------------------------------
-       Layout accents
-       -----------------------------------------------------------------------
-       Tokens usados por sidebar, hero, banners e grandes áreas visuais.
+       Navbar — Midnight deep purple
        ----------------------------------------------------------------------- */
 
-    /* Início do gradiente/área visual da sidebar. */
-    --sidebar-start:       42 54% 96%;
-    /* Fim do gradiente/área visual da sidebar. */
-    --sidebar-end:         38 40% 90%;
-    /* Cor de destaque da sidebar. */
-    --sidebar-accent:      356 86% 55%;
+    /* Fundo da navbar: midnight profundo. */
+    --nav-bg:              268 60% 10%;
+    /* Texto da navbar. */
+    --nav-text:            0 0% 100%;
+    /* Texto secundário da navbar. */
+    --nav-muted:           263 40% 74%;
+    /* Fundo do item ativo. */
+    --nav-active-bg:       263 72% 28%;
+    /* Texto do item ativo. */
+    --nav-active-text:     0 0% 100%;
+    /* Borda da navbar. */
+    --nav-border:          268 50% 16%;
 
-    /* Início do gradiente principal/hero. */
-    --hero-start:          356 86% 55%;
-    /* Fim do gradiente principal/hero. */
-    --hero-end:            12 82% 52%;
+    /* -----------------------------------------------------------------------
+       Layout accents
+       ----------------------------------------------------------------------- */
 
-    /* Primeiro brilho radial do fundo da página. */
-    --page-glow-start:     356 88% 94%;
-    /* Segundo brilho radial do fundo da página. */
-    --page-glow-end:       24 76% 92%;
-    /* Início do gradiente base da página. */
-    --page-gradient-start: 42 50% 94%;
-    /* Fim do gradiente base da página. */
-    --page-gradient-end:   39 36% 89%;
+    /* Gradiente sidebar. */
+    --sidebar-start:       250 28% 96%;
+    --sidebar-end:         248 22% 92%;
+    /* Destaque sidebar. */
+    --sidebar-accent:      263 85% 58%;
+
+    /* Gradiente hero: roxo para ciano. */
+    --hero-start:          263 85% 58%;
+    --hero-end:            192 90% 46%;
+
+    /* Glows de fundo. */
+    --page-glow-start:     263 88% 94%;
+    --page-glow-end:       192 78% 92%;
+    /* Gradiente base da página. */
+    --page-gradient-start: 250 30% 96%;
+    --page-gradient-end:   248 22% 92%;
   }
 
   /* ==========================================================================
-     DARK THEME — MARAJÓ DARK VIVO
+     DARK THEME — ELECTRIC AMETHYST MIDNIGHT
      --------------------------------------------------------------------------
      Direção visual:
-     - Dark vivo, não preto morto.
-     - Fundos vinho/ameixa escuros com brilho vermelho sutil.
-     - Cards escuros com profundidade.
-     - Vermelho da marca mais luminoso para CTA e foco.
+     - Midnight profundo: fundos quase-preto com subtom violeta.
+     - Cards levemente mais claros com profundidade real.
+     - Roxo elétrico luminoso para CTA, foco e destaques.
+     - Detalhes em ciano para contraponto vibrante.
      ========================================================================== */
 
   :root[data-theme="dark"] {
@@ -239,155 +224,145 @@
        Brand colors — versão dark
        ----------------------------------------------------------------------- */
 
-    /* Cor principal da marca no tema atual. */
-    --brand:           356 88% 62%;
-    /* Versão mais escura da marca, usada em bordas, hover e profundidade. */
-    --brand-dark:      356 76% 46%;
-    /* Versão suave da marca, usada em fundos leves e badges. */
-    --brand-soft:      356 42% 22%;
-    /* Tom luminoso da marca, usado em brilhos e gradientes. */
-    --brand-glow:      356 92% 68%;
+    /* Cor principal da marca: roxo elétrico intensificado no dark. */
+    --brand:           263 90% 68%;
+    /* Versão escura da marca. */
+    --brand-dark:      263 76% 50%;
+    /* Versão suave da marca. */
+    --brand-soft:      263 38% 24%;
+    /* Tom luminoso da marca para glow. */
+    --brand-glow:      263 92% 76%;
 
     /* -----------------------------------------------------------------------
-       Core surfaces
+       Core surfaces — Midnight
        ----------------------------------------------------------------------- */
 
-    /* Fundo principal da aplicação. */
-    --bg:             350 24% 12%;
-    /* Superfície principal de cards, painéis e caixas. */
-    --surface:        348 22% 16%;
-    /* Superfície secundária para áreas discretas, hovers e blocos internos. */
-    --surface-muted:  348 20% 20%;
-    /* Borda padrão do tema. */
-    --border:         350 18% 28%;
-    /* Borda mais forte para destaque visual. */
-    --border-strong:  350 20% 38%;
+    /* Fundo principal: midnight violeta profundo. */
+    --bg:             264 32% 7%;
+    /* Superfície de cards: violeta escuro elevado. */
+    --surface:        262 28% 11%;
+    /* Superfície secundária. */
+    --surface-muted:  262 24% 15%;
+    /* Borda padrão. */
+    --border:         262 20% 22%;
+    /* Borda forte. */
+    --border-strong:  263 48% 36%;
 
     /* -----------------------------------------------------------------------
        Typography
        ----------------------------------------------------------------------- */
 
-    /* Cor principal de texto. */
-    --text:           30 42% 94%;
-    /* Cor de texto secundário ou menos importante. */
-    --text-muted:     20 22% 74%;
+    /* Texto principal: branco frio levíssimo. */
+    --text:           240 28% 96%;
+    /* Texto secundário: slate claro. */
+    --text-muted:     248 18% 64%;
 
     /* -----------------------------------------------------------------------
        Semantic colors
        ----------------------------------------------------------------------- */
 
-    /* Cor semântica para sucesso/aprovado. */
-    --success:        156 76% 70%;
-    /* Fundo suave para estados de sucesso. */
-    --success-soft:   156 38% 18%;
+    /* Sucesso. */
+    --success:        158 82% 60%;
+    /* Fundo suave de sucesso. */
+    --success-soft:   158 40% 16%;
 
-    /* Cor semântica para alerta/atenção. */
-    --warning:        40 96% 72%;
-    /* Fundo suave para estados de alerta. */
-    --warning-soft:   38 44% 18%;
+    /* Alerta. */
+    --warning:        42 96% 66%;
+    /* Fundo suave de alerta. */
+    --warning-soft:   40 44% 18%;
 
-    /* Cor semântica para erro/risco, separada do vermelho da marca. */
-    --danger:         0 84% 64%;
-    /* Fundo suave para estados de erro/risco. */
-    --danger-soft:    356 38% 20%;
+    /* Erro. */
+    --danger:         4 86% 64%;
+    /* Fundo suave de erro. */
+    --danger-soft:    4 38% 18%;
 
     /* -----------------------------------------------------------------------
        Accent
        ----------------------------------------------------------------------- */
 
-    /* Fundo de destaque suave. */
-    --accent-soft:     356 42% 22%;
-    /* Texto usado sobre áreas de destaque suave. */
+    /* Destaque suave. */
+    --accent-soft:     263 38% 22%;
+    /* Texto sobre destaque. */
     --accent-contrast: 0 0% 100%;
 
     /* -----------------------------------------------------------------------
-       Navbar
+       Navbar — ultra dark midnight
        ----------------------------------------------------------------------- */
 
-    /* Fundo principal da navbar. */
-    --nav-bg:         350 36% 14%;
-    /* Texto principal da navbar. */
-    --nav-text:       0 0% 100%;
-    /* Texto secundário da navbar. */
-    --nav-muted:      356 38% 78%;
-    /* Fundo do item ativo na navbar. */
-    --nav-active-bg:  356 56% 28%;
-    /* Borda inferior/lateral da navbar. */
-    --nav-border:     350 32% 20%;
+    /* Fundo da navbar: quase-preto midnight. */
+    --nav-bg:          268 48% 5%;
+    /* Texto da navbar. */
+    --nav-text:        0 0% 100%;
+    /* Texto secundário. */
+    --nav-muted:       263 36% 68%;
+    /* Item ativo. */
+    --nav-active-bg:   263 60% 24%;
+    /* Texto ativo. */
+    --nav-active-text: 0 0% 100%;
+    /* Borda da navbar. */
+    --nav-border:      268 40% 10%;
 
     /* -----------------------------------------------------------------------
        shadcn/radix token contract
        ----------------------------------------------------------------------- */
 
-    /* Token shadcn/Radix para fundo geral. */
-    --background:          350 24% 12%;
-    /* Token shadcn/Radix para texto principal. */
-    --foreground:          30 42% 94%;
+    /* Fundo geral. */
+    --background:          264 32% 7%;
+    /* Texto principal. */
+    --foreground:          240 28% 96%;
 
-    /* Token shadcn/Radix para fundo de cards. */
-    --card:                348 22% 16%;
-    /* Token shadcn/Radix para texto dentro de cards. */
-    --card-foreground:     30 42% 94%;
+    /* Cards. */
+    --card:                262 28% 11%;
+    --card-foreground:     240 28% 96%;
 
-    /* Token shadcn/Radix para fundo de popovers/dropdowns. */
-    --popover:             348 22% 16%;
-    /* Token shadcn/Radix para texto em popovers/dropdowns. */
-    --popover-foreground:  30 42% 94%;
+    /* Popovers. */
+    --popover:             262 28% 11%;
+    --popover-foreground:  240 28% 96%;
 
-    /* Cor principal de ação: botões, foco e CTA. */
-    --primary:             356 88% 62%;
-    /* Texto usado sobre a cor primary. */
+    /* Primary: roxo elétrico brilhante. */
+    --primary:             263 90% 68%;
     --primary-foreground:  0 0% 100%;
 
-    /* Token shadcn/Radix para áreas secundárias. */
-    --secondary:           348 20% 20%;
-    /* Texto usado sobre áreas secundárias. */
-    --secondary-foreground:30 42% 94%;
+    /* Secundário. */
+    --secondary:           262 24% 15%;
+    --secondary-foreground:240 28% 96%;
 
-    /* Token shadcn/Radix para fundos discretos. */
-    --muted:               348 20% 20%;
-    /* Texto secundário em componentes shadcn/Radix. */
-    --muted-foreground:    20 22% 74%;
+    /* Muted. */
+    --muted:               262 24% 15%;
+    --muted-foreground:    248 18% 64%;
 
-    /* Token shadcn/Radix para área de destaque. */
-    --accent:              356 42% 22%;
-    /* Texto usado sobre o accent. */
-    --accent-foreground:   30 42% 94%;
+    /* Accent. */
+    --accent:              263 38% 22%;
+    --accent-foreground:   240 28% 96%;
 
-    /* Token shadcn/Radix para ações destrutivas. */
-    --destructive:         0 84% 64%;
-    /* Texto usado sobre destructive. */
+    /* Destructive. */
+    --destructive:         4 86% 64%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Borda/fundo base de inputs. */
-    --input:               350 18% 28%;
-    /* Cor do anel de foco acessível. */
-    --ring:                356 88% 62%;
+    /* Input. */
+    --input:               262 20% 22%;
+    /* Ring. */
+    --ring:                263 90% 68%;
 
     /* -----------------------------------------------------------------------
        Layout accents
        ----------------------------------------------------------------------- */
 
-    /* Início do gradiente/área visual da sidebar. */
-    --sidebar-start:       350 28% 11%;
-    /* Fim do gradiente/área visual da sidebar. */
-    --sidebar-end:         348 26% 16%;
-    /* Cor de destaque da sidebar. */
-    --sidebar-accent:      356 88% 62%;
+    /* Sidebar. */
+    --sidebar-start:       264 36% 6%;
+    --sidebar-end:         262 28% 11%;
+    --sidebar-accent:      263 90% 68%;
 
-    /* Início do gradiente principal/hero. */
-    --hero-start:          356 88% 62%;
-    /* Fim do gradiente principal/hero. */
-    --hero-end:            12 78% 54%;
+    /* Hero: roxo para ciano. */
+    --hero-start:          263 90% 68%;
+    --hero-end:            192 88% 50%;
 
-    /* Primeiro brilho radial do fundo da página. */
-    --page-glow-start:     356 88% 38%;
-    /* Segundo brilho radial do fundo da página. */
-    --page-glow-end:       12 78% 44%;
-    /* Início do gradiente base da página. */
-    --page-gradient-start: 350 24% 12%;
-    /* Fim do gradiente base da página. */
-    --page-gradient-end:   348 26% 10%;
+    /* Glows. */
+    --page-glow-start:     263 80% 28%;
+    --page-glow-end:       192 76% 24%;
+    /* Gradiente base. */
+    --page-gradient-start: 264 32% 7%;
+    --page-gradient-end:   262 36% 5%;
   }
 
   /* ==========================================================================
@@ -841,116 +816,59 @@
 
   :root[data-theme="dark"][data-visual-theme="theme-2"] {
     /* -----------------------------------------------------------------------
-       Visual Theme 2 Dark — Azul Industrial
+       Visual Theme 2 Dark — Botânico Floral
        -----------------------------------------------------------------------
        Direção:
-       - Azul industrial escuro com cinza aço.
-       - Primary azul; vermelho preservado apenas para danger/destructive.
-       - Mantém contraste em áreas densas como kanban, tabelas e admin.
+       - Escuro botânico e elegante.
        ----------------------------------------------------------------------- */
-    /* Cor principal da marca no tema atual. */
-    --brand:               207 76% 58%;
-    /* Versão mais escura da marca, usada em bordas, hover e profundidade. */
-    --brand-dark:          212 58% 34%;
-    /* Versão suave da marca, usada em fundos leves e badges. */
-    --brand-soft:          207 34% 18%;
-    /* Tom luminoso da marca, usado em brilhos e gradientes. */
-    --brand-glow:          207 82% 66%;
-
-    /* Fundo principal da aplicação. */
-    --bg:                  218 34% 9%;
-    /* Superfície principal de cards, painéis e caixas. */
-    --surface:             216 30% 14%;
-    /* Superfície secundária para áreas discretas, hovers e blocos internos. */
-    --surface-muted:       215 24% 19%;
-    /* Borda padrão do tema. */
-    --border:              214 18% 28%;
-    /* Borda mais forte para destaque visual. */
-    --border-strong:       207 40% 46%;
-
-    /* Token shadcn/Radix para fundo geral. */
-    --background:          218 34% 9%;
-    /* Token shadcn/Radix para fundo de cards. */
-    --card:                216 30% 14%;
-    /* Token shadcn/Radix para fundo de popovers/dropdowns. */
-    --popover:             216 30% 14%;
-    /* Token shadcn/Radix para áreas secundárias. */
-    --secondary:           215 24% 19%;
-    /* Token shadcn/Radix para fundos discretos. */
-    --muted:               215 24% 19%;
-
-    /* Cor principal de texto. */
-    --text:                210 35% 93%;
-    /* Cor de texto secundário ou menos importante. */
-    --text-muted:          214 20% 72%;
-
-    /* Token shadcn/Radix para texto principal. */
-    --foreground:          210 35% 93%;
-    /* Token shadcn/Radix para texto dentro de cards. */
-    --card-foreground:     210 35% 93%;
-    /* Token shadcn/Radix para texto em popovers/dropdowns. */
-    --popover-foreground:  210 35% 93%;
-
-    /* Cor principal de ação: botões, foco e CTA. */
-    --primary:             207 76% 58%;
-    /* Variação da cor principal para hover. */
-    --primary-hover:       207 70% 50%;
-    /* Fundo suave baseado na cor principal. */
-    --primary-soft:        207 34% 18%;
-    /* Texto usado sobre a cor primary. */
+    --brand:               350 50% 70%;
+    --brand-dark:          350 60% 60%;
+    --brand-soft:          350 30% 20%;
+    --brand-glow:          350 50% 70%;
+    --bg:                  350 20% 12%;
+    --surface:             350 15% 15%;
+    --surface-muted:       350 15% 20%;
+    --border:              350 15% 25%;
+    --border-strong:       350 20% 35%;
+    --background:          350 20% 12%;
+    --foreground:          35 20% 95%;
+    --card:                350 15% 15%;
+    --card-foreground:     35 20% 95%;
+    --popover:             350 15% 15%;
+    --popover-foreground:  35 20% 95%;
+    --secondary:           350 15% 20%;
+    --secondary-foreground:35 20% 95%;
+    --muted:               350 15% 20%;
+    --muted-foreground:    350 15% 65%;
+    --text:                35 20% 95%;
+    --text-muted:          350 15% 65%;
+    --primary:             350 50% 65%;
+    --primary-hover:       350 60% 75%;
+    --primary-soft:        350 30% 20%;
     --primary-foreground:  0 0% 100%;
-    /* Cor do anel de foco acessível. */
-    --ring:                207 76% 58%;
-
-    /* Token shadcn/Radix para área de destaque. */
-    --accent:              207 34% 20%;
-    /* Texto usado sobre o accent. */
-    --accent-foreground:   210 35% 93%;
-    /* Fundo de destaque suave. */
-    --accent-soft:         207 34% 20%;
-    /* Texto usado sobre áreas de destaque suave. */
-    --accent-contrast:     210 35% 93%;
-
-    /* Cor semântica para erro/risco, separada do vermelho da marca. */
-    --danger:              344 68% 58%;
-    /* Fundo suave para estados de erro/risco. */
-    --danger-soft:         344 28% 20%;
-    /* Token shadcn/Radix para ações destrutivas. */
-    --destructive:         344 68% 58%;
-    /* Texto usado sobre destructive. */
+    --ring:                350 50% 65%;
+    --accent:              350 30% 20%;
+    --accent-foreground:   350 50% 70%;
+    --accent-soft:         350 30% 20%;
+    --accent-contrast:     35 20% 95%;
+    --danger:              344 62% 45%;
+    --danger-soft:         344 50% 20%;
+    --destructive:         344 62% 45%;
     --destructive-foreground: 0 0% 100%;
-
-    /* Borda/fundo base de inputs. */
-    --input:               214 18% 28%;
-
-    /* Fundo principal da navbar. */
-    --nav-bg:              218 48% 10%;
-    /* Texto principal da navbar. */
-    --nav-text:            210 35% 96%;
-    /* Texto secundário da navbar. */
-    --nav-muted:           214 20% 74%;
-    /* Fundo do item ativo na navbar. */
-    --nav-active-bg:       207 62% 30%;
-    /* Texto do item ativo na navbar. */
-    --nav-active-text:     0 0% 100%;
-    /* Borda inferior/lateral da navbar. */
-    --nav-border:          215 32% 22%;
-
-    /* Cor de destaque da sidebar. */
-    --sidebar-accent:      207 76% 58%;
-    /* Início do gradiente principal/hero. */
-    --hero-start:          207 76% 58%;
-    /* Fim do gradiente principal/hero. */
-    --hero-end:            212 58% 34%;
-
-    /* Primeiro brilho radial do fundo da página. */
-    --page-glow-start:     207 46% 28%;
-    /* Segundo brilho radial do fundo da página. */
-    --page-glow-end:       218 42% 24%;
-    /* Início do gradiente base da página. */
-    --page-gradient-start: 218 34% 9%;
-    /* Fim do gradiente base da página. */
-    --page-gradient-end:   216 42% 7%;
+    --input:               350 15% 25%;
+    --nav-bg:              350 20% 10%;
+    --nav-text:            35 20% 90%;
+    --nav-muted:           350 15% 60%;
+    --nav-active-bg:       350 30% 20%;
+    --nav-active-text:     350 50% 80%;
+    --nav-border:          350 20% 16%;
+    --sidebar-accent:      350 50% 65%;
+    --hero-start:          350 50% 65%;
+    --hero-end:            350 40% 40%;
+    --page-glow-start:     350 40% 20%;
+    --page-glow-end:       350 30% 15%;
+    --page-gradient-start: 350 20% 12%;
+    --page-gradient-end:   350 15% 10%;
   }
 
   /* ==========================================================================
@@ -1014,11 +932,23 @@
       linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end))) !important;
     color: hsl(var(--text));
   }
-  :root[data-theme="dark"][data-visual-theme="theme-2"] body {
+  :root[data-visual-theme="theme-2"] body {
     background:
+      url("/assets/floral-bg.png") repeat,
       radial-gradient(circle at 10% 10%, hsl(var(--page-glow-start) / 0.16), transparent 28rem),
       radial-gradient(circle at 88% 14%, hsl(var(--page-glow-end) / 0.14), transparent 30rem),
       linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    background-size: 600px, auto, auto, auto;
+    background-blend-mode: multiply, normal, normal, normal;
+  }
+  :root[data-theme="dark"][data-visual-theme="theme-2"] body {
+    background:
+      url("/assets/floral-bg.png") repeat,
+      radial-gradient(circle at 10% 10%, hsl(var(--page-glow-start) / 0.16), transparent 28rem),
+      radial-gradient(circle at 88% 14%, hsl(var(--page-glow-end) / 0.14), transparent 30rem),
+      linear-gradient(180deg, hsl(var(--page-gradient-start)), hsl(var(--page-gradient-end)));
+    background-size: 600px, auto, auto, auto;
+    background-blend-mode: soft-light, normal, normal, normal;
     color: hsl(var(--text));
   }
 

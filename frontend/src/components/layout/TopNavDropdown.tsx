@@ -52,10 +52,10 @@ export function TopNavDropdown({
         onClick={onToggle}
         className={cn(
           "group inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-transparent px-2.5 text-[13px] font-semibold outline-none transition-colors",
-          "focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]",
+          "focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
           isActive
             ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-            : "text-text-muted hover:bg-white/5 hover:text-text",
+            : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
         )}
       >
         {renderIcon(group.label)}
@@ -70,13 +70,13 @@ export function TopNavDropdown({
         <div
           id={menuId}
           role="menu"
-          className="absolute left-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-border/70 bg-surface p-1.5 shadow-xl shadow-black/15"
+          className="absolute left-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-[hsl(var(--nav-bg))]/95 p-2 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
         >
           {group.items.map((item) => {
             const active = isItemActive(item.to);
 
             return (
-              <NavLink
+               <NavLink
                 key={item.to}
                 to={item.to}
                 role="menuitem"
@@ -88,18 +88,24 @@ export function TopNavDropdown({
                   }
                 }}
                 className={cn(
-                  "flex min-w-0 items-start gap-2 rounded-lg px-3 py-2 text-left outline-none transition-colors",
-                  "focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]",
+                  "flex min-w-0 items-start gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-all duration-200",
+                  "focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
                   active
-                    ? "bg-[hsl(var(--primary)/0.10)] text-[hsl(var(--primary))]"
-                    : "text-text hover:bg-surface-muted/60",
+                    ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
+                    : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
                 )}
               >
-                <span className="mt-0.5">{renderIcon(item.to)}</span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold">{item.label}</span>
-                  <span className="block truncate text-xs text-text-muted">{item.caption}</span>
-                </span>
+                <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors", active ? "bg-white/10 text-[hsl(var(--nav-active-text))]" : "bg-white/5 text-[hsl(var(--nav-muted))] group-hover:text-[hsl(var(--nav-text))]")}>
+                  {renderIcon(item.to)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className={cn("block truncate text-[13px] font-bold", active ? "text-[hsl(var(--nav-active-text))]" : "text-[hsl(var(--nav-text))]")}>
+                    {item.label}
+                  </span>
+                  <span className={cn("block truncate text-[11px]", active ? "text-[hsl(var(--nav-active-text))]/80" : "text-[hsl(var(--nav-muted))]")}>
+                    {item.caption}
+                  </span>
+                </div>
               </NavLink>
             );
           })}
