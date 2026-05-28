@@ -942,6 +942,84 @@ async def test_allows_move_to_offer_when_all_offer_gates_satisfied(
         status="submitted",
         final_recommendation="yes",
     )
+    # Hiring decision is now always required before offer.
+    await _add_hiring_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        decision_status="submitted",
+        decision_outcome="hire",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "offer", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["stage"] == "offer"
+
+
+@pytest.mark.asyncio
+async def test_blocks_move_to_offer_when_no_hiring_decision(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Moving from final to offer without any hiring decision must return 409 with hiring_decision_required."""
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(
+        client,
+        headers,
+        db_session,
+        requires_interview=False,
+        requires_scorecard=False,
+        requires_behavioral_assessment=False,
+    )
+    candidate_id = await _create_candidate(client, headers, "C_ODec", f"odec-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="final")
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "offer", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["code"] == "pipeline_transition_blocked"
+    codes = {g["code"] for g in body["missing_gates"]}
+    assert "hiring_decision_required" in codes
+    gate = next(g for g in body["missing_gates"] if g["code"] == "hiring_decision_required")
+    assert gate["action"] == "open_decision"
+
+
+@pytest.mark.asyncio
+async def test_blocks_move_to_offer_when_decision_is_advance_allows_move(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """outcome=advance satisfies the offer gate (advance means 'move forward', hire means 'contract')."""
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(
+        client,
+        headers,
+        db_session,
+        requires_interview=False,
+        requires_scorecard=False,
+        requires_behavioral_assessment=False,
+    )
+    candidate_id = await _create_candidate(client, headers, "C_OAdv", f"oadv-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="final")
+    await _add_hiring_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        decision_status="submitted",
+        decision_outcome="advance",
+    )
 
     resp = await client.patch(
         f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
@@ -1040,6 +1118,118 @@ async def test_allows_move_to_hired_with_submitted_hire_decision(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["stage"] == "hired"
+
+
+# ---------------------------------------------------------------------------
+# C2) Pre-admission stage gates — hire decision required
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_blocks_move_to_pre_admission_when_no_hire_decision(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """hired → pre_admission must be blocked when no submitted hire decision exists."""
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(
+        client,
+        headers,
+        db_session,
+        requires_interview=False,
+        requires_scorecard=False,
+        requires_behavioral_assessment=False,
+    )
+    candidate_id = await _create_candidate(client, headers, "C_PA1", f"pa1-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="hired")
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["code"] == "pipeline_transition_blocked"
+    codes = {g["code"] for g in body["missing_gates"]}
+    assert "hiring_decision_required" in codes
+    gate = next(g for g in body["missing_gates"] if g["code"] == "hiring_decision_required")
+    assert gate["action"] == "open_decision"
+
+
+@pytest.mark.asyncio
+async def test_blocks_move_to_pre_admission_when_only_advance_decision(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """outcome=advance is NOT sufficient for pre_admission — requires outcome=hire specifically."""
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(
+        client,
+        headers,
+        db_session,
+        requires_interview=False,
+        requires_scorecard=False,
+        requires_behavioral_assessment=False,
+    )
+    candidate_id = await _create_candidate(client, headers, "C_PA2", f"pa2-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="hired")
+    await _add_hiring_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        decision_status="submitted",
+        decision_outcome="advance",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 409, resp.text
+    codes = {g["code"] for g in resp.json()["missing_gates"]}
+    assert "hiring_decision_required" in codes
+
+
+@pytest.mark.asyncio
+async def test_allows_move_to_pre_admission_with_hire_decision(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """hired → pre_admission is allowed when a submitted hire decision exists."""
+    _, headers = await _setup_recruiter(db_session, client)
+    job_id = await _create_job(
+        client,
+        headers,
+        db_session,
+        requires_interview=False,
+        requires_scorecard=False,
+        requires_behavioral_assessment=False,
+    )
+    candidate_id = await _create_candidate(client, headers, "C_PA3", f"pa3-{uuid4().hex[:6]}@test.com")
+    await _add_to_job(client, headers, candidate_id, job_id)
+    await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="hired")
+    await _add_hiring_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        decision_status="submitted",
+        decision_outcome="hire",
+    )
+
+    resp = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": ""},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["stage"] == "pre_admission"
 
 
 # ---------------------------------------------------------------------------

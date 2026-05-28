@@ -256,7 +256,7 @@ async def test_overview_keeps_offer_unblocked_when_optional_hire_decision_submit
     [
         ("hired", "Contratado"),
         ("pre_admission", "Pré-admissão"),
-        ("protheus", "Pré-admissão"),
+        ("protheus", "Protheus"),
     ],
 )
 async def test_overview_keeps_post_hiring_stages_linked_to_active_job(
@@ -291,11 +291,14 @@ async def test_overview_keeps_post_hiring_stages_linked_to_active_job(
 
 
 @pytest.mark.asyncio
-async def test_overview_shows_manager_decision_missing_in_final_stage(
+async def test_overview_shows_hiring_decision_required_in_final_stage(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Candidate in final, job requires_manager_review → manager_decision_missing in overview."""
+    """Candidate in final without a hiring decision → hiring_decision_required gate in overview.
+
+    The gate now fires unconditionally for every job (not only requires_manager_review).
+    """
     recruiter = await _create_active_user(
         db_session,
         f"recruiter-mgr-{uuid4().hex[:6]}@test.com",
@@ -303,9 +306,9 @@ async def test_overview_shows_manager_decision_missing_in_final_stage(
         UserRole.RECRUITER,
     )
     headers = await _auth_headers(client, recruiter.email, "password123")
-    job_id = await _create_job(db_session, recruiter.id, requires_manager_review=True)
+    job_id = await _create_job(db_session, recruiter.id)
     await db_session.commit()
-    candidate_id = await _create_candidate(client, headers, "Candidato Manager Review")
+    candidate_id = await _create_candidate(client, headers, "Candidato Decision Gate")
     await _add_to_job(client, headers, candidate_id, job_id)
     await _force_stage(db_session, candidate_id=candidate_id, job_id=job_id, stage="final")
 
@@ -314,20 +317,20 @@ async def test_overview_shows_manager_decision_missing_in_final_stage(
     data = resp.json()
 
     gate_ids = [p["id"] for p in data["preview_pendencies"]]
-    assert "manager_decision_missing" in gate_ids, (
-        f"Expected manager_decision_missing, got: {gate_ids}"
+    assert "hiring_decision_required" in gate_ids, (
+        f"Expected hiring_decision_required, got: {gate_ids}"
     )
-    gate = next(p for p in data["preview_pendencies"] if p["id"] == "manager_decision_missing")
+    gate = next(p for p in data["preview_pendencies"] if p["id"] == "hiring_decision_required")
     assert gate["tone"] == "block"
     assert gate["action"] == "open_decision"
 
 
 @pytest.mark.asyncio
-async def test_overview_manager_decision_resolved_when_advance_submitted(
+async def test_overview_hiring_decision_gate_resolved_when_advance_submitted(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """manager_decision_missing clears when hiring decision submitted with outcome=advance."""
+    """hiring_decision_required clears when hiring decision submitted with outcome=advance."""
     recruiter = await _create_active_user(
         db_session,
         f"recruiter-advance-{uuid4().hex[:6]}@test.com",
@@ -335,7 +338,7 @@ async def test_overview_manager_decision_resolved_when_advance_submitted(
         UserRole.RECRUITER,
     )
     headers = await _auth_headers(client, recruiter.email, "password123")
-    job_id = await _create_job(db_session, recruiter.id, requires_manager_review=True)
+    job_id = await _create_job(db_session, recruiter.id)
     await db_session.commit()
     candidate_id = await _create_candidate(client, headers, "Candidato Advance Decision")
     await _add_to_job(client, headers, candidate_id, job_id)
@@ -360,17 +363,17 @@ async def test_overview_manager_decision_resolved_when_advance_submitted(
     assert resp.status_code == 200, resp.text
     data = resp.json()
     gate_ids = [p["id"] for p in data["preview_pendencies"]]
-    assert "manager_decision_missing" not in gate_ids, (
-        f"advance decision should clear manager gate, still got: {gate_ids}"
+    assert "hiring_decision_required" not in gate_ids, (
+        f"advance decision should clear hiring_decision_required gate, still got: {gate_ids}"
     )
 
 
 @pytest.mark.asyncio
-async def test_overview_manager_decision_not_cleared_when_hold_submitted(
+async def test_overview_hiring_decision_gate_not_cleared_when_hold_submitted(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Decision with outcome=hold does NOT satisfy manager_decision_missing gate."""
+    """Decision with outcome=hold does NOT satisfy hiring_decision_required gate."""
     recruiter = await _create_active_user(
         db_session,
         f"recruiter-hold-{uuid4().hex[:6]}@test.com",
@@ -378,7 +381,7 @@ async def test_overview_manager_decision_not_cleared_when_hold_submitted(
         UserRole.RECRUITER,
     )
     headers = await _auth_headers(client, recruiter.email, "password123")
-    job_id = await _create_job(db_session, recruiter.id, requires_manager_review=True)
+    job_id = await _create_job(db_session, recruiter.id)
     await db_session.commit()
     candidate_id = await _create_candidate(client, headers, "Candidato Hold Decision")
     await _add_to_job(client, headers, candidate_id, job_id)
@@ -401,8 +404,8 @@ async def test_overview_manager_decision_not_cleared_when_hold_submitted(
     assert resp.status_code == 200, resp.text
     data = resp.json()
     gate_ids = [p["id"] for p in data["preview_pendencies"]]
-    assert "manager_decision_missing" in gate_ids, (
-        f"hold decision must not clear manager gate, got: {gate_ids}"
+    assert "hiring_decision_required" in gate_ids, (
+        f"hold decision must not clear hiring_decision_required gate, got: {gate_ids}"
     )
 
 

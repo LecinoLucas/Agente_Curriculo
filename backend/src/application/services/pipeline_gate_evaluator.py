@@ -171,6 +171,16 @@ class PipelineGateEvaluator:
             )
             return result
 
+        if target_stage == "pre_admission":
+            pipeline_id = await self._repository.find_active_pipeline_id(candidate_id, job_id)
+            await self._collect_pre_admission_gates(
+                result=result,
+                candidate_id=candidate_id,
+                job_id=job_id,
+                pipeline_id=pipeline_id,
+            )
+            return result
+
         if target_stage == "protheus":
             await self._collect_protheus_gates(
                 result=result,
@@ -490,30 +500,34 @@ class PipelineGateEvaluator:
                     )
                 )
 
-        if bool(job.requires_manager_review):
-            decision = await self._repository.find_active_hiring_decision(
-                candidate_id=candidate_id,
-                job_id=job_id,
-                pipeline_id=pipeline_id,
-            )
-            if (
-                decision is None
-                or decision.decision_status != "submitted"
-                or decision.decision_outcome not in ("advance", "hire")
-            ):
-                result.missing_gates.append(
-                    MissingGate(
-                        code="manager_decision_missing",
-                        label="Decisão de gestor pendente",
-                        description=(
-                            "Registre uma decisão final aprovando o avanço (advance ou hire) antes da oferta."
-                        ),
-                        action="open_decision",
-                        action_payload=(
-                            {"decision_id": str(decision.id)} if decision is not None else None
-                        ),
-                    )
+        # Hiring decision is always required before advancing to offer, regardless of
+        # requires_manager_review. The flag controlled this gate historically; now it's
+        # unconditional so the flow decision → offer → hired → pre_admission is enforced
+        # for every job.
+        decision = await self._repository.find_active_hiring_decision(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=pipeline_id,
+        )
+        if (
+            decision is None
+            or decision.decision_status != "submitted"
+            or decision.decision_outcome not in ("advance", "hire")
+        ):
+            result.missing_gates.append(
+                MissingGate(
+                    code="hiring_decision_required",
+                    label="Decisão de contratação obrigatória",
+                    description=(
+                        "Registre a decisão de contratação (avançar ou contratar) "
+                        "antes de avançar para a etapa de oferta."
+                    ),
+                    action="open_decision",
+                    action_payload=(
+                        {"decision_id": str(decision.id)} if decision is not None else None
+                    ),
                 )
+            )
 
     async def _collect_hired_gates(
         self,
@@ -578,3 +592,42 @@ class PipelineGateEvaluator:
         # A hiring decision is an auditable record, not the action that hires.
         # Hiring itself is represented by moving the active pipeline entry to
         # "hired" and then through post-hire stages, preserving the link.
+
+    async def _collect_pre_admission_gates(
+        self,
+        *,
+        result: GateEvaluationResult,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID | None,
+    ) -> None:
+        """Gate for hired → pre_admission: requires a submitted hire decision.
+
+        Defense-in-depth: even if the offer gate was force-bypassed or the
+        candidate arrived via legacy data, pre-admission must never start
+        without a confirmed hire decision.
+        """
+        decision = await self._repository.find_active_hiring_decision(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            pipeline_id=pipeline_id,
+        )
+        if (
+            decision is None
+            or decision.decision_status != "submitted"
+            or decision.decision_outcome != "hire"
+        ):
+            result.missing_gates.append(
+                MissingGate(
+                    code="hiring_decision_required",
+                    label="Decisão de contratação obrigatória",
+                    description=(
+                        "Registre a decisão de contratar antes de iniciar a pré-admissão."
+                    ),
+                    action="open_decision",
+                    action_payload=(
+                        {"decision_id": str(decision.id)} if decision is not None else None
+                    ),
+                    forceable=True,
+                )
+            )
