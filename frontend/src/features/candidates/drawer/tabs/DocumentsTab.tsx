@@ -209,17 +209,17 @@ export function DocumentsTab(props: DocumentsTabProps) {
             "flex w-full flex-col items-center justify-center rounded-2xl border border-dashed px-5 py-6 text-center transition",
             isDragActive
               ? "border-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]"
-              : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] hover:border-[hsl(var(--primary))]/45 hover:bg-[hsl(var(--accent-soft))]/60",
+              : "border-border bg-surface-muted hover:border-[hsl(var(--primary))]/45 hover:bg-[hsl(var(--accent-soft))]/60",
             uploadLoading ? "cursor-wait opacity-70" : "cursor-pointer",
           ].join(" ")}
         >
-          <span className="rounded-full bg-[hsl(var(--surface))] px-3 py-1 text-xs font-semibold text-[hsl(var(--primary))] shadow-sm">
+          <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-[hsl(var(--primary))] shadow-sm">
             PDF do currículo
           </span>
-          <span className="mt-3 text-sm font-semibold text-[hsl(var(--text))]">
+          <span className="mt-3 text-sm font-semibold text-text">
             Envie o currículo para iniciar a análise da IA
           </span>
-          <span className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+          <span className="mt-1 text-xs text-text-muted">
             Clique para selecionar ou arraste o PDF para esta área
           </span>
         </button>
@@ -247,7 +247,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
         </div>
 
         {selectedFile ? (
-          <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
+          <p className="mt-2 text-[11px] text-text-muted">
             {selectedFile.name} ({Math.ceil(selectedFile.size / 1024)} KB)
           </p>
         ) : null}
@@ -281,7 +281,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                 <div
                   key={resume.resume_id}
                   className={[
-                    "rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 transition-opacity",
+                    "rounded-xl border border-border bg-surface-muted px-4 py-3 transition-opacity",
                     isDeleting ? "opacity-40" : "",
                   ].join(" ")}
                 >
@@ -310,19 +310,19 @@ export function DocumentsTab(props: DocumentsTabProps) {
                           <button
                             type="button"
                             onClick={() => setEditingResumeId(null)}
-                            className="text-[11px] text-[hsl(var(--text-muted))]"
+                            className="text-[11px] text-text-muted"
                           >
                             ✕
                           </button>
                         </div>
                       ) : (
-                        <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
+                        <p className="truncate text-sm font-semibold text-text">
                           {resume.title}
                         </p>
                       )}
 
                       {resume.current_file_name ? (
-                        <p className="mt-0.5 truncate text-[11px] text-[hsl(var(--text-muted))]">
+                        <p className="mt-0.5 truncate text-[11px] text-text-muted">
                           {resume.current_file_name}
                         </p>
                       ) : null}
@@ -356,7 +356,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                     </div>
                   </div>
 
-                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-[hsl(var(--text-muted))]">
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-text-muted">
                     <span>v{resume.current_version}</span>
                     <span>{new Date(resume.updated_at).toLocaleDateString("pt-BR")}</span>
                   </div>
@@ -373,7 +373,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                           {downloadingResume ? "Baixando…" : "Abrir currículo"}
                         </button>
                       ) : canDownloadResume && !resume.current_version_id ? (
-                        <span className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+                        <span className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-text-muted">
                           Currículo não enviado
                         </span>
                       ) : null}
@@ -384,7 +384,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                           setEditingResumeId(resume.resume_id);
                           setEditTitle(resume.title);
                         }}
-                        className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))]"
+                        className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-text-muted transition hover:bg-surface"
                       >
                         Editar título
                       </button>
@@ -394,7 +394,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                         onClick={() =>
                           void handlers.handleToggleStatus(resume.resume_id, resume.status)
                         }
-                        className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))]"
+                        className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-text-muted transition hover:bg-surface"
                       >
                         {resume.status === "active" ? "Arquivar" : "Reativar"}
                       </button>
@@ -430,7 +430,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                   ) : null}
 
                   {!isEditing && canAnalyze ? (
-                    <p className="mt-2 text-[11px] text-[hsl(var(--text-muted))]">
+                    <p className="mt-2 text-[11px] text-text-muted">
                       Atalho manual. O acompanhamento da execução fica na aba Análise IA.
                     </p>
                   ) : null}
@@ -451,7 +451,7 @@ export function DocumentsTab(props: DocumentsTabProps) {
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(null)}
-                          className="rounded-lg border border-[hsl(var(--border))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface))]"
+                          className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-text-muted transition hover:bg-surface"
                         >
                           Cancelar
                         </button>

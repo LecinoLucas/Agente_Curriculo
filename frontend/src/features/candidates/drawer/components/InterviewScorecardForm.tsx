@@ -114,7 +114,7 @@ export function InterviewScorecardForm({
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-[hsl(var(--text))]">Critérios</p>
+          <p className="text-sm font-semibold text-text">Critérios</p>
           {!readOnly ? (
             <button
               type="button"
@@ -129,7 +129,7 @@ export function InterviewScorecardForm({
                   },
                 ])
               }
-              className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/70"
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-text hover:bg-surface-muted/70"
             >
               <Plus className="h-4 w-4" />
               Critério
@@ -151,7 +151,7 @@ export function InterviewScorecardForm({
       </div>
 
       <label className="block space-y-1 text-sm">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Observações finais
         </span>
         <textarea
@@ -159,19 +159,19 @@ export function InterviewScorecardForm({
           onChange={(event) => setOverallNotes(event.target.value)}
           disabled={readOnly}
           rows={4}
-          className="w-full resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm disabled:bg-[hsl(var(--surface-muted))]/60"
+          className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm disabled:bg-surface-muted/60"
         />
       </label>
 
       <label className="block space-y-1 text-sm">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Recomendação final
         </span>
         <select
           value={finalRecommendation}
           onChange={(event) => setFinalRecommendation(event.target.value as InterviewFinalRecommendation | "")}
           disabled={readOnly}
-          className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm disabled:bg-[hsl(var(--surface-muted))]/60"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm disabled:bg-surface-muted/60"
         >
           <option value="">Selecione</option>
           {RECOMMENDATIONS.map((recommendation) => (
@@ -196,7 +196,7 @@ export function InterviewScorecardForm({
               void handleSave().catch(() => undefined);
             }}
             disabled={saving || submitting}
-            className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-2 text-sm font-medium text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/70 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:bg-surface-muted/70 disabled:opacity-60"
           >
             <Save className="h-4 w-4" />
             {saving ? "Salvando..." : "Salvar rascunho"}

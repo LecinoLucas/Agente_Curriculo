@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Modal } from "../../components/common/Modal";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Field } from "../../shared/components/forms/Field";
 import { agendaService } from "../../services/agendaService";
 import { toast } from "../../shared/utils/toast";
@@ -78,7 +81,7 @@ export function CancelInterviewModal({
       >
         {/* Error banner */}
         {error && (
-          <div className="border-b border-[hsl(var(--border))] bg-rose-50 px-6 py-3">
+          <div className="border-b border-border bg-rose-50 px-6 py-3">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
               <div className="flex-1">
@@ -91,17 +94,17 @@ export function CancelInterviewModal({
         {/* Body */}
         <div className="flex-1 px-6 py-4">
           {candidateName && (
-            <p className="mb-4 text-sm text-[hsl(var(--text-muted))]">
+            <p className="mb-4 text-sm text-text-muted">
               Entrevista de <strong>{candidateName}</strong>
             </p>
           )}
 
           <Field label="Motivo do cancelamento *">
-            <textarea
+            <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Ex: Candidato desistiu da entrevista"
-              className="ui-input rounded-xl px-3 py-2 text-sm resize-none"
+              className="rounded-xl px-3 py-2 text-sm resize-none"
               rows={4}
               autoFocus
             />
@@ -109,11 +112,11 @@ export function CancelInterviewModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-6 py-3 flex gap-3 justify-end">
+        <div className="border-t border-border bg-surface-muted px-6 py-3 flex gap-3 justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="h-10 px-5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-sm font-medium text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))] transition disabled:opacity-50"
+            className="h-10 px-5 rounded-xl border border-border bg-surface text-sm font-medium text-text hover:bg-surface-muted transition disabled:opacity-50"
             disabled={loading}
           >
             Fechar

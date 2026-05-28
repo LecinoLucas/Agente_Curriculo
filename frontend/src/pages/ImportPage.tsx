@@ -262,7 +262,7 @@ export function ImportPage() {
             <h3 className="text-lg font-bold">Dados do candidato</h3>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-[hsl(var(--text))]">Nome completo *</span>
+              <span className="text-sm font-medium text-text">Nome completo *</span>
               <input
                 type="text"
                 value={fullName}
@@ -274,7 +274,7 @@ export function ImportPage() {
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-[hsl(var(--text))]">E-mail *</span>
+              <span className="text-sm font-medium text-text">E-mail *</span>
               <input
                 type="email"
                 value={email}
@@ -287,7 +287,7 @@ export function ImportPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-[hsl(var(--text))]">Telefone</span>
+                <span className="text-sm font-medium text-text">Telefone</span>
                 <input
                   type="tel"
                   value={phone}
@@ -299,7 +299,7 @@ export function ImportPage() {
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-[hsl(var(--text))]">CPF</span>
+                <span className="text-sm font-medium text-text">CPF</span>
                 <input
                   type="text"
                   value={cpf}
@@ -312,16 +312,16 @@ export function ImportPage() {
             </div>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-[hsl(var(--text))]">Currículo (PDF) *</span>
+              <span className="text-sm font-medium text-text">Currículo (PDF) *</span>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,application/pdf"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="block w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text))] file:mr-3 file:rounded-lg file:border-0 file:bg-[hsl(var(--primary))] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                className="block w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text file:mr-3 file:rounded-lg file:border-0 file:bg-[hsl(var(--primary))] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
                 disabled={submitting}
               />
-              <span className="text-[11px] text-[hsl(var(--text-muted))]">
+              <span className="text-[11px] text-text-muted">
                 Apenas PDF, até 10 MB.
               </span>
             </label>
@@ -385,14 +385,14 @@ export function ImportPage() {
           <div className="mb-6 flex items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold">Cadastros recentes</h3>
-              <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+              <p className="mt-1 text-sm text-text-muted">
                 Cada arquivo mantém seu próprio status de extração.
               </p>
             </div>
             {items.length > 0 ? (
               <button
                 onClick={() => setItems([])}
-                className="text-xs font-semibold text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                className="text-xs font-semibold text-text-muted hover:text-text"
               >
                 Limpar
               </button>
@@ -408,22 +408,22 @@ export function ImportPage() {
             <div className="flex-1 overflow-x-auto">
               <table className="w-full min-w-[720px] text-sm">
                 <thead>
-                  <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]">
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <tr className="border-b border-border bg-surface-muted">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Arquivo
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Candidato
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Status da extração
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Ação
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+                <tbody className="divide-y divide-[hsl(var(--border))] bg-surface">
                   {items.map((item) => {
                     const canViewCandidate = Boolean(item.candidateId);
                     const canLinkToJob =
@@ -432,10 +432,10 @@ export function ImportPage() {
                     return (
                       <tr key={item.id} className={getStatusAccent(item.extractionStatus)}>
                         <td className="px-4 py-4 align-top">
-                          <p className="font-semibold text-[hsl(var(--text))]">{item.fileName}</p>
+                          <p className="font-semibold text-text">{item.fileName}</p>
                         </td>
                         <td className="px-4 py-4 align-top">
-                          <p className="font-medium text-[hsl(var(--text))]">{item.candidateName}</p>
+                          <p className="font-medium text-text">{item.candidateName}</p>
                         </td>
                         <td className="px-4 py-4 align-top">
                           <div className="flex items-start gap-3">
@@ -445,11 +445,11 @@ export function ImportPage() {
                               {getStatusIcon(item.extractionStatus)}
                             </span>
                             <div className="min-w-0">
-                              <p className="font-medium text-[hsl(var(--text))]">
+                              <p className="font-medium text-text">
                                 {getExtractionStatusLabel(item.extractionStatus)}
                               </p>
                               {item.errorMessage ? (
-                                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                                <p className="mt-1 text-xs text-text-muted">
                                   {item.errorMessage}
                                 </p>
                               ) : null}
@@ -462,7 +462,7 @@ export function ImportPage() {
                               <button
                                 type="button"
                                 onClick={() => navigate(`/candidatos?candidateId=${item.candidateId}`)}
-                                className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-text transition hover:bg-surface-muted"
                               >
                                 Ver candidato
                                 <ArrowRight className="h-3.5 w-3.5" />
@@ -489,7 +489,7 @@ export function ImportPage() {
                                 type="button"
                                 disabled
                                 title="Reprocessamento indisponível até a API expor um endpoint dedicado."
-                                className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text-muted))] opacity-60"
+                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-text-muted opacity-60"
                               >
                                 <RotateCcw className="h-3.5 w-3.5" />
                                 Reprocessar extração

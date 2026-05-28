@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Modal } from "../../components/common/Modal";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Field } from "../../shared/components/forms/Field";
 import { useGoogleCalendarConnection } from "./useGoogleCalendarConnection";
 import { agendaService } from "../../services/agendaService";
@@ -429,8 +432,8 @@ export function AgendaInterviewModal({
       >
         <div className="flex items-center justify-center py-12">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-6 w-6 animate-spin text-[hsl(var(--text-muted))]" />
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
+            <p className="text-sm text-text-muted">
               Carregando dados...
             </p>
           </div>
@@ -451,7 +454,7 @@ export function AgendaInterviewModal({
       >
         {/* Error banner */}
         {error && (
-          <div className="border-b border-[hsl(var(--border))] bg-rose-50 px-6 py-3">
+          <div className="border-b border-border bg-rose-50 px-6 py-3">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
               <div className="flex-1">
@@ -462,7 +465,7 @@ export function AgendaInterviewModal({
         )}
 
         {validationError && (
-          <div className="border-b border-[hsl(var(--border))] bg-amber-50 px-6 py-3">
+          <div className="border-b border-border bg-amber-50 px-6 py-3">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
               <p className="text-sm font-medium text-amber-900">{validationError}</p>
@@ -475,13 +478,13 @@ export function AgendaInterviewModal({
           <div className="space-y-4">
             {/* Candidate */}
             <Field label="Candidato *">
-              <select
+              <Select
                 value={form.candidate_id}
                 onChange={(e) =>
                   handleFormChange({ candidate_id: e.target.value })
                 }
                 disabled={isEdit}
-                className="ui-input h-11 rounded-xl px-3 text-sm disabled:opacity-60"
+                className="h-11 rounded-xl px-3 text-sm disabled:opacity-60"
               >
                 <option value="">Selecione um candidato</option>
                 {candidates.map((c) => (
@@ -489,17 +492,17 @@ export function AgendaInterviewModal({
                     {c.full_name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
 
             {/* Job (optional) */}
             <Field label="Vaga (opcional)">
-              <select
+              <Select
                 value={form.job_id}
                 onChange={(e) =>
                   handleFormChange({ job_id: e.target.value })
                 }
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               >
                 <option value="">Nenhuma vaga</option>
                 {jobs.map((j) => (
@@ -507,181 +510,181 @@ export function AgendaInterviewModal({
                     {j.title}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
 
             {/* Title */}
             <Field label="Título *">
-              <input
+              <Input
                 type="text"
                 value={form.title}
                 onChange={(e) =>
                   handleFormChange({ title: e.target.value })
                 }
                 placeholder="Ex: Entrevista técnica com o candidato"
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               />
             </Field>
 
             {/* Interview Type */}
             <Field label="Tipo de entrevista *">
-              <select
+              <Select
                 value={form.interview_type}
                 onChange={(e) =>
                   handleFormChange({ interview_type: e.target.value })
                 }
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               >
                 {INTERVIEW_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
 
             {/* Status */}
             <Field label="Status">
-              <select
+              <Select
                 value={form.status}
                 onChange={(e) =>
                   handleFormChange({ status: e.target.value })
                 }
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               >
                 {STATUSES.map((s) => (
                   <option key={s.value} value={s.value}>
                     {s.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
 
             <Field label="Formato">
-              <select
+              <Select
                 value={form.interview_format}
                 onChange={(e) =>
                   handleFormChange({ interview_format: e.target.value })
                 }
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               >
                 {INTERVIEW_FORMATS.map((format) => (
                   <option key={format.value} value={format.value}>
                     {format.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
 
             {/* Date */}
             <Field label="Data *">
-              <input
+              <Input
                 type="date"
                 value={form.scheduled_start}
                 onChange={(e) =>
                   handleFormChange({ scheduled_start: e.target.value })
                 }
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               />
             </Field>
 
             {/* Time range */}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Início *">
-                <input
+                <Input
                   type="time"
                   value={form.scheduled_start_time}
                   onChange={(e) =>
                     handleFormChange({ scheduled_start_time: e.target.value })
                   }
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
+                  className="h-11 rounded-xl px-3 text-sm"
                 />
               </Field>
 
               <Field label="Fim *">
-                <input
+                <Input
                   type="time"
                   value={form.scheduled_end_time}
                   onChange={(e) =>
                     handleFormChange({ scheduled_end_time: e.target.value })
                   }
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
+                  className="h-11 rounded-xl px-3 text-sm"
                 />
               </Field>
             </div>
 
             {/* Timezone */}
             <Field label="Timezone">
-              <input
+              <Input
                 type="text"
                 value={form.timezone}
                 onChange={(e) =>
                   handleFormChange({ timezone: e.target.value })
                 }
                 placeholder="America/Recife"
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               />
             </Field>
 
             {/* Interviewer */}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Avaliador (nome)">
-                <input
+                <Input
                   type="text"
                   value={form.interviewer_name}
                   onChange={(e) =>
                     handleFormChange({ interviewer_name: e.target.value })
                   }
                   placeholder="Ex: João Silva"
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
+                  className="h-11 rounded-xl px-3 text-sm"
                 />
               </Field>
 
               <Field label="Avaliador (e-mail)">
-                <input
+                <Input
                   type="email"
                   value={form.interviewer_email}
                   onChange={(e) =>
                     handleFormChange({ interviewer_email: e.target.value })
                   }
                   placeholder="joao@example.com"
-                  className="ui-input h-11 rounded-xl px-3 text-sm"
+                  className="h-11 rounded-xl px-3 text-sm"
                 />
               </Field>
             </div>
 
             {/* Location */}
             <Field label="Local">
-              <input
+              <Input
                 type="text"
                 value={form.location}
                 onChange={(e) =>
                   handleFormChange({ location: e.target.value })
                 }
                 placeholder="Ex: Sala de reunião 3 / Presencial / Online"
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               />
             </Field>
 
             {/* Meeting URL */}
             <Field label="Link da reunião">
-              <input
+              <Input
                 type="url"
                 value={form.meeting_url}
                 onChange={(e) =>
                   handleFormChange({ meeting_url: e.target.value })
                 }
                 placeholder="https://meet.google.com/..."
-                className="ui-input h-11 rounded-xl px-3 text-sm"
+                className="h-11 rounded-xl px-3 text-sm"
               />
             </Field>
 
             {/* Sincronização com calendário */}
             <div className="pt-2">
-              <h4 className="text-sm font-medium text-[hsl(var(--text))] mb-2">Sincronização com calendário</h4>
+              <h4 className="text-sm font-medium text-text mb-2">Sincronização com calendário</h4>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-[hsl(var(--text))]">
-                  <input
+                <div className="flex items-center gap-2 text-sm text-text">
+                  <Input
                     id="agenda-interview-google-calendar"
                     type="checkbox"
                     checked={form.create_google_event}
@@ -689,12 +692,12 @@ export function AgendaInterviewModal({
                       handleGoogleEventChange(e.target.checked)
                     }
                     disabled={!googleConnected}
-                    className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+                    className="h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
                   />
                   <label htmlFor="agenda-interview-google-calendar">Adicionar ao Google Calendar</label>
                 </div>
                 
-                <div className="flex items-center gap-2 text-sm text-[hsl(var(--text))]">
+                <div className="flex items-center gap-2 text-sm text-text">
                   <input
                     id="agenda-interview-google-meet"
                     type="checkbox"
@@ -703,13 +706,13 @@ export function AgendaInterviewModal({
                       handleGoogleMeetChange(e.target.checked)
                     }
                     disabled={!googleConnected}
-                    className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+                    className="h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
                   />
                   <label htmlFor="agenda-interview-google-meet">Criar link do Google Meet</label>
                 </div>
                 
                 {!googleConnected && (
-                  <p className="text-sm text-[hsl(var(--text-muted))]">
+                  <p className="text-sm text-text-muted">
                     Conecte o Google Calendar para criar evento e link do Meet.{" "}
                     <button
                       type="button"
@@ -729,7 +732,7 @@ export function AgendaInterviewModal({
                 )}
 
                 {googleConnected && !form.create_google_event ? (
-                  <p className="text-sm text-[hsl(var(--text-muted))]">
+                  <p className="text-sm text-text-muted">
                     Marque Google Calendar para criar link do Meet.
                   </p>
                 ) : null}
@@ -737,13 +740,13 @@ export function AgendaInterviewModal({
             </div>
 
             <Field label="Observação pública para o candidato">
-              <textarea
+              <Textarea
                 value={form.public_notes}
                 onChange={(e) =>
                   handleFormChange({ public_notes: e.target.value })
                 }
                 placeholder="Mensagem visível no portal do candidato"
-                className="ui-input rounded-xl px-3 py-2 text-sm resize-none"
+                className="rounded-xl px-3 py-2 text-sm resize-none"
                 rows={3}
               />
             </Field>
@@ -755,20 +758,20 @@ export function AgendaInterviewModal({
                   handleFormChange({ internal_notes: e.target.value })
                 }
                 placeholder="Notas privadas da equipe de recrutamento"
-                className="ui-input rounded-xl px-3 py-2 text-sm resize-none"
+                className="rounded-xl px-3 py-2 text-sm resize-none"
                 rows={3}
               />
             </Field>
 
             {/* Description */}
             <Field label="Descrição">
-              <textarea
+              <Textarea
                 value={form.description}
                 onChange={(e) =>
                   handleFormChange({ description: e.target.value })
                 }
                 placeholder="Notas adicionais sobre a entrevista"
-                className="ui-input rounded-xl px-3 py-2 text-sm resize-none"
+                className="rounded-xl px-3 py-2 text-sm resize-none"
                 rows={3}
               />
             </Field>
@@ -776,11 +779,11 @@ export function AgendaInterviewModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-6 py-4 flex gap-3 justify-end">
+        <div className="border-t border-border bg-surface-muted px-6 py-4 flex gap-3 justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="h-11 px-6 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-sm font-medium text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))] transition disabled:opacity-50"
+            className="h-11 px-6 rounded-xl border border-border bg-surface text-sm font-medium text-text hover:bg-surface-muted transition disabled:opacity-50"
             disabled={loading}
           >
             Cancelar

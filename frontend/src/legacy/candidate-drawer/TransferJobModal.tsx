@@ -150,7 +150,7 @@ export function TransferJobModal({
       <div className="ui-card fixed left-1/2 top-1/2 z-[70] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-[hsl(var(--text))]">
+            <h2 className="text-base font-semibold text-text">
               Transferir/corrigir vaga
             </h2>
             <p className="ui-text-muted mt-0.5 text-sm">
@@ -163,24 +163,24 @@ export function TransferJobModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] disabled:opacity-50"
+            className="rounded-lg p-1.5 text-text-muted transition hover:bg-surface-muted hover:text-text disabled:opacity-50"
           >
             ✕
           </button>
         </div>
 
-        <div className="mb-4 rounded-xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning-soft))] px-4 py-3">
-          <p className="text-sm font-semibold text-[hsl(var(--text))]">
+        <div className="mb-4 rounded-xl border border-[hsl(var(--warning))]/30 bg-warning-soft px-4 py-3">
+          <p className="text-sm font-semibold text-text">
             Aviso de impacto
           </p>
-          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mt-1 text-xs text-text-muted">
             Esta ação retira o candidato do pipeline atual. Use apenas para corrigir o contexto da vaga.
           </p>
         </div>
 
         <div className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">
+            <span className="text-sm font-medium text-text">
               Vaga destino
             </span>
             <select
@@ -203,7 +203,7 @@ export function TransferJobModal({
             </select>
           </label>
 
-          <p className="text-xs text-[hsl(var(--text-muted))]">
+          <p className="text-xs text-text-muted">
             Apenas vagas publicadas podem receber transferência.
           </p>
 
@@ -214,7 +214,7 @@ export function TransferJobModal({
           ) : null}
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">
+            <span className="text-sm font-medium text-text">
               Motivo da transferência
             </span>
             <textarea

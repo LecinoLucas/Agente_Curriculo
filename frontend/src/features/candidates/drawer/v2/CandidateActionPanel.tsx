@@ -77,21 +77,21 @@ export function CandidateActionPanel({
   const terminalStage = currentStage === "admitted" || currentStage === "rejected";
 
   return (
-    <div className="border-t border-[hsl(var(--border))]/20">
+    <div className="border-t border-border/20">
       <button
         type="button"
         onClick={onToggle}
         disabled={interactionLocked}
-        className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-[hsl(var(--surface-muted))]/30"
+        className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-surface-muted/30"
       >
-        <h3 className="font-semibold text-[hsl(var(--text))]">Ações Adicionais</h3>
-        <span className={`text-sm font-semibold text-[hsl(var(--text-muted))] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
+        <h3 className="font-semibold text-text">Ações Adicionais</h3>
+        <span className={`text-sm font-semibold text-text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
           ▼
         </span>
       </button>
 
       {isOpen && (
-        <div className="border-t border-[hsl(var(--border))]/20 px-6 py-4 space-y-4">
+        <div className="border-t border-border/20 px-6 py-4 space-y-4">
           {/* Link to active job */}
           {activeJobId && activeJob && !hasActivePipeline ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -113,7 +113,7 @@ export function CandidateActionPanel({
           {/* Change stage */}
           {hasActivePipeline && !terminalStage ? (
             <div>
-              <label className="block mb-2 text-sm font-semibold text-[hsl(var(--text))]">
+              <label className="block mb-2 text-sm font-semibold text-text">
                 Mover para etapa
               </label>
               <div className="space-y-2">
@@ -121,7 +121,7 @@ export function CandidateActionPanel({
                   value={selectedStage}
                   onChange={(e) => setSelectedStage(e.target.value as PipelineStage)}
                   disabled={stageSaving || interactionLocked}
-                  className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text))] disabled:opacity-50"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text disabled:opacity-50"
                 >
                   {STAGE_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>
@@ -197,7 +197,7 @@ export function CandidateActionPanel({
               type="button"
               onClick={onOpenTransferJob}
               disabled={interactionLocked}
-              className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-text transition hover:bg-surface-muted disabled:opacity-50"
             >
               ↔️ Transferir para outra vaga
             </button>

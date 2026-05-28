@@ -89,6 +89,7 @@ export type ListCandidateSummariesParams = {
   link_status_filter?: string;
   skill?: string;
   seniority?: string;
+  include_admitted?: boolean;
 };
 
 function normalizeCandidate(candidate: Partial<Candidate> & { id?: string; full_name?: string; created_by?: string; created_at?: string; updated_at?: string }): Candidate {
@@ -412,6 +413,9 @@ export const candidatesService = {
     if (paramsInput.link_status_filter) params.set("link_status_filter", paramsInput.link_status_filter);
     if (paramsInput.skill) params.set("skill", paramsInput.skill);
     if (paramsInput.seniority) params.set("seniority", paramsInput.seniority);
+    if (paramsInput.include_admitted !== undefined) {
+      params.set("include_admitted", String(paramsInput.include_admitted));
+    }
     return httpRequest<Paginated<CandidateListSummary>>(
       `/api/v1/candidates/summaries?${params.toString()}`,
     ).then((payload) => ({

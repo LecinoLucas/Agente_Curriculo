@@ -53,7 +53,10 @@ export function CandidateSearchModal({
     const version = ++fetchVersionRef.current;
     setSummariesLoading(true);
     try {
-      const { data } = await candidatesService.listSummaries(1, 40, q || undefined);
+      const { data } = await candidatesService.listSummaries(1, 40, {
+        search: q || undefined,
+        link_status_filter: "without_active_job",
+      });
       // Ignore stale responses from previous requests
       if (version !== fetchVersionRef.current) return;
       setSummaries(data);
@@ -183,11 +186,11 @@ export function CandidateSearchModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       {previousProcessPrompt ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-2xl">
-            <h3 className="text-base font-semibold text-[hsl(var(--text))]">
+          <div className="w-full max-w-md rounded-lg border border-border bg-surface p-5 shadow-2xl">
+            <h3 className="text-base font-semibold text-text">
               Este candidato já participou desta vaga anteriormente.
             </h3>
-            <div className="mt-4 space-y-2 text-sm text-[hsl(var(--text-muted))]">
+            <div className="mt-4 space-y-2 text-sm text-text-muted">
               <p>Última etapa: {previousProcessPrompt.lastStage}</p>
               <p>Último resultado: {previousProcessPrompt.result}</p>
               <p>Encerrado em: {new Date(previousProcessPrompt.closedAt).toLocaleDateString("pt-BR")}</p>
@@ -199,14 +202,14 @@ export function CandidateSearchModal({
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+                className="rounded-lg border border-border px-3 py-2 text-sm text-text transition hover:bg-surface-muted"
                 onClick={() => setPreviousProcessPrompt(null)}
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+                className="rounded-lg border border-border px-3 py-2 text-sm text-text transition hover:bg-surface-muted"
                 onClick={() => {
                   onOpenCandidate?.(
                     previousProcessPrompt.candidateId,
@@ -232,21 +235,21 @@ export function CandidateSearchModal({
           </div>
         </div>
       ) : null}
-      <div className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-2xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] shadow-2xl flex flex-col">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-2xl border border-border/40 bg-surface shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="shrink-0 border-b border-[hsl(var(--border))]/30 px-6 py-4">
+        <div className="shrink-0 border-b border-border/30 px-6 py-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-[hsl(var(--text-muted))]">
+              <p className="text-sm font-medium text-text-muted">
                 Vincular candidatos
               </p>
-              <h2 className="mt-1 truncate text-lg font-semibold text-[hsl(var(--text))]">
+              <h2 className="mt-1 truncate text-lg font-semibold text-text">
                 {activeJobTitle}
               </h2>
             </div>
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))]"
+              className="rounded-lg p-1.5 text-text-muted transition hover:bg-surface-muted"
             >
               <X className="h-5 w-5" />
             </button>
@@ -256,15 +259,15 @@ export function CandidateSearchModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {/* Search input */}
-          <div className="sticky top-0 bg-[hsl(var(--surface))] px-6 py-4 border-b border-[hsl(var(--border))]/20">
+          <div className="sticky top-0 bg-surface px-6 py-4 border-b border-border/20">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
               <input
                 type="text"
                 placeholder="Buscar candidato por nome ou e-mail..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/50"
+                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-surface text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/50"
               />
             </div>
           </div>
@@ -275,11 +278,11 @@ export function CandidateSearchModal({
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="h-4 w-4 text-amber-500" />
-                <h3 className="text-sm font-semibold text-[hsl(var(--text))]">
+                <h3 className="text-sm font-semibold text-text">
                   IA Recomenda
                 </h3>
                 {rankedAvailable.length > 0 && (
-                  <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+                  <span className="text-xs font-medium text-text-muted">
                     {rankedAvailable.length}
                   </span>
                 )}
@@ -288,7 +291,7 @@ export function CandidateSearchModal({
               {rankingLoading ? (
                 <div className="space-y-2">
                   {[...Array(2)].map((_, i) => (
-                    <div key={i} className="h-12 rounded-lg bg-[hsl(var(--surface-muted))]/50 animate-pulse" />
+                    <div key={i} className="h-12 rounded-lg bg-surface-muted/50 animate-pulse" />
                   ))}
                 </div>
               ) : rankedAvailable.length > 0 ? (
@@ -305,7 +308,7 @@ export function CandidateSearchModal({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-[hsl(var(--text-muted))]">
+                <p className="text-xs text-text-muted">
                   {ranking === null
                     ? "Ranking não disponível ainda. Abra o painel de ranking para carregar recomendações."
                     : "Nenhum candidato recomendado"}
@@ -316,11 +319,11 @@ export function CandidateSearchModal({
             {/* Outros candidatos */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <h3 className="text-sm font-semibold text-[hsl(var(--text))]">
+                <h3 className="text-sm font-semibold text-text">
                   Outros candidatos
                 </h3>
                 {otherCandidates.length > 0 && (
-                  <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+                  <span className="text-xs font-medium text-text-muted">
                     {otherCandidates.length}
                   </span>
                 )}
@@ -329,7 +332,7 @@ export function CandidateSearchModal({
               {summariesLoading ? (
                 <div className="space-y-2">
                   {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-12 rounded-lg bg-[hsl(var(--surface-muted))]/50 animate-pulse" />
+                    <div key={i} className="h-12 rounded-lg bg-surface-muted/50 animate-pulse" />
                   ))}
                 </div>
               ) : otherCandidates.length > 0 ? (
@@ -342,12 +345,19 @@ export function CandidateSearchModal({
                       isAdded={addedIds.has(candidate.id)}
                       error={errors[candidate.id]}
                       onAdd={() => void handleAdd(candidate.id, candidate.full_name)}
-                      onOpen={() => onOpenCandidate?.(candidate.id)}
+                      onOpen={() =>
+                        onOpenCandidate?.(
+                          candidate.id,
+                          candidate.active_job_id
+                            ? `/pipeline/${candidate.active_job_id}?candidateId=${candidate.id}`
+                            : undefined,
+                        )
+                      }
                     />
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-[hsl(var(--text-muted))]">
+                <p className="text-xs text-text-muted">
                   {search ? "Nenhum candidato encontrado" : "Carregando..."}
                 </p>
               )}
@@ -355,7 +365,7 @@ export function CandidateSearchModal({
 
             {!hasContent && !rankingLoading && !summariesLoading && (
               <div className="text-center py-6">
-                <p className="text-sm text-[hsl(var(--text-muted))]">
+                <p className="text-sm text-text-muted">
                   Nenhum candidato disponível
                 </p>
               </div>
@@ -364,7 +374,7 @@ export function CandidateSearchModal({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 border-t border-[hsl(var(--border))]/30 px-6 py-4 bg-[hsl(var(--surface-muted))]/30">
+        <div className="shrink-0 border-t border-border/30 px-6 py-4 bg-surface-muted/30">
           <button
             onClick={() => {
               onClose();
@@ -398,10 +408,10 @@ function RankedCandidateRow({
   const scoreClass = scoreColorClass(entry.job_fit_score);
 
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))]/20 p-3 hover:border-[hsl(var(--border))]/60 transition">
+    <div className="rounded-lg border border-border/40 bg-surface-muted/20 p-3 hover:border-border/60 transition">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm text-[hsl(var(--text))]">
+          <p className="font-medium text-sm text-text">
             {entry.candidate_name}
           </p>
           <div className="mt-1 flex items-center gap-2">
@@ -453,22 +463,22 @@ function OtherCandidateRow({
     <div className={`rounded-lg border p-3 transition ${
       isLinked
         ? "border-blue-200/60 bg-blue-50/30 hover:border-blue-200"
-        : "border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))]/20 hover:border-[hsl(var(--border))]/60"
+        : "border-border/40 bg-surface-muted/20 hover:border-border/60"
     }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm text-[hsl(var(--text))]">
+          <p className="font-medium text-sm text-text">
             {candidate.full_name}
           </p>
           <div className="mt-1 space-y-0.5">
             {candidate.email && (
-              <p className="text-xs text-[hsl(var(--text-muted))]">{candidate.email}</p>
+              <p className="text-xs text-text-muted">{candidate.email}</p>
             )}
             {candidate.active_job_title && (
               <p className={`text-xs font-medium ${
                 isLinked
                   ? "text-blue-700"
-                  : "text-[hsl(var(--text-muted))]"
+                  : "text-text-muted"
               }`}>
                 {isLinked ? "✓ " : ""}Vaga: {candidate.active_job_title}
               </p>
@@ -486,7 +496,7 @@ function OtherCandidateRow({
             isAdded
               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
               : isLinked
-                ? "border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))]/10 text-[hsl(var(--text-muted))]"
+                ? "border-border/40 bg-surface-muted/10 text-text-muted"
                 : "border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
           }`}
         >

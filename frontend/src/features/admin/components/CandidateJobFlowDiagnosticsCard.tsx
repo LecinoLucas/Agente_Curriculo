@@ -319,7 +319,7 @@ export function CandidateJobFlowDiagnosticsCard() {
   };
 
   return (
-    <Card className="border-[hsl(var(--border))]">
+    <Card className="border-border">
       <CardHeader>
         <CardTitle>Diagnóstico Candidato/Vaga</CardTitle>
         <CardDescription>
@@ -338,7 +338,7 @@ export function CandidateJobFlowDiagnosticsCard() {
               onChange={(event) => void runCandidateSearch(event.target.value)}
               placeholder="Digite nome ou email do candidato"
             />
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-xs text-text-muted">
               {candidateSearchLoading
                 ? "Buscando candidatos..."
                 : selectedCandidateName
@@ -346,16 +346,16 @@ export function CandidateJobFlowDiagnosticsCard() {
                   : "Use pelo menos 2 caracteres para buscar."}
             </p>
             {candidateResults.length > 0 ? (
-              <ul className="max-h-52 space-y-1 overflow-auto rounded-md border border-[hsl(var(--border))] p-2 text-sm">
+              <ul className="max-h-52 space-y-1 overflow-auto rounded-md border border-border p-2 text-sm">
                 {candidateResults.map((candidate) => (
                   <li key={candidate.id}>
                     <button
                       type="button"
-                      className="w-full rounded px-2 py-1 text-left hover:bg-[hsl(var(--surface-muted))]"
+                      className="w-full rounded px-2 py-1 text-left hover:bg-surface-muted"
                       onClick={() => selectCandidate(candidate)}
                     >
                       <span className="font-medium">{candidate.full_name}</span>
-                      <span className="ml-2 text-xs text-[hsl(var(--text-muted))]">
+                      <span className="ml-2 text-xs text-text-muted">
                         {candidate.email ?? candidate.id}
                       </span>
                     </button>
@@ -374,11 +374,11 @@ export function CandidateJobFlowDiagnosticsCard() {
               placeholder="bb6aa5f2-a040-461a-adef-c79a5ef88872"
             />
             {selectedCandidate?.active_job_title ? (
-              <p className="text-xs text-[hsl(var(--text-muted))]">
+              <p className="text-xs text-text-muted">
                 Vaga ativa sugerida: {selectedCandidate.active_job_title}
               </p>
             ) : null}
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-xs text-text-muted">
               Candidate ID selecionado:{" "}
               <span className="font-mono">{candidateId || "nenhum"}</span>
             </p>
@@ -442,11 +442,11 @@ export function CandidateJobFlowDiagnosticsCard() {
         ) : null}
 
         {diagnostic ? (
-          <div className="rounded-md border border-[hsl(var(--border))]">
-            <div className="border-b border-[hsl(var(--border))] px-4 py-3 text-sm font-semibold text-[hsl(var(--text))]">
+          <div className="rounded-md border border-border">
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold text-text">
               Checklist do fluxo
             </div>
-            <ul className="space-y-2 px-4 py-3 text-sm text-[hsl(var(--text))]">
+            <ul className="space-y-2 px-4 py-3 text-sm text-text">
               {checklist.map((row) => (
                 <li key={row.key}>{`${row.label}: ${row.icon} ${row.detail}`}</li>
               ))}
@@ -455,7 +455,7 @@ export function CandidateJobFlowDiagnosticsCard() {
         ) : null}
 
         {repairResult ? (
-          <div className="space-y-2 rounded-md border border-[hsl(var(--border))] px-4 py-3 text-sm text-[hsl(var(--text))]">
+          <div className="space-y-2 rounded-md border border-border px-4 py-3 text-sm text-text">
             <p className="font-semibold">{repairResult.repaired ? "Reparo executado." : "Nenhuma correção automática segura foi aplicada."}</p>
             <p>{`Antes: ${REASON_CODE_LABELS[repairResult.before.reason_code]}`}</p>
             <p>{`Depois: ${REASON_CODE_LABELS[repairResult.after.reason_code]}`}</p>

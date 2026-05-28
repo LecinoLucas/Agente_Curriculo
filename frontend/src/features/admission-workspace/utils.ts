@@ -57,7 +57,7 @@ export function checklistItemStatusLabel(status: AdmissionWorkspaceChecklistItem
     pending: "Pendente",
     received: "Recebido",
     approved: "Aprovado",
-    rejected: "Rejeitado",
+    rejected: "Correção solicitada",
     not_required: "Dispensado",
   };
   return labels[status] ?? status;
@@ -65,9 +65,9 @@ export function checklistItemStatusLabel(status: AdmissionWorkspaceChecklistItem
 
 export function documentStatusLabel(status: AdmissionWorkspaceDocumentStatus): string {
   const labels: Record<string, string> = {
-    uploaded: "Enviado",
+    uploaded: "Em análise",
     approved: "Aprovado",
-    rejected: "Rejeitado",
+    rejected: "Correção solicitada",
     replaced: "Substituído",
     pending: "Pendente",
   };

@@ -11,16 +11,16 @@ const ICONS = {
 } as const;
 
 const TONE_CLASSES: Record<ToastItem["type"], string> = {
-  success: "ui-badge-success",
-  error: "ui-badge-danger",
-  warning: "ui-badge-warning",
-  info: "ui-badge-info",
+  success: "bg-success-soft text-success border-success/20",
+  error: "bg-danger-soft text-danger border-danger/20",
+  warning: "bg-warning-soft text-warning border-warning/20",
+  info: "bg-surface-muted text-text border-border",
 };
 
 const ICON_CLASSES: Record<ToastItem["type"], string> = {
-  success: "text-[hsl(var(--success))]",
-  error:   "text-[hsl(var(--danger))]",
-  warning: "text-[hsl(var(--warning))]",
+  success: "text-success",
+  error:   "text-danger",
+  warning: "text-warning",
   info:    "text-[hsl(var(--primary))]",
 };
 

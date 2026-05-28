@@ -25,7 +25,7 @@ function renderAliasBadgesDisplay(aliases: string[]) {
   const { visible, remaining } = renderAliasBadges(aliases);
 
   if (!aliases.length) {
-    return <span className="text-sm text-[hsl(var(--text-muted))]">—</span>;
+    return <span className="text-sm text-text-muted">—</span>;
   }
 
   return (
@@ -33,7 +33,7 @@ function renderAliasBadgesDisplay(aliases: string[]) {
       {visible.map((alias, index) => (
         <span
           key={`${alias}-${index}`}
-          className="inline-flex max-w-full items-center truncate rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-xs text-[hsl(var(--text))]"
+          className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-surface-muted px-2 py-0.5 text-xs text-text"
           title={alias}
         >
           {alias}
@@ -41,7 +41,7 @@ function renderAliasBadgesDisplay(aliases: string[]) {
       ))}
       {remaining > 0 ? (
         <span
-          className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2 py-0.5 text-xs text-[hsl(var(--text-muted))]"
+          className="inline-flex items-center rounded-full border border-border bg-surface px-2 py-0.5 text-xs text-text-muted"
           title={aliases.slice(3).join(", ")}
         >
           +{remaining}
@@ -73,7 +73,7 @@ export function SkillsTable({
         ) : null}
 
         {error ? (
-          <div className="flex items-center gap-2 px-4 py-6 text-sm text-[hsl(var(--danger))]">
+          <div className="flex items-center gap-2 px-4 py-6 text-sm text-danger">
             <span className="font-semibold">!</span>
             <span>{error}</span>
           </div>
@@ -104,8 +104,8 @@ export function SkillsTable({
 
         {!loading && !error && total > 0 ? (
           <>
-            <div className="border-b border-[hsl(var(--border))] px-4 py-3 sm:px-6">
-              <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <div className="border-b border-border px-4 py-3 sm:px-6">
+              <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
                 {total} {total === 1 ? "equivalência" : "equivalências"}
               </p>
             </div>
@@ -113,8 +113,8 @@ export function SkillsTable({
             {/* Desktop table */}
             <div className="ui-scrollbar hidden max-h-[68vh] overflow-y-auto md:block">
               <Table className="w-full table-fixed">
-                <TableHeader className="bg-[hsl(var(--surface-muted))]">
-                  <TableRow className="hover:bg-[hsl(var(--surface-muted))]">
+                <TableHeader className="bg-surface-muted">
+                  <TableRow className="hover:bg-surface-muted">
                     <TableHead className="w-[24%] min-w-[220px]">Canônico</TableHead>
                     <TableHead className="w-[18%]">Domínios</TableHead>
                     <TableHead className="w-[12%]">Força</TableHead>
@@ -127,10 +127,10 @@ export function SkillsTable({
                     <TableRow key={skill.id} className="align-top">
                       <TableCell className="min-w-0 py-4">
                         <div className="min-w-0">
-                          <p className="break-words text-sm font-semibold text-[hsl(var(--text))]">
+                          <p className="break-words text-sm font-semibold text-text">
                             {skill.canonical}
                           </p>
-                          {skill.type ? <p className="text-xs text-[hsl(var(--text-muted))]">{skill.type}</p> : null}
+                          {skill.type ? <p className="text-xs text-text-muted">{skill.type}</p> : null}
                         </div>
                       </TableCell>
                       <TableCell className="py-4">
@@ -143,7 +143,7 @@ export function SkillsTable({
                             ))}
                           </div>
                         ) : (
-                          <span className="text-sm text-[hsl(var(--text-muted))]">—</span>
+                          <span className="text-sm text-text-muted">—</span>
                         )}
                       </TableCell>
                       <TableCell className="py-4">
@@ -178,18 +178,18 @@ export function SkillsTable({
               {items.map((skill) => (
                 <div
                   key={skill.id}
-                  className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 shadow-sm"
+                  className="rounded-xl border border-border bg-surface p-4 shadow-sm"
                 >
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-semibold text-[hsl(var(--text))]">{skill.canonical}</p>
+                        <p className="break-words text-sm font-semibold text-text">{skill.canonical}</p>
                       </div>
                       <Badge variant="outline">{skill.strength}</Badge>
                     </div>
 
                     <div className="space-y-1">
-                      <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
                         Domínios
                       </p>
                       <div className="flex flex-wrap gap-1.5">
@@ -200,13 +200,13 @@ export function SkillsTable({
                             </Badge>
                           ))
                         ) : (
-                          <span className="text-sm text-[hsl(var(--text-muted))]">—</span>
+                          <span className="text-sm text-text-muted">—</span>
                         )}
                       </div>
                     </div>
 
                     <div className="space-y-1">
-                      <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
                         Aliases
                       </p>
                       <div className="max-w-full">{renderAliasBadgesDisplay(skill.aliases ?? [])}</div>

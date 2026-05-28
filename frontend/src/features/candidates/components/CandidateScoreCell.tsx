@@ -15,12 +15,12 @@ export function CandidateScoreCell({ candidate }: { candidate: CandidateListSumm
     semantics.primaryScore == null
       ? "text-slate-400 dark:text-slate-500"
       : semantics.statusTone === "high"
-      ? "text-[hsl(var(--success))]"
+      ? "text-success"
       : semantics.statusTone === "mid"
-        ? "text-[hsl(var(--warning))]"
+        ? "text-warning"
         : semantics.statusTone === "low"
-          ? "text-[hsl(var(--danger))]"
-          : "text-[hsl(var(--text))]";
+          ? "text-danger"
+          : "text-text";
 
   const barColor =
     semantics.statusTone === "high"
@@ -43,7 +43,7 @@ export function CandidateScoreCell({ candidate }: { candidate: CandidateListSumm
       </div>
       
       {showProgress ? (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[hsl(var(--surface-muted))] shadow-inner">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted shadow-inner">
           <div 
             className={`h-full transition-all duration-700 ease-out ${barColor}`} 
             style={{ width: `${score}%` }} 

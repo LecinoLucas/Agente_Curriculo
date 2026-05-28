@@ -259,9 +259,9 @@ function CredentialSecretDialog({
             </>
           ) : (
             <>
-              <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-3 text-sm">
-                <p className="font-medium text-[hsl(var(--text))]">{credential?.label ?? "Credencial"}</p>
-                <p className="mt-1 text-[hsl(var(--text-muted))]">
+              <div className="rounded-lg border border-border bg-surface-muted p-3 text-sm">
+                <p className="font-medium text-text">{credential?.label ?? "Credencial"}</p>
+                <p className="mt-1 text-text-muted">
                   {providerLabel(credential?.provider ?? "")} · {credential?.model_id || "modelo geral"} ·{" "}
                   {credential?.masked_key ?? "****"}
                 </p>
@@ -457,7 +457,7 @@ export function AdminAiProviderCredentialsPage() {
               ))}
             </select>
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[hsl(var(--text-muted))]" />
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-text-muted" />
               <Input
                 value={modelFilter}
                 onChange={(event) => setModelFilter(event.target.value)}
@@ -481,14 +481,14 @@ export function AdminAiProviderCredentialsPage() {
           ) : null}
 
           {loading ? (
-            <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-8 text-center text-sm text-[hsl(var(--text-muted))]">
+            <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-text-muted">
               Carregando credenciais...
             </div>
           ) : credentials.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-8 text-center">
-              <KeyRound className="mx-auto h-8 w-8 text-[hsl(var(--text-muted))]" />
-              <p className="mt-3 text-sm font-medium text-[hsl(var(--text))]">Nenhuma credencial encontrada.</p>
-              <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            <div className="rounded-lg border border-dashed border-border p-8 text-center">
+              <KeyRound className="mx-auto h-8 w-8 text-text-muted" />
+              <p className="mt-3 text-sm font-medium text-text">Nenhuma credencial encontrada.</p>
+              <p className="mt-1 text-sm text-text-muted">
                 Cadastre uma chave para o worker usar credenciais persistentes.
               </p>
             </div>
@@ -511,8 +511,8 @@ export function AdminAiProviderCredentialsPage() {
                   <TableRow key={credential.id}>
                     <TableCell>
                       <div className="space-y-1">
-                        <p className="font-medium text-[hsl(var(--text))]">{credential.label}</p>
-                        <p className="font-mono text-xs text-[hsl(var(--text-muted))]">
+                        <p className="font-medium text-text">{credential.label}</p>
+                        <p className="font-mono text-xs text-text-muted">
                           {credential.masked_key}
                         </p>
                       </div>
@@ -520,7 +520,7 @@ export function AdminAiProviderCredentialsPage() {
                     <TableCell>
                       <div className="space-y-1">
                         <p className="text-sm">{providerLabel(credential.provider)}</p>
-                        <p className="text-xs text-[hsl(var(--text-muted))]">{credential.model_id || "modelo geral"}</p>
+                        <p className="text-xs text-text-muted">{credential.model_id || "modelo geral"}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -534,7 +534,7 @@ export function AdminAiProviderCredentialsPage() {
                         {credential.last_error_type || "—"}
                       </div>
                       {credential.last_error_at ? (
-                        <p className="text-xs text-[hsl(var(--text-muted))]">
+                        <p className="text-xs text-text-muted">
                           {formatDateTime(credential.last_error_at)}
                         </p>
                       ) : null}

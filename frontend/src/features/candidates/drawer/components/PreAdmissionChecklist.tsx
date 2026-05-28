@@ -8,7 +8,7 @@ import type {
   PreAdmissionDocument,
 } from "../../../../types/domain";
 
-const itemTypeLabels: Record<PreAdmissionChecklistItemType, string> = {
+const itemTypeLabels: Record<string, string> = {
   cpf: "CPF",
   rg: "RG",
   comprovante_endereco: "Comprovante de endereço",
@@ -20,6 +20,10 @@ const itemTypeLabels: Record<PreAdmissionChecklistItemType, string> = {
   dados_bancarios: "Dados bancários",
   other: "Outro",
 };
+
+function itemTypeLabel(itemType: PreAdmissionChecklistItemType, title: string) {
+  return itemTypeLabels[itemType] ?? title;
+}
 
 const itemStatusLabels: Record<PreAdmissionChecklistItemStatus, string> = {
   pending: "Pendente",
@@ -70,8 +74,8 @@ export function PreAdmissionChecklist({
 
   const handleTypeChange = (value: PreAdmissionChecklistItemType) => {
     setItemType(value);
-    if (!title.trim() || title === itemTypeLabels[itemType]) {
-      setTitle(itemTypeLabels[value]);
+    if (!title.trim() || title === itemTypeLabel(itemType, title)) {
+      setTitle(itemTypeLabel(value, title));
     }
   };
 
@@ -95,16 +99,16 @@ export function PreAdmissionChecklist({
   };
 
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))] bg-white p-4">
+    <div className="rounded-lg border border-border bg-white p-4">
       <div className="flex flex-col gap-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Checklist manual
         </p>
-        <h3 className="text-base font-semibold text-[hsl(var(--text))]">Documentos e pendências</h3>
+        <h3 className="text-base font-semibold text-text">Documentos e pendências</h3>
       </div>
 
       {items.length === 0 ? (
-        <div className="mt-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-4 text-sm text-[hsl(var(--text-muted))]">
+        <div className="mt-4 rounded-lg border border-border bg-surface-muted/30 p-4 text-sm text-text-muted">
           Nenhum item de checklist registrado.
         </div>
       ) : (
@@ -116,27 +120,27 @@ export function PreAdmissionChecklist({
             return (
                 <div
                   key={item.id}
-                  className="grid gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/20 p-3 sm:grid-cols-[1fr_170px]"
+                  className="grid gap-3 rounded-lg border border-border bg-surface-muted/20 p-3 sm:grid-cols-[1fr_170px]"
                 >
                   <div>
-                    <div className="text-sm font-semibold text-[hsl(var(--text))]">{item.title}</div>
-                    <div className="mt-1 text-xs text-[hsl(var(--text-muted))]">
-                      {itemTypeLabels[item.item_type]} · {item.required ? "Obrigatório" : "Opcional"}
+                    <div className="text-sm font-semibold text-text">{item.title}</div>
+                    <div className="mt-1 text-xs text-text-muted">
+                      {itemTypeLabel(item.item_type, item.title)} · {item.required ? "Obrigatório" : "Opcional"}
                     </div>
                     {item.notes ? (
-                      <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{item.notes}</p>
+                      <p className="mt-2 text-sm text-text-muted">{item.notes}</p>
                     ) : null}
 
                     {itemDocuments.length > 0 ? (
                       <div className="mt-3 space-y-2">
                         {itemDocuments.map((document) => (
-                          <div key={document.id} className="rounded-lg border border-[hsl(var(--border))] bg-white p-3">
+                          <div key={document.id} className="rounded-lg border border-border bg-white p-3">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <div>
-                                <p className="break-all text-sm font-medium text-[hsl(var(--text))]">
+                                <p className="break-all text-sm font-medium text-text">
                                   {document.original_filename}
                                 </p>
-                                <p className="text-xs text-[hsl(var(--text-muted))]">
+                                <p className="text-xs text-text-muted">
                                   {documentStatusLabels[document.status] ?? document.status}
                                 </p>
                               </div>
@@ -145,7 +149,7 @@ export function PreAdmissionChecklist({
                                   <button
                                     type="button"
                                     onClick={() => void onDownloadDocument(document.id, document.original_filename)}
-                                    className="rounded-md border border-[hsl(var(--border))] px-2 py-1 text-xs font-semibold text-[hsl(var(--text))]"
+                                    className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-text"
                                   >
                                     Baixar
                                   </button>
@@ -184,7 +188,7 @@ export function PreAdmissionChecklist({
                                   onChange={(event) => setReviewNotes(event.target.value)}
                                   rows={2}
                                   placeholder="Motivo da rejeição"
-                                  className="w-full resize-none rounded-md border border-[hsl(var(--border))] px-2 py-1 text-sm"
+                                  className="w-full resize-none rounded-md border border-border px-2 py-1 text-sm"
                                 />
                                 <div className="flex gap-2">
                                   <button
@@ -200,7 +204,7 @@ export function PreAdmissionChecklist({
                                       setRejectingDocumentId(null);
                                       setReviewNotes("");
                                     }}
-                                    className="rounded-md border border-[hsl(var(--border))] px-2 py-1 text-xs font-semibold"
+                                    className="rounded-md border border-border px-2 py-1 text-xs font-semibold"
                                   >
                                     Cancelar
                                   </button>
@@ -213,7 +217,7 @@ export function PreAdmissionChecklist({
                     ) : null}
                   </div>
                   <label className="block space-y-1 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Status
                     </span>
                     <select
@@ -222,7 +226,7 @@ export function PreAdmissionChecklist({
                         void onUpdateItem(item.id, event.target.value as PreAdmissionChecklistItemStatus)
                       }
                       disabled={updating}
-                      className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm disabled:opacity-60"
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm disabled:opacity-60"
                     >
                       {Object.entries(itemStatusLabels).map(([value, label]) => (
                         <option key={value} value={value}>
@@ -237,15 +241,15 @@ export function PreAdmissionChecklist({
         </div>
       )}
 
-      <div className="mt-4 grid gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-3 sm:grid-cols-[160px_1fr_auto] sm:items-end">
+      <div className="mt-4 grid gap-3 rounded-lg border border-border bg-surface-muted/30 p-3 sm:grid-cols-[160px_1fr_auto] sm:items-end">
         <label className="block space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Tipo
           </span>
           <select
             value={itemType}
             onChange={(event) => handleTypeChange(event.target.value as PreAdmissionChecklistItemType)}
-            className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
           >
             {Object.entries(itemTypeLabels).map(([value, label]) => (
               <option key={value} value={value}>
@@ -255,22 +259,22 @@ export function PreAdmissionChecklist({
           </select>
         </label>
         <label className="block space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Título
           </span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
           />
         </label>
         <div className="flex flex-wrap items-center gap-3">
-          <label className="inline-flex items-center gap-2 text-sm text-[hsl(var(--text))]">
+          <label className="inline-flex items-center gap-2 text-sm text-text">
             <input
               type="checkbox"
               checked={required}
               onChange={(event) => setRequired(event.target.checked)}
-              className="h-4 w-4 rounded border-[hsl(var(--border))]"
+              className="h-4 w-4 rounded border-border"
             />
             Obrigatório
           </label>

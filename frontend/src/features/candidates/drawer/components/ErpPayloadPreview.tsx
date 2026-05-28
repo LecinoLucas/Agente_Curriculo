@@ -28,9 +28,9 @@ function summarizeSensitiveValue(value: unknown): string {
 
 export function ErpPayloadPreview({ payload }: ErpPayloadPreviewProps) {
   return (
-    <div className="space-y-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 p-4">
-      <div className="text-sm font-semibold text-[hsl(var(--text))]">Preview do Payload Protheus (dry-run)</div>
-      <div className="grid gap-2 text-sm text-[hsl(var(--text-muted))] sm:grid-cols-2">
+    <div className="space-y-3 rounded-lg border border-border bg-surface-muted/35 p-4">
+      <div className="text-sm font-semibold text-text">Preview do Payload Protheus (dry-run)</div>
+      <div className="grid gap-2 text-sm text-text-muted sm:grid-cols-2">
         <div><span className="font-medium">Nome:</span> {payload.candidate.name || "-"}</div>
         <div><span className="font-medium">Email:</span> {maskEmail(payload.candidate.email)}</div>
         <div><span className="font-medium">CPF:</span> {maskCpf(payload.candidate.cpf)}</div>

@@ -66,7 +66,7 @@ export function SimpleDonutChart({
             {emptyLabel}
           </text>
         </svg>
-        <p className="text-sm text-[hsl(var(--text-muted))]">{emptyLabel}</p>
+        <p className="text-sm text-text-muted">{emptyLabel}</p>
       </div>
     );
   }
@@ -140,7 +140,7 @@ export function SimpleDonutChart({
         {normalizedData.map((item) => (
           <div
             key={item.label}
-            className="flex items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 px-3 py-2"
+            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted/40 px-3 py-2"
           >
             <div className="flex items-center gap-2 min-w-0">
               <span
@@ -148,9 +148,9 @@ export function SimpleDonutChart({
                 className="h-3 w-3 flex-shrink-0 rounded-full"
                 style={{ backgroundColor: item.color ?? "hsl(var(--primary))" }}
               />
-              <span className="truncate text-sm text-[hsl(var(--text))]">{item.label}</span>
+              <span className="truncate text-sm text-text">{item.label}</span>
             </div>
-            <span className="text-sm font-semibold text-[hsl(var(--text))]">
+            <span className="text-sm font-semibold text-text">
               {valueFormatter(item.value)}
             </span>
           </div>

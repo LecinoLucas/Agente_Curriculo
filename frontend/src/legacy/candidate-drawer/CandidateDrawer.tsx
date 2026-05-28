@@ -968,7 +968,7 @@ export function CandidateDrawer({
         <div className="flex flex-1 flex-col">
           <div className="p-5">
             <div className="mb-4 rounded-xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] px-4 py-3">
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">
+              <p className="text-sm font-semibold text-text">
                 Carregando candidato…
               </p>
               <p className="mt-1 text-xs text-[hsl(var(--primary))]">
@@ -982,14 +982,14 @@ export function CandidateDrawer({
 
       {!candidateLoading && candidateError ? (
         <div className="flex flex-1 flex-col p-5">
-          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-4 text-sm text-[hsl(var(--danger))]">
+          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-danger-soft px-4 py-4 text-sm text-danger">
             <p className="font-semibold">Não foi possível abrir este candidato.</p>
             <p className="mt-1">{candidateError}</p>
             {selectedCandidateId ? (
               <button
                 type="button"
                 onClick={() => void openCandidate(selectedCandidateId)}
-                className="mt-3 rounded-lg border border-[hsl(var(--danger))]/20 bg-[hsl(var(--surface))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--danger))] transition hover:bg-[hsl(var(--danger-soft))]"
+                className="mt-3 rounded-lg border border-[hsl(var(--danger))]/20 bg-surface px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft"
               >
                 Tentar novamente
               </button>

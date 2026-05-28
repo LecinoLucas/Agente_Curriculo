@@ -70,6 +70,7 @@ vi.mock("../../features/candidates/components/CandidatePreviewDrawer", () => ({
 
 describe("PipelinePage", () => {
   const mockSetActiveJob = vi.fn();
+  const mockSetBoardFilters = vi.fn().mockResolvedValue(undefined);
   const mockRefreshBoard = vi.fn();
   const mockMoveCandidateStage = vi.fn();
   const mockOpenCandidate = vi.fn().mockResolvedValue(undefined);
@@ -205,10 +206,12 @@ describe("PipelinePage", () => {
     (usePipeline as any).mockReturnValue({
       activeJobId: "job-1",
       board: mockBoard,
+      boardFilters: {},
       boardLoading: false,
       boardError: null,
       rankingSyncTick: 0,
       setActiveJob: mockSetActiveJob,
+      setBoardFilters: mockSetBoardFilters,
       moveCandidateStage: mockMoveCandidateStage,
       refreshBoard: mockRefreshBoard,
       openCandidate: mockOpenCandidate,
@@ -257,8 +260,100 @@ describe("PipelinePage", () => {
 
     await waitFor(() => {
       expect(screen.queryByPlaceholderText(/buscar candidato/i)).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /Filtros/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Filtros$/i)).not.toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: /Vincular candidato/i }).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("3.1. Renderiza filtros seguros por data do vínculo", async () => {
+    render(
+      <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Entrada no processo")).toBeInTheDocument();
+      expect(screen.getByText("Última atividade")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/entrou na etapa/i)).not.toBeInTheDocument();
+  });
+
+  it("3.2. Alterar filtro atualiza a board com novos params", async () => {
+    render(
+      <MemoryRouter
+        future={routerFuture}
+        initialEntries={["/pipeline/job-1?entered_from=2026-05-01"]}
+      >
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockSetBoardFilters).toHaveBeenCalledWith({ entered_from: "2026-05-01" });
+    });
+
+    fireEvent.change(screen.getByLabelText("Última atividade até"), {
+      target: { value: "2026-05-31" },
+    });
+
+    await waitFor(() => {
+      expect(mockSetBoardFilters).toHaveBeenLastCalledWith({
+        entered_from: "2026-05-01",
+        updated_to: "2026-05-31",
+      });
+    });
+  });
+
+  it("3.3. Limpar filtros remove os params da board", async () => {
+    (usePipeline as any).mockReturnValue({
+      activeJobId: "job-1",
+      board: mockBoard,
+      boardFilters: {
+        entered_from: "2026-05-01",
+        entered_to: "2026-05-31",
+        updated_from: "2026-06-01",
+        updated_to: "2026-06-30",
+      },
+      boardLoading: false,
+      boardError: null,
+      rankingSyncTick: 0,
+      setActiveJob: mockSetActiveJob,
+      setBoardFilters: mockSetBoardFilters,
+      moveCandidateStage: mockMoveCandidateStage,
+      refreshBoard: mockRefreshBoard,
+      openCandidate: mockOpenCandidate,
+      closeCandidate: mockCloseCandidate,
+      syncCandidateOverview: mockSyncCandidateOverview,
+    });
+
+    render(
+      <MemoryRouter
+        future={routerFuture}
+        initialEntries={[
+          "/pipeline/job-1?entered_from=2026-05-01&entered_to=2026-05-31&updated_from=2026-06-01&updated_to=2026-06-30",
+        ]}
+      >
+        <Routes>
+          <Route path="/pipeline/:jobId" element={<PipelinePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("2026-05-01")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
+
+    await waitFor(() => {
+      expect(mockSetBoardFilters).toHaveBeenLastCalledWith({});
     });
   });
 
@@ -347,12 +442,17 @@ describe("PipelinePage", () => {
     (usePipeline as any).mockReturnValue({
       activeJobId: "job-1",
       board: boardWithProtheus,
+      boardFilters: {},
       boardLoading: false,
       boardError: null,
       rankingSyncTick: 0,
       setActiveJob: mockSetActiveJob,
+      setBoardFilters: mockSetBoardFilters,
       moveCandidateStage: mockMoveCandidateStage,
       refreshBoard: mockRefreshBoard,
+      openCandidate: mockOpenCandidate,
+      closeCandidate: mockCloseCandidate,
+      syncCandidateOverview: mockSyncCandidateOverview,
     });
 
     render(

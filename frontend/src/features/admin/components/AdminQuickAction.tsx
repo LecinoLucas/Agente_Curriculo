@@ -12,8 +12,8 @@ type AdminQuickActionProps = {
 };
 
 const variantClasses: Record<string, string> = {
-  default: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] shadow-sm",
-  blue: "border-[hsl(var(--border))] bg-[linear-gradient(135deg,hsl(var(--accent-soft)),hsl(var(--surface)))] shadow-sm",
+  default: "border-border bg-surface-muted shadow-sm",
+  blue: "border-border bg-[linear-gradient(135deg,hsl(var(--accent-soft)),hsl(var(--surface)))] shadow-sm",
 };
 
 export function AdminQuickAction({

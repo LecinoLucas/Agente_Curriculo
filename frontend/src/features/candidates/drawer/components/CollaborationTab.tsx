@@ -144,7 +144,7 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
             <span>{error}</span>
           </div>
         ) : comments.length === 0 ? (
-          <div className="flex items-center justify-center py-8 text-[hsl(var(--text-muted))]">
+          <div className="flex items-center justify-center py-8 text-text-muted">
             <p className="text-sm">Sem comentários de colaboração ainda</p>
           </div>
         ) : (
@@ -152,33 +152,33 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
             {comments.map((comment) => (
               <div
                 key={comment.id}
-                className="rounded-lg border border-[hsl(var(--border))]/50 bg-[hsl(var(--surface))] p-4 space-y-2"
+                className="rounded-lg border border-border/50 bg-surface p-4 space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium text-[hsl(var(--text))]">
+                    <span className="text-sm font-medium text-text">
                       {comment.author_role === "recruiter" && "Recrutador"}
                       {comment.author_role === "manager" && "Gestor"}
                       {comment.author_role === "admin" && "Admin"}
                       {!["recruiter", "manager", "admin"].includes(comment.author_role) && comment.author_role}
                     </span>
-                    <span className="text-xs text-[hsl(var(--text-muted))]">
+                    <span className="text-xs text-text-muted">
                       {new Date(comment.created_at).toLocaleDateString("pt-BR", {
                         dateStyle: "short",
                       })}
                     </span>
                   </div>
-                  <span className="px-2 py-1 rounded text-xs font-medium bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] flex-shrink-0">
+                  <span className="px-2 py-1 rounded text-xs font-medium bg-surface-muted text-text-muted flex-shrink-0">
                     {comment.comment_type === "review_request" && "Solicitação de revisão"}
                     {comment.comment_type === "manager_feedback" && "Feedback do gestor"}
                     {comment.comment_type === "comment" && "Comentário"}
                     {!["review_request", "manager_feedback", "comment"].includes(comment.comment_type) && comment.comment_type}
                   </span>
                 </div>
-                <p className="text-sm text-[hsl(var(--text))]">{comment.message}</p>
+                <p className="text-sm text-text">{comment.message}</p>
                 {comment.recommendation && (
-                  <div className="pt-2 border-t border-[hsl(var(--border))]/30">
-                    <span className="text-xs font-medium text-[hsl(var(--text-muted))]">Recomendação:</span>
+                  <div className="pt-2 border-t border-border/30">
+                    <span className="text-xs font-medium text-text-muted">Recomendação:</span>
                     <span className="ml-2 text-xs font-semibold text-[hsl(var(--primary))]">
                       {comment.recommendation === "advance" && "Avançar"}
                       {comment.recommendation === "hold" && "Aguardar"}
@@ -196,17 +196,17 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
 
       {/* Input area */}
       {!loading && (
-        <div className="border-t border-[hsl(var(--border))]/30 bg-[hsl(var(--surface))] p-5 space-y-3">
+        <div className="border-t border-border/30 bg-surface p-5 space-y-3">
           {/* Mode toggle */}
-          <div className="flex gap-1 rounded-lg border border-[hsl(var(--border))]/50 p-1 bg-[hsl(var(--bg))]">
+          <div className="flex gap-1 rounded-lg border border-border/50 p-1 bg-[hsl(var(--bg))]">
             <button
               type="button"
               onClick={() => setMode("comment")}
               className={[
                 "flex-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors",
                 mode === "comment"
-                  ? "bg-[hsl(var(--surface))] text-[hsl(var(--text))] shadow-sm"
-                  : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+                  ? "bg-surface text-text shadow-sm"
+                  : "text-text-muted hover:text-text",
               ].join(" ")}
             >
               <MessageSquare className="h-3.5 w-3.5" />
@@ -222,8 +222,8 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
               className={[
                 "flex-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors",
                 mode === "review_request"
-                  ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-sm"
-                  : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+                  ? "bg-surface text-[hsl(var(--primary))] shadow-sm"
+                  : "text-text-muted hover:text-text",
               ].join(" ")}
             >
               <UserCheck className="h-3.5 w-3.5" />
@@ -235,7 +235,7 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
           {mode === "review_request" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-[hsl(var(--text-muted))]">Prioridade:</span>
+                <span className="text-xs text-text-muted">Prioridade:</span>
                 <div className="flex gap-1">
                   {PRIORITY_OPTIONS.map((opt) => (
                     <button
@@ -250,7 +250,7 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
                             : opt.value === "medium"
                               ? "bg-amber-500 text-white"
                               : "bg-[hsl(var(--primary))] text-white"
-                          : "border border-[hsl(var(--border))] text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+                          : "border border-border text-text-muted hover:text-text",
                       ].join(" ")}
                     >
                       {opt.label}
@@ -262,12 +262,12 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
               <div className="space-y-1.5">
                 <label
                   htmlFor="target-manager"
-                  className="block text-xs text-[hsl(var(--text-muted))]"
+                  className="block text-xs text-text-muted"
                 >
                   Gestor responsável
                 </label>
                 {loadingManagers ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-[hsl(var(--border))]/50 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text-muted))]">
+                  <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text-muted">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     Carregando gestores...
                   </div>
@@ -276,7 +276,7 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
                     id="target-manager"
                     value={selectedManagerId}
                     onChange={(e) => setSelectedManagerId(e.target.value)}
-                    className="w-full rounded-lg border border-[hsl(var(--border))]/50 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+                    className="w-full rounded-lg border border-border/50 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
                     disabled={submitting}
                   >
                     <option value="">Selecione um gestor</option>
@@ -293,7 +293,7 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
                 )}
               </div>
 
-              <p className="text-[11px] text-[hsl(var(--text-muted))]">
+              <p className="text-[11px] text-text-muted">
                 A revisão do gestor só será considerada concluída quando o usuário Gestor enviar feedback.
               </p>
             </div>
@@ -318,7 +318,7 @@ export function CollaborationTab({ candidateId, jobId }: CollaborationTabProps) 
                     ? "Adicione um comentário interno..."
                     : "Descreva o que o gestor deve avaliar..."
                 }
-                className="w-full p-3 rounded-lg border border-[hsl(var(--border))]/50 bg-[hsl(var(--bg))] text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] resize-none"
+                className="w-full p-3 rounded-lg border border-border/50 bg-[hsl(var(--bg))] text-sm text-text placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] resize-none"
                 rows={3}
                 disabled={submitting}
               />

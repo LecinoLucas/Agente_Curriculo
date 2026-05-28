@@ -56,34 +56,34 @@ export function CreateJobAreaModal({ open, initialName = "", onClose, onSuccess 
     <Modal title="Criar nova área" onClose={onClose}>
       <div className="space-y-5 px-6 py-5">
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Nome da área *</span>
+          <span className="text-sm font-medium text-text">Nome da área *</span>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none"
+            className="ui-input h-11 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none"
             placeholder="Ex: Tecnologia, Financeiro"
           />
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Descrição (opcional)</span>
+          <span className="text-sm font-medium text-text">Descrição (opcional)</span>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={3}
-            className="ui-input min-h-[80px] w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2.5 text-sm shadow-none"
+            className="ui-input min-h-[80px] w-full rounded-xl border-border bg-surface px-3 py-2.5 text-sm shadow-none"
             placeholder="Breve descrição da área"
           />
         </label>
 
         {error && (
-          <div className="rounded-xl border border-[hsl(var(--danger))]/15 bg-[hsl(var(--danger-soft))] px-3 py-3 text-sm text-[hsl(var(--danger))]">
+          <div className="rounded-xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-3 text-sm text-danger">
             {error}
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-[hsl(var(--border))] px-6 py-4">
+      <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
         <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
           Cancelar
         </Button>

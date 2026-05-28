@@ -76,13 +76,13 @@ function MetricTile({
       className={[
         "rounded-2xl border px-4 py-3",
         emphasis
-          ? "border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface-muted))]/72 shadow-[inset_0_1px_0_hsl(var(--surface))]"
-          : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/38",
+          ? "border-border-strong/45 bg-surface-muted/72 shadow-[inset_0_1px_0_hsl(var(--surface))]"
+          : "border-border bg-surface-muted/38",
       ].join(" ")}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-[hsl(var(--text))]">{value}</p>
-      {note ? <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{note}</p> : null}
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-text">{value}</p>
+      {note ? <p className="mt-1 text-xs text-text-muted">{note}</p> : null}
     </div>
   );
 }
@@ -100,10 +100,10 @@ export function JobContextPanel({
 }: JobContextPanelProps) {
   if (!job) {
     return (
-      <Card className="overflow-hidden rounded-[30px] border-[hsl(var(--border-strong))]/55 bg-[hsl(var(--surface))] shadow-[0_24px_60px_-34px_hsl(var(--text)/0.24)] lg:sticky lg:top-24">
+      <Card className="overflow-hidden rounded-[30px] border-border-strong/55 bg-surface shadow-[0_24px_60px_-34px_hsl(var(--text)/0.24)] lg:sticky lg:top-24">
         <CardContent className="px-6 py-8">
-          <p className="text-sm font-semibold text-[hsl(var(--text))]">Selecione uma vaga</p>
-          <p className="mt-2 text-sm leading-6 text-[hsl(var(--text-muted))]">
+          <p className="text-sm font-semibold text-text">Selecione uma vaga</p>
+          <p className="mt-2 text-sm leading-6 text-text-muted">
             O contexto operacional da vaga escolhida vai aparecer aqui com saúde, insights, pipeline e próximas ações.
           </p>
         </CardContent>
@@ -138,21 +138,21 @@ export function JobContextPanel({
         };
 
   return (
-    <Card className="job-context-panel-enter overflow-hidden rounded-[30px] border-[hsl(var(--border-strong))]/55 bg-[hsl(var(--surface))] shadow-[0_24px_60px_-34px_hsl(var(--text)/0.24)] transition-all duration-200 lg:sticky lg:top-24">
+    <Card className="job-context-panel-enter overflow-hidden rounded-[30px] border-border-strong/55 bg-surface shadow-[0_24px_60px_-34px_hsl(var(--text)/0.24)] transition-all duration-200 lg:sticky lg:top-24">
       <CardContent className="p-0">
-        <div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/38 px-6 py-5">
+        <div className="border-b border-border bg-surface-muted/38 px-6 py-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+              <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                 <ChevronRight className="h-3.5 w-3.5" />
                 <span>Diagnóstico da vaga</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-lg font-semibold text-[hsl(var(--text))]">{job.title}</h3>
+                <h3 className="text-lg font-semibold text-text">{job.title}</h3>
                 <StatusPill label={formatJobStatus(job.status)} tone={jobStatusTone(job.status)} />
               </div>
               {summaryParts.length > 0 ? (
-                <p className="text-sm text-[hsl(var(--text-muted))]">{summaryParts.join(" • ")}</p>
+                <p className="text-sm text-text-muted">{summaryParts.join(" • ")}</p>
               ) : null}
             </div>
 
@@ -171,7 +171,7 @@ export function JobContextPanel({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                className="h-9 w-9 rounded-full text-text-muted hover:bg-surface-muted hover:text-text"
                 onClick={onClearSelection}
                 aria-label="Fechar contexto da vaga"
               >
@@ -184,10 +184,10 @@ export function JobContextPanel({
         </div>
 
         <div className="space-y-4 px-5 py-5">
-          <section className="space-y-3 rounded-[24px] border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-4 shadow-[inset_0_1px_0_hsl(var(--surface-muted))]">
+          <section className="space-y-3 rounded-[24px] border border-border bg-surface px-4 py-4 shadow-[inset_0_1px_0_hsl(var(--surface-muted))]">
             <div>
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">Job Health</p>
-              <p className="text-xs text-[hsl(var(--text-muted))]">Essa vaga está bem ou mal, e por quê.</p>
+              <p className="text-sm font-semibold text-text">Job Health</p>
+              <p className="text-xs text-text-muted">Essa vaga está bem ou mal, e por quê.</p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -215,7 +215,7 @@ export function JobContextPanel({
             </div>
 
             {quality ? (
-              <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/25 px-4 py-3">
+              <div className="rounded-2xl border border-border bg-surface-muted/25 px-4 py-3">
                 <JobQualityBadge quality={quality} compact />
               </div>
             ) : null}
@@ -225,8 +225,8 @@ export function JobContextPanel({
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-[hsl(var(--primary))]" />
               <div>
-                <p className="text-sm font-semibold text-[hsl(var(--text))]">AI Insights</p>
-                <p className="text-xs text-[hsl(var(--text-muted))]">Leituras operacionais com foco em ação.</p>
+                <p className="text-sm font-semibold text-text">AI Insights</p>
+                <p className="text-xs text-text-muted">Leituras operacionais com foco em ação.</p>
               </div>
             </div>
 
@@ -246,10 +246,10 @@ export function JobContextPanel({
                       <span className={`h-2 w-2 rounded-full ${classes.marker}`} />
                       <span>{insight.title}</span>
                     </div>
-                    <div className="mt-2 inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/72 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+                    <div className="mt-2 inline-flex items-center rounded-full border border-border bg-surface/72 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                       {getInsightMeta(insight.confidence, insight.momentum)}
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-[hsl(var(--text-muted))]">
+                    <p className="mt-3 text-sm leading-6 text-text-muted">
                       {insight.signal} {insight.cause} {insight.impact}
                     </p>
                     <p className={`mt-3 text-sm font-medium ${classes.label}`}>Próxima ação: {insight.action}</p>
@@ -259,10 +259,10 @@ export function JobContextPanel({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-[24px] border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-4 shadow-[inset_0_1px_0_hsl(var(--surface-muted))]">
+          <section className="space-y-3 rounded-[24px] border border-border bg-surface px-4 py-4 shadow-[inset_0_1px_0_hsl(var(--surface-muted))]">
             <div>
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">Candidate Pipeline Snapshot</p>
-              <p className="text-xs text-[hsl(var(--text-muted))]">Volume, gargalo e força do funil em leitura rápida.</p>
+              <p className="text-sm font-semibold text-text">Candidate Pipeline Snapshot</p>
+              <p className="text-xs text-text-muted">Volume, gargalo e força do funil em leitura rápida.</p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -295,10 +295,10 @@ export function JobContextPanel({
             </div>
           </section>
 
-          <section className="space-y-3 rounded-[24px] border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-4 shadow-[inset_0_1px_0_hsl(var(--surface-muted))]">
+          <section className="space-y-3 rounded-[24px] border border-border bg-surface px-4 py-4 shadow-[inset_0_1px_0_hsl(var(--surface-muted))]">
             <div>
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">Quick Actions</p>
-              <p className="text-xs text-[hsl(var(--text-muted))]">Ações diretas para destravar ou acelerar a vaga.</p>
+              <p className="text-sm font-semibold text-text">Quick Actions</p>
+              <p className="text-xs text-text-muted">Ações diretas para destravar ou acelerar a vaga.</p>
             </div>
 
             <div className="grid gap-2">
@@ -311,7 +311,7 @@ export function JobContextPanel({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 justify-start rounded-xl border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface))] px-4 hover:bg-[hsl(var(--surface-muted))]/70"
+                  className="h-10 justify-start rounded-xl border-border-strong/45 bg-surface px-4 hover:bg-surface-muted/70"
                   onClick={() => onNavigatePipeline(job.id)}
                 >
                   <KanbanSquare className="mr-2 h-4 w-4" />
@@ -323,7 +323,7 @@ export function JobContextPanel({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 justify-start rounded-xl border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface))] px-4 hover:bg-[hsl(var(--surface-muted))]/70"
+                  className="h-10 justify-start rounded-xl border-border-strong/45 bg-surface px-4 hover:bg-surface-muted/70"
                   onClick={() => onNavigateEdit(job.id)}
                 >
                   <Pencil className="mr-2 h-4 w-4" />
@@ -335,7 +335,7 @@ export function JobContextPanel({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 justify-start rounded-xl border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface))] px-4 hover:bg-[hsl(var(--surface-muted))]/70"
+                  className="h-10 justify-start rounded-xl border-border-strong/45 bg-surface px-4 hover:bg-surface-muted/70"
                   onClick={() => onPause(job.id)}
                   disabled={runningAction === `pause:${job.id}`}
                 >
@@ -348,7 +348,7 @@ export function JobContextPanel({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 justify-start rounded-xl border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface))] px-4 hover:bg-[hsl(var(--surface-muted))]/70"
+                  className="h-10 justify-start rounded-xl border-border-strong/45 bg-surface px-4 hover:bg-surface-muted/70"
                   onClick={() => onClose(job.id)}
                   disabled={runningAction === `close:${job.id}`}
                 >
@@ -359,7 +359,7 @@ export function JobContextPanel({
             </div>
 
             {operationalPresentation.actionTarget === "edit" ? (
-              <div className="rounded-2xl border border-[hsl(var(--warning))]/15 bg-[hsl(var(--warning-soft))]/35 px-4 py-3 text-sm text-[hsl(var(--warning))]">
+              <div className="rounded-2xl border border-[hsl(var(--warning))]/15 bg-warning-soft/35 px-4 py-3 text-sm text-warning">
                 <div className="flex items-start gap-3">
                   <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
                   <p>Antes de acelerar o pipeline, vale ajustar a estrutura da vaga para evitar ruído operacional.</p>

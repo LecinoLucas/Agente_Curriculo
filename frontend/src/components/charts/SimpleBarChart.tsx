@@ -36,7 +36,7 @@ export function SimpleBarChart({
     return (
       <div
         aria-label={ariaLabel}
-        className="flex h-full min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 text-sm text-[hsl(var(--text-muted))]"
+        className="flex h-full min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-border bg-surface-muted/30 text-sm text-text-muted"
         role="img"
       >
         {emptyLabel}
@@ -57,12 +57,12 @@ export function SimpleBarChart({
           return (
             <div key={item.label} className="grid gap-2 sm:grid-cols-[160px_1fr_auto] sm:items-center">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[hsl(var(--text))]">{item.label}</p>
+                <p className="truncate text-sm font-medium text-text">{item.label}</p>
                 {item.note ? (
-                  <p className="truncate text-xs text-[hsl(var(--text-muted))]">{item.note}</p>
+                  <p className="truncate text-xs text-text-muted">{item.note}</p>
                 ) : null}
               </div>
-              <div className="h-3 rounded-full bg-[hsl(var(--surface-muted))]">
+              <div className="h-3 rounded-full bg-surface-muted">
                 <div
                   className="h-full rounded-full"
                   style={{
@@ -71,7 +71,7 @@ export function SimpleBarChart({
                   }}
                 />
               </div>
-              <span className="text-sm font-semibold text-[hsl(var(--text))]">
+              <span className="text-sm font-semibold text-text">
                 {valueFormatter(item.value)}
               </span>
             </div>
@@ -96,10 +96,10 @@ export function SimpleBarChart({
             className="flex min-w-[72px] flex-1 flex-col items-center gap-2"
             title={`${item.label}: ${valueFormatter(item.value)}`}
           >
-            <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+            <span className="text-xs font-medium text-text-muted">
               {valueFormatter(item.value)}
             </span>
-            <div className="flex h-56 w-full items-end rounded-2xl bg-[hsl(var(--surface-muted))]/40 px-2 py-2">
+            <div className="flex h-56 w-full items-end rounded-2xl bg-surface-muted/40 px-2 py-2">
               <div
                 className="w-full rounded-xl"
                 style={{
@@ -108,11 +108,11 @@ export function SimpleBarChart({
                 }}
               />
             </div>
-            <span className="line-clamp-2 text-center text-xs text-[hsl(var(--text-muted))]">
+            <span className="line-clamp-2 text-center text-xs text-text-muted">
               {item.label}
             </span>
             {item.note ? (
-              <span className="line-clamp-2 text-center text-[10px] text-[hsl(var(--text-muted))]">
+              <span className="line-clamp-2 text-center text-[10px] text-text-muted">
                 {item.note}
               </span>
             ) : null}

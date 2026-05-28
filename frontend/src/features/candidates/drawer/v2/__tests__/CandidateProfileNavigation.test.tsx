@@ -106,7 +106,7 @@ describe("CandidateProfileNavigation", () => {
     const activeButton = buttons.find((btn) => btn.textContent?.includes("Análise"));
 
     if (activeButton) {
-      expect(activeButton).toHaveClass("bg-[hsl(var(--surface))]");
+      expect(activeButton).toHaveClass("bg-surface");
     }
   });
 });

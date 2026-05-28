@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "../../../components/common/Modal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   skillsService,
   type SkillCatalog,
@@ -97,62 +100,62 @@ export function EditSkillModal({ open, skill, onClose, onSuccess }: EditSkillMod
     <Modal title="Editar skill" onClose={onClose}>
       <div className="space-y-5 px-6 py-5">
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Nome da skill *</span>
-          <input
+          <span className="text-sm font-medium text-text">Nome da skill *</span>
+          <Input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none"
+            className="h-11 shadow-none"
             placeholder="Ex: React, Python, Scrum"
           />
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Categoria</span>
-          <select
+          <span className="text-sm font-medium text-text">Categoria</span>
+          <Select
             value={category}
             onChange={(event) => setCategory(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none"
+            className="h-11 shadow-none"
           >
             {CATEGORIES.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Aliases</span>
-          <input
+          <span className="text-sm font-medium text-text">Aliases</span>
+          <Input
             value={aliases}
             onChange={(event) => setAliases(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none"
+            className="h-11 shadow-none"
             placeholder="Ex: JS, JavaScript, EcmaScript"
           />
-          <p className="text-xs text-[hsl(var(--text-muted))]">
+          <p className="text-xs text-text-muted">
             Separe múltiplos aliases por vírgula.
           </p>
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Descrição</span>
-          <textarea
+          <span className="text-sm font-medium text-text">Descrição</span>
+          <Textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={3}
-            className="ui-input min-h-[90px] w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2.5 text-sm shadow-none"
+            className="shadow-none"
             placeholder="Contexto de uso, observações ou exemplos."
           />
         </label>
 
         {error ? (
-          <div className="rounded-xl border border-[hsl(var(--danger))]/15 bg-[hsl(var(--danger-soft))] px-3 py-3 text-sm text-[hsl(var(--danger))]">
+          <div className="rounded-xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-3 text-sm text-danger">
             {error}
           </div>
         ) : null}
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-[hsl(var(--border))] px-6 py-4">
+      <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
         <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
           Cancelar
         </Button>

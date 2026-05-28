@@ -30,10 +30,10 @@ export function OverviewTab({
         <section className="rounded-2xl border border-[hsl(var(--primary))]/15 bg-[hsl(var(--accent-soft))] p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
-              <h2 className="text-base font-semibold text-[hsl(var(--text))]">
+              <h2 className="text-base font-semibold text-text">
                 Candidato aguardando vaga
               </h2>
-              <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
+              <p className="mt-2 text-sm text-text-muted">
                 Vincule a uma vaga para análise, score e acompanhamento no funil.
               </p>
             </div>
@@ -82,24 +82,24 @@ export function OverviewTab({
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted transition hover:bg-surface-muted hover:text-text"
           >
             Editar
           </button>
         }
       >
         <div className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <div className="rounded-xl border border-border bg-surface-muted px-3 py-2.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
               Nome
             </div>
-            <div className="mt-1 text-sm text-[hsl(var(--text))]">{overview.candidate.full_name}</div>
+            <div className="mt-1 text-sm text-text">{overview.candidate.full_name}</div>
           </div>
-          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <div className="rounded-xl border border-border bg-surface-muted px-3 py-2.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
               E-mail
             </div>
-            <div className="mt-1 text-sm text-[hsl(var(--text))]">{overview.candidate.email ?? "—"}</div>
+            <div className="mt-1 text-sm text-text">{overview.candidate.email ?? "—"}</div>
           </div>
         </div>
       </Section>

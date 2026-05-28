@@ -23,6 +23,7 @@ import {
   JobCandidate,
   JobPipelineBoard,
   MovePipelineCandidateResponse,
+  PipelineBoardFilters,
   PipelineStage,
 } from "../../types/domain";
 
@@ -39,6 +40,7 @@ interface PipelineState {
   // Active job and its kanban board
   activeJobId: string | null;
   board: JobPipelineBoard | null;
+  boardFilters: PipelineBoardFilters;
   boardLoading: boolean;
   boardError: string | null;
 
@@ -66,6 +68,7 @@ export interface PipelineContextValue extends PipelineState {
 
   // Board
   setActiveJob: (jobId: string) => void;
+  setBoardFilters: (filters: PipelineBoardFilters) => Promise<void>;
   refreshBoard: () => Promise<void>;
   invalidateBoard: (jobId?: string | null, reload?: boolean) => Promise<void>;
 
@@ -129,6 +132,7 @@ const INITIAL_STATE: PipelineState = {
   jobsError: null,
   activeJobId: null,
   board: null,
+  boardFilters: {},
   boardLoading: false,
   boardError: null,
   selectedCandidateId: null,
@@ -169,6 +173,31 @@ function toFriendlyText(error: unknown, defaultMessage: string): string {
   return detail || defaultMessage;
 }
 
+function normalizeBoardFilters(filters?: PipelineBoardFilters | null): PipelineBoardFilters {
+  if (!filters) return {};
+
+  return Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => typeof value === "string" && value.trim().length > 0),
+  ) as PipelineBoardFilters;
+}
+
+function serializeBoardFilters(filters?: PipelineBoardFilters | null): string {
+  const normalized = normalizeBoardFilters(filters);
+  const params = new URLSearchParams();
+
+  if (normalized.entered_from) params.set("entered_from", normalized.entered_from);
+  if (normalized.entered_to) params.set("entered_to", normalized.entered_to);
+  if (normalized.updated_from) params.set("updated_from", normalized.updated_from);
+  if (normalized.updated_to) params.set("updated_to", normalized.updated_to);
+
+  return params.toString();
+}
+
+function buildBoardCacheKey(jobId: string, filters?: PipelineBoardFilters | null): string {
+  const serialized = serializeBoardFilters(filters);
+  return serialized ? `${jobId}?${serialized}` : jobId;
+}
+
 // ── Context ────────────────────────────────────────────────────────────────────
 
 const PipelineContext = createContext<PipelineContextValue | undefined>(undefined);
@@ -188,6 +217,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   const activeJobIdRef = useRef<string | null>(null);
   const selectedCandidateIdRef = useRef<string | null>(null);
+  const boardFiltersRef = useRef<PipelineBoardFilters>({});
 
   const boardCacheRef = useRef<Map<string, JobPipelineBoard>>(new Map());
   const boardFetchInFlightRef = useRef<Map<string, Promise<JobPipelineBoard>>>(new Map());
@@ -277,36 +307,51 @@ export function PipelineProvider({ children }: PropsWithChildren) {
 
   // ── Board ──────────────────────────────────────────────────────────────────
 
-  const fetchBoard = useCallback(async (jobId: string, force = false): Promise<JobPipelineBoard> => {
-    if (!force) {
-      const cached = boardCacheRef.current.get(jobId);
-      if (cached) return cached;
-    }
+  const fetchBoard = useCallback(
+    async (
+      jobId: string,
+      filters: PipelineBoardFilters = boardFiltersRef.current,
+      force = false,
+    ): Promise<JobPipelineBoard> => {
+      const cacheKey = buildBoardCacheKey(jobId, filters);
 
-    const inFlight = boardFetchInFlightRef.current.get(jobId);
-    if (inFlight) return inFlight;
+      if (!force) {
+        const cached = boardCacheRef.current.get(cacheKey);
+        if (cached) return cached;
+      }
 
-    const request = getJobPipeline(jobId)
-      .then((board) => {
-        boardCacheRef.current.set(jobId, board);
-        return board;
-      })
-      .finally(() => {
-        boardFetchInFlightRef.current.delete(jobId);
-      });
+      const inFlight = boardFetchInFlightRef.current.get(cacheKey);
+      if (inFlight) return inFlight;
 
-    boardFetchInFlightRef.current.set(jobId, request);
-    return request;
-  }, []);
+      const request = getJobPipeline(jobId, filters)
+        .then((board) => {
+          boardCacheRef.current.set(cacheKey, board);
+          return board;
+        })
+        .finally(() => {
+          boardFetchInFlightRef.current.delete(cacheKey);
+        });
 
-  const loadBoard = useCallback(async (jobId: string, force = false) => {
+      boardFetchInFlightRef.current.set(cacheKey, request);
+      return request;
+    },
+    [],
+  );
+
+  const loadBoard = useCallback(async (
+    jobId: string,
+    force = false,
+    filters: PipelineBoardFilters = boardFiltersRef.current,
+  ) => {
+    const cacheKey = buildBoardCacheKey(jobId, filters);
     setState((prev) => ({ ...prev, boardLoading: true, boardError: null }));
 
     if (!force) {
-      const cached = boardCacheRef.current.get(jobId);
+      const cached = boardCacheRef.current.get(cacheKey);
       if (cached) {
         setState((prev) =>
-          prev.activeJobId === jobId
+          prev.activeJobId === jobId &&
+          buildBoardCacheKey(jobId, boardFiltersRef.current) === cacheKey
             ? { ...prev, board: cached, boardLoading: false, boardError: null }
             : prev,
         );
@@ -315,9 +360,10 @@ export function PipelineProvider({ children }: PropsWithChildren) {
     }
 
     try {
-      const board = await fetchBoard(jobId, force);
+      const board = await fetchBoard(jobId, filters, force);
       setState((prev) =>
-        prev.activeJobId === jobId
+        prev.activeJobId === jobId &&
+        buildBoardCacheKey(jobId, boardFiltersRef.current) === cacheKey
           ? { ...prev, board, boardLoading: false, boardError: null }
           : prev,
       );
@@ -341,15 +387,38 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         candidateOverview: null,
         candidateError: null,
       }));
-      void loadBoard(jobId);
+      void loadBoard(jobId, false, boardFiltersRef.current);
     },
     [loadBoard],
   );
 
   const refreshBoard = useCallback(async () => {
     const jobId = activeJobIdRef.current;
-    if (jobId) await loadBoard(jobId, true);
+    if (jobId) await loadBoard(jobId, true, boardFiltersRef.current);
   }, [loadBoard]);
+
+  const setBoardFilters = useCallback(
+    async (filters: PipelineBoardFilters) => {
+      const normalized = normalizeBoardFilters(filters);
+      const nextKey = serializeBoardFilters(normalized);
+      const currentKey = serializeBoardFilters(boardFiltersRef.current);
+      if (nextKey === currentKey) return;
+
+      boardFiltersRef.current = normalized;
+      setState((prev) => ({
+        ...prev,
+        boardFilters: normalized,
+        board: prev.activeJobId ? null : prev.board,
+        boardError: null,
+      }));
+
+      const jobId = activeJobIdRef.current;
+      if (jobId) {
+        await loadBoard(jobId, false, normalized);
+      }
+    },
+    [loadBoard],
+  );
 
   const setCandidateAiStatus = useCallback(
     (candidateId: string, status: AIAnalysisStatus | null) => {
@@ -363,7 +432,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           return { ...candidate, ai_status: status };
         });
         if (nextBoard === prev.board) return prev;
-        boardCacheRef.current.set(nextBoard.job_id, nextBoard);
+        boardCacheRef.current.set(buildBoardCacheKey(nextBoard.job_id, boardFiltersRef.current), nextBoard);
         return { ...prev, board: nextBoard };
       });
     },
@@ -376,7 +445,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         if (!prev.board) return prev;
         const nextBoard = updateBoardCandidate(prev.board, candidateId, updater);
         if (nextBoard === prev.board) return prev;
-        boardCacheRef.current.set(nextBoard.job_id, nextBoard);
+        boardCacheRef.current.set(buildBoardCacheKey(nextBoard.job_id, boardFiltersRef.current), nextBoard);
         return { ...prev, board: nextBoard };
       });
     },
@@ -726,15 +795,23 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       const targetJobId = jobId ?? activeJobIdRef.current;
       if (!targetJobId) return;
 
-      boardCacheRef.current.delete(targetJobId);
-      boardFetchInFlightRef.current.delete(targetJobId);
+      for (const key of Array.from(boardCacheRef.current.keys())) {
+        if (key === targetJobId || key.startsWith(`${targetJobId}?`)) {
+          boardCacheRef.current.delete(key);
+        }
+      }
+      for (const key of Array.from(boardFetchInFlightRef.current.keys())) {
+        if (key === targetJobId || key.startsWith(`${targetJobId}?`)) {
+          boardFetchInFlightRef.current.delete(key);
+        }
+      }
 
       if (!reload) {
         return;
       }
 
       if (activeJobIdRef.current === targetJobId) {
-        await loadBoard(targetJobId, true);
+        await loadBoard(targetJobId, true, boardFiltersRef.current);
       }
     },
     [loadBoard],
@@ -990,7 +1067,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
           PIPELINE_STAGE_STATUS_LABEL[toStage],
         );
         if (nextBoard === prev.board) return prev;
-        boardCacheRef.current.set(nextBoard.job_id, nextBoard);
+        boardCacheRef.current.set(buildBoardCacheKey(nextBoard.job_id, boardFiltersRef.current), nextBoard);
         return { ...prev, board: nextBoard };
       });
 
@@ -1010,7 +1087,10 @@ export function PipelineProvider({ children }: PropsWithChildren) {
         }
 
         if (previousBoard) {
-          boardCacheRef.current.set(previousBoard.job_id, previousBoard);
+          boardCacheRef.current.set(
+            buildBoardCacheKey(previousBoard.job_id, boardFiltersRef.current),
+            previousBoard,
+          );
           setState((prev) =>
             prev.board?.job_id === previousBoard?.job_id
               ? { ...prev, board: previousBoard }
@@ -1183,6 +1263,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       loadJobs,
       invalidateJobs,
       setActiveJob,
+      setBoardFilters,
       refreshBoard,
       invalidateBoard,
       openCandidate,
@@ -1209,6 +1290,7 @@ export function PipelineProvider({ children }: PropsWithChildren) {
       loadJobs,
       invalidateJobs,
       setActiveJob,
+      setBoardFilters,
       refreshBoard,
       invalidateBoard,
       openCandidate,

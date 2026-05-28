@@ -97,6 +97,7 @@ vi.mock("../../services/analysisService", () => ({
 
 vi.mock("../../services/admissionWorkspaceService", () => ({
   admissionWorkspaceService: {
+    getOverview: vi.fn(),
     getWorkspace: vi.fn(),
     approveChecklistItem: vi.fn(),
     rejectChecklistItem: vi.fn(),
@@ -725,6 +726,51 @@ describe("Candidate workspace flow", () => {
       },
       recent_events: [],
     });
+    vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue({
+      case: {
+        id: "case-created",
+        status: "draft",
+        current_stage: "pre_admission",
+        created_at: "2026-05-24T10:00:00Z",
+        updated_at: "2026-05-24T10:00:00Z",
+      },
+      candidate: {
+        id: "candidate-1",
+        name: "Ana Souza",
+        initials: "AS",
+        avatar_url: null,
+      },
+      job: {
+        id: "job-1",
+        title: "Analista Protheus",
+      },
+      status_label: "Rascunho",
+      progress: {
+        total: 0,
+        approved: 0,
+        pending: 0,
+        rejected: 0,
+        in_review: 0,
+        waived: 0,
+      },
+      main_blocker: null,
+      main_blockers: [],
+      next_action: null,
+      next_actions: [],
+      summary: {
+        responsible_name: "Juliana",
+        created_at: "2026-05-24T10:00:00Z",
+        last_update_at: "2026-05-24T10:00:00Z",
+        readiness_status: "not_ready",
+        ready_for_export: false,
+      },
+      integration_status: {
+        state: "pending",
+        label: "Pendente",
+        ready_for_export: false,
+      },
+      updated_at: "2026-05-24T10:00:00Z",
+    });
     vi.mocked(getCandidateBehavioralAssessment).mockResolvedValue(behavioralAssignment);
     vi.mocked(getBehavioralEvaluation).mockResolvedValue({
       id: "evaluation-1",
@@ -1148,7 +1194,7 @@ describe("Candidate workspace flow", () => {
       expect(preAdmissionService.createPreAdmission).toHaveBeenCalledWith("job-1", "candidate-1", {});
     });
     await waitFor(() => {
-      expect(admissionWorkspaceService.getWorkspace).toHaveBeenCalledWith("case-created");
+      expect(admissionWorkspaceService.getOverview).toHaveBeenCalledWith("case-created");
     });
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /Iniciar pré-admissão/i })).not.toBeInTheDocument();
@@ -1247,7 +1293,7 @@ describe("Candidate workspace flow", () => {
     await user.click(screen.getByTestId("candidate-profile-primary-action"));
     expect(screen.queryByRole("dialog", { name: /Iniciar pré-admissão/i })).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(admissionWorkspaceService.getWorkspace).toHaveBeenCalledWith("case-1");
+      expect(admissionWorkspaceService.getOverview).toHaveBeenCalledWith("case-1");
     });
   });
 

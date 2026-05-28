@@ -170,8 +170,8 @@ export function getOperationalMomentumNote(snapshot: JobPipelineSnapshot) {
 export function getOperationalToneClasses(tone: OperationalTone) {
   if (tone === "healthy") {
     return {
-      label: "text-[hsl(var(--success))]",
-      note: "text-[hsl(var(--text-muted))]",
+      label: "text-success",
+      note: "text-text-muted",
       marker: "bg-[hsl(var(--success))]",
     };
   }
@@ -179,22 +179,22 @@ export function getOperationalToneClasses(tone: OperationalTone) {
   if (tone === "ready") {
     return {
       label: "text-[hsl(var(--primary))]",
-      note: "text-[hsl(var(--text-muted))]",
+      note: "text-text-muted",
       marker: "bg-[hsl(var(--primary))]",
     };
   }
 
   if (tone === "review") {
     return {
-      label: "text-[hsl(var(--warning))]",
-      note: "text-[hsl(var(--warning))]",
+      label: "text-warning",
+      note: "text-warning",
       marker: "bg-[hsl(var(--warning))]",
     };
   }
 
   return {
-    label: "text-[hsl(var(--danger))]",
-    note: tone === "risk" ? "text-[hsl(var(--danger))]" : "text-[hsl(var(--warning))]",
+    label: "text-danger",
+    note: tone === "risk" ? "text-danger" : "text-warning",
     marker: tone === "risk" ? "bg-[hsl(var(--danger))]" : "bg-[hsl(var(--warning))]",
   };
 }
@@ -202,15 +202,15 @@ export function getOperationalToneClasses(tone: OperationalTone) {
 export function getOperationalSurfaceClasses(tone: OperationalTone) {
   if (tone === "healthy") {
     return {
-      soft: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/55",
-      emphasis: "border-[hsl(var(--success))]/20 bg-[hsl(var(--success-soft))]/75",
-      accent: "bg-[hsl(var(--success-soft))]",
+      soft: "border-border bg-surface-muted/55",
+      emphasis: "border-[hsl(var(--success))]/20 bg-success-soft/75",
+      accent: "bg-success-soft",
     };
   }
 
   if (tone === "ready") {
     return {
-      soft: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/55",
+      soft: "border-border bg-surface-muted/55",
       emphasis: "border-[hsl(var(--primary))]/20 bg-[hsl(var(--accent-soft))]/90",
       accent: "bg-[hsl(var(--accent-soft))]",
     };
@@ -218,24 +218,24 @@ export function getOperationalSurfaceClasses(tone: OperationalTone) {
 
   if (tone === "review") {
     return {
-      soft: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/55",
-      emphasis: "border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))]/80",
-      accent: "bg-[hsl(var(--warning-soft))]",
+      soft: "border-border bg-surface-muted/55",
+      emphasis: "border-[hsl(var(--warning))]/20 bg-warning-soft/80",
+      accent: "bg-warning-soft",
     };
   }
 
   if (tone === "stuck") {
     return {
-      soft: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/55",
-      emphasis: "border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))]/80",
-      accent: "bg-[hsl(var(--warning-soft))]",
+      soft: "border-border bg-surface-muted/55",
+      emphasis: "border-[hsl(var(--warning))]/20 bg-warning-soft/80",
+      accent: "bg-warning-soft",
     };
   }
 
   return {
-    soft: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/55",
-    emphasis: "border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))]/80",
-    accent: "bg-[hsl(var(--danger-soft))]",
+    soft: "border-border bg-surface-muted/55",
+    emphasis: "border-[hsl(var(--danger))]/20 bg-danger-soft/80",
+    accent: "bg-danger-soft",
   };
 }
 

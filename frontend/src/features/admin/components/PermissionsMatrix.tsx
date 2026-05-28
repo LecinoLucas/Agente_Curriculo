@@ -115,13 +115,13 @@ export function PermissionsMatrix() {
   );
 
   return (
-    <Card className="shadow-sm border border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+    <Card className="shadow-sm border border-border bg-surface">
       <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6">
         <div>
-          <CardTitle className="text-lg font-bold text-[hsl(var(--text))]">
+          <CardTitle className="text-lg font-bold text-text">
             Controle Dinâmico de Telas e Acessos
           </CardTitle>
-          <CardDescription className="text-sm text-[hsl(var(--text-muted))]">
+          <CardDescription className="text-sm text-text-muted">
             Adicione novas rotas, exclua telas customizadas e bloqueie ou libere acessos para cada tipo de perfil.
           </CardDescription>
         </div>
@@ -138,9 +138,9 @@ export function PermissionsMatrix() {
           <button
             type="button"
             onClick={handleResetToDefaults}
-            className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-xs font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-text transition hover:bg-surface-muted"
           >
-            <RotateCcw className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+            <RotateCcw className="h-3.5 w-3.5 text-text-muted" />
             Restaurar Padrões
           </button>
         </div>
@@ -151,16 +151,16 @@ export function PermissionsMatrix() {
         {isAdding && (
           <form
             onSubmit={handleAddScreen}
-            className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))/0.5] p-4 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200"
+            className="rounded-xl border border-border bg-[hsl(var(--surface-muted))/0.5] p-4 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text))]">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-text">
                 Cadastrar Nova Tela Customizada
               </h3>
               <button
                 type="button"
                 onClick={() => setIsAdding(false)}
-                className="text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                className="text-xs text-text-muted hover:text-text"
               >
                 Cancelar
               </button>
@@ -168,7 +168,7 @@ export function PermissionsMatrix() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-medium text-[hsl(var(--text-muted))] mb-1">
+                <label className="block text-xs font-medium text-text-muted mb-1">
                   Nome Amigável da Tela (Label)
                 </label>
                 <input
@@ -176,11 +176,11 @@ export function PermissionsMatrix() {
                   placeholder="Ex: Treinamento Interno"
                   value={newLabel}
                   onChange={(e) => setNewLabel(e.target.value)}
-                  className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[hsl(var(--text-muted))] mb-1">
+                <label className="block text-xs font-medium text-text-muted mb-1">
                   Caminho da Rota (URL Path)
                 </label>
                 <input
@@ -188,7 +188,7 @@ export function PermissionsMatrix() {
                   placeholder="Ex: /admin/treinamentos"
                   value={newPath}
                   onChange={(e) => setNewPath(e.target.value)}
-                  className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
                 />
               </div>
             </div>
@@ -213,28 +213,28 @@ export function PermissionsMatrix() {
 
         {/* Barra de pesquisa */}
         <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-[hsl(var(--text-muted))]" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
           <input
             type="text"
             placeholder="Pesquisar por tela ou rota..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-2 pl-9 pr-4 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+            className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-4 text-sm text-text placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
           />
         </div>
 
         {/* Tabela de Matriz */}
-        <div className="overflow-x-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+        <div className="overflow-x-auto rounded-xl border border-border bg-surface">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))/0.5]">
-                <th className="h-12 px-4 text-left text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] w-52">
+              <tr className="border-b border-border bg-[hsl(var(--surface-muted))/0.5]">
+                <th className="h-12 px-4 text-left text-xs font-bold uppercase tracking-wider text-text-muted w-52">
                   Tela / Rota
                 </th>
                 {ROLES.map((r) => (
                   <th
                     key={r.key}
-                    className="h-12 px-2 text-center text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]"
+                    className="h-12 px-2 text-center text-xs font-bold uppercase tracking-wider text-text-muted"
                   >
                     <div>{r.label}</div>
                   </th>
@@ -244,7 +244,7 @@ export function PermissionsMatrix() {
             <tbody>
               {filteredScreens.length === 0 ? (
                 <tr>
-                  <td colSpan={ROLES.length + 1} className="py-8 text-center text-sm text-[hsl(var(--text-muted))]">
+                  <td colSpan={ROLES.length + 1} className="py-8 text-center text-sm text-text-muted">
                     Nenhuma tela encontrada para a pesquisa.
                   </td>
                 </tr>
@@ -252,11 +252,11 @@ export function PermissionsMatrix() {
                 filteredScreens.map((screen) => (
                   <tr
                     key={screen.path}
-                    className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--surface-muted))/0.3] transition-colors"
+                    className="border-b border-border last:border-0 hover:bg-[hsl(var(--surface-muted))/0.3] transition-colors"
                   >
                     <td className="px-4 py-3.5">
-                      <p className="font-semibold text-[hsl(var(--text))]">{screen.label}</p>
-                      <p className="text-xs font-mono text-[hsl(var(--text-muted))] mt-0.5">{screen.path}</p>
+                      <p className="font-semibold text-text">{screen.label}</p>
+                      <p className="text-xs font-mono text-text-muted mt-0.5">{screen.path}</p>
                     </td>
 
                     {ROLES.map((role) => {
@@ -274,7 +274,7 @@ export function PermissionsMatrix() {
                               "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
                               isAllowed
                                 ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                                : "bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] hover:bg-rose-100 hover:text-rose-700",
+                                : "bg-surface-muted text-text-muted hover:bg-rose-100 hover:text-rose-700",
                               isEssentialAdminRoute ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
                             ].join(" ")}
                           >

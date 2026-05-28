@@ -35,14 +35,14 @@ interface CandidatePreAdmissionPanelProps {
 function BootstrapLoadingState() {
   return (
     <div className="space-y-4">
-      <div className="ui-card rounded-lg border border-[hsl(var(--border))] p-5">
+      <div className="bg-surface shadow-sm text-text rounded-lg border border-border p-5">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[hsl(var(--accent-soft))] text-[hsl(var(--brand-dark))]">
             <ClipboardList className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <div className="h-4 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-            <div className="h-3 w-72 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+            <div className="h-4 w-40 animate-pulse rounded bg-surface-muted" />
+            <div className="h-3 w-72 animate-pulse rounded bg-surface-muted" />
           </div>
         </div>
       </div>
@@ -189,7 +189,7 @@ export function CandidatePreAdmissionPanel({
 
   if (!canAccessPreAdmission) {
     return (
-      <div className="ui-card rounded-lg border border-[hsl(var(--border))] p-6">
+      <div className="bg-surface shadow-sm text-text rounded-lg border border-border p-6">
         <EmptyState
           icon="🔒"
           title="Pré-admissão restrita ao RH."
@@ -205,7 +205,7 @@ export function CandidatePreAdmissionPanel({
 
   if (error) {
     return (
-      <div className="ui-card rounded-lg border border-[hsl(var(--border))] p-6">
+      <div className="bg-surface shadow-sm text-text rounded-lg border border-border p-6">
         <EmptyState
           icon="⚠️"
           title="Pré-admissão indisponível"
@@ -251,7 +251,7 @@ export function CandidatePreAdmissionPanel({
 
     return (
       <>
-        <div className="ui-card rounded-lg border border-[hsl(var(--border))] p-6">
+        <div className="bg-surface shadow-sm text-text rounded-lg border border-border p-6">
           <EmptyState
             icon="📋"
             title="Caso admissional ainda não aberto"

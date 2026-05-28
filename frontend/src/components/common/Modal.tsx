@@ -42,13 +42,13 @@ export function Modal({ title, onClose, children, contentClassName }: ModalProps
         aria-modal="true"
         aria-label={title ?? "Conteúdo do modal"}
         className={cn(
-          "relative z-[1001] flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-2xl shadow-black/30",
+          "relative z-[1001] flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl shadow-black/30",
           "sm:max-w-[540px]",
           contentClassName,
         )}
       >
-        <div className="shrink-0 border-b border-[hsl(var(--border))] px-6 py-5 pr-12">
-          <h2 className="text-lg font-semibold leading-none tracking-tight font-display text-[hsl(var(--text))]">
+        <div className="shrink-0 border-b border-border px-6 py-5 pr-12">
+          <h2 className="text-lg font-semibold leading-none tracking-tight font-display text-text">
             {title}
           </h2>
           <p className="sr-only">
@@ -59,7 +59,7 @@ export function Modal({ title, onClose, children, contentClassName }: ModalProps
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-sm text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+          className="absolute right-4 top-4 rounded-sm text-text-muted transition hover:text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
           aria-label="Fechar modal"
         >
           <X className="h-4 w-4" />

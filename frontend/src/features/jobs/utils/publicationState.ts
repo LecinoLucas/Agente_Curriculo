@@ -52,12 +52,12 @@ export function getPublicationPanelState(
 export function getPanelToneClasses(tone: PublicationPanelState["tone"]) {
   switch (tone) {
     case "danger":
-      return "border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]";
+      return "border-[hsl(var(--danger))]/20 bg-danger-soft text-danger";
     case "warning":
-      return "border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] text-[hsl(var(--warning))]";
+      return "border-[hsl(var(--warning))]/20 bg-warning-soft text-warning";
     case "success":
-      return "border-[hsl(var(--success))]/20 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]";
+      return "border-[hsl(var(--success))]/20 bg-success-soft text-success";
     default:
-      return "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]";
+      return "border-border bg-surface-muted text-text-muted";
   }
 }

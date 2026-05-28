@@ -30,7 +30,7 @@ export function AdmissionCasePageHeader({
     <div className="admission-page-header">
       {/* Breadcrumb */}
       <nav className="admission-breadcrumb" aria-label="Breadcrumb">
-        <ol className="flex items-center gap-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
+        <ol className="flex items-center gap-1 text-[11px] font-medium text-text-muted">
           <li>Pipeline</li>
           <li aria-hidden="true">
             <ChevronRight className="h-3 w-3" />
@@ -39,7 +39,7 @@ export function AdmissionCasePageHeader({
           <li aria-hidden="true">
             <ChevronRight className="h-3 w-3" />
           </li>
-          <li className="font-semibold text-[hsl(var(--text))]">{candidateName}</li>
+          <li className="font-semibold text-text">{candidateName}</li>
         </ol>
       </nav>
 
@@ -49,16 +49,16 @@ export function AdmissionCasePageHeader({
           <Link
             to={backHref}
             aria-label="Voltar"
-            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm transition-colors hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-text-muted shadow-sm transition-colors hover:bg-surface-muted hover:text-text"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
         ) : null}
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-[hsl(var(--text))]">
+          <h1 className="text-xl font-semibold tracking-tight text-text">
             Admissão de {candidateName}
           </h1>
-          <p className="mt-0.5 text-sm text-[hsl(var(--text-muted))]">
+          <p className="mt-0.5 text-sm text-text-muted">
             Checklist documental e preparação para integração
           </p>
         </div>
@@ -95,10 +95,10 @@ export function AdmissionCaseSummaryBar({
             {workspace.candidate.initials}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
+            <p className="truncate text-sm font-semibold text-text">
               {workspace.candidate.name}
             </p>
-            <p className="flex items-center gap-1.5 truncate text-xs text-[hsl(var(--text-muted))]">
+            <p className="flex items-center gap-1.5 truncate text-xs text-text-muted">
               <BriefcaseBusiness className="h-3 w-3 shrink-0" aria-hidden="true" />
               {workspace.job.title}
             </p>
@@ -110,10 +110,10 @@ export function AdmissionCaseSummaryBar({
 
       {/* Active job block */}
       <div className="admission-summary-bar__block">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
           Vaga ativa
         </p>
-        <p className="mt-1 text-sm font-medium text-[hsl(var(--text))]">
+        <p className="mt-1 text-sm font-medium text-text">
           {workspace.job.title}
         </p>
       </div>
@@ -122,7 +122,7 @@ export function AdmissionCaseSummaryBar({
 
       {/* Current stage block */}
       <div className="admission-summary-bar__block">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
           Etapa atual
         </p>
         <div className="mt-1">
@@ -138,7 +138,7 @@ export function AdmissionCaseSummaryBar({
 
       {/* Checklist progress block */}
       <div className="admission-summary-bar__block admission-summary-bar__block--progress">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
           Progresso do checklist
         </p>
         <div className="mt-2 flex items-center gap-3">
@@ -163,10 +163,10 @@ export function AdmissionCaseSummaryBar({
             </svg>
           </div>
           <div>
-            <p className="text-sm font-bold text-[hsl(var(--text))]">
+            <p className="text-sm font-bold text-text">
               {formatProgressLabel(workspace.checklist.approved, workspace.checklist.total)}
             </p>
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-xs text-text-muted">
               documentos aprovados
             </p>
           </div>
@@ -176,7 +176,7 @@ export function AdmissionCaseSummaryBar({
       {/* Actions block */}
       <div className="admission-summary-bar__actions">
         {workspace.summary.ready_for_export ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--success-soft))] px-2.5 py-1 text-xs font-semibold text-[hsl(var(--success))]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-xs font-semibold text-success">
             <Circle className="h-2 w-2 fill-current" aria-hidden="true" />
             {caseStatusLabel(workspace.case.status)}
           </span>
@@ -184,7 +184,7 @@ export function AdmissionCaseSummaryBar({
         {openPageHref ? (
           <Link
             to={openPageHref}
-            className="ui-btn-primary inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold"
+            className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold"
           >
             Ver perfil do candidato
           </Link>

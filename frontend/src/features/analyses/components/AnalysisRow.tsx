@@ -100,8 +100,8 @@ export function AnalysisRow({
 
   return (
     <tr
-      className={`group transition-colors hover:bg-[hsl(var(--surface-muted))] ${
-        isDiscarded ? "bg-[hsl(var(--surface-muted))]/45 text-[hsl(var(--text-muted))]" : ""
+      className={`group transition-colors hover:bg-surface-muted ${
+        isDiscarded ? "bg-surface-muted/45 text-text-muted" : ""
       }`}
     >
       {/* Candidato */}
@@ -114,7 +114,7 @@ export function AnalysisRow({
         >
           <div
             className={`font-medium leading-tight ${
-              hasCandidate ? "cursor-pointer text-[hsl(var(--primary))] hover:underline" : "text-[hsl(var(--text))]"
+              hasCandidate ? "cursor-pointer text-[hsl(var(--primary))] hover:underline" : "text-text"
             }`}
           >
             {item.candidate_name ?? <span className="ui-text-muted italic">Sem nome</span>}
@@ -130,12 +130,12 @@ export function AnalysisRow({
         <div className="flex flex-col gap-1">
           <TypeBadge type={item.type} />
           {item.type === "behavioral_ai" ? (
-            <span className="block max-w-[180px] truncate text-xs text-[hsl(var(--text-muted))]" title={item.job_title ?? undefined}>
+            <span className="block max-w-[180px] truncate text-xs text-text-muted" title={item.job_title ?? undefined}>
               {item.job_title ?? "Avaliação comportamental"}
             </span>
           ) : item.resume_file_name ? (
             <span
-              className="block max-w-[180px] truncate text-xs text-[hsl(var(--text-muted))]"
+              className="block max-w-[180px] truncate text-xs text-text-muted"
               title={item.resume_file_name}
             >
               {item.resume_file_name}
@@ -151,23 +151,23 @@ export function AnalysisRow({
         <div className="flex flex-col gap-1">
           <StatusBadge status={item.status} />
           {isRetryScheduled ? (
-            <span className="max-w-[240px] text-xs text-[hsl(var(--text-muted))]">
+            <span className="max-w-[240px] text-xs text-text-muted">
               Limite temporário da IA. Nova tentativa automática
               {nextRetryLabel ? ` em ${nextRetryLabel}` : " agendada"}.
             </span>
           ) : null}
           {item.status === "waiting_extraction" ? (
-            <span className="max-w-[240px] text-xs text-[hsl(var(--text-muted))]">
+            <span className="max-w-[240px] text-xs text-text-muted">
               A análise já foi criada e aguarda a extração do currículo.
             </span>
           ) : null}
           {likelyStuck ? (
-            <span className="max-w-[260px] text-xs text-[hsl(var(--warning))]">
+            <span className="max-w-[260px] text-xs text-warning">
               A análise está demorando mais que o esperado. Verifique o worker ou tente reprocessar.
             </span>
           ) : null}
           {safeFailureReason && (isFailed || isRetryScheduled) ? (
-            <span className="max-w-[240px] truncate text-xs text-[hsl(var(--danger))]" title={safeFailureReason}>
+            <span className="max-w-[240px] truncate text-xs text-danger" title={safeFailureReason}>
               {safeFailureReason}
             </span>
           ) : null}
@@ -186,11 +186,11 @@ export function AnalysisRow({
             <span className="ui-badge-info inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-medium">
               {item.provider ?? "IA"}
             </span>
-            <span className="max-w-[160px] truncate text-xs text-[hsl(var(--text-muted))]" title={item.model ?? undefined}>
+            <span className="max-w-[160px] truncate text-xs text-text-muted" title={item.model ?? undefined}>
               {item.model ?? "Modelo não informado"}
             </span>
             {item.provider_error_type ? (
-              <span className="max-w-[160px] truncate text-xs text-[hsl(var(--text-muted))]">
+              <span className="max-w-[160px] truncate text-xs text-text-muted">
                 {item.provider_error_type}
                 {item.provider_status_code ? ` · HTTP ${item.provider_status_code}` : ""}
               </span>

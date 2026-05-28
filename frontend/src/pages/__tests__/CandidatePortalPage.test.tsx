@@ -478,9 +478,9 @@ describe("CandidatePortalPage.nextSteps", () => {
       application_status: "admitted",
       current_process_status_label: "Admitido",
       is_process_closed: true,
-      closed_reason_public_label: "Admissão concluída.",
+      closed_reason_public_label: "Seu processo foi concluído com sucesso.",
       can_request_contact: true,
-      can_apply_to_other_jobs: true,
+      can_apply_to_other_jobs: false,
       public_timeline: {
         current_step_key: "result",
         current_step_label: "Admitido",
@@ -496,7 +496,7 @@ describe("CandidatePortalPage.nextSteps", () => {
             key: "result",
             label: "Admitido",
             status: "current",
-            description: "Admissão concluída.",
+            description: "Seu processo foi concluído com sucesso.",
             interview: null,
           },
         ],
@@ -554,9 +554,9 @@ describe("CandidatePortalPage.nextSteps", () => {
       application_status: "admitted",
       current_process_status_label: "Admitido",
       is_process_closed: true,
-      closed_reason_public_label: "Admissão concluída.",
+      closed_reason_public_label: "Seu processo foi concluído com sucesso.",
       can_request_contact: true,
-      can_apply_to_other_jobs: true,
+      can_apply_to_other_jobs: false,
       public_timeline: {
         current_step_key: "result",
         current_step_label: "Admitido",
@@ -572,7 +572,7 @@ describe("CandidatePortalPage.nextSteps", () => {
             key: "result",
             label: "Admitido",
             status: "current",
-            description: "Admissão concluída.",
+            description: "Seu processo foi concluído com sucesso.",
             interview: null,
           },
         ],
@@ -768,6 +768,80 @@ describe("CandidatePortalPage.rejectedProcess", () => {
     expect((await screen.findAllByText("Você está em nosso banco de talentos")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Você não foi selecionado para esta vaga no momento.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /solicitar contato com o rh/i })).not.toBeInTheDocument();
+  });
+
+  it("mostra desligado sem banco de talentos como status principal", async () => {
+    (candidatePortalService.getOverview as any).mockResolvedValue({
+      candidate: {
+        id: "cand-3",
+        full_name: "Clara Desligada",
+        email: "clara@example.com",
+        phone: "11999999999",
+        city: "São Paulo",
+        state: "SP",
+        application_source: "public_application",
+        application_source_label: "Candidatura pública",
+      },
+      active_application: null,
+      application_history: [
+        {
+          pipeline_id: "pipeline-3",
+          job_id: "job-3",
+          job_title: "Analista de RH",
+          status: "admitted",
+          status_label: "Admitido",
+          submitted_at: "2026-05-10T10:00:00Z",
+          updated_at: "2026-05-28T10:00:00Z",
+          resume_file_name: "clara.pdf",
+          analysis_status: null,
+          application_source: "public_application",
+          talent_pool: false,
+          talent_pool_profile_status: null,
+        },
+      ],
+      latest_resume: {
+        resume_id: "resume-3",
+        resume_version_id: "version-3",
+        file_name: "clara.pdf",
+        extraction_status: "completed",
+        uploaded_at: "2026-05-10T10:00:00Z",
+      },
+      talent_pool: false,
+      status_public: "Processo admissional encerrado",
+      application_status: "dismissed",
+      current_process_status_label: "Processo admissional encerrado",
+      is_process_closed: true,
+      closed_reason_public_label: "Seu vínculo admissional foi encerrado pela equipe de RH.",
+      can_request_contact: true,
+      can_apply_to_other_jobs: false,
+      public_timeline: {
+        current_step_key: "result",
+        current_step_label: "Processo admissional encerrado",
+        steps: [
+          {
+            key: "application_received",
+            label: "Inscrição recebida",
+            status: "completed",
+            description: "Recebemos sua candidatura.",
+            interview: null,
+          },
+          {
+            key: "result",
+            label: "Processo admissional encerrado",
+            status: "closed",
+            description: "Seu vínculo admissional foi encerrado pela equipe de RH.",
+            interview: null,
+          },
+        ],
+      },
+    });
+
+    renderPortal();
+
+    expect((await screen.findAllByText("Processo admissional encerrado")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Seu vínculo admissional foi encerrado pela equipe de RH.").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Seu perfil continuará disponível em nosso banco de talentos/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /ver outras vagas/i })).not.toBeInTheDocument();
   });
 });
 
@@ -1091,9 +1165,9 @@ describe("CandidatePortalPage.premiumLightThemeAndEmptyStates", () => {
       application_status: "admitted",
       current_process_status_label: "Admitido",
       is_process_closed: true,
-      closed_reason_public_label: "Admissão concluída.",
+      closed_reason_public_label: "Seu processo foi concluído com sucesso.",
       can_request_contact: true,
-      can_apply_to_other_jobs: true,
+      can_apply_to_other_jobs: false,
       public_timeline: {
         current_step_key: "result",
         current_step_label: "Admitido",
@@ -1266,70 +1340,49 @@ describe("CandidatePortalPage.preAdmission", () => {
     expect(screen.queryByTestId("candidate-portal-pre-admission-tile")).not.toBeInTheDocument();
   });
 
-  it("renderiza card-resumo dentro do perfil com lista de documentos", async () => {
+  it("CTA do tile do dashboard navega para /candidato/pre-admissao", async () => {
     mockOverviewWithPreAdmission();
 
     renderPortal();
 
-    fireEvent.click(await screen.findByTestId("candidate-portal-pre-admission-tile-cta"));
+    const cta = await screen.findByTestId("candidate-portal-pre-admission-tile-cta");
+    const link = cta.tagName === "A" ? cta : cta.querySelector("a");
+    expect(link).not.toBeNull();
+    expect(link).toHaveAttribute("href", "/candidato/pre-admissao");
+  });
 
-    const card = await screen.findByTestId("candidate-portal-pre-admission-card");
-    const view = within(card);
-    expect(view.getByText("CPF")).toBeInTheDocument();
-    expect(view.getByText("RG")).toBeInTheDocument();
-    expect(view.getByText("Comprovante de endereço")).toBeInTheDocument();
-    expect(view.getAllByText(/Correção solicitada/i).length).toBeGreaterThan(0);
-    expect(view.getByTestId("candidate-portal-pre-admission-rejection-reason")).toHaveTextContent(
-      /Foto borrada/,
+  it("portal mostra card-resumo no perfil sem checklist completo nem upload inline", async () => {
+    mockOverviewWithPreAdmission();
+
+    renderPortal();
+
+    fireEvent.click(await screen.findByTitle("Perfil"));
+
+    const summary = await screen.findByTestId("candidate-portal-pre-admission-summary");
+    expect(within(summary).getByTestId("candidate-portal-pre-admission-cta")).toHaveAttribute(
+      "href",
+      "/candidato/pre-admissao",
     );
-    expect(view.getByText(/Documento aprovado pelo RH/i)).toBeInTheDocument();
+
+    // Detail/checklist UI was moved to the dedicated page — must not show here.
+    expect(screen.queryByTestId("candidate-portal-pre-admission-card")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Enviar documento para CPF/i)).not.toBeInTheDocument();
   });
 
-  it("não expõe dados internos de RH/Protheus no card-resumo do portal", async () => {
+  it("portal-resumo não expõe dados internos de RH/Protheus", async () => {
     mockOverviewWithPreAdmission();
 
     renderPortal();
 
-    fireEvent.click(await screen.findByTestId("candidate-portal-pre-admission-tile-cta"));
+    fireEvent.click(await screen.findByTitle("Perfil"));
 
-    const card = await screen.findByTestId("candidate-portal-pre-admission-card");
-    const view = within(card);
-    expect(view.queryByText(/protheus/i)).not.toBeInTheDocument();
-    expect(view.queryByText(/observa[çc][ãa]o do rh/i)).not.toBeInTheDocument();
-    expect(view.queryByText(/reviewed_by/i)).not.toBeInTheDocument();
-    expect(view.queryByText(/payload/i)).not.toBeInTheDocument();
-    expect(view.queryByText(/score/i)).not.toBeInTheDocument();
-  });
-
-  it("upload chama endpoint correto e recarrega pré-admissão", async () => {
-    mockOverviewWithPreAdmission();
-    (candidatePortalService.uploadPreAdmissionDocument as any).mockResolvedValue({
-      id: "doc-new",
-      original_filename: "cpf.pdf",
-      mime_type: "application/pdf",
-      size_bytes: 1024,
-      status: "uploaded",
-      uploaded_at: "2026-05-25T10:00:00Z",
-    });
-
-    renderPortal();
-
-    fireEvent.click(await screen.findByTestId("candidate-portal-pre-admission-tile-cta"));
-    const card = await screen.findByTestId("candidate-portal-pre-admission-card");
-
-    const fileInput = within(card).getByLabelText(/Enviar documento para CPF/i) as HTMLInputElement;
-    const file = new File(["pdf"], "cpf.pdf", { type: "application/pdf" });
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    await waitFor(() => {
-      expect(candidatePortalService.uploadPreAdmissionDocument).toHaveBeenCalledWith(
-        "case-1",
-        "item-1",
-        expect.any(FormData),
-      );
-    });
-    // initial load + reloadPreAdmission after upload
-    expect((candidatePortalService.getPreAdmission as any).mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(toast.success).toHaveBeenCalledWith("Documento enviado para análise.");
+    const summary = await screen.findByTestId("candidate-portal-pre-admission-summary");
+    const text = summary.textContent ?? "";
+    expect(text).not.toMatch(/protheus/i);
+    expect(text).not.toMatch(/review_notes/i);
+    expect(text).not.toMatch(/reviewed_by/i);
+    expect(text).not.toMatch(/payload/i);
+    expect(text).not.toMatch(/score/i);
+    expect(text).not.toMatch(/export[_ ]package/i);
   });
 });

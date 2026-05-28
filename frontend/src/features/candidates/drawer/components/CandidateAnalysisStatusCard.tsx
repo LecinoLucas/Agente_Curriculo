@@ -6,7 +6,7 @@ import { formatScorePercent } from "../../utils/scoreFormatting";
 type SeverityTone = "neutral" | "info" | "success" | "danger" | "warning";
 
 const SEVERITY_CLASS: Record<SeverityTone, string> = {
-  neutral: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 text-[hsl(var(--text))]",
+  neutral: "border-border bg-surface-muted/45 text-text",
   info: "border-sky-200 bg-sky-50/80 text-sky-950",
   success: "border-emerald-200 bg-emerald-50/90 text-emerald-950",
   danger: "border-rose-200 bg-rose-50/85 text-rose-950",

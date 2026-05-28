@@ -165,9 +165,9 @@ function deriveMetricsFromRows(items: BehavioralAIEvaluationListItem[]): Behavio
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))]/70 bg-[hsl(var(--bg))]/50 p-3">
-      <dt className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-[hsl(var(--text))]">{value || "-"}</dd>
+    <div className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/50 p-3">
+      <dt className="text-[11px] font-semibold uppercase text-text-muted">{label}</dt>
+      <dd className="mt-1 break-words text-sm text-text">{value || "-"}</dd>
     </div>
   );
 }
@@ -175,8 +175,8 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 function CompactField({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-[hsl(var(--text))]">{value || "-"}</dd>
+      <dt className="text-[11px] font-semibold uppercase text-text-muted">{label}</dt>
+      <dd className="mt-1 break-words text-sm text-text">{value || "-"}</dd>
     </div>
   );
 }
@@ -257,16 +257,16 @@ function CompactEvaluationCard({
   onRetry: (item: BehavioralAIEvaluationListItem) => void;
 }) {
   return (
-    <article className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 shadow-sm">
+    <article className="rounded-lg border border-border bg-surface p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="break-words text-base font-semibold text-[hsl(var(--text))]">{item.candidate_name}</h2>
-          <p className="mt-1 break-words text-xs text-[hsl(var(--text-muted))]">{item.candidate_email || "-"}</p>
+          <h2 className="break-words text-base font-semibold text-text">{item.candidate_name}</h2>
+          <p className="mt-1 break-words text-xs text-text-muted">{item.candidate_email || "-"}</p>
         </div>
         <StatusBadge status={item.operational_status} />
       </div>
 
-      <p className="mt-3 break-words text-sm font-medium text-[hsl(var(--text))]">{item.job_title}</p>
+      <p className="mt-3 break-words text-sm font-medium text-text">{item.job_title}</p>
 
       <dl className="mt-4 grid grid-cols-2 gap-3">
         <CompactField
@@ -274,7 +274,7 @@ function CompactEvaluationCard({
           value={
             <>
               <span className="font-medium">{item.provider}</span>
-              <span className="block text-xs text-[hsl(var(--text-muted))]">{item.model}</span>
+              <span className="block text-xs text-text-muted">{item.model}</span>
             </>
           }
         />
@@ -283,9 +283,9 @@ function CompactEvaluationCard({
         <CompactField label="Finalizado" value={finalTimestamp(item)} />
       </dl>
 
-      <div className="mt-4 rounded-lg border border-[hsl(var(--border))]/70 bg-[hsl(var(--bg))]/50 p-3">
-        <p className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">Erro seguro</p>
-        <p className="mt-1 line-clamp-3 break-words text-sm text-[hsl(var(--text))]">
+      <div className="mt-4 rounded-lg border border-border/70 bg-[hsl(var(--bg))]/50 p-3">
+        <p className="text-[11px] font-semibold uppercase text-text-muted">Erro seguro</p>
+        <p className="mt-1 line-clamp-3 break-words text-sm text-text">
           {item.safe_error_message || "-"}
         </p>
       </div>
@@ -466,16 +466,16 @@ export function AnalisesIaComportamentalPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
-      <section className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-5 py-5 shadow-sm">
+      <section className="rounded-xl border border-border bg-surface px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] text-[hsl(var(--primary))]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-[hsl(var(--bg))] text-[hsl(var(--primary))]">
                 <BrainCircuit className="h-5 w-5" aria-hidden="true" />
               </span>
               <div>
-                <h1 className="font-heading text-2xl font-semibold text-[hsl(var(--text))]">IA Comportamental</h1>
-                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                <h1 className="font-heading text-2xl font-semibold text-text">IA Comportamental</h1>
+                <p className="mt-1 text-sm text-text-muted">
                   Acompanhe fila, falhas, retries e conclusões das avaliações comportamentais assistidas por IA.
                 </p>
               </div>
@@ -495,22 +495,22 @@ export function AnalisesIaComportamentalPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ label, value, icon: Icon, tone }) => (
-          <div key={label} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+          <div key={label} className="rounded-lg border border-border bg-surface p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">{label}</p>
+              <p className="text-xs font-semibold uppercase text-text-muted">{label}</p>
               <Icon className={cn("h-4 w-4", tone)} aria-hidden="true" />
             </div>
-            <p className="mt-2 text-2xl font-semibold text-[hsl(var(--text))]">{value}</p>
+            <p className="mt-2 text-2xl font-semibold text-text">{value}</p>
           </div>
         ))}
       </section>
 
-      <section className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
-        <div className="border-b border-[hsl(var(--border))] p-4">
+      <section className="rounded-xl border border-border bg-surface">
+        <div className="border-b border-border p-4">
           <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_repeat(6,minmax(150px,1fr))_auto]">
             <label className="relative block">
               <span className="sr-only">Busca</span>
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
               <input
                 value={filters.search}
                 onChange={(event) => updateFilter("search", event.target.value)}
@@ -588,7 +588,7 @@ export function AnalisesIaComportamentalPage() {
             </button>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:max-w-lg">
-            <label className="text-xs font-semibold text-[hsl(var(--text-muted))]">
+            <label className="text-xs font-semibold text-text-muted">
               Período inicial
               <input
                 type="date"
@@ -597,7 +597,7 @@ export function AnalisesIaComportamentalPage() {
                 className="ui-input mt-1 h-10 w-full rounded-lg text-sm"
               />
             </label>
-            <label className="text-xs font-semibold text-[hsl(var(--text-muted))]">
+            <label className="text-xs font-semibold text-text-muted">
               Período final
               <input
                 type="date"
@@ -610,7 +610,7 @@ export function AnalisesIaComportamentalPage() {
         </div>
 
         {notice ? (
-          <div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))]/60 px-4 py-3 text-sm text-[hsl(var(--text))]">
+          <div className="border-b border-border bg-[hsl(var(--bg))]/60 px-4 py-3 text-sm text-text">
             {notice}
           </div>
         ) : null}
@@ -625,18 +625,18 @@ export function AnalisesIaComportamentalPage() {
           ) : error ? (
             <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 p-8 text-center">
               <AlertTriangle className="h-8 w-8 text-rose-600" aria-hidden="true" />
-              <p className="max-w-md text-sm text-[hsl(var(--text))]">{error}</p>
+              <p className="max-w-md text-sm text-text">{error}</p>
               <button type="button" className="ui-btn-primary rounded-lg px-4 py-2 text-sm font-semibold" onClick={() => void loadData()}>
                 Tentar novamente
               </button>
             </div>
           ) : items.length === 0 ? (
             <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 p-8 text-center">
-              <BrainCircuit className="h-8 w-8 text-[hsl(var(--text-muted))]" aria-hidden="true" />
-              <p className="text-base font-semibold text-[hsl(var(--text))]">
+              <BrainCircuit className="h-8 w-8 text-text-muted" aria-hidden="true" />
+              <p className="text-base font-semibold text-text">
                 {hasActiveFilters ? "Nenhuma avaliação encontrada" : "Ainda não há avaliações comportamentais IA"}
               </p>
-              <p className="max-w-md text-sm text-[hsl(var(--text-muted))]">
+              <p className="max-w-md text-sm text-text-muted">
                 {hasActiveFilters
                   ? "Ajuste os filtros para ampliar a busca operacional."
                   : "As avaliações solicitadas no perfil do candidato aparecerão aqui."}
@@ -659,7 +659,7 @@ export function AnalisesIaComportamentalPage() {
               <div className="hidden overflow-x-auto lg:block">
                 <table className="min-w-[1320px] w-full divide-y divide-[hsl(var(--border))] text-sm">
                   <thead className="bg-[hsl(var(--bg))]/70">
-                    <tr className="text-left text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">
+                    <tr className="text-left text-xs font-semibold uppercase text-text-muted">
                       <th className="px-4 py-3">Candidato</th>
                       <th className="px-4 py-3">Vaga</th>
                       <th className="px-4 py-3">Status operacional</th>
@@ -671,7 +671,7 @@ export function AnalisesIaComportamentalPage() {
                       <th className="px-4 py-3">Concluído/falhou</th>
                       <th className="px-4 py-3">Próxima tentativa</th>
                       <th className="px-4 py-3">Erro seguro</th>
-                      <th className="sticky right-0 border-l border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-4 py-3 text-right">
+                      <th className="sticky right-0 border-l border-border bg-[hsl(var(--bg))] px-4 py-3 text-right">
                         Ações
                       </th>
                     </tr>
@@ -680,25 +680,25 @@ export function AnalisesIaComportamentalPage() {
                     {items.map((item) => (
                       <tr key={item.evaluation_id} className="group align-top hover:bg-[hsl(var(--bg))]/50">
                         <td className="px-4 py-3">
-                          <div className="font-semibold text-[hsl(var(--text))]">{item.candidate_name}</div>
-                          <div className="text-xs text-[hsl(var(--text-muted))]">{item.candidate_email || "-"}</div>
+                          <div className="font-semibold text-text">{item.candidate_name}</div>
+                          <div className="text-xs text-text-muted">{item.candidate_email || "-"}</div>
                         </td>
-                        <td className="px-4 py-3 text-[hsl(var(--text))]">{item.job_title}</td>
+                        <td className="px-4 py-3 text-text">{item.job_title}</td>
                         <td className="px-4 py-3"><StatusBadge status={item.operational_status} /></td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-[hsl(var(--text))]">{item.provider}</div>
-                          <div className="text-xs text-[hsl(var(--text-muted))]">{item.model}</div>
+                          <div className="font-medium text-text">{item.provider}</div>
+                          <div className="text-xs text-text-muted">{item.model}</div>
                         </td>
-                        <td className="px-4 py-3 text-[hsl(var(--text))]">{item.retry_count}</td>
-                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.requested_at)}</td>
-                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.queued_at)}</td>
-                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.started_at)}</td>
-                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{finalTimestamp(item)}</td>
-                        <td className="px-4 py-3 text-[hsl(var(--text-muted))]">{formatDateTime(item.next_retry_at)}</td>
-                        <td className="max-w-[220px] px-4 py-3 text-xs text-[hsl(var(--text-muted))]">
+                        <td className="px-4 py-3 text-text">{item.retry_count}</td>
+                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.requested_at)}</td>
+                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.queued_at)}</td>
+                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.started_at)}</td>
+                        <td className="px-4 py-3 text-text-muted">{finalTimestamp(item)}</td>
+                        <td className="px-4 py-3 text-text-muted">{formatDateTime(item.next_retry_at)}</td>
+                        <td className="max-w-[220px] px-4 py-3 text-xs text-text-muted">
                           <span className="line-clamp-3">{item.safe_error_message || "-"}</span>
                         </td>
-                        <td className="sticky right-0 border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3 group-hover:bg-[hsl(var(--bg))]">
+                        <td className="sticky right-0 border-l border-border bg-surface px-4 py-3 group-hover:bg-[hsl(var(--bg))]">
                           <RowActions
                             item={item}
                             retryingId={retryingId}
@@ -715,7 +715,7 @@ export function AnalisesIaComportamentalPage() {
           )}
         </div>
 
-        <div className="border-t border-[hsl(var(--border))] p-4">
+        <div className="border-t border-border p-4">
           <Pagination page={page} totalPages={totalPages} total={total} onPageChange={setPage} />
         </div>
       </section>
@@ -732,7 +732,7 @@ export function AnalisesIaComportamentalPage() {
         >
           <div className="max-h-[75vh] overflow-y-auto p-5">
             {detailLoading ? (
-              <div className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
+              <div className="flex items-center gap-2 text-sm text-text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 Carregando detalhes...
               </div>
@@ -744,7 +744,7 @@ export function AnalisesIaComportamentalPage() {
               <div className="space-y-5">
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={detail.operational_status} />
-                  <span className="text-sm text-[hsl(var(--text-muted))]">
+                  <span className="text-sm text-text-muted">
                     {detail.provider} / {detail.model}
                   </span>
                 </div>
@@ -765,9 +765,9 @@ export function AnalisesIaComportamentalPage() {
                   <DetailRow label="Retry" value={retryReasonLabel(detail.retry_allowed_reason)} />
                 </dl>
 
-                <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))]/50 p-4">
-                  <h3 className="text-sm font-semibold text-[hsl(var(--text))]">Resumo seguro</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[hsl(var(--text-muted))]">
+                <div className="rounded-lg border border-border bg-[hsl(var(--bg))]/50 p-4">
+                  <h3 className="text-sm font-semibold text-text">Resumo seguro</h3>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-muted">
                     {detail.summary || detail.safe_error_message || "Sem resumo disponível."}
                   </p>
                 </div>

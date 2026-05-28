@@ -39,20 +39,20 @@ export function AdmissionProtheusIntegrationPanel({
         "scroll-mt-24 space-y-4 rounded-xl border bg-white p-4 shadow-sm",
         highlight
           ? "border-[hsl(var(--primary))]/35 ring-2 ring-[hsl(var(--primary))]/10"
-          : "border-[hsl(var(--border))]",
+          : "border-border",
       ].join(" ")}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Integração Protheus
           </p>
-          <h3 className="text-base font-semibold text-[hsl(var(--text))]">Painel técnico ERP</h3>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <h3 className="text-base font-semibold text-text">Painel técnico ERP</h3>
+          <p className="mt-1 text-sm text-text-muted">
             Dry-run, homologação e tentativas ficam isolados nesta área.
           </p>
         </div>
-        <span className="inline-flex w-fit rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-2.5 py-1 text-xs font-semibold text-[hsl(var(--text-muted))]">
+        <span className="inline-flex w-fit rounded-full border border-border bg-surface-muted/50 px-2.5 py-1 text-xs font-semibold text-text-muted">
           {summaryLabel}
         </span>
       </div>

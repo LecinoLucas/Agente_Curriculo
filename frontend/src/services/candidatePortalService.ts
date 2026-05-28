@@ -148,7 +148,15 @@ export interface CandidatePortalOverview {
   public_interview: CandidatePortalPublicInterview | null;
   talent_pool: boolean;
   status_public: string;
-  application_status: "active" | "rejected" | "hired" | "talent_pool" | "no_active_application" | string;
+  application_status:
+    | "active"
+    | "rejected"
+    | "dismissed"
+    | "admitted"
+    | "hired"
+    | "talent_pool"
+    | "no_active_application"
+    | string;
   current_process_status_label: string;
   is_process_closed: boolean;
   closed_reason_public_label: string | null;
@@ -182,6 +190,7 @@ export interface CandidatePortalPreAdmissionChecklistItem {
 export interface CandidatePortalPreAdmissionSummary {
   has_pre_admission_case: boolean;
   pre_admission_status: PreAdmissionStatus | null;
+  status_public_label?: string | null;
   documents_total: number;
   documents_pending: number;
   documents_submitted: number;
@@ -192,6 +201,7 @@ export interface CandidatePortalPreAdmissionSummary {
 export interface CandidatePortalPreAdmissionCase {
   id: string;
   status: PreAdmissionStatus;
+  status_public_label?: string | null;
   salary_offer: string | number | null;
   start_date: string | null;
   work_model: string | null;

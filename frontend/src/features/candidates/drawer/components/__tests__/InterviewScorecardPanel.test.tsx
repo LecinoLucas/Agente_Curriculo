@@ -8,6 +8,14 @@ import { toast } from "../../../../../shared/utils/toast";
 import type { InterviewScorecard } from "../../../../../types/domain";
 
 vi.mock("../../../../../services/interviewScorecardService");
+vi.mock("../../../../../features/auth/useAuth", () => ({
+  useAuth: () => ({
+    user: {
+      id: "user-1",
+      role: "recruiter",
+    },
+  }),
+}));
 vi.mock("../../../../../shared/utils/toast", () => ({
   toast: {
     success: vi.fn(),
@@ -48,6 +56,7 @@ describe("InterviewScorecardPanel", () => {
     vi.clearAllMocks();
     vi.mocked(scorecardService.getInterviewScorecard).mockResolvedValue({
       scorecard: null,
+      scorecards: [],
       suggested_behavioral_questions: [],
     });
     vi.mocked(scorecardService.createInterviewScorecard).mockResolvedValue(draftScorecard);
@@ -126,6 +135,7 @@ describe("InterviewScorecardPanel", () => {
     const user = userEvent.setup();
     vi.mocked(scorecardService.getInterviewScorecard).mockResolvedValue({
       scorecard: draftScorecard,
+      scorecards: [draftScorecard],
       suggested_behavioral_questions: [],
     });
 
@@ -186,6 +196,14 @@ describe("InterviewScorecardPanel", () => {
         final_recommendation: "yes",
         submitted_at: "2026-05-13T11:00:00Z",
       },
+      scorecards: [
+        {
+          ...draftScorecard,
+          status: "submitted",
+          final_recommendation: "yes",
+          submitted_at: "2026-05-13T11:00:00Z",
+        },
+      ],
       suggested_behavioral_questions: [],
     });
 
@@ -195,5 +213,69 @@ describe("InterviewScorecardPanel", () => {
     expect(screen.getByDisplayValue("Comunicação")).toBeDisabled();
     expect(screen.queryByRole("button", { name: /Salvar rascunho/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Enviar scorecard/i })).not.toBeInTheDocument();
+  });
+
+  it("cria scorecard proprio sem sobrescrever parecer existente de outro avaliador", async () => {
+    const user = userEvent.setup();
+    vi.mocked(scorecardService.getInterviewScorecard).mockResolvedValue({
+      scorecard: {
+        ...draftScorecard,
+        id: "scorecard-2",
+        evaluator_id: "user-2",
+        final_recommendation: "yes",
+        overall_notes: "Parecer anterior.",
+      },
+      scorecards: [
+        {
+          ...draftScorecard,
+          id: "scorecard-2",
+          evaluator_id: "user-2",
+          final_recommendation: "yes",
+          overall_notes: "Parecer anterior.",
+        },
+      ],
+      suggested_behavioral_questions: [],
+    });
+
+    render(<InterviewScorecardPanel jobId="job-1" candidateId="candidate-1" />);
+
+    expect(await screen.findByText(/Ja existem pareceres de outros avaliadores/i)).toBeInTheDocument();
+    expect(screen.getByText(/Parecer 1/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Salvar rascunho/i }));
+
+    await waitFor(() => {
+      expect(scorecardService.createInterviewScorecard).toHaveBeenCalledWith(
+        "job-1",
+        "candidate-1",
+        expect.objectContaining({ items: expect.any(Array) }),
+      );
+    });
+    expect(scorecardService.updateInterviewScorecard).not.toHaveBeenCalled();
+  });
+
+  it("mostra pareceres paralelos quando o usuario ja tem scorecard proprio", async () => {
+    vi.mocked(scorecardService.getInterviewScorecard).mockResolvedValue({
+      scorecard: draftScorecard,
+      scorecards: [
+        draftScorecard,
+        {
+          ...draftScorecard,
+          id: "scorecard-2",
+          evaluator_id: "user-2",
+          final_recommendation: "strong_yes",
+          overall_notes: "Parecer do gestor.",
+          status: "submitted",
+          submitted_at: "2026-05-13T12:00:00Z",
+        },
+      ],
+      suggested_behavioral_questions: [],
+    });
+
+    render(<InterviewScorecardPanel jobId="job-1" candidateId="candidate-1" />);
+
+    expect(await screen.findByText(/Pareceres paralelos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Parecer do gestor/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Forte sim/i).length).toBeGreaterThan(0);
   });
 });

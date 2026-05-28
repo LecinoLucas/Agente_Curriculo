@@ -239,13 +239,13 @@ export function ScoreTab({
 
   return (
     <div className="flex flex-col gap-5 p-5">
-      <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+      <div className="rounded-xl border border-border bg-surface px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
           Resumo operacional
         </p>
-        <p className="mt-2 text-sm font-medium text-[hsl(var(--text))]">{semantics.contextLine}</p>
+        <p className="mt-2 text-sm font-medium text-text">{semantics.contextLine}</p>
         {semantics.detailLine ? (
-          <p className="mt-1 text-xs leading-5 text-[hsl(var(--text-muted))]">{semantics.detailLine}</p>
+          <p className="mt-1 text-xs leading-5 text-text-muted">{semantics.detailLine}</p>
         ) : null}
       </div>
 
@@ -260,12 +260,12 @@ export function ScoreTab({
       ) : null}
 
       <Section title="Resumo da vaga ativa">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
               Situação do score
             </p>
-            <p className="mt-1 text-sm text-[hsl(var(--text))]" title={freshnessBadge.description}>
+            <p className="mt-1 text-sm text-text" title={freshnessBadge.description}>
               {compatibilityGuidance?.description ?? "Aderência calculada para a vaga ativa com base no currículo analisado."}
             </p>
           </div>
@@ -276,14 +276,14 @@ export function ScoreTab({
             <button
               type="button"
               onClick={() => setShowConfidenceDetails(!showConfidenceDetails)}
-              className="flex items-center gap-1 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-1 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] transition-colors"
+              className="flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs text-text-muted hover:text-text transition-colors"
               title={confidenceMessage}
             >
               <Info className="h-3.5 w-3.5" />
               <span>Confiança</span>
             </button>
             {rankingComputedAt ? (
-              <span className="text-xs text-[hsl(var(--text-muted))]">
+              <span className="text-xs text-text-muted">
                 Atualizado {rankingRelativeTime}
               </span>
             ) : null}
@@ -291,10 +291,10 @@ export function ScoreTab({
         </div>
 
         {showConfidenceDetails && (
-          <div className="mt-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-3">
+          <div className="mt-2 rounded-xl border border-border bg-surface-muted p-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-[hsl(var(--text))]">Confiança da Análise</span>
-              <span className="text-xs font-semibold text-[hsl(var(--text))]">
+              <span className="text-xs font-medium text-text">Confiança da Análise</span>
+              <span className="text-xs font-semibold text-text">
                 {fmtPercentValue(scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0)}
               </span>
             </div>
@@ -310,7 +310,7 @@ export function ScoreTab({
                 style={{ width: `${(scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) * 100}%` }}
               ></div>
             </div>
-            <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">
+            <p className="mt-2 text-xs text-text-muted">
               {(scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) > 0.7 
                 ? "ℹ️ Currículo rico em detalhes e histórico profissional." 
                 : (scoreExplanation?.data_confidence_score ?? rankingEntry?.score_breakdown?.confidence_score ?? 0) > 0.4 
@@ -322,7 +322,7 @@ export function ScoreTab({
 
         {loading ? <SkeletonRows /> : null}
         {error ? (
-          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
+          <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-danger-soft px-4 py-3 text-sm text-danger">
             {error}
           </div>
         ) : null}
@@ -332,9 +332,9 @@ export function ScoreTab({
             {/* Removed redundant grid */}
 
             {dealBreakerDetails.length > 0 ? (
-              <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] px-4 py-3">
-                <p className="text-sm font-semibold text-[hsl(var(--danger))]">Score zerado por regra da vaga</p>
-                <p className="mt-1 text-xs leading-relaxed text-[hsl(var(--text))]">
+              <div className="rounded-xl border border-[hsl(var(--danger))]/20 bg-danger-soft px-4 py-3">
+                <p className="text-sm font-semibold text-danger">Score zerado por regra da vaga</p>
+                <p className="mt-1 text-xs leading-relaxed text-text">
                   Este candidato foi rejeitado porque um critério eliminatório da vaga não foi atendido.
                 </p>
               </div>
@@ -342,11 +342,11 @@ export function ScoreTab({
 
             {dealBreakerDetails.length > 0 ? (
               <div className="flex flex-col gap-3">
-                <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                <div className="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Critérios eliminatórios violados
                   </p>
-                  <p className="mt-1 text-sm text-[hsl(var(--text))]">
+                  <p className="mt-1 text-sm text-text">
                     O score foi zerado porque a regra da vaga não foi atendida.
                   </p>
                 </div>
@@ -355,12 +355,12 @@ export function ScoreTab({
                   {dealBreakerDetails.map((item, index) => (
                     <div
                       key={`${index}-${item.fieldLabel}-${item.expected}-${item.actual}`}
-                      className="rounded-xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--surface-muted))] px-4 py-3"
+                      className="rounded-xl border border-[hsl(var(--danger))]/20 bg-surface-muted px-4 py-3"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-[hsl(var(--text))]">{item.fieldLabel}</p>
-                          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{item.reason}</p>
+                          <p className="text-sm font-semibold text-text">{item.fieldLabel}</p>
+                          <p className="mt-1 text-xs text-text-muted">{item.reason}</p>
                         </div>
                         <Badge variant="danger">Critério eliminatório</Badge>
                       </div>
@@ -383,7 +383,7 @@ export function ScoreTab({
                   .map((reason, index) => (
                   <span
                     key={`${reason.type}-${reason.field}-${index}`}
-                    className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]"
+                    className="rounded-full border border-border bg-surface-muted px-2.5 py-1 text-[11px] text-text-muted"
                   >
                     {reason.description}
                   </span>
@@ -392,15 +392,15 @@ export function ScoreTab({
             ) : null}
 
             {dealBreakerDetails.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum critério eliminatório violado.</p>
+              <p className="text-sm text-text-muted">Nenhum critério eliminatório violado.</p>
             ) : null}
 
             {/* Removed redundant summary text */}
 
             {scoreExplanation && scoreExplanation.overestimation_risks.length > 0 ? (
-              <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
-                <p className="text-sm font-semibold text-[hsl(var(--warning))]">Alerta de confiança</p>
-                <div className="mt-1 flex flex-col gap-1 text-xs leading-relaxed text-[hsl(var(--text))]">
+              <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-warning-soft px-4 py-3">
+                <p className="text-sm font-semibold text-warning">Alerta de confiança</p>
+                <div className="mt-1 flex flex-col gap-1 text-xs leading-relaxed text-text">
                   {scoreExplanation.overestimation_risks.map((risk) => (
                     <p key={risk}>{risk}</p>
                   ))}
@@ -409,7 +409,7 @@ export function ScoreTab({
             ) : null}
 
             {!hasRankingDetails ? (
-              <p className="text-sm text-[hsl(var(--text-muted))]">
+              <p className="text-sm text-text-muted">
                 O detalhamento do ranking ainda não está disponível neste contexto.
               </p>
             ) : null}
@@ -429,13 +429,13 @@ export function ScoreTab({
 
       {canSendMatchingFeedback && scoreExplanation ? (
         <Section title="Feedback humano">
-          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+          <div className="rounded-xl border border-border bg-surface-muted px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                   Feedback do recrutador
                 </p>
-                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                <p className="mt-1 text-sm text-text-muted">
                   Registra se o matching ajudou ou não na decisão.
                 </p>
               </div>
@@ -447,8 +447,8 @@ export function ScoreTab({
                   className={[
                     "rounded-lg border px-3 py-2 text-sm font-medium transition",
                     scoreExplanation.feedback?.liked
-                      ? "border-[hsl(var(--success))]/30 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]"
-                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                      ? "border-[hsl(var(--success))]/30 bg-success-soft text-success"
+                      : "border-border bg-surface text-text hover:bg-surface-muted",
                     feedbackSaving === "liked" ? "opacity-70" : "",
                   ].join(" ")}
                 >
@@ -461,8 +461,8 @@ export function ScoreTab({
                   className={[
                     "rounded-lg border px-3 py-2 text-sm font-medium transition",
                     scoreExplanation.feedback?.rejected
-                      ? "border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]"
-                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                      ? "border-[hsl(var(--danger))]/30 bg-danger-soft text-danger"
+                      : "border-border bg-surface text-text hover:bg-surface-muted",
                     feedbackSaving === "rejected" ? "opacity-70" : "",
                   ].join(" ")}
                 >
@@ -476,7 +476,7 @@ export function ScoreTab({
                     "rounded-lg border px-3 py-2 text-sm font-medium transition",
                     scoreExplanation.feedback?.hired
                       ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]"
-                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+                      : "border-border bg-surface text-text hover:bg-surface-muted",
                     feedbackSaving === "hired" ? "opacity-70" : "",
                   ].join(" ")}
                 >
@@ -486,7 +486,7 @@ export function ScoreTab({
             </div>
 
             {scoreExplanation.feedback?.feedback_at ? (
-              <p className="mt-3 text-xs text-[hsl(var(--text-muted))]">
+              <p className="mt-3 text-xs text-text-muted">
                 Último feedback registrado em {formatOptionalDateTime(scoreExplanation.feedback.feedback_at)}.
               </p>
             ) : null}
@@ -498,9 +498,9 @@ export function ScoreTab({
         <div ref={rankingDetailsRef} />
         <details
           ref={rankingDetailsDisclosureRef}
-          className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-4 py-3"
+          className="rounded-xl border border-border bg-surface-muted/35 px-4 py-3"
         >
-          <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
+          <summary className="cursor-pointer list-none text-sm font-medium text-text">
             Detalhes técnicos da análise
           </summary>
           <div className="mt-4 flex flex-col gap-4">
@@ -530,7 +530,7 @@ export function ScoreTab({
                 ) : null}
               </>
             ) : (
-              <p className="text-sm text-[hsl(var(--text-muted))]">
+              <p className="text-sm text-text-muted">
                 O detalhamento técnico do ranking ainda não está disponível neste contexto.
               </p>
             )}
@@ -538,9 +538,9 @@ export function ScoreTab({
             {scoreExplanation ? (
               <details
                 ref={explainabilityDisclosureRef}
-                className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3"
+                className="rounded-xl border border-border bg-surface px-4 py-3"
               >
-                <summary className="cursor-pointer list-none text-sm font-medium text-[hsl(var(--text))]">
+                <summary className="cursor-pointer list-none text-sm font-medium text-text">
                   Breakdown e evidências
                 </summary>
                 <div className="mt-4 flex flex-col gap-4">
@@ -551,8 +551,8 @@ export function ScoreTab({
                     <MetaItem label="Confiança" value={fmtPercentValue(scoreExplanation.data_confidence_score)} />
                   </div>
 
-                  <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <div className="rounded-xl border border-border bg-surface-muted px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Breakdown do score
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -596,18 +596,18 @@ function InsightListBlock({
   empty: string;
 }) {
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{title}</p>
+    <div className="rounded-xl border border-border bg-surface-muted px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{title}</p>
       {items.length > 0 ? (
         <ul className="mt-3 flex flex-col gap-2">
           {items.map((item) => (
-            <li key={item} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text))]">
+            <li key={item} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text">
               {item}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
+        <p className="mt-3 text-sm text-text-muted">{empty}</p>
       )}
     </div>
   );
@@ -628,7 +628,7 @@ function ExplainabilityCard({
           ? "border-emerald-200 bg-emerald-50/75 text-emerald-950"
           : tone === "negative"
             ? "border-amber-200 bg-amber-50/80 text-amber-950"
-            : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))]",
+            : "border-border bg-surface-muted text-text",
       ].join(" ")}
     >
       {label}
@@ -644,14 +644,14 @@ function ExplanationBreakdownItem({
   item: { score: number; weight: number; contribution: number } | null;
 }) {
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+    <div className="rounded-xl border border-border bg-surface px-3 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
         {label}
       </p>
       <p className={["mt-2 text-lg font-extrabold tabular-nums", scoreColorClass(item?.score ?? null)].join(" ")}>
         {fmtScore(item?.score ?? null)}
       </p>
-      <div className="mt-2 flex flex-col gap-1 text-xs text-[hsl(var(--text-muted))]">
+      <div className="mt-2 flex flex-col gap-1 text-xs text-text-muted">
         <span>Peso: {item ? `${Math.round(item.weight * 100)}%` : "—"}</span>
         <span>Contribuição: {fmtScore(item?.contribution ?? null)}</span>
       </div>

@@ -1,5 +1,28 @@
 import { httpRequest } from "./http";
-import type { AdmissionCaseWorkspace } from "../types/domain";
+import type {
+  AdmissionCaseDocumentsPayload,
+  AdmissionCaseEventsPage,
+  AdmissionCaseOverview,
+  AdmissionCaseWorkspace,
+} from "../types/domain";
+
+async function getOverview(caseId: string): Promise<AdmissionCaseOverview> {
+  return httpRequest<AdmissionCaseOverview>(`/api/v1/pre-admission/cases/${caseId}/overview`);
+}
+
+async function getDocuments(caseId: string): Promise<AdmissionCaseDocumentsPayload> {
+  return httpRequest<AdmissionCaseDocumentsPayload>(`/api/v1/pre-admission/cases/${caseId}/documents`);
+}
+
+async function getEvents(
+  caseId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<AdmissionCaseEventsPage> {
+  return httpRequest<AdmissionCaseEventsPage>(
+    `/api/v1/pre-admission/cases/${caseId}/events?page=${page}&page_size=${pageSize}`,
+  );
+}
 
 async function getWorkspace(caseId: string): Promise<AdmissionCaseWorkspace> {
   return httpRequest<AdmissionCaseWorkspace>(`/api/v1/admission/cases/${caseId}/workspace`);
@@ -38,6 +61,9 @@ async function markCaseReadyForExport(caseId: string): Promise<AdmissionCaseWork
 }
 
 export const admissionWorkspaceService = {
+  getOverview,
+  getDocuments,
+  getEvents,
   getWorkspace,
   approveChecklistItem,
   rejectChecklistItem,

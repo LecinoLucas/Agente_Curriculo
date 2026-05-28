@@ -39,7 +39,7 @@ export function CandidateQuickActions({
   }
 
   return (
-    <div className="shrink-0 border-t border-[hsl(var(--border))]/30 bg-[hsl(var(--surface))] px-5 py-3">
+    <div className="shrink-0 border-t border-border/30 bg-surface px-5 py-3">
       <div className="flex items-center gap-2.5">
         <button
           type="button"
@@ -60,7 +60,7 @@ export function CandidateQuickActions({
           type="button"
           onClick={onTerminate}
           disabled={isLoading}
-          className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-2.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2.5 text-xs font-medium text-text-muted transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
         >
           <X className="h-3.5 w-3.5" />
           {pendingAction === "terminate" ? "Reprovando…" : "Reprovar"}
@@ -71,7 +71,7 @@ export function CandidateQuickActions({
           onClick={onViewAnalysis}
           disabled={isLoading}
           title="Ver análise"
-          className="flex items-center gap-1 rounded-lg border border-[hsl(var(--border))] px-3 py-2.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))]/70 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-lg border border-border px-3 py-2.5 text-xs font-medium text-text-muted transition hover:bg-surface-muted/70 disabled:opacity-50"
         >
           <BarChart3 className="h-3.5 w-3.5" />
         </button>

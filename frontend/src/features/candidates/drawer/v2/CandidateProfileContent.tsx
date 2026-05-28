@@ -15,7 +15,7 @@ export function CandidateProfileContent({
         <div className="p-6">
           <div className="animate-pulse space-y-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-12 rounded-lg bg-[hsl(var(--surface-muted))]/40" />
+              <div key={i} className="h-12 rounded-lg bg-surface-muted/40" />
             ))}
           </div>
         </div>

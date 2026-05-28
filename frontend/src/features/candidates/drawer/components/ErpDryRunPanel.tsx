@@ -228,11 +228,11 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
   return (
     <section className="admission-embedded-card space-y-4 p-5">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(var(--text-muted))]">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
           Protheus
         </p>
-        <h4 className="mt-1 text-base font-semibold text-[hsl(var(--text))]">Simulação Protheus</h4>
-        <p className="text-sm text-[hsl(var(--text-muted))]">
+        <h4 className="mt-1 text-base font-semibold text-text">Simulação Protheus</h4>
+        <p className="text-sm text-text-muted">
           Modo dry-run auditável para validar payload e simular integração ERP.
         </p>
       </div>
@@ -245,15 +245,15 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
         <>
           <div className="admission-row grid gap-3 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Ambiente
               </p>
-              <p className="mt-1 font-semibold text-[hsl(var(--text))]">
+              <p className="mt-1 font-semibold text-text">
                 {capabilities?.environment ?? (loadingCapabilities ? "Carregando..." : "Indisponível")}
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Dry-run
               </p>
               <p className={dryRunAvailable ? "mt-1 font-semibold text-emerald-700" : "mt-1 font-semibold text-amber-800"}>
@@ -261,7 +261,7 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Mock
               </p>
               <p className={mockAvailable ? "mt-1 font-semibold text-emerald-700" : "mt-1 font-semibold text-amber-800"}>
@@ -269,7 +269,7 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Envio real
               </p>
               <p className={realSendAvailable ? "mt-1 font-semibold text-emerald-700" : "mt-1 font-semibold text-amber-800"}>
@@ -295,7 +295,7 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
               type="button"
               onClick={handlePrepare}
               disabled={!dryRunAvailable || loadingCapabilities || saving}
-              className="ui-btn-primary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Preparando..." : "Preparar simulação Protheus"}
             </button>
@@ -303,7 +303,7 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
               type="button"
               onClick={handleSimulate}
               disabled={!canSimulate || saving}
-              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="border border-border text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Simulando..." : "Simular envio"}
             </button>
@@ -312,7 +312,7 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
               onClick={handleMockSend}
               disabled={!mockAvailable || saving}
               title={capabilities?.mock.disabled_reason ?? undefined}
-              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="border border-border text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Executando..." : "Executar mock"}
             </button>
@@ -338,7 +338,7 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
             </div>
           ) : null}
 
-          {loading ? <p className="text-sm text-[hsl(var(--text-muted))]">Carregando tentativas...</p> : null}
+          {loading ? <p className="text-sm text-text-muted">Carregando tentativas...</p> : null}
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
           {latestAttempt ? (
@@ -346,20 +346,20 @@ export function ErpDryRunPanel({ pkg, capabilities: providedCapabilities }: ErpD
               <div className="admission-row p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                       Última tentativa
                     </p>
-                    <p className="mt-1 text-sm font-semibold text-[hsl(var(--text))]">
+                    <p className="mt-1 text-sm font-semibold text-text">
                       {labelForAttemptStatus(latestAttempt.status)}
                     </p>
                   </div>
-                  <span className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-2.5 py-1 text-xs font-semibold text-[hsl(var(--text-muted))]">
+                  <span className="rounded-lg border border-border bg-surface-muted/50 px-2.5 py-1 text-xs font-semibold text-text-muted">
                     {labelForAttemptMode(latestAttempt.mode)}
                   </span>
                 </div>
                 {latestExternalReference || latestCorrelationId ? (
-                  <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 px-3 py-2 text-xs text-[hsl(var(--text-muted))]">
-                    <p className="font-semibold text-[hsl(var(--text))]">Dados técnicos da tentativa</p>
+                  <div className="mt-3 rounded-md border border-border bg-surface-muted/35 px-3 py-2 text-xs text-text-muted">
+                    <p className="font-semibold text-text">Dados técnicos da tentativa</p>
                     {latestExternalReference ? (
                       <p className="mt-1">Referência externa: {latestExternalReference}</p>
                     ) : null}

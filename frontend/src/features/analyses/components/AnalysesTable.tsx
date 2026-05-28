@@ -38,7 +38,7 @@ export function AnalysesTable({
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-20">
-        <p className="text-lg font-medium text-[hsl(var(--text-muted))]">
+        <p className="text-lg font-medium text-text-muted">
           {hasActiveFilters ? "Nenhuma análise corresponde aos filtros atuais" : "Ainda não há análises registradas"}
         </p>
         <p className="ui-text-muted text-sm">
@@ -69,7 +69,7 @@ export function AnalysesTable({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]">
+            <tr className="border-b border-border bg-surface-muted">
               <th className="ui-text-muted w-[200px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">
                 Candidato
               </th>
@@ -93,7 +93,7 @@ export function AnalysesTable({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+          <tbody className="divide-y divide-[hsl(var(--border))] bg-surface">
             {items.map((item) => (
               <AnalysisRow
                 key={item.id}
@@ -110,7 +110,7 @@ export function AnalysesTable({
       </div>
 
       {totalPages > 1 ? (
-        <div className="border-t border-[hsl(var(--border))] px-6 py-4">
+        <div className="border-t border-border px-6 py-4">
           <Pagination
             page={page}
             totalPages={totalPages}

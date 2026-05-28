@@ -44,8 +44,8 @@ function getAvatarStyles(name: string): string {
   const classes = [
     "bg-[hsl(var(--primary)/0.08)] text-[hsl(var(--primary))] border-[hsl(var(--primary)/0.15)]",
     "bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent-foreground))] border-[hsl(var(--accent-soft))/80]",
-    "bg-[hsl(var(--warning-soft))] text-[hsl(var(--warning))] border-[hsl(var(--warning-soft))/80]",
-    "bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] border-[hsl(var(--border))/20]"
+    "bg-warning-soft text-warning border-[hsl(var(--warning-soft))/80]",
+    "bg-surface-muted text-text-muted border-[hsl(var(--border))/20]"
   ];
   return classes[index];
 }
@@ -76,11 +76,11 @@ function getAiProcessingState(candidate: JobCandidate): { label: string; tone: "
 }
 
 const BADGE_TONE_CLASS: Record<PipelineCardBadgeTone, string> = {
-  danger: "bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))] border border-[hsl(var(--danger-soft))/80]",
-  warning: "bg-[hsl(var(--warning-soft))] text-[hsl(var(--warning))] border border-[hsl(var(--warning-soft))/80]",
+  danger: "bg-danger-soft text-danger border border-[hsl(var(--danger-soft))/80]",
+  warning: "bg-warning-soft text-warning border border-[hsl(var(--warning-soft))/80]",
   progress: "bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent-foreground))] border border-[hsl(var(--accent-soft))/80]",
-  success: "bg-[hsl(var(--success-soft))] text-[hsl(var(--success))] border border-[hsl(var(--success-soft))/80]",
-  neutral: "bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] border border-[hsl(var(--border))/20]",
+  success: "bg-success-soft text-success border border-[hsl(var(--success-soft))/80]",
+  neutral: "bg-surface-muted text-text-muted border border-[hsl(var(--border))/20]",
 };
 
 export const KanbanCard = memo(function KanbanCard({
@@ -141,11 +141,11 @@ export const KanbanCard = memo(function KanbanCard({
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "group relative w-full select-none rounded-xl border bg-white dark:bg-[hsl(var(--card))] p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)]",
-        isTopMatch ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/[0.02]" : "border-[hsl(var(--border))]/40 dark:border-slate-800/80",
+        "group relative w-full select-none rounded-xl border bg-white dark:bg-slate-900 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
+        isTopMatch ? "border-[#C1121F]/30 bg-[#C1121F]/[0.02]" : "border-slate-100 dark:border-slate-800/80 hover:border-slate-200 dark:hover:border-slate-700",
         isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
         draggable ? "active:cursor-grabbing" : "",
-        isDragging ? "opacity-55 ring-2 ring-[hsl(var(--primary))]/15" : "",
+        isDragging ? "opacity-55 ring-2 ring-[#C1121F]/15" : "",
         "kanban-card-enter",
       ]
         .filter(Boolean)
@@ -175,17 +175,17 @@ export const KanbanCard = memo(function KanbanCard({
               </span>
             )}
             {isTopMatch && !rank && (
-              <span className="rounded bg-[hsl(var(--primary))]/10 border border-[hsl(var(--primary))]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[hsl(var(--primary))]">
+              <span className="rounded bg-[#C1121F]/10 border border-[#C1121F]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#C1121F]">
                 Mais aderente
               </span>
             )}
-            <span className="truncate text-sm font-bold tracking-tight text-[hsl(var(--text))] transition-colors group-hover:text-[hsl(var(--primary))]">
+            <span className="truncate text-sm font-bold tracking-tight text-slate-800 dark:text-slate-100 transition-colors group-hover:text-[#C1121F]">
               {name}
             </span>
           </div>
           
           {meta.length > 0 && (
-            <p className="mt-1 text-[10px] font-medium text-[hsl(var(--text-muted))]">
+            <p className="mt-1 text-[10px] font-medium text-text-muted">
               {meta.join(" • ")}
             </p>
           )}
@@ -194,9 +194,9 @@ export const KanbanCard = memo(function KanbanCard({
 
       {/* Origin and Timing line */}
       {(source || dateLabel) && (
-        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[hsl(var(--border))]/40 dark:border-slate-800/80 pt-2 text-[9px] font-semibold text-[hsl(var(--text-muted))]">
+        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 dark:border-slate-800/80 pt-2 text-[9px] font-semibold text-text-muted">
           {source ? (
-            <span className="inline-flex items-center rounded bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-[hsl(var(--text-muted))] font-medium">
+            <span className="inline-flex items-center rounded bg-surface-muted px-1.5 py-0.5 text-text-muted font-medium">
               {source === "public_application" ? "Candidatura Pública" : source}
             </span>
           ) : (
@@ -209,7 +209,7 @@ export const KanbanCard = memo(function KanbanCard({
       {stageSubstatus ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           <span
-            className="inline-flex max-w-full items-center truncate rounded border border-[hsl(var(--border))]/50 bg-[hsl(var(--surface-muted))] px-1.5 py-0.5 text-[9px] font-black uppercase text-[hsl(var(--text-muted))]"
+            className="inline-flex max-w-full items-center truncate rounded border border-border/50 bg-surface-muted px-1.5 py-0.5 text-[9px] font-black uppercase text-text-muted"
             title={`Status real: ${stageSubstatus}`}
             data-testid="kanban-card-real-stage"
           >
@@ -217,7 +217,7 @@ export const KanbanCard = memo(function KanbanCard({
           </span>
           {stageSummary ? (
             <span
-              className="inline-flex max-w-full items-center truncate rounded border border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))]/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-[hsl(var(--primary))]"
+              className="inline-flex max-w-full items-center truncate rounded border border-[#C1121F]/20 bg-[#C1121F]/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-[#C1121F]"
               title={stageSummary}
               data-testid="kanban-card-admission-summary"
             >
@@ -268,7 +268,7 @@ export const KanbanCard = memo(function KanbanCard({
           {skills.map((skill) => (
             <span
               key={skill}
-              className="rounded bg-[hsl(var(--surface-muted))] border border-[hsl(var(--border))]/40 dark:border-slate-800/80 px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-muted))] truncate max-w-[100px] inline-block"
+              className="rounded bg-surface-muted border border-border/40 dark:border-slate-800/80 px-2 py-0.5 text-[10px] font-medium text-text-muted truncate max-w-[100px] inline-block"
               title={skill}
             >
               {skill}
@@ -278,34 +278,34 @@ export const KanbanCard = memo(function KanbanCard({
       )}
 
       {/* Footer block: Match Score and Indicators */}
-      <div className="mt-3.5 flex items-center justify-between gap-2.5 border-t border-[hsl(var(--border))]/40 dark:border-slate-800/80 pt-3 min-w-0">
+      <div className="mt-3.5 flex items-center justify-between gap-2.5 border-t border-border/40 dark:border-slate-800/80 pt-3 min-w-0">
         {isSaving ? (
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))] animate-pulse truncate">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted animate-pulse truncate">
             Sincronizando…
           </span>
         ) : (
           <>
             {jobFitScore !== null && jobFitScore !== undefined ? (
               <div className="flex flex-1 items-center gap-1.5 min-w-0">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] shrink-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 shrink-0">
                   Match
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))] min-w-[24px]">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 min-w-[24px]">
                   <div
-                    className="h-full bg-[hsl(var(--primary))] transition-all duration-500"
+                    className="h-full bg-[#C1121F] transition-all duration-500"
                     style={{ width: `${Math.round(jobFitScore)}%` }}
                   />
                 </div>
-                <span className="text-xs font-black tabular-nums text-[hsl(var(--primary))] shrink-0">
+                <span className="text-xs font-black tabular-nums text-[#C1121F] shrink-0">
                   {Math.round(jobFitScore)}%
                 </span>
               </div>
             ) : (
               <div className="flex flex-1 items-center justify-between gap-1.5 min-w-0">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] shrink-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted shrink-0">
                   Match
                 </span>
-                <span className="rounded bg-[hsl(var(--surface-muted))] border border-[hsl(var(--border))]/40 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--text-muted))] shrink-0">
+                <span className="rounded bg-surface-muted border border-border/40 px-1.5 py-0.5 text-[9px] font-bold text-text-muted shrink-0">
                   {aiProcessingState ? "Aguardando IA" : "Pendente"}
                 </span>
               </div>

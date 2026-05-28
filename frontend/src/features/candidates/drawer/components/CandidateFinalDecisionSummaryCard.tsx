@@ -124,7 +124,7 @@ export function CandidateFinalDecisionSummaryCard({
 
   if (loading && !summary) {
     return (
-      <section className="rounded-lg border border-[hsl(var(--border))] bg-white p-4 text-sm text-[hsl(var(--text-muted))]">
+      <section className="rounded-lg border border-border bg-white p-4 text-sm text-text-muted">
         Carregando resumo consolidado...
       </section>
     );

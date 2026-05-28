@@ -110,7 +110,7 @@ export function MoreActionsMenu({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2 text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))] transition shadow-sm"
+        className="rounded-xl border border-border bg-surface p-2 text-text-muted hover:text-text hover:bg-surface-muted transition shadow-sm"
         aria-label="Mais ações"
         aria-expanded={isOpen}
       >
@@ -118,14 +118,14 @@ export function MoreActionsMenu({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-lg">
+        <div className="absolute right-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-border bg-surface shadow-lg">
           <div className="overflow-hidden py-1">
             {visibleActions.map((action, idx) => (
               <div
                 key={action.key}
                 className={
                   action.separator && idx > 0
-                    ? "border-t border-[hsl(var(--border))]/50"
+                    ? "border-t border-border/50"
                     : ""
                 }
               >
@@ -135,7 +135,7 @@ export function MoreActionsMenu({
                     action.handler();
                     setIsOpen(false);
                   }}
-                  className="block w-full px-4 py-2 text-left text-sm text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+                  className="block w-full px-4 py-2 text-left text-sm text-text transition hover:bg-surface-muted"
                 >
                   {action.label}
                 </button>

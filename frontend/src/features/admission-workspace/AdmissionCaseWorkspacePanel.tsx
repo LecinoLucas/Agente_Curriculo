@@ -6,8 +6,21 @@ import { SkeletonCards } from "@/components/common/Skeleton";
 import { formatContextError } from "../../services/errorMessages";
 import { HttpError } from "../../services/http";
 import { admissionWorkspaceService } from "../../services/admissionWorkspaceService";
+import {
+  approvePreAdmissionDocument,
+  downloadPreAdmissionDocument,
+  rejectPreAdmissionDocument,
+  type RejectPreAdmissionDocumentPayload,
+} from "../../services/preAdmissionService";
 import { toast } from "../../shared/utils/toast";
-import type { AdmissionCaseWorkspace, AdmissionWorkspaceBlocker } from "../../types/domain";
+import type {
+  AdmissionCaseDocumentsPayload,
+  AdmissionCaseEventsPage,
+  AdmissionCaseOverview,
+  AdmissionCaseWorkspace,
+  AdmissionWorkspaceBlocker,
+  AdmissionWorkspaceDocument,
+} from "../../types/domain";
 import { AdmissionCaseHeader } from "./components/AdmissionCaseHeader";
 import { AdmissionChecklistCard } from "./components/AdmissionChecklistCard";
 import { AdmissionBlockersCard } from "./components/AdmissionBlockersCard";
@@ -15,14 +28,15 @@ import { AdmissionDocumentsCard } from "./components/AdmissionDocumentsCard";
 import { AdmissionNextActionsCard } from "./components/AdmissionNextActionsCard";
 import { AdmissionRecentEventsCard } from "./components/AdmissionRecentEventsCard";
 import { AdmissionSummaryCard } from "./components/AdmissionSummaryCard";
-
-type ChecklistAction = "approve" | "reject" | "request-correction" | "mark-not-required";
+import { AdmissionProtheusIntegrationPanel } from "./AdmissionProtheusIntegrationPanel";
 
 type AdmissionCaseWorkspacePanelProps = {
   caseId: string;
   openPageHref?: string | null;
   integrationHref?: string | null;
 };
+
+type DocumentReviewMode = "reject" | "request-correction";
 
 function extractBlockersFromError(error: unknown): AdmissionWorkspaceBlocker[] {
   if (!(error instanceof HttpError) || !error.detail || typeof error.detail !== "object") {
@@ -38,8 +52,8 @@ function WorkspaceLoadingState() {
     <div className="admission-cockpit space-y-5 px-3 pt-5 sm:px-4">
       {/* Loading: page header */}
       <div className="space-y-2">
-        <div className="h-3 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-        <div className="h-6 w-64 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+        <div className="h-3 w-40 animate-pulse rounded bg-surface-muted" />
+        <div className="h-6 w-64 animate-pulse rounded bg-surface-muted" />
       </div>
       {/* Loading: summary bar */}
       <div className="admission-section-card h-24 animate-pulse p-5" />
@@ -49,44 +63,161 @@ function WorkspaceLoadingState() {
   );
 }
 
+function SectionLoadingState({ title }: { title: string }) {
+  return (
+    <section className="admission-section-card">
+      <div className="px-5 py-4">
+        <h2 className="text-base font-semibold text-text">{title}</h2>
+      </div>
+      <div className="px-5 pb-5">
+        <div className="h-20 animate-pulse rounded-xl bg-surface-muted" />
+      </div>
+    </section>
+  );
+}
+
+function SectionErrorState({
+  title,
+  message,
+  onRetry,
+}: {
+  title: string;
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="admission-section-card p-5">
+      <h2 className="text-base font-semibold text-text">{title}</h2>
+      <p className="mt-2 text-sm text-text-muted">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="border border-border bg-surface text-text hover:bg-surface-muted transition mt-3 inline-flex min-h-10 items-center rounded-xl px-4 text-sm font-medium"
+      >
+        Tentar novamente
+      </button>
+    </section>
+  );
+}
+
+function buildWorkspace(
+  overview: AdmissionCaseOverview,
+  documentsPayload: AdmissionCaseDocumentsPayload | null,
+  eventsPage: AdmissionCaseEventsPage | null,
+): AdmissionCaseWorkspace {
+  const fallbackChecklist = {
+    total: overview.progress.total,
+    approved: overview.progress.approved,
+    pending: overview.progress.pending + overview.progress.in_review,
+    blocked: overview.progress.rejected,
+    items: [],
+  };
+
+  return {
+    case: overview.case,
+    candidate: overview.candidate,
+    job: overview.job,
+    checklist: documentsPayload?.checklist ?? fallbackChecklist,
+    documents: documentsPayload?.documents ?? [],
+    main_blockers: overview.main_blockers,
+    next_actions: overview.next_actions,
+    summary: overview.summary,
+    recent_events: eventsPage?.items ?? [],
+  };
+}
+
 export function AdmissionCaseWorkspacePanel({
   caseId,
   openPageHref,
   integrationHref,
 }: AdmissionCaseWorkspacePanelProps) {
-  const [workspace, setWorkspace] = useState<AdmissionCaseWorkspace | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<AdmissionCaseOverview | null>(null);
+  const [documentsPayload, setDocumentsPayload] = useState<AdmissionCaseDocumentsPayload | null>(null);
+  const [eventsPage, setEventsPage] = useState<AdmissionCaseEventsPage | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const [loadingActionKey, setLoadingActionKey] = useState<string | null>(null);
   const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
+  const [highlightedDocumentId, setHighlightedDocumentId] = useState<string | null>(null);
 
   const resolvedIntegrationHref = useMemo(
     () => integrationHref ?? `/admission/cases/${caseId}/integration`,
     [caseId, integrationHref],
   );
 
-  const loadWorkspace = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    setOverviewError(null);
     try {
-      const payload = await admissionWorkspaceService.getWorkspace(caseId);
-      setWorkspace(payload);
+      const payload = await admissionWorkspaceService.getOverview(caseId);
+      setOverview(payload);
     } catch (requestError) {
-      setError(
+      setOverviewError(
         formatContextError(
           requestError,
-          "Não foi possível carregar o workspace da pré-admissão.",
+          "Não foi possível carregar o overview da pré-admissão.",
           "Atualize a página ou revise o vínculo do pipeline ativo.",
         ),
       );
     } finally {
-      setLoading(false);
+      setOverviewLoading(false);
     }
   }, [caseId]);
 
+  const loadDocuments = useCallback(async () => {
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+    try {
+      const payload = await admissionWorkspaceService.getDocuments(caseId);
+      setDocumentsPayload(payload);
+    } catch (requestError) {
+      setDocumentsError(
+        formatContextError(
+          requestError,
+          "Não foi possível carregar documentos e checklist.",
+          "Tente novamente para revisar os arquivos do caso.",
+        ),
+      );
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, [caseId]);
+
+  const loadEvents = useCallback(async () => {
+    setEventsLoading(true);
+    setEventsError(null);
+    try {
+      const payload = await admissionWorkspaceService.getEvents(caseId, 1, 20);
+      setEventsPage(payload);
+    } catch (requestError) {
+      setEventsError(
+        formatContextError(
+          requestError,
+          "Não foi possível carregar o histórico recente.",
+          "Tente novamente para recarregar os eventos.",
+        ),
+      );
+    } finally {
+      setEventsLoading(false);
+    }
+  }, [caseId]);
+
+  const reloadSections = useCallback(async () => {
+    await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
+  }, [loadDocuments, loadEvents, loadOverview]);
+
   useEffect(() => {
-    void loadWorkspace();
-  }, [loadWorkspace]);
+    void Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
+  }, [loadDocuments, loadEvents, loadOverview]);
+
+  const workspace = useMemo(
+    () => (overview ? buildWorkspace(overview, documentsPayload, eventsPage) : null),
+    [documentsPayload, eventsPage, overview],
+  );
 
   const openChecklist = useCallback(() => {
     document.getElementById("admission-checklist-section")?.scrollIntoView({
@@ -95,33 +226,21 @@ export function AdmissionCaseWorkspacePanel({
     });
   }, []);
 
-  const runChecklistAction = useCallback(
-    async (itemId: string, action: ChecklistAction) => {
-      const actionMap = {
-        approve: {
-          fn: admissionWorkspaceService.approveChecklistItem,
-          success: "Item aprovado.",
-        },
-        reject: {
-          fn: admissionWorkspaceService.rejectChecklistItem,
-          success: "Item rejeitado.",
-        },
-        "request-correction": {
-          fn: admissionWorkspaceService.requestChecklistItemCorrection,
-          success: "Correção solicitada.",
-        },
-        "mark-not-required": {
-          fn: admissionWorkspaceService.markChecklistItemNotRequired,
-          success: "Item marcado como não obrigatório.",
-        },
-      } as const;
+  const openDocuments = useCallback((documentId?: string | null) => {
+    setHighlightedDocumentId(documentId ?? null);
+    document.getElementById("admission-documents-section")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
 
-      const actionMeta = actionMap[action];
-      setLoadingActionKey(`${itemId}:${action}`);
+  const handleMarkNotRequired = useCallback(
+    async (itemId: string) => {
+      setLoadingActionKey(`${itemId}:mark-not-required`);
       setSummaryMessage(null);
       try {
-        await actionMeta.fn(itemId);
-        toast.success(actionMeta.success);
+        await admissionWorkspaceService.markChecklistItemNotRequired(itemId);
+        toast.success("Item marcado como não obrigatório.");
       } catch (requestError) {
         toast.error(
           formatContextError(
@@ -132,10 +251,89 @@ export function AdmissionCaseWorkspacePanel({
         );
       } finally {
         setLoadingActionKey(null);
-        await loadWorkspace();
+        await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
       }
     },
-    [loadWorkspace],
+    [loadDocuments, loadEvents, loadOverview],
+  );
+
+  const handleApproveDocument = useCallback(
+    async (documentData: AdmissionWorkspaceDocument) => {
+      setLoadingActionKey(`document:${documentData.id}:approve`);
+      setSummaryMessage(null);
+      try {
+        await approvePreAdmissionDocument(documentData.id);
+        toast.success("Documento aprovado.");
+      } catch (requestError) {
+        toast.error(
+          formatContextError(
+            requestError,
+            "Não foi possível aprovar o documento.",
+            "Tente novamente.",
+          ),
+        );
+      } finally {
+        setLoadingActionKey(null);
+        await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
+      }
+    },
+    [loadDocuments, loadEvents, loadOverview],
+  );
+
+  const handleRejectDocument = useCallback(
+    async (
+      documentData: AdmissionWorkspaceDocument,
+      payload: RejectPreAdmissionDocumentPayload,
+      mode: DocumentReviewMode,
+    ) => {
+      setLoadingActionKey(`document:${documentData.id}:${mode}`);
+      setSummaryMessage(null);
+      try {
+        await rejectPreAdmissionDocument(documentData.id, payload);
+        toast.success(mode === "request-correction" ? "Correção solicitada." : "Documento rejeitado.");
+      } catch (requestError) {
+        toast.error(
+          formatContextError(
+            requestError,
+            "Não foi possível registrar a revisão do documento.",
+            "Tente novamente.",
+          ),
+        );
+        throw requestError;
+      } finally {
+        setLoadingActionKey(null);
+        await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
+      }
+    },
+    [loadDocuments, loadEvents, loadOverview],
+  );
+
+  const handleDownloadDocument = useCallback(
+    async (documentData: AdmissionWorkspaceDocument) => {
+      setLoadingActionKey(`document:${documentData.id}:download`);
+      try {
+        const blob = await downloadPreAdmissionDocument(documentData.id);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = documentData.filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (requestError) {
+        toast.error(
+          formatContextError(
+            requestError,
+            "Não foi possível baixar o documento.",
+            "Tente novamente.",
+          ),
+        );
+      } finally {
+        setLoadingActionKey(null);
+      }
+    },
+    [],
   );
 
   const handleMarkReady = useCallback(async () => {
@@ -164,22 +362,22 @@ export function AdmissionCaseWorkspacePanel({
       );
     } finally {
       setLoadingActionKey(null);
-      await loadWorkspace();
+      await Promise.all([loadOverview(), loadDocuments(), loadEvents()]);
     }
-  }, [caseId, loadWorkspace]);
+  }, [caseId, loadDocuments, loadEvents, loadOverview]);
 
-  if (loading) {
+  if (overviewLoading && !overview) {
     return <WorkspaceLoadingState />;
   }
 
-  if (error || !workspace) {
+  if (overviewError || !workspace) {
     return (
       <div className="admission-section-card p-6">
         <EmptyState
           icon="⚠️"
           title="Workspace indisponível"
-          description={error ?? "Não foi possível localizar este caso admissional."}
-          action={{ label: "Recarregar", onClick: () => void loadWorkspace() }}
+          description={overviewError ?? "Não foi possível localizar este caso admissional."}
+          action={{ label: "Recarregar", onClick: () => void loadOverview() }}
         />
       </div>
     );
@@ -202,11 +400,22 @@ export function AdmissionCaseWorkspacePanel({
 
         {/* ── Left column ─────────────────────────────────────────────── */}
         <div className="space-y-5">
-          <AdmissionChecklistCard
-            items={workspace.checklist.items}
-            loadingActionKey={loadingActionKey}
-            onAction={runChecklistAction}
-          />
+          {documentsLoading && !documentsPayload ? (
+            <SectionLoadingState title="Checklist admissional" />
+          ) : documentsError && !documentsPayload ? (
+            <SectionErrorState
+              title="Checklist admissional"
+              message={documentsError}
+              onRetry={() => void loadDocuments()}
+            />
+          ) : (
+            <AdmissionChecklistCard
+              items={workspace.checklist.items}
+              loadingActionKey={loadingActionKey}
+              onMarkNotRequired={handleMarkNotRequired}
+              onReviewDocument={openDocuments}
+            />
+          )}
           <AdmissionBlockersCard
             blockers={workspace.main_blockers}
             onOpenChecklist={openChecklist}
@@ -221,13 +430,45 @@ export function AdmissionCaseWorkspacePanel({
             submitting={loadingActionKey === "case:mark-ready"}
             actionMessage={summaryMessage}
           />
-          <AdmissionDocumentsCard documents={workspace.documents} />
+          {documentsLoading && !documentsPayload ? (
+            <SectionLoadingState title="Documentos enviados" />
+          ) : documentsError && !documentsPayload ? (
+            <SectionErrorState
+              title="Documentos enviados"
+              message={documentsError}
+              onRetry={() => void loadDocuments()}
+            />
+          ) : (
+            <AdmissionDocumentsCard
+              documents={workspace.documents}
+              highlightedDocumentId={highlightedDocumentId}
+              loadingActionKey={loadingActionKey}
+              onApprove={handleApproveDocument}
+              onReject={handleRejectDocument}
+              onDownload={handleDownloadDocument}
+            />
+          )}
           <AdmissionNextActionsCard
             actions={workspace.next_actions}
             integrationHref={resolvedIntegrationHref}
             onOpenChecklist={openChecklist}
           />
-          <AdmissionRecentEventsCard events={workspace.recent_events} />
+          <AdmissionProtheusIntegrationPanel
+            caseId={caseId}
+            variant="embedded"
+            workspace={workspace}
+          />
+          {eventsLoading && !eventsPage ? (
+            <SectionLoadingState title="Histórico recente" />
+          ) : eventsError && !eventsPage ? (
+            <SectionErrorState
+              title="Histórico recente"
+              message={eventsError}
+              onRetry={() => void loadEvents()}
+            />
+          ) : (
+            <AdmissionRecentEventsCard events={workspace.recent_events} />
+          )}
         </div>
       </div>
 
@@ -235,8 +476,8 @@ export function AdmissionCaseWorkspacePanel({
       <div className="flex justify-end pt-2">
         <button
           type="button"
-          onClick={() => void loadWorkspace()}
-          className="ui-btn-secondary inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-medium"
+          onClick={() => void reloadSections()}
+          className="border border-border bg-surface text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-medium"
         >
           <RefreshCw className="h-4 w-4" />
           Recarregar workspace

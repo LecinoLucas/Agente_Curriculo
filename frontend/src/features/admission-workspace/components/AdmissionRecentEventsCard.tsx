@@ -31,7 +31,7 @@ export function AdmissionRecentEventsCard({
       id="admission-events-section"
     >
       {events.length === 0 ? (
-        <p className="py-2 text-sm text-[hsl(var(--text-muted))]">
+        <p className="py-2 text-sm text-text-muted">
           Nenhum evento recente.
         </p>
       ) : (
@@ -58,19 +58,24 @@ export function AdmissionRecentEventsCard({
               {/* Content */}
               <div className="min-w-0 flex-1 pt-0.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                  <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                  <p className="text-sm font-semibold text-text">
                     {event.title}
                   </p>
                   <time
-                    className="shrink-0 text-[10px] text-[hsl(var(--text-muted))]"
+                    className="shrink-0 text-[10px] text-text-muted"
                     dateTime={event.created_at}
                   >
                     {formatDateTime(event.created_at)}
                   </time>
                 </div>
                 {event.description ? (
-                  <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))] leading-relaxed">
+                  <p className="mt-0.5 text-xs text-text-muted leading-relaxed">
                     {event.description}
+                  </p>
+                ) : null}
+                {event.actor_name ? (
+                  <p className="mt-1 text-[11px] font-medium text-text-muted">
+                    por {event.actor_name}
                   </p>
                 ) : null}
               </div>

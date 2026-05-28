@@ -38,7 +38,17 @@ export type ManagerJobCandidatesResponse = {
   candidates: ManagerCandidateSummary[];
 };
 
-export type ScorecardFinalRecommendation = "strong_yes" | "yes" | "no" | "strong_no";
+export type ScorecardFinalRecommendation = "strong_yes" | "yes" | "neutral" | "no" | "strong_no";
+
+export type ScorecardItemPayload = {
+  id?: string | null;
+  competency_name: string;
+  question_text?: string | null;
+  rating?: number | null;
+  evidence?: string | null;
+  weight?: number;
+  display_order?: number;
+};
 
 export type ScorecardResponse = {
   id: string;
@@ -51,12 +61,18 @@ export type ScorecardResponse = {
   submitted_at: string | null;
   items: Array<{
     id: string;
+    scorecard_id: string;
     competency_name: string;
     question_text: string | null;
     rating: number | null;
     evidence: string | null;
+    weight: number | string;
     display_order: number;
+    created_at: string;
+    updated_at: string;
   }>;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ScorecardEnvelopeResponse = {
@@ -77,13 +93,28 @@ export const managerService = {
   getScorecard: (jobId: string, candidateId: string) =>
     httpRequest<ScorecardEnvelopeResponse>(`/api/v1/jobs/${jobId}/candidates/${candidateId}/interview-scorecard`),
 
-  createScorecard: (jobId: string, candidateId: string, body: { items: Array<{ competency_name: string; question_text?: string; display_order: number }> }) =>
+  createScorecard: (
+    jobId: string,
+    candidateId: string,
+    body: {
+      final_recommendation?: ScorecardFinalRecommendation | null;
+      overall_notes?: string | null;
+      items: ScorecardItemPayload[];
+    },
+  ) =>
     httpRequest<ScorecardResponse>(`/api/v1/jobs/${jobId}/candidates/${candidateId}/interview-scorecard`, {
       method: "POST",
       body,
     }),
 
-  patchScorecard: (scorecardId: string, body: Partial<{ final_recommendation: ScorecardFinalRecommendation; overall_notes: string; items: Array<{ competency_name: string; rating?: number; evidence?: string; display_order?: number }> }>) =>
+  patchScorecard: (
+    scorecardId: string,
+    body: Partial<{
+      final_recommendation: ScorecardFinalRecommendation | null;
+      overall_notes: string | null;
+      items: ScorecardItemPayload[];
+    }>,
+  ) =>
     httpRequest<ScorecardResponse>(`/api/v1/interview-scorecards/${scorecardId}`, {
       method: "PATCH",
       body,

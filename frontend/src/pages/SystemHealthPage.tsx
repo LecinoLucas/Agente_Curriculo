@@ -100,14 +100,14 @@ function HealthMetricCard({
   note?: string;
 }) {
   return (
-    <Card className="border-[hsl(var(--border))]">
+    <Card className="border-border">
       <CardContent className="flex items-start justify-between gap-4 p-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{label}</p>
-          <p className="text-2xl font-semibold text-[hsl(var(--text))]">{value}</p>
-          {note ? <p className="text-xs text-[hsl(var(--text-muted))]">{note}</p> : null}
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{label}</p>
+          <p className="text-2xl font-semibold text-text">{value}</p>
+          {note ? <p className="text-xs text-text-muted">{note}</p> : null}
         </div>
-        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-3 text-[hsl(var(--text-secondary))]">
+        <div className="rounded-2xl border border-border bg-surface-muted p-3 text-[hsl(var(--text-secondary))]">
           {icon}
         </div>
       </CardContent>
@@ -138,7 +138,7 @@ function SectionShell({
           <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-[hsl(var(--text-muted))]">Carregando status do sistema...</p>
+          <p className="text-sm text-text-muted">Carregando status do sistema...</p>
         </CardContent>
       </Card>
     );
@@ -329,7 +329,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
         />
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-2">
         {TAB_ITEMS.map((tab) => (
           <button
             key={tab.key}
@@ -338,8 +338,8 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
             className={[
               "rounded-xl px-4 py-2 text-sm font-medium transition-colors",
               activeTab === tab.key
-                ? "bg-[hsl(var(--surface-muted))] text-[hsl(var(--text))] shadow-sm"
-                : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]/60 hover:text-[hsl(var(--text))]",
+                ? "bg-surface-muted text-text shadow-sm"
+                : "text-text-muted hover:bg-surface-muted/60 hover:text-text",
             ].join(" ")}
           >
             {tab.label}
@@ -376,10 +376,10 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                       { label: "Banco", data: overviewData.database },
                       { label: "Redis", data: overviewData.redis },
                     ].map((item) => (
-                      <div key={item.label} className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] px-4 py-3">
+                      <div key={item.label} className="flex items-center justify-between rounded-xl border border-border px-4 py-3">
                         <div>
-                          <p className="text-sm font-medium text-[hsl(var(--text))]">{item.label}</p>
-                          <p className="text-xs text-[hsl(var(--text-muted))]">
+                          <p className="text-sm font-medium text-text">{item.label}</p>
+                          <p className="text-xs text-text-muted">
                             {item.data.latency_ms != null ? `${formatNumber(item.data.latency_ms)} ms` : item.data.message ?? "Sem latência disponível"}
                           </p>
                         </div>
@@ -395,17 +395,17 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     <CardDescription>Provider ativo e volume operacional recente.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] px-4 py-3">
+                    <div className="flex items-center justify-between rounded-xl border border-border px-4 py-3">
                       <div>
-                        <p className="text-sm font-medium text-[hsl(var(--text))]">Provider configurado</p>
-                        <p className="text-xs text-[hsl(var(--text-muted))]">
+                        <p className="text-sm font-medium text-text">Provider configurado</p>
+                        <p className="text-xs text-text-muted">
                           {overviewData.ai_provider.configured_provider}
                           {overviewData.ai_provider.configured_key_count != null
                             ? ` · ${formatNumber(overviewData.ai_provider.available_key_count ?? 0)}/${formatNumber(overviewData.ai_provider.configured_key_count)} chaves disponíveis`
                             : ""}
                         </p>
                         {(overviewData.ai_provider.cooldown_key_count ?? 0) > 0 ? (
-                          <p className="mt-1 text-xs text-[hsl(var(--warning))]">
+                          <p className="mt-1 text-xs text-warning">
                             {formatNumber(overviewData.ai_provider.cooldown_key_count ?? 0)} chave(s) Gemini em cooldown por rate limit.
                           </p>
                         ) : null}
@@ -413,17 +413,17 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                       <Badge variant={getStatusVariant(overviewData.ai_provider.status)}>{overviewData.ai_provider.status}</Badge>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-xl border border-[hsl(var(--border))] px-4 py-3">
-                        <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Processando</p>
-                        <p className="mt-1 text-xl font-semibold text-[hsl(var(--text))]">{formatNumber(overviewData.processing_analyses)}</p>
+                      <div className="rounded-xl border border-border px-4 py-3">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">Processando</p>
+                        <p className="mt-1 text-xl font-semibold text-text">{formatNumber(overviewData.processing_analyses)}</p>
                       </div>
-                      <div className="rounded-xl border border-[hsl(var(--border))] px-4 py-3">
-                        <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Pendentes</p>
-                        <p className="mt-1 text-xl font-semibold text-[hsl(var(--text))]">{formatNumber(overviewData.pending_analyses)}</p>
+                      <div className="rounded-xl border border-border px-4 py-3">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">Pendentes</p>
+                        <p className="mt-1 text-xl font-semibold text-text">{formatNumber(overviewData.pending_analyses)}</p>
                       </div>
-                      <div className="rounded-xl border border-[hsl(var(--border))] px-4 py-3">
-                        <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Última análise</p>
-                        <p className="mt-1 text-sm font-medium text-[hsl(var(--text))]">{formatDateTime(overviewData.last_analysis_at)}</p>
+                      <div className="rounded-xl border border-border px-4 py-3">
+                        <p className="text-xs uppercase tracking-wide text-text-muted">Última análise</p>
+                        <p className="mt-1 text-sm font-medium text-text">{formatDateTime(overviewData.last_analysis_at)}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -444,7 +444,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
         >
           {aiUsageData ? (
             <div className="space-y-6">
-              <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 p-4 text-sm text-[hsl(var(--text-muted))]">
+              <div className="rounded-2xl border border-border bg-surface-muted/40 p-4 text-sm text-text-muted">
                 O consumo exibido é calculado a partir das chamadas registradas pelo sistema. Para billing oficial, consulte Google AI Studio ou Google Cloud Billing.
               </div>
               <Card>
@@ -496,22 +496,22 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                   {limitsData ? (
                     <>
                       <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
-                          <div className="text-[hsl(var(--text-muted))]">Padrão por usuário</div>
+                        <div className="rounded-xl border border-border p-3 text-sm">
+                          <div className="text-text-muted">Padrão por usuário</div>
                           <div className="text-base font-semibold">{limitsData.defaults.per_user}/dia</div>
                         </div>
-                        <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
-                          <div className="text-[hsl(var(--text-muted))]">Padrão por vaga</div>
+                        <div className="rounded-xl border border-border p-3 text-sm">
+                          <div className="text-text-muted">Padrão por vaga</div>
                           <div className="text-base font-semibold">{limitsData.defaults.per_job}/dia</div>
                         </div>
-                        <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
-                          <div className="text-[hsl(var(--text-muted))]">Padrão global</div>
+                        <div className="rounded-xl border border-border p-3 text-sm">
+                          <div className="text-text-muted">Padrão global</div>
                           <div className="text-base font-semibold">{limitsData.defaults.global}/dia</div>
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-[hsl(var(--border))] p-3 text-sm">
-                        <div className="text-[hsl(var(--text-muted))]">Uso global hoje</div>
+                      <div className="rounded-xl border border-border p-3 text-sm">
+                        <div className="text-text-muted">Uso global hoje</div>
                         <div className="text-base font-semibold">
                           {limitsData.global_usage.used_today} / {limitsData.global_usage.effective_limit}
                           {limitsData.global_usage.limit_source === "override" ? (
@@ -523,12 +523,12 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                       <div>
                         <div className="mb-2 text-sm font-semibold">Overrides ativos</div>
                         {limitsData.active_overrides.length === 0 ? (
-                          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum override ativo no momento.</p>
+                          <p className="text-sm text-text-muted">Nenhum override ativo no momento.</p>
                         ) : (
                           <div className="overflow-x-auto">
                             <table className="min-w-full text-sm">
                               <thead>
-                                <tr className="border-b border-[hsl(var(--border))] text-left text-[hsl(var(--text-muted))]">
+                                <tr className="border-b border-border text-left text-text-muted">
                                   <th className="px-2 py-2">Escopo</th>
                                   <th className="px-2 py-2">Alvo</th>
                                   <th className="px-2 py-2">Anterior</th>
@@ -540,7 +540,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                               </thead>
                               <tbody>
                                 {limitsData.active_overrides.map((ov) => (
-                                  <tr key={ov.id} className="border-b border-[hsl(var(--border))]/60">
+                                  <tr key={ov.id} className="border-b border-border/60">
                                     <td className="px-2 py-2">{ov.scope}</td>
                                     <td className="px-2 py-2 truncate max-w-[10rem]">{ov.scope_id ?? "—"}</td>
                                     <td className="px-2 py-2">{ov.old_limit}</td>
@@ -573,7 +573,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                       </div>
                     </>
                   ) : (
-                    <p className="text-sm text-[hsl(var(--text-muted))]">Carregando limites...</p>
+                    <p className="text-sm text-text-muted">Carregando limites...</p>
                   )}
                 </CardContent>
               </Card>
@@ -599,7 +599,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-sm">
                         <thead>
-                          <tr className="border-b border-[hsl(var(--border))] text-left text-[hsl(var(--text-muted))]">
+                          <tr className="border-b border-border text-left text-text-muted">
                             <th className="px-2 py-2">Modelo</th>
                             <th className="px-2 py-2">Provider</th>
                             <th className="px-2 py-2">Input (USD/1M)</th>
@@ -614,7 +614,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                             const inputPrice = item.input_per_1m_tokens != null ? Number(item.input_per_1m_tokens) : null;
                             const outputPrice = item.output_per_1m_tokens != null ? Number(item.output_per_1m_tokens) : null;
                             return (
-                              <tr key={`${item.provider}:${item.model}`} className="border-b border-[hsl(var(--border))]/60">
+                              <tr key={`${item.provider}:${item.model}`} className="border-b border-border/60">
                                 <td className="px-2 py-2 font-medium">{item.model}</td>
                                 <td className="px-2 py-2">{item.provider}</td>
                                 <td className="px-2 py-2">{inputPrice != null ? formatCurrency(inputPrice) : "—"}</td>
@@ -641,11 +641,11 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                       </table>
                     </div>
                   ) : (
-                    <p className="text-sm text-[hsl(var(--text-muted))]">Carregando catálogo de preços...</p>
+                    <p className="text-sm text-text-muted">Carregando catálogo de preços...</p>
                   )}
 
-                  <div className="flex flex-col gap-2 border-t border-[hsl(var(--border))]/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm text-[hsl(var(--text-muted))]">
+                  <div className="flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm text-text-muted">
                       Recalcula <code>estimated_cost_usd</code> em <code>ai_usage_logs</code> para registros antigos cujo provider/modelo agora tem preço configurado. Não chama provider de IA e não altera tokens.
                     </div>
                     <Button type="button" onClick={() => void handleBackfillCosts()} disabled={backfillStatus.kind === "running"}>
@@ -653,12 +653,12 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     </Button>
                   </div>
                   {backfillStatus.kind === "done" ? (
-                    <p className="text-sm text-[hsl(var(--success))]">
+                    <p className="text-sm text-success">
                       Atualizados {backfillStatus.updated} de {backfillStatus.total} registros. {backfillStatus.skipped} sem preço configurado foram mantidos como null.
                     </p>
                   ) : null}
                   {backfillStatus.kind === "error" ? (
-                    <p className="text-sm text-[hsl(var(--danger))]">{backfillStatus.message}</p>
+                    <p className="text-sm text-danger">{backfillStatus.message}</p>
                   ) : null}
                 </CardContent>
               </Card>
@@ -675,7 +675,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                           <thead>
-                            <tr className="border-b border-[hsl(var(--border))] text-left text-[hsl(var(--text-muted))]">
+                            <tr className="border-b border-border text-left text-text-muted">
                               <th className="px-2 py-2">Provider</th>
                               <th className="px-2 py-2">Chamadas</th>
                               <th className="px-2 py-2">Tokens</th>
@@ -684,7 +684,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                           </thead>
                           <tbody>
                             {aiUsageData.by_provider.map((item) => (
-                              <tr key={item.provider ?? "provider"} className="border-b border-[hsl(var(--border))]/60">
+                              <tr key={item.provider ?? "provider"} className="border-b border-border/60">
                                 <td className="px-2 py-2">{item.provider ?? "—"}</td>
                                 <td className="px-2 py-2">{formatNumber(item.total_calls)}</td>
                                 <td className="px-2 py-2">{formatNumber(item.total_tokens)}</td>
@@ -709,7 +709,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                           <thead>
-                            <tr className="border-b border-[hsl(var(--border))] text-left text-[hsl(var(--text-muted))]">
+                            <tr className="border-b border-border text-left text-text-muted">
                               <th className="px-2 py-2">Modelo</th>
                               <th className="px-2 py-2">Chamadas</th>
                               <th className="px-2 py-2">Latência média</th>
@@ -718,7 +718,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                           </thead>
                           <tbody>
                             {aiUsageData.by_model.map((item) => (
-                              <tr key={`${item.provider}:${item.model}`} className="border-b border-[hsl(var(--border))]/60">
+                              <tr key={`${item.provider}:${item.model}`} className="border-b border-border/60">
                                 <td className="px-2 py-2">{item.model ?? "—"}</td>
                                 <td className="px-2 py-2">{formatNumber(item.total_calls)}</td>
                                 <td className="px-2 py-2">{item.avg_latency_ms != null ? `${formatDecimal(item.avg_latency_ms, 0)} ms` : "—"}</td>
@@ -762,10 +762,10 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     ) : (
                       <div className="space-y-3">
                         {aiUsageData.top_expensive_analyses.map((item) => (
-                          <div key={item.analysis_id} className="rounded-xl border border-[hsl(var(--border))] px-4 py-3">
-                            <p className="text-sm font-medium text-[hsl(var(--text))]">{item.model}</p>
-                            <p className="text-xs text-[hsl(var(--text-muted))]">{item.provider}</p>
-                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-[hsl(var(--text-muted))]">
+                          <div key={item.analysis_id} className="rounded-xl border border-border px-4 py-3">
+                            <p className="text-sm font-medium text-text">{item.model}</p>
+                            <p className="text-xs text-text-muted">{item.provider}</p>
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-muted">
                               <span>{formatNumber(item.calls)} chamadas</span>
                               <span>{formatNumber(item.total_tokens)} tokens</span>
                               <span>{formatCurrency(item.estimated_cost_usd)}</span>
@@ -799,8 +799,8 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                   </CardHeader>
                   <CardContent className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-[hsl(var(--text))]">Latência</p>
-                      <p className="text-xs text-[hsl(var(--text-muted))]">{queuesData.redis.latency_ms != null ? `${formatNumber(queuesData.redis.latency_ms)} ms` : "Sem medição"}</p>
+                      <p className="text-sm text-text">Latência</p>
+                      <p className="text-xs text-text-muted">{queuesData.redis.latency_ms != null ? `${formatNumber(queuesData.redis.latency_ms)} ms` : "Sem medição"}</p>
                     </div>
                     <Badge variant={getStatusVariant(queuesData.redis.status)}>{queuesData.redis.status}</Badge>
                   </CardContent>
@@ -811,10 +811,10 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-[hsl(var(--text))]">Workers online</p>
+                      <p className="text-sm text-text">Workers online</p>
                       <Badge variant={getStatusVariant(queuesData.celery.status)}>{queuesData.celery.status}</Badge>
                     </div>
-                    <p className="text-sm text-[hsl(var(--text-muted))]">
+                    <p className="text-sm text-text-muted">
                       {queuesData.celery.workers_online != null
                         ? `${formatNumber(queuesData.celery.workers_online)} workers`
                         : queuesData.celery.message ?? "Sem resposta do inspect"}
@@ -859,11 +859,11 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     <CardTitle>Pool e horário do banco</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="rounded-xl border border-[hsl(var(--border))] px-4 py-3">
-                      <p className="text-xs uppercase tracking-wide text-[hsl(var(--text-muted))]">Horário do banco</p>
-                      <p className="mt-1 text-sm text-[hsl(var(--text))]">{formatDateTime(databaseData.database_time)}</p>
+                    <div className="rounded-xl border border-border px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-text-muted">Horário do banco</p>
+                      <p className="mt-1 text-sm text-text">{formatDateTime(databaseData.database_time)}</p>
                     </div>
-                    <pre className="overflow-x-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-4 text-xs text-[hsl(var(--text-muted))]">
+                    <pre className="overflow-x-auto rounded-xl border border-border bg-surface-muted p-4 text-xs text-text-muted">
                       {JSON.stringify(databaseData.pool_info, null, 2)}
                     </pre>
                   </CardContent>
@@ -893,7 +893,7 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     ) : (
                       <div className="space-y-2">
                         {errorsData.ai_errors_by_provider.map((item) => (
-                          <div key={item.provider} className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] px-4 py-3 text-sm">
+                          <div key={item.provider} className="flex items-center justify-between rounded-xl border border-border px-4 py-3 text-sm">
                             <span>{item.provider}</span>
                             <Badge variant="warning">{formatNumber(item.failed_calls)}</Badge>
                           </div>
@@ -913,14 +913,14 @@ export function SystemHealthPage({ hideHeader = false }: SystemHealthPageProps =
                     ) : (
                       <div className="space-y-3">
                         {errorsData.recent_failures.map((item, index) => (
-                          <div key={`${item.source}-${item.analysis_id ?? index}`} className="rounded-xl border border-[hsl(var(--border))] px-4 py-3">
+                          <div key={`${item.source}-${item.analysis_id ?? index}`} className="rounded-xl border border-border px-4 py-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant="outline">{item.source}</Badge>
                               {item.provider ? <Badge variant="secondary">{item.provider}</Badge> : null}
                               {item.model ? <Badge variant="neutral">{item.model}</Badge> : null}
                             </div>
-                            <p className="mt-2 text-sm text-[hsl(var(--text))]">{item.error_message || "Falha sem mensagem detalhada."}</p>
-                            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{formatDateTime(item.created_at)}</p>
+                            <p className="mt-2 text-sm text-text">{item.error_message || "Falha sem mensagem detalhada."}</p>
+                            <p className="mt-1 text-xs text-text-muted">{formatDateTime(item.created_at)}</p>
                           </div>
                         ))}
                       </div>

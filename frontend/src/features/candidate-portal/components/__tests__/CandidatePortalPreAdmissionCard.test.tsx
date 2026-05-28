@@ -156,6 +156,72 @@ describe("CandidatePortalPreAdmissionCard", () => {
     expect(screen.getByText("cpf.pdf")).toBeInTheDocument();
   });
 
+  it("item rejeitado sem rejection_reason_public mostra fallback genérico", () => {
+    render(
+      <CandidatePortalPreAdmissionCard
+        preAdmission={{
+          ...baseEnvelope,
+          case: {
+            ...baseEnvelope.case!,
+            checklist_items: [
+              {
+                ...baseEnvelope.case!.checklist_items[0],
+                status: "rejected",
+                rejection_reason_public: null,
+                uploaded_document: {
+                  id: "doc-1",
+                  original_filename: "cpf.pdf",
+                  mime_type: "application/pdf",
+                  size_bytes: 42,
+                  status: "rejected",
+                  uploaded_at: "2026-05-14T10:00:00Z",
+                },
+              },
+            ],
+          },
+        }}
+        onUploaded={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("candidate-portal-pre-admission-rejection-reason"),
+    ).toHaveTextContent(/Documento rejeitado\. Envie uma nova versão para análise\./i);
+  });
+
+  it("não renderiza review_notes ou identificadores internos no card do portal", () => {
+    render(
+      <CandidatePortalPreAdmissionCard
+        preAdmission={{
+          ...baseEnvelope,
+          case: {
+            ...baseEnvelope.case!,
+            checklist_items: [
+              {
+                ...baseEnvelope.case!.checklist_items[0],
+                status: "rejected",
+                rejection_reason_public: "Reenvie em PDF.",
+                uploaded_document: {
+                  id: "doc-1",
+                  original_filename: "cpf.pdf",
+                  mime_type: "application/pdf",
+                  size_bytes: 42,
+                  status: "rejected",
+                  uploaded_at: "2026-05-14T10:00:00Z",
+                },
+              },
+            ],
+          },
+        }}
+        onUploaded={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/review_notes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/internal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reviewed_by/i)).not.toBeInTheDocument();
+  });
+
   it("item rejeitado mostra motivo público", () => {
     render(
       <CandidatePortalPreAdmissionCard

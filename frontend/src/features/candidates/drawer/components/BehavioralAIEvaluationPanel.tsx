@@ -123,13 +123,13 @@ export function BehavioralAIEvaluationPanel({
     if (loading) {
       return (
         <div className="flex items-center justify-center p-6">
-          <Loader className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+          <Loader className="h-5 w-5 animate-spin text-text-muted" />
         </div>
       );
     }
 
     return (
-      <div className="space-y-3 border-t border-[hsl(var(--border))]/30 p-6">
+      <div className="space-y-3 border-t border-border/30 p-6">
         <button
           onClick={handleGenerateAnalysis}
           disabled={triggering}
@@ -144,18 +144,18 @@ export function BehavioralAIEvaluationPanel({
 
   // Show evaluation
   return (
-    <div className="border-t border-[hsl(var(--border))]/30 p-6">
+    <div className="border-t border-border/30 p-6">
       {/* Header with collapse toggle */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="mb-4 flex w-full items-center gap-2 text-left"
       >
         <div className="flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Análise assistida por IA
           </p>
         </div>
-        <span className="text-xs text-[hsl(var(--text-muted))]">
+        <span className="text-xs text-text-muted">
           {isCollapsed ? "Expandir" : "Recolher"}
         </span>
       </button>
@@ -250,10 +250,10 @@ export function BehavioralAIEvaluationPanel({
               {/* Summary */}
               {evaluation.summary && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Resumo
                   </p>
-                  <p className="rounded-lg bg-[hsl(var(--surface-muted))]/30 p-3 text-sm leading-relaxed">
+                  <p className="rounded-lg bg-surface-muted/30 p-3 text-sm leading-relaxed">
                     {evaluation.summary}
                   </p>
                 </div>
@@ -262,14 +262,14 @@ export function BehavioralAIEvaluationPanel({
               {/* Competency Signals */}
               {evaluation.competency_signals && evaluation.competency_signals.length > 0 && (
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Sinais por Competência
                   </p>
                   <div className="space-y-2">
                     {evaluation.competency_signals.map((signal, idx) => (
-                      <div key={idx} className="rounded-lg border border-[hsl(var(--border))] p-3">
+                      <div key={idx} className="rounded-lg border border-border p-3">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium text-[hsl(var(--text))]">{signal.competency}</p>
+                          <p className="font-medium text-text">{signal.competency}</p>
                           <span
                             className={`rounded px-2 py-1 text-xs font-medium whitespace-nowrap ${
                               signal.signal === "strong"
@@ -284,11 +284,11 @@ export function BehavioralAIEvaluationPanel({
                             {signal.signal === "weak" && "Fraco"}
                           </span>
                         </div>
-                        <p className="mt-2 text-sm text-[hsl(var(--text))]">{signal.evidence}</p>
+                        <p className="mt-2 text-sm text-text">{signal.evidence}</p>
                         {signal.concerns.length > 0 && (
                           <div className="mt-2 space-y-1">
                             {signal.concerns.map((concern, cidx) => (
-                              <div key={cidx} className="text-xs text-[hsl(var(--text-muted))]">
+                              <div key={cidx} className="text-xs text-text-muted">
                                 • {concern}
                               </div>
                             ))}
@@ -303,7 +303,7 @@ export function BehavioralAIEvaluationPanel({
               {/* Strengths */}
               {evaluation.strengths && evaluation.strengths.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Forças Identificadas
                   </p>
                   <div className="space-y-1">
@@ -320,7 +320,7 @@ export function BehavioralAIEvaluationPanel({
               {/* Concerns/Points of Attention */}
               {evaluation.concerns && evaluation.concerns.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Pontos de Atenção
                   </p>
                   <div className="space-y-1">
@@ -337,12 +337,12 @@ export function BehavioralAIEvaluationPanel({
               {/* Suggested Interview Questions */}
               {evaluation.suggested_interview_questions && evaluation.suggested_interview_questions.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Perguntas Sugeridas para Entrevista
                   </p>
                   <div className="space-y-2">
                     {evaluation.suggested_interview_questions.map((question, idx) => (
-                      <div key={idx} className="rounded-lg bg-blue-50/30 px-3 py-2 text-sm text-[hsl(var(--text))]">
+                      <div key={idx} className="rounded-lg bg-blue-50/30 px-3 py-2 text-sm text-text">
                         {idx + 1}. {question}
                       </div>
                     ))}
@@ -353,7 +353,7 @@ export function BehavioralAIEvaluationPanel({
               {/* Risk Flags */}
               {evaluation.risk_flags && evaluation.risk_flags.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Limitações da Análise
                   </p>
                   <div className="space-y-1">

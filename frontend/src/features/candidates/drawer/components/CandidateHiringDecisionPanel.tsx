@@ -67,21 +67,21 @@ function statusText(value: string): string {
 function DecisionDetails({ decision }: { decision: HiringDecision }) {
   return (
     <div className="grid gap-3 sm:grid-cols-3">
-      <div className="rounded-md border border-[hsl(var(--border))] bg-white/80 p-3">
-        <div className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">Decisão</div>
-        <div className="mt-1 text-sm font-medium text-[hsl(var(--text))]">
+      <div className="rounded-md border border-border bg-white/80 p-3">
+        <div className="text-[11px] font-semibold uppercase text-text-muted">Decisão</div>
+        <div className="mt-1 text-sm font-medium text-text">
           {outcomeLabels[decision.decision_outcome]}
         </div>
       </div>
-      <div className="rounded-md border border-[hsl(var(--border))] bg-white/80 p-3">
-        <div className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">Motivo</div>
-        <div className="mt-1 text-sm font-medium text-[hsl(var(--text))]">
+      <div className="rounded-md border border-border bg-white/80 p-3">
+        <div className="text-[11px] font-semibold uppercase text-text-muted">Motivo</div>
+        <div className="mt-1 text-sm font-medium text-text">
           {reasonLabels[decision.reason_code]}
         </div>
       </div>
-      <div className="rounded-md border border-[hsl(var(--border))] bg-white/80 p-3">
-        <div className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">Status</div>
-        <div className="mt-1 text-sm font-medium text-[hsl(var(--text))]">
+      <div className="rounded-md border border-border bg-white/80 p-3">
+        <div className="text-[11px] font-semibold uppercase text-text-muted">Status</div>
+        <div className="mt-1 text-sm font-medium text-text">
           {statusText(decision.decision_status)}
         </div>
       </div>
@@ -154,7 +154,7 @@ export function CandidateHiringDecisionPanel({
 
   if (loading && !decision) {
     return (
-      <section className="rounded-lg border border-[hsl(var(--border))] bg-white p-4 text-sm text-[hsl(var(--text-muted))]">
+      <section className="rounded-lg border border-border bg-white p-4 text-sm text-text-muted">
         <div className="flex items-center gap-2">
           <Loader className="h-4 w-4 animate-spin" />
           Carregando decisão final...
@@ -164,20 +164,20 @@ export function CandidateHiringDecisionPanel({
   }
 
   return (
-    <section className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+    <section className="rounded-lg border border-border bg-surface p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-3">
           <div className="rounded-lg bg-[hsl(var(--accent-soft))] p-2 text-[hsl(var(--primary))]">
             <ClipboardCheck className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
               Decisão final
             </p>
-            <h3 className="text-base font-semibold text-[hsl(var(--text))]">
+            <h3 className="text-base font-semibold text-text">
               {title}
             </h3>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            <p className="mt-1 text-sm text-text-muted">
               {description}
             </p>
           </div>
@@ -200,21 +200,21 @@ export function CandidateHiringDecisionPanel({
       ) : null}
 
       {!decision ? (
-        <div className="mt-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-4 text-sm text-[hsl(var(--text-muted))]">
+        <div className="mt-4 rounded-lg border border-border bg-surface-muted/30 p-4 text-sm text-text-muted">
           Nenhuma decisão final registrada para esta vaga.
         </div>
       ) : (
         <div className="mt-4 space-y-3">
           <DecisionDetails decision={decision} />
           {decision.notes ? (
-            <div className="rounded-md border border-[hsl(var(--border))] bg-white/80 p-3">
-              <div className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">
+            <div className="rounded-md border border-border bg-white/80 p-3">
+              <div className="text-[11px] font-semibold uppercase text-text-muted">
                 Observação
               </div>
-              <p className="mt-1 text-sm text-[hsl(var(--text))]">{decision.notes}</p>
+              <p className="mt-1 text-sm text-text">{decision.notes}</p>
             </div>
           ) : null}
-          <div className="text-xs text-[hsl(var(--text-muted))]">
+          <div className="text-xs text-text-muted">
             Registrada em {formatDate(decision.submitted_at ?? decision.created_at)}
           </div>
         </div>
@@ -237,11 +237,11 @@ export function CandidateHiringDecisionPanel({
       ) : null}
 
       {history.length > 0 ? (
-        <div className="mt-4 rounded-lg border border-[hsl(var(--border))]">
+        <div className="mt-4 rounded-lg border border-border">
           <button
             type="button"
             onClick={() => setHistoryOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-[hsl(var(--text))]"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-text"
           >
             <span className="inline-flex items-center gap-2">
               <History className="h-4 w-4" />
@@ -250,19 +250,19 @@ export function CandidateHiringDecisionPanel({
             <ChevronDown className={`h-4 w-4 transition ${historyOpen ? "rotate-180" : ""}`} />
           </button>
           {historyOpen ? (
-            <div className="space-y-3 border-t border-[hsl(var(--border))] p-4">
+            <div className="space-y-3 border-t border-border p-4">
               {history.map((item) => (
-                <div key={item.id} className="rounded-md bg-[hsl(var(--surface-muted))]/40 p-3">
+                <div key={item.id} className="rounded-md bg-surface-muted/40 p-3">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm font-medium text-[hsl(var(--text))]">
+                    <div className="text-sm font-medium text-text">
                       {outcomeLabels[item.decision_outcome]} · {reasonLabels[item.reason_code]}
                     </div>
-                    <div className="text-xs text-[hsl(var(--text-muted))]">
+                    <div className="text-xs text-text-muted">
                       {statusText(item.decision_status)} · {formatDate(item.submitted_at ?? item.created_at)}
                     </div>
                   </div>
                   {item.notes ? (
-                    <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{item.notes}</p>
+                    <p className="mt-2 text-sm text-text-muted">{item.notes}</p>
                   ) : null}
                 </div>
               ))}

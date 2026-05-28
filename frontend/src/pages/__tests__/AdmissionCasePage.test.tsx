@@ -1,14 +1,28 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdmissionCasePage } from "../../pages/AdmissionCasePage";
 import { admissionWorkspaceService } from "../../services/admissionWorkspaceService";
-import type { AdmissionCaseWorkspace } from "../../types/domain";
+import * as admissionPackageService from "../../services/admissionPackageService";
+import {
+  approvePreAdmissionDocument,
+  downloadPreAdmissionDocument,
+  rejectPreAdmissionDocument,
+} from "../../services/preAdmissionService";
+import type {
+  AdmissionCaseDocumentsPayload,
+  AdmissionCaseEventsPage,
+  AdmissionCaseOverview,
+  AdmissionCaseWorkspace,
+} from "../../types/domain";
 
 vi.mock("../../services/admissionWorkspaceService", () => ({
   admissionWorkspaceService: {
+    getOverview: vi.fn(),
+    getDocuments: vi.fn(),
+    getEvents: vi.fn(),
     getWorkspace: vi.fn(),
     approveChecklistItem: vi.fn(),
     rejectChecklistItem: vi.fn(),
@@ -16,6 +30,14 @@ vi.mock("../../services/admissionWorkspaceService", () => ({
     markChecklistItemNotRequired: vi.fn(),
     markCaseReadyForExport: vi.fn(),
   },
+}));
+
+vi.mock("../../services/admissionPackageService");
+
+vi.mock("../../services/preAdmissionService", () => ({
+  approvePreAdmissionDocument: vi.fn(),
+  rejectPreAdmissionDocument: vi.fn(),
+  downloadPreAdmissionDocument: vi.fn(),
 }));
 
 const mockWorkspace: AdmissionCaseWorkspace = {
@@ -77,19 +99,39 @@ const mockWorkspace: AdmissionCaseWorkspace = {
   documents: [
     {
       id: "doc-1",
+      checklist_item_id: "item-1",
+      checklist_title: "Documento de identidade",
+      required: true,
       filename: "RG_Larissa.pdf",
       document_type: "rg",
+      mime_type: "application/pdf",
+      size_bytes: 204800,
       status: "approved",
       uploaded_at: "2025-05-23T14:02:00Z",
+      reviewed_at: "2025-05-23T14:10:00Z",
+      reviewed_by_name: "Ana Paula",
+      review_notes: null,
+      rejection_reason_public: null,
       approved_at: "2025-05-23T14:10:00Z",
+      is_current_for_item: true,
     },
     {
       id: "doc-2",
+      checklist_item_id: "item-2",
+      checklist_title: "CPF",
+      required: true,
       filename: "CPF_Larissa.pdf",
       document_type: "cpf",
+      mime_type: "application/pdf",
+      size_bytes: 102400,
       status: "approved",
       uploaded_at: "2025-05-23T14:03:00Z",
+      reviewed_at: "2025-05-23T14:11:00Z",
+      reviewed_by_name: "Ana Paula",
+      review_notes: null,
+      rejection_reason_public: null,
       approved_at: "2025-05-23T14:11:00Z",
+      is_current_for_item: true,
     },
   ],
   main_blockers: [
@@ -129,6 +171,7 @@ const mockWorkspace: AdmissionCaseWorkspace = {
       title: "Documento enviado",
       description: "RG_Larissa.pdf foi enviado pelo candidato.",
       created_at: "2025-05-23T14:05:00Z",
+      actor_name: "Larissa Oliveira",
     },
     {
       id: "evt-2",
@@ -136,9 +179,88 @@ const mockWorkspace: AdmissionCaseWorkspace = {
       title: "Checklist atualizado",
       description: "Status do CPF alterado para Aprovado.",
       created_at: "2025-05-23T14:03:00Z",
+      actor_name: "Ana Paula",
     },
   ],
 };
+
+const mockOverview: AdmissionCaseOverview = {
+  case: mockWorkspace.case,
+  candidate: mockWorkspace.candidate,
+  job: mockWorkspace.job,
+  status_label: "Em andamento",
+  progress: {
+    total: mockWorkspace.checklist.total,
+    approved: mockWorkspace.checklist.approved,
+    pending: mockWorkspace.checklist.pending,
+    rejected: mockWorkspace.checklist.blocked,
+    in_review: 0,
+    waived: 0,
+  },
+  main_blocker: mockWorkspace.main_blockers[0] ?? null,
+  main_blockers: mockWorkspace.main_blockers,
+  next_action: mockWorkspace.next_actions[0] ?? null,
+  next_actions: mockWorkspace.next_actions,
+  summary: mockWorkspace.summary,
+  integration_status: {
+    state: "pending",
+    label: "Pendente",
+    ready_for_export: false,
+  },
+  updated_at: mockWorkspace.case.updated_at,
+};
+
+const mockDocumentsPayload: AdmissionCaseDocumentsPayload = {
+  checklist: mockWorkspace.checklist,
+  documents: mockWorkspace.documents,
+};
+
+const mockEventsPage: AdmissionCaseEventsPage = {
+  items: mockWorkspace.recent_events,
+  total: mockWorkspace.recent_events.length,
+  page: 1,
+  page_size: 20,
+  has_next: false,
+};
+
+function mockWorkspaceSlices(workspace: AdmissionCaseWorkspace) {
+  vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue({
+    case: workspace.case,
+    candidate: workspace.candidate,
+    job: workspace.job,
+    status_label: "Em andamento",
+    progress: {
+      total: workspace.checklist.total,
+      approved: workspace.checklist.approved,
+      pending: workspace.checklist.pending,
+      rejected: workspace.checklist.blocked,
+      in_review: 0,
+      waived: 0,
+    },
+    main_blocker: workspace.main_blockers[0] ?? null,
+    main_blockers: workspace.main_blockers,
+    next_action: workspace.next_actions[0] ?? null,
+    next_actions: workspace.next_actions,
+    summary: workspace.summary,
+    integration_status: {
+      state: workspace.summary.ready_for_export ? "ready" : "pending",
+      label: workspace.summary.ready_for_export ? "Pronto para exportação" : "Pendente",
+      ready_for_export: workspace.summary.ready_for_export,
+    },
+    updated_at: workspace.case.updated_at,
+  });
+  vi.mocked(admissionWorkspaceService.getDocuments).mockResolvedValue({
+    checklist: workspace.checklist,
+    documents: workspace.documents,
+  });
+  vi.mocked(admissionWorkspaceService.getEvents).mockResolvedValue({
+    items: workspace.recent_events,
+    total: workspace.recent_events.length,
+    page: 1,
+    page_size: 20,
+    has_next: false,
+  });
+}
 
 const emptyWorkspace: AdmissionCaseWorkspace = {
   ...mockWorkspace,
@@ -172,67 +294,195 @@ function renderPage(caseId = "case-42") {
 
 describe("AdmissionCasePage", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue(mockOverview);
+    vi.mocked(admissionWorkspaceService.getDocuments).mockResolvedValue(mockDocumentsPayload);
+    vi.mocked(admissionWorkspaceService.getEvents).mockResolvedValue(mockEventsPage);
+    vi.mocked(admissionPackageService.getPackageByCaseId).mockResolvedValue({
+      id: "pkg-1",
+      case_id: "case-42",
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      status: "approved_for_export",
+      payload: {
+        candidate: {
+          id: "cand-1",
+          full_name: "Larissa Oliveira",
+          email: "larissa@example.com",
+          phone: null,
+          cpf: "123.456.789-00",
+        },
+        job: {
+          id: "job-1",
+          title: "Assistente Administrativo",
+          company: null,
+          department: null,
+          location: null,
+        },
+        pre_admission: {
+          case_id: "case-42",
+          status: "ready_for_admission",
+          start_date: "2026-06-01",
+          salary_offer: 4500,
+          work_model: "Presencial",
+        },
+        documents: [],
+        decision: {
+          hiring_decision_id: "decision-1",
+          decision_outcome: "hire",
+          reason_code: "strong_fit",
+          submitted_at: "2026-05-25T10:00:00Z",
+        },
+      },
+      validation_errors: null,
+      created_by: "user-1",
+      approved_by: "user-1",
+      exported_by: null,
+      created_at: "2026-05-25T15:00:00Z",
+      updated_at: "2026-05-25T15:00:00Z",
+      approved_at: "2026-05-25T15:10:00Z",
+      exported_at: null,
+      cancelled_at: null,
+    });
+    vi.mocked(admissionPackageService.listErpAttempts).mockResolvedValue({ attempts: [] });
+    vi.mocked(admissionPackageService.downloadJson).mockResolvedValue(new Blob(["json"]));
+    vi.mocked(admissionPackageService.downloadCsv).mockResolvedValue(new Blob(["csv"]));
+    vi.mocked(admissionPackageService.exportErp).mockResolvedValue({
+      id: "att-1",
+      package_id: "pkg-1",
+      case_id: "case-42",
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      provider: "protheus",
+      mode: "mock",
+      status: "sent",
+      lifecycle_status: "exported",
+      retryable: false,
+      attempt_number: 1,
+      external_reference: "PROTHEUS-MOCK-001",
+      request_payload_json: {
+        provider: "protheus",
+        mode: "mock",
+        candidate: { name: "Larissa Oliveira", email: "larissa@example.com", cpf: "123.456.789-00" },
+        job: { title: "Assistente Administrativo", department: null },
+        admission: { start_date: "2026-06-01", salary_offer: 4500, work_model: "Presencial" },
+        decision: { hiring_decision_id: "decision-1" },
+        documents: [],
+      },
+      response_payload_json: { success: true },
+      validation_errors_json: [],
+      error_message: null,
+      error_summary: null,
+      attempted_by: "user-1",
+      created_at: "2026-05-25T15:20:00Z",
+      updated_at: "2026-05-25T15:20:00Z",
+      completed_at: "2026-05-25T15:20:03Z",
+    });
+    vi.mocked(admissionPackageService.retryExportErp).mockResolvedValue({
+      id: "att-2",
+      package_id: "pkg-1",
+      case_id: "case-42",
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      provider: "protheus",
+      mode: "mock",
+      status: "sent",
+      lifecycle_status: "exported",
+      retryable: false,
+      attempt_number: 2,
+      external_reference: "PROTHEUS-MOCK-002",
+      request_payload_json: {
+        provider: "protheus",
+        mode: "mock",
+        candidate: { name: "Larissa Oliveira", email: "larissa@example.com", cpf: "123.456.789-00" },
+        job: { title: "Assistente Administrativo", department: null },
+        admission: { start_date: "2026-06-01", salary_offer: 4500, work_model: "Presencial" },
+        decision: { hiring_decision_id: "decision-1" },
+        documents: [],
+      },
+      response_payload_json: { success: true },
+      validation_errors_json: [],
+      error_message: null,
+      error_summary: null,
+      attempted_by: "user-1",
+      created_at: "2026-05-25T15:22:00Z",
+      updated_at: "2026-05-25T15:22:00Z",
+      completed_at: "2026-05-25T15:22:03Z",
+    });
+    vi.mocked(approvePreAdmissionDocument).mockResolvedValue({} as any);
+    vi.mocked(rejectPreAdmissionDocument).mockResolvedValue({} as any);
+    vi.mocked(downloadPreAdmissionDocument).mockResolvedValue(new Blob(["pdf"]));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   it("renderiza 'Checklist admissional' com dados reais", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Checklist admissional")).toBeInTheDocument();
   });
 
   it("renderiza 'Pendências principais'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Pendências principais")).toBeInTheDocument();
   });
 
   it("renderiza 'Resumo do caso'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Resumo do caso")).toBeInTheDocument();
   });
 
   it("renderiza 'Documentos enviados'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Documentos enviados")).toBeInTheDocument();
   });
 
+  it("lista os documentos enviados com item e arquivo", async () => {
+    renderPage();
+    expect(await screen.findByText("RG_Larissa.pdf")).toBeInTheDocument();
+    expect(screen.getByText(/Documento de identidade · Documento de identidade/i)).toBeInTheDocument();
+  });
+
   it("renderiza 'Próximas ações'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Próximas ações")).toBeInTheDocument();
   });
 
   it("renderiza 'Histórico recente'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Histórico recente")).toBeInTheDocument();
   });
 
+  it("renderiza o painel embutido de exportação ERP no cockpit", async () => {
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      summary: { ...mockWorkspace.summary, ready_for_export: true },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Exportação ERP")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Enviar para ERP/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Baixar JSON \(conferência\)/i })).toBeInTheDocument();
+  });
+
   it("mostra progresso correto: '{aprovados} de {total} documentos aprovados'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     // mockWorkspace items array has 2 approved out of 3 total items
     expect(await screen.findByText("2 de 3 documentos aprovados")).toBeInTheDocument();
   });
 
   it("renderiza breadcrumb com nome do candidato", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     const elements = await screen.findAllByText("Larissa Oliveira");
     expect(elements.length).toBeGreaterThan(0);
   });
 
   it("renderiza título 'Admissão de {nome}'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Admissão de Larissa Oliveira")).toBeInTheDocument();
   });
 
   it("renderiza subtítulo correto", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(
       await screen.findByText("Checklist documental e preparação para integração"),
@@ -253,7 +503,7 @@ describe("AdmissionCasePage", () => {
         },
       ],
     };
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(readyWorkspace);
+    mockWorkspaceSlices(readyWorkspace);
     renderPage();
 
     const link = await screen.findByRole("link", { name: /Abrir integração Protheus/i });
@@ -266,7 +516,6 @@ describe("AdmissionCasePage", () => {
   });
 
   it("botão desabilitado de Protheus NÃO navega para 'Visão geral'", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
 
     // The disabled Protheus action should be a div with aria-disabled, NOT a link
@@ -278,19 +527,18 @@ describe("AdmissionCasePage", () => {
   });
 
   it("empty state de documentos quando não há documentos", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(emptyWorkspace);
+    mockWorkspaceSlices(emptyWorkspace);
     renderPage();
     expect(await screen.findByText("Nenhum documento enviado ainda.")).toBeInTheDocument();
   });
 
   it("empty state de histórico quando não há eventos", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(emptyWorkspace);
+    mockWorkspaceSlices(emptyWorkspace);
     renderPage();
     expect(await screen.findByText("Nenhum evento recente.")).toBeInTheDocument();
   });
 
   it("blockers/pendências aparecem quando existem", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(mockWorkspace);
     renderPage();
     expect(await screen.findByText("Foto 3x4 ausente")).toBeInTheDocument();
     expect(
@@ -299,17 +547,142 @@ describe("AdmissionCasePage", () => {
   });
 
   it("mostra 'Sem pendências críticas' quando não há blockers", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(emptyWorkspace);
+    mockWorkspaceSlices(emptyWorkspace);
     renderPage();
     expect(await screen.findByText("Sem pendências críticas")).toBeInTheDocument();
   });
 
-  it("mostra erro quando o workspace não carrega", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockRejectedValue(
+  it("mostra erro quando o overview não carrega", async () => {
+    vi.mocked(admissionWorkspaceService.getOverview).mockRejectedValue(
       new Error("Network error"),
     );
     renderPage();
     expect(await screen.findByText("Workspace indisponível")).toBeInTheDocument();
+  });
+
+  it("abre modal de rejeição e exige mensagem para o candidato", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-request-correction-doc-1"));
+    const dialog = await screen.findByRole("dialog", { name: /Solicitar correção do documento/i });
+    expect(dialog).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Solicitar correção" }));
+    expect(await screen.findByTestId("admission-document-rejection-error")).toHaveTextContent(
+      "Informe a mensagem para o candidato.",
+    );
+    expect(rejectPreAdmissionDocument).not.toHaveBeenCalled();
+  });
+
+  it("nota interna é opcional ao solicitar correção", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-request-correction-doc-1"));
+    const dialog = await screen.findByRole("dialog", { name: /Solicitar correção do documento/i });
+    await user.type(
+      within(dialog).getByTestId("admission-public-reason"),
+      "Envie uma versão legível do documento.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Solicitar correção" }));
+
+    await waitFor(() => {
+      expect(rejectPreAdmissionDocument).toHaveBeenCalledWith("doc-1", {
+        rejection_reason_public: "Envie uma versão legível do documento.",
+        review_notes: null,
+      });
+    });
+  });
+
+  it("envia mensagem pública e nota interna em campos separados ao rejeitar", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-reject-doc-1"));
+    const dialog = await screen.findByRole("dialog", { name: /Rejeitar documento/i });
+    await user.type(
+      within(dialog).getByTestId("admission-public-reason"),
+      "Documento cortado. Reenvie a imagem completa.",
+    );
+    await user.type(
+      within(dialog).getByTestId("admission-review-notes"),
+      "Checar novamente a assinatura quando o novo arquivo chegar.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Rejeitar documento" }));
+
+    await waitFor(() => {
+      expect(rejectPreAdmissionDocument).toHaveBeenCalledWith("doc-1", {
+        rejection_reason_public: "Documento cortado. Reenvie a imagem completa.",
+        review_notes: "Checar novamente a assinatura quando o novo arquivo chegar.",
+      });
+    });
+    const payload = vi.mocked(rejectPreAdmissionDocument).mock.calls[0]?.[1];
+    expect(payload).not.toEqual({
+      rejection_reason_public: "Documento cortado. Reenvie a imagem completa.",
+      review_notes: "Documento cortado. Reenvie a imagem completa.",
+    });
+  });
+
+  it("aprova documento pelo endpoint correto", async () => {
+    const user = userEvent.setup();
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [
+        {
+          ...mockWorkspace.documents[0],
+          status: "uploaded",
+          reviewed_at: null,
+          reviewed_by_name: null,
+          approved_at: null,
+        },
+      ],
+    });
+    renderPage();
+
+    await user.click(await screen.findByTestId("admission-document-approve-doc-1"));
+
+    await waitFor(() => {
+      expect(approvePreAdmissionDocument).toHaveBeenCalledWith("doc-1");
+    });
+  });
+
+  it("mostra motivo público e nota interna em áreas separadas para documento rejeitado", async () => {
+    mockWorkspaceSlices({
+      ...mockWorkspace,
+      documents: [
+        {
+          ...mockWorkspace.documents[0],
+          status: "rejected",
+          reviewed_at: "2025-05-23T14:15:00Z",
+          reviewed_by_name: "Ana Paula",
+          rejection_reason_public: "Envie um arquivo sem cortes.",
+          review_notes: "Conferir bordas e legibilidade no reenvio.",
+          approved_at: null,
+        },
+      ],
+    });
+    renderPage();
+
+    expect(await screen.findByTestId("admission-document-public-reason")).toHaveTextContent(
+      "Envie um arquivo sem cortes.",
+    );
+    expect(await screen.findByTestId("admission-document-internal-notes")).toHaveTextContent(
+      "Conferir bordas e legibilidade no reenvio.",
+    );
+  });
+
+  it("mantém overview visível quando documentos falham", async () => {
+    vi.mocked(admissionWorkspaceService.getDocuments).mockRejectedValue(
+      new Error("documents failed"),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Admissão de Larissa Oliveira")).toBeInTheDocument();
+    expect(await screen.findByText("Documentos enviados")).toBeInTheDocument();
+    expect(
+      await screen.findAllByText(/Não foi possível carregar documentos e checklist\./i),
+    ).toHaveLength(2);
   });
 
   it("mostra empty state quando caseId não está na URL", () => {

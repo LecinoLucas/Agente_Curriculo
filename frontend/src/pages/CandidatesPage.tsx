@@ -251,7 +251,7 @@ export function CandidatesPage() {
                   type="button"
                   onClick={fetchCandidates}
                   disabled={loading}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 text-sm font-semibold text-[hsl(var(--text))] transition-all hover:bg-[hsl(var(--accent-soft))] disabled:opacity-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-text transition-all hover:bg-[hsl(var(--accent-soft))] disabled:opacity-50"
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                   {loading ? "Sincronizando…" : "Atualizar"}
@@ -271,15 +271,15 @@ export function CandidatesPage() {
 
         {/* Quick Insights Row */}
         <div className="mt-6 flex flex-wrap gap-4 border-t border-[hsl(var(--border)/0.4)] pt-6">
-          <div className="flex items-center gap-2 text-xs font-medium text-[hsl(var(--text-muted))]">
+          <div className="flex items-center gap-2 text-xs font-medium text-text-muted">
             <span className="flex h-2 w-2 rounded-full bg-[hsl(var(--success))]" />
             Aderência à Vaga Ativa
           </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-[hsl(var(--text-muted))]">
+          <div className="flex items-center gap-2 text-xs font-medium text-text-muted">
             <span className="flex h-2 w-2 rounded-full bg-[hsl(var(--border-strong))]" />
             Aguardando Processamento
           </div>
-          <div className="ml-auto hidden items-center gap-2 text-[10px] uppercase tracking-widest text-[hsl(var(--text-muted))] sm:flex">
+          <div className="ml-auto hidden items-center gap-2 text-[10px] uppercase tracking-widest text-text-muted sm:flex">
             Regra Marajó: 1 Candidato = 1 Pipeline Ativo
           </div>
         </div>
@@ -324,7 +324,7 @@ export function CandidatesPage() {
 
           {/* Content Area with refined scrollbar and spacing */}
           <div className="flex-1 overflow-y-auto px-6 pb-10 lg:px-8">
-              <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface))] shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.6)] bg-surface shadow-sm">
                 {showInitialLoading ? (
                   <div className="flex items-center justify-center py-32">
                     <div className="flex flex-col items-center gap-4">
@@ -332,17 +332,17 @@ export function CandidatesPage() {
                         <div className="absolute h-full w-full animate-ping rounded-full bg-[hsl(var(--primary)/0.2)]" />
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[hsl(var(--primary))] border-t-transparent shadow-lg" />
                       </div>
-                      <p className="text-sm font-semibold text-[hsl(var(--text-muted))]">Preparando lista de candidatos…</p>
+                      <p className="text-sm font-semibold text-text-muted">Preparando lista de candidatos…</p>
                     </div>
                   </div>
                 ) : error ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-                    <div className="h-12 w-12 rounded-full bg-[hsl(var(--danger-soft))] p-3 text-[hsl(var(--danger))]">
+                    <div className="h-12 w-12 rounded-full bg-danger-soft p-3 text-danger">
                       <RefreshCw className="h-full w-full" />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-base font-bold text-[hsl(var(--text))]">Erro na sincronização</p>
-                      <p className="text-sm text-[hsl(var(--text-muted))]">{error}</p>
+                      <p className="text-base font-bold text-text">Erro na sincronização</p>
+                      <p className="text-sm text-text-muted">{error}</p>
                     </div>
                     <button
                       type="button"
@@ -354,16 +354,16 @@ export function CandidatesPage() {
                   </div>
                 ) : candidates.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-32 gap-6 text-center">
-                    <div className="h-20 w-20 rounded-full bg-[hsl(var(--surface-muted))] p-6 text-[hsl(var(--text-muted)/0.4)]">
+                    <div className="h-20 w-20 rounded-full bg-surface-muted p-6 text-[hsl(var(--text-muted)/0.4)]">
                       <Users className="h-full w-full" />
                     </div>
                     <div className="max-w-xs space-y-2">
-                      <p className="text-xl font-bold text-[hsl(var(--text))]">
+                      <p className="text-xl font-bold text-text">
                         {hasActiveFilters
                           ? "Nenhum resultado"
                           : "Lista vazia"}
                       </p>
-                      <p className="text-sm text-[hsl(var(--text-muted))]">
+                      <p className="text-sm text-text-muted">
                         {hasActiveFilters
                           ? "Experimente remover alguns filtros para encontrar o que procura."
                           : "Comece cadastrando novos candidatos para gerenciar suas vagas."}
@@ -382,7 +382,7 @@ export function CandidatesPage() {
                 ) : (
                   <>
                     {activeTab === "saved" ? (
-                      <div className="mx-6 mt-6 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted)/0.25)] px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                      <div className="mx-6 mt-6 rounded-lg border border-border bg-[hsl(var(--surface-muted)/0.25)] px-4 py-3 text-sm text-text-muted">
                         Buscas salvas entram na próxima fase. Use os filtros da base para montar a consulta agora.
                       </div>
                     ) : null}
@@ -396,35 +396,35 @@ export function CandidatesPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-[hsl(var(--border)/0.4)] bg-[hsl(var(--surface-muted)/0.3)]">
-                            <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                            <th className="px-6 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-text-muted">
                               Identificação e Tags
                             </th>
-                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-text-muted">
                               Contato
                             </th>
-                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-text-muted">
                               Docs
                             </th>
-                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-text-muted">
                               Situação Atual
                             </th>
-                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-text-muted">
                               Vaga Ativa
                             </th>
-                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-text-muted">
                               Status IA
                             </th>
-                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+                            <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-widest text-text-muted">
                               Ranking & Match
                             </th>
                             {showActionsColumn ? (
-                              <th className="sticky right-0 bg-[hsl(var(--surface))]/95 px-6 py-4 text-right text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--text-muted))] backdrop-blur-sm shadow-[-8px_0_10px_-8px_rgba(15,23,42,0.08)]">
+                              <th className="sticky right-0 bg-surface/95 px-6 py-4 text-right text-[11px] font-bold uppercase tracking-widest text-text-muted backdrop-blur-sm shadow-[-8px_0_10px_-8px_rgba(15,23,42,0.08)]">
                                 Ações
                               </th>
                             ) : null}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[hsl(var(--border)/0.3)] bg-[hsl(var(--surface))]">
+                        <tbody className="divide-y divide-[hsl(var(--border)/0.3)] bg-surface">
                           {candidates.map((c) => (
                             <CandidateRow
                               key={c.id}
@@ -555,16 +555,16 @@ export function CandidateRow({
           
   const statusClass =
     postHiringActive || latestSuccessTerminal
-      ? "border-[hsl(var(--success))]/35 bg-[hsl(var(--success-soft))]/65 text-[hsl(var(--success))]"
+      ? "border-[hsl(var(--success))]/35 bg-success-soft/65 text-success"
       : c.active_job_stage === "rejected"
-        ? "border-[hsl(var(--danger))]/35 bg-[hsl(var(--danger-soft))]/65 text-[hsl(var(--danger))]"
+        ? "border-[hsl(var(--danger))]/35 bg-danger-soft/65 text-danger"
         : c.latest_relationship_status === "hired"
-          ? "border-[hsl(var(--success))]/35 bg-[hsl(var(--success-soft))]/65 text-[hsl(var(--success))]"
+          ? "border-[hsl(var(--success))]/35 bg-success-soft/65 text-success"
           : c.latest_relationship_status === "rejected"
-            ? "border-[hsl(var(--danger))]/35 bg-[hsl(var(--danger-soft))]/65 text-[hsl(var(--danger))]"
+            ? "border-[hsl(var(--danger))]/35 bg-danger-soft/65 text-danger"
         : c.active_job_id
           ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--accent-soft))]/70 text-[hsl(var(--primary))]"
-          : "border-[hsl(var(--success))]/35 bg-[hsl(var(--success-soft))]/65 text-[hsl(var(--success))]";
+          : "border-[hsl(var(--success))]/35 bg-success-soft/65 text-success";
 
   const vacancyLabel =
     postHiringActive || c.active_job_stage === "rejected"
@@ -597,12 +597,12 @@ export function CandidateRow({
         "group cursor-pointer border-l-2 border-l-transparent transition-colors duration-150",
         isActive
           ? "border-l-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]/60"
-          : "hover:bg-[hsl(var(--surface-muted))]/55",
+          : "hover:bg-surface-muted/55",
       ].join(" ")}
     >
       <td className="px-6 py-5">
         <div className="flex flex-col gap-1.5">
-          <div className="font-bold tracking-tight text-[hsl(var(--text))] transition-colors group-hover:text-[hsl(var(--primary))]">{c.full_name}</div>
+          <div className="font-bold tracking-tight text-text transition-colors group-hover:text-[hsl(var(--primary))]">{c.full_name}</div>
           {c.tags.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {c.tags.slice(0, 2).map((t) => (
@@ -614,21 +614,21 @@ export function CandidateRow({
                 </span>
               ))}
               {c.tags.length > 2 ? (
-                <span className="text-[10px] font-semibold text-[hsl(var(--text-muted))]">+{c.tags.length - 2}</span>
+                <span className="text-[10px] font-semibold text-text-muted">+{c.tags.length - 2}</span>
               ) : null}
             </div>
           ) : (
-            <div className="text-[10px] italic text-[hsl(var(--text-muted))]">Sem tags</div>
+            <div className="text-[10px] italic text-text-muted">Sem tags</div>
           )}
         </div>
       </td>
       <td className="px-4 py-5">
         <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+          <div className="flex items-center gap-1.5 text-text-muted">
             <Mail className="h-3 w-3 opacity-60" />
             <span className="truncate max-w-[140px]">{c.email ?? "—"}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[hsl(var(--text-muted))]">
+          <div className="flex items-center gap-1.5 text-text-muted">
             <Phone className="h-3 w-3 opacity-60" />
             <span>{c.phone ?? "—"}</span>
           </div>
@@ -644,7 +644,7 @@ export function CandidateRow({
       </td>
       <td className="px-4 py-5">
         <div className="flex flex-col gap-1">
-          <div className="max-w-[150px] truncate font-medium text-[hsl(var(--text))]">
+          <div className="max-w-[150px] truncate font-medium text-text">
             {vacancyLabel}
           </div>
           {!c.active_job_id && onLinkJob && (
@@ -673,7 +673,7 @@ export function CandidateRow({
             "sticky right-0 px-6 py-5 text-right transition-colors",
             isActive
               ? "bg-[hsl(var(--accent-soft))]/60"
-              : "bg-[hsl(var(--surface))]/96 group-hover:bg-[hsl(var(--surface-muted))]/55",
+              : "bg-surface/96 group-hover:bg-surface-muted/55",
             "backdrop-blur-sm shadow-[-8px_0_10px_-8px_rgba(15,23,42,0.08)]"
           ].join(" ")} 
           onClick={(event) => event.stopPropagation()}
@@ -682,7 +682,7 @@ export function CandidateRow({
             buttonLabel={`Ações para ${c.full_name}`}
             items={actionItems}
             direction={direction}
-            buttonClassName="border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+            buttonClassName="border-border bg-surface text-text-muted shadow-sm hover:bg-surface-muted hover:text-text"
           />
         </td>
       ) : null}

@@ -25,10 +25,10 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
   });
 
   return (
-    <div className="flex flex-col h-full bg-[hsl(var(--surface))] rounded-2xl border border-[hsl(var(--border))] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+    <div className="flex flex-col h-full bg-surface rounded-2xl border border-border shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--border))]/85 bg-[hsl(var(--surface-muted))]/40">
-        <h3 className="text-xs font-bold tracking-tight text-[hsl(var(--text))]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/85 bg-surface-muted/40">
+        <h3 className="text-xs font-bold tracking-tight text-text">
           Notificações
         </h3>
         <div className="flex items-center gap-2">
@@ -38,7 +38,7 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
                 onClick={markAllAsRead}
                 title="Marcar todas como lidas"
                 type="button"
-                className="p-1.5 rounded-lg text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] transition"
+                className="p-1.5 rounded-lg text-text-muted hover:bg-surface-muted hover:text-text transition"
               >
                 <Check className="h-3.5 w-3.5" />
               </button>
@@ -46,7 +46,7 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
                 onClick={clearAll}
                 title="Limpar todas"
                 type="button"
-                className="p-1.5 rounded-lg text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--danger))]/10 hover:text-[hsl(var(--danger))] transition"
+                className="p-1.5 rounded-lg text-text-muted hover:bg-[hsl(var(--danger))]/10 hover:text-danger transition"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -56,7 +56,7 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex px-4 py-1.5 border-b border-[hsl(var(--border))]/50 gap-1 bg-[hsl(var(--surface-muted))]/20">
+      <div className="flex px-4 py-1.5 border-b border-border/50 gap-1 bg-surface-muted/20">
         {(["all", "operational", "messages"] as const).map((tab) => {
           const label = {
             all: "Todas",
@@ -71,7 +71,7 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
               className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${
                 activeTab === tab
                   ? "bg-[hsl(var(--primary))] text-white"
-                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]"
+                  : "text-text-muted hover:bg-surface-muted"
               }`}
             >
               {label}
@@ -92,14 +92,14 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
           ))
         ) : (
           <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] opacity-60">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-muted text-text-muted opacity-60">
               <Inbox className="h-5 w-5" />
             </div>
             <div className="space-y-0.5">
-              <p className="text-[11px] font-bold text-[hsl(var(--text))]">
+              <p className="text-[11px] font-bold text-text">
                 Tudo limpo por aqui!
               </p>
-              <p className="text-[9px] text-[hsl(var(--text-muted))] max-w-[200px]">
+              <p className="text-[9px] text-text-muted max-w-[200px]">
                 Nenhuma notificação nesta categoria no momento.
               </p>
             </div>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../../../components/common/Modal";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { skillsService, type SkillCatalog } from "../../../services/skillsService";
 import { formatErrorDetails, handleApiError } from "../../../shared/utils/errorHandler";
 
@@ -60,47 +62,47 @@ export function ArchiveSkillModal({ open, skill, onClose, onSuccess }: ArchiveSk
   return (
     <Modal title="Arquivar skill" onClose={onClose}>
       <div className="space-y-5 px-6 py-5">
-        <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-4">
-          <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.name}</p>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+        <div className="rounded-xl border border-border bg-surface-muted px-4 py-4">
+          <p className="text-sm font-semibold text-text">{skill.name}</p>
+          <p className="mt-1 text-sm text-text-muted">
             Esta skill sairá da listagem principal e não poderá ser usada em novas vagas.
           </p>
         </div>
 
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Motivo *</span>
-          <select
+          <span className="text-sm font-medium text-text">Motivo *</span>
+          <Select
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            className="ui-input h-11 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none"
+            className="h-11 shadow-none"
           >
             {ARCHIVE_REASONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-[hsl(var(--text))]">Observação</span>
-          <textarea
+          <span className="text-sm font-medium text-text">Observação</span>
+          <Textarea
             value={note}
             onChange={(event) => setNote(event.target.value)}
             rows={3}
-            className="ui-input min-h-[90px] w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2.5 text-sm shadow-none"
+            className="shadow-none"
             placeholder="Detalhe opcional para histórico e auditoria."
           />
         </label>
 
         {error ? (
-          <div className="rounded-xl border border-[hsl(var(--danger))]/15 bg-[hsl(var(--danger-soft))] px-3 py-3 text-sm text-[hsl(var(--danger))]">
+          <div className="rounded-xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-3 text-sm text-danger">
             {error}
           </div>
         ) : null}
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-[hsl(var(--border))] px-6 py-4">
+      <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
         <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
           Cancelar
         </Button>

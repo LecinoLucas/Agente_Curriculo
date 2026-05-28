@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { CalendarClock, Loader2 } from "lucide-react";
 
 import { Modal } from "../../components/common/Modal";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useGoogleCalendarConnection } from "../agenda/useGoogleCalendarConnection";
 import type { InterviewFormat } from "../../types/agenda";
 
@@ -103,11 +106,11 @@ export function InterviewQuickScheduleModal({
 
   return (
     <Modal title="Agendar entrevista" onClose={onClose} contentClassName="sm:max-w-[620px]">
-      <div className="border-b border-[hsl(var(--border))] px-6 py-4">
-        <p className="text-sm text-[hsl(var(--text-muted))]">
+      <div className="border-b border-border px-6 py-4">
+        <p className="text-sm text-text-muted">
           Defina os dados principais da entrevista com o candidato.
         </p>
-        <p className="mt-2 text-sm font-medium text-[hsl(var(--text))]">
+        <p className="mt-2 text-sm font-medium text-text">
           {candidateName} · {jobTitle}
         </p>
       </div>
@@ -122,49 +125,49 @@ export function InterviewQuickScheduleModal({
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="space-y-1.5 text-sm font-medium">
             <span>Data</span>
-            <input className="ui-input h-10 w-full rounded-lg px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <Input className="h-10 w-full rounded-lg px-3" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </label>
           <label className="space-y-1.5 text-sm font-medium">
             <span>Início</span>
-            <input className="ui-input h-10 w-full rounded-lg px-3" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
+            <Input className="h-10 w-full rounded-lg px-3" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
           </label>
           <label className="space-y-1.5 text-sm font-medium">
             <span>Duração</span>
-            <select className="ui-input h-10 w-full rounded-lg px-3" value={duration} onChange={(event) => setDuration(event.target.value)}>
+            <Select className="h-10 w-full rounded-lg px-3" value={duration} onChange={(event) => setDuration(event.target.value)}>
               <option value="30">30 min</option>
               <option value="45">45 min</option>
               <option value="60">60 min</option>
               <option value="90">90 min</option>
-            </select>
+            </Select>
           </label>
         </div>
 
         <label className="space-y-1.5 text-sm font-medium">
           <span>Tipo</span>
-          <select className="ui-input h-10 w-full rounded-lg px-3" value={interviewFormat} onChange={(event) => setInterviewFormat(event.target.value as InterviewFormat)}>
+          <Select className="h-10 w-full rounded-lg px-3" value={interviewFormat} onChange={(event) => setInterviewFormat(event.target.value as InterviewFormat)}>
             <option value="online">Online</option>
             <option value="presencial">Presencial</option>
             <option value="telefone">Telefone</option>
-          </select>
+          </Select>
         </label>
 
         {interviewFormat === "online" ? (
           <label className="space-y-1.5 text-sm font-medium">
             <span>Link</span>
-            <input className="ui-input h-10 w-full rounded-lg px-3" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} placeholder="https://meet.google.com/..." />
+            <Input className="h-10 w-full rounded-lg px-3" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} placeholder="https://meet.google.com/..." />
           </label>
         ) : null}
 
         {interviewFormat === "presencial" ? (
           <label className="space-y-1.5 text-sm font-medium">
             <span>Local</span>
-            <input className="ui-input h-10 w-full rounded-lg px-3" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Sala, unidade ou endereço" />
+            <Input className="h-10 w-full rounded-lg px-3" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Sala, unidade ou endereço" />
           </label>
         ) : null}
 
         <label className="space-y-1.5 text-sm font-medium">
           <span>Observação pública para o candidato</span>
-          <textarea className="ui-input min-h-20 w-full rounded-lg px-3 py-2" value={publicNotes} onChange={(event) => setPublicNotes(event.target.value)} />
+          <Textarea className="min-h-20 w-full rounded-lg px-3 py-2" value={publicNotes} onChange={(event) => setPublicNotes(event.target.value)} />
         </label>
 
         {/* Sincronização com calendário */}
@@ -176,7 +179,7 @@ export function InterviewQuickScheduleModal({
               checked={createGoogleEvent}
               onChange={(e) => handleGoogleEventChange(e.target.checked)}
               disabled={!googleConnected}
-              className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+              className="h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
             />
             <label htmlFor="quick-schedule-google-calendar">Adicionar ao Google Calendar</label>
           </div>
@@ -188,13 +191,13 @@ export function InterviewQuickScheduleModal({
               checked={createGoogleMeet}
               onChange={(e) => handleGoogleMeetChange(e.target.checked)}
               disabled={!googleConnected}
-              className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+              className="h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
             />
             <label htmlFor="quick-schedule-google-meet">Criar link do Google Meet</label>
           </div>
           
           {!googleConnected && (
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-xs text-text-muted">
               Conecte o Google Calendar para criar evento e link do Meet.
             </p>
           )}
@@ -206,21 +209,21 @@ export function InterviewQuickScheduleModal({
           )}
 
           {googleConnected && !createGoogleEvent ? (
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-xs text-text-muted">
               Marque Google Calendar para criar link do Meet.
             </p>
           ) : null}
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-6 py-4 sm:flex-row sm:justify-end">
-        <button type="button" className="ui-btn-secondary inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium" onClick={onClose} disabled={isSaving}>
+      <div className="flex flex-col gap-2 border-t border-border bg-surface-muted px-6 py-4 sm:flex-row sm:justify-end">
+        <button type="button" className="border border-border bg-surface text-text hover:bg-surface-muted inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium" onClick={onClose} disabled={isSaving}>
           Cancelar
         </button>
-        <button type="button" className="ui-btn-secondary inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium" onClick={onOpenFullAgenda} disabled={isSaving}>
+        <button type="button" className="border border-border bg-surface text-text hover:bg-surface-muted inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium" onClick={onOpenFullAgenda} disabled={isSaving}>
           Abrir agenda completa
         </button>
-        <button type="button" className="ui-btn-secondary inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium" onClick={() => void onMoveWithoutScheduling()} disabled={isSaving}>
+        <button type="button" className="border border-border bg-surface text-text hover:bg-surface-muted inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium" onClick={() => void onMoveWithoutScheduling()} disabled={isSaving}>
           Mover sem agendar
         </button>
         <button type="button" className="inline-flex h-10 items-center justify-center rounded-lg bg-[hsl(var(--primary))] px-4 text-sm font-medium text-white disabled:opacity-50" onClick={() => void handleSchedule()} disabled={isSaving}>

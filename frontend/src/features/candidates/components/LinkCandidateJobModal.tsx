@@ -171,31 +171,31 @@ export function LinkCandidateJobModal({
       contentClassName="sm:max-w-[720px]"
     >
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b border-[hsl(var(--border))] px-6 py-4">
-          <p className="text-sm font-medium text-[hsl(var(--text))]">
+        <div className="border-b border-border px-6 py-4">
+          <p className="text-sm font-medium text-text">
             {candidateName ? candidateName : "Selecione a vaga"}
           </p>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <p className="mt-1 text-sm text-text-muted">
             Escolha uma vaga ativa para iniciar análise, score e acompanhamento no funil.
           </p>
         </div>
 
-        <div className="border-b border-[hsl(var(--border))] px-6 py-4">
+        <div className="border-b border-border px-6 py-4">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar vaga por título, área ou senioridade"
-              className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-2.5 pl-10 pr-4 text-sm text-[hsl(var(--text))] outline-none transition focus:border-[hsl(var(--primary))] focus:ring-2 focus:ring-[hsl(var(--primary))]/15"
+              className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-4 text-sm text-text outline-none transition focus:border-[hsl(var(--primary))] focus:ring-2 focus:ring-[hsl(var(--primary))]/15"
             />
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-[hsl(var(--text-muted))]">
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-text-muted">
               <LoaderCircle className="h-6 w-6 animate-spin text-[hsl(var(--primary))]" />
               Carregando vagas ativas…
             </div>
@@ -204,16 +204,16 @@ export function LinkCandidateJobModal({
               {error}
             </div>
           ) : availableJobs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-6 py-12 text-center">
-              <BriefcaseBusiness className="h-8 w-8 text-[hsl(var(--text-muted))]" />
-              <p className="mt-4 text-base font-semibold text-[hsl(var(--text))]">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-surface-muted px-6 py-12 text-center">
+              <BriefcaseBusiness className="h-8 w-8 text-text-muted" />
+              <p className="mt-4 text-base font-semibold text-text">
                 {hasSearch && hasAnyLinkableJobs
                   ? "Nenhuma vaga encontrada"
                   : hasAnyActiveJobs
                   ? "Todas as vagas ativas já estão vinculadas"
                   : "Nenhuma vaga ativa encontrada"}
               </p>
-              <p className="mt-2 max-w-md text-sm text-[hsl(var(--text-muted))]">
+              <p className="mt-2 max-w-md text-sm text-text-muted">
                 {hasSearch && hasAnyLinkableJobs
                   ? "Tente outro termo de busca para encontrar uma vaga ativa."
                   : hasAnyActiveJobs
@@ -233,17 +233,17 @@ export function LinkCandidateJobModal({
               {availableJobs.map((job) => (
                 <div
                   key={job.id}
-                  className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-4"
+                  className="rounded-2xl border border-border bg-surface px-4 py-4"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-[hsl(var(--text))]">{job.title}</p>
-                        <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
+                        <p className="text-sm font-semibold text-text">{job.title}</p>
+                        <span className="rounded-full border border-border bg-surface-muted px-2.5 py-1 text-[11px] font-medium text-text-muted">
                           {getJobStatusLabel(job.status)}
                         </span>
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-[hsl(var(--text-muted))]">
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
                         <span>Área: {formatJobArea(job.job_area)}</span>
                         <span>Senioridade: {job.seniority_level ?? "—"}</span>
                         <span>Modelo: {job.work_model ? formatWorkModel(job.work_model) : "—"}</span>
@@ -265,13 +265,13 @@ export function LinkCandidateJobModal({
           )}
         </div>
 
-        <div className="border-t border-[hsl(var(--border))] px-6 py-4">
+        <div className="border-t border-border px-6 py-4">
           <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
               disabled={linkingJobId !== null}
-              className="rounded-xl border border-[hsl(var(--border))] px-4 py-2 text-sm font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+              className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-text-muted transition hover:bg-surface-muted disabled:opacity-50"
             >
               Cancelar
             </button>

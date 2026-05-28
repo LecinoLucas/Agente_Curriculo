@@ -90,6 +90,16 @@ const NAVIGATION_CONFIG: NavGroup[] = [
     ],
   },
   {
+    label: "Admissão",
+    caption: "Checklists e casos",
+    roles: ["admin", "hr"],
+    isDropdown: true,
+    items: [
+      { to: "/admitidos", label: "Admitidos", caption: "Processos concluídos", roles: ["admin", "hr"] },
+      { to: "/admissao/checklists", label: "Checklists admissionais", caption: "Templates de documentos", roles: ["admin", "hr"] },
+    ],
+  },
+  {
     label: "Gestores",
     caption: "Revisão e Decisão",
     roles: ["admin", "manager"],
@@ -148,6 +158,8 @@ const ICON_MAP: Record<string, any> = {
   "/analises-ia": Sparkles,
   "/analises-ia/comportamental": BrainCircuit,
   "/manager": ShieldCheck,
+  "/admitidos": UserRound,
+  "/admissao/checklists": ShieldCheck,
   "/admin": Settings,
   "/admin/usuarios": UserRound,
   "/admin/cadastros": FolderOpen,
@@ -161,6 +173,7 @@ const ICON_MAP: Record<string, any> = {
   "Recrutamento": Briefcase,
   "Avaliações": GraduationCap,
   "Gestores": UserRound,
+  "Admissão": ShieldCheck,
   "IA & Automação": Sparkles,
   "Adm": Settings,
   "Portal do Candidato": User,
@@ -264,7 +277,7 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--bg))] text-[hsl(var(--text))] flex flex-col">
+    <div className="min-h-screen bg-[hsl(var(--bg))] text-text flex flex-col">
       <div className="flex-1 flex flex-col min-w-0">
         <TopNavbar
           groups={visibleGroups}
@@ -471,7 +484,7 @@ export function AppShell() {
         </main>
 
         {/* Footer */}
-        <footer className="w-full border-t border-[hsl(var(--border))] bg-[hsl(var(--surface))] py-4 text-center text-sm text-[hsl(var(--nav-muted))]">
+        <footer className="w-full border-t border-border bg-surface py-4 text-center text-sm text-[hsl(var(--nav-muted))]">
           <div className="mx-auto max-w-[1600px] px-4 sm:px-6">
             @LecinoLucas Developer 2026 Rede Marajo RH IA
           </div>

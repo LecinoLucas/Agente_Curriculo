@@ -11,10 +11,11 @@ import {
   getPreAdmission,
 } from "../../../../../services/preAdmissionService";
 import { toast } from "../../../../../shared/utils/toast";
-import type { AdmissionCaseWorkspace } from "../../../../../types/domain";
+import type { AdmissionCaseOverview, AdmissionCaseWorkspace } from "../../../../../types/domain";
 
 vi.mock("../../../../../services/admissionWorkspaceService", () => ({
   admissionWorkspaceService: {
+    getOverview: vi.fn(),
     getWorkspace: vi.fn(),
     approveChecklistItem: vi.fn(),
     rejectChecklistItem: vi.fn(),
@@ -86,11 +87,21 @@ const baseWorkspace: AdmissionCaseWorkspace = {
   documents: [
     {
       id: "doc-1",
+      checklist_item_id: "item-1",
+      checklist_title: "Documento de identidade",
+      required: true,
       filename: "RG_Larissa.pdf",
       document_type: "rg",
+      mime_type: "application/pdf",
+      size_bytes: 204800,
       status: "uploaded",
       uploaded_at: "2026-05-25T11:30:00Z",
+      reviewed_at: null,
+      reviewed_by_name: null,
+      review_notes: null,
+      rejection_reason_public: null,
       approved_at: null,
+      is_current_for_item: true,
     },
   ],
   main_blockers: [
@@ -157,6 +168,43 @@ const admittedWorkspace: AdmissionCaseWorkspace = {
   },
 };
 
+function overviewFromWorkspace(workspace: AdmissionCaseWorkspace): AdmissionCaseOverview {
+  const state =
+    workspace.case.status === "admitted"
+      ? "completed"
+      : workspace.summary.ready_for_export
+        ? "ready"
+        : "pending";
+  const label =
+    state === "completed" ? "Exportado" : state === "ready" ? "Pronto para exportação" : "Pendente";
+
+  return {
+    case: workspace.case,
+    candidate: workspace.candidate,
+    job: workspace.job,
+    status_label: workspace.case.status,
+    progress: {
+      total: workspace.checklist.total,
+      approved: workspace.checklist.approved,
+      pending: workspace.checklist.pending,
+      rejected: workspace.checklist.blocked,
+      in_review: 0,
+      waived: 0,
+    },
+    main_blocker: workspace.main_blockers[0] ?? null,
+    main_blockers: workspace.main_blockers,
+    next_action: workspace.next_actions[0] ?? null,
+    next_actions: workspace.next_actions,
+    summary: workspace.summary,
+    integration_status: {
+      state,
+      label,
+      ready_for_export: workspace.summary.ready_for_export,
+    },
+    updated_at: workspace.case.updated_at,
+  };
+}
+
 function renderPanel(props?: Partial<ComponentProps<typeof CandidatePreAdmissionPanel>>) {
   return render(
     <MemoryRouter>
@@ -175,6 +223,7 @@ describe("CandidatePreAdmissionPanel.summaryCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(baseWorkspace);
+    vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue(overviewFromWorkspace(baseWorkspace));
     vi.mocked(createPreAdmission).mockResolvedValue({
       id: "case-created",
       candidate_id: "cand-1",
@@ -228,14 +277,14 @@ describe("CandidatePreAdmissionPanel.summaryCard", () => {
   });
 
   it("mostra status Protheus 'Pronto para exportação' quando ready_for_export=true", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(readyWorkspace);
+    vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue(overviewFromWorkspace(readyWorkspace));
     renderPanel();
     const card = await screen.findByTestId("pre-admission-profile-summary");
     expect(within(card).getByText(/Protheus: Pronto para exportação/i)).toBeInTheDocument();
   });
 
   it("mostra status Protheus 'Exportado' quando o caso está admitted", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(admittedWorkspace);
+    vi.mocked(admissionWorkspaceService.getOverview).mockResolvedValue(overviewFromWorkspace(admittedWorkspace));
     renderPanel();
     const card = await screen.findByTestId("pre-admission-profile-summary");
     expect(within(card).getByText(/Protheus: Exportado/i)).toBeInTheDocument();
@@ -332,7 +381,7 @@ describe("CandidatePreAdmissionPanel.summaryCard", () => {
       expect(createPreAdmission).toHaveBeenCalledWith("job-1", "cand-1", {});
     });
     await waitFor(() => {
-      expect(admissionWorkspaceService.getWorkspace).toHaveBeenCalledWith("case-created");
+      expect(admissionWorkspaceService.getOverview).toHaveBeenCalledWith("case-created");
     });
     expect(onCaseCreated).toHaveBeenCalledWith("case-created");
     expect(toast.success).toHaveBeenCalledWith("Caso admissional criado.");
@@ -408,6 +457,7 @@ describe("CandidatePreAdmissionPanel.summaryCard", () => {
 
     expect(screen.getByText("Pré-admissão restrita ao RH.")).toBeInTheDocument();
     expect(admissionWorkspaceService.getWorkspace).not.toHaveBeenCalled();
+    expect(admissionWorkspaceService.getOverview).not.toHaveBeenCalled();
     expect(getPreAdmission).not.toHaveBeenCalled();
   });
 });

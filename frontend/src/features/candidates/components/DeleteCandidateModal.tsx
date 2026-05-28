@@ -45,7 +45,7 @@ export function DeleteCandidateModal({
     <Modal title="Excluir candidato definitivamente?" onClose={onClose}>
       <div className="space-y-5 px-6 py-5">
         <div className="space-y-2">
-          <p className="text-sm text-[hsl(var(--text))]">
+          <p className="text-sm text-text">
             Esta ação removerá <strong>{candidateName}</strong> do banco de dados. Análises, vínculos e
             informações associadas poderão ser removidos. Esta ação não pode ser desfeita.
           </p>
@@ -71,7 +71,7 @@ export function DeleteCandidateModal({
             placeholder="Detalhes adicionais, se necessário"
             disabled={loading}
             rows={4}
-            className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-[hsl(var(--text))] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-text ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
 
@@ -88,7 +88,7 @@ export function DeleteCandidateModal({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-[hsl(var(--border))] px-6 py-4">
+      <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
         <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
           Cancelar
         </Button>

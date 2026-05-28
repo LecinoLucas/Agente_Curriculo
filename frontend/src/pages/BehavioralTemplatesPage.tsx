@@ -261,7 +261,7 @@ export function BehavioralTemplatesPage() {
       <div className="flex h-[80vh] items-center justify-center bg-[hsl(var(--bg))]">
         <div className="text-center space-y-2">
           <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))] mx-auto" />
-          <p className="text-sm text-[hsl(var(--text-muted))]">Carregando painel de avaliações…</p>
+          <p className="text-sm text-text-muted">Carregando painel de avaliações…</p>
         </div>
       </div>
     );
@@ -272,8 +272,8 @@ export function BehavioralTemplatesPage() {
       {/* ── HEADER ── */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[hsl(var(--text))] tracking-tight">Templates Comportamentais</h1>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))] leading-relaxed">
+          <h1 className="text-2xl font-bold text-text tracking-tight">Templates Comportamentais</h1>
+          <p className="mt-1 text-sm text-text-muted leading-relaxed">
             Painel de controle de avaliações operacionais estruturadas por competências e scorecards.
           </p>
         </div>
@@ -281,9 +281,9 @@ export function BehavioralTemplatesPage() {
           <Button
             onClick={() => setIsGalleryOpen(true)}
             variant="outline"
-            className="flex items-center gap-2 border-[hsl(var(--border))] hover:bg-[hsl(var(--accent-soft))]"
+            className="flex items-center gap-2 border-border hover:bg-[hsl(var(--accent-soft))]"
           >
-            <Layers className="h-4 w-4 text-[hsl(var(--text-muted))]" />
+            <Layers className="h-4 w-4 text-text-muted" />
             Usar modelo pronto
           </Button>
           <Button
@@ -305,7 +305,7 @@ export function BehavioralTemplatesPage() {
       </div>
 
       {error ? (
-        <div className="border border-red-200 rounded-2xl p-12 text-center text-[hsl(var(--text))] bg-red-50/20 max-w-xl mx-auto space-y-4 shadow-sm" data-testid="error-state">
+        <div className="border border-red-200 rounded-2xl p-12 text-center text-text bg-red-50/20 max-w-xl mx-auto space-y-4 shadow-sm" data-testid="error-state">
           <AlertTriangle className="h-12 w-12 text-red-600 mx-auto animate-pulse" />
           <h3 className="text-lg font-bold text-red-950">Falha ao Carregar Avaliações</h3>
           <p className="text-xs text-red-850 leading-relaxed max-w-md mx-auto">
@@ -350,10 +350,10 @@ export function BehavioralTemplatesPage() {
           </div>
 
           {/* ── TOOLBAR: SEARCH & FILTERS ── */}
-          <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 space-y-4 shadow-2xs">
+          <div className="rounded-2xl border border-border bg-surface p-4 space-y-4 shadow-2xs">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-[hsl(var(--text-muted))]" />
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
                 <input
                   type="text"
                   placeholder="Buscar avaliações por nome ou descrição..."
@@ -366,11 +366,11 @@ export function BehavioralTemplatesPage() {
               <div className="flex flex-wrap gap-2 items-center">
                 {/* Status Selector */}
                 <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
-                  <SlidersHorizontal className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-text-muted" />
                   <select
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
+                    className="bg-transparent text-xs font-semibold outline-none text-text"
                   >
                     <option value="all">Todos os Status</option>
                     <option value="active">Apenas Ativos</option>
@@ -380,11 +380,11 @@ export function BehavioralTemplatesPage() {
 
                 {/* Sort Selector */}
                 <div className="flex items-center gap-1.5 border rounded-xl px-2.5 py-1.5 bg-[hsl(var(--bg))]">
-                  <ArrowUpDown className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+                  <ArrowUpDown className="h-3.5 w-3.5 text-text-muted" />
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="bg-transparent text-xs font-semibold outline-none text-[hsl(var(--text))]"
+                    className="bg-transparent text-xs font-semibold outline-none text-text"
                   >
                     <option value="recent">Mais Recentes</option>
                     <option value="name">Ordem Alfabética</option>
@@ -395,8 +395,8 @@ export function BehavioralTemplatesPage() {
             </div>
 
             {/* Category filtering chips */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[hsl(var(--border))]">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--text-muted))] mr-1">Categoria:</span>
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted mr-1">Categoria:</span>
               {categories.map((cat) => (
                 <button
                   key={cat}
@@ -404,7 +404,7 @@ export function BehavioralTemplatesPage() {
                   className={`rounded-full px-3 py-1 text-xs font-semibold border transition-all duration-200 ${
                     selectedCategory === cat
                       ? "bg-[hsl(var(--primary))] text-white border-transparent"
-                      : "bg-[hsl(var(--bg))] text-[hsl(var(--text-muted))] border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]"
+                      : "bg-[hsl(var(--bg))] text-text-muted border-border hover:bg-surface-muted"
                   }`}
                 >
                   {cat === "all" ? "Todas" : cat}
@@ -415,8 +415,8 @@ export function BehavioralTemplatesPage() {
 
           {/* ── TEMPLATE LIST CARDS ── */}
           {sortedTemplates.length === 0 ? (
-            <div className="border-2 border-dashed rounded-2xl p-12 text-center text-[hsl(var(--text-muted))] bg-[hsl(var(--surface))]">
-              <AlertCircle className="h-10 w-10 text-[hsl(var(--text-muted))] mx-auto mb-2 opacity-50" />
+            <div className="border-2 border-dashed rounded-2xl p-12 text-center text-text-muted bg-surface">
+              <AlertCircle className="h-10 w-10 text-text-muted mx-auto mb-2 opacity-50" />
               <h4 className="font-semibold text-sm">Nenhum template encontrado</h4>
               <p className="text-xs max-w-xs mx-auto mt-1 leading-relaxed">
                 Nenhuma avaliação atende aos filtros definidos. Crie um novo template ou use um modelo pronto.
@@ -432,7 +432,7 @@ export function BehavioralTemplatesPage() {
                 return (
                   <div
                     key={template.id}
-                    className="group rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+                    className="group rounded-2xl border border-border bg-surface p-5 transition-all duration-200 hover:shadow-md flex flex-col justify-between"
                   >
                     <div>
                       {/* Badges bar */}
@@ -458,15 +458,15 @@ export function BehavioralTemplatesPage() {
                       </div>
 
                       {/* Name & Desc */}
-                      <h3 className="text-sm font-bold text-[hsl(var(--text))] leading-snug group-hover:text-[hsl(var(--primary))] transition-colors">
+                      <h3 className="text-sm font-bold text-text leading-snug group-hover:text-[hsl(var(--primary))] transition-colors">
                         {template.name}
                       </h3>
-                      <p className="mt-1.5 text-xs text-[hsl(var(--text-muted))] leading-relaxed line-clamp-2">
+                      <p className="mt-1.5 text-xs text-text-muted leading-relaxed line-clamp-2">
                         {parsed.description || "Sem descrição disponível."}
                       </p>
 
                       {/* Metrics preview row */}
-                      <div className="mt-4 grid grid-cols-2 gap-2 border-y border-[hsl(var(--border))]/60 py-2 text-[11px] text-[hsl(var(--text-muted))]">
+                      <div className="mt-4 grid grid-cols-2 gap-2 border-y border-border/60 py-2 text-[11px] text-text-muted">
                         <span className="flex items-center gap-1">
                           <BookOpen className="h-3.5 w-3.5 shrink-0" />
                           {template.competency_count} {template.competency_count === 1 ? "competência" : "competências"}
@@ -491,7 +491,7 @@ export function BehavioralTemplatesPage() {
                     </div>
 
                     {/* Operations & CTAs row */}
-                    <div className="mt-5 pt-3 flex gap-2 items-center justify-between border-t border-[hsl(var(--border))]/40">
+                    <div className="mt-5 pt-3 flex gap-2 items-center justify-between border-t border-border/40">
                       <div className="flex gap-1.5">
                         {/* Quick actions for recruiter convenience */}
                         <button
@@ -543,19 +543,19 @@ export function BehavioralTemplatesPage() {
           {/* Overlay click to close */}
           <div className="absolute inset-0" onClick={() => setIsDrawerOpen(false)} />
 
-          <div className="relative w-full max-w-md bg-[hsl(var(--surface))] h-full flex flex-col shadow-2xl border-l border-[hsl(var(--border))] animate-in slide-in-from-right duration-200">
+          <div className="relative w-full max-w-md bg-surface h-full flex flex-col shadow-2xl border-l border-border animate-in slide-in-from-right duration-200">
             {/* Drawer Header */}
-            <div className="p-5 border-b border-[hsl(var(--border))] flex items-center justify-between">
+            <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-[hsl(var(--text))] flex items-center gap-2">
+                <h3 className="text-base font-bold text-text flex items-center gap-2">
                   <FolderPlus className="h-5 w-5 text-[hsl(var(--primary))]" />
                   Criar Nova Avaliação
                 </h3>
-                <p className="text-xs text-[hsl(var(--text-muted))] mt-0.5">Defina as informações estruturais do rascunho</p>
+                <p className="text-xs text-text-muted mt-0.5">Defina as informações estruturais do rascunho</p>
               </div>
               <button
                 onClick={() => setIsDrawerOpen(false)}
-                className="p-1 rounded-xl text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))]"
+                className="p-1 rounded-xl text-text-muted hover:bg-[hsl(var(--accent-soft))] hover:text-text"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -570,7 +570,7 @@ export function BehavioralTemplatesPage() {
                   <Layers className="h-4 w-4" />
                   Quer economizar tempo?
                 </p>
-                <p className="text-[11px] text-[hsl(var(--text-muted))] leading-relaxed">
+                <p className="text-[11px] text-text-muted leading-relaxed">
                   Temos templates comportamentais profissionais criados por especialistas em seleção humana prontos para uso.
                 </p>
                 <button
@@ -585,7 +585,7 @@ export function BehavioralTemplatesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-text uppercase tracking-wider mb-1">
                   Nome do Template *
                 </label>
                 <input
@@ -600,7 +600,7 @@ export function BehavioralTemplatesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-text uppercase tracking-wider mb-1">
                   Descrição Comercial *
                 </label>
                 <textarea
@@ -615,7 +615,7 @@ export function BehavioralTemplatesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-bold text-text uppercase tracking-wider mb-1">
                     Categoria
                   </label>
                   <select
@@ -633,7 +633,7 @@ export function BehavioralTemplatesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-bold text-text uppercase tracking-wider mb-1">
                     Minutos Estimados
                   </label>
                   <input
@@ -647,7 +647,7 @@ export function BehavioralTemplatesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-text uppercase tracking-wider mb-1">
                   Público-Alvo Recomendado
                 </label>
                 <input
@@ -668,7 +668,7 @@ export function BehavioralTemplatesPage() {
               </div>
 
               {/* Drawer Action CTA */}
-              <div className="pt-4 border-t border-[hsl(var(--border))] flex justify-end gap-2">
+              <div className="pt-4 border-t border-border flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"

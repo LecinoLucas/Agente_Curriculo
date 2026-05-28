@@ -11,7 +11,7 @@ export function ReviewStep({ form, errors, onChange }: Props) {
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[hsl(var(--primary))]">Consentimento</p>
-        <h2 className="text-2xl font-semibold tracking-tight text-[hsl(var(--text))]">Revise e conclua sua candidatura</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-text">Revise e conclua sua candidatura</h2>
       </div>
 
       <div className="space-y-3 rounded-3xl bg-gray-50 p-5">

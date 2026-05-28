@@ -1,6 +1,6 @@
-import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search } from "lucide-react";
+import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Users, Clock, Calendar, CheckCircle2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { CandidatePreviewDrawer } from "../features/candidates/components/CandidatePreviewDrawer";
 import { JobCombobox } from "../features/pipeline/JobCombobox";
@@ -11,6 +11,7 @@ import { usePipeline } from "../features/pipeline/PipelineContext";
 import { PipelineRejectionReasonModal } from "../features/pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
 import {
+  resolvePreAdmissionNavigationPath,
   usePipelineGateActionResolver,
   usePipelineTransitionBlockedHandler,
 } from "../features/pipeline/usePipelineTransitionBlocked";
@@ -25,7 +26,7 @@ import { toast } from "../shared/utils/toast";
 const MOVE_CANDIDATE_TOAST_KEY = "feedback-move-candidate";
 import { getJobRanking } from "../services/jobsService";
 import { pipelineService, type PipelineJobSummary } from "../services/pipelineService";
-import type { JobCandidate, JobRanking, JobRankingEntry, PipelineStage } from "../types/domain";
+import type { JobCandidate, JobRanking, JobRankingEntry, PipelineBoardFilters, PipelineStage } from "../types/domain";
 import {
   formatJobStatus,
   formatSeniority,
@@ -69,10 +70,25 @@ function getLastSelectedJobId() {
   return window.sessionStorage.getItem(PIPELINE_LAST_SELECTED_JOB_KEY);
 }
 
+function readPipelineBoardFilters(searchParams: URLSearchParams): PipelineBoardFilters {
+  const read = (key: keyof PipelineBoardFilters) => {
+    const value = searchParams.get(key);
+    return value?.trim() ? value : undefined;
+  };
+
+  return {
+    entered_from: read("entered_from"),
+    entered_to: read("entered_to"),
+    updated_from: read("updated_from"),
+    updated_to: read("updated_to"),
+  };
+}
+
 // ── PipelinePage ───────────────────────────────────────────────────────────────
 
 export function PipelinePage() {
   const { jobId: jobIdParam } = useParams<{ jobId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const [showNewCandidate, setShowNewCandidate] = useState(false);
@@ -132,16 +148,23 @@ export function PipelinePage() {
   const {
     activeJobId,
     board,
+    boardFilters,
     boardLoading,
     boardError,
     rankingSyncTick,
     setActiveJob,
+    setBoardFilters,
     moveCandidateStage,
     refreshBoard,
     openCandidate,
     closeCandidate,
     syncCandidateOverview,
   } = usePipeline();
+
+  const urlBoardFilters = useMemo(
+    () => readPipelineBoardFilters(searchParams),
+    [searchParams],
+  );
 
   const [lastUpdated, setLastUpdated] = useState(() =>
     new Date().toLocaleTimeString("pt-BR", { hour12: false })
@@ -277,6 +300,13 @@ export function PipelinePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const current = JSON.stringify(boardFilters);
+    const next = JSON.stringify(urlBoardFilters);
+    if (current === next) return;
+    void setBoardFilters(urlBoardFilters);
+  }, [boardFilters, setBoardFilters, urlBoardFilters]);
 
   useEffect(() => {
     if (!jobIdParam) return;
@@ -498,10 +528,53 @@ export function PipelinePage() {
     void openCandidate(candidateId);
   }, [openCandidate]);
 
+  useEffect(() => {
+    const autoOpenCandidateId = searchParams.get("candidateId");
+    if (autoOpenCandidateId && autoOpenCandidateId !== previewCandidateIdRef.current) {
+      const t = setTimeout(() => {
+        handleOpenCandidate(autoOpenCandidateId);
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [searchParams, handleOpenCandidate]);
+
   const handleCloseDrawer = useCallback(() => {
     setPreviewCandidateId(null);
     closeCandidate();
-  }, [closeCandidate]);
+    setSearchParams((prev) => {
+      if (prev.has("candidateId")) {
+        prev.delete("candidateId");
+        return prev;
+      }
+      return prev;
+    }, { replace: true });
+  }, [closeCandidate, setSearchParams]);
+
+  const handleBoardDateFilterChange = useCallback(
+    (key: keyof PipelineBoardFilters, value: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set(key, value);
+        } else {
+          next.delete(key);
+        }
+        return next;
+      }, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  const handleClearBoardFilters = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("entered_from");
+      next.delete("entered_to");
+      next.delete("updated_from");
+      next.delete("updated_to");
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const syncAfterStageMutation = useCallback(async (affectedCandidateId?: string) => {
     try {
@@ -520,8 +593,13 @@ export function PipelinePage() {
       feedback.moveCandidate.processing();
       setIsStageMoveSaving(true);
       try {
-        await moveCandidateStage(candidateId, toStage);
+        const moveResult = await moveCandidateStage(candidateId, toStage);
         await syncAfterStageMutation(candidateId);
+        const preAdmissionPath = resolvePreAdmissionNavigationPath(moveResult);
+        if (preAdmissionPath) {
+          navigate(preAdmissionPath);
+          return;
+        }
         feedback.moveCandidate.success();
       } catch (err: unknown) {
         const handled = handleBlockedError(err, { candidateId, candidateName });
@@ -538,7 +616,7 @@ export function PipelinePage() {
         setIsStageMoveSaving(false);
       }
     },
-    [handleBlockedError, moveCandidateStage, syncAfterStageMutation],
+    [handleBlockedError, moveCandidateStage, navigate, syncAfterStageMutation],
   );
 
   const handleCardDragStart = useCallback(
@@ -709,7 +787,7 @@ export function PipelinePage() {
           <nav className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
             <span>Recrutamento</span>
             <span className="text-slate-300 dark:text-slate-700">/</span>
-            <span className="text-[hsl(var(--primary))]">Pipeline</span>
+            <span className="text-[#C1121F]">Pipeline</span>
           </nav>
           <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-800 dark:text-slate-100">
             Pipeline
@@ -742,8 +820,8 @@ export function PipelinePage() {
               disabled={!canUse}
               className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
                 canUse
-                  ? "border-[hsl(var(--primary))]/20 bg-[hsl(var(--primary))] text-white shadow-sm hover:opacity-90 dark:border-[hsl(var(--primary))]/30"
-                  : "cursor-not-allowed border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] dark:border-slate-800 dark:bg-slate-900"
+                  ? "border-[#C1121F]/20 bg-[#C1121F] text-white shadow-sm hover:opacity-90 dark:border-[#C1121F]/30"
+                  : "cursor-not-allowed border-border/40 bg-surface-muted text-text-muted dark:border-slate-800 dark:bg-slate-900"
               }`}
             >
               <Search className="h-4 w-4" />
@@ -755,8 +833,8 @@ export function PipelinePage() {
                 onClick={() => setShowRanking((current) => !current)}
                 className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
                   showRanking
-                    ? "border-[hsl(var(--primary))]/30 bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
-                    : "border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] shadow-sm hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800"
+                    ? "border-[#C1121F]/30 bg-[#C1121F]/5 text-[#C1121F]"
+                    : "border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800"
                 }`}
                 aria-expanded={showRanking}
               >
@@ -770,58 +848,94 @@ export function PipelinePage() {
 
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Total de Candidatos
-            </p>
-            <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
-                {totalCandidatos}
-              </span>
-              <span className="rounded bg-[hsl(var(--surface-muted))] dark:bg-slate-800 border border-[hsl(var(--border))]/40 dark:border-slate-700 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--text-muted))]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Total de Candidatos
+                </p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+                    {totalCandidatos}
+                  </span>
+                </div>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-[#C1121F] dark:bg-rose-950/30 dark:text-rose-400">
+                <Users className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <span className="inline-flex items-center rounded-md bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
                 Inscritos
               </span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Em andamento
-            </p>
-            <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
-                {emAndamento}
-              </span>
-              <span className="rounded bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent-soft))]/85 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--accent-foreground))]">
+          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Em andamento
+                </p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+                    {emAndamento}
+                  </span>
+                </div>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
+                <Clock className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-inset ring-blue-500/20 dark:bg-blue-950/30 dark:text-blue-400 dark:ring-blue-500/30">
                 {totalCandidatos > 0 ? `${Math.round((emAndamento / totalCandidatos) * 100)}%` : "0%"}
               </span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Entrevistas
-            </p>
-            <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
-                {entrevistas}
-              </span>
-              <span className="rounded bg-[hsl(var(--warning-soft))] border border-[hsl(var(--warning-soft))]/85 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--warning))]">
+          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Entrevistas
+                </p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+                    {entrevistas}
+                  </span>
+                </div>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">
+                <Calendar className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-500/30">
                 Agendadas
               </span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-3 py-2.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-[hsl(var(--text-muted))]">
-              Contratações
-            </p>
-            <div className="mt-1 flex items-baseline justify-between gap-2">
-              <span className="text-xl font-black tracking-tight text-[hsl(var(--text))]">
-                {contratacoes}
-              </span>
-              <span className="rounded bg-[hsl(var(--success-soft))] border border-[hsl(var(--success-soft))]/85 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--success))]">
+          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Contratações
+                </p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+                    {contratacoes}
+                  </span>
+                </div>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center">
+              <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-600 ring-1 ring-inset ring-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-500/30">
                 Efetivadas
               </span>
             </div>
@@ -850,15 +964,15 @@ export function PipelinePage() {
           <div className={boardLayoutClass}>
             
             {/* Main Board Area */}
-            <div className="min-w-0 rounded-2xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:p-4">
+            <div className="min-w-0 rounded-2xl border border-border/40 bg-surface p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:p-4">
               
               {/* Header inside Board panel */}
-              <div className="mb-3 flex flex-col gap-3 border-b border-[hsl(var(--border))]/40 pb-3 dark:border-slate-800 xl:flex-row xl:flex-wrap xl:items-center xl:justify-between">
+              <div className="mb-3 flex flex-col gap-3 border-b border-border/40 pb-3 dark:border-slate-800 xl:flex-row xl:flex-wrap xl:items-center xl:justify-between">
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-lg font-black tracking-tight text-[hsl(var(--text))] dark:text-slate-100 truncate">
+                  <h2 className="text-lg font-black tracking-tight text-text dark:text-slate-100 truncate">
                     {selectedJob ? selectedJob.title : "Candidatos"}
                   </h2>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[hsl(var(--text-muted))]">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-text-muted">
                     <span>{`Kanban · ${totalActive} em processo`}</span>
                     {selectedJobMeta.map((item) => (
                       <span key={String(item)} className="inline-flex items-center gap-2">
@@ -867,23 +981,92 @@ export function PipelinePage() {
                       </span>
                     ))}
                   </div>
-                  <p className="mt-1 text-[10px] font-semibold text-[hsl(var(--text-muted))]/80">
+                  <p className="mt-1 text-[10px] font-semibold text-text-muted/80">
                     Detalhes de admissão e ERP ficam em áreas próprias.
                   </p>
                 </div>
- 
+
                 {/* Filters and Refresh State */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                  <div className="flex w-full sm:w-auto items-center gap-1 rounded-xl border border-[hsl(var(--border))]/55 bg-[hsl(var(--surface-muted))] p-1 dark:border-slate-800 dark:bg-slate-950">
+                <div className="flex flex-col gap-3 xl:items-end">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <div className="rounded-xl border border-border/55 bg-surface-muted/55 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                        Entrada no processo
+                      </p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
+                          <span>De</span>
+                          <input
+                            type="date"
+                            value={urlBoardFilters.entered_from ?? ""}
+                            onChange={(event) => handleBoardDateFilterChange("entered_from", event.target.value)}
+                            className="ui-input h-10 rounded-lg px-3 text-sm"
+                            aria-label="Entrada no processo de"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
+                          <span>Até</span>
+                          <input
+                            type="date"
+                            value={urlBoardFilters.entered_to ?? ""}
+                            onChange={(event) => handleBoardDateFilterChange("entered_to", event.target.value)}
+                            className="ui-input h-10 rounded-lg px-3 text-sm"
+                            aria-label="Entrada no processo até"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/55 bg-surface-muted/55 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                        Última atividade
+                      </p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
+                          <span>De</span>
+                          <input
+                            type="date"
+                            value={urlBoardFilters.updated_from ?? ""}
+                            onChange={(event) => handleBoardDateFilterChange("updated_from", event.target.value)}
+                            className="ui-input h-10 rounded-lg px-3 text-sm"
+                            aria-label="Última atividade de"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
+                          <span>Até</span>
+                          <input
+                            type="date"
+                            value={urlBoardFilters.updated_to ?? ""}
+                            onChange={(event) => handleBoardDateFilterChange("updated_to", event.target.value)}
+                            className="ui-input h-10 rounded-lg px-3 text-sm"
+                            aria-label="Última atividade até"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={handleClearBoardFilters}
+                        className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      >
+                        Limpar filtros
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <div className="flex w-full sm:w-auto items-center gap-1 rounded-xl border border-border/55 bg-surface-muted p-1 dark:border-slate-800 dark:bg-slate-950">
                     <button
                       onClick={() => setSortOrder("score_desc")}
-                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
+                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-white text-[#C1121F] shadow-sm border border-slate-200 dark:bg-slate-900 dark:border-slate-700" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"}`}
                     >
                       Top Match IA
                     </button>
                     <button
                       onClick={() => setSortOrder("name_az")}
-                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "name_az" ? "bg-[hsl(var(--surface))] text-[hsl(var(--primary))] shadow-[0_1px_2px_rgba(0,0,0,0.05)] border border-[hsl(var(--border))]/40 dark:border-slate-800" : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] dark:text-slate-500 dark:hover:text-slate-350"}`}
+                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "name_az" ? "bg-white text-[#C1121F] shadow-sm border border-slate-200 dark:bg-slate-900 dark:border-slate-700" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"}`}
                     >
                       Ordem A-Z
                     </button>
@@ -911,6 +1094,7 @@ export function PipelinePage() {
                       Sincronizando
                     </span>
                   )}
+                  </div>
                 </div>
               </div>
 
@@ -1006,7 +1190,7 @@ export function PipelinePage() {
                         disabled={!canUse}
                         className={`inline-flex items-center justify-center gap-1.5 rounded-xl border px-6 py-3 text-xs font-bold transition-all ${
                           canUse
-                            ? "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(2,70%,45%)] shadow-sm"
+                            ? "bg-[#C1121F] text-white hover:bg-[#A10F19] shadow-sm"
                             : "cursor-not-allowed border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 text-slate-400 dark:text-slate-500"
                         }`}
                       >
@@ -1189,14 +1373,14 @@ function RankingPanel({
   return (
     <aside
       id="pipeline-ranking-panel"
-      className="sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-[hsl(var(--border))]/40 dark:border-slate-800 bg-[hsl(var(--surface))] p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
+      className="sticky top-6 flex h-[720px] max-h-[85vh] flex-col rounded-2xl border border-border/40 dark:border-slate-800 bg-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[hsl(var(--border))]/40 dark:border-slate-800 pb-4">
+      <div className="flex items-start justify-between gap-3 border-b border-border/40 dark:border-slate-800 pb-4">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-wider text-[hsl(var(--primary))]">
             Ranking IA Marajó
           </p>
-          <h3 className="mt-1 text-sm font-bold text-[hsl(var(--text))] dark:text-slate-100 truncate" title={jobTitle}>{jobTitle}</h3>
+          <h3 className="mt-1 text-sm font-bold text-text dark:text-slate-100 truncate" title={jobTitle}>{jobTitle}</h3>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {onRefresh && (
@@ -1310,8 +1494,8 @@ function RankingCard({
       className={[
         "w-full rounded-xl border p-3.5 text-left transition-all hover:-translate-y-0.5",
         hasDealBreakerRejection
-          ? "border-[hsl(var(--danger-soft))]/60 dark:border-rose-900 bg-[hsl(var(--danger-soft))]/20 hover:border-rose-350 hover:shadow-sm"
-          : "border-[hsl(var(--border))]/40 dark:border-slate-800 bg-[hsl(var(--surface))] shadow-[0_1px_2px_rgba(0,0,0,0.01)] hover:border-slate-350 dark:hover:border-slate-700 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]",
+          ? "border-[hsl(var(--danger-soft))]/60 dark:border-rose-900 bg-danger-soft/20 hover:border-rose-350 hover:shadow-sm"
+          : "border-border/40 dark:border-slate-800 bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.01)] hover:border-slate-350 dark:hover:border-slate-700 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-3">

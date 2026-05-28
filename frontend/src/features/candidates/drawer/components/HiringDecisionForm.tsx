@@ -81,16 +81,16 @@ export function HiringDecisionForm({ saving, onSubmit, onCancel }: HiringDecisio
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-[hsl(var(--border))] bg-white p-4">
+    <div className="space-y-4 rounded-lg border border-border bg-white p-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Decisão
           </span>
           <select
             value={outcome}
             onChange={(event) => setOutcome(event.target.value as HiringDecisionOutcome | "")}
-            className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
           >
             <option value="">Selecione</option>
             {OUTCOMES.map((item) => (
@@ -102,13 +102,13 @@ export function HiringDecisionForm({ saving, onSubmit, onCancel }: HiringDecisio
         </label>
 
         <label className="block space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Motivo
           </span>
           <select
             value={reasonCode}
             onChange={(event) => setReasonCode(event.target.value as HiringDecisionReasonCode | "")}
-            className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
           >
             <option value="">Selecione</option>
             {REASONS.map((item) => (
@@ -121,23 +121,23 @@ export function HiringDecisionForm({ saving, onSubmit, onCancel }: HiringDecisio
       </div>
 
       <label className="block space-y-1 text-sm">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Observação
         </span>
         <textarea
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
           rows={4}
-          className="w-full resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+          className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm"
         />
       </label>
 
-      <label className="flex items-start gap-2 text-sm text-[hsl(var(--text))]">
+      <label className="flex items-start gap-2 text-sm text-text">
         <input
           type="checkbox"
           checked={confirmed}
           onChange={(event) => setConfirmed(event.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-[hsl(var(--border))]"
+          className="mt-0.5 h-4 w-4 rounded border-border"
         />
         Confirmo que esta decisão foi tomada manualmente por pessoa autorizada.
       </label>
@@ -162,7 +162,7 @@ export function HiringDecisionForm({ saving, onSubmit, onCancel }: HiringDecisio
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm font-medium text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/70 disabled:opacity-60"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface-muted/70 disabled:opacity-60"
         >
           Cancelar
         </button>

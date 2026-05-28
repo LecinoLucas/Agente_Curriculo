@@ -76,6 +76,23 @@ const mockSummary = {
   },
 };
 
+function buildDraftScorecard(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "sc-1",
+    candidate_id: "cand-1",
+    job_id: "job-1",
+    evaluator_id: "manager-1",
+    status: "draft",
+    final_recommendation: null,
+    overall_notes: null,
+    submitted_at: null,
+    created_at: "2026-05-15T10:00:00Z",
+    updated_at: "2026-05-15T10:00:00Z",
+    items: [],
+    ...overrides,
+  };
+}
+
 describe("ManagerReviewPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,17 +124,7 @@ describe("ManagerReviewPage", () => {
     mockGetCandidateSummary.mockResolvedValue(mockSummary);
     mockGetScorecard.mockResolvedValue({ scorecard: null, suggested_behavioral_questions: [] });
 
-    const draftScorecard = {
-      id: "sc-1",
-      candidate_id: "cand-1",
-      job_id: "job-1",
-      evaluator_id: "manager-1",
-      status: "draft",
-      final_recommendation: "yes",
-      overall_notes: null,
-      submitted_at: null,
-      items: [],
-    };
+    const draftScorecard = buildDraftScorecard();
     mockCreateScorecard.mockResolvedValue(draftScorecard);
     mockPatchScorecard.mockImplementation((_, body) =>
       Promise.resolve({ ...draftScorecard, ...body })
@@ -215,12 +222,13 @@ describe("ManagerReviewPage", () => {
     await user.click(await screen.findByRole("button", { name: /João Silva/i }));
     await screen.findByText("Avaliação do Gestor");
 
+    expect(screen.getByText("Critérios")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar rascunho/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /enviar avaliação/i })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Descreva sua avaliação detalhada do candidato...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /enviar scorecard/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/observações finais/i)).toBeInTheDocument();
   });
 
-  it("salva rascunho de scorecard criando novo quando não existe", async () => {
+  it("salva rascunho de scorecard estruturado criando novo quando não existe", async () => {
     const user = userEvent.setup();
     render(<ManagerReviewPage />);
 
@@ -228,32 +236,27 @@ describe("ManagerReviewPage", () => {
     await screen.findByText("Avaliação do Gestor");
 
     await user.type(
-      screen.getByPlaceholderText("Descreva sua avaliação detalhada do candidato..."),
+      screen.getByLabelText(/observações finais/i),
       "Candidato demonstra boas habilidades."
     );
     await user.click(screen.getByRole("button", { name: /salvar rascunho/i }));
 
     await waitFor(() => {
-      expect(mockCreateScorecard).toHaveBeenCalledWith("job-1", "cand-1", { items: [] });
-      expect(mockPatchScorecard).toHaveBeenCalledWith("sc-1", {
-        final_recommendation: "yes",
+      expect(mockCreateScorecard).toHaveBeenCalledWith("job-1", "cand-1", expect.objectContaining({
+        final_recommendation: null,
         overall_notes: "Candidato demonstra boas habilidades.",
-      });
+      }));
+      expect(mockCreateScorecard.mock.calls[0][2].items).toHaveLength(3);
+      expect(mockPatchScorecard).not.toHaveBeenCalled();
     });
   });
 
   it("salva rascunho sem criar novo quando scorecard já existe", async () => {
-    const existingDraft = {
+    const existingDraft = buildDraftScorecard({
       id: "sc-existing",
-      candidate_id: "cand-1",
-      job_id: "job-1",
-      evaluator_id: "manager-1",
-      status: "draft",
       final_recommendation: "strong_yes",
       overall_notes: "Nota anterior",
-      submitted_at: null,
-      items: [],
-    };
+    });
     mockGetScorecard.mockResolvedValue({ scorecard: existingDraft, suggested_behavioral_questions: [] });
     mockPatchScorecard.mockResolvedValue({ ...existingDraft, overall_notes: "Nota atualizada" });
 
@@ -265,7 +268,7 @@ describe("ManagerReviewPage", () => {
 
     // Existing notes should be pre-filled
     await waitFor(() => {
-      expect((screen.getByPlaceholderText("Descreva sua avaliação detalhada do candidato...") as HTMLTextAreaElement).value).toBe("Nota anterior");
+      expect((screen.getByLabelText(/observações finais/i) as HTMLTextAreaElement).value).toBe("Nota anterior");
     });
 
     await user.click(screen.getByRole("button", { name: /salvar rascunho/i }));
@@ -274,6 +277,7 @@ describe("ManagerReviewPage", () => {
       expect(mockCreateScorecard).not.toHaveBeenCalled();
       expect(mockPatchScorecard).toHaveBeenCalledWith("sc-existing", expect.objectContaining({
         final_recommendation: "strong_yes",
+        overall_notes: "Nota anterior",
       }));
     });
   });
@@ -285,7 +289,8 @@ describe("ManagerReviewPage", () => {
     await user.click(await screen.findByRole("button", { name: /João Silva/i }));
     await screen.findByText("Avaliação do Gestor");
 
-    await user.click(screen.getByRole("button", { name: /enviar avaliação/i }));
+    await user.selectOptions(screen.getByLabelText(/recomendação final/i), "yes");
+    await user.click(screen.getByRole("button", { name: /enviar scorecard/i }));
 
     await waitFor(() => {
       expect(mockSubmitScorecard).toHaveBeenCalledWith("sc-1");
@@ -293,22 +298,18 @@ describe("ManagerReviewPage", () => {
 
     expect(await screen.findByText("Avaliação enviada")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /salvar rascunho/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /enviar avaliação/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /enviar scorecard/i })).not.toBeInTheDocument();
   });
 
   it("exibe scorecard já submetido em modo leitura ao selecionar solicitação", async () => {
     mockGetScorecard.mockResolvedValue({
-      scorecard: {
+      scorecard: buildDraftScorecard({
         id: "sc-submitted",
-        candidate_id: "cand-1",
-        job_id: "job-1",
-        evaluator_id: "manager-1",
         status: "submitted",
         final_recommendation: "strong_yes",
         overall_notes: "Excelente candidato.",
         submitted_at: "2026-05-16T09:00:00Z",
-        items: [],
-      },
+      }),
       suggested_behavioral_questions: [],
     });
 
@@ -320,6 +321,25 @@ describe("ManagerReviewPage", () => {
     expect(await screen.findByText("Avaliação enviada")).toBeInTheDocument();
     expect(await screen.findByText("Excelente candidato.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /salvar rascunho/i })).not.toBeInTheDocument();
+  });
+
+  it("exibe perguntas sugeridas pela IA comportamental para apoiar o scorecard", async () => {
+    mockGetScorecard.mockResolvedValue({
+      scorecard: null,
+      suggested_behavioral_questions: [
+        "Conte uma situação em que precisou influenciar o time.",
+        "Como você lida com conflitos entre áreas?",
+      ],
+    });
+
+    const user = userEvent.setup();
+    render(<ManagerReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /João Silva/i }));
+    await user.click(await screen.findByRole("button", { name: /perguntas sugeridas pela ia comportamental/i }));
+
+    expect(await screen.findByText("1. Conte uma situação em que precisou influenciar o time.")).toBeInTheDocument();
+    expect(screen.getByText("2. Como você lida com conflitos entre áreas?")).toBeInTheDocument();
   });
 
   it("sem solicitações exibe estado vazio com mensagem correta", async () => {

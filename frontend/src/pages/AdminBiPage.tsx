@@ -165,14 +165,14 @@ function MetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <Card className="border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+    <Card className="border-border bg-surface">
       <CardContent className="flex items-start justify-between gap-4 p-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{title}</p>
-          <p className="text-2xl font-semibold text-[hsl(var(--text))]">{value}</p>
-          {hint ? <p className="text-xs text-[hsl(var(--text-muted))]">{hint}</p> : null}
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{title}</p>
+          <p className="text-2xl font-semibold text-text">{value}</p>
+          {hint ? <p className="text-xs text-text-muted">{hint}</p> : null}
         </div>
-        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] p-3 text-[hsl(var(--text))]">
+        <div className="rounded-2xl border border-border bg-surface-muted p-3 text-text">
           {icon}
         </div>
       </CardContent>
@@ -192,12 +192,12 @@ function SelectField({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-2 text-sm text-[hsl(var(--text))]">
+    <label className="flex flex-col gap-2 text-sm text-text">
       <span className="font-medium">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] outline-none ring-0 transition focus:border-[hsl(var(--primary))]"
+        className="h-10 rounded-xl border border-border bg-surface px-3 text-sm text-text outline-none ring-0 transition focus:border-[hsl(var(--primary))]"
       >
         {children}
       </select>
@@ -217,10 +217,10 @@ function AnalyticsTable({
   rows: React.ReactNode;
 }) {
   return (
-    <Card className="border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+    <Card className="border-border bg-surface">
       <div className="space-y-1 p-6 pb-4">
-        <h3 className="text-base font-semibold text-[hsl(var(--text))]">{title}</h3>
-        <p className="text-sm text-[hsl(var(--text-muted))]">{description}</p>
+        <h3 className="text-base font-semibold text-text">{title}</h3>
+        <p className="text-sm text-text-muted">{description}</p>
       </div>
       <Table>
         <TableHeader>
@@ -355,7 +355,7 @@ export function AdminBiPage() {
         subtitle="Acompanhe indicadores de vagas, candidatos, análises e eficiência do processo seletivo."
       />
 
-      <Card className="border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+      <Card className="border-border bg-surface">
         <CardContent className="flex flex-col gap-4 p-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <SelectField label="Período" value={period} onChange={(value) => setPeriod(value as PeriodKey)}>
@@ -384,7 +384,7 @@ export function AdminBiPage() {
               ))}
             </SelectField>
 
-            <label className="flex flex-col gap-2 text-sm text-[hsl(var(--text))]">
+            <label className="flex flex-col gap-2 text-sm text-text">
               <span className="font-medium">Provider IA</span>
               <Input
                 value={provider}
@@ -401,7 +401,7 @@ export function AdminBiPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
             <Badge variant="outline">Admin</Badge>
             <span>Dados agregados reais do sistema.</span>
             <span>Nenhuma API key ou prompt completo é exibido.</span>
@@ -410,7 +410,7 @@ export function AdminBiPage() {
       </Card>
 
       {error ? (
-        <Card className="border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+        <Card className="border-border bg-surface">
           <CardContent className="p-6">
             <EmptyState
               icon="⚠️"
@@ -434,7 +434,7 @@ export function AdminBiPage() {
       </div>
 
       {!loading && !data ? (
-        <Card className="border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+        <Card className="border-border bg-surface">
           <CardContent className="p-6">
             <EmptyState
               icon="◌"
@@ -514,7 +514,7 @@ export function AdminBiPage() {
           empty={!loading && aiUsageChartData.length === 0}
           emptyMessage="Sem dados de uso de IA ainda."
         >
-          <div className="mb-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/60 p-3 text-sm text-[hsl(var(--text-muted))]">
+          <div className="mb-4 rounded-2xl border border-border bg-surface-muted/60 p-3 text-sm text-text-muted">
             O consumo exibido é calculado a partir das chamadas registradas pelo sistema. Para billing oficial, consulte Google AI Studio ou Google Cloud Billing.
           </div>
           <div className="h-72">
@@ -551,14 +551,14 @@ export function AdminBiPage() {
             data?.top_expensive_analyses.length ? (
               data.top_expensive_analyses.map((item) => (
                 <TableRow key={item.analysis_id}>
-                  <TableCell className="font-medium text-[hsl(var(--text))]">{item.candidate_name}</TableCell>
+                  <TableCell className="font-medium text-text">{item.candidate_name}</TableCell>
                   <TableCell>{formatNumber(item.tokens)}</TableCell>
                   <TableCell>{formatCurrency(item.estimated_cost_usd)}</TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-[hsl(var(--text-muted))]">
+                <TableCell colSpan={3} className="text-center text-text-muted">
                   Nenhuma análise cara registrada no período.
                 </TableCell>
               </TableRow>
@@ -574,12 +574,12 @@ export function AdminBiPage() {
             data?.latest_analysis_failures.length ? (
               data.latest_analysis_failures.map((item) => (
                 <TableRow key={item.analysis_id}>
-                  <TableCell className="font-medium text-[hsl(var(--text))]">{item.candidate_name}</TableCell>
+                  <TableCell className="font-medium text-text">{item.candidate_name}</TableCell>
                   <TableCell>
                     <div className="space-y-1">
                       <p>{item.job_title}</p>
                       {item.failure_reason ? (
-                        <p className="text-xs text-[hsl(var(--text-muted))]">{item.failure_reason}</p>
+                        <p className="text-xs text-text-muted">{item.failure_reason}</p>
                       ) : null}
                     </div>
                   </TableCell>
@@ -588,7 +588,7 @@ export function AdminBiPage() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-[hsl(var(--text-muted))]">
+                <TableCell colSpan={3} className="text-center text-text-muted">
                   Nenhuma falha recente no período.
                 </TableCell>
               </TableRow>
@@ -604,14 +604,14 @@ export function AdminBiPage() {
             data?.top_jobs_by_candidates.length ? (
               data.top_jobs_by_candidates.map((item) => (
                 <TableRow key={item.job_id}>
-                  <TableCell className="font-medium text-[hsl(var(--text))]">{item.title}</TableCell>
+                  <TableCell className="font-medium text-text">{item.title}</TableCell>
                   <TableCell>{formatNumber(item.total_candidates)}</TableCell>
                   <TableCell>{getJobStatusLabel(item.status)}</TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-[hsl(var(--text-muted))]">
+                <TableCell colSpan={3} className="text-center text-text-muted">
                   Nenhuma vaga com candidatos no período.
                 </TableCell>
               </TableRow>

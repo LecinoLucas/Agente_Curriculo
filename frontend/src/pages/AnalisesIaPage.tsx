@@ -55,7 +55,7 @@ export function AnalisesIaPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-5">
+      <div className="border-b border-border bg-[hsl(var(--bg))] px-6 py-5">
         <PageHeader
           title="Análises IA"
           subtitle={
@@ -103,25 +103,25 @@ export function AnalisesIaPage() {
             onClearFilters={clearFilters}
           />
 
-          <div className="grid gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-6 py-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 border-b border-border bg-[hsl(var(--bg))] px-6 py-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Pendentes", value: summary.pending, icon: Clock3, tone: "text-[hsl(var(--text-muted))]" },
+              { label: "Pendentes", value: summary.pending, icon: Clock3, tone: "text-text-muted" },
               { label: "Processando", value: summary.processing, icon: Activity, tone: "text-[hsl(var(--primary))]" },
-              { label: "Concluídas", value: summary.completed, icon: CheckCircle2, tone: "text-[hsl(var(--success))]" },
-              { label: "Falhas / retry", value: summary.issues, icon: AlertTriangle, tone: "text-[hsl(var(--warning))]" },
+              { label: "Concluídas", value: summary.completed, icon: CheckCircle2, tone: "text-success" },
+              { label: "Falhas / retry", value: summary.issues, icon: AlertTriangle, tone: "text-warning" },
             ].map(({ label, value, icon: Icon, tone }) => (
               <div
                 key={label}
-                className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 py-3"
+                className="rounded-lg border border-border bg-surface px-4 py-3"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
                     {label}
                   </p>
                   <Icon className={`h-4 w-4 ${tone}`} />
                 </div>
-                <p className="mt-2 text-2xl font-semibold text-[hsl(var(--text))]">{value}</p>
-                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                <p className="mt-2 text-2xl font-semibold text-text">{value}</p>
+                <p className="mt-1 text-xs text-text-muted">
                   {typeFilter === "all"
                     ? "Todos os tipos"
                     : typeFilter === "behavioral_ai"
@@ -141,7 +141,7 @@ export function AnalisesIaPage() {
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
-            <p className="text-sm text-[hsl(var(--danger))]">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
             <button
               type="button"
               onClick={fetchData}

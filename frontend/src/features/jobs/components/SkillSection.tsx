@@ -237,11 +237,11 @@ function SelectedSkillRow({
   }
 
   return (
-    <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 p-4">
+    <div className="rounded-2xl border border-border bg-surface-muted/40 p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.skill_name}</p>
-          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+          <p className="text-sm font-semibold text-text">{skill.skill_name}</p>
+          <p className="mt-1 text-xs text-text-muted">
             {skill.priority_level === "priority"
               ? "Essencial"
               : skill.priority_level === "eliminatory"
@@ -251,7 +251,7 @@ function SelectedSkillRow({
         </div>
 
         <div className="grid gap-3 md:grid-cols-3 lg:w-[520px]">
-          <label className="flex flex-col gap-1 text-xs font-medium text-[hsl(var(--text-muted))]">
+          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
             Peso
             <input
               type="number"
@@ -272,7 +272,7 @@ function SelectedSkillRow({
             />
           </label>
 
-          <label className="flex flex-col gap-1 text-xs font-medium text-[hsl(var(--text-muted))]">
+          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
             Nível mínimo
             <select
               value={skill.minimum_level ?? ""}
@@ -293,7 +293,7 @@ function SelectedSkillRow({
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-xs font-medium text-[hsl(var(--text-muted))]">
+          <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
             Anos mínimos
             <input
               type="number"
@@ -348,7 +348,7 @@ function SelectedSkillRow({
           Remover
         </Button>
         {hasUnsavedDetails ? (
-          <span className="text-xs text-[hsl(var(--text-muted))]">
+          <span className="text-xs text-text-muted">
             Pressione Enter ou saia do campo para salvar os ajustes.
           </span>
         ) : null}
@@ -403,15 +403,15 @@ export function SkillSection({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6">
+      <section className="rounded-3xl border border-border bg-surface p-6">
         <div className="flex flex-col gap-2">
-          <h3 className="text-lg font-semibold text-[hsl(var(--text))]">{title}</h3>
-          <p className="text-sm text-[hsl(var(--text-muted))]">{description}</p>
+          <h3 className="text-lg font-semibold text-text">{title}</h3>
+          <p className="text-sm text-text-muted">{description}</p>
           <div className="inline-flex w-fit rounded-full border border-[hsl(var(--primary))]/20 bg-[hsl(var(--accent-soft))] px-3 py-1 text-xs font-medium text-[hsl(var(--primary))]">
             {emphasis}
           </div>
           {warning ? (
-            <div className="mt-2 rounded-2xl border border-[hsl(var(--warning))]/25 bg-[hsl(var(--warning))]/10 px-3 py-2 text-xs text-[hsl(var(--warning))]">
+            <div className="mt-2 rounded-2xl border border-[hsl(var(--warning))]/25 bg-[hsl(var(--warning))]/10 px-3 py-2 text-xs text-warning">
               {warning}
             </div>
           ) : null}
@@ -420,7 +420,7 @@ export function SkillSection({
         <div className="mt-5">
           {/* Search + Nova skill */}
           <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-2 text-sm font-medium text-[hsl(var(--text))]">
+            <label className="flex flex-1 flex-col gap-2 text-sm font-medium text-text">
               Buscar skill
               <input
                 type="text"
@@ -458,7 +458,7 @@ export function SkillSection({
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   uiCategory === cat
                     ? "bg-[hsl(var(--primary))] text-white"
-                    : "border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] hover:border-[hsl(var(--primary))]/30 hover:text-[hsl(var(--primary))]"
+                    : "border border-border bg-surface-muted text-text-muted hover:border-[hsl(var(--primary))]/30 hover:text-[hsl(var(--primary))]"
                 }`}
               >
                 {cat}
@@ -498,13 +498,13 @@ export function SkillSection({
             {sortedFilteredSkills.slice(0, 18).map((skill) => (
               <div
                 key={skill.id}
-                className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 p-4"
+                className="rounded-2xl border border-border bg-surface-muted/50 p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{skill.name}</p>
+                    <p className="text-sm font-semibold text-text">{skill.name}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs text-[hsl(var(--text-muted))]">
+                      <span className="text-xs text-text-muted">
                         {skill.category || "Sem categoria"}
                       </span>
                       {skill.catalog_type && skill.catalog_type !== "skill" && CATALOG_TYPE_BADGE[skill.catalog_type] && (
@@ -534,15 +534,15 @@ export function SkillSection({
               </div>
             ))}
             {sortedFilteredSkills.length === 0 && !search.trim() ? (
-              <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] px-4 py-6 text-sm text-[hsl(var(--text-muted))] md:col-span-2 xl:col-span-3">
+              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-text-muted md:col-span-2 xl:col-span-3">
                 Nenhuma skill disponível para este filtro.
               </div>
             ) : null}
             {search.trim() && sortedFilteredSkills.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-6 text-center md:col-span-2 xl:col-span-3 flex flex-col items-center gap-3">
-                <div className="text-sm text-[hsl(var(--text-muted))]">
+              <div className="rounded-2xl border border-dashed border-border bg-surface-muted/30 p-6 text-center md:col-span-2 xl:col-span-3 flex flex-col items-center gap-3">
+                <div className="text-sm text-text-muted">
                   Nenhuma skill encontrada para{" "}
-                  <span className="font-semibold text-[hsl(var(--text))]">
+                  <span className="font-semibold text-text">
                     "{search.trim()}"
                   </span>
                 </div>
@@ -561,11 +561,11 @@ export function SkillSection({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6">
+      <section className="rounded-3xl border border-border bg-surface p-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h4 className="text-base font-semibold text-[hsl(var(--text))]">Skills selecionadas</h4>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            <h4 className="text-base font-semibold text-text">Skills selecionadas</h4>
+            <p className="mt-1 text-sm text-text-muted">
               {linkedSkills.length} item(ns) nesta etapa.
             </p>
           </div>
@@ -584,7 +584,7 @@ export function SkillSection({
           ))}
 
           {linkedSkills.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] px-4 py-8 text-sm text-[hsl(var(--text-muted))]">
+            <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-sm text-text-muted">
               Nenhuma skill adicionada nesta etapa.
             </div>
           ) : null}

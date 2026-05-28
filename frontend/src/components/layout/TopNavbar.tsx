@@ -39,14 +39,14 @@ export function TopNavbar({
   onPipelineClick,
 }: TopNavbarProps) {
   return (
-    <header className="sticky top-0 z-40 flex h-14 w-full items-center gap-2 border-b border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))]/95 px-3 shadow-sm backdrop-blur-md sm:px-4">
+    <header className="sticky top-0 z-40 flex h-14 w-full items-center gap-2 border-b border-border/40 bg-surface/95 px-3 shadow-sm backdrop-blur-md sm:px-4">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
           aria-label={mobileMenuOpen ? "Fechar menu de navegação" : "Abrir menu de navegação"}
           aria-expanded={mobileMenuOpen}
           onClick={onToggleMobileMenu}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--text))] outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] xl:hidden"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-text outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] xl:hidden"
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
@@ -61,10 +61,10 @@ export function TopNavbar({
             RA
           </span>
           <span className="hidden min-w-0 sm:block lg:w-[5.4rem] min-[1360px]:w-[6.25rem]">
-            <span className="block truncate font-heading text-[13px] font-extrabold leading-tight tracking-tight text-[hsl(var(--text))]">
+            <span className="block truncate font-heading text-[13px] font-extrabold leading-tight tracking-tight text-text">
               Marajo RH
             </span>
-            <span className="block truncate text-[10px] leading-tight text-[hsl(var(--text-muted))]">
+            <span className="block truncate text-[10px] leading-tight text-text-muted">
               ATS & Recrutamento IA
             </span>
           </span>
@@ -101,7 +101,7 @@ export function TopNavbar({
                     "focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]",
                     active
                       ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-                      : "text-[hsl(var(--text-muted))] hover:bg-white/5 hover:text-[hsl(var(--text))]",
+                      : "text-text-muted hover:bg-white/5 hover:text-text",
                   )}
                 >
                   {renderIcon(item.to)}
@@ -139,7 +139,7 @@ export function TopNavbar({
           onClick={onToggleTheme}
           aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
           title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
-          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--text-muted))] outline-none transition-colors hover:bg-white/10 hover:text-[hsl(var(--text))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-text-muted outline-none transition-colors hover:bg-white/10 hover:text-text focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
         >
           {theme === "light" ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
         </button>
@@ -149,7 +149,7 @@ export function TopNavbar({
           onClick={() => onNavigate("/perfil")}
           aria-label="Abrir perfil"
           title="Perfil"
-          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--text-muted))] outline-none transition-colors hover:bg-white/10 hover:text-[hsl(var(--text))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-text-muted outline-none transition-colors hover:bg-white/10 hover:text-text focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
         >
           <UserRound className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -158,7 +158,7 @@ export function TopNavbar({
           onClick={onLogout}
           aria-label="Sair"
           title="Sair"
-          className="hidden h-9 w-9 items-center justify-center rounded-lg text-[hsl(var(--text-muted))] outline-none transition-colors hover:bg-[hsl(var(--danger))] hover:text-white focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-lg text-text-muted outline-none transition-colors hover:bg-[hsl(var(--danger))] hover:text-white focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
         </button>

@@ -31,7 +31,6 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     hasScorecard,
     hasHiringDecision,
     hasPreAdmission,
-    hasAdmissionPackage,
     hasCollaboration,
     userRole,
     showAll,
@@ -48,12 +47,14 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
   // Resume is always visible
   visible.add("overview");
 
-  // If showing all, return all tabs
+  const canShowPreAdmission = canSeePreAdmission && hasPreAdmission;
+
+  // If showing all, return all tabs allowed by the current data contract.
   if (showAll) {
     const allTabs: TabKey[] = ["overview", "score", "documents", "interview", "assessment", "communications", "collaboration", "notes", "pre_admission"];
     return allTabs.filter((tab) => {
       if (tab === "notes" && !canSeeInternalNotes) return false;
-      if (tab === "pre_admission" && !canSeePreAdmission) return false;
+      if (tab === "pre_admission" && !canShowPreAdmission) return false;
       return true;
     });
   }
@@ -104,17 +105,8 @@ export function getVisibleCandidateTabs(input: GetVisibleCandidateTabsInput): Ta
     pipelineStage === "protheus" ||
     pipelineStage === "admitted"
   ) {
-    // Pre-admission/Contratado stage
-    if (
-      canSeePreAdmission &&
-      (hasHiringDecision ||
-        hasPreAdmission ||
-        hasAdmissionPackage ||
-        pipelineStage === "hired" ||
-        pipelineStage === "pre_admission" ||
-        pipelineStage === "protheus" ||
-        pipelineStage === "admitted")
-    ) {
+    // Pre-admission is only a summary entry in the candidate profile.
+    if (canShowPreAdmission) {
       visible.add("pre_admission");
     }
 

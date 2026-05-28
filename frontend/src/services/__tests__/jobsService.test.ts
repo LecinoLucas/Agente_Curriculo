@@ -73,4 +73,27 @@ describe("getJobPipeline", () => {
 
     expect(board.columns[0].candidates[0].ai_status).toBe("waiting_extraction");
   });
+
+  it("serializa filtros de data do vínculo da pipeline", async () => {
+    httpRequestMock.mockResolvedValue({
+      job_id: "job-1",
+      columns: [],
+    });
+
+    await getJobPipeline("job-1", {
+      entered_from: "2026-05-01",
+      entered_to: "2026-05-31",
+      updated_from: "2026-06-01",
+      updated_to: "2026-06-30",
+    });
+
+    const [requestUrl] = httpRequestMock.mock.calls[0];
+    const url = new URL(requestUrl, "http://localhost");
+
+    expect(url.pathname).toBe("/api/v1/pipeline/job-1");
+    expect(url.searchParams.get("entered_from")).toMatch(/^2026-05-01T00:00:00\.000[+-]\d{2}:\d{2}$/);
+    expect(url.searchParams.get("entered_to")).toMatch(/^2026-05-31T23:59:59\.999[+-]\d{2}:\d{2}$/);
+    expect(url.searchParams.get("updated_from")).toMatch(/^2026-06-01T00:00:00\.000[+-]\d{2}:\d{2}$/);
+    expect(url.searchParams.get("updated_to")).toMatch(/^2026-06-30T23:59:59\.999[+-]\d{2}:\d{2}$/);
+  });
 });

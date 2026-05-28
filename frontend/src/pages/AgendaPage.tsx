@@ -98,30 +98,30 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
       className={cn(
         "group flex items-center gap-4 rounded-xl px-3 py-3 transition relative",
         isCancelled
-          ? "bg-[hsl(var(--surface-muted))]/20 opacity-60"
-          : "hover:bg-[hsl(var(--surface-muted))]/30"
+          ? "bg-surface-muted/20 opacity-60"
+          : "hover:bg-surface-muted/30"
       )}
     >
       {/* Time */}
       <div className="w-12 shrink-0 text-right">
-        <p className={cn("text-sm font-bold", isCancelled ? "text-[hsl(var(--text-muted))]" : "text-[hsl(var(--text))]")}>{time}</p>
-        <p className="text-[10px] text-[hsl(var(--text-muted))]">{durationMinutes}m</p>
+        <p className={cn("text-sm font-bold", isCancelled ? "text-text-muted" : "text-text")}>{time}</p>
+        <p className="text-[10px] text-text-muted">{durationMinutes}m</p>
       </div>
 
       {/* Divider dot */}
       <div className={cn("h-full w-px", isCancelled ? "bg-[hsl(var(--border))]/20" : "bg-[hsl(var(--border))]/40")} />
 
       {/* Avatar */}
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--surface-muted))]/80 text-[11px] font-bold text-[hsl(var(--text-muted))]">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-muted/80 text-[11px] font-bold text-text-muted">
         {initials}
       </div>
 
       {/* Details */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[hsl(var(--text))]">
+        <p className="truncate text-sm font-semibold text-text">
           {iv.candidate_name}
         </p>
-        <p className="truncate text-xs text-[hsl(var(--text-muted))]">
+        <p className="truncate text-xs text-text-muted">
           {iv.job_title || "-"} · {interviewTypeLabel(iv.interview_type)} · Scorecard: {scorecardStatusLabel(iv)}
         </p>
       </div>
@@ -129,8 +129,8 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
       {/* Platform — subtle */}
       {iv.meeting_url && (
         <div className="hidden items-center gap-1 sm:flex">
-          <Video className="h-3 w-3 text-[hsl(var(--text-muted))]" />
-          <span className="text-xs text-[hsl(var(--text-muted))]">Online</span>
+          <Video className="h-3 w-3 text-text-muted" />
+          <span className="text-xs text-text-muted">Online</span>
         </div>
       )}
 
@@ -140,7 +140,7 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
           <Calendar className={cn("h-3 w-3", 
             iv.calendar_sync_status === "synced" ? "text-emerald-600" :
             iv.calendar_sync_status === "failed" ? "text-rose-600" :
-            "text-[hsl(var(--text-muted))]"
+            "text-text-muted"
           )} />
           {iv.calendar_sync_status === "synced" && iv.external_calendar_html_link ? (
             <a
@@ -155,7 +155,7 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
             <span className={cn("text-xs", 
               iv.calendar_sync_status === "synced" ? "text-emerald-600" :
               iv.calendar_sync_status === "failed" ? "text-rose-600" :
-              "text-[hsl(var(--text-muted))]"
+              "text-text-muted"
             )}>
               {iv.calendar_sync_status === "synced" ? "Sincronizado" :
                iv.calendar_sync_status === "failed" ? "Falha" :
@@ -177,14 +177,14 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
             data-testid="agenda-actions-button"
             type="button"
             onClick={() => setMenuOpen(!menuOpen)}
-            className="h-8 w-8 rounded-lg text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]/50 hover:text-[hsl(var(--text))] transition"
+            className="h-8 w-8 rounded-lg text-text-muted hover:bg-surface-muted/50 hover:text-text transition"
             aria-label="Menu de ações"
           >
             <MoreVertical className="h-4 w-4" />
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 mt-1 w-56 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-lg z-10">
+            <div className="absolute right-0 mt-1 w-56 rounded-lg border border-border bg-surface shadow-lg z-10">
               {onEdit && (
                 <button
                   data-testid="agenda-edit-action"
@@ -193,7 +193,7 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
                     onEdit(iv.id);
                     setMenuOpen(false);
                   }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition first:rounded-t-lg"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition first:rounded-t-lg"
                 >
                   <Edit2 className="h-4 w-4" />
                   {isCancelled || iv.status === "no_show" ? "Reagendar" : "Reagendar/editar"}
@@ -207,7 +207,7 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
                     onComplete(iv);
                     setMenuOpen(false);
                   }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition"
                 >
                   <CheckCircle2 className="h-4 w-4" />
                   Marcar como concluída
@@ -221,7 +221,7 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
                     onNoShow(iv);
                     setMenuOpen(false);
                   }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition"
                 >
                   <UserX className="h-4 w-4" />
                   Não compareceu
@@ -235,7 +235,7 @@ function InterviewRow({ iv, onEdit, onCancel, onComplete, onNoShow, onScorecard 
                     onScorecard(iv);
                     setMenuOpen(false);
                   }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-[hsl(var(--surface-muted))] flex items-center gap-2 text-[hsl(var(--text))] transition"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-surface-muted flex items-center gap-2 text-text transition"
                 >
                   <ClipboardCheck className="h-4 w-4" />
                   {scorecardActionLabel(iv)}
@@ -451,8 +451,8 @@ export function AgendaPage() {
         />
         <div className="flex h-64 items-center justify-center">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--text-muted))]" />
-            <p className="text-sm text-[hsl(var(--text-muted))]">Carregando agenda...</p>
+            <Loader2 className="h-8 w-8 animate-spin text-text-muted" />
+            <p className="text-sm text-text-muted">Carregando agenda...</p>
           </div>
         </div>
       </div>
@@ -495,14 +495,14 @@ export function AgendaPage() {
       </div>
 
       {/* Google Calendar Connection Banner */}
-      <div className="flex flex-col gap-3 rounded-xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]">
             <Calendar className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Integração com Google Agenda</p>
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-sm font-semibold text-text">Integração com Google Agenda</p>
+            <p className="text-xs text-text-muted">
               {googleConnected
                 ? `Conta conectada${googleAccountEmail ? `: ${googleAccountEmail}` : ""}.`
                 : "Conecte sua conta para sincronizar as entrevistas automaticamente."}
@@ -513,7 +513,7 @@ export function AgendaPage() {
           type="button"
           onClick={() => void handleConnectGoogle()}
           disabled={connectingGoogle || loadingGoogleConnection}
-          className="ui-btn-secondary h-10 rounded-lg border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-4 text-sm font-medium text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))] disabled:opacity-60"
+          className="ui-btn-secondary h-10 rounded-lg border-border bg-surface px-4 text-sm font-medium text-text hover:bg-surface-muted disabled:opacity-60"
         >
           {connectingGoogle
             ? "Conectando..."
@@ -535,19 +535,19 @@ export function AgendaPage() {
         ].map((k) => (
           <div
             key={k.label}
-            className="flex items-center gap-3 rounded-xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] px-4 py-3"
+            className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface px-4 py-3"
           >
-            <k.icon className="h-4 w-4 shrink-0 text-[hsl(var(--text-muted))]" />
+            <k.icon className="h-4 w-4 shrink-0 text-text-muted" />
             <div>
-              <p className="text-lg font-extrabold text-[hsl(var(--text))]">{k.value}</p>
-              <p className="text-[11px] text-[hsl(var(--text-muted))]">{k.label}</p>
+              <p className="text-lg font-extrabold text-text">{k.value}</p>
+              <p className="text-[11px] text-text-muted">{k.label}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div className="space-y-3 rounded-xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-4">
+      <div className="space-y-3 rounded-xl border border-border/60 bg-surface p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Search */}
           <div className="relative flex-1 flex items-center">
@@ -556,10 +556,10 @@ export function AgendaPage() {
               placeholder="Buscar candidato, vaga, avaliador..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full rounded-lg border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] pl-3 pr-9 py-2 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+              className="w-full rounded-lg border border-border/40 bg-surface-muted pl-3 pr-9 py-2 text-sm text-text placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
             />
             {loading && (
-              <Loader2 className="absolute right-3 h-4 w-4 animate-spin text-[hsl(var(--text-muted))]" />
+              <Loader2 className="absolute right-3 h-4 w-4 animate-spin text-text-muted" />
             )}
           </div>
 
@@ -567,7 +567,7 @@ export function AgendaPage() {
           <select
             value={filterPeriod}
             onChange={(e) => setFilterPeriod(e.target.value as any)}
-            className="rounded-lg border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+            className="rounded-lg border border-border/40 bg-surface-muted px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
           >
             <option value="today">Hoje</option>
             <option value="week">Esta semana</option>
@@ -579,7 +579,7 @@ export function AgendaPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="rounded-lg border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface-muted))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+            className="rounded-lg border border-border/40 bg-surface-muted px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
           >
             <option value="all">Todos os status</option>
             <option value="scheduled">Agendada</option>
@@ -593,7 +593,7 @@ export function AgendaPage() {
       </div>
 
       {/* Week strip */}
-      <div className="flex gap-1 overflow-x-auto rounded-xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-2">
+      <div className="flex gap-1 overflow-x-auto rounded-xl border border-border/60 bg-surface p-2">
         {days.map((day) => {
           const ts = dayStart(day).getTime();
           const isToday = ts === todayTs;
@@ -610,7 +610,7 @@ export function AgendaPage() {
                   ? "bg-[hsl(var(--primary))] text-white"
                   : isToday
                   ? "border border-[hsl(var(--primary))]/30 text-[hsl(var(--primary))]"
-                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]/40"
+                  : "text-text-muted hover:bg-surface-muted/40"
               )}
             >
               <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
@@ -637,16 +637,16 @@ export function AgendaPage() {
       </div>
 
       {/* Day detail */}
-      <div className="rounded-2xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-5">
+      <div className="rounded-2xl border border-border/60 bg-surface p-5">
         <div className="mb-4">
-          <h2 className="text-sm font-bold text-[hsl(var(--text))]">
+          <h2 className="text-sm font-bold text-text">
             {selected.toLocaleDateString("pt-BR", {
               weekday: "long",
               day: "numeric",
               month: "long",
             })}
           </h2>
-          <p className="text-xs text-[hsl(var(--text-muted))]">
+          <p className="text-xs text-text-muted">
             {todayIvs.length === 0
               ? "Sem entrevistas neste dia"
               : `${todayIvs.length} entrevista${todayIvs.length > 1 ? "s" : ""}`}
@@ -655,8 +655,8 @@ export function AgendaPage() {
 
         {todayIvs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Calendar className="mb-3 h-8 w-8 text-[hsl(var(--text-muted))]/50" />
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <Calendar className="mb-3 h-8 w-8 text-text-muted/50" />
+            <p className="text-sm text-text-muted">
               Nenhuma entrevista agendada.
             </p>
           </div>
@@ -678,14 +678,14 @@ export function AgendaPage() {
       </div>
 
       {/* Week list */}
-      <div className="rounded-2xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-5">
-        <h3 className="mb-3 text-sm font-bold text-[hsl(var(--text))]">
+      <div className="rounded-2xl border border-border/60 bg-surface p-5">
+        <h3 className="mb-3 text-sm font-bold text-text">
           Semana completa
         </h3>
         {weekIvs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <Calendar className="mb-2 h-6 w-6 text-[hsl(var(--text-muted))]/50" />
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <Calendar className="mb-2 h-6 w-6 text-text-muted/50" />
+            <p className="text-xs text-text-muted">
               Nenhuma entrevista neste período.
             </p>
           </div>
@@ -696,7 +696,7 @@ export function AgendaPage() {
               if (ivs.length === 0) return null;
               return (
                 <div key={day.toISOString()} className="py-3 first:pt-0 last:pb-0">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     {day.toLocaleDateString("pt-BR", {
                       weekday: "long",
                       day: "numeric",

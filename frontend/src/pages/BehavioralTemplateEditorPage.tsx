@@ -439,7 +439,7 @@ export function BehavioralTemplateEditorPage() {
       <div className="flex h-screen items-center justify-center bg-[hsl(var(--bg))]">
         <div className="text-center space-y-2">
           <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--primary))] mx-auto" />
-          <p className="text-[hsl(var(--text-muted))]">Carregando workspace do editor…</p>
+          <p className="text-text-muted">Carregando workspace do editor…</p>
         </div>
       </div>
     );
@@ -447,7 +447,7 @@ export function BehavioralTemplateEditorPage() {
 
   if (!template) {
     return (
-      <div className="p-8 text-center bg-[hsl(var(--bg))] text-[hsl(var(--text-muted))]">
+      <div className="p-8 text-center bg-[hsl(var(--bg))] text-text-muted">
         Template não encontrado.
       </div>
     );
@@ -457,18 +457,18 @@ export function BehavioralTemplateEditorPage() {
   return (
     <div className="flex flex-col min-h-screen bg-[hsl(var(--bg))]">
       {/* ── TOP BAR ── */}
-      <header className="border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-6 py-4 shadow-sm">
+      <header className="border-b border-border bg-surface px-6 py-4 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <button
               onClick={() => navigate("/admin/behavioral-templates")}
-              className="flex items-center gap-1.5 text-xs text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] transition-colors"
+              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Voltar para avaliações
             </button>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-[hsl(var(--text))]">{template.name}</h1>
-              <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2.5 py-0.5 text-xs font-semibold text-[hsl(var(--text-muted))] border">
+              <h1 className="text-xl font-bold text-text">{template.name}</h1>
+              <span className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-text-muted border">
                 v{template.version}
               </span>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
@@ -477,7 +477,7 @@ export function BehavioralTemplateEditorPage() {
                 {template.status === "active" ? "Ativo" : "Rascunho"}
               </span>
             </div>
-            <p className="text-xs text-[hsl(var(--text-muted))]">
+            <p className="text-xs text-text-muted">
               Categoria: <span className="font-semibold">{parsedDesc.category}</span> | Duração: <span className="font-semibold">{parsedDesc.duration} min</span>
             </p>
           </div>
@@ -520,9 +520,9 @@ export function BehavioralTemplateEditorPage() {
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
         
         {/* COLUNA A: NAVEGAÇÃO LATERAL (3/12 cols) */}
-        <section className="lg:col-span-3 border-r border-[hsl(var(--border))] bg-[hsl(var(--surface))] flex flex-col">
-          <div className="p-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">Competências</span>
+        <section className="lg:col-span-3 border-r border-border bg-surface flex flex-col">
+          <div className="p-4 border-b border-border bg-surface-muted/30 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Competências</span>
             <Button size="sm" onClick={handleAddCompetency} className="h-7 px-2 flex items-center gap-1">
               <Plus className="h-3 w-3" /> Add
             </Button>
@@ -537,7 +537,7 @@ export function BehavioralTemplateEditorPage() {
               className={`w-full text-left px-3 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
                 selectedCompId === null
                   ? "bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]"
-                  : "text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]/60"
+                  : "text-text-muted hover:bg-surface-muted/60"
               }`}
             >
               <Settings2 className="h-4 w-4" /> Configurações Gerais
@@ -547,7 +547,7 @@ export function BehavioralTemplateEditorPage() {
               <div
                 key={c.id}
                 className={`group relative rounded-xl transition-all ${
-                  selectedCompId === c.id ? "bg-[hsl(var(--surface-muted))]" : "hover:bg-[hsl(var(--surface-muted))]/40"
+                  selectedCompId === c.id ? "bg-surface-muted" : "hover:bg-surface-muted/40"
                 }`}
               >
                 <button
@@ -558,14 +558,14 @@ export function BehavioralTemplateEditorPage() {
                   className="w-full text-left px-3 py-2.5 text-sm"
                 >
                   <div className="flex items-center justify-between">
-                    <span className={`font-semibold truncate pr-4 ${selectedCompId === c.id ? "text-[hsl(var(--text))]" : "text-[hsl(var(--text-muted))]"}`}>
+                    <span className={`font-semibold truncate pr-4 ${selectedCompId === c.id ? "text-text" : "text-text-muted"}`}>
                       {c.name}
                     </span>
                     <span className="text-[10px] bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] font-bold rounded-full px-1.5 py-0.5 shrink-0">
                       p{c.weight}%
                     </span>
                   </div>
-                  <p className="text-[10px] text-[hsl(var(--text-muted))] mt-0.5">
+                  <p className="text-[10px] text-text-muted mt-0.5">
                     {c.questions?.length ?? 0} {c.questions?.length === 1 ? "pergunta" : "perguntas"}
                   </p>
                 </button>
@@ -575,18 +575,18 @@ export function BehavioralTemplateEditorPage() {
         </section>
 
         {/* COLUNA B: CONTEÚDO CENTRAL - BUILDER (5/12 cols) */}
-        <section className="lg:col-span-5 border-r border-[hsl(var(--border))] bg-[hsl(var(--bg))] flex flex-col">
+        <section className="lg:col-span-5 border-r border-border bg-[hsl(var(--bg))] flex flex-col">
           {selectedCompId === null ? (
             /* CONFIGURAÇÕES GERAIS DO TEMPLATE */
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="border-b pb-4">
-                <h2 className="text-base font-bold text-[hsl(var(--text))]">Informações Gerais</h2>
-                <p className="text-xs text-[hsl(var(--text-muted))]">Metadados e preferências operacionais do template</p>
+                <h2 className="text-base font-bold text-text">Informações Gerais</h2>
+                <p className="text-xs text-text-muted">Metadados e preferências operacionais do template</p>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-[hsl(var(--text))] mb-1">Nome do Template *</label>
+                  <label className="block text-sm font-semibold text-text mb-1">Nome do Template *</label>
                   <input
                     type="text"
                     defaultValue={template.name}
@@ -597,7 +597,7 @@ export function BehavioralTemplateEditorPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-[hsl(var(--text))] mb-1">Descrição Comercial *</label>
+                  <label className="block text-sm font-semibold text-text mb-1">Descrição Comercial *</label>
                   <textarea
                     defaultValue={parsedDesc.description}
                     onBlur={(e) => void handleSaveGeneral(template.name, { description: e.target.value })}
@@ -608,7 +608,7 @@ export function BehavioralTemplateEditorPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-[hsl(var(--text))] mb-1">Categoria</label>
+                    <label className="block text-sm font-semibold text-text mb-1">Categoria</label>
                     <select
                       value={parsedDesc.category}
                       onChange={(e) => void handleSaveGeneral(template.name, { category: e.target.value })}
@@ -624,7 +624,7 @@ export function BehavioralTemplateEditorPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-[hsl(var(--text))] mb-1">Duração Estimada (min)</label>
+                    <label className="block text-sm font-semibold text-text mb-1">Duração Estimada (min)</label>
                     <input
                       type="number"
                       value={parsedDesc.duration}
@@ -635,7 +635,7 @@ export function BehavioralTemplateEditorPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-[hsl(var(--text))] mb-1">Público Recomendado</label>
+                  <label className="block text-sm font-semibold text-text mb-1">Público Recomendado</label>
                   <input
                     type="text"
                     defaultValue={parsedDesc.target_audience}
@@ -651,7 +651,7 @@ export function BehavioralTemplateEditorPage() {
             selectedComp && (
               <div className="flex-1 overflow-y-auto flex flex-col">
                 {/* Competency settings bar */}
-                <div className="p-4 border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] space-y-3">
+                <div className="p-4 border-b border-border bg-surface space-y-3">
                   <div className="flex items-center justify-between">
                     <input
                       type="text"
@@ -669,7 +669,7 @@ export function BehavioralTemplateEditorPage() {
                           e.currentTarget.blur();
                         }
                       }}
-                      className="text-sm font-bold text-[hsl(var(--text))] bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[hsl(var(--primary))] outline-none"
+                      className="text-sm font-bold text-text bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[hsl(var(--primary))] outline-none"
                     />
                     <div className="flex items-center gap-1">
                       <button
@@ -706,11 +706,11 @@ export function BehavioralTemplateEditorPage() {
                             e.currentTarget.blur();
                           }
                         }}
-                        className="text-xs text-[hsl(var(--text-muted))] bg-transparent w-full border-b border-transparent hover:border-gray-300 outline-none"
+                        className="text-xs text-text-muted bg-transparent w-full border-b border-transparent hover:border-gray-300 outline-none"
                       />
                     </div>
                     <div className="col-span-3 flex items-center gap-1 justify-end">
-                      <label className="text-[10px] font-bold text-[hsl(var(--text-muted))]">Peso:</label>
+                      <label className="text-[10px] font-bold text-text-muted">Peso:</label>
                       <input
                         type="number"
                         value={localCompWeight}
@@ -738,7 +738,7 @@ export function BehavioralTemplateEditorPage() {
                 {/* Question Cards Area */}
                 <div className="flex-1 p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
                       Perguntas ({selectedComp.questions?.length ?? 0})
                     </span>
                     <Button
@@ -764,8 +764,8 @@ export function BehavioralTemplateEditorPage() {
                               onClick={() => setSelectedQuestId(q.id)}
                               className={`p-3 rounded-xl border transition-all cursor-pointer flex gap-3 ${
                                 isSelected
-                                  ? "border-[hsl(var(--primary))] bg-[hsl(var(--surface))] shadow-sm"
-                                  : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] hover:shadow-xs hover:border-gray-300"
+                                  ? "border-[hsl(var(--primary))] bg-surface shadow-sm"
+                                  : "border-border bg-surface hover:shadow-xs hover:border-gray-300"
                               }`}
                             >
                               {/* Left visual handles and sorting */}
@@ -797,20 +797,20 @@ export function BehavioralTemplateEditorPage() {
 
                               {/* Question Main Block */}
                               <div className="flex-1 min-w-0 space-y-1.5">
-                                <p className="text-sm font-semibold text-[hsl(var(--text))] leading-snug break-words">
+                                <p className="text-sm font-semibold text-text leading-snug break-words">
                                   {parsed.text}
                                   {q.is_required && <span className="text-red-500 ml-1">*</span>}
                                 </p>
 
                                 <div className="flex flex-wrap gap-2 items-center">
-                                  <span className="rounded-md border bg-[hsl(var(--bg))] px-1.5 py-0.5 text-[9px] font-bold text-[hsl(var(--text-muted))]">
+                                  <span className="rounded-md border bg-[hsl(var(--bg))] px-1.5 py-0.5 text-[9px] font-bold text-text-muted">
                                     {q.answer_type === "multiple_choice"
                                       ? "Múltipla Escolha"
                                       : q.answer_type === "scale"
                                       ? "Escala 1 a 5"
                                       : "Texto Livre"}
                                   </span>
-                                  <span className="text-[9px] text-[hsl(var(--text-muted))] font-medium">
+                                  <span className="text-[9px] text-text-muted font-medium">
                                     Peso: <span className="font-semibold text-gray-700">{q.weight}</span>
                                   </span>
                                 </div>
@@ -835,7 +835,7 @@ export function BehavioralTemplateEditorPage() {
                           );
                         })
                     ) : (
-                      <div className="border-2 border-dashed rounded-xl p-8 text-center text-[hsl(var(--text-muted))]">
+                      <div className="border-2 border-dashed rounded-xl p-8 text-center text-text-muted">
                         <QuestionIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         Nenhuma pergunta cadastrada nesta competência.
                       </div>
@@ -848,19 +848,19 @@ export function BehavioralTemplateEditorPage() {
         </section>
 
         {/* COLUNA C: PAINEL DIREITO - CONFIGURAÇÕES & PREVIEW (4/12 cols) */}
-        <section className="lg:col-span-4 bg-[hsl(var(--surface))] flex flex-col overflow-y-auto">
+        <section className="lg:col-span-4 bg-surface flex flex-col overflow-y-auto">
           {selectedQuest && parsedQuestMetadata ? (
             <div className="p-5 space-y-6">
               {/* SECTION HEADER */}
               <div className="border-b pb-3 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">Configurar Pergunta</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Configurar Pergunta</span>
                 <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5 font-bold">Ativa</span>
               </div>
 
               {/* TABS SELECTOR (Local editor form) */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase mb-1">Texto da Pergunta *</label>
+                  <label className="block text-xs font-bold text-text uppercase mb-1">Texto da Pergunta *</label>
                   <textarea
                     value={localQuestText}
                     onChange={(e) => setLocalQuestText(e.target.value)}
@@ -879,7 +879,7 @@ export function BehavioralTemplateEditorPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase mb-1">Tipo de Resposta</label>
+                    <label className="block text-xs font-bold text-text uppercase mb-1">Tipo de Resposta</label>
                     <select
                       value={selectedQuest.answer_type}
                       onChange={(e) => {
@@ -898,7 +898,7 @@ export function BehavioralTemplateEditorPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase mb-1">Peso</label>
+                    <label className="block text-xs font-bold text-text uppercase mb-1">Peso</label>
                     <input
                       type="number"
                       value={localQuestWeight}
@@ -922,7 +922,7 @@ export function BehavioralTemplateEditorPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[hsl(var(--text))] uppercase mb-1">Instrução ao Candidato</label>
+                  <label className="block text-xs font-bold text-text uppercase mb-1">Instrução ao Candidato</label>
                   <input
                     type="text"
                     value={localQuestInstruction}
@@ -951,13 +951,13 @@ export function BehavioralTemplateEditorPage() {
                     onChange={(e) => void handleUpdateQuestion(selectedQuest, { is_required: e.target.checked })}
                     className="h-4 w-4 rounded border-gray-300 focus:ring-[hsl(var(--primary))]"
                   />
-                  <label htmlFor="is_req_check" className="text-sm font-semibold text-[hsl(var(--text))]">Resposta obrigatória</label>
+                  <label htmlFor="is_req_check" className="text-sm font-semibold text-text">Resposta obrigatória</label>
                 </div>
 
                 {/* Multiple choice options configurator */}
                 {selectedQuest.answer_type === "multiple_choice" && (
                   <div className="border-t pt-4 space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">Alternativas</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Alternativas</span>
                     
                     <div className="space-y-2">
                       {localQuestOptions.map((opt, oIdx) => (
@@ -1037,7 +1037,7 @@ export function BehavioralTemplateEditorPage() {
                 {/* Scale 1-5 Custom labels configurator */}
                 {selectedQuest.answer_type === "scale" && (
                   <div className="border-t pt-4 space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--text-muted))]">Legendas da Escala</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Legendas da Escala</span>
                     
                     <div className="space-y-2">
                       {[1, 3, 5].map((val) => (
@@ -1082,7 +1082,7 @@ export function BehavioralTemplateEditorPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Evidências Esperadas</label>
+                    <label className="block text-[10px] font-bold text-text uppercase mb-1">Evidências Esperadas</label>
                     <textarea
                       value={localQuestEvidence}
                       onChange={(e) => setLocalQuestEvidence(e.target.value)}
@@ -1098,7 +1098,7 @@ export function BehavioralTemplateEditorPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Critérios de Boa Resposta</label>
+                    <label className="block text-[10px] font-bold text-text uppercase mb-1">Critérios de Boa Resposta</label>
                     <textarea
                       value={localQuestCriteria}
                       onChange={(e) => setLocalQuestCriteria(e.target.value)}
@@ -1114,7 +1114,7 @@ export function BehavioralTemplateEditorPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Sinais de Alerta (Red Flags)</label>
+                    <label className="block text-[10px] font-bold text-text uppercase mb-1">Sinais de Alerta (Red Flags)</label>
                     <textarea
                       value={localQuestAlert}
                       onChange={(e) => setLocalQuestAlert(e.target.value)}
@@ -1130,7 +1130,7 @@ export function BehavioralTemplateEditorPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-[hsl(var(--text))] uppercase mb-1">Observações Internas</label>
+                    <label className="block text-[10px] font-bold text-text uppercase mb-1">Observações Internas</label>
                     <textarea
                       value={localQuestNotes}
                       onChange={(e) => setLocalQuestNotes(e.target.value)}
@@ -1204,7 +1204,7 @@ export function BehavioralTemplateEditorPage() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-[hsl(var(--text-muted))] space-y-2">
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-text-muted space-y-2">
               <Settings2 className="h-10 w-10 opacity-30" />
               <p className="text-sm font-semibold">Nenhuma pergunta selecionada</p>
               <p className="text-xs max-w-xs leading-relaxed">Selecione ou adicione uma pergunta no painel central para configurar pesos, alternativas, rubricas e previews.</p>
@@ -1216,7 +1216,7 @@ export function BehavioralTemplateEditorPage() {
       {/* ── VALIDATION CHECKS DIALOG ── */}
       {showValidation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-2 text-amber-600">
                 <AlertTriangle className="h-5 w-5" />
@@ -1231,13 +1231,13 @@ export function BehavioralTemplateEditorPage() {
               <div className="text-center py-6 space-y-2">
                 <CheckCircle className="h-12 w-12 text-emerald-600 mx-auto" />
                 <h4 className="font-bold text-gray-800">Template Perfeito!</h4>
-                <p className="text-xs text-[hsl(var(--text-muted))] px-4 leading-relaxed">
+                <p className="text-xs text-text-muted px-4 leading-relaxed">
                   Todas as regras e consistências estão perfeitamente atendidas. Este template está 100% elegível para publicação!
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs text-[hsl(var(--text-muted))]">
+                <p className="text-xs text-text-muted">
                   O template possui pendências que impedem a publicação. Corrija os seguintes itens:
                 </p>
                 <div className="max-h-60 overflow-y-auto space-y-2 border rounded-xl p-3 bg-gray-50">

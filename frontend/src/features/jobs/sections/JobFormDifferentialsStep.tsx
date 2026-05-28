@@ -117,14 +117,14 @@ export function JobFormDifferentialsStep({
                   ),
                 })
               }
-              className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))]"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-2 text-xs text-text"
             >
               {item}
-              <Trash2 className="h-3.5 w-3.5 text-[hsl(var(--text-muted))]" />
+              <Trash2 className="h-3.5 w-3.5 text-text-muted" />
             </button>
           ))}
           {form.behavioral_requirements.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-text-muted">
               Nenhum requisito comportamental adicionado.
             </p>
           ) : null}

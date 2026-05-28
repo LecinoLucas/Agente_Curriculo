@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,7 +11,6 @@ import type {
   AdmissionCaseWorkspace,
   AdmissionPackage,
   ErpIntegrationAttempt,
-  ProtheusCapabilities,
 } from "../../../types/domain";
 
 vi.mock("../../../services/admissionWorkspaceService", () => ({
@@ -64,15 +64,7 @@ const blockedWorkspace: AdmissionCaseWorkspace = {
     readiness_status: "not_ready",
     ready_for_export: false,
   },
-  recent_events: [
-    {
-      id: "evt-1",
-      type: "document_uploaded",
-      title: "Documento enviado",
-      description: "RG_Larissa.pdf foi enviado pelo candidato.",
-      created_at: "2026-05-25T11:30:00Z",
-    },
-  ],
+  recent_events: [],
 };
 
 const readyWorkspace: AdmissionCaseWorkspace = {
@@ -97,7 +89,7 @@ const readyWorkspace: AdmissionCaseWorkspace = {
   },
 };
 
-const admissionPackage: AdmissionPackage = {
+const approvedPackage: AdmissionPackage = {
   id: "pkg-1",
   case_id: "case-1",
   candidate_id: "cand-1",
@@ -109,7 +101,7 @@ const admissionPackage: AdmissionPackage = {
       full_name: "Larissa Oliveira",
       email: "larissa@example.com",
       phone: null,
-      cpf: "123",
+      cpf: "123.456.789-00",
     },
     job: {
       id: "job-1",
@@ -144,120 +136,148 @@ const admissionPackage: AdmissionPackage = {
   cancelled_at: null,
 };
 
-const readyAttempt: ErpIntegrationAttempt = {
+const exportSuccessAttempt: ErpIntegrationAttempt = {
   id: "att-1",
   package_id: "pkg-1",
   case_id: "case-1",
   candidate_id: "cand-1",
   job_id: "job-1",
   provider: "protheus",
-  mode: "dry_run",
-  status: "ready",
+  mode: "mock",
+  status: "sent",
+  lifecycle_status: "exported",
+  retryable: false,
+  attempt_number: 1,
+  external_reference: "PROTHEUS-MOCK-001",
   request_payload_json: {
     provider: "protheus",
-    mode: "dry_run",
-    candidate: { name: "Larissa Oliveira", email: "larissa@example.com", cpf: "123" },
+    mode: "mock",
+    candidate: { name: "Larissa Oliveira", email: "larissa@example.com", cpf: "123.456.789-00" },
     job: { title: "Assistente Administrativo", department: null },
     admission: { start_date: "2026-06-01", salary_offer: 4500, work_model: "Presencial" },
     decision: { hiring_decision_id: "decision-1" },
     documents: [],
   },
-  response_payload_json: null,
+  response_payload_json: { success: true, external_reference: "PROTHEUS-MOCK-001" },
   validation_errors_json: [],
   error_message: null,
+  error_summary: null,
   attempted_by: "user-1",
   created_at: "2026-05-25T15:20:00Z",
   updated_at: "2026-05-25T15:20:00Z",
-  completed_at: null,
+  completed_at: "2026-05-25T15:20:03Z",
 };
 
-const blockedCapabilities: ProtheusCapabilities = {
-  provider: "protheus",
-  environment: "development",
-  integration_mode: "dry_run",
-  dry_run: { available: true, disabled_reason: null },
-  simulation: { available: true, disabled_reason: null },
-  mock: {
-    available: false,
-    disabled_reason: "Mock send permitido apenas quando ERP_INTEGRATION_MODE=mock.",
+const failedRetryableAttempt: ErpIntegrationAttempt = {
+  ...exportSuccessAttempt,
+  id: "att-2",
+  status: "failed",
+  lifecycle_status: "retry_pending",
+  retryable: true,
+  attempt_number: 1,
+  external_reference: null,
+  response_payload_json: null,
+  error_message: "Validation failed for ERP export",
+  error_summary: {
+    code: "PROTHEUS_MOCK_VALIDATION_ERROR",
+    message: "Falha sanitizada do ERP para nova tentativa.",
+    stage: "provider",
+    retryable: true,
   },
-  real_send: {
-    available: false,
-    disabled_reason:
-      "Feature flags de envio real desligadas: PROTHEUS_REAL_SEND_ENABLED, ERP_ALLOW_REAL_SEND.",
-    missing_configuration: ["PROTHEUS_BASE_URL"],
-    blocking_flags: ["PROTHEUS_REAL_SEND_ENABLED", "ERP_ALLOW_REAL_SEND"],
-  },
+  completed_at: "2026-05-25T15:20:03Z",
 };
 
-function renderPanel() {
+function renderPanel(props?: Partial<ComponentProps<typeof AdmissionProtheusIntegrationPanel>>) {
   return render(
     <MemoryRouter>
-      <AdmissionProtheusIntegrationPanel caseId="case-1" />
+      <AdmissionProtheusIntegrationPanel caseId="case-1" {...props} />
     </MemoryRouter>,
   );
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
 }
 
 describe("AdmissionProtheusIntegrationPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(admissionPackageService.getPackageByCaseId).mockResolvedValue(null);
-    vi.mocked(admissionPackageService.getProtheusCapabilities).mockResolvedValue(blockedCapabilities);
+    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(readyWorkspace);
+    vi.mocked(admissionPackageService.getPackageByCaseId).mockResolvedValue(approvedPackage);
     vi.mocked(admissionPackageService.listErpAttempts).mockResolvedValue({ attempts: [] });
+    vi.mocked(admissionPackageService.downloadJson).mockResolvedValue(new Blob(["json"]));
+    vi.mocked(admissionPackageService.downloadCsv).mockResolvedValue(new Blob(["csv"]));
+    vi.mocked(admissionPackageService.exportErp).mockResolvedValue(exportSuccessAttempt);
+    vi.mocked(admissionPackageService.retryExportErp).mockResolvedValue(exportSuccessAttempt);
   });
 
-  it("bloqueia integração quando ready_for_export=false e mostra blockers", async () => {
+  it("bloqueia envio ERP quando o caso ainda não está pronto", async () => {
     vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(blockedWorkspace);
 
     renderPanel();
 
-    expect(await screen.findByText("Integração bloqueada")).toBeInTheDocument();
-    expect(screen.getByText("Foto 3x4 ausente")).toBeInTheDocument();
-    expect(screen.getByText("Operação bloqueada pelo gate de pré-admissão.")).toBeInTheDocument();
+    expect(await screen.findByText("Envio ERP bloqueado")).toBeInTheDocument();
+    expect(screen.getByText(/Finalize o checklist obrigatório/i)).toBeInTheDocument();
     expect(admissionPackageService.getPackageByCaseId).not.toHaveBeenCalled();
   });
 
-  it("carrega pacote e tentativas quando ready_for_export=true", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(readyWorkspace);
-    vi.mocked(admissionPackageService.getPackageByCaseId).mockResolvedValue(admissionPackage);
-    vi.mocked(admissionPackageService.listErpAttempts).mockResolvedValue({ attempts: [readyAttempt] });
+  it("separa downloads de conferência do envio ERP e não mostra payload sensível", async () => {
+    renderPanel({ workspace: readyWorkspace, variant: "embedded" });
 
-    renderPanel();
+    const sendSection = await screen.findByTestId("erp-send-section");
+    const downloadsSection = screen.getByTestId("erp-downloads-section");
 
-    expect(await screen.findByText("Caso liberado para integração")).toBeInTheDocument();
-    expect(await screen.findByText("Pacote de Admissão")).toBeInTheDocument();
-    expect(await screen.findByText("Simulação Protheus")).toBeInTheDocument();
-    expect(await screen.findByText("Tentativas de Integração")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Preparar simulação Protheus/i })).toBeEnabled();
+    expect(within(sendSection).getByRole("button", { name: /Enviar para ERP/i })).toBeInTheDocument();
+    expect(within(downloadsSection).getByRole("button", { name: /Baixar JSON \(conferência\)/i })).toBeInTheDocument();
+    expect(within(downloadsSection).getByRole("button", { name: /Baixar CSV \(conferência\)/i })).toBeInTheDocument();
+    expect(screen.getByText(/não envia dados ao ERP/i)).toBeInTheDocument();
+    expect(screen.queryByText("123.456.789-00")).not.toBeInTheDocument();
   });
 
-  it("mantém envio real/homologação bloqueado nesta fase", async () => {
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(readyWorkspace);
-    vi.mocked(admissionPackageService.getPackageByCaseId).mockResolvedValue(admissionPackage);
-    vi.mocked(admissionPackageService.listErpAttempts).mockResolvedValue({ attempts: [readyAttempt] });
+  it("envia para o ERP e mostra estado de loading", async () => {
+    const user = userEvent.setup();
+    const exportRequest = deferred<ErpIntegrationAttempt>();
+    vi.mocked(admissionPackageService.exportErp).mockReturnValue(exportRequest.promise);
 
-    renderPanel();
+    renderPanel({ workspace: readyWorkspace, variant: "embedded" });
 
-    const homologButton = await screen.findByRole("button", { name: /Enviar para homologação/i });
-    expect(homologButton).toBeDisabled();
-    expect(screen.getByText(/Envio real\/homologação está bloqueado por capability backend/i)).toBeInTheDocument();
+    const button = await screen.findByRole("button", { name: /Enviar para ERP/i });
+    await user.click(button);
+
+    expect(await screen.findByRole("button", { name: /Enviando\.\.\./i })).toBeDisabled();
+
+    exportRequest.resolve(exportSuccessAttempt);
+
     await waitFor(() => {
-      expect(screen.getByText(/PROTHEUS_REAL_SEND_ENABLED/i)).toBeInTheDocument();
+      expect(admissionPackageService.exportErp).toHaveBeenCalledWith("pkg-1");
     });
   });
 
-  it("prepara dry-run usando endpoint existente", async () => {
+  it("mostra erro sanitizado e botão de retry quando a tentativa é retryable", async () => {
+    vi.mocked(admissionPackageService.listErpAttempts).mockResolvedValue({ attempts: [failedRetryableAttempt] });
+
+    renderPanel({ workspace: readyWorkspace, variant: "embedded" });
+
+    expect(await screen.findByTestId("erp-error-summary")).toHaveTextContent(
+      "Falha sanitizada do ERP para nova tentativa.",
+    );
+    expect(screen.getByRole("button", { name: /Tentar novamente/i })).toBeInTheDocument();
+  });
+
+  it("executa retry pelo endpoint dedicado", async () => {
     const user = userEvent.setup();
-    vi.mocked(admissionWorkspaceService.getWorkspace).mockResolvedValue(readyWorkspace);
-    vi.mocked(admissionPackageService.getPackageByCaseId).mockResolvedValue(admissionPackage);
-    vi.mocked(admissionPackageService.createProtheusDryRunAttempt).mockResolvedValue(readyAttempt);
+    vi.mocked(admissionPackageService.listErpAttempts).mockResolvedValue({ attempts: [failedRetryableAttempt] });
 
-    renderPanel();
+    renderPanel({ workspace: readyWorkspace, variant: "embedded" });
 
-    await user.click(await screen.findByRole("button", { name: /Preparar simulação Protheus/i }));
+    await user.click(await screen.findByRole("button", { name: /Tentar novamente/i }));
 
     await waitFor(() => {
-      expect(admissionPackageService.createProtheusDryRunAttempt).toHaveBeenCalledWith("pkg-1");
+      expect(admissionPackageService.retryExportErp).toHaveBeenCalledWith("pkg-1");
     });
   });
 });

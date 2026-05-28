@@ -170,6 +170,32 @@ export async function createProtheusHomologAttempt(
   );
 }
 
+export async function exportErp(
+  packageId: string,
+  simulateFailure = false,
+): Promise<ErpIntegrationAttempt> {
+  return httpRequest<ErpIntegrationAttempt>(
+    `/api/v1/admission-packages/${packageId}/export-erp`,
+    {
+      method: "POST",
+      body: { simulate_failure: simulateFailure },
+    },
+  );
+}
+
+export async function retryExportErp(
+  packageId: string,
+  simulateFailure = false,
+): Promise<ErpIntegrationAttempt> {
+  return httpRequest<ErpIntegrationAttempt>(
+    `/api/v1/admission-packages/${packageId}/export-erp/retry`,
+    {
+      method: "POST",
+      body: { simulate_failure: simulateFailure },
+    },
+  );
+}
+
 // Re-export for convenience
 export const admissionPackageService = {
   createPackage,
@@ -182,6 +208,8 @@ export const admissionPackageService = {
   createProtheusDryRunAttempt,
   createProtheusMockAttempt,
   createProtheusHomologAttempt,
+  exportErp,
+  retryExportErp,
   listErpAttempts,
   getErpAttempt,
   simulateErpAttempt,

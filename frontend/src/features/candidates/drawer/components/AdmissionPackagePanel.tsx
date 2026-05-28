@@ -175,11 +175,11 @@ export function AdmissionPackagePanel({ caseId, caseStatus, onPackageChange }: P
   const header = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
           Pacote admissional
         </p>
-        <h3 className="text-base font-semibold text-[hsl(var(--text))]">Pacote de Admissão</h3>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+        <h3 className="text-base font-semibold text-text">Pacote de Admissão</h3>
+        <p className="mt-1 text-sm text-text-muted">
           Gere, revise e exporte os dados admissionais antes da integração Protheus.
         </p>
       </div>
@@ -211,7 +211,7 @@ export function AdmissionPackagePanel({ caseId, caseStatus, onPackageChange }: P
       >
         {header}
         <div className="flex items-center justify-center">
-          <div className="text-sm text-[hsl(var(--text-muted))]">Carregando...</div>
+          <div className="text-sm text-text-muted">Carregando...</div>
         </div>
       </section>
     );
@@ -242,7 +242,7 @@ export function AdmissionPackagePanel({ caseId, caseStatus, onPackageChange }: P
         <button
           onClick={handleCreate}
           disabled={saving}
-          className="ui-btn-primary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+          className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
         >
           {saving ? "Gerando..." : "Gerar Pacote de Admissão"}
         </button>
@@ -264,14 +264,14 @@ export function AdmissionPackagePanel({ caseId, caseStatus, onPackageChange }: P
             <button
               onClick={handleApprove}
               disabled={saving}
-              className="ui-btn-primary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Aprovando..." : "Aprovar Pacote"}
             </button>
             <button
               onClick={handleCancel}
               disabled={saving}
-              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="border border-border text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Cancelando..." : "Cancelar"}
             </button>
@@ -279,22 +279,22 @@ export function AdmissionPackagePanel({ caseId, caseStatus, onPackageChange }: P
         </>
       ) : pkg.status === "approved_for_export" ? (
         <>
-          <div className="rounded-lg border border-[hsl(var(--success))]/25 bg-[hsl(var(--success-soft))] p-4">
-            <p className="text-sm text-[hsl(var(--success))]">Pacote aprovado. Você pode exportar agora.</p>
+          <div className="rounded-lg border border-[hsl(var(--success))]/25 bg-success-soft p-4">
+            <p className="text-sm text-success">Pacote aprovado. Você pode exportar agora.</p>
           </div>
           <AdmissionPackagePreview payload={pkg.payload} readOnly />
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleDownloadJson}
               disabled={saving}
-              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="border border-border text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Exportar JSON"}
             </button>
             <button
               onClick={handleDownloadCsv}
               disabled={saving}
-              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="border border-border text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Exportar CSV"}
             </button>
@@ -312,22 +312,22 @@ export function AdmissionPackagePanel({ caseId, caseStatus, onPackageChange }: P
             <button
               onClick={handleDownloadJson}
               disabled={saving}
-              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="border border-border text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Baixar JSON"}
             </button>
             <button
               onClick={handleDownloadCsv}
               disabled={saving}
-              className="ui-btn-secondary inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="border border-border text-text hover:bg-surface-muted transition inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
             >
               {saving ? "Exportando..." : "Baixar CSV"}
             </button>
           </div>
         </>
       ) : pkg.status === "cancelled" ? (
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 p-4">
-          <p className="text-sm text-[hsl(var(--text-muted))]">
+        <div className="rounded-lg border border-border bg-surface-muted/45 p-4">
+          <p className="text-sm text-text-muted">
             Pacote cancelado em {formatDateTime(pkg.cancelled_at)}
           </p>
         </div>

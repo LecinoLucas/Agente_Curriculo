@@ -234,7 +234,7 @@ export function CandidateDecisionPanel({
       <div className={`rounded-2xl border p-4 shadow-sm ${recommendation.bgColor}`}>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--text-muted))]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
               Decisão sugerida
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -243,26 +243,26 @@ export function CandidateDecisionPanel({
                 {recommendation.label}
               </span>
               {rankingEntry?.rank ? (
-                <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+                <span className="text-xs font-medium text-text-muted">
                   Ranking atual: #{rankingEntry.rank}
                 </span>
               ) : null}
             </div>
-            <p className="mt-2 text-sm leading-6 text-[hsl(var(--text-muted))]">
+            <p className="mt-2 text-sm leading-6 text-text-muted">
               {contextText}
             </p>
             {detailText ? (
-              <p className="mt-1 text-xs leading-5 text-[hsl(var(--text-muted))]">
+              <p className="mt-1 text-xs leading-5 text-text-muted">
                 {detailText}
               </p>
             ) : null}
             {explainabilityLine ? (
-              <p className="mt-3 rounded-xl border border-[hsl(var(--border))]/50 bg-white/55 px-3 py-2 text-sm leading-6 text-[hsl(var(--text))]">
+              <p className="mt-3 rounded-xl border border-border/50 bg-white/55 px-3 py-2 text-sm leading-6 text-text">
                 {explainabilityLine}
               </p>
             ) : null}
             {semantics.secondaryDisplay ? (
-              <div className="mt-3 inline-flex items-center rounded-full border border-[hsl(var(--border))]/60 bg-white/60 px-3 py-1 text-xs font-medium text-[hsl(var(--text-muted))]">
+              <div className="mt-3 inline-flex items-center rounded-full border border-border/60 bg-white/60 px-3 py-1 text-xs font-medium text-text-muted">
                 {semantics.secondaryLabel}: {semantics.secondaryDisplay}
               </div>
             ) : null}
@@ -272,7 +272,7 @@ export function CandidateDecisionPanel({
             <button
               type="button"
               onClick={onViewAnalysis}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-white/70 px-3 text-sm font-medium text-[hsl(var(--text))] transition hover:bg-white"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-white/70 px-3 text-sm font-medium text-text transition hover:bg-white"
             >
               Ver score
               <ArrowRight className="h-4 w-4" />
@@ -293,14 +293,14 @@ export function CandidateDecisionPanel({
         {!compact && hasInsights ? (
           <div className="mt-4 grid gap-3 xl:grid-cols-2">
           {strengths.length > 0 && (
-            <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-white/55 px-3.5 py-3">
-              <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+            <div className="rounded-xl border border-border/40 bg-white/55 px-3.5 py-3">
+              <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
                 Forças
               </p>
               <div className="space-y-1.5">
                 {strengths.map((strength) => (
-                  <div key={strength} className="flex gap-2 text-sm text-[hsl(var(--text))]">
+                  <div key={strength} className="flex gap-2 text-sm text-text">
                     <span className="mt-0.5 shrink-0 rounded-full bg-emerald-100 p-1 text-emerald-800">
                       <CheckCircle2 className="h-3 w-3" />
                     </span>
@@ -312,14 +312,14 @@ export function CandidateDecisionPanel({
           )}
 
           {risks.length > 0 && (
-            <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-white/55 px-3.5 py-3">
-              <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+            <div className="rounded-xl border border-border/40 bg-white/55 px-3.5 py-3">
+              <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-700" />
                 Pontos de Atenção
               </p>
               <div className="space-y-1.5">
                 {risks.map((risk) => (
-                  <div key={risk} className="flex gap-2 text-sm text-[hsl(var(--text))]">
+                  <div key={risk} className="flex gap-2 text-sm text-text">
                     <span className="mt-0.5 shrink-0 rounded-full bg-amber-100 p-1 text-amber-800">
                       <AlertTriangle className="h-3 w-3" />
                     </span>

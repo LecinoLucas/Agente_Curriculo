@@ -50,6 +50,20 @@ export type UsePipelineTransitionBlockedHandler = {
   clearForceError: () => void;
 };
 
+export function resolvePreAdmissionNavigationPath(
+  response: MovePipelineCandidateResponse | null | undefined,
+): string | null {
+  if (!response || response.required_action !== "open_pre_admission") return null;
+  if (response.pre_admission_case_id) {
+    return `/admissao/${response.pre_admission_case_id}`;
+  }
+  const params = new URLSearchParams({
+    candidateId: response.candidate_id,
+    jobId: response.job_id,
+  });
+  return `/admissao/novo?${params.toString()}`;
+}
+
 /**
  * Centralizes detection + storage of pipeline_transition_blocked responses so
  * every surface that triggers a stage move (Kanban drag, drawer advance,
@@ -162,10 +176,38 @@ export function usePipelineGateActionResolver(
 ) {
   const navigate = useNavigate();
 
+  const readPayloadString = (payload: Record<string, unknown> | null, keys: string[]): string | null => {
+    if (!payload) return null;
+    for (const key of keys) {
+      const value = payload[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return null;
+  };
+
   return useCallback(
     (action: GateAction): boolean => {
       if (action.action === "add_reason" && onAddReason) {
         onAddReason(action.candidateId);
+        onAfterNavigate?.();
+        return true;
+      }
+
+      if (action.action === "open_pre_admission") {
+        const caseId = readPayloadString(action.payload, ["case_id", "caseId", "pre_admission_case_id"]);
+        if (caseId) {
+          navigate(`/admissao/${caseId}`);
+          onAfterNavigate?.();
+          return true;
+        }
+
+        const jobId = readPayloadString(action.payload, ["job_id", "jobId"]);
+        if (!jobId) return false;
+        const params = new URLSearchParams({
+          candidateId: action.candidateId,
+          jobId,
+        });
+        navigate(`/admissao/novo?${params.toString()}`);
         onAfterNavigate?.();
         return true;
       }

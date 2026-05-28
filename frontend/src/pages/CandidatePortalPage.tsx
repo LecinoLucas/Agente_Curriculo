@@ -61,7 +61,7 @@ import { toast } from "../shared/utils/toast";
 import { BehavioralAssessmentCard } from "../features/candidate-portal/components/BehavioralAssessmentCard";
 import { BehavioralAssessmentForm } from "../features/candidate-portal/components/BehavioralAssessmentForm";
 import { CandidateMessagesCard } from "../features/candidate-portal/components/CandidateMessagesCard";
-import { CandidatePortalPreAdmissionCard } from "../features/candidate-portal/components/CandidatePortalPreAdmissionCard";
+import { CandidatePortalPreAdmissionSummaryCard } from "../features/candidate-portal/components/CandidatePortalPreAdmissionSummaryCard";
 import { useTheme } from "../hooks/useTheme";
 import { useVisualTheme } from "../hooks/useVisualTheme";
 
@@ -91,6 +91,37 @@ function sourceLabel(value: string | null): string {
   if (value === "manual") return "Cadastro manual";
   if (value === "public_google") return "Google";
   return "Não informado";
+}
+
+const PUBLIC_STAGE_LABELS: Record<string, string> = {
+  entry: "Inscrição recebida",
+  screening: "Em triagem",
+  hr_interview: "Entrevista",
+  technical_interview: "Entrevista",
+  final: "Etapa final",
+  offer: "Proposta",
+  hired: "Contratado",
+  pre_admission: "Pré-admissão",
+  protheus: "Integração admissional",
+  admitted: "Admitido",
+  rejected: "Processo encerrado",
+};
+
+function candidateSafeLabel(value: string | null | undefined): string {
+  const label = (value ?? "").trim();
+  if (!label) return "";
+  if (label.toLowerCase() === "protheus") return "Integração admissional";
+  if (label.toLowerCase() === "pre_admission") return "Pré-admissão";
+  return label
+    .replace(/\bProtheus\b/g, "Integração admissional")
+    .replace(/\bpre_admission\b/g, "Pré-admissão")
+    .replace(/\bexport package\b/gi, "pacote admissional")
+    .replace(/\bpipeline\b/gi, "processo");
+}
+
+function candidateSafeStageLabel(value: string | null | undefined): string {
+  if (!value) return "Aguardando atualização";
+  return PUBLIC_STAGE_LABELS[value] ?? (candidateSafeLabel(value) || "Aguardando atualização");
 }
 
 function extractionLabel(value: string | null): string {
@@ -154,7 +185,7 @@ function ApplicationCard({
           </p>
         </div>
         <span className="inline-flex w-fit items-center rounded-full bg-primary/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-primary ring-1 ring-inset ring-primary/10">
-          {application.status_label}
+          {candidateSafeLabel(application.status_label)}
         </span>
       </div>
 
@@ -187,7 +218,7 @@ function ApplicationCard({
           <p className="mt-1 text-xs font-bold text-primary">
             {application.talent_pool
               ? extractionLabel(application.talent_pool_profile_status)
-              : application.status_label}
+              : candidateSafeLabel(application.status_label)}
           </p>
         </div>
       </div>
@@ -333,6 +364,23 @@ export type CandidateVisibleStep = {
 };
 
 export function buildCandidateVisibleSteps(overview: CandidatePortalOverview | null): CandidateVisibleStep[] {
+  if (overview?.application_status === "dismissed") {
+    return [
+      {
+        key: "admission_completed",
+        title: "Admissão concluída",
+        status: "completed",
+        description: "Sua admissão foi finalizada com sucesso."
+      },
+      {
+        key: "result",
+        title: "Vínculo encerrado",
+        status: "current",
+        description: "Seu vínculo admissional foi encerrado pela equipe de RH."
+      }
+    ];
+  }
+
   if (overview?.application_status === "rejected") {
     return [
       {
@@ -446,6 +494,7 @@ export function buildCandidateVisibleSteps(overview: CandidatePortalOverview | n
 function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOverview | null }) {
   const visibleSteps = buildCandidateVisibleSteps(overview);
   const isRejected = overview?.application_status === "rejected";
+  const isDismissed = overview?.application_status === "dismissed";
 
   return (
     <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 dark:backdrop-blur-md shadow-xs p-4 sm:p-5">
@@ -456,7 +505,9 @@ function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOve
         <div>
           <CardTitle className="text-base font-bold text-foreground">Sua jornada de candidatura</CardTitle>
           <CardDescription className="text-xs font-semibold text-muted-foreground mt-0.5">
-            {isRejected
+            {isDismissed
+              ? "O vínculo admissional foi encerrado."
+              : isRejected
               ? "O processo desta vaga foi encerrado."
               : "Acompanhe as etapas do seu processo seletivo."}
           </CardDescription>
@@ -524,7 +575,9 @@ function CandidateHorizontalStepper({ overview }: { overview: CandidatePortalOve
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <div>
-          {isRejected
+          {isDismissed
+            ? "Seu histórico admissional segue registrado e o RH pode prestar suporte quando necessário."
+            : isRejected
             ? "Seu perfil continuará disponível em nosso banco de talentos para futuras oportunidades compatíveis."
             : "Nosso time está analisando seu perfil com cuidado. Se houver avanço no processo, entraremos em contato."}
         </div>
@@ -574,7 +627,7 @@ function QuickSummaryCard({
   onOpenStatus: () => void;
 }) {
   const vaga = activeApplication?.job_title || closedProcessApplication?.job_title || "Nenhuma vaga ativa";
-  const etapa = activeApplication?.pipeline_stage || "Aguardando atualização";
+  const etapa = candidateSafeStageLabel(activeApplication?.pipeline_stage);
   
   const resumeDate = overview?.latest_resume?.uploaded_at
     ? `recebido em ${new Date(overview.latest_resume.uploaded_at).toLocaleDateString("pt-BR")}`
@@ -718,10 +771,14 @@ function BottomIncentiveCard() {
 }
 
 function getClosedProcessApplication(overview: CandidatePortalOverview): CandidatePortalApplication | null {
-  if (overview.application_status !== "rejected" && overview.application_status !== "admitted") {
+  if (
+    overview.application_status !== "rejected"
+    && overview.application_status !== "admitted"
+    && overview.application_status !== "dismissed"
+  ) {
     return null;
   }
-  const targetStatus = overview.application_status === "admitted" ? "admitted" : "finished";
+  const targetStatus = overview.application_status === "rejected" ? "finished" : "admitted";
   return (
     overview.application_history.find((application) => application.status === targetStatus)
     ?? overview.application_history[0]
@@ -743,6 +800,12 @@ function ProcessClosedCard({
   onUpdateResume: () => void;
 }) {
   const jobTitle = application?.job_title || "esta vaga";
+  const isDismissed = overview.application_status === "dismissed";
+  const title = isDismissed ? "Processo admissional encerrado" : "Processo encerrado";
+  const badge = isDismissed ? "Desligado" : "Não selecionado";
+  const supportMessage = isDismissed
+    ? "Seu histórico admissional continua registrado. Se precisar, solicite contato com o RH."
+    : "Seu perfil continuará disponível em nosso banco de talentos e poderá ser considerado em futuras oportunidades compatíveis.";
 
   return (
     <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card dark:bg-card/70 shadow-xs">
@@ -752,19 +815,19 @@ function ProcessClosedCard({
             <span className="inline-flex w-fit items-center rounded-full bg-primary/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-primary">
               {jobTitle}
             </span>
-            <CardTitle className="text-xl font-black text-foreground">Processo encerrado</CardTitle>
+            <CardTitle className="text-xl font-black text-foreground">{title}</CardTitle>
             <CardDescription className="max-w-2xl text-sm font-semibold leading-relaxed text-muted-foreground">
               {overview.closed_reason_public_label || "Você não foi selecionado para esta vaga no momento."}
             </CardDescription>
           </div>
           <span className="inline-flex w-fit items-center rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs font-bold text-foreground">
-            Não selecionado
+            {badge}
           </span>
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-5">
         <p className="rounded-xl border border-border bg-muted/30 p-4 text-sm font-medium leading-relaxed text-muted-foreground">
-          Seu perfil continuará disponível em nosso banco de talentos e poderá ser considerado em futuras oportunidades compatíveis.
+          {supportMessage}
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           {overview.can_request_contact ? (
@@ -955,12 +1018,13 @@ export function CandidatePortalPage() {
   const applicationHistory: CandidatePortalApplication[] = overview?.application_history ?? [];
   const closedProcessApplication = overview ? getClosedProcessApplication(overview) : null;
   const isRejectedProcess = overview?.application_status === "rejected";
+  const isClosedProcess = isRejectedProcess || overview?.application_status === "dismissed";
   const isAdmittedProcess = overview?.application_status === "admitted";
   const isTalentPoolOnly =
     overview?.application_status === "talent_pool" || overview?.application_status === "no_active_application";
   const behavioralAssessments: BehavioralAssignmentSummary[] = behavioralAssessmentSummaries;
   const pendingBehavioralAssessments =
-    isRejectedProcess || isAdmittedProcess
+    isClosedProcess || isAdmittedProcess
       ? []
       : behavioralAssessments.filter(
           (item) => item.status === "pending" || item.status === "in_progress",
@@ -968,7 +1032,7 @@ export function CandidatePortalPage() {
 
   const visibleSteps = buildCandidateVisibleSteps(overview);
   const currentStepObj = visibleSteps.find(s => s.status === "current") || (visibleSteps.length > 0 ? visibleSteps[visibleSteps.length - 1] : null);
-  const currentStatusTitle = currentStepObj?.title || overview?.status_public || "Currículo em análise";
+  const currentStatusTitle = currentStepObj?.title || candidateSafeLabel(overview?.status_public) || "Currículo em análise";
   const currentStatusDesc = currentStepObj?.description || "Seu currículo está sendo avaliado pelo nosso time.";
 
   async function loadPortalData(refresh = false) {
@@ -1176,11 +1240,6 @@ export function CandidatePortalPage() {
     }
   };
 
-  const reloadPreAdmission = async () => {
-    const payload = await candidatePortalService.getPreAdmission();
-    setPreAdmission(payload);
-  };
-
   const handleMenuClick = (menuId: string) => {
     setActiveMenuId(menuId);
     if (menuId === "candidaturas" || menuId === "vagas") {
@@ -1331,7 +1390,7 @@ export function CandidatePortalPage() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                {overview.status_public}
+                {candidateSafeLabel(overview.status_public)}
               </div>
             )}
             <button
@@ -1477,18 +1536,20 @@ export function CandidatePortalPage() {
                           </div>
                         </div>
                         <Button
-                          onClick={() => handleMenuClick("perfil")}
+                          asChild
                           className="h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-center shrink-0"
                           data-testid="candidate-portal-pre-admission-tile-cta"
                         >
-                          Enviar documentos
-                          <ChevronRight className="h-4 w-4" />
+                          <Link to="/candidato/pre-admissao">
+                            Enviar documentos
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
                         </Button>
                       </Card>
                     </div>
                   ) : null}
 
-                  {isRejectedProcess ? (
+                  {isClosedProcess ? (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <ProcessClosedCard
                         overview={overview}
@@ -1513,7 +1574,7 @@ export function CandidatePortalPage() {
                     </div>
                   ) : null}
 
-                  {!isRejectedProcess && !isTalentPoolOnly ? (
+                  {!isClosedProcess && !isTalentPoolOnly ? (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <CandidateInterviewCard interview={publicInterview} />
                     </div>
@@ -1574,8 +1635,8 @@ export function CandidatePortalPage() {
                   ) : null}
 
                   {/* Grid layout */}
-                  <div className={!isRejectedProcess ? "grid grid-cols-1 lg:grid-cols-2 gap-4 w-full" : "w-full"}>
-                    {!isRejectedProcess && (
+                  <div className={!isClosedProcess ? "grid grid-cols-1 lg:grid-cols-2 gap-4 w-full" : "w-full"}>
+                    {!isClosedProcess && (
                       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
                         <NextUpdateCard />
                       </div>
@@ -1591,9 +1652,11 @@ export function CandidatePortalPage() {
                   </div>
 
                   {/* Bottom Incentive Card */}
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300 w-full">
-                    <BottomIncentiveCard />
-                  </div>
+                  {!isClosedProcess ? (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300 w-full">
+                      <BottomIncentiveCard />
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -1622,13 +1685,13 @@ export function CandidatePortalPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {[
                             {
-                              label: isRejectedProcess || isAdmittedProcess ? "Vaga de origem" : "Vaga ativa",
+                              label: isClosedProcess || isAdmittedProcess ? "Vaga de origem" : "Vaga ativa",
                               val: activeApplication?.job_title || closedProcessApplication?.job_title || "Banco de Talentos Marajó",
                               icon: <Briefcase className="h-5 w-5" />,
                             },
                             {
                               label: "Status",
-                              val: overview.status_public,
+                              val: candidateSafeLabel(overview.status_public),
                               icon: <ShieldCheck className="h-5 w-5" />,
                               highlight: true,
                             },
@@ -1674,14 +1737,14 @@ export function CandidatePortalPage() {
                         </div>
                       </CardContent>
                       </Card>
-                      {!isRejectedProcess && !isTalentPoolOnly ? (
+                      {!isClosedProcess && !isTalentPoolOnly ? (
                         <CandidateInterviewCard interview={publicInterview} />
                       ) : null}
                     </div>
 
                     {/* Next Update Card & Basic Candidate Info - Side column */}
                     <div className="flex flex-col gap-6">
-                      {!isRejectedProcess && <NextUpdateCard />}
+                      {!isClosedProcess && <NextUpdateCard />}
                       
                       {/* Basic Candidate Metadata */}
                       <Card className="overflow-hidden border border-border rounded-[1.25rem] bg-card shadow-xs flex-1">
@@ -1783,7 +1846,7 @@ export function CandidatePortalPage() {
                               job_id: activeApplication.job_id,
                               job_title: activeApplication.job_title,
                               status: activeApplication.pipeline_stage,
-                              status_label: activeApplication.status_public,
+                              status_label: candidateSafeLabel(activeApplication.status_public),
                               submitted_at: activeApplication.submitted_at,
                               updated_at: activeApplication.submitted_at,
                               resume_file_name: activeApplication.resume_filename,
@@ -1942,10 +2005,7 @@ export function CandidatePortalPage() {
                       </CardContent>
                     </Card>
 
-                    <CandidatePortalPreAdmissionCard
-                      preAdmission={preAdmission}
-                      onUploaded={reloadPreAdmission}
-                    />
+                    <CandidatePortalPreAdmissionSummaryCard preAdmission={preAdmission} />
                   </div>
 
                   {/* Right Column: Resume Upload */}

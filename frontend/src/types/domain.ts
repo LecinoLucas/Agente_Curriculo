@@ -611,6 +611,13 @@ export type JobPipelineBoard = {
   columns: PipelineColumn[];
 };
 
+export type PipelineBoardFilters = {
+  entered_from?: string;
+  entered_to?: string;
+  updated_from?: string;
+  updated_to?: string;
+};
+
 export type PipelineTrigger = "manual" | "auto_match" | "system";
 
 export type PipelineStageTransition = {
@@ -712,6 +719,8 @@ export type MovePipelineCandidateResponse = {
   status: "active" | "hired" | "rejected" | "transferred";
   transition_id: string;
   updated_at: string;
+  required_action?: "open_pre_admission" | null;
+  pre_admission_case_id?: string | null;
   analysis?: PipelineAnalysisDecision | null;
 };
 
@@ -960,6 +969,31 @@ export type PaginatedResponse<T> = {
   total_pages: number;
 };
 
+export type AdmittedCandidate = {
+  candidate_id: string;
+  candidate_name: string;
+  candidate_email: string | null;
+  job_id: string;
+  job_title: string;
+  pipeline_id: string | null;
+  admission_case_id: string;
+  admission_status: string;
+  admitted_at: string;
+  dismissed_at: string | null;
+  start_date: string | null;
+  work_model: string | null;
+};
+
+export type AdmittedCandidatesSummary = {
+  total_admitted: number;
+  admitted_this_month: number;
+  latest_admitted_at: string | null;
+};
+
+export type AdmittedCandidatesPage = PaginatedResponse<AdmittedCandidate> & {
+  summary: AdmittedCandidatesSummary;
+};
+
 export type BehavioralAssignmentAnswer = {
   answer_text: string | null;
   answer_value: number | null;
@@ -1095,6 +1129,7 @@ export type InterviewScorecardPayload = {
 
 export type InterviewScorecardEnvelope = {
   scorecard: InterviewScorecard | null;
+  scorecards?: InterviewScorecard[];
   suggested_behavioral_questions: string[];
 };
 
@@ -1232,19 +1267,10 @@ export type PreAdmissionStatus =
   | "documents_received"
   | "ready_for_admission"
   | "admitted"
+  | "dismissed"
   | "cancelled";
 
-export type PreAdmissionChecklistItemType =
-  | "cpf"
-  | "rg"
-  | "comprovante_endereco"
-  | "carteira_trabalho"
-  | "pis"
-  | "titulo_eleitor"
-  | "certificado_reservista"
-  | "exame_admissional"
-  | "dados_bancarios"
-  | "other";
+export type PreAdmissionChecklistItemType = string;
 
 export type PreAdmissionChecklistItemStatus =
   | "pending"
@@ -1280,11 +1306,17 @@ export type PreAdmissionDocument = {
 export type PreAdmissionChecklistItem = {
   id: string;
   case_id: string;
+  template_item_id?: string | null;
+  document_key: string;
   item_type: PreAdmissionChecklistItemType;
   title: string;
   status: PreAdmissionChecklistItemStatus;
   required: boolean;
   notes: string | null;
+  candidate_description?: string | null;
+  accepted_file_types: string[];
+  max_file_size_mb: number;
+  display_order: number;
   created_at: string;
   updated_at: string;
   documents?: PreAdmissionDocument[];
@@ -1295,6 +1327,8 @@ export type PreAdmissionCase = {
   candidate_id: string;
   job_id: string;
   hiring_decision_id: string;
+  checklist_template_id?: string | null;
+  checklist_template_name?: string | null;
   status: PreAdmissionStatus;
   salary_offer: string | number | null;
   start_date: string | null;
@@ -1304,6 +1338,8 @@ export type PreAdmissionCase = {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  dismissed_at: string | null;
+  dismissal_reason: string | null;
   checklist_items: PreAdmissionChecklistItem[];
 };
 
@@ -1323,6 +1359,7 @@ export type PreAdmissionEnvelope = {
 };
 
 export type PreAdmissionPayload = {
+  checklist_template_id?: string | null;
   salary_offer?: string | number | null;
   start_date?: string | null;
   work_model?: string | null;
@@ -1335,13 +1372,73 @@ export type PreAdmissionUpdatePayload = PreAdmissionPayload & {
 
 export type PreAdmissionChecklistItemPayload = {
   item_type: PreAdmissionChecklistItemType;
+  document_key?: string | null;
   title: string;
   status?: PreAdmissionChecklistItemStatus;
   required?: boolean;
   notes?: string | null;
+  candidate_description?: string | null;
+  accepted_file_types?: string[] | null;
+  max_file_size_mb?: number | null;
+  display_order?: number | null;
 };
 
 export type PreAdmissionChecklistItemUpdatePayload = Partial<PreAdmissionChecklistItemPayload>;
+
+export type PreAdmissionChecklistTemplateItem = {
+  id: string;
+  template_id: string;
+  document_key: string;
+  title: string;
+  candidate_description: string | null;
+  is_required: boolean;
+  accepted_file_types: string[];
+  max_file_size_mb: number;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PreAdmissionChecklistTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  admission_type: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PreAdmissionChecklistTemplateDetail = PreAdmissionChecklistTemplate & {
+  items: PreAdmissionChecklistTemplateItem[];
+};
+
+export type PreAdmissionChecklistTemplatePayload = {
+  name: string;
+  description?: string | null;
+  admission_type?: string | null;
+  is_active?: boolean;
+  is_default?: boolean;
+};
+
+export type PreAdmissionChecklistTemplateUpdatePayload = Partial<PreAdmissionChecklistTemplatePayload>;
+
+export type PreAdmissionChecklistTemplateItemPayload = {
+  document_key: string;
+  title: string;
+  candidate_description?: string | null;
+  is_required?: boolean;
+  accepted_file_types?: string[] | null;
+  max_file_size_mb?: number;
+  display_order?: number | null;
+  is_active?: boolean;
+};
+
+export type PreAdmissionChecklistTemplateItemUpdatePayload =
+  Partial<PreAdmissionChecklistTemplateItemPayload>;
 
 export type PreAdmissionEventsResponse = {
   events: PreAdmissionEvent[];
@@ -1418,11 +1515,21 @@ export type AdmissionWorkspaceChecklist = {
 
 export type AdmissionWorkspaceDocument = {
   id: string;
+  checklist_item_id: string;
+  checklist_title: string;
+  required: boolean;
   filename: string;
   document_type: PreAdmissionChecklistItemType | string;
+  mime_type: string;
+  size_bytes: number;
   status: AdmissionWorkspaceDocumentStatus;
   uploaded_at: string;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+  review_notes: string | null;
+  rejection_reason_public: string | null;
   approved_at: string | null;
+  is_current_for_item: boolean;
 };
 
 export type AdmissionWorkspaceBlocker = {
@@ -1454,6 +1561,50 @@ export type AdmissionWorkspaceRecentEvent = {
   title: string;
   description: string;
   created_at: string;
+  actor_name?: string | null;
+};
+
+export type AdmissionCaseOverviewProgress = {
+  total: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+  in_review: number;
+  waived: number;
+};
+
+export type AdmissionCaseOverviewIntegrationStatus = {
+  state: string;
+  label: string;
+  ready_for_export: boolean;
+};
+
+export type AdmissionCaseOverview = {
+  case: AdmissionWorkspaceCase;
+  candidate: AdmissionWorkspaceCandidate;
+  job: AdmissionWorkspaceJob;
+  status_label: string;
+  progress: AdmissionCaseOverviewProgress;
+  main_blocker: AdmissionWorkspaceBlocker | null;
+  main_blockers: AdmissionWorkspaceBlocker[];
+  next_action: AdmissionWorkspaceNextAction | null;
+  next_actions: AdmissionWorkspaceNextAction[];
+  summary: AdmissionWorkspaceSummary;
+  integration_status: AdmissionCaseOverviewIntegrationStatus;
+  updated_at: string;
+};
+
+export type AdmissionCaseDocumentsPayload = {
+  checklist: AdmissionWorkspaceChecklist;
+  documents: AdmissionWorkspaceDocument[];
+};
+
+export type AdmissionCaseEventsPage = {
+  items: AdmissionWorkspaceRecentEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
 };
 
 export type AdmissionCaseWorkspace = {
@@ -1589,6 +1740,16 @@ export type ErpIntegrationAttemptValidationError = {
   message: string;
 };
 
+export type ErpIntegrationAttemptErrorSummary = {
+  code: string;
+  message: string;
+  stage?: string | null;
+  field?: string | null;
+  retryable?: boolean;
+  http_status?: number | null;
+  timestamp?: string | null;
+};
+
 export type ErpIntegrationAttempt = {
   id: string;
   package_id: string;
@@ -1598,6 +1759,14 @@ export type ErpIntegrationAttempt = {
   provider: string;
   mode: ErpIntegrationAttemptMode;
   status: ErpIntegrationAttemptStatus;
+  lifecycle_status?: string;
+  retryable?: boolean;
+  idempotency_key?: string | null;
+  external_reference?: string | null;
+  http_status?: number | null;
+  request_headers_json?: Record<string, unknown> | null;
+  response_headers_json?: Record<string, unknown> | null;
+  attempt_number?: number;
   request_payload_json: ErpDryRunPayloadPreview;
   response_payload_json: {
     success?: boolean;
@@ -1607,6 +1776,7 @@ export type ErpIntegrationAttempt = {
   } | null;
   validation_errors_json: ErpIntegrationAttemptValidationError[] | null;
   error_message: string | null;
+  error_summary?: ErpIntegrationAttemptErrorSummary | null;
   attempted_by: string | null;
   created_at: string;
   updated_at: string;

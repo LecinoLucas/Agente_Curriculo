@@ -7,6 +7,7 @@ import {
 } from "./templateImporter";
 import { BUNDLED_TEMPLATES } from "./catalog/behavioralTemplateCatalog";
 import { CandidatePreviewModal } from "./CandidatePreviewModal";
+import { Input } from "@/components/ui/input";
 
 type Props = {
   onClose: () => void;
@@ -45,13 +46,13 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-4xl rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-2xl">
+      <div className="my-8 w-full max-w-4xl rounded-2xl border border-border bg-surface shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-[hsl(var(--border))] px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
           <div>
-            <h2 className="text-xl font-bold text-[hsl(var(--text))]">Modelos prontos</h2>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            <h2 className="text-xl font-bold text-text">Modelos prontos</h2>
+            <p className="mt-1 text-sm text-text-muted">
               Selecione um modelo para criar um rascunho editável. Você poderá personalizar antes de ativar.
             </p>
           </div>
@@ -59,7 +60,7 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
             type="button"
             onClick={onClose}
             disabled={importingName !== null}
-            className="shrink-0 rounded-xl p-2 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))] disabled:opacity-40"
+            className="shrink-0 rounded-xl p-2 text-text-muted hover:bg-[hsl(var(--accent-soft))] hover:text-text disabled:opacity-40"
           >
             <X className="h-5 w-5" />
           </button>
@@ -68,12 +69,12 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
         {/* Search & Filter Chips */}
         <div className="px-6 pt-4 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <input
+            <Input
               type="text"
               placeholder="Buscar modelos por nome ou descrição..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="ui-input flex-1"
+              className="flex-1 h-11"
             />
           </div>
 
@@ -87,7 +88,7 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
                   "rounded-full px-3 py-1 text-xs font-semibold transition-all duration-200 border",
                   selectedCategory === cat
                     ? "bg-[hsl(var(--primary))] text-white border-transparent"
-                    : "bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]"
+                    : "bg-surface text-text-muted border-border hover:bg-surface-muted"
                 )}
               >
                 {cat === "all" ? "Todos" : cat}
@@ -107,7 +108,7 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
 
         {/* Template grid */}
         {filteredTemplates.length === 0 ? (
-          <div className="p-12 text-center text-[hsl(var(--text-muted))]">
+          <div className="p-12 text-center text-text-muted">
             Nenhum modelo encontrado correspondente aos termos de busca.
           </div>
         ) : (
@@ -121,7 +122,7 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
                 <div
                   key={template.name}
                   className={cn(
-                    "flex flex-col rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-5 transition-all duration-200",
+                    "flex flex-col rounded-2xl border border-border bg-[hsl(var(--bg))] p-5 transition-all duration-200",
                     isImporting ? "opacity-80" : "hover:shadow-md hover:border-[hsl(var(--primary))]/30",
                   )}
                 >
@@ -131,15 +132,15 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
                   </span>
 
                   {/* Name */}
-                  <h3 className="text-sm font-bold leading-snug text-[hsl(var(--text))]">
+                  <h3 className="text-sm font-bold leading-snug text-text">
                     {template.name.replace("Avaliação Comportamental — ", "")}
                   </h3>
-                  <p className="mt-1.5 line-clamp-3 text-xs text-[hsl(var(--text-muted))]">
+                  <p className="mt-1.5 line-clamp-3 text-xs text-text-muted">
                     {template.description}
                   </p>
 
                   {/* Meta */}
-                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-[hsl(var(--text-muted))]">
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-text-muted">
                     <span className="flex items-center gap-1">
                       <Layers className="h-3.5 w-3.5" />
                       {template.competencies.length} competências
@@ -157,15 +158,15 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
                   </div>
 
                   {/* Competency list */}
-                  <ul className="mt-3 space-y-0.5 border-t border-[hsl(var(--border))] pt-3">
+                  <ul className="mt-3 space-y-0.5 border-t border-border pt-3">
                     {template.competencies.slice(0, 3).map((c) => (
-                      <li key={c.key} className="flex items-center gap-1.5 text-xs text-[hsl(var(--text-muted))] line-clamp-1">
+                      <li key={c.key} className="flex items-center gap-1.5 text-xs text-text-muted line-clamp-1">
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--primary))]" />
                         {c.name}
                       </li>
                     ))}
                     {template.competencies.length > 3 && (
-                      <li className="text-xs text-[hsl(var(--text-muted))] italic pl-3">
+                      <li className="text-xs text-text-muted italic pl-3">
                         + {template.competencies.length - 3} competências...
                       </li>
                     )}
@@ -177,7 +178,7 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
                       type="button"
                       onClick={() => setPreviewTemplate(template)}
                       disabled={importingName !== null}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-medium text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))] disabled:opacity-40"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-medium text-text-muted transition-colors hover:bg-[hsl(var(--accent-soft))] hover:text-text disabled:opacity-40"
                     >
                       <Eye className="h-3.5 w-3.5" />
                       Preview
@@ -213,12 +214,12 @@ export function TemplateGalleryModal({ onClose, onImport, importingName }: Props
         )}
 
         {/* Footer */}
-        <div className="flex justify-end border-t border-[hsl(var(--border))] px-6 py-4">
+        <div className="flex justify-end border-t border-border px-6 py-4">
           <button
             type="button"
             onClick={onClose}
             disabled={importingName !== null}
-            className="rounded-xl border border-[hsl(var(--border))] px-4 py-2 text-sm font-medium text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))] disabled:opacity-40"
+            className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-[hsl(var(--accent-soft))] hover:text-text disabled:opacity-40"
           >
             Fechar
           </button>

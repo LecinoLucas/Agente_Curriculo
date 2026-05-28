@@ -27,17 +27,17 @@ function blockerSeverityColor(severity: string): {
 } {
   if (severity === "high") {
     return {
-      bg: "bg-[hsl(var(--danger-soft))]",
+      bg: "bg-danger-soft",
       border: "border-[hsl(var(--danger))]/20",
-      icon: "text-[hsl(var(--danger))]",
-      btn: "border-[hsl(var(--danger))]/30 text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger-soft))]",
+      icon: "text-danger",
+      btn: "border-[hsl(var(--danger))]/30 text-danger hover:bg-danger-soft",
     };
   }
   return {
-    bg: "bg-[hsl(var(--warning-soft))]",
+    bg: "bg-warning-soft",
     border: "border-[hsl(var(--warning))]/20",
-    icon: "text-[hsl(var(--warning))]",
-    btn: "border-[hsl(var(--warning))]/30 text-[hsl(var(--warning))] hover:bg-[hsl(var(--warning-soft))]",
+    icon: "text-warning",
+    btn: "border-[hsl(var(--warning))]/30 text-warning hover:bg-warning-soft",
   };
 }
 
@@ -48,21 +48,21 @@ export function AdmissionBlockersCard({
   return (
     <AdmissionSectionCard title="Pendências principais">
       {blockers.length === 0 ? (
-        <div className="flex items-start gap-3 rounded-xl border border-[hsl(var(--success))]/20 bg-[hsl(var(--success-soft))] p-4">
+        <div className="flex items-start gap-3 rounded-xl border border-[hsl(var(--success))]/20 bg-success-soft p-4">
           <ShieldCheck
-            className="mt-0.5 h-5 w-5 shrink-0 text-[hsl(var(--success))]"
+            className="mt-0.5 h-5 w-5 shrink-0 text-success"
             aria-hidden="true"
           />
           <div>
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">
+            <p className="text-sm font-semibold text-text">
               Sem pendências críticas
             </p>
-            <p className="mt-0.5 text-sm text-[hsl(var(--text-muted))]">
+            <p className="mt-0.5 text-sm text-text-muted">
               O checklist obrigatório está consistente para a próxima etapa.
             </p>
           </div>
           <CheckCircle2
-            className="ml-auto mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--success))]"
+            className="ml-auto mt-0.5 h-4 w-4 shrink-0 text-success"
             aria-hidden="true"
           />
         </div>
@@ -82,10 +82,10 @@ export function AdmissionBlockersCard({
                   aria-hidden="true"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                  <p className="text-sm font-semibold text-text">
                     {blocker.title}
                   </p>
-                  <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
+                  <p className="mt-0.5 text-xs text-text-muted">
                     {blocker.description}
                   </p>
                 </div>

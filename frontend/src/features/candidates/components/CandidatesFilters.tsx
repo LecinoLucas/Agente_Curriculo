@@ -157,7 +157,7 @@ export function CandidatesFilters({
           className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
             activeTab === "all"
               ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
-              : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))]"
+              : "border-border text-text-muted"
           }`}
         >
           Todos
@@ -168,7 +168,7 @@ export function CandidatesFilters({
           className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
             activeTab === "talent_pool"
               ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
-              : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))]"
+              : "border-border text-text-muted"
           }`}
         >
           Banco de Talentos
@@ -179,7 +179,7 @@ export function CandidatesFilters({
           className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
             activeTab === "saved"
               ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
-              : "border-[hsl(var(--border))] text-[hsl(var(--text-muted))]"
+              : "border-border text-text-muted"
           }`}
         >
           Buscas salvas
@@ -188,7 +188,7 @@ export function CandidatesFilters({
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
           <input
             type="text"
             placeholder="Buscar nome, e-mail, CPF, telefone ou skill..."
@@ -243,7 +243,7 @@ export function CandidatesFilters({
       </div>
 
       {showAdvanced ? (
-        <div className="grid gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 md:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 rounded-lg border border-border bg-surface p-3 md:grid-cols-3 xl:grid-cols-4">
           <input
             type="number"
             min={0}
@@ -331,7 +331,7 @@ export function CandidatesFilters({
           {chips.map((chip) => (
             <span
               key={`${chip.key}:${chip.label}`}
-              className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-1 text-xs font-medium text-[hsl(var(--text-muted))]"
+              className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-muted"
             >
               {chip.label}
             </span>

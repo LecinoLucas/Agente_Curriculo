@@ -15,10 +15,45 @@ export default {
       },
       colors: {
         border: "hsl(var(--border))",
+        "border-strong": "hsl(var(--border-strong))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          dark: "hsl(var(--brand-dark))",
+          soft: "hsl(var(--brand-soft))",
+          glow: "hsl(var(--brand-glow))",
+        },
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          muted: "hsl(var(--surface-muted))",
+        },
+        text: {
+          DEFAULT: "hsl(var(--text))",
+          muted: "hsl(var(--text-muted))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          soft: "hsl(var(--success-soft))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          soft: "hsl(var(--warning-soft))",
+        },
+        danger: {
+          DEFAULT: "hsl(var(--danger))",
+          soft: "hsl(var(--danger-soft))",
+        },
+        "accent-soft": "hsl(var(--accent-soft))",
+        "accent-contrast": "hsl(var(--accent-contrast))",
+        "nav-bg": "hsl(var(--nav-bg))",
+        "nav-text": "hsl(var(--nav-text))",
+        "nav-muted": "hsl(var(--nav-muted))",
+        "nav-active-bg": "hsl(var(--nav-active-bg))",
+        "nav-active-text": "hsl(var(--nav-active-text))",
+        "nav-border": "hsl(var(--nav-border))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

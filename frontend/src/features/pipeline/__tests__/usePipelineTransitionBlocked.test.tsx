@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HttpError } from "../../../services/http";
 import { pipelineService } from "../../../services/pipelineService";
-import { usePipelineTransitionBlockedHandler } from "../usePipelineTransitionBlocked";
+import {
+  resolvePreAdmissionNavigationPath,
+  usePipelineTransitionBlockedHandler,
+} from "../usePipelineTransitionBlocked";
 
 vi.mock("../../../services/pipelineService", async () => {
   const actual = await vi.importActual<typeof import("../../../services/pipelineService")>(
@@ -201,5 +204,55 @@ describe("usePipelineTransitionBlockedHandler", () => {
         expect(result.current.forceError).toMatch(/mínimo de 10/i);
       });
     });
+  });
+});
+
+describe("resolvePreAdmissionNavigationPath", () => {
+  it("retorna /admissao/:caseId quando required_action pede pré-admissão e o case_id existe", () => {
+    const path = resolvePreAdmissionNavigationPath({
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      stage: "pre_admission",
+      candidate_status: "Pré-admissão",
+      status: "active",
+      transition_id: "tr-1",
+      updated_at: "2026-05-25T00:00:00Z",
+      required_action: "open_pre_admission",
+      pre_admission_case_id: "case-1",
+      analysis: null,
+    });
+    expect(path).toBe("/admissao/case-1");
+  });
+
+  it("retorna fallback /admissao/novo quando case_id não existe", () => {
+    const path = resolvePreAdmissionNavigationPath({
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      stage: "pre_admission",
+      candidate_status: "Pré-admissão",
+      status: "active",
+      transition_id: "tr-1",
+      updated_at: "2026-05-25T00:00:00Z",
+      required_action: "open_pre_admission",
+      pre_admission_case_id: null,
+      analysis: null,
+    });
+    expect(path).toBe("/admissao/novo?candidateId=cand-1&jobId=job-1");
+  });
+
+  it("retorna null para respostas sem required_action de pré-admissão", () => {
+    const path = resolvePreAdmissionNavigationPath({
+      candidate_id: "cand-1",
+      job_id: "job-1",
+      stage: "screening",
+      candidate_status: "Triagem",
+      status: "active",
+      transition_id: "tr-1",
+      updated_at: "2026-05-25T00:00:00Z",
+      required_action: null,
+      pre_admission_case_id: null,
+      analysis: null,
+    });
+    expect(path).toBeNull();
   });
 });

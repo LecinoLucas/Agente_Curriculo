@@ -55,7 +55,7 @@ export function TopNavDropdown({
           "focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]",
           isActive
             ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-            : "text-[hsl(var(--text-muted))] hover:bg-white/5 hover:text-[hsl(var(--text))]",
+            : "text-text-muted hover:bg-white/5 hover:text-text",
         )}
       >
         {renderIcon(group.label)}
@@ -70,7 +70,7 @@ export function TopNavDropdown({
         <div
           id={menuId}
           role="menu"
-          className="absolute left-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] p-1.5 shadow-xl shadow-black/15"
+          className="absolute left-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-border/70 bg-surface p-1.5 shadow-xl shadow-black/15"
         >
           {group.items.map((item) => {
             const active = isItemActive(item.to);
@@ -92,13 +92,13 @@ export function TopNavDropdown({
                   "focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]",
                   active
                     ? "bg-[hsl(var(--primary)/0.10)] text-[hsl(var(--primary))]"
-                    : "text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/60",
+                    : "text-text hover:bg-surface-muted/60",
                 )}
               >
                 <span className="mt-0.5">{renderIcon(item.to)}</span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">{item.label}</span>
-                  <span className="block truncate text-xs text-[hsl(var(--text-muted))]">{item.caption}</span>
+                  <span className="block truncate text-xs text-text-muted">{item.caption}</span>
                 </span>
               </NavLink>
             );

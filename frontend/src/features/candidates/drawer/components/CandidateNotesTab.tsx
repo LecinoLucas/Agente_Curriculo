@@ -124,9 +124,9 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
 
   return (
     <section className="space-y-4 p-5">
-      <div className="rounded-xl border border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] p-4">
-        <p className="text-sm font-semibold text-[hsl(var(--text))]">Observações</p>
-        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+      <div className="rounded-xl border border-border/40 bg-surface p-4">
+        <p className="text-sm font-semibold text-text">Observações</p>
+        <p className="mt-1 text-xs text-text-muted">
           Essas observações são internas e não ficam visíveis para o candidato.
         </p>
 
@@ -134,12 +134,12 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Escreva uma observação interna sobre este candidato..."
-          className="mt-3 min-h-28 w-full rounded-lg border border-[hsl(var(--border))]/60 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] outline-none transition focus:border-[hsl(var(--primary))]/50"
+          className="mt-3 min-h-28 w-full rounded-lg border border-border/60 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text outline-none transition focus:border-[hsl(var(--primary))]/50"
           maxLength={MAX_NOTE_LENGTH}
         />
 
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-[hsl(var(--text-muted))]">
+          <span className="text-xs text-text-muted">
             {text.length}/{MAX_NOTE_LENGTH}
           </span>
           <button
@@ -165,7 +165,7 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
             <LoaderCircle className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
           </div>
         ) : notes.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-4 text-sm text-[hsl(var(--text-muted))]">
+          <div className="rounded-xl border border-dashed border-border/60 bg-surface p-4 text-sm text-text-muted">
             Nenhuma observação registrada para este candidato.
           </div>
         ) : (
@@ -174,16 +174,16 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
             return (
               <article
                 key={note.id}
-                className="rounded-xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface))] p-4"
+                className="rounded-xl border border-border/60 bg-surface p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{note.author.name}</p>
-                    <p className="text-xs text-[hsl(var(--text-muted))]">{formatDateTime(note.created_at)}</p>
+                    <p className="text-sm font-semibold text-text">{note.author.name}</p>
+                    <p className="text-xs text-text-muted">{formatDateTime(note.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {note.is_edited ? (
-                      <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[11px] text-[hsl(var(--text-muted))]">
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-text-muted">
                         Editada
                       </span>
                     ) : null}
@@ -196,7 +196,7 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
                       <button
                         type="button"
                         onClick={() => startEdit(note)}
-                        className="rounded-md p-1 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                        className="rounded-md p-1 text-text-muted transition hover:bg-surface-muted hover:text-text"
                         aria-label="Editar observação"
                       >
                         <Pencil className="h-4 w-4" />
@@ -221,14 +221,14 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
                     <textarea
                       value={editText}
                       onChange={(event) => setEditText(event.target.value)}
-                      className="min-h-24 w-full rounded-lg border border-[hsl(var(--border))]/60 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] outline-none transition focus:border-[hsl(var(--primary))]/50"
+                      className="min-h-24 w-full rounded-lg border border-border/60 bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text outline-none transition focus:border-[hsl(var(--primary))]/50"
                       maxLength={MAX_NOTE_LENGTH}
                     />
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
                         onClick={cancelEdit}
-                        className="rounded-lg border border-[hsl(var(--border))]/70 px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text-muted))]"
+                        className="rounded-lg border border-border/70 px-3 py-1.5 text-xs font-semibold text-text-muted"
                       >
                         Cancelar
                       </button>
@@ -243,7 +243,7 @@ export function CandidateNotesTab({ candidateId }: CandidateNotesTabProps) {
                     </div>
                   </div>
                 ) : (
-                  <p className="mt-3 whitespace-pre-wrap text-sm text-[hsl(var(--text))]">{note.note_text}</p>
+                  <p className="mt-3 whitespace-pre-wrap text-sm text-text">{note.note_text}</p>
                 )}
               </article>
             );

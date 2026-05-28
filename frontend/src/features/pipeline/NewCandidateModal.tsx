@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Modal } from "../../components/common/Modal";
+import { Select } from "@/components/ui/select";
 import { candidatesService } from "../../services/candidatesService";
 import { resumeService } from "../../services/resumeService";
 import { formatErrorDetails, handleApiError } from "../../shared/utils/errorHandler";
@@ -274,15 +275,15 @@ export function NewCandidateModal({
     >
       <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-5 p-6 max-h-[70vh] overflow-y-auto">
         <div className="space-y-1">
-          <p className="text-sm text-[hsl(var(--text-muted))]">
+          <p className="text-sm text-text-muted">
             Foque no cadastro inicial. O vínculo com vaga e a análise IA podem continuar depois, no drawer do candidato.
           </p>
         </div>
 
         {!selectedJobId && (
-          <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] px-4 py-3">
-            <p className="text-sm font-medium text-[hsl(var(--warning))]">Aviso</p>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-warning-soft px-4 py-3">
+            <p className="text-sm font-medium text-warning">Aviso</p>
+            <p className="mt-1 text-sm text-text-muted">
               Este candidato será criado sem vaga ativa e ficará com status <strong>Aguardando vaga</strong>.
             </p>
           </div>
@@ -291,7 +292,7 @@ export function NewCandidateModal({
         <div className="grid gap-4 md:grid-cols-2">
           {/* Nome */}
           <label className="flex flex-col gap-1.5 md:col-span-2">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Nome completo *</span>
+            <span className="text-sm font-medium text-text">Nome completo *</span>
             <input
               type="text"
               required
@@ -303,10 +304,10 @@ export function NewCandidateModal({
               }}
               placeholder="Nome do candidato"
               className={[
-                "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
+                "h-10 w-full rounded-lg bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:ring-2",
                 errors.fullName
                   ? "border border-red-300 focus:border-red-500 focus:ring-red-100"
-                  : "border border-[hsl(var(--border))] focus:border-blue-500 focus:ring-blue-100",
+                  : "border border-border focus:border-blue-500 focus:ring-blue-100",
               ].join(" ")}
             />
             {errors.fullName ? <span className="text-xs text-red-600">{errors.fullName}</span> : null}
@@ -314,7 +315,7 @@ export function NewCandidateModal({
 
           {/* E-mail */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">E-mail *</span>
+            <span className="text-sm font-medium text-text">E-mail *</span>
             <input
               type="email"
               required
@@ -325,10 +326,10 @@ export function NewCandidateModal({
               }}
               placeholder="email@exemplo.com"
               className={[
-                "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
+                "h-10 w-full rounded-lg bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:ring-2",
                 errors.email
                   ? "border border-red-300 focus:border-red-500 focus:ring-red-100"
-                  : "border border-[hsl(var(--border))] focus:border-blue-500 focus:ring-blue-100",
+                  : "border border-border focus:border-blue-500 focus:ring-blue-100",
               ].join(" ")}
             />
             {errors.email ? <span className="text-xs text-red-600">{errors.email}</span> : null}
@@ -336,19 +337,19 @@ export function NewCandidateModal({
 
           {/* Telefone */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Telefone</span>
+            <span className="text-sm font-medium text-text">Telefone</span>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(11) 99999-9999"
-              className="h-10 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
           {/* CPF */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">CPF (opcional)</span>
+            <span className="text-sm font-medium text-text">CPF (opcional)</span>
             <input
               type="text"
               value={cpf}
@@ -358,10 +359,10 @@ export function NewCandidateModal({
               }}
               placeholder="Digite qualquer valor"
               className={[
-                "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
+                "h-10 w-full rounded-lg bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:ring-2",
                 errors.cpf
                   ? "border border-red-300 focus:border-red-500 focus:ring-red-100"
-                  : "border border-[hsl(var(--border))] focus:border-blue-500 focus:ring-blue-100",
+                  : "border border-border focus:border-blue-500 focus:ring-blue-100",
               ].join(" ")}
             />
             {errors.cpf ? <span className="text-xs text-red-600">{errors.cpf}</span> : null}
@@ -369,45 +370,45 @@ export function NewCandidateModal({
 
           {/* Cidade */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Cidade</span>
+            <span className="text-sm font-medium text-text">Cidade</span>
             <input
               type="text"
               value={city}
               onChange={(e) => setCity(e.target.value)}
               placeholder="Ex: São Paulo"
-              className="h-10 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
           {/* Fonte do Candidato */}
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Fonte do candidato</span>
+            <span className="text-sm font-medium text-text">Fonte do candidato</span>
             <input
               type="text"
               value={source}
               onChange={(e) => setSource(e.target.value)}
               placeholder="Ex: LinkedIn, Indicação..."
-              className="h-10 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
           {/* Currículo */}
           <div className="flex flex-col gap-1.5 md:col-span-2">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Currículo / Anexo</span>
+            <span className="text-sm font-medium text-text">Currículo / Anexo</span>
             <input
               type="file"
               accept=".pdf,.doc,.docx"
               onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
-              className="w-full text-sm text-[hsl(var(--text))] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[hsl(var(--primary))] file:text-white hover:file:bg-[hsl(var(--primary))]/90"
+              className="w-full text-sm text-text file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[hsl(var(--primary))] file:text-white hover:file:bg-[hsl(var(--primary))]/90"
             />
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+            <div className="rounded-xl border border-border bg-surface-muted px-3 py-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Status do currículo
               </p>
-              <p className="mt-1 text-sm text-[hsl(var(--text))]">
+              <p className="mt-1 text-sm text-text">
                 {resumeFile ? "Currículo pronto para envio" : "Currículo opcional neste momento"}
               </p>
-              <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+              <p className="mt-1 text-xs text-text-muted">
                 {uploadStatusText}
               </p>
             </div>
@@ -415,23 +416,23 @@ export function NewCandidateModal({
 
           {/* Observações Internas */}
           <label className="flex flex-col gap-1.5 md:col-span-2">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Observações internas</span>
+            <span className="text-sm font-medium text-text">Observações internas</span>
             <textarea
               value={internalNotes}
               onChange={(e) => setInternalNotes(e.target.value)}
               placeholder="Anotações sobre o candidato..."
-              className="h-24 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="h-24 w-full rounded-lg border border-border bg-surface p-3 text-sm text-text placeholder:text-text-muted outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
           {/* Vaga (Opcional) */}
           <label className="flex flex-col gap-1.5 md:col-span-2">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Vaga (opcional para vínculo)</span>
-            <select
+            <span className="text-sm font-medium text-text">Vaga (opcional para vínculo)</span>
+            <Select
               value={selectedJobId}
               onChange={(e) => setSelectedJobId(e.target.value)}
               disabled={loading}
-              className="ui-input h-10 rounded-lg px-3 text-sm disabled:opacity-50"
+              className="h-10 rounded-lg px-3 text-sm disabled:opacity-50"
             >
               <option value="">Sem vaga</option>
               {selectableJobs.map((job) => (
@@ -439,7 +440,7 @@ export function NewCandidateModal({
                   {job.title} - {formatJobStatus(job.status)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
 
@@ -450,11 +451,11 @@ export function NewCandidateModal({
         ) : null}
 
         {duplicate ? (
-          <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] p-4">
-            <p className="text-sm font-semibold text-[hsl(var(--warning))]">
+          <div className="rounded-xl border border-[hsl(var(--warning))]/20 bg-warning-soft p-4">
+            <p className="text-sm font-semibold text-warning">
               Já existe um candidato com este email/CPF: <strong>{duplicate.full_name}</strong>
             </p>
-            <p className="mt-1 text-sm text-[hsl(var(--warning))]">
+            <p className="mt-1 text-sm text-warning">
               Deseja abrir o perfil do candidato existente?
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -479,16 +480,16 @@ export function NewCandidateModal({
               id="keepOpen"
               checked={keepOpen}
               onChange={(e) => setKeepOpen(e.target.checked)}
-              className="h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+              className="h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
             />
-            <label htmlFor="keepOpen" className="text-sm font-medium text-[hsl(var(--text-muted))]">
+            <label htmlFor="keepOpen" className="text-sm font-medium text-text-muted">
               Cadastrar outro
             </label>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted transition hover:bg-surface-muted hover:text-text"
           >
             Cancelar
           </button>

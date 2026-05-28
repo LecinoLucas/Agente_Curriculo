@@ -40,14 +40,14 @@ export function CandidateScoreDimensionsCard({ dimensions }: CandidateScoreDimen
   return (
     <div
       data-testid="preview-score-dimensions"
-      className="rounded-lg border border-[hsl(var(--border))]/70 bg-[hsl(var(--bg))]/60 p-3"
+      className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3"
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
         Dimensões
       </p>
       {!hasData ? (
         <p
-          className="mt-1.5 text-sm text-[hsl(var(--text-muted))]"
+          className="mt-1.5 text-sm text-text-muted"
           data-testid="preview-score-dimensions-empty"
         >
           Dimensões ainda não disponíveis.
@@ -57,10 +57,10 @@ export function CandidateScoreDimensionsCard({ dimensions }: CandidateScoreDimen
           {rows.map((row) => (
             <div key={row.key} data-testid={`preview-dimension-${row.key}`}>
               <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                <span className="text-[hsl(var(--text-muted))]">{row.label}</span>
-                <span className="font-medium text-[hsl(var(--text))]">{row.display}</span>
+                <span className="text-text-muted">{row.label}</span>
+                <span className="font-medium text-text">{row.display}</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-[hsl(var(--surface-muted))]">
+              <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted">
                 <div
                   data-testid={`preview-dimension-bar-${row.key}`}
                   className={`h-full transition-all ${getBarToneClass(row.key, row.percent)}`}
@@ -76,7 +76,7 @@ export function CandidateScoreDimensionsCard({ dimensions }: CandidateScoreDimen
 }
 
 function getBarToneClass(key: DimensionKey, percent: number | null): string {
-  if (percent == null) return "bg-[hsl(var(--surface-muted))]";
+  if (percent == null) return "bg-surface-muted";
   if (key === "confidence" && percent < 40) return "bg-[hsl(var(--danger))]";
   if (percent >= 75) return "bg-[hsl(var(--primary))]";
   if (percent >= 40) return "bg-[hsl(var(--warning))]";

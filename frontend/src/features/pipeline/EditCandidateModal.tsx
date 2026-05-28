@@ -156,12 +156,12 @@ export function EditCandidateModal({
         role="dialog"
         aria-modal="true"
         aria-label="Editar candidato"
-        className="ui-card fixed left-1/2 top-1/2 z-[60] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 shadow-2xl"
+        className="fixed left-1/2 top-1/2 z-[60] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-surface p-6 shadow-2xl"
       >
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-[hsl(var(--text))]">Editar candidato</h2>
-            <p className="ui-text-muted mt-0.5 text-sm">
+            <h2 className="text-base font-semibold text-text">Editar candidato</h2>
+            <p className="mt-0.5 text-sm text-text-muted">
               Atualize apenas os dados cadastrais
             </p>
           </div>
@@ -169,23 +169,23 @@ export function EditCandidateModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="shrink-0 rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] disabled:opacity-50"
+            className="shrink-0 rounded-lg p-1.5 text-text-muted transition hover:bg-surface-muted hover:text-text disabled:opacity-50"
             aria-label="Fechar"
           >
             ✕
           </button>
         </div>
 
-        <div className="mb-5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+        <div className="mb-5 rounded-xl border border-border bg-surface-muted px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Candidate ID
           </p>
-          <p className="mt-1 break-all text-sm text-[hsl(var(--text))]">{candidate.id}</p>
+          <p className="mt-1 break-all text-sm text-text">{candidate.id}</p>
         </div>
 
         <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">Nome completo *</span>
+            <span className="text-sm font-medium text-text">Nome completo *</span>
             <input
               type="text"
               value={fullName}
@@ -195,7 +195,7 @@ export function EditCandidateModal({
               }}
               placeholder="Nome do candidato"
               className={[
-                "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
+                "h-10 w-full rounded-lg bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:ring-2",
                 errors.fullName
                   ? "border border-red-300 focus:border-red-500 focus:ring-red-100"
                   : "border border-gray-200 focus:border-blue-500 focus:ring-blue-100",
@@ -205,7 +205,7 @@ export function EditCandidateModal({
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-[hsl(var(--text))]">E-mail *</span>
+            <span className="text-sm font-medium text-text">E-mail *</span>
             <input
               type="email"
               value={email}
@@ -215,7 +215,7 @@ export function EditCandidateModal({
               }}
               placeholder="email@exemplo.com"
               className={[
-                "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
+                "h-10 w-full rounded-lg bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:ring-2",
                 errors.email
                   ? "border border-red-300 focus:border-red-500 focus:ring-red-100"
                   : "border border-gray-200 focus:border-blue-500 focus:ring-blue-100",
@@ -226,7 +226,7 @@ export function EditCandidateModal({
 
           <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-[hsl(var(--text))]">Telefone</span>
+              <span className="text-sm font-medium text-text">Telefone</span>
               <input
                 type="tel"
                 value={phone}
@@ -235,12 +235,12 @@ export function EditCandidateModal({
                   setErrors((current) => ({ ...current, form: undefined }));
                 }}
                 placeholder="(11) 99999-9999"
-                className="h-10 w-full rounded-lg border border-gray-200 bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full rounded-lg border border-gray-200 bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-[hsl(var(--text))]">CPF</span>
+              <span className="text-sm font-medium text-text">CPF</span>
               <input
                 type="text"
                 value={cpf}
@@ -250,7 +250,7 @@ export function EditCandidateModal({
                 }}
                 placeholder="Digite qualquer valor"
                 className={[
-                  "h-10 w-full rounded-lg bg-[hsl(var(--surface))] px-3 text-sm text-[hsl(var(--text))] placeholder:text-[hsl(var(--text-muted))] outline-none focus:ring-2",
+                  "h-10 w-full rounded-lg bg-surface px-3 text-sm text-text placeholder:text-text-muted outline-none focus:ring-2",
                   errors.cpf
                     ? "border border-red-300 focus:border-red-500 focus:ring-red-100"
                     : "border border-gray-200 focus:border-blue-500 focus:ring-blue-100",

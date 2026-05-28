@@ -26,7 +26,7 @@ export function NotificationsBell() {
         className={`relative flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300 ${
           isOpen
             ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
-            : "border-[hsl(var(--border))]/80 bg-[hsl(var(--surface-muted))]/40 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]/80 hover:text-[hsl(var(--text))]"
+            : "border-border/80 bg-surface-muted/40 text-text-muted hover:bg-surface-muted/80 hover:text-text"
         }`}
         aria-label="Notificações"
       >

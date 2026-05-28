@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export type ActionMenuItem = {
   label: string;
@@ -52,19 +53,17 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
 
   return (
     <div className={cn("relative inline-flex", className)}>
-      <button
+      <Button
+        variant="secondary"
+        size="icon"
         ref={buttonRef}
-        type="button"
-        className={cn(
-          "ui-btn-secondary inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors",
-          buttonClassName,
-        )}
+        className={cn("h-9 w-9", buttonClassName)}
         aria-label={buttonLabel}
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
       >
         <MoreHorizontal className="h-4 w-4" />
-      </button>
+      </Button>
 
       {open ? createPortal(
         <>
@@ -73,7 +72,7 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
             onClick={() => setOpen(false)}
           />
           <div 
-            className="ui-card z-[9999] w-48 overflow-hidden rounded-xl shadow-lg border border-[hsl(var(--border))]"
+            className="z-[9999] w-48 overflow-hidden rounded-xl border border-border bg-surface text-text shadow-lg"
             style={menuStyle}
           >
             {visibleItems.map((item) => (
@@ -86,8 +85,8 @@ export function ActionMenu({ items, className, buttonClassName, buttonLabel = "A
                   item.onClick();
                 }}
                 className={cn(
-                  "flex w-full items-center px-3 py-2.5 text-left text-sm transition-colors hover:bg-[hsl(var(--surface-muted))] disabled:cursor-not-allowed disabled:opacity-50",
-                  item.tone === "danger" ? "text-[hsl(var(--danger))]" : "text-[hsl(var(--text))]"
+                  "flex w-full items-center px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50",
+                  item.tone === "danger" ? "text-danger" : "text-text"
                 )}
               >
                 {item.label}

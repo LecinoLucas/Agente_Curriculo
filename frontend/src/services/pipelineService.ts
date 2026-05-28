@@ -25,6 +25,7 @@ export type PipelineGateActionCode =
   | "open_behavioral_ai"
   | "open_decision"
   | "add_reason"
+  | "open_pre_admission"
   /**
    * Sentinel used by the parser when the backend ships an `action` value that
    * the frontend doesn't recognize. We keep the gate visible (so we don't mask
@@ -65,6 +66,7 @@ const GATE_ACTION_CODES: ReadonlySet<PipelineGateActionCode> = new Set<PipelineG
   "open_behavioral_ai",
   "open_decision",
   "add_reason",
+  "open_pre_admission",
   "open_profile",
 ]);
 
@@ -284,6 +286,8 @@ export const pipelineService = {
       status: item?.status ?? "active",
       transition_id: item?.transition_id ?? "",
       updated_at: item?.updated_at ?? new Date(0).toISOString(),
+      required_action: item?.required_action ?? null,
+      pre_admission_case_id: item?.pre_admission_case_id ?? null,
       analysis: normalizeAnalysisDecision(item?.analysis),
     };
   },

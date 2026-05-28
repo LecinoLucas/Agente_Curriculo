@@ -15,18 +15,18 @@ export function fmtPercentValue(value: number | null | undefined): string {
 
 export function scoreColorClass(score: number | null | undefined): string {
   const tone = getScoreTone(score);
-  if (tone === "high") return "text-[hsl(var(--success))]";
-  if (tone === "mid") return "text-[hsl(var(--warning))]";
-  if (tone === "low") return "text-[hsl(var(--danger))]";
-  return "text-[hsl(var(--text-muted))]";
+  if (tone === "high") return "text-success";
+  if (tone === "mid") return "text-warning";
+  if (tone === "low") return "text-danger";
+  return "text-text-muted";
 }
 
 export function scoreBgClass(score: number | null | undefined): string {
   const tone = getScoreTone(score);
-  if (tone === "high") return "bg-[hsl(var(--success-soft))] ring-[hsl(var(--success))]/25";
-  if (tone === "mid") return "bg-[hsl(var(--warning-soft))] ring-[hsl(var(--warning))]/25";
-  if (tone === "low") return "bg-[hsl(var(--danger-soft))] ring-[hsl(var(--danger))]/25";
-  return "bg-[hsl(var(--surface-muted))] ring-[hsl(var(--border))]";
+  if (tone === "high") return "bg-success-soft ring-[hsl(var(--success))]/25";
+  if (tone === "mid") return "bg-warning-soft ring-[hsl(var(--warning))]/25";
+  if (tone === "low") return "bg-danger-soft ring-[hsl(var(--danger))]/25";
+  return "bg-surface-muted ring-[hsl(var(--border))]";
 }
 
 export function getCompatibilityGuidance(params: {

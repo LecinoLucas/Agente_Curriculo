@@ -25,15 +25,15 @@ export function DataQualityBanner({
 
   return (
     <Alert className="border-[hsl(var(--warning))] bg-[hsl(var(--warning))]/5">
-      <AlertDescription className="text-sm text-[hsl(var(--text))]">
+      <AlertDescription className="text-sm text-text">
         <div className="flex items-start justify-between gap-4">
           <div>
             <span className="font-semibold">⚠️ {filteredCount} candidatos ocultados</span>
-            <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+            <p className="mt-1 text-xs text-text-muted">
               {percentage}% do total possui problemas de dados (sem currículo, parsing falhou, etc).
               Esses candidatos não aparecem no ranking por enquanto.
             </p>
-            <div className="mt-2 flex gap-4 text-xs text-[hsl(var(--text-muted))]">
+            <div className="mt-2 flex gap-4 text-xs text-text-muted">
               <span>✅ {validCount} válidos</span>
               <span>❓ {unknownCount} não verificados</span>
               <span>🔴 {filteredCount} com problemas</span>

@@ -94,6 +94,7 @@ describe("AppShell — TopNavbar", () => {
         "Pipeline",
         "Recrutamento",
         "Avaliações",
+        "Admissão",
         "Gestores",
         "IA & Automação",
         "Adm",
@@ -101,13 +102,24 @@ describe("AppShell — TopNavbar", () => {
 
       fireEvent.click(within(topNav()).getByRole("button", { name: "Adm" }));
       expect(screen.getByRole("menuitem", { name: /Credenciais IA/ })).toBeInTheDocument();
+
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
+      expect(screen.getByRole("menuitem", { name: /Admitidos/ })).toBeInTheDocument();
     });
 
     it("renderiza a TopNavbar para recruiter sem áreas de gestor/admin", () => {
       renderShell("recruiter");
 
       expectTopNavLabels(["Dashboard", "Pipeline", "Recrutamento", "Avaliações", "IA & Automação"]);
-      expectTopNavMissing(["Gestores", "Adm"]);
+      expectTopNavMissing(["Admissão", "Gestores", "Adm"]);
+    });
+
+    it("renderiza menu Admitidos para RH", () => {
+      renderShell("hr");
+
+      expectTopNavLabels(["Dashboard", "Pipeline", "Recrutamento", "Admissão"]);
+      fireEvent.click(within(topNav()).getByRole("button", { name: "Admissão" }));
+      expect(screen.getByRole("menuitem", { name: /Admitidos/ })).toBeInTheDocument();
     });
 
     it("renderiza a TopNavbar para manager com apenas grupos permitidos", () => {

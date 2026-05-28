@@ -18,10 +18,10 @@ interface ScoreSummaryProps {
 
 function getQualitativeLabel(score: number | null): { label: string; color: string } {
   const normalized = normalizeScorePercent(score);
-  if (normalized === null) return { label: "—", color: "text-[hsl(var(--text-muted))]" };
-  if (normalized >= 75) return { label: "Forte", color: "text-[hsl(var(--success))]" };
-  if (normalized >= 40) return { label: "Moderado", color: "text-[hsl(var(--warning))]" };
-  return { label: "Fraco", color: "text-[hsl(var(--danger))]" };
+  if (normalized === null) return { label: "—", color: "text-text-muted" };
+  if (normalized >= 75) return { label: "Forte", color: "text-success" };
+  if (normalized >= 40) return { label: "Moderado", color: "text-warning" };
+  return { label: "Fraco", color: "text-danger" };
 }
 
 function ScoreBar({
@@ -34,8 +34,8 @@ function ScoreBar({
   if (value === null || value === undefined) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-[hsl(var(--text-muted))]">{label}</span>
-        <span className="text-xs text-[hsl(var(--text-muted))]">—</span>
+        <span className="text-xs font-medium text-text-muted">{label}</span>
+        <span className="text-xs text-text-muted">—</span>
       </div>
     );
   }
@@ -53,20 +53,20 @@ function ScoreBar({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-[hsl(var(--text))] flex items-center gap-1 relative group">
+        <span className="text-xs font-medium text-text flex items-center gap-1 relative group">
           {label}
           {label === "Confiança" && (
             <>
-              <Info className="h-3 w-3 text-[hsl(var(--text-muted))] cursor-help" />
-              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block bg-[hsl(var(--surface))] border border-[hsl(var(--border))] rounded px-2 py-1 text-[10px] text-[hsl(var(--text))] whitespace-nowrap shadow-lg z-50">
+              <Info className="h-3 w-3 text-text-muted cursor-help" />
+              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block bg-surface border border-border rounded px-2 py-1 text-[10px] text-text whitespace-nowrap shadow-lg z-50">
                 {confidenceMessage}
               </div>
             </>
           )}
         </span>
-        <span className="text-xs font-semibold text-[hsl(var(--text))]">{Math.round(percentage)}%</span>
+        <span className="text-xs font-semibold text-text">{Math.round(percentage)}%</span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-[hsl(var(--surface-muted))]">
+      <div className="h-1.5 w-full rounded-full bg-surface-muted">
         <div
           className={`h-full rounded-full transition-all ${barColor}`}
           style={{ width: `${Math.round(percentage)}%` }}
@@ -106,15 +106,15 @@ export function ScoreSummary({
   }
 
   return (
-    <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div>
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
               Aderência à Vaga
             </p>
             {rank ? (
-              <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2.5 py-0.5 text-xs font-semibold text-[hsl(var(--text-muted))]">
+              <span className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-text-muted">
                 Posição: #{rank}
               </span>
             ) : null}
@@ -122,13 +122,13 @@ export function ScoreSummary({
           <div className="mt-2 flex items-end gap-2">
             <span
               className={[
-                "text-3xl font-semibold tracking-[-0.03em] tabular-nums text-[hsl(var(--text))]",
+                "text-3xl font-semibold tracking-[-0.03em] tabular-nums text-text",
                 getScoreTone(compatibilityScore) === "high"
-                  ? "text-[hsl(var(--success))]"
+                  ? "text-success"
                   : getScoreTone(compatibilityScore) === "mid"
-                    ? "text-[hsl(var(--warning))]"
+                    ? "text-warning"
                     : getScoreTone(compatibilityScore) === "low"
-                      ? "text-[hsl(var(--danger))]"
+                      ? "text-danger"
                       : "",
               ].join(" ")}
             >
@@ -139,16 +139,16 @@ export function ScoreSummary({
             </span>
           </div>
           {summaryText ? (
-            <p className="mt-3 rounded-xl bg-[hsl(var(--surface-muted))]/55 px-3 py-2.5 text-sm leading-6 text-[hsl(var(--text-muted))]">
+            <p className="mt-3 rounded-xl bg-surface-muted/55 px-3 py-2.5 text-sm leading-6 text-text-muted">
               {summaryText}
             </p>
           ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+            <span className="rounded-full border border-border bg-surface-muted/45 px-2.5 py-1 text-[11px] text-text-muted">
               {freshnessLine}
             </span>
             {deltaLine ? (
-              <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/45 px-2.5 py-1 text-[11px] text-[hsl(var(--text-muted))]">
+              <span className="rounded-full border border-border bg-surface-muted/45 px-2.5 py-1 text-[11px] text-text-muted">
                 {deltaLine}
               </span>
             ) : null}
@@ -156,8 +156,8 @@ export function ScoreSummary({
         </div>
 
         {showBreakdown ? (
-          <div className="space-y-3 rounded-xl border border-[hsl(var(--border))]/60 bg-[hsl(var(--surface-muted))]/30 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          <div className="space-y-3 rounded-xl border border-border/60 bg-surface-muted/30 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
               Dimensões
             </p>
             <ScoreBar label="Skills" value={scoreBreakdown?.skill_match_score} />
@@ -173,7 +173,7 @@ export function ScoreSummary({
 
       {insights.length > 0 ? (
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--text-muted))]">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
             Por que esta aderencia?
           </p>
           <div className="grid gap-2 xl:grid-cols-3">
@@ -186,7 +186,7 @@ export function ScoreSummary({
                     ? "border-emerald-200 bg-emerald-50/65 text-emerald-950"
                     : insight.tone === "negative"
                       ? "border-amber-200 bg-amber-50/75 text-amber-950"
-                      : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/35 text-[hsl(var(--text))]",
+                      : "border-border bg-surface-muted/35 text-text",
                 ].join(" ")}
               >
                 {insight.label}

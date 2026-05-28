@@ -20,14 +20,14 @@ export function ChartCard({
   children,
 }: ChartCardProps) {
   return (
-    <Card className="border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+    <Card className="border-border bg-surface">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-base text-[hsl(var(--text))]">{title}</CardTitle>
+        <CardTitle className="text-base text-text">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="h-72 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
+          <div className="h-72 animate-pulse rounded-2xl bg-surface-muted" />
         ) : empty ? (
           <EmptyState icon="◌" title="Sem dados" description={emptyMessage} />
         ) : (

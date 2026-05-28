@@ -18,29 +18,29 @@ export function CandidateAnalysisSection({
   }
 
   return (
-    <div className="border-t border-[hsl(var(--border))]/20">
+    <div className="border-t border-border/20">
       <button
         type="button"
         onClick={onToggle}
         disabled={isLoading}
-        className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-[hsl(var(--surface-muted))]/30 disabled:opacity-50"
+        className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-surface-muted/30 disabled:opacity-50"
       >
-        <h3 className="font-semibold text-[hsl(var(--text))]">Análise Detalhada</h3>
-        <span className={`text-sm font-semibold text-[hsl(var(--text-muted))] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
+        <h3 className="font-semibold text-text">Análise Detalhada</h3>
+        <span className={`text-sm font-semibold text-text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
           ▼
         </span>
       </button>
 
       {isOpen && (
-        <div className="border-t border-[hsl(var(--border))]/20 px-6 py-4">
+        <div className="border-t border-border/20 px-6 py-4">
           {isLoading ? (
             <div className="animate-pulse space-y-3">
               {Array.from({ length: 2 }).map((_, i) => (
                 <div key={i}>
-                  <div className="mb-2 h-4 w-24 rounded bg-[hsl(var(--surface-muted))]/40" />
+                  <div className="mb-2 h-4 w-24 rounded bg-surface-muted/40" />
                   <div className="space-y-2">
                     {Array.from({ length: 2 }).map((_, j) => (
-                      <div key={j} className="h-3 rounded bg-[hsl(var(--surface-muted))]/40" />
+                      <div key={j} className="h-3 rounded bg-surface-muted/40" />
                     ))}
                   </div>
                 </div>
@@ -56,7 +56,7 @@ export function CandidateAnalysisSection({
                   </h4>
                   <ul className="space-y-1.5">
                     {analysisResult.strengths.map((strength, idx) => (
-                      <li key={idx} className="flex gap-2.5 text-sm text-[hsl(var(--text))]">
+                      <li key={idx} className="flex gap-2.5 text-sm text-text">
                         <span className="shrink-0 font-bold text-green-600">✓</span>
                         <span className="font-medium">{strength}</span>
                       </li>
@@ -73,7 +73,7 @@ export function CandidateAnalysisSection({
                   </h4>
                   <ul className="space-y-1.5">
                     {analysisResult.weaknesses.map((weakness, idx) => (
-                      <li key={idx} className="flex gap-2.5 text-sm text-[hsl(var(--text))]">
+                      <li key={idx} className="flex gap-2.5 text-sm text-text">
                         <span className="shrink-0 text-amber-600">⚠️</span>
                         <span className="font-medium">{weakness}</span>
                       </li>
@@ -85,10 +85,10 @@ export function CandidateAnalysisSection({
               {/* Summary */}
               {analysisResult.candidate_summary && (
                 <div>
-                  <h4 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-[hsl(var(--text))]">
+                  <h4 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-text">
                     Sumário
                   </h4>
-                  <p className="text-sm leading-relaxed text-[hsl(var(--text-muted))]">
+                  <p className="text-sm leading-relaxed text-text-muted">
                     {analysisResult.candidate_summary}
                   </p>
                 </div>
@@ -97,7 +97,7 @@ export function CandidateAnalysisSection({
               {/* Keywords */}
               {analysisResult.keywords && analysisResult.keywords.length > 0 && (
                 <div>
-                  <h4 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-[hsl(var(--text))]">
+                  <h4 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-text">
                     Palavras-chave
                   </h4>
                   <div className="flex flex-wrap gap-2">
@@ -110,7 +110,7 @@ export function CandidateAnalysisSection({
                       </span>
                     ))}
                     {analysisResult.keywords.length > 8 && (
-                      <span className="rounded-full bg-[hsl(var(--surface-muted))]/50 px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text-muted))]">
+                      <span className="rounded-full bg-surface-muted/50 px-3 py-1.5 text-xs font-semibold text-text-muted">
                         +{analysisResult.keywords.length - 8}
                       </span>
                     )}

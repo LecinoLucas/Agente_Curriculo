@@ -82,8 +82,8 @@ export function NotificationItem({ notification, onItemClick }: NotificationItem
       onClick={handleClick}
       className={`group relative flex gap-4 p-4 rounded-xl border transition-all duration-300 cursor-pointer ${
         notification.read
-          ? "bg-[hsl(var(--surface))] border-[hsl(var(--border))]/40 opacity-70 hover:opacity-100 hover:bg-[hsl(var(--surface-muted))]/40"
-          : "bg-[hsl(var(--surface-muted))] border-[hsl(var(--border))] hover:bg-[hsl(var(--surface))]"
+          ? "bg-surface border-border/40 opacity-70 hover:opacity-100 hover:bg-surface-muted/40"
+          : "bg-surface-muted border-border hover:bg-surface"
       }`}
     >
       {/* Category Icon */}
@@ -98,7 +98,7 @@ export function NotificationItem({ notification, onItemClick }: NotificationItem
         <div className="flex items-start justify-between gap-2">
           <p
             className={`text-xs font-bold leading-snug tracking-tight transition-colors ${
-              notification.read ? "text-[hsl(var(--text-muted))]" : "text-[hsl(var(--text))]"
+              notification.read ? "text-text-muted" : "text-text"
             }`}
           >
             {notification.title}
@@ -108,12 +108,12 @@ export function NotificationItem({ notification, onItemClick }: NotificationItem
             <span className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--primary))] animate-pulse mt-1.5" />
           )}
         </div>
-        <p className="text-[11px] leading-relaxed text-[hsl(var(--text-muted))]">
+        <p className="text-[11px] leading-relaxed text-text-muted">
           {notification.description}
         </p>
 
         <div className="flex items-center justify-between pt-2">
-          <span className="text-[9px] font-medium text-[hsl(var(--text-muted))]/70">
+          <span className="text-[9px] font-medium text-text-muted/70">
             {formatRelativeTime(notification.timestamp)}
           </span>
 

@@ -82,7 +82,7 @@ export function CandidateQuickJobActions({
   }
 
   return (
-    <div className="shrink-0 space-y-2 border-t border-[hsl(var(--border))]/30 px-5 py-3">
+    <div className="shrink-0 space-y-2 border-t border-border/30 px-5 py-3">
       {/* Link to active job: only when candidate is not in the job */}
       {!hasActivePipeline && activeJobId && activeJob && (
         <button
@@ -102,7 +102,7 @@ export function CandidateQuickJobActions({
             value={selectedStage}
             onChange={(e) => setSelectedStage(e.target.value as PipelineStage)}
             disabled={stageSaving || interactionLocked || confirmTerminal !== null}
-            className="flex-1 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-xs text-[hsl(var(--text))] disabled:opacity-50"
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text disabled:opacity-50"
           >
             {STAGE_OPTIONS.map(({ value, label }) => (
               <option key={value} value={value}>
@@ -154,7 +154,7 @@ export function CandidateQuickJobActions({
           type="button"
           onClick={onOpenTransferJob}
           disabled={interactionLocked}
-          className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-xs font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text transition hover:bg-surface-muted disabled:opacity-50"
         >
           ↔ Transferir
         </button>

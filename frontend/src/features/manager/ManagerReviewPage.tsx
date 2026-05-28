@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Loader2, Save, Send, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, Loader2, Send, Users } from "lucide-react";
 
 import { collaborationService } from "../../services/collaborationService";
 import {
   managerService,
   type ManagerCandidateDetailResponse,
-  type ScorecardFinalRecommendation,
   type ScorecardResponse,
 } from "../../services/managerService";
+import type { InterviewScorecardPayload } from "../../types/domain";
+import { InterviewScorecardForm } from "../candidates/drawer/components/InterviewScorecardForm";
 import type { ReviewRequestItem } from "../../types/domain";
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -17,7 +18,7 @@ const PRIORITY_LABELS: Record<string, string> = {
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: "bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]",
+  low: "bg-surface-muted text-text-muted",
   medium: "bg-amber-100 text-amber-800",
   high: "bg-rose-100 text-rose-800",
 };
@@ -50,9 +51,10 @@ export function ManagerReviewPage() {
   // Scorecard state
   const [scorecard, setScorecard] = useState<ScorecardResponse | null>(null);
   const [loadingScorecard, setLoadingScorecard] = useState(false);
-  const [scorecardRec, setScorecardRec] = useState<ScorecardFinalRecommendation>("yes");
-  const [scorecardNotes, setScorecardNotes] = useState("");
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [questionsOpen, setQuestionsOpen] = useState(false);
   const [savingScorecard, setSavingScorecard] = useState(false);
+  const [submittingScorecard, setSubmittingScorecard] = useState(false);
   const [scorecardError, setScorecardError] = useState<string | null>(null);
 
   // Candidate browse state (tab 2)
@@ -95,8 +97,8 @@ export function ManagerReviewPage() {
     setFeedbackSent(false);
     setCandidateSummary(null);
     setScorecard(null);
-    setScorecardNotes("");
-    setScorecardRec("yes");
+    setSuggestedQuestions([]);
+    setQuestionsOpen(false);
     setScorecardError(null);
     setLoadingSummary(true);
     setLoadingScorecard(true);
@@ -109,55 +111,47 @@ export function ManagerReviewPage() {
     void managerService.getScorecard(req.job_id, req.candidate_id)
       .then((env) => {
         setScorecard(env.scorecard);
-        if (env.scorecard) {
-          setScorecardRec(env.scorecard.final_recommendation ?? "yes");
-          setScorecardNotes(env.scorecard.overall_notes ?? "");
-        }
+        setSuggestedQuestions(env.suggested_behavioral_questions ?? []);
       })
       .catch(() => {})
       .finally(() => setLoadingScorecard(false));
   }
 
-  async function handleSaveScorecard() {
-    if (!selectedRequest) return;
+  async function handleSaveScorecard(payload: InterviewScorecardPayload): Promise<ScorecardResponse> {
+    if (!selectedRequest) {
+      throw new Error("manager_scorecard_context_missing");
+    }
     setSavingScorecard(true);
     setScorecardError(null);
     try {
-      let sc = scorecard;
-      if (!sc) {
-        sc = await managerService.createScorecard(selectedRequest.job_id, selectedRequest.candidate_id, { items: [] });
-      }
-      const updated = await managerService.patchScorecard(sc.id, {
-        final_recommendation: scorecardRec,
-        overall_notes: scorecardNotes,
-      });
-      setScorecard(updated);
+      const saved = scorecard
+        ? await managerService.patchScorecard(scorecard.id, payload)
+        : await managerService.createScorecard(selectedRequest.job_id, selectedRequest.candidate_id, {
+            final_recommendation: payload.final_recommendation ?? null,
+            overall_notes: payload.overall_notes ?? null,
+            items: payload.items ?? [],
+          });
+      setScorecard(saved);
+      return saved;
     } catch {
       setScorecardError("Não foi possível salvar o rascunho.");
+      throw new Error("manager_scorecard_save_failed");
     } finally {
       setSavingScorecard(false);
     }
   }
 
-  async function handleSubmitScorecard() {
-    if (!selectedRequest) return;
-    setSavingScorecard(true);
+  async function handleSubmitScorecard(scorecardId: string) {
+    setSubmittingScorecard(true);
     setScorecardError(null);
     try {
-      let sc = scorecard;
-      if (!sc) {
-        sc = await managerService.createScorecard(selectedRequest.job_id, selectedRequest.candidate_id, { items: [] });
-      }
-      sc = await managerService.patchScorecard(sc.id, {
-        final_recommendation: scorecardRec,
-        overall_notes: scorecardNotes,
-      });
-      const submitted = await managerService.submitScorecard(sc.id);
+      const submitted = await managerService.submitScorecard(scorecardId);
       setScorecard(submitted);
     } catch {
       setScorecardError("Não foi possível enviar a avaliação.");
+      throw new Error("manager_scorecard_submit_failed");
     } finally {
-      setSavingScorecard(false);
+      setSubmittingScorecard(false);
     }
   }
 
@@ -226,8 +220,8 @@ export function ManagerReviewPage() {
     <div className="space-y-0 p-6">
       {/* Header */}
       <div className="mb-6 space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-[hsl(var(--text))]">Revisão de Candidatos</h1>
-        <p className="text-sm text-[hsl(var(--text-muted))]">
+        <h1 className="text-2xl font-bold tracking-tight text-text">Revisão de Candidatos</h1>
+        <p className="text-sm text-text-muted">
           Avalie candidatos e envie sua recomendação ao recrutador.
         </p>
       </div>
@@ -240,7 +234,7 @@ export function ManagerReviewPage() {
       )}
 
       {/* Tabs */}
-      <div className="mb-6 flex gap-1 border-b border-[hsl(var(--border))]">
+      <div className="mb-6 flex gap-1 border-b border-border">
         <button
           type="button"
           onClick={() => setActiveTab("requests")}
@@ -248,7 +242,7 @@ export function ManagerReviewPage() {
             "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors",
             activeTab === "requests"
               ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
-              : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+              : "text-text-muted hover:text-text",
           ].join(" ")}
         >
           <Clock className="h-4 w-4" />
@@ -266,7 +260,7 @@ export function ManagerReviewPage() {
             "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors",
             activeTab === "candidates"
               ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
-              : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]",
+              : "text-text-muted hover:text-text",
           ].join(" ")}
         >
           <Users className="h-4 w-4" />
@@ -280,7 +274,7 @@ export function ManagerReviewPage() {
           {/* List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">Pendentes de revisão</p>
+              <p className="text-sm font-semibold text-text">Pendentes de revisão</p>
               <button
                 type="button"
                 onClick={loadReviewRequests}
@@ -295,10 +289,10 @@ export function ManagerReviewPage() {
                 <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
               </div>
             ) : requests.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-8 text-center">
-                <CheckCircle2 className="mx-auto h-8 w-8 text-[hsl(var(--text-muted))] mb-2" />
-                <p className="text-sm font-medium text-[hsl(var(--text-muted))]">Nenhuma solicitação pendente</p>
-                <p className="text-xs text-[hsl(var(--text-muted))] mt-1">
+              <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                <CheckCircle2 className="mx-auto h-8 w-8 text-text-muted mb-2" />
+                <p className="text-sm font-medium text-text-muted">Nenhuma solicitação pendente</p>
+                <p className="text-xs text-text-muted mt-1">
                   Quando um recrutador solicitar sua revisão, ela aparecerá aqui.
                 </p>
               </div>
@@ -313,11 +307,11 @@ export function ManagerReviewPage() {
                       "w-full text-left rounded-xl border p-3.5 transition-all",
                       selectedRequest?.request_id === req.request_id
                         ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.06)]"
-                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--surface))]",
+                        : "border-border hover:border-[hsl(var(--primary)/0.4)] bg-surface",
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className="text-sm font-semibold text-[hsl(var(--text))] truncate">{req.candidate_name}</p>
+                      <p className="text-sm font-semibold text-text truncate">{req.candidate_name}</p>
                       <div className="flex gap-1.5 flex-shrink-0">
                         {req.is_directed_to_me && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">
@@ -339,9 +333,9 @@ export function ManagerReviewPage() {
                         </span>
                       </div>
                     </div>
-                    <p className="text-xs text-[hsl(var(--text-muted))] mb-1.5 truncate">{req.job_title}</p>
-                    <p className="text-xs text-[hsl(var(--text))] line-clamp-2">{req.latest_message}</p>
-                    <p className="mt-1.5 text-[10px] text-[hsl(var(--text-muted))]">
+                    <p className="text-xs text-text-muted mb-1.5 truncate">{req.job_title}</p>
+                    <p className="text-xs text-text line-clamp-2">{req.latest_message}</p>
+                    <p className="mt-1.5 text-[10px] text-text-muted">
                       {new Date(req.requested_at).toLocaleDateString("pt-BR", { dateStyle: "short" })}
                       {req.pipeline_stage && ` · Etapa: ${req.pipeline_stage}`}
                     </p>
@@ -354,16 +348,16 @@ export function ManagerReviewPage() {
           {/* Detail + Feedback */}
           <div>
             {!selectedRequest ? (
-              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-8 text-center h-full flex flex-col items-center justify-center">
-                <p className="text-sm text-[hsl(var(--text-muted))]">Selecione uma solicitação para ver detalhes</p>
+              <div className="rounded-xl border border-dashed border-border p-8 text-center h-full flex flex-col items-center justify-center">
+                <p className="text-sm text-text-muted">Selecione uma solicitação para ver detalhes</p>
               </div>
             ) : (
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 space-y-4">
+              <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
                 {/* Request header */}
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))] mb-2">Solicitação do recrutador</p>
-                  <p className="text-sm text-[hsl(var(--text))]">{selectedRequest.latest_message}</p>
-                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">Solicitação do recrutador</p>
+                  <p className="text-sm text-text">{selectedRequest.latest_message}</p>
+                  <p className="mt-1 text-xs text-text-muted">
                     {new Date(selectedRequest.requested_at).toLocaleDateString("pt-BR", { dateStyle: "long" })}
                   </p>
                   {selectedRequest.is_directed_to_me && (
@@ -375,38 +369,38 @@ export function ManagerReviewPage() {
 
                 {/* Candidate summary */}
                 {loadingSummary ? (
-                  <div className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
+                  <div className="flex items-center gap-2 text-sm text-text-muted">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Carregando resumo...
                   </div>
                 ) : candidateSummary ? (
-                  <div className="rounded-lg border border-[hsl(var(--border))]/60 bg-[hsl(var(--bg))] p-4 space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">Resumo seguro</p>
+                  <div className="rounded-lg border border-border/60 bg-[hsl(var(--bg))] p-4 space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Resumo seguro</p>
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
-                        <p className="text-xs text-[hsl(var(--text-muted))]">Candidato</p>
-                        <p className="font-medium text-[hsl(var(--text))]">{candidateSummary.name}</p>
+                        <p className="text-xs text-text-muted">Candidato</p>
+                        <p className="font-medium text-text">{candidateSummary.name}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-[hsl(var(--text-muted))]">Vaga</p>
-                        <p className="font-medium text-[hsl(var(--text))] truncate">{selectedRequest.job_title}</p>
+                        <p className="text-xs text-text-muted">Vaga</p>
+                        <p className="font-medium text-text truncate">{selectedRequest.job_title}</p>
                       </div>
                       {candidateSummary.pipeline_stage && (
                         <div>
-                          <p className="text-xs text-[hsl(var(--text-muted))]">Etapa</p>
-                          <p className="font-medium text-[hsl(var(--text))] capitalize">{candidateSummary.pipeline_stage}</p>
+                          <p className="text-xs text-text-muted">Etapa</p>
+                          <p className="font-medium text-text capitalize">{candidateSummary.pipeline_stage}</p>
                         </div>
                       )}
                       {selectedRequest.interview_status && (
                         <div>
-                          <p className="text-xs text-[hsl(var(--text-muted))]">Entrevista</p>
-                          <p className="font-medium text-[hsl(var(--text))] capitalize">{selectedRequest.interview_status}</p>
+                          <p className="text-xs text-text-muted">Entrevista</p>
+                          <p className="font-medium text-text capitalize">{selectedRequest.interview_status}</p>
                         </div>
                       )}
                       {candidateSummary.scorecard && (
                         <div className="col-span-2">
-                          <p className="text-xs text-[hsl(var(--text-muted))]">Scorecard</p>
-                          <p className="font-medium text-[hsl(var(--text))] capitalize">
+                          <p className="text-xs text-text-muted">Scorecard</p>
+                          <p className="font-medium text-text capitalize">
                             {candidateSummary.scorecard.status}
                             {candidateSummary.scorecard.recommendation && ` · ${candidateSummary.scorecard.recommendation.replace(/_/g, " ")}`}
                           </p>
@@ -420,10 +414,10 @@ export function ManagerReviewPage() {
                 ) : null}
 
                 {/* Scorecard panel */}
-                <div className="rounded-lg border border-[hsl(var(--border))]/60 bg-[hsl(var(--bg))] p-4 space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">Avaliação do Gestor</p>
+                <div className="rounded-lg border border-border/60 bg-[hsl(var(--bg))] p-4 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Avaliação do Gestor</p>
                   {loadingScorecard ? (
-                    <div className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
+                    <div className="flex items-center gap-2 text-sm text-text-muted">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Carregando avaliação...
                     </div>
@@ -441,55 +435,38 @@ export function ManagerReviewPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Recomendação final</label>
-                        <select
-                          value={scorecardRec}
-                          onChange={(e) => setScorecardRec(e.target.value as ScorecardFinalRecommendation)}
-                          disabled={savingScorecard}
-                          className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
-                        >
-                          <option value="strong_yes">Forte SIM</option>
-                          <option value="yes">SIM</option>
-                          <option value="no">NÃO</option>
-                          <option value="strong_no">Forte NÃO</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Observações gerais</label>
-                        <textarea
-                          value={scorecardNotes}
-                          onChange={(e) => setScorecardNotes(e.target.value)}
-                          rows={3}
-                          disabled={savingScorecard}
-                          placeholder="Descreva sua avaliação detalhada do candidato..."
-                          className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] resize-none"
-                        />
-                      </div>
+                    <div className="space-y-4">
                       {scorecardError && (
                         <p className="text-xs text-rose-600">{scorecardError}</p>
                       )}
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleSaveScorecard()}
-                          disabled={savingScorecard}
-                          className="flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
-                        >
-                          {savingScorecard ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                          Salvar rascunho
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleSubmitScorecard()}
-                          disabled={savingScorecard}
-                          className="flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[hsl(var(--primary))]/90 disabled:opacity-50"
-                        >
-                          {savingScorecard ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                          Enviar avaliação
-                        </button>
-                      </div>
+                      <InterviewScorecardForm
+                        scorecard={scorecard}
+                        saving={savingScorecard}
+                        submitting={submittingScorecard}
+                        onSave={handleSaveScorecard}
+                        onSubmit={handleSubmitScorecard}
+                      />
+                      {suggestedQuestions.length > 0 ? (
+                        <div className="rounded-lg border border-blue-100 bg-blue-50/40">
+                          <button
+                            type="button"
+                            onClick={() => setQuestionsOpen((current) => !current)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-blue-950"
+                          >
+                            Perguntas sugeridas pela IA comportamental
+                            <ChevronDown className={`h-4 w-4 transition ${questionsOpen ? "rotate-180" : ""}`} />
+                          </button>
+                          {questionsOpen ? (
+                            <div className="space-y-2 border-t border-blue-100 px-4 py-3">
+                              {suggestedQuestions.map((question, index) => (
+                                <p key={`${question}-${index}`} className="text-sm text-blue-950">
+                                  {index + 1}. {question}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -505,13 +482,13 @@ export function ManagerReviewPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--text-muted))]">Seu feedback</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Seu feedback</p>
                     <div>
-                      <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Recomendação</label>
+                      <label className="block text-xs text-text-muted mb-1">Recomendação</label>
                       <select
                         value={recommendation}
                         onChange={(e) => setRecommendation(e.target.value as typeof recommendation)}
-                        className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+                        className="w-full rounded-lg border border-border bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
                         disabled={submittingFeedback}
                       >
                         {Object.entries(RECOMMENDATION_LABELS).map(([val, label]) => (
@@ -520,17 +497,17 @@ export function ManagerReviewPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-[hsl(var(--text-muted))] mb-1">Mensagem</label>
+                      <label className="block text-xs text-text-muted mb-1">Mensagem</label>
                       <textarea
                         value={feedbackMessage}
                         onChange={(e) => setFeedbackMessage(e.target.value)}
                         placeholder="Descreva sua avaliação do candidato..."
                         rows={3}
                         disabled={submittingFeedback}
-                        className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))] placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] resize-none"
+                        className="w-full rounded-lg border border-border bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text placeholder-[hsl(var(--text-muted))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] resize-none"
                       />
                     </div>
-                    <p className="text-[10px] text-[hsl(var(--text-muted))]">
+                    <p className="text-[10px] text-text-muted">
                       Sua recomendação não move o candidato automaticamente. O recrutador é responsável pela decisão final.
                     </p>
                     <button
@@ -559,13 +536,13 @@ export function ManagerReviewPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Jobs */}
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Minhas Vagas</p>
+            <p className="text-sm font-semibold text-text">Minhas Vagas</p>
             {loadingJobs ? (
               <div className="flex items-center justify-center h-32">
                 <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
               </div>
             ) : jobs.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-center text-sm text-[hsl(var(--text-muted))]">
+              <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-text-muted">
                 Nenhuma vaga atribuída
               </div>
             ) : (
@@ -579,11 +556,11 @@ export function ManagerReviewPage() {
                       "w-full text-left rounded-xl border p-3 transition-all text-sm",
                       selectedJobId === job.id
                         ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.06)] text-[hsl(var(--primary))]"
-                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--surface))] text-[hsl(var(--text))]",
+                        : "border-border hover:border-[hsl(var(--primary)/0.4)] bg-surface text-text",
                     ].join(" ")}
                   >
                     <p className="font-medium truncate">{job.title}</p>
-                    <p className="text-xs text-[hsl(var(--text-muted))] mt-0.5">
+                    <p className="text-xs text-text-muted mt-0.5">
                       {job.assigned_count} / {job.candidate_count} candidatos
                     </p>
                   </button>
@@ -594,13 +571,13 @@ export function ManagerReviewPage() {
 
           {/* Candidates */}
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Candidatos</p>
+            <p className="text-sm font-semibold text-text">Candidatos</p>
             {loadingCandidates ? (
               <div className="flex items-center justify-center h-32">
                 <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
               </div>
             ) : candidates.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-center text-sm text-[hsl(var(--text-muted))]">
+              <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-text-muted">
                 {selectedJobId ? "Nenhum candidato atribuído" : "Selecione uma vaga"}
               </div>
             ) : (
@@ -614,13 +591,13 @@ export function ManagerReviewPage() {
                       "w-full text-left rounded-xl border p-3 transition-all text-sm",
                       browseSummary?.id === c.id
                         ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.06)]"
-                        : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--surface))]",
+                        : "border-border hover:border-[hsl(var(--primary)/0.4)] bg-surface",
                     ].join(" ")}
                   >
-                    <p className="font-medium truncate text-[hsl(var(--text))]">{c.name}</p>
-                    <p className="text-xs text-[hsl(var(--text-muted))] truncate">{c.email}</p>
+                    <p className="font-medium truncate text-text">{c.name}</p>
+                    <p className="text-xs text-text-muted truncate">{c.email}</p>
                     {c.scorecard_status && (
-                      <p className="text-xs text-[hsl(var(--text-muted))] mt-0.5 capitalize">
+                      <p className="text-xs text-text-muted mt-0.5 capitalize">
                         Scorecard: {c.scorecard_status}
                       </p>
                     )}
@@ -632,37 +609,37 @@ export function ManagerReviewPage() {
 
           {/* Summary */}
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Resumo seguro</p>
+            <p className="text-sm font-semibold text-text">Resumo seguro</p>
             {loadingBrowseSummary ? (
               <div className="flex items-center justify-center h-32">
                 <Loader2 className="h-5 w-5 animate-spin text-[hsl(var(--primary))]" />
               </div>
             ) : !browseSummary ? (
-              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-center text-sm text-[hsl(var(--text-muted))]">
+              <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-text-muted">
                 Selecione um candidato
               </div>
             ) : (
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4 space-y-3">
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
                 <div>
-                  <p className="text-xs text-[hsl(var(--text-muted))]">Nome</p>
-                  <p className="text-sm font-semibold text-[hsl(var(--text))]">{browseSummary.name}</p>
+                  <p className="text-xs text-text-muted">Nome</p>
+                  <p className="text-sm font-semibold text-text">{browseSummary.name}</p>
                 </div>
                 {browseSummary.pipeline_stage && (
                   <div>
-                    <p className="text-xs text-[hsl(var(--text-muted))]">Etapa</p>
-                    <p className="text-sm capitalize text-[hsl(var(--text))]">{browseSummary.pipeline_stage}</p>
+                    <p className="text-xs text-text-muted">Etapa</p>
+                    <p className="text-sm capitalize text-text">{browseSummary.pipeline_stage}</p>
                   </div>
                 )}
                 {browseSummary.scorecard && (
                   <div>
-                    <p className="text-xs text-[hsl(var(--text-muted))]">Scorecard</p>
-                    <div className="rounded bg-[hsl(var(--bg))] border border-[hsl(var(--border))]/40 p-3 space-y-1.5 mt-1">
-                      <p className="text-xs text-[hsl(var(--text-muted))]">Status: <span className="font-medium text-[hsl(var(--text))] capitalize">{browseSummary.scorecard.status}</span></p>
+                    <p className="text-xs text-text-muted">Scorecard</p>
+                    <div className="rounded bg-[hsl(var(--bg))] border border-border/40 p-3 space-y-1.5 mt-1">
+                      <p className="text-xs text-text-muted">Status: <span className="font-medium text-text capitalize">{browseSummary.scorecard.status}</span></p>
                       {browseSummary.scorecard.recommendation && (
-                        <p className="text-xs text-[hsl(var(--text-muted))]">Recomendação: <span className="font-medium text-[hsl(var(--text))]">{browseSummary.scorecard.recommendation.replace(/_/g, " ")}</span></p>
+                        <p className="text-xs text-text-muted">Recomendação: <span className="font-medium text-text">{browseSummary.scorecard.recommendation.replace(/_/g, " ")}</span></p>
                       )}
                       {browseSummary.scorecard.submitted_at && (
-                        <p className="text-xs text-[hsl(var(--text-muted))]">Enviado: {new Date(browseSummary.scorecard.submitted_at).toLocaleDateString("pt-BR")}</p>
+                        <p className="text-xs text-text-muted">Enviado: {new Date(browseSummary.scorecard.submitted_at).toLocaleDateString("pt-BR")}</p>
                       )}
                     </div>
                   </div>

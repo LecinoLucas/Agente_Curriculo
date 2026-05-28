@@ -71,6 +71,7 @@ import {
 import { PipelineRejectionReasonModal } from "../features/pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../features/pipeline/PipelineTransitionBlockedModal";
 import {
+  resolvePreAdmissionNavigationPath,
   usePipelineGateActionResolver,
   usePipelineTransitionBlockedHandler,
 } from "../features/pipeline/usePipelineTransitionBlocked";
@@ -599,11 +600,16 @@ export function CandidateProfilePage() {
       if (!candidateId || !profileJobId) return false;
       setWorkflowSaving(true);
       try {
-        await pipelineService.moveCandidateStage(profileJobId, candidateId, {
+        const moveResult = await pipelineService.moveCandidateStage(profileJobId, candidateId, {
           stage,
           reason: reason?.trim() || null,
           notes: reason?.trim() || null,
         });
+        const preAdmissionPath = resolvePreAdmissionNavigationPath(moveResult);
+        if (preAdmissionPath) {
+          navigate(preAdmissionPath);
+          return true;
+        }
         toast.success("Etapa atualizada.");
         await reloadWorkspace();
         return true;
@@ -630,7 +636,7 @@ export function CandidateProfilePage() {
         setWorkflowSaving(false);
       }
     },
-    [candidateId, handleBlockedError, overview?.candidate?.full_name, profileJobId, reloadWorkspace],
+    [candidateId, handleBlockedError, navigate, overview?.candidate?.full_name, profileJobId, reloadWorkspace],
   );
 
   const handleTransfer = useCallback(
@@ -792,7 +798,7 @@ export function CandidateProfilePage() {
         onPrimaryAction={canRunPrimaryAction ? () => handleSuggestedAction(nextAction) : undefined}
       />
 
-      <section className="mt-8 overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] shadow-sm">
+      <section className="mt-8 overflow-hidden rounded-2xl border border-[hsl(var(--border)/0.7)] bg-surface shadow-sm">
         <div className="overflow-x-auto px-2">
           <Tabs
             tabs={visibleProfileTabs}
@@ -1071,21 +1077,21 @@ function ProfileHeader({
     : "Aguardando vaga";
 
   return (
-    <section className="rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] p-5 shadow-sm lg:p-6">
+    <section className="rounded-2xl border border-[hsl(var(--border)/0.7)] bg-surface p-5 shadow-sm lg:p-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[hsl(var(--primary)/0.1)] text-lg font-bold text-[hsl(var(--primary))]">
             {getInitials(candidate.full_name)}
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-bold tracking-tight text-[hsl(var(--text))]">
+            <h1 className="truncate text-2xl font-bold tracking-tight text-text">
               {candidate.full_name}
             </h1>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            <p className="mt-1 text-sm text-text-muted">
               {activeEntry?.job_title ?? "Candidato sem vaga ativa"}
             </p>
 
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-[hsl(var(--text-muted))]">
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-text-muted">
               {candidate.email ? (
                 <span className="inline-flex items-center gap-1.5">
                   <Mail className="h-4 w-4" />
@@ -1189,14 +1195,14 @@ function HeaderMoreActionsMenu({
         type="button"
         onClick={() => setOpen((current) => !current)}
         data-testid="candidate-profile-more-actions"
-        className="inline-flex h-9 items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-xs font-bold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+        className="inline-flex h-9 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-xs font-bold text-text transition hover:bg-surface-muted"
       >
         Mais ações
         <ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-1 shadow-lg">
+        <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] rounded-xl border border-border bg-surface p-1 shadow-lg">
           {visibleActions.map((action) => (
             <button
               key={action.key}
@@ -1205,7 +1211,7 @@ function HeaderMoreActionsMenu({
                 action.onClick();
                 setOpen(false);
               }}
-              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium text-text transition hover:bg-surface-muted"
             >
               {action.label}
             </button>
@@ -1236,28 +1242,28 @@ function DecisionCards({
   return (
     <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       <InfoCard icon={<Briefcase className="h-5 w-5" />} title="Vaga ativa">
-        <p className="text-base font-bold text-[hsl(var(--text))]">
+        <p className="text-base font-bold text-text">
           {activeEntry?.job_title ?? "Aguardando vaga"}
         </p>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mt-1 text-sm text-text-muted">
           {activeEntry ? STAGE_LABEL[activeEntry.stage] : "Sem pipeline ativo"}
         </p>
       </InfoCard>
 
       <InfoCard icon={<BarChart3 className="h-5 w-5" />} title="Aderência">
-        <p className="text-3xl font-bold text-[hsl(var(--text))]">
+        <p className="text-3xl font-bold text-text">
           {formatScorePercent(activeScore)}
         </p>
-        <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mt-1 text-sm text-text-muted">
           {analysis ? ANALYSIS_STATUS_LABEL[analysis.status] ?? analysis.status : "Sem análise"}
         </p>
       </InfoCard>
 
       <InfoCard icon={<FileText className="h-5 w-5" />} title="Pendências">
         {pendencies.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhuma pendência.</p>
+          <p className="text-sm text-text-muted">Nenhuma pendência.</p>
         ) : (
-          <ul className="space-y-2 text-sm text-[hsl(var(--text))]">
+          <ul className="space-y-2 text-sm text-text">
             {pendencies.map((pendency) => (
               <li key={pendency.id} className="flex items-start gap-2">
                 <span
@@ -1274,7 +1280,7 @@ function DecisionCards({
                     {pendency.label}
                   </span>
                   {pendency.description ? (
-                    <span className="text-xs text-[hsl(var(--text-muted))]">{pendency.description}</span>
+                    <span className="text-xs text-text-muted">{pendency.description}</span>
                   ) : null}
                 </span>
               </li>
@@ -1284,14 +1290,14 @@ function DecisionCards({
       </InfoCard>
 
       <InfoCard icon={<Calendar className="h-5 w-5" />} title="Próxima ação">
-        <p className="text-base font-bold text-[hsl(var(--text))]">{nextAction.label}</p>
-        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{nextAction.hint}</p>
+        <p className="text-base font-bold text-text">{nextAction.label}</p>
+        <p className="mt-1 text-xs text-text-muted">{nextAction.hint}</p>
         {showPrimaryAction ? (
           <button
             type="button"
             onClick={onPrimaryAction}
             data-testid="candidate-profile-next-action-button"
-            className="mt-3 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))]"
+            className="mt-3 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text transition hover:bg-surface-muted"
           >
             {nextAction.label}
           </button>
@@ -1470,12 +1476,12 @@ function WorkflowTab({
           {activeEntry && !terminal ? (
             <div className="space-y-3">
               <label className="block text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Mover etapa</span>
+                <span className="font-semibold text-text">Mover etapa</span>
                 <select
                   value={stage}
                   onChange={(event) => setStage(event.target.value as PipelineStage)}
                   disabled={saving}
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 >
                   {STAGE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -1485,13 +1491,13 @@ function WorkflowTab({
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Motivo/observação</span>
+                <span className="font-semibold text-text">Motivo/observação</span>
                 <textarea
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   disabled={saving}
                   rows={3}
-                  className="mt-1 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
                   placeholder="Opcional, mas recomendado para reprovação ou correção de etapa."
                 />
               </label>
@@ -1556,7 +1562,7 @@ function WorkflowTab({
               </div>
             </div>
           ) : activeEntry ? (
-            <div className="space-y-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 p-4 text-sm text-[hsl(var(--text-muted))]">
+            <div className="space-y-3 rounded-xl border border-border bg-surface-muted/40 p-4 text-sm text-text-muted">
               <p>
                 {admitted
                   ? "Candidato admitido nesta vaga. O vínculo final permanece disponível no histórico da pipeline."
@@ -1627,26 +1633,26 @@ function WorkflowTab({
           ) : null}
 
           {!activeEntry ? (
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-text-muted">
               Transferência exige vínculo atual. Use adicionar/vincular vaga.
             </p>
           ) : !canTransfer ? (
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-text-muted">
               Transferência disponível apenas nas etapas iniciais. Para processos avançados, encerre ou reprove antes de corrigir a vaga.
             </p>
           ) : transferJobs.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-text-muted">
               Nenhuma vaga disponível para transferência.
             </p>
           ) : (
             <>
               <label className="block text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Vaga destino</span>
+                <span className="font-semibold text-text">Vaga destino</span>
                 <select
                   value={targetJobId}
                   onChange={(event) => setTargetJobId(event.target.value)}
                   disabled={saving}
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 >
                   {transferJobs.map((job) => (
                     <option key={job.id} value={job.id}>
@@ -1656,13 +1662,13 @@ function WorkflowTab({
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Motivo da transferência</span>
+                <span className="font-semibold text-text">Motivo da transferência</span>
                 <textarea
                   value={transferReason}
                   onChange={(event) => setTransferReason(event.target.value)}
                   disabled={saving}
                   rows={4}
-                  className="mt-1 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
                   placeholder="Explique por que o candidato deve sair da vaga atual."
                 />
               </label>
@@ -1870,7 +1876,7 @@ function ProfileScoreTab({
       {scoreStatus === "score_stale" ? (
         <SectionCard title="Score desatualizado">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-text-muted">
               O score atual pode não refletir a versão mais recente do currículo ou da vaga.
             </p>
             <ActionButton
@@ -1897,9 +1903,9 @@ function ProfileScoreTab({
       {summary || strengths.length > 0 || attentionPoints.length > 0 || scoreExplanationLoading ? (
         <SectionCard title="Explicação resumida">
           {scoreExplanationLoading ? (
-            <p className="text-sm text-[hsl(var(--text-muted))]">Carregando explicação detalhada...</p>
+            <p className="text-sm text-text-muted">Carregando explicação detalhada...</p>
           ) : null}
-          {summary ? <p className="text-sm leading-6 text-[hsl(var(--text))]">{summary}</p> : null}
+          {summary ? <p className="text-sm leading-6 text-text">{summary}</p> : null}
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <InsightColumn title="Principais forças" items={strengths} empty="Sem forças destacadas." />
             <InsightColumn title="Pontos de atenção" items={attentionPoints} empty="Sem pontos de atenção destacados." />
@@ -1934,9 +1940,9 @@ function InsightColumn({
 }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">{title}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{title}</p>
       {items.length > 0 ? (
-        <ul className="mt-2 space-y-2 text-sm text-[hsl(var(--text))]">
+        <ul className="mt-2 space-y-2 text-sm text-text">
           {items.map((item) => (
             <li key={item} className="rounded-xl border border-[hsl(var(--border)/0.65)] bg-[hsl(var(--bg))] px-3 py-2">
               {item}
@@ -1944,7 +1950,7 @@ function InsightColumn({
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
+        <p className="mt-2 text-sm text-text-muted">{empty}</p>
       )}
     </div>
   );
@@ -2181,7 +2187,7 @@ function ProfileDocumentsTab({
             type="file"
             accept="application/pdf,.pdf"
             onChange={handleFileChange}
-            className="min-w-0 flex-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm"
+            className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm"
           />
           <ActionButton onClick={() => void handleUpload()} disabled={!file || uploading} primary>
             {uploading ? "Enviando..." : "Enviar currículo"}
@@ -2193,7 +2199,7 @@ function ProfileDocumentsTab({
           ) : null}
         </div>
         {file ? (
-          <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mt-2 text-xs text-text-muted">
             Selecionado: {file.name}
           </p>
         ) : null}
@@ -2241,22 +2247,22 @@ function ProfileDocumentsTab({
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum currículo enviado.</p>
+              <p className="text-sm text-text-muted">Nenhum currículo enviado.</p>
             )}
           </SectionCard>
 
           <SectionCard title="Visualização do currículo">
             {previewLoading ? (
               <div className="space-y-2">
-                <div className="h-4 w-56 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-                <div className="h-72 animate-pulse rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface-muted))]" />
+                <div className="h-4 w-56 animate-pulse rounded bg-surface-muted" />
+                <div className="h-72 animate-pulse rounded-xl border border-[hsl(var(--border)/0.7)] bg-surface-muted" />
               </div>
             ) : null}
             {!previewLoading && previewError ? (
-              <p className="text-sm text-[hsl(var(--danger))]">Não foi possível carregar o currículo.</p>
+              <p className="text-sm text-danger">Não foi possível carregar o currículo.</p>
             ) : null}
             {!previewLoading && !previewError && !previewObjectUrl ? (
-              <p className="text-sm text-[hsl(var(--text-muted))]">
+              <p className="text-sm text-text-muted">
                 Clique em "Visualizar currículo" para abrir o arquivo.
               </p>
             ) : null}
@@ -2276,12 +2282,12 @@ function ProfileDocumentsTab({
               )
             ) : null}
             {!previewLoading && !previewError && previewObjectUrl && !showInlinePreview && showDocFallback ? (
-              <p className="text-sm text-[hsl(var(--text-muted))]">
+              <p className="text-sm text-text-muted">
                 Pré-visualização indisponível para este formato. Baixe o arquivo para visualizar.
               </p>
             ) : null}
             {!previewLoading && !previewError && previewObjectUrl && !showInlinePreview && !showDocFallback ? (
-              <p className="text-sm text-[hsl(var(--text-muted))]">
+              <p className="text-sm text-text-muted">
                 Não foi possível renderizar este tipo de arquivo no navegador. Use "Baixar" ou "Abrir em nova aba".
               </p>
             ) : null}
@@ -2289,10 +2295,10 @@ function ProfileDocumentsTab({
 
           <SectionCard title="Versões do currículo">
             {resumesLoading ? (
-              <div className="h-16 animate-pulse rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface-muted))]" />
+              <div className="h-16 animate-pulse rounded-xl border border-[hsl(var(--border)/0.7)] bg-surface-muted" />
             ) : null}
             {!resumesLoading && resumesError ? (
-              <p className="text-sm text-[hsl(var(--danger))]">{resumesError}</p>
+              <p className="text-sm text-danger">{resumesError}</p>
             ) : null}
             {!resumesLoading && !resumesError && selectedResumeDetails?.versions.length ? (
               <ul className="space-y-2">
@@ -2302,17 +2308,17 @@ function ProfileDocumentsTab({
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))] px-3 py-2"
                   >
                     <div>
-                      <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                      <p className="text-sm font-semibold text-text">
                         v{version.version_number} · {version.original_file_name}
                       </p>
-                      <p className="text-xs text-[hsl(var(--text-muted))]">
+                      <p className="text-xs text-text-muted">
                         {formatDateTime(version.uploaded_at)} · {version.mime_type}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setSelectedVersionId(version.id)}
-                      className="rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]"
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text hover:bg-surface-muted"
                     >
                       {selectedVersion?.id === version.id ? "Selecionada" : "Visualizar"}
                     </button>
@@ -2646,7 +2652,7 @@ function ProfileInterviewsTab({
       />
       <SectionCard title="Entrevistas">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-[hsl(var(--text-muted))]">
+          <p className="text-sm text-text-muted">
             Agenda operacional do processo atual nesta vaga. Entrevistas de ciclos anteriores ficam no histórico.
           </p>
           <ActionButton onClick={() => openForm()} primary>
@@ -2662,8 +2668,8 @@ function ProfileInterviewsTab({
         ) : null}
 
         {formMode ? (
-          <div className="mt-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--bg))] p-4">
-            <p className="mb-3 text-sm font-bold text-[hsl(var(--text))]">
+          <div className="mt-4 rounded-xl border border-border bg-[hsl(var(--bg))] p-4">
+            <p className="mb-3 text-sm font-bold text-text">
               {formMode === "reschedule" ? "Reagendar entrevista" : form.title}
             </p>
             {hasTechnicalInterviewPendency && formMode === "create" && (
@@ -2678,23 +2684,23 @@ function ProfileInterviewsTab({
             )}
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Título</span>
+                <span className="font-semibold text-text">Título</span>
                 <input
                   value={form.title}
                   onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                   disabled={formMode === "reschedule"}
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Tipo</span>
+                <span className="font-semibold text-text">Tipo</span>
                 <select
                   value={form.interview_type}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, interview_type: event.target.value as InterviewType }))
                   }
                   disabled={formMode === "reschedule"}
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 >
                   {Object.entries(INTERVIEW_TYPE_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -2704,14 +2710,14 @@ function ProfileInterviewsTab({
                 </select>
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Formato</span>
+                <span className="font-semibold text-text">Formato</span>
                 <select
                   value={form.interview_format}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, interview_format: event.target.value as InterviewFormat }))
                   }
                   disabled={formMode === "reschedule"}
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 >
                   <option value="online">Online</option>
                   <option value="presencial">Presencial</option>
@@ -2719,62 +2725,62 @@ function ProfileInterviewsTab({
                 </select>
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Entrevistador</span>
+                <span className="font-semibold text-text">Entrevistador</span>
                 <input
                   value={form.interviewer_name}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, interviewer_name: event.target.value }))
                   }
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">E-mail do entrevistador</span>
+                <span className="font-semibold text-text">E-mail do entrevistador</span>
                 <input
                   type="email"
                   value={form.interviewer_email}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, interviewer_email: event.target.value }))
                   }
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Início</span>
+                <span className="font-semibold text-text">Início</span>
                 <input
                   type="datetime-local"
                   value={form.scheduled_start}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, scheduled_start: event.target.value }))
                   }
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Fim</span>
+                <span className="font-semibold text-text">Fim</span>
                 <input
                   type="datetime-local"
                   value={form.scheduled_end}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, scheduled_end: event.target.value }))
                   }
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Local</span>
+                <span className="font-semibold text-text">Local</span>
                 <input
                   value={form.location}
                   onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 />
               </label>
               <label className="text-sm">
-                <span className="font-semibold text-[hsl(var(--text))]">Link da reunião</span>
+                <span className="font-semibold text-text">Link da reunião</span>
                 <input
                   value={form.meeting_url}
                   onChange={(event) => setForm((current) => ({ ...current, meeting_url: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm"
+                  className="mt-1 h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm"
                 />
               </label>
             </div>
@@ -2801,9 +2807,9 @@ function ProfileInterviewsTab({
 
       <SectionCard title="Entrevistas do processo atual">
         {loading ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Carregando entrevistas...</p>
+          <p className="text-sm text-text-muted">Carregando entrevistas...</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhuma entrevista registrada no processo atual.</p>
+          <p className="text-sm text-text-muted">Nenhuma entrevista registrada no processo atual.</p>
         ) : (
           <ul className="space-y-3">
             {items.map((item) => {
@@ -2848,8 +2854,8 @@ function ProfileInterviewsTab({
                           {interviewStatusLabel(item.status)}
                         </Badge>
                       </div>
-                      <p className="mt-3 font-semibold text-[hsl(var(--text))]">{item.title}</p>
-                      <div className="mt-2 grid gap-2 text-sm text-[hsl(var(--text-muted))] md:grid-cols-2">
+                      <p className="mt-3 font-semibold text-text">{item.title}</p>
+                      <div className="mt-2 grid gap-2 text-sm text-text-muted md:grid-cols-2">
                         <span className="inline-flex items-center gap-2">
                           <Clock className="h-4 w-4" />
                           {formatInterviewDateTime(item.scheduled_start)}
@@ -2859,7 +2865,7 @@ function ProfileInterviewsTab({
                         <span>Scorecard: {scorecardStatusLabel(item)}</span>
                       </div>
                       {item.counts_for_current_gate ? (
-                        <p className="mt-3 rounded-lg border border-[hsl(var(--primary)/0.25)] bg-[hsl(var(--primary)/0.06)] px-3 py-2 text-sm font-medium text-[hsl(var(--text))]">
+                        <p className="mt-3 rounded-lg border border-[hsl(var(--primary)/0.25)] bg-[hsl(var(--primary)/0.06)] px-3 py-2 text-sm font-medium text-text">
                           Esta entrevista é necessária para avançar o candidato.
                         </p>
                       ) : null}
@@ -2869,7 +2875,7 @@ function ProfileInterviewsTab({
                         </p>
                       ) : null}
                       {isScheduled && (item.counts_for_current_gate || isScorecardGateInterview) ? (
-                        <p className="mt-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-3 py-2 text-sm text-[hsl(var(--text-muted))]">
+                        <p className="mt-3 rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-sm text-text-muted">
                           A entrevista precisa ser concluída antes do scorecard.
                         </p>
                       ) : null}
@@ -2964,7 +2970,7 @@ function ProfileInterviewsTab({
                   </div>
 
                   {detailsOpen ? (
-                    <div className="mt-4 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-3 text-sm text-[hsl(var(--text-muted))]">
+                    <div className="mt-4 rounded-lg border border-border bg-surface p-3 text-sm text-text-muted">
                       <p>Status: {interviewStatusLabel(item.status)}</p>
                       {item.cancel_reason ? <p>Motivo: {item.cancel_reason}</p> : null}
                       {item.internal_notes ? <p>Observações internas: {item.internal_notes}</p> : null}
@@ -2972,14 +2978,14 @@ function ProfileInterviewsTab({
                   ) : null}
 
                   {feedbackOpen ? (
-                    <div className="mt-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+                    <div className="mt-4 rounded-xl border border-border bg-surface p-4">
                       <label className="block text-sm">
-                        <span className="font-semibold text-[hsl(var(--text))]">Feedback da entrevista</span>
+                        <span className="font-semibold text-text">Feedback da entrevista</span>
                         <textarea
                           value={feedbackDraft}
                           onChange={(event) => setFeedbackDraft(event.target.value)}
                           rows={4}
-                          className="mt-2 w-full resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text))]"
+                          className="mt-2 w-full resize-none rounded-lg border border-border bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text"
                         />
                       </label>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -3002,13 +3008,13 @@ function ProfileInterviewsTab({
                   ) : null}
 
                   {scorecardOpen && canScorecard ? (
-                    <div className="mt-4 overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))] px-4 py-3">
+                    <div className="mt-4 overflow-hidden rounded-xl border border-border bg-surface">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
                         <div>
-                          <p className="text-sm font-bold text-[hsl(var(--text))]">
+                          <p className="text-sm font-bold text-text">
                             {item.scorecard_status === "submitted" ? "Scorecard enviado" : "Scorecard da entrevista"}
                           </p>
-                          <p className="text-xs text-[hsl(var(--text-muted))]">
+                          <p className="text-xs text-text-muted">
                             {interviewTypeLabel(item.interview_type)} · {formatInterviewDateTime(item.scheduled_start)}
                           </p>
                         </div>
@@ -3059,7 +3065,7 @@ function behavioralKindLabel(assessment: BehavioralAssignmentDetailResponse, req
 }
 
 function renderBehavioralAnswer(answer: BehavioralAssignmentAnswer | null) {
-  if (!answer) return <span className="text-[hsl(var(--text-muted))]">Não respondida</span>;
+  if (!answer) return <span className="text-text-muted">Não respondida</span>;
   if (answer.answer_text) return <p className="whitespace-pre-wrap">{answer.answer_text}</p>;
   if (answer.answer_value !== null && answer.answer_value !== undefined) {
     return <span className="font-semibold">{answer.answer_value}</span>;
@@ -3067,7 +3073,7 @@ function renderBehavioralAnswer(answer: BehavioralAssignmentAnswer | null) {
   if (answer.selected_options_json?.length) {
     return <span>{answer.selected_options_json.join(", ")}</span>;
   }
-  return <span className="text-[hsl(var(--text-muted))]">Não respondida</span>;
+  return <span className="text-text-muted">Não respondida</span>;
 }
 
 function getBehavioralAIStatusLabel(
@@ -3254,7 +3260,7 @@ function ProfileBehavioralAssessmentsTab({
   }
 
   if (loading) {
-    return <p className="text-sm text-[hsl(var(--text-muted))]">Carregando avaliações...</p>;
+    return <p className="text-sm text-text-muted">Carregando avaliações...</p>;
   }
 
   if (error) {
@@ -3291,9 +3297,9 @@ function ProfileBehavioralAssessmentsTab({
       <SectionCard title="Avaliação comportamental">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-[hsl(var(--text-muted))]">{kindLabel}</p>
-            <h2 className="mt-1 text-lg font-bold text-[hsl(var(--text))]">{assessment.template_name}</h2>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm font-semibold text-text-muted">{kindLabel}</p>
+            <h2 className="mt-1 text-lg font-bold text-text">{assessment.template_name}</h2>
+            <p className="mt-1 text-sm text-text-muted">
               {assessment.job_title ?? "Vaga atual"} · {answeredLabel}
             </p>
           </div>
@@ -3333,7 +3339,7 @@ function ProfileBehavioralAssessmentsTab({
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-sm font-bold text-[hsl(var(--text))]">
+                <p className="text-sm font-bold text-text">
                   {evaluation?.status === "failed"
                     ? "IA comportamental falhou"
                     : evaluation?.status === "pending"
@@ -3346,7 +3352,7 @@ function ProfileBehavioralAssessmentsTab({
                         ? "IA comportamental concluída"
                         : "IA comportamental pendente"}
                 </p>
-                <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                <p className="mt-1 text-sm text-text-muted">
                   {!evaluation
                     ? "O candidato concluiu o teste comportamental. Gere a análise com IA para apoiar a decisão."
                     : evaluation.status === "failed"
@@ -3377,7 +3383,7 @@ function ProfileBehavioralAssessmentsTab({
                       ? "Tentar novamente"
                       : "Gerar análise IA comportamental"}
                 </ActionButton>
-                <span className="text-xs text-[hsl(var(--text-muted))]">
+                <span className="text-xs text-text-muted">
                   Esta análise não altera score, ranking ou etapa do pipeline.
                 </span>
               </div>
@@ -3390,7 +3396,7 @@ function ProfileBehavioralAssessmentsTab({
             ) : null}
 
             {evaluation?.summary ? (
-              <p className="mt-4 whitespace-pre-wrap rounded-lg border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface))] p-3 text-sm leading-6 text-[hsl(var(--text))]">
+              <p className="mt-4 whitespace-pre-wrap rounded-lg border border-[hsl(var(--border)/0.6)] bg-surface p-3 text-sm leading-6 text-text">
                 {evaluation.summary}
               </p>
             ) : null}
@@ -3400,7 +3406,7 @@ function ProfileBehavioralAssessmentsTab({
 
       <SectionCard title="Respostas">
         {assessment.competencies.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhuma resposta disponível.</p>
+          <p className="text-sm text-text-muted">Nenhuma resposta disponível.</p>
         ) : (
           <div className="space-y-3">
             {assessment.competencies.map((competency) => (
@@ -3408,14 +3414,14 @@ function ProfileBehavioralAssessmentsTab({
                 key={competency.id}
                 className="rounded-xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--bg))] p-4"
               >
-                <summary className="cursor-pointer text-sm font-bold text-[hsl(var(--text))]">
+                <summary className="cursor-pointer text-sm font-bold text-text">
                   {competency.name}
-                  <span className="ml-2 font-normal text-[hsl(var(--text-muted))]">
+                  <span className="ml-2 font-normal text-text-muted">
                     {competency.questions.length} pergunta(s)
                   </span>
                 </summary>
                 {competency.description ? (
-                  <p className="mt-2 text-xs text-[hsl(var(--text-muted))]">{competency.description}</p>
+                  <p className="mt-2 text-xs text-text-muted">{competency.description}</p>
                 ) : null}
                 <div className="mt-4 space-y-3">
                   {competency.questions.map((question) => {
@@ -3423,13 +3429,13 @@ function ProfileBehavioralAssessmentsTab({
                     return (
                       <div
                         key={question.id}
-                        className="rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] p-3"
+                        className="rounded-xl border border-[hsl(var(--border)/0.5)] bg-surface p-3"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-2">
-                          <p className="text-sm font-semibold text-[hsl(var(--text))]">{parsed.text}</p>
+                          <p className="text-sm font-semibold text-text">{parsed.text}</p>
                           {question.is_required ? <Badge tone="neutral">Obrigatória</Badge> : null}
                         </div>
-                        <div className="mt-2 text-sm text-[hsl(var(--text))]">
+                        <div className="mt-2 text-sm text-text">
                           {renderBehavioralAnswer(question.answer)}
                         </div>
                       </div>
@@ -3546,7 +3552,7 @@ function HistoryTab({
   };
 
   if (loading) {
-    return <p className="text-sm text-[hsl(var(--text-muted))]">Carregando histórico de processos...</p>;
+    return <p className="text-sm text-text-muted">Carregando histórico de processos...</p>;
   }
 
   if (processes.length === 0) {
@@ -3562,7 +3568,7 @@ function HistoryTab({
     <div className="space-y-4">
       <SectionCard title="Processo atual">
         {current.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum processo ativo no momento.</p>
+          <p className="text-sm text-text-muted">Nenhum processo ativo no momento.</p>
         ) : (
           <div className="space-y-3">
             {current.map((process) => (
@@ -3580,7 +3586,7 @@ function HistoryTab({
 
       <SectionCard title="Processos anteriores">
         {previous.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--text-muted))]">Nenhum processo anterior.</p>
+          <p className="text-sm text-text-muted">Nenhum processo anterior.</p>
         ) : (
           <div className="space-y-3">
             {previous.map((process) => (
@@ -3669,16 +3675,16 @@ function ProcessHistoryCard({
       >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-[hsl(var(--text))]">{title}</h3>
+            <h3 className="font-semibold text-text">{title}</h3>
             <Badge tone={process.is_current ? "success" : "neutral"}>
               {process.is_current ? "Atual" : "Histórico"}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <p className="mt-1 text-sm text-text-muted">
             {process.job_title} · Resultado: {process.result_label} · Última etapa:{" "}
             {STAGE_LABEL[process.current_or_final_stage as PipelineStage] ?? process.current_or_final_stage}
           </p>
-          <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+          <p className="mt-1 text-xs text-text-muted">
             {startedAt ? `Iniciado em ${startedAt}` : "Início não informado"}
             {process.events_count ? ` · ${process.events_count} evento(s)` : ""}
           </p>
@@ -3706,7 +3712,7 @@ function ProcessHistoryCard({
       </div>
 
       {process.closure_reason ? (
-        <p className="mt-3 rounded-lg border border-[hsl(var(--border)/0.6)] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mt-3 rounded-lg border border-[hsl(var(--border)/0.6)] bg-surface px-3 py-2 text-sm text-text-muted">
           Motivo: {process.closure_reason}
         </p>
       ) : null}
@@ -3778,9 +3784,9 @@ function ProcessHistoryCard({
 
 function HistorySummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] px-3 py-2">
-      <p className="text-xs font-semibold text-[hsl(var(--text-muted))]">{label}</p>
-      <p className="mt-1 font-medium text-[hsl(var(--text))]">{value}</p>
+    <div className="rounded-lg border border-[hsl(var(--border)/0.5)] bg-surface px-3 py-2">
+      <p className="text-xs font-semibold text-text-muted">{label}</p>
+      <p className="mt-1 font-medium text-text">{value}</p>
     </div>
   );
 }
@@ -3796,16 +3802,16 @@ function HistoryDetailList({
 }) {
   return (
     <div>
-      <h4 className="text-sm font-semibold text-[hsl(var(--text))]">{title}</h4>
+      <h4 className="text-sm font-semibold text-text">{title}</h4>
       {items.length === 0 ? (
-        <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{empty}</p>
+        <p className="mt-2 text-sm text-text-muted">{empty}</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {items.map((item) => (
-            <li key={item.id} className="rounded-lg border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] px-3 py-2">
-              <p className="text-sm font-medium text-[hsl(var(--text))]">{item.primary}</p>
+            <li key={item.id} className="rounded-lg border border-[hsl(var(--border)/0.5)] bg-surface px-3 py-2">
+              <p className="text-sm font-medium text-text">{item.primary}</p>
               {item.secondary ? (
-                <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{item.secondary}</p>
+                <p className="mt-1 text-xs text-text-muted">{item.secondary}</p>
               ) : null}
             </li>
           ))}
@@ -3825,13 +3831,13 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <article className="rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] p-5 shadow-sm">
+    <article className="rounded-2xl border border-[hsl(var(--border)/0.7)] bg-surface p-5 shadow-sm">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary)/0.08)] text-[hsl(var(--primary))]">
           {icon}
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-[hsl(var(--text-muted))]">{title}</h2>
+          <h2 className="text-sm font-semibold text-text-muted">{title}</h2>
           <div className="mt-2">{children}</div>
         </div>
       </div>
@@ -3841,8 +3847,8 @@ function InfoCard({
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-[hsl(var(--border)/0.7)] bg-[hsl(var(--surface))] p-5 shadow-sm">
-      <h2 className="mb-4 text-base font-bold text-[hsl(var(--text))]">{title}</h2>
+    <section className="rounded-2xl border border-[hsl(var(--border)/0.7)] bg-surface p-5 shadow-sm">
+      <h2 className="mb-4 text-base font-bold text-text">{title}</h2>
       {children}
     </section>
   );
@@ -3856,8 +3862,8 @@ function DefinitionList({ items }: { items: Array<[string, React.ReactNode]> }) 
           key={label}
           className="flex items-baseline justify-between gap-4 border-b border-[hsl(var(--border)/0.45)] pb-3 last:border-0 last:pb-0"
         >
-          <dt className="text-[hsl(var(--text-muted))]">{label}</dt>
-          <dd className="text-right font-semibold text-[hsl(var(--text))]">{value}</dd>
+          <dt className="text-text-muted">{label}</dt>
+          <dd className="text-right font-semibold text-text">{value}</dd>
         </div>
       ))}
     </dl>
@@ -3873,7 +3879,7 @@ function Badge({
 }) {
   const classes = {
     success: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    neutral: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]",
+    neutral: "border-border bg-surface-muted text-text-muted",
     info: "border-blue-200 bg-blue-50 text-blue-700",
     primary: "border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.08)] text-[hsl(var(--primary))]",
     danger: "border-rose-200 bg-rose-50 text-rose-700",
@@ -3909,7 +3915,7 @@ function ActionButton({
         "inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50",
         primary
           ? "bg-[hsl(var(--primary))] text-white hover:bg-[hsl(var(--primary)/0.9)]"
-          : "border border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]",
+          : "border border-border bg-surface text-text hover:bg-surface-muted",
       ].join(" ")}
     >
       {children}
@@ -3931,10 +3937,10 @@ function EmptyBlock({
   actionDisabled?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-10 text-center">
-      <UserRound className="mx-auto h-8 w-8 text-[hsl(var(--text-muted))]" />
-      <p className="mt-3 font-bold text-[hsl(var(--text))]">{title}</p>
-      <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{description}</p>
+    <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
+      <UserRound className="mx-auto h-8 w-8 text-text-muted" />
+      <p className="mt-3 font-bold text-text">{title}</p>
+      <p className="mt-1 text-sm text-text-muted">{description}</p>
       {actionLabel && onAction ? (
         <button
           type="button"
@@ -3952,13 +3958,13 @@ function EmptyBlock({
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="h-40 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
+      <div className="h-40 animate-pulse rounded-2xl bg-surface-muted" />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((item) => (
-          <div key={item} className="h-32 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
+          <div key={item} className="h-32 animate-pulse rounded-2xl bg-surface-muted" />
         ))}
       </div>
-      <div className="h-96 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
+      <div className="h-96 animate-pulse rounded-2xl bg-surface-muted" />
     </div>
   );
 }

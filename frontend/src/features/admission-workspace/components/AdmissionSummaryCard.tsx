@@ -26,18 +26,18 @@ type MiniCardProps = {
 
 function MiniCard({ icon, label, value }: MiniCardProps) {
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] p-3 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.6)]">
+    <div className="flex items-start gap-2.5 rounded-xl border border-border/70 bg-surface p-3 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.6)]">
       <span
-        className="mt-0.5 shrink-0 text-[hsl(var(--text-muted))]"
+        className="mt-0.5 shrink-0 text-text-muted"
         aria-hidden="true"
       >
         {icon}
       </span>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[hsl(var(--text-muted))]">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted">
           {label}
         </p>
-        <div className="mt-0.5 text-sm font-semibold text-[hsl(var(--text))]">
+        <div className="mt-0.5 text-sm font-semibold text-text">
           {value}
         </div>
       </div>
@@ -61,9 +61,9 @@ export function AdmissionSummaryCard({
           <MiniCard
             icon={
               summary.ready_for_export ? (
-                <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                <CheckCircle2 className="h-4 w-4 text-success" />
               ) : (
-                <ShieldAlert className="h-4 w-4 text-[hsl(var(--warning))]" />
+                <ShieldAlert className="h-4 w-4 text-warning" />
               )
             }
             label="Status do caso"
@@ -92,7 +92,7 @@ export function AdmissionSummaryCard({
 
         {/* Action message */}
         {actionMessage ? (
-          <div className="rounded-xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning-soft))] px-3 py-2.5 text-sm text-[hsl(var(--text))]">
+          <div className="rounded-xl border border-[hsl(var(--warning))]/30 bg-warning-soft px-3 py-2.5 text-sm text-text">
             {actionMessage}
           </div>
         ) : null}
@@ -102,7 +102,7 @@ export function AdmissionSummaryCard({
           type="button"
           onClick={onMarkReady}
           disabled={submitting || summary.ready_for_export}
-          className="ui-btn-primary inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-60"
+          className="bg-[hsl(var(--primary))] text-white hover:opacity-90 transition inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-60"
         >
           {summary.ready_for_export ? (
             <>

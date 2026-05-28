@@ -40,6 +40,7 @@ const GATE_ACTION_LABEL: Record<PipelineGateActionCode, string> = {
   open_behavioral_ai: "Ver IA comportamental",
   open_decision: "Abrir decisão final",
   add_reason: "Informar motivo",
+  open_pre_admission: "Abrir admissão",
   open_profile: "Abrir perfil",
 };
 

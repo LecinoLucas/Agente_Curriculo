@@ -83,9 +83,9 @@ export function CandidateProfileNavigation({
   const hasMoreTabs = visibleTabs.length < TABS.length;
 
   return (
-    <div className="shrink-0 border-b border-[hsl(var(--border))]/30 bg-[hsl(var(--surface))] px-5 py-3">
+    <div className="shrink-0 border-b border-border/30 bg-surface px-5 py-3">
       <div className="space-y-2">
-        <div className="overflow-x-auto rounded-xl border border-[hsl(var(--border))]/50 bg-[hsl(var(--surface-muted))]/45 p-1">
+        <div className="overflow-x-auto rounded-xl border border-border/50 bg-surface-muted/45 p-1">
           <div className="flex gap-1">
             {tabsToRender.map(({ key, label, icon: Icon }) => (
               <button
@@ -95,8 +95,8 @@ export function CandidateProfileNavigation({
                 className={[
                   "relative flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition whitespace-nowrap",
                   activeTab === key
-                    ? "bg-[hsl(var(--surface))] text-[hsl(var(--text))] shadow-sm ring-1 ring-[hsl(var(--border))]/60"
-                    : "text-[hsl(var(--text-muted))] hover:bg-white/60 hover:text-[hsl(var(--text))]",
+                    ? "bg-surface text-text shadow-sm ring-1 ring-[hsl(var(--border))]/60"
+                    : "text-text-muted hover:bg-white/60 hover:text-text",
                 ].join(" ")}
               >
                 <Icon className="h-4 w-4" />
@@ -110,7 +110,7 @@ export function CandidateProfileNavigation({
           <button
             type="button"
             onClick={() => setShowAll(!showAll)}
-            className="flex items-center gap-1.5 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:text-[hsl(var(--text))]"
+            className="flex items-center gap-1.5 text-xs font-medium text-text-muted transition hover:text-text"
           >
             {showAll ? (
               <>

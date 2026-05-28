@@ -201,7 +201,7 @@ export function JobFormPage() {
   if (!canManage) {
     return (
       <div className="mx-auto w-full max-w-6xl px-6 py-10">
-        <div className="rounded-3xl border border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] p-6 text-sm text-[hsl(var(--danger))]">
+        <div className="rounded-3xl border border-[hsl(var(--danger))]/20 bg-danger-soft p-6 text-sm text-danger">
           Você não tem permissão para editar vagas.
         </div>
       </div>
@@ -322,7 +322,7 @@ export function JobFormPage() {
   function renderStepContent() {
     if (pageLoading) {
       return (
-        <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-8 text-sm text-[hsl(var(--text-muted))]">
+        <div className="rounded-3xl border border-border bg-surface p-8 text-sm text-text-muted">
           Carregando vaga...
         </div>
       );
@@ -467,7 +467,7 @@ export function JobFormPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 sm:px-6 py-6 pb-12">
-      <div className="sticky top-[20px] z-20 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/95 p-4 shadow-sm backdrop-blur mb-2">
+      <div className="sticky top-[20px] z-20 rounded-3xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur mb-2">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-start gap-3">
             <Button type="button" variant="outline" onClick={() => navigate("/vagas")}>
@@ -475,10 +475,10 @@ export function JobFormPage() {
               Voltar
             </Button>
             <div>
-              <h1 className="text-2xl font-semibold text-[hsl(var(--text))]">
+              <h1 className="text-2xl font-semibold text-text">
                 {isEditing ? "Editar vaga" : "Nova vaga"}
               </h1>
-              <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+              <p className="mt-1 text-sm text-text-muted">
                 Estruture a vaga por etapas para melhorar a leitura e a publicação sem relaxar validações.
               </p>
             </div>
@@ -507,7 +507,7 @@ export function JobFormPage() {
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
-          <div className="flex border border-[hsl(var(--border))] bg-[hsl(var(--surface))] rounded-2xl overflow-x-auto shadow-sm">
+          <div className="flex border border-border bg-surface rounded-2xl overflow-x-auto shadow-sm">
             {STEPS.map((step, index) => {
               const isActive = step.id === activeStep;
               const isDone = index < currentStepIndex;
@@ -519,17 +519,17 @@ export function JobFormPage() {
                   className={`flex flex-1 flex-col items-center gap-2 p-4 text-center border-b-2 transition-colors min-w-[120px] ${
                     isActive
                       ? "border-b-[hsl(var(--primary))] bg-[hsl(var(--accent-soft))]"
-                      : "border-b-transparent hover:bg-[hsl(var(--surface-muted))]"
+                      : "border-b-transparent hover:bg-surface-muted"
                   }`}
                 >
                   <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold shrink-0 ${
-                    isDone ? "bg-[hsl(var(--success))] text-white" : isActive ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-[hsl(var(--text-muted))]"
+                    isDone ? "bg-[hsl(var(--success))] text-white" : isActive ? "bg-[hsl(var(--primary))] text-white" : "bg-[hsl(var(--border))] text-text-muted"
                   }`}>
                     {isDone ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
                   </span>
                   <div className="flex flex-col items-center">
-                    <span className={`text-sm font-medium ${isActive ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--text))]"}`}>{step.label}</span>
-                    <span className="text-[11px] text-[hsl(var(--text-muted))] hidden xl:block mt-0.5">{step.hint}</span>
+                    <span className={`text-sm font-medium ${isActive ? "text-[hsl(var(--primary))]" : "text-text"}`}>{step.label}</span>
+                    <span className="text-[11px] text-text-muted hidden xl:block mt-0.5">{step.hint}</span>
                   </div>
                 </button>
               );
@@ -538,10 +538,10 @@ export function JobFormPage() {
 
           {renderStepContent()}
 
-          <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))]/95 p-5 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <div className="sticky bottom-0 z-10 mt-6 flex flex-col gap-3 rounded-3xl border border-border bg-surface/95 p-5 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">{currentStep.label}</p>
-              <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{currentStep.hint}</p>
+              <p className="text-sm font-semibold text-text">{currentStep.label}</p>
+              <p className="mt-1 text-sm text-text-muted">{currentStep.hint}</p>
             </div>
 
             <div className="flex gap-2">
@@ -568,15 +568,15 @@ export function JobFormPage() {
         </div>
 
         <aside className="space-y-4 xl:sticky xl:top-[148px] xl:self-start">
-          <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <div className="rounded-3xl border border-border bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
               Painel de qualidade
             </p>
             <div className="mt-4">
               {jobQuality ? (
                 <JobQualityBadge quality={jobQuality} />
               ) : (
-                <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                <div className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-muted">
                   Salve a vaga para calcular a qualidade.
                 </div>
               )}
@@ -588,27 +588,27 @@ export function JobFormPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5">
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Bloqueios obrigatórios</p>
+          <div className="rounded-3xl border border-border bg-surface p-5">
+            <p className="text-sm font-semibold text-text">Bloqueios obrigatórios</p>
             <div className="mt-3 space-y-2">
               {frontendBlockers.map((blocker) => (
                 <div
                   key={blocker}
-                  className="rounded-2xl border border-[hsl(var(--danger))]/15 bg-[hsl(var(--danger-soft))] px-3 py-3 text-sm text-[hsl(var(--danger))]"
+                  className="rounded-2xl border border-[hsl(var(--danger))]/15 bg-danger-soft px-3 py-3 text-sm text-danger"
                 >
                   {formatPublicationBlocker(blocker)}
                 </div>
               ))}
               {frontendBlockers.length === 0 ? (
-                <div className="rounded-2xl border border-[hsl(var(--success))]/15 bg-[hsl(var(--success-soft))] px-3 py-3 text-sm text-[hsl(var(--success))]">
+                <div className="rounded-2xl border border-[hsl(var(--success))]/15 bg-success-soft px-3 py-3 text-sm text-success">
                   Estrutura mínima preenchida no frontend.
                 </div>
               ) : null}
             </div>
           </div>
 
-          <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5">
-            <p className="text-sm font-semibold text-[hsl(var(--text))]">Resumo rápido</p>
+          <div className="rounded-3xl border border-border bg-surface p-5">
+            <p className="text-sm font-semibold text-text">Resumo rápido</p>
             <div className="mt-4 space-y-3 text-sm">
               <SummaryRow label="Essenciais" value={`${mandatorySkills.length}`} />
               <SummaryRow label="Diferenciais" value={`${optionalSkills.length}`} />
@@ -620,8 +620,8 @@ export function JobFormPage() {
           </div>
 
           {alerts.length > 0 ? (
-            <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5">
-              <p className="text-sm font-semibold text-[hsl(var(--text))]">Orientações de configuração</p>
+            <div className="rounded-3xl border border-border bg-surface p-5">
+              <p className="text-sm font-semibold text-text">Orientações de configuração</p>
               <div className="mt-4 space-y-2">
                 {alerts.slice(0, 4).map((alert) => (
                   <div
@@ -629,10 +629,10 @@ export function JobFormPage() {
                     className={[
                       "rounded-2xl border px-3 py-3 text-sm",
                       alert.level === "critical"
-                        ? "border-[hsl(var(--danger))]/15 bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]"
+                        ? "border-[hsl(var(--danger))]/15 bg-danger-soft text-danger"
                         : alert.level === "warning"
-                          ? "border-[hsl(var(--warning))]/15 bg-[hsl(var(--warning-soft))] text-[hsl(var(--warning))]"
-                          : "border-[hsl(var(--success))]/15 bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]",
+                          ? "border-[hsl(var(--warning))]/15 bg-warning-soft text-warning"
+                          : "border-[hsl(var(--success))]/15 bg-success-soft text-success",
                     ].join(" ")}
                   >
                     {alert.message}

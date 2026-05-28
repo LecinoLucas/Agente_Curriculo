@@ -288,7 +288,7 @@ export function CadastrosPage() {
         subtitle="Gerencie skills, áreas e itens arquivados preservados para histórico e auditoria."
       />
 
-      <div className="flex border-b border-[hsl(var(--border))]">
+      <div className="flex border-b border-border">
         {[
           { key: "skills", label: "Skills" },
           { key: "areas", label: "Áreas" },
@@ -298,8 +298,8 @@ export function CadastrosPage() {
             key={tab.key}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--text))]"
-                : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                ? "border-b-2 border-[hsl(var(--primary))] text-text"
+                : "text-text-muted hover:text-text"
             }`}
             onClick={() => setActiveTab(tab.key as MainTab)}
           >
@@ -312,7 +312,7 @@ export function CadastrosPage() {
         <div className="space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
               <input
                 type="text"
                 placeholder="Buscar por nome ou alias..."
@@ -373,10 +373,10 @@ export function CadastrosPage() {
               },
             }}
             renderRow={(skill) => (
-              <tr key={skill.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]/50">
-                <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{skill.name}</td>
-                <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{categoryLabel(skill.category)}</td>
-                <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+              <tr key={skill.id} className="border-b border-border hover:bg-surface-muted/50">
+                <td className="px-4 py-3 text-sm font-medium text-text">{skill.name}</td>
+                <td className="px-4 py-3 text-sm text-text-muted">{categoryLabel(skill.category)}</td>
+                <td className="px-4 py-3 text-sm text-text-muted">
                   <div className="flex flex-wrap gap-1">
                     {skill.aliases.map((alias) => (
                       <Badge key={alias.id} variant="secondary" className="text-xs">
@@ -386,7 +386,7 @@ export function CadastrosPage() {
                     {skill.aliases.length === 0 ? "—" : null}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                <td className="px-4 py-3 text-sm text-text-muted">
                   <span className="line-clamp-2">{skill.description ?? "—"}</span>
                 </td>
                 <td className="px-4 py-3 text-sm">{skillStatusBadge(skill)}</td>
@@ -411,7 +411,7 @@ export function CadastrosPage() {
                 </td>
               </tr>
             )}
-            footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {skillsState.data?.total ?? 0} skills.</div>}
+            footer={<div className="text-xs text-text-muted">Total de {skillsState.data?.total ?? 0} skills.</div>}
           />
         </div>
       ) : null}
@@ -420,7 +420,7 @@ export function CadastrosPage() {
         <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
               <input
                 type="text"
                 placeholder="Buscar por nome..."
@@ -455,9 +455,9 @@ export function CadastrosPage() {
               },
             }}
             renderRow={(area) => (
-              <tr key={area.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]/50">
-                <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{area.name}</td>
-                <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{area.description ?? "—"}</td>
+              <tr key={area.id} className="border-b border-border hover:bg-surface-muted/50">
+                <td className="px-4 py-3 text-sm font-medium text-text">{area.name}</td>
+                <td className="px-4 py-3 text-sm text-text-muted">{area.description ?? "—"}</td>
                 <td className="px-4 py-3 text-sm">
                   {area.is_active ? (
                     <Badge variant="outline" className="border-green-200 bg-green-50 text-green-600">
@@ -494,7 +494,7 @@ export function CadastrosPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger-soft))] hover:text-[hsl(var(--danger))]"
+                      className="text-danger hover:bg-danger-soft hover:text-danger"
                       onClick={() => setDeletingArea(area)}
                     >
                       Excluir
@@ -503,21 +503,21 @@ export function CadastrosPage() {
                 </td>
               </tr>
             )}
-            footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {areasState.data?.total ?? 0} áreas.</div>}
+            footer={<div className="text-xs text-text-muted">Total de {areasState.data?.total ?? 0} áreas.</div>}
           />
         </div>
       ) : null}
 
       {activeTab === "archived" ? (
         <div className="space-y-4">
-          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-5 py-4">
-            <h2 className="text-base font-semibold text-[hsl(var(--text))]">Arquivados</h2>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <div className="rounded-xl border border-border bg-surface-muted px-5 py-4">
+            <h2 className="text-base font-semibold text-text">Arquivados</h2>
+            <p className="mt-1 text-sm text-text-muted">
               Itens removidos do fluxo ativo, mas preservados para histórico e auditoria.
             </p>
           </div>
 
-          <div className="flex border-b border-[hsl(var(--border))] mb-4">
+          <div className="flex border-b border-border mb-4">
             {[
               { key: "skills", label: `Skills (${archivedSkillsState.data?.total ?? 0})` },
               { key: "behavioralTemplates", label: `Templates comportamentais (${archivedTemplatesState.data?.total ?? 0})` },
@@ -528,8 +528,8 @@ export function CadastrosPage() {
                 key={tab.key}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   archivedTab === tab.key
-                    ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--text))]"
-                    : "text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))]"
+                    ? "border-b-2 border-[hsl(var(--primary))] text-text"
+                    : "text-text-muted hover:text-text"
                 }`}
                 onClick={() => setArchivedTab(tab.key as ArchivedTab)}
               >
@@ -541,7 +541,7 @@ export function CadastrosPage() {
           {archivedTab === "skills" ? (
             <div className="space-y-4">
               <div className="relative max-w-xl">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                 <input
                   type="text"
                   placeholder="Buscar skill arquivada..."
@@ -567,11 +567,11 @@ export function CadastrosPage() {
                   description: "As skills arquivadas aparecerão aqui.",
                 }}
                 renderRow={(skill) => (
-                  <tr key={skill.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]/50">
-                    <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{skill.name}</td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{categoryLabel(skill.category)}</td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{formatDate(skill.archived_at)}</td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                  <tr key={skill.id} className="border-b border-border hover:bg-surface-muted/50">
+                    <td className="px-4 py-3 text-sm font-medium text-text">{skill.name}</td>
+                    <td className="px-4 py-3 text-sm text-text-muted">{categoryLabel(skill.category)}</td>
+                    <td className="px-4 py-3 text-sm text-text-muted">{formatDate(skill.archived_at)}</td>
+                    <td className="px-4 py-3 text-sm text-text-muted">
                       <div className="space-y-1">
                         <div>{skillArchiveReasonLabel(skill.archive_reason)}</div>
                         {skill.archive_reason_note ? (
@@ -586,7 +586,7 @@ export function CadastrosPage() {
                     </td>
                   </tr>
                 )}
-                footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {archivedSkillsState.data?.total ?? 0} skills arquivadas.</div>}
+                footer={<div className="text-xs text-text-muted">Total de {archivedSkillsState.data?.total ?? 0} skills arquivadas.</div>}
               />
             </div>
           ) : null}
@@ -594,7 +594,7 @@ export function CadastrosPage() {
           {archivedTab === "behavioralTemplates" ? (
             <div className="space-y-4">
               <div className="relative max-w-xl">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                 <input
                   type="text"
                   placeholder="Buscar template comportamental arquivado..."
@@ -620,27 +620,27 @@ export function CadastrosPage() {
                   description: "Templates comportamentais arquivados aparecerão aqui.",
                 }}
                 renderRow={(template) => (
-                  <tr key={template.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]/50">
-                    <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">
+                  <tr key={template.id} className="border-b border-border hover:bg-surface-muted/50">
+                    <td className="px-4 py-3 text-sm font-medium text-text">
                       <div>{template.name}</div>
                       {template.description ? (
-                        <div className="mt-1 line-clamp-1 text-xs font-normal text-[hsl(var(--text-muted))]">{template.description}</div>
+                        <div className="mt-1 line-clamp-1 text-xs font-normal text-text-muted">{template.description}</div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{formatDate(template.archived_at)}</td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                    <td className="px-4 py-3 text-sm text-text-muted">{formatDate(template.archived_at)}</td>
+                    <td className="px-4 py-3 text-sm text-text-muted">
                       {template.competency_count} {template.competency_count === 1 ? "competência" : "competências"} · {template.question_count}{" "}
                       {template.question_count === 1 ? "pergunta" : "perguntas"}
                     </td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                    <td className="px-4 py-3 text-sm text-text-muted">
                       <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-600">
                         Arquivado
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-[hsl(var(--text-muted))]">Somente leitura</td>
+                    <td className="px-4 py-3 text-right text-sm text-text-muted">Somente leitura</td>
                   </tr>
                 )}
-                footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {archivedTemplatesState.data?.total ?? 0} templates comportamentais arquivados.</div>}
+                footer={<div className="text-xs text-text-muted">Total de {archivedTemplatesState.data?.total ?? 0} templates comportamentais arquivados.</div>}
               />
             </div>
           ) : null}
@@ -648,7 +648,7 @@ export function CadastrosPage() {
           {archivedTab === "jobs" ? (
             <div className="space-y-4">
               <div className="relative max-w-xl">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                 <input
                   type="text"
                   placeholder="Buscar vaga arquivada..."
@@ -674,19 +674,19 @@ export function CadastrosPage() {
                 description: "Vagas arquivadas serão exibidas aqui.",
               }}
               renderRow={(job) => (
-                <tr key={job.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]/50">
-                  <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{job.title}</td>
-                  <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                <tr key={job.id} className="border-b border-border hover:bg-surface-muted/50">
+                  <td className="px-4 py-3 text-sm font-medium text-text">{job.title}</td>
+                  <td className="px-4 py-3 text-sm text-text-muted">
                     <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-600">
                       Arquivada
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{formatDate(job.archived_at)}</td>
-                  <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{job.archive_reason ?? "—"}</td>
-                  <td className="px-4 py-3 text-right text-sm text-[hsl(var(--text-muted))]">Somente leitura</td>
+                  <td className="px-4 py-3 text-sm text-text-muted">{formatDate(job.archived_at)}</td>
+                  <td className="px-4 py-3 text-sm text-text-muted">{job.archive_reason ?? "—"}</td>
+                  <td className="px-4 py-3 text-right text-sm text-text-muted">Somente leitura</td>
                 </tr>
               )}
-              footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {archivedJobsState.data?.total ?? 0} vagas arquivadas.</div>}
+              footer={<div className="text-xs text-text-muted">Total de {archivedJobsState.data?.total ?? 0} vagas arquivadas.</div>}
             />
             </div>
           ) : null}
@@ -694,7 +694,7 @@ export function CadastrosPage() {
           {archivedTab === "candidates" ? (
             <div className="space-y-4">
               <div className="relative max-w-xl">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                 <input
                   type="text"
                   placeholder="Buscar candidato arquivado..."
@@ -720,11 +720,11 @@ export function CadastrosPage() {
                   description: "Os candidatos arquivados aparecerão aqui.",
                 }}
                 renderRow={(candidate) => (
-                  <tr key={candidate.id} className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))]/50">
-                    <td className="px-4 py-3 text-sm font-medium text-[hsl(var(--text))]">{candidate.full_name}</td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{candidate.email ?? "—"}</td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">{formatDate(candidate.archived_at)}</td>
-                    <td className="px-4 py-3 text-sm text-[hsl(var(--text-muted))]">
+                  <tr key={candidate.id} className="border-b border-border hover:bg-surface-muted/50">
+                    <td className="px-4 py-3 text-sm font-medium text-text">{candidate.full_name}</td>
+                    <td className="px-4 py-3 text-sm text-text-muted">{candidate.email ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm text-text-muted">{formatDate(candidate.archived_at)}</td>
+                    <td className="px-4 py-3 text-sm text-text-muted">
                       <div className="space-y-1">
                         <div>{candidateArchiveReasonLabel(candidate.archive_reason)}</div>
                         {candidate.archive_reason_note ? (
@@ -739,7 +739,7 @@ export function CadastrosPage() {
                     </td>
                   </tr>
                 )}
-                footer={<div className="text-xs text-[hsl(var(--text-muted))]">Total de {archivedCandidatesState.data?.total ?? 0} candidatos arquivados.</div>}
+                footer={<div className="text-xs text-text-muted">Total de {archivedCandidatesState.data?.total ?? 0} candidatos arquivados.</div>}
               />
             </div>
           ) : null}

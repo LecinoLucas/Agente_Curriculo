@@ -11,58 +11,58 @@ export function AdmissionPackagePreview({ payload, readOnly = false }: Props) {
   }
 
   return (
-    <div className="space-y-6 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/25 p-5">
+    <div className="space-y-6 rounded-lg border border-border bg-surface-muted/25 p-5">
       {/* Candidato */}
       <section>
-        <h3 className="mb-3 font-semibold text-[hsl(var(--text))]">Candidato</h3>
+        <h3 className="mb-3 font-semibold text-text">Candidato</h3>
         <dl className="space-y-2">
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Nome:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">{payload.candidate.full_name || "—"}</dd>
+            <dt className="text-sm font-medium text-text-muted">Nome:</dt>
+            <dd className="text-sm text-text">{payload.candidate.full_name || "—"}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Email:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">{payload.candidate.email || "—"}</dd>
+            <dt className="text-sm font-medium text-text-muted">Email:</dt>
+            <dd className="text-sm text-text">{payload.candidate.email || "—"}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Telefone:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">{payload.candidate.phone || "—"}</dd>
+            <dt className="text-sm font-medium text-text-muted">Telefone:</dt>
+            <dd className="text-sm text-text">{payload.candidate.phone || "—"}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">CPF:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">{payload.candidate.cpf || "—"}</dd>
+            <dt className="text-sm font-medium text-text-muted">CPF:</dt>
+            <dd className="text-sm text-text">{payload.candidate.cpf || "—"}</dd>
           </div>
         </dl>
       </section>
 
       {/* Vaga */}
       <section>
-        <h3 className="mb-3 font-semibold text-[hsl(var(--text))]">Vaga</h3>
+        <h3 className="mb-3 font-semibold text-text">Vaga</h3>
         <dl className="space-y-2">
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Título:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">{payload.job.title || "—"}</dd>
+            <dt className="text-sm font-medium text-text-muted">Título:</dt>
+            <dd className="text-sm text-text">{payload.job.title || "—"}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Empresa:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">{payload.job.company || "—"}</dd>
+            <dt className="text-sm font-medium text-text-muted">Empresa:</dt>
+            <dd className="text-sm text-text">{payload.job.company || "—"}</dd>
           </div>
         </dl>
       </section>
 
       {/* Pré-admissão */}
       <section>
-        <h3 className="mb-3 font-semibold text-[hsl(var(--text))]">Pré-admissão</h3>
+        <h3 className="mb-3 font-semibold text-text">Pré-admissão</h3>
         <dl className="space-y-2">
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Data de Início:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">
+            <dt className="text-sm font-medium text-text-muted">Data de Início:</dt>
+            <dd className="text-sm text-text">
               {payload.pre_admission.start_date || "—"}
             </dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Salário Ofertado:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">
+            <dt className="text-sm font-medium text-text-muted">Salário Ofertado:</dt>
+            <dd className="text-sm text-text">
               {payload.pre_admission.salary_offer
                 ? new Intl.NumberFormat("pt-BR", {
                     style: "currency",
@@ -72,8 +72,8 @@ export function AdmissionPackagePreview({ payload, readOnly = false }: Props) {
             </dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Regime:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">
+            <dt className="text-sm font-medium text-text-muted">Regime:</dt>
+            <dd className="text-sm text-text">
               {payload.pre_admission.work_model || "—"}
             </dd>
           </div>
@@ -82,17 +82,17 @@ export function AdmissionPackagePreview({ payload, readOnly = false }: Props) {
 
       {/* Decisão */}
       <section>
-        <h3 className="mb-3 font-semibold text-[hsl(var(--text))]">Decisão</h3>
+        <h3 className="mb-3 font-semibold text-text">Decisão</h3>
         <dl className="space-y-2">
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Resultado:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">
+            <dt className="text-sm font-medium text-text-muted">Resultado:</dt>
+            <dd className="text-sm text-text">
               {payload.decision.decision_outcome || "—"}
             </dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-sm font-medium text-[hsl(var(--text-muted))]">Motivo:</dt>
-            <dd className="text-sm text-[hsl(var(--text))]">{payload.decision.reason_code || "—"}</dd>
+            <dt className="text-sm font-medium text-text-muted">Motivo:</dt>
+            <dd className="text-sm text-text">{payload.decision.reason_code || "—"}</dd>
           </div>
         </dl>
       </section>
@@ -100,18 +100,18 @@ export function AdmissionPackagePreview({ payload, readOnly = false }: Props) {
       {/* Documentos */}
       {payload.documents && payload.documents.length > 0 && (
         <section>
-          <h3 className="mb-3 font-semibold text-[hsl(var(--text))]">
+          <h3 className="mb-3 font-semibold text-text">
             Documentos ({payload.documents.length})
           </h3>
           <ul className="space-y-1 text-sm">
             {payload.documents.map((doc) => (
               <li key={doc.document_id} className="flex items-center justify-between">
-                <span className="text-[hsl(var(--text-muted))]">{doc.title}</span>
+                <span className="text-text-muted">{doc.title}</span>
                 <span
                   className={`px-2 py-1 rounded text-xs font-medium ${
                     doc.status === "approved"
-                      ? "bg-[hsl(var(--success-soft))] text-[hsl(var(--success))]"
-                      : "bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]"
+                      ? "bg-success-soft text-success"
+                      : "bg-surface-muted text-text-muted"
                   }`}
                 >
                   {doc.status}

@@ -31,9 +31,19 @@ const AdmissionCasePage = lazy(() =>
   import("../pages/AdmissionCasePage").then((m) => ({ default: m.AdmissionCasePage }))
 );
 
+const AdmitidosPage = lazy(() =>
+  import("../pages/AdmitidosPage").then((m) => ({ default: m.AdmitidosPage }))
+);
+
 const AdmissionIntegrationPlaceholderPage = lazy(() =>
   import("../pages/AdmissionIntegrationPlaceholderPage").then((m) => ({
     default: m.AdmissionIntegrationPlaceholderPage,
+  }))
+);
+
+const PreAdmissionChecklistsPage = lazy(() =>
+  import("../pages/PreAdmissionChecklistsPage").then((m) => ({
+    default: m.PreAdmissionChecklistsPage,
   }))
 );
 
@@ -128,6 +138,12 @@ const CandidatePortalPage = lazy(() =>
   }))
 );
 
+const CandidatePreAdmissionPage = lazy(() =>
+  import("../pages/CandidatePreAdmissionPage").then((m) => ({
+    default: m.CandidatePreAdmissionPage,
+  }))
+);
+
 const CandidateEntryPage = lazy(() =>
   import("../pages/CandidateEntryPage").then((m) => ({
     default: m.CandidateEntryPage,
@@ -197,6 +213,10 @@ export function AppRouter() {
       <Route path="/candidato/cadastro" element={publicPage(<PublicApplicationPage />)} />
       <Route path="/candidato/login" element={publicPage(<CandidateEntryPage />)} />
       <Route path="/candidato/portal" element={candidatePage(<CandidatePortalPage />)} />
+      <Route
+        path="/candidato/pre-admissao"
+        element={candidatePage(<CandidatePreAdmissionPage />)}
+      />
       <Route path="/login" element={publicPage(<LoginPage />)} />
 
       <Route
@@ -259,6 +279,16 @@ export function AppRouter() {
         <Route
           path="admissao/:caseId/integracao"
           element={protectedPage(<AdmissionIntegrationPlaceholderPage />, PRE_ADMISSION_ROLES)}
+        />
+
+        <Route
+          path="admissao/checklists"
+          element={protectedPage(<PreAdmissionChecklistsPage />, PRE_ADMISSION_ROLES)}
+        />
+
+        <Route
+          path="admitidos"
+          element={protectedPage(<AdmitidosPage />, PRE_ADMISSION_ROLES)}
         />
 
         <Route

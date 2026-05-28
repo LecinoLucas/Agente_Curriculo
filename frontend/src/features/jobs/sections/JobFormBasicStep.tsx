@@ -69,7 +69,7 @@ export function JobFormBasicStep({ form, onFormChange }: JobFormBasicStepProps) 
               <button
                 type="button"
                 onClick={() => setModalOpen(true)}
-                className="h-11 w-11 flex items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] hover:bg-[hsl(var(--surface-hover))] text-[hsl(var(--text-secondary))] hover:text-[hsl(var(--text))]"
+                className="h-11 w-11 flex items-center justify-center rounded-xl border border-border bg-surface hover:bg-[hsl(var(--surface-hover))] text-[hsl(var(--text-secondary))] hover:text-text"
                 title="Criar nova área"
               >
                 +

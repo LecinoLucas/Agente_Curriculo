@@ -145,14 +145,14 @@ export function BehavioralTemplateSelector({
   const selectableTemplates = allTemplates.filter((t) => t.status !== "archived");
 
   return (
-    <div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6 space-y-6">
+    <div className="rounded-3xl border border-border bg-surface p-6 space-y-6">
       <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))]">
           <GraduationCap className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-[hsl(var(--text))]">Avaliação comportamental</h2>
-          <p className="mt-0.5 text-sm text-[hsl(var(--text-muted))]">
+          <h2 className="text-base font-semibold text-text">Avaliação comportamental</h2>
+          <p className="mt-0.5 text-sm text-text-muted">
             Selecione um template ativo para estruturar os critérios comportamentais desta vaga.
             Templates em rascunho não podem ser usados em avaliações.
           </p>
@@ -161,7 +161,7 @@ export function BehavioralTemplateSelector({
 
       {/* Blocking warning when assessment is required but no active template is linked */}
       {missingActiveTemplate && (
-        <div className="flex items-start gap-3 rounded-2xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning))]/8 px-4 py-3 text-sm text-[hsl(var(--warning))]">
+        <div className="flex items-start gap-3 rounded-2xl border border-[hsl(var(--warning))]/30 bg-[hsl(var(--warning))]/8 px-4 py-3 text-sm text-warning">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>
             Esta vaga exige avaliação comportamental. Para publicar, selecione um{" "}
@@ -171,25 +171,25 @@ export function BehavioralTemplateSelector({
       )}
 
       {loading ? (
-        <div className="text-sm text-[hsl(var(--text-muted))]">Carregando templates...</div>
+        <div className="text-sm text-text-muted">Carregando templates...</div>
       ) : selectableTemplates.length === 0 ? (
-        <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-4 text-sm text-[hsl(var(--text-muted))]">
+        <div className="rounded-2xl border border-border bg-surface-muted px-4 py-4 text-sm text-text-muted">
           Nenhum template ativo disponível. Crie e ative um template em{" "}
           <span className="font-medium text-[hsl(var(--primary))]">Avaliações → Templates comportamentais</span>.
         </div>
       ) : (
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-[hsl(var(--text))]">
+            <label className="mb-1.5 block text-sm font-medium text-text">
               Template selecionado
               {requiresAssessment && (
-                <span className="ml-1 text-[hsl(var(--danger))]">*</span>
+                <span className="ml-1 text-danger">*</span>
               )}
             </label>
             <select
               value={value || ""}
               onChange={(e) => handleSelect(e.target.value)}
-              className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm text-[hsl(var(--text))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]/30"
             >
               <option value="">Nenhum template</option>
               {selectableTemplates.map((t) => (
@@ -219,7 +219,7 @@ export function BehavioralTemplateSelector({
 
           {/* Archived warning (defensive — archived are not shown in select but could be pre-saved) */}
           {isArchived && (
-            <div className="flex items-start gap-3 rounded-2xl border border-[hsl(var(--danger))]/30 bg-[hsl(var(--danger-soft))] px-4 py-3 text-sm text-[hsl(var(--danger))]">
+            <div className="flex items-start gap-3 rounded-2xl border border-[hsl(var(--danger))]/30 bg-danger-soft px-4 py-3 text-sm text-danger">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Template arquivado</p>
@@ -243,7 +243,7 @@ export function BehavioralTemplateSelector({
               ].join(" ")}
             >
               {loadingDetail ? (
-                <p className="text-sm text-[hsl(var(--text-muted))]">Carregando detalhes...</p>
+                <p className="text-sm text-text-muted">Carregando detalhes...</p>
               ) : selectedTemplate ? (
                 <>
                   {/* Header row */}
@@ -251,11 +251,11 @@ export function BehavioralTemplateSelector({
                     <div className="flex items-center gap-2 min-w-0">
                       <BookOpen className="h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[hsl(var(--text))] truncate">
+                        <p className="text-sm font-semibold text-text truncate">
                           {selectedTemplate.name}
                         </p>
                         {templateMeta?.description && (
-                          <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))] line-clamp-2">
+                          <p className="mt-0.5 text-xs text-text-muted line-clamp-2">
                             {templateMeta.description}
                           </p>
                         )}
@@ -264,7 +264,7 @@ export function BehavioralTemplateSelector({
                     <button
                       type="button"
                       onClick={handleRemove}
-                      className="shrink-0 rounded-lg p-1 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                      className="shrink-0 rounded-lg p-1 text-text-muted hover:bg-surface-muted hover:text-text"
                       aria-label="Remover template"
                     >
                       <X className="h-4 w-4" />
@@ -285,13 +285,13 @@ export function BehavioralTemplateSelector({
                     </span>
 
                     {/* Version */}
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[hsl(var(--text-muted))] font-medium">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-text-muted font-medium">
                       v{selectedTemplate.version}
                     </span>
 
                     {/* Category */}
                     {templateMeta?.category && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[hsl(var(--text-muted))] font-medium">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-text-muted font-medium">
                         <Tag className="h-3 w-3" />
                         {templateMeta.category}
                       </span>
@@ -299,17 +299,17 @@ export function BehavioralTemplateSelector({
 
                     {/* Duration */}
                     {templateMeta?.duration != null && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[hsl(var(--text-muted))] font-medium">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-text-muted font-medium">
                         <Clock className="h-3 w-3" />
                         ~{templateMeta.duration} min
                       </span>
                     )}
 
                     {/* Stats */}
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[hsl(var(--text-muted))] font-medium">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-text-muted font-medium">
                       {selectedTemplate.competency_count} competência(s)
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[hsl(var(--text-muted))] font-medium">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-text-muted font-medium">
                       {selectedTemplate.question_count} pergunta(s)
                     </span>
                   </div>
@@ -317,7 +317,7 @@ export function BehavioralTemplateSelector({
                   {/* Competencies list */}
                   {selectedTemplate.competencies && selectedTemplate.competencies.length > 0 && (
                     <div className="space-y-2">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
                         <Layers className="h-3 w-3" />
                         Competências avaliadas
                       </div>
@@ -327,12 +327,12 @@ export function BehavioralTemplateSelector({
                           .map((competency) => (
                             <li
                               key={competency.id}
-                              className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2"
+                              className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2"
                             >
-                              <span className="text-sm font-medium text-[hsl(var(--text))]">
+                              <span className="text-sm font-medium text-text">
                                 {competency.name}
                               </span>
-                              <span className="text-xs text-[hsl(var(--text-muted))] shrink-0 ml-2">
+                              <span className="text-xs text-text-muted shrink-0 ml-2">
                                 {competency.question_count} pergunta(s)
                               </span>
                             </li>

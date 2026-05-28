@@ -1,4 +1,12 @@
-import { Job, JobCandidate, JobPipelineBoard, JobQualityResult, JobRanking, PipelineStage } from "../types/domain";
+import {
+  Job,
+  JobCandidate,
+  JobPipelineBoard,
+  JobQualityResult,
+  JobRanking,
+  PipelineBoardFilters,
+  PipelineStage,
+} from "../types/domain";
 import { Paginated, PaginatedJobs } from "../types/api";
 import { httpRequest } from "./http";
 
@@ -227,8 +235,39 @@ export async function listJobCandidates(
   return { data, total, page, page_size, total_pages };
 }
 
-export async function getJobPipeline(jobId: string): Promise<JobPipelineBoard> {
-  const response = await httpRequest<JobPipelineBoard>(`/api/v1/pipeline/${jobId}`);
+function appendDateFilter(
+  params: URLSearchParams,
+  key: keyof PipelineBoardFilters,
+  value: string | undefined,
+  boundary: "start" | "end",
+) {
+  if (!value) return;
+  const suffix = boundary === "start" ? "T00:00:00.000" : "T23:59:59.999";
+  const date = new Date(`${value}${suffix}`);
+  if (Number.isNaN(date.getTime())) return;
+
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const hours = String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, "0");
+  const minutes = String(Math.abs(offsetMinutes) % 60).padStart(2, "0");
+
+  params.set(key, `${value}${suffix}${sign}${hours}:${minutes}`);
+}
+
+export async function getJobPipeline(
+  jobId: string,
+  filters?: PipelineBoardFilters,
+): Promise<JobPipelineBoard> {
+  const params = new URLSearchParams();
+  appendDateFilter(params, "entered_from", filters?.entered_from, "start");
+  appendDateFilter(params, "entered_to", filters?.entered_to, "end");
+  appendDateFilter(params, "updated_from", filters?.updated_from, "start");
+  appendDateFilter(params, "updated_to", filters?.updated_to, "end");
+
+  const query = params.toString();
+  const response = await httpRequest<JobPipelineBoard>(
+    query ? `/api/v1/pipeline/${jobId}?${query}` : `/api/v1/pipeline/${jobId}`,
+  );
   const columns = Array.isArray(response?.columns) ? response.columns : [];
   return {
     job_id: response?.job_id ?? jobId,

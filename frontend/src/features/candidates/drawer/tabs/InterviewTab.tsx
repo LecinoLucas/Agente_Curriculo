@@ -218,7 +218,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
   if (!canUseFlow) {
     return (
       <div className="p-6">
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-5 text-sm text-[hsl(var(--text-muted))]">
+        <div className="rounded-lg border border-border bg-surface-muted/30 p-5 text-sm text-text-muted">
           Vincule o candidato a uma vaga ativa para gerenciar entrevistas.
         </div>
       </div>
@@ -229,8 +229,8 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
     <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-[hsl(var(--text))]">Entrevistas</h3>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">Agenda, execução, presença e feedback.</p>
+          <h3 className="text-base font-semibold text-text">Entrevistas</h3>
+          <p className="mt-1 text-sm text-text-muted">Agenda, execução, presença e feedback.</p>
         </div>
         <button
           type="button"
@@ -247,10 +247,10 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
       ) : null}
 
       {formMode ? (
-        <div className="mb-5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+        <div className="mb-5 rounded-lg border border-border bg-surface p-4">
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">Título</span>
+              <span className="text-xs font-semibold uppercase text-text-muted">Título</span>
               <input
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
@@ -259,7 +259,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">Tipo</span>
+              <span className="text-xs font-semibold uppercase text-text-muted">Tipo</span>
               <select
                 value={form.interview_type}
                 onChange={(event) => setForm((current) => ({ ...current, interview_type: event.target.value as InterviewType }))}
@@ -272,7 +272,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
               </select>
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">Início</span>
+              <span className="text-xs font-semibold uppercase text-text-muted">Início</span>
               <input
                 type="datetime-local"
                 value={form.scheduled_start}
@@ -281,7 +281,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">Fim</span>
+              <span className="text-xs font-semibold uppercase text-text-muted">Fim</span>
               <input
                 type="datetime-local"
                 value={form.scheduled_end}
@@ -290,7 +290,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">Entrevistador</span>
+              <span className="text-xs font-semibold uppercase text-text-muted">Entrevistador</span>
               <input
                 value={form.interviewer_name}
                 onChange={(event) => setForm((current) => ({ ...current, interviewer_name: event.target.value }))}
@@ -298,7 +298,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase text-[hsl(var(--text-muted))]">E-mail</span>
+              <span className="text-xs font-semibold uppercase text-text-muted">E-mail</span>
               <input
                 type="email"
                 value={form.interviewer_email}
@@ -338,7 +338,7 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
             <button
               type="button"
               onClick={() => setFormMode(null)}
-              className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm font-medium"
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium"
             >
               <X className="h-4 w-4" />
               Fechar
@@ -349,35 +349,35 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
 
       {loading ? (
         <div className="flex justify-center p-8" role="status" aria-label="Carregando entrevistas">
-          <Loader className="h-5 w-5 animate-spin text-[hsl(var(--text-muted))]" />
+          <Loader className="h-5 w-5 animate-spin text-text-muted" />
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-5 text-sm text-[hsl(var(--text-muted))]">
+        <div className="rounded-lg border border-border bg-surface-muted/30 p-5 text-sm text-text-muted">
           Nenhuma entrevista registrada.
         </div>
       ) : (
         <div className="space-y-3">
           {items.map((interview) => (
-            <div key={interview.id} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+            <div key={interview.id} className="rounded-lg border border-border bg-surface p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-md bg-[hsl(var(--surface-muted))] px-2 py-1 text-xs font-semibold">
+                    <span className="rounded-md bg-surface-muted px-2 py-1 text-xs font-semibold">
                       {TYPE_LABELS[interview.interview_type]}
                     </span>
-                    <span className="rounded-md border border-[hsl(var(--border))] px-2 py-1 text-xs font-semibold">
+                    <span className="rounded-md border border-border px-2 py-1 text-xs font-semibold">
                       {STATUS_LABELS[interview.status]}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-xs text-[hsl(var(--text-muted))]">
+                    <span className="inline-flex items-center gap-1 text-xs text-text-muted">
                       <Clock className="h-3.5 w-3.5" />
                       {formatDateTime(interview.scheduled_start)}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-[hsl(var(--text))]">{interview.title}</p>
-                  <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                  <p className="mt-2 text-sm font-semibold text-text">{interview.title}</p>
+                  <p className="mt-1 text-sm text-text-muted">
                     {interview.interviewer_name || interview.interviewer_email || "Sem entrevistador definido"}
                   </p>
-                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                  <p className="mt-1 text-xs text-text-muted">
                     Calendar: {interview.calendar_sync_status ?? "not_synced"}
                     {interview.external_calendar_html_link ? (
                       <a
@@ -415,8 +415,8 @@ export function InterviewTab({ jobId, candidateId, onScorecardSubmitted }: Inter
       )}
 
       {scorecardInterviewId ? (
-        <div className="mt-6 rounded-lg border border-[hsl(var(--border))]">
-          <div className="border-b border-[hsl(var(--border))] px-4 py-3">
+        <div className="mt-6 rounded-lg border border-border">
+          <div className="border-b border-border px-4 py-3">
             <p className="text-sm font-semibold">
               Scorecard vinculado {selectedScorecardInterview ? `- ${formatDateTime(selectedScorecardInterview.scheduled_start)}` : ""}
             </p>

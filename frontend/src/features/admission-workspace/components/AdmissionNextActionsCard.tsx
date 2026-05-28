@@ -47,7 +47,7 @@ export function AdmissionNextActionsCard({
   return (
     <AdmissionSectionCard title="Próximas ações">
       {actions.length === 0 ? (
-        <p className="py-2 text-sm text-[hsl(var(--text-muted))]">
+        <p className="py-2 text-sm text-text-muted">
           Nenhuma ação disponível no momento.
         </p>
       ) : (
@@ -62,19 +62,19 @@ export function AdmissionNextActionsCard({
                   <div
                     key={action.type}
                     title={action.disabled_reason ?? undefined}
-                    className="flex cursor-not-allowed items-center gap-3 rounded-xl border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface-muted))]/40 p-3.5 opacity-60"
+                    className="flex cursor-not-allowed items-center gap-3 rounded-xl border border-border/70 bg-surface-muted/40 p-3.5 opacity-60"
                     aria-disabled="true"
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-text-muted">
                       {icon}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                      <p className="text-sm font-semibold text-text">
                         {action.label}
                       </p>
-                      <p className="text-xs text-[hsl(var(--text-muted))]">{subtitle}</p>
+                      <p className="text-xs text-text-muted">{subtitle}</p>
                     </div>
-                    <ExternalLink className="ml-auto h-4 w-4 shrink-0 text-[hsl(var(--text-muted))]" aria-hidden="true" />
+                    <ExternalLink className="ml-auto h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
                   </div>
                 );
               }
@@ -83,18 +83,18 @@ export function AdmissionNextActionsCard({
                 <Link
                   key={action.type}
                   to={integrationHref}
-                  className="flex items-center gap-3 rounded-xl border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] p-3.5 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.6)] transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-[hsl(var(--accent-soft))]"
+                  className="flex items-center gap-3 rounded-xl border border-border/70 bg-surface p-3.5 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.6)] transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-[hsl(var(--accent-soft))]"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--accent-soft))] text-[hsl(var(--brand-dark))]">
                     {icon}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                    <p className="text-sm font-semibold text-text">
                       {action.label}
                     </p>
-                    <p className="text-xs text-[hsl(var(--text-muted))]">{subtitle}</p>
+                    <p className="text-xs text-text-muted">{subtitle}</p>
                   </div>
-                  <ExternalLink className="ml-auto h-4 w-4 shrink-0 text-[hsl(var(--text-muted))]" aria-hidden="true" />
+                  <ExternalLink className="ml-auto h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
                 </Link>
               );
             }
@@ -105,16 +105,16 @@ export function AdmissionNextActionsCard({
                 key={action.type}
                 type="button"
                 onClick={onOpenChecklist}
-                className="flex items-center gap-3 rounded-xl border border-[hsl(var(--border))]/70 bg-[hsl(var(--surface))] p-3.5 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.6)] text-left transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-[hsl(var(--accent-soft))]"
+                className="flex items-center gap-3 rounded-xl border border-border/70 bg-surface p-3.5 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.6)] text-left transition-colors hover:border-[hsl(var(--primary))]/30 hover:bg-[hsl(var(--accent-soft))]"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--accent-soft))] text-[hsl(var(--brand-dark))]">
                   {icon}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                  <p className="text-sm font-semibold text-text">
                     {action.label}
                   </p>
-                  <p className="text-xs text-[hsl(var(--text-muted))]">{subtitle}</p>
+                  <p className="text-xs text-text-muted">{subtitle}</p>
                 </div>
               </button>
             );

@@ -83,6 +83,10 @@ describe("CandidateSearchModal process history action", () => {
     );
 
     await screen.findByText("Ana Souza");
+    expect(candidatesService.listSummaries).toHaveBeenCalledWith(1, 40, {
+      search: undefined,
+      link_status_filter: "without_active_job",
+    });
     await user.click(screen.getByRole("button", { name: "Vincular" }));
     expect(await screen.findByText("Este candidato já participou desta vaga anteriormente.")).toBeInTheDocument();
 

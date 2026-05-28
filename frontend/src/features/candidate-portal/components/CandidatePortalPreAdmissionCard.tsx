@@ -161,11 +161,11 @@ export function CandidatePortalPreAdmissionCard({
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-extrabold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+          <p className="text-xs font-extrabold uppercase tracking-widest text-text-muted">
             Pré-admissão
           </p>
-          <h2 className="mt-1 text-xl font-bold text-[hsl(var(--text))]">Documentos da admissão</h2>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <h2 className="mt-1 text-xl font-bold text-text">Documentos da admissão</h2>
+          <p className="mt-1 text-sm text-text-muted">
             Envie os documentos solicitados pelo RH. Aceitamos {formatAllowedTypes(
               process.checklist_items[0]?.allowed_file_types ?? [],
             )}.
@@ -182,13 +182,13 @@ export function CandidatePortalPreAdmissionCard({
       {documentsTotal > 0 ? (
         <div
           data-testid="candidate-portal-pre-admission-progress"
-          className="mt-5 flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-4 py-3"
+          className="mt-5 flex items-center justify-between rounded-xl border border-border bg-surface-muted/50 px-4 py-3"
         >
-          <span className="text-sm font-semibold text-[hsl(var(--text))]">
+          <span className="text-sm font-semibold text-text">
             {documentsApproved} de {documentsTotal} documentos aprovados
           </span>
           {summary?.next_pending_document ? (
-            <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+            <span className="text-xs font-medium text-text-muted">
               Próximo: {summary.next_pending_document}
             </span>
           ) : null}
@@ -196,7 +196,7 @@ export function CandidatePortalPreAdmissionCard({
       ) : null}
 
       {process.checklist_items.length === 0 ? (
-        <p className="mt-5 rounded-xl border border-dashed border-[hsl(var(--border))] p-4 text-sm text-[hsl(var(--text-muted))]">
+        <p className="mt-5 rounded-xl border border-dashed border-border p-4 text-sm text-text-muted">
           Nenhuma pendência documental registrada.
         </p>
       ) : (
@@ -213,17 +213,17 @@ export function CandidatePortalPreAdmissionCard({
               <li
                 key={item.item_id}
                 data-testid="candidate-portal-pre-admission-item"
-                className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/20 p-4"
+                className="rounded-xl border border-border bg-surface-muted/20 p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{item.title}</p>
-                    <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
+                    <p className="text-sm font-semibold text-text">{item.title}</p>
+                    <p className="mt-0.5 text-xs text-text-muted">
                       {item.required ? "Obrigatório" : "Opcional"} ·{" "}
                       {formatAllowedTypes(item.allowed_file_types)} até {item.max_file_size_mb}MB
                     </p>
                     {item.description ? (
-                      <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{item.description}</p>
+                      <p className="mt-2 text-sm text-text-muted">{item.description}</p>
                     ) : null}
                     <div className="mt-3 flex items-center gap-2 text-sm">
                       {statusKey === "approved" ? (
@@ -233,9 +233,9 @@ export function CandidatePortalPreAdmissionCard({
                       ) : (
                         <FileUp className="h-4 w-4 text-[hsl(var(--primary))]" />
                       )}
-                      <span className="font-medium text-[hsl(var(--text))]">{statusLabel}</span>
+                      <span className="font-medium text-text">{statusLabel}</span>
                       {document ? (
-                        <span className="break-all text-[hsl(var(--text-muted))]">
+                        <span className="break-all text-text-muted">
                           {document.original_filename}
                         </span>
                       ) : null}
@@ -267,7 +267,7 @@ export function CandidatePortalPreAdmissionCard({
                         type="button"
                         onClick={() => void handleDownload(document.id, document.original_filename)}
                         disabled={downloadingDocumentId !== null}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-white px-3 py-2 text-sm font-semibold text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))]/50 disabled:opacity-60"
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm font-semibold text-text hover:bg-surface-muted/50 disabled:opacity-60"
                       >
                         {downloadingDocumentId === document.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />

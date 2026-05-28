@@ -6,8 +6,8 @@ type SummaryRowProps = {
 export function SummaryRow({ label, value }: SummaryRowProps) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-[hsl(var(--text-muted))]">{label}</span>
-      <span className="font-medium text-[hsl(var(--text))]">{value}</span>
+      <span className="text-text-muted">{label}</span>
+      <span className="font-medium text-text">{value}</span>
     </div>
   );
 }

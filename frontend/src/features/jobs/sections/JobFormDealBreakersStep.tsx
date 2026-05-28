@@ -152,7 +152,7 @@ export function JobFormDealBreakersStep({
           <Button type="button" onClick={onAddDealBreaker}>
             Adicionar critério eliminatório
           </Button>
-          <span className="text-xs text-[hsl(var(--text-muted))]">
+          <span className="text-xs text-text-muted">
             Exemplo: modelo de trabalho diferente de remoto.
           </span>
         </div>
@@ -166,17 +166,17 @@ export function JobFormDealBreakersStep({
           {(form.deal_breakers ?? []).map((rule, index) => (
             <div
               key={`${rule.field}-${rule.reason}-${index}`}
-              className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/40 p-4"
+              className="rounded-2xl border border-border bg-surface-muted/40 p-4"
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-[hsl(var(--text))]">
+                  <p className="text-sm font-semibold text-text">
                     {rule.field} • {rule.operator}
                   </p>
-                  <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+                  <p className="mt-1 text-sm text-text-muted">
                     Valor: {rule.value ?? rule.values?.join(", ") ?? "—"}
                   </p>
-                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                  <p className="mt-1 text-xs text-text-muted">
                     Motivo: {rule.reason}
                   </p>
                 </div>
@@ -214,7 +214,7 @@ export function JobFormDealBreakersStep({
             </div>
           ))}
           {(form.deal_breakers ?? []).length === 0 ? (
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-text-muted">
               Nenhum critério eliminatório configurado.
             </p>
           ) : null}

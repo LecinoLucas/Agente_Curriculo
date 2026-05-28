@@ -19,11 +19,11 @@ export function PersonalDataStep({ form, errors, onChange }: Props) {
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[hsl(var(--primary))]">Dados pessoais</p>
-        <h2 className="text-2xl font-semibold tracking-tight text-[hsl(var(--text))]">Preencha seus dados principais</h2>
-        <p className="text-sm text-[hsl(var(--text-muted))]">
+        <h2 className="text-2xl font-semibold tracking-tight text-text">Preencha seus dados principais</h2>
+        <p className="text-sm text-text-muted">
           Usamos essas informações para identificar seu perfil e evitar cadastros duplicados.
         </p>
-        <p className="text-sm text-[hsl(var(--text-muted))]">
+        <p className="text-sm text-text-muted">
           Se você já tiver cadastro, suas informações serão vinculadas ao seu perfil existente quando possível.
         </p>
       </div>

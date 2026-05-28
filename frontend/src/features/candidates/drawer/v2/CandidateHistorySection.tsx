@@ -95,52 +95,52 @@ export function CandidateHistorySection({
 
   if (!activeJobId) {
     return (
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-        <p className="text-sm text-[hsl(var(--text-muted))]">Sem histórico — candidato não vinculado a vaga</p>
+      <div className="rounded-lg border border-border bg-surface-muted px-4 py-3">
+        <p className="text-sm text-text-muted">Sem histórico — candidato não vinculado a vaga</p>
       </div>
     );
   }
 
   return (
-    <div className="border-t border-[hsl(var(--border))]/20">
+    <div className="border-t border-border/20">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-[hsl(var(--surface-muted))]/30"
+        className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-surface-muted/30"
       >
-        <h3 className="font-semibold text-[hsl(var(--text))]">Histórico do Pipeline</h3>
-        <span className={`text-sm font-semibold text-[hsl(var(--text-muted))] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
+        <h3 className="font-semibold text-text">Histórico do Pipeline</h3>
+        <span className={`text-sm font-semibold text-text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}>
           ▼
         </span>
       </button>
 
       {isOpen && (
-        <div className="border-t border-[hsl(var(--border))]/20 px-6 py-4">
+        <div className="border-t border-border/20 px-6 py-4">
           {historyLoading ? (
             <div className="animate-pulse space-y-3">
               {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="h-10 rounded-lg bg-[hsl(var(--surface-muted))]/40" />
+                <div key={i} className="h-10 rounded-lg bg-surface-muted/40" />
               ))}
             </div>
           ) : history && history.transitions && history.transitions.length > 0 ? (
             <div className="space-y-2">
               {history.transitions.map((event, idx) => (
-                <div key={idx} className="rounded-lg bg-[hsl(var(--surface-muted))]/30 px-3 py-2.5">
+                <div key={idx} className="rounded-lg bg-surface-muted/30 px-3 py-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm text-[hsl(var(--text))]">
+                      <p className="font-semibold text-sm text-text">
                         {STAGE_LABEL[event.to_stage] ?? event.to_stage}
                       </p>
-                      <p className="mt-0.5 text-xs text-[hsl(var(--text-muted))]">
+                      <p className="mt-0.5 text-xs text-text-muted">
                         {TRIGGER_LABEL[event.trigger] ?? event.trigger}
                       </p>
                     </div>
-                    <time className="shrink-0 text-xs font-medium text-[hsl(var(--text-muted))]">
+                    <time className="shrink-0 text-xs font-medium text-text-muted">
                       {formatDateTime(event.moved_at)}
                     </time>
                   </div>
                   {event.reason && (
-                    <p className="mt-1.5 text-xs leading-relaxed text-[hsl(var(--text-muted))]">
+                    <p className="mt-1.5 text-xs leading-relaxed text-text-muted">
                       {event.reason}
                     </p>
                   )}
@@ -148,7 +148,7 @@ export function CandidateHistorySection({
               ))}
             </div>
           ) : (
-            <p className="text-sm text-[hsl(var(--text-muted))]">Sem eventos no histórico</p>
+            <p className="text-sm text-text-muted">Sem eventos no histórico</p>
           )}
         </div>
       )}

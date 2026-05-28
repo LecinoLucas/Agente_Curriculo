@@ -41,25 +41,25 @@ export function PreAdmissionStatusCard({
   onStatusChange,
 }: PreAdmissionStatusCardProps) {
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))] bg-white p-4">
+    <div className="rounded-lg border border-border bg-white p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Status
           </p>
-          <h3 className="mt-1 text-base font-semibold text-[hsl(var(--text))]">
+          <h3 className="mt-1 text-base font-semibold text-text">
             {preAdmissionStatusLabels[preAdmissionCase.status]}
           </h3>
         </div>
         <label className="block space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Atualizar status
           </span>
           <select
             value={preAdmissionCase.status}
             onChange={(event) => onStatusChange(event.target.value as PreAdmissionStatus)}
             disabled={updating}
-            className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-2 text-sm disabled:opacity-60 sm:w-64"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm disabled:opacity-60 sm:w-64"
           >
             {Object.entries(preAdmissionStatusLabels).map(([value, label]) => (
               <option key={value} value={value}>
@@ -71,22 +71,22 @@ export function PreAdmissionStatusCard({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="flex items-start gap-2 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-3">
+        <div className="flex items-start gap-2 rounded-md border border-border bg-surface-muted/30 p-3">
           <CircleDollarSign className="mt-0.5 h-4 w-4 text-[hsl(var(--primary))]" />
           <div>
-            <div className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">Oferta</div>
-            <div className="mt-1 text-sm font-medium text-[hsl(var(--text))]">
+            <div className="text-[11px] font-semibold uppercase text-text-muted">Oferta</div>
+            <div className="mt-1 text-sm font-medium text-text">
               {formatSalary(preAdmissionCase.salary_offer)}
             </div>
           </div>
         </div>
-        <div className="flex items-start gap-2 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-3">
+        <div className="flex items-start gap-2 rounded-md border border-border bg-surface-muted/30 p-3">
           <CalendarDays className="mt-0.5 h-4 w-4 text-[hsl(var(--primary))]" />
           <div>
-            <div className="text-[11px] font-semibold uppercase text-[hsl(var(--text-muted))]">
+            <div className="text-[11px] font-semibold uppercase text-text-muted">
               Data prevista
             </div>
-            <div className="mt-1 text-sm font-medium text-[hsl(var(--text))]">
+            <div className="mt-1 text-sm font-medium text-text">
               {formatDate(preAdmissionCase.start_date)}
             </div>
           </div>
@@ -94,7 +94,7 @@ export function PreAdmissionStatusCard({
       </div>
 
       {preAdmissionCase.work_model || preAdmissionCase.notes ? (
-        <div className="mt-4 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/30 p-3 text-sm text-[hsl(var(--text-muted))]">
+        <div className="mt-4 rounded-md border border-border bg-surface-muted/30 p-3 text-sm text-text-muted">
           {preAdmissionCase.work_model ? <p>Modelo: {preAdmissionCase.work_model}</p> : null}
           {preAdmissionCase.notes ? <p className="mt-1">{preAdmissionCase.notes}</p> : null}
         </div>

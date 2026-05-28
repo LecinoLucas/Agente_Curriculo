@@ -185,7 +185,7 @@ export function CandidateProfileView({
   return (
     <div
       className={[
-        "flex flex-col bg-[hsl(var(--surface))]",
+        "flex flex-col bg-surface",
         compact ? "h-auto overflow-visible" : "h-full min-h-0 overflow-hidden",
       ].join(" ")}
     >
@@ -296,7 +296,7 @@ export function CandidateProfileView({
       </div>
 
       {/* Sticky footer for compact mode */}
-      <div className={compact ? "sticky bottom-0 bg-[hsl(var(--surface))] z-10 border-t border-[hsl(var(--border))]/10" : ""}>
+      <div className={compact ? "sticky bottom-0 bg-surface z-10 border-t border-border/10" : ""}>
         {/* Quick actions */}
         {!isLoading && (
           <CandidateQuickActions

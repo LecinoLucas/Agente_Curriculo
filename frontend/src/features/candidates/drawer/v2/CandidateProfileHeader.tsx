@@ -49,26 +49,26 @@ export function CandidateProfileHeader({
 
   const scoreColor =
     semantics.statusTone === "high"
-      ? "text-[hsl(var(--success))]"
+      ? "text-success"
       : semantics.statusTone === "mid"
-        ? "text-[hsl(var(--warning))]"
+        ? "text-warning"
         : semantics.statusTone === "low"
-        ? "text-[hsl(var(--danger))]"
-          : "text-[hsl(var(--text-muted))]";
+        ? "text-danger"
+          : "text-text-muted";
 
   const stageBadgeClass =
     currentStage === "hired" || currentStage === "pre_admission" || currentStage === "protheus" || currentStage === "admitted"
       ? "border-emerald-200 bg-emerald-50 text-emerald-900"
       : currentStage === "rejected"
         ? "border-rose-200 bg-rose-50 text-rose-900"
-        : "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 text-[hsl(var(--text-muted))]";
+        : "border-border bg-surface-muted/50 text-text-muted";
   return (
-    <div className="shrink-0 border-b border-[hsl(var(--border))]/40 bg-[hsl(var(--surface))] px-5 py-4">
+    <div className="shrink-0 border-b border-border/40 bg-surface px-5 py-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex items-start gap-3.5">
           {/* Avatar */}
           {isLoading ? (
-            <div className="h-12 w-12 animate-pulse rounded-2xl bg-[hsl(var(--surface-muted))]" />
+            <div className="h-12 w-12 animate-pulse rounded-2xl bg-surface-muted" />
           ) : (
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-600 to-slate-800 text-sm font-bold text-white shadow-sm">
               {initials}
@@ -79,8 +79,8 @@ export function CandidateProfileHeader({
           <div className="min-w-0 pt-0.5">
             {isLoading ? (
               <>
-                <div className="mb-2 h-6 w-40 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
-                <div className="h-4 w-32 animate-pulse rounded bg-[hsl(var(--surface-muted))]" />
+                <div className="mb-2 h-6 w-40 animate-pulse rounded bg-surface-muted" />
+                <div className="h-4 w-32 animate-pulse rounded bg-surface-muted" />
               </>
             ) : (
               <>
@@ -88,20 +88,20 @@ export function CandidateProfileHeader({
                   <button
                     type="button"
                     onClick={onBackToList}
-                    className="mb-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                    className="mb-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-text-muted transition hover:bg-surface-muted hover:text-text"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
                     <span>{backToListLabel}</span>
                   </button>
                 ) : null}
-                <h1 className="truncate text-lg font-semibold tracking-[-0.01em] text-[hsl(var(--text))]">
+                <h1 className="truncate text-lg font-semibold tracking-[-0.01em] text-text">
                   {candidate?.full_name ?? "—"}
                 </h1>
-                <p className="mt-0.5 truncate text-sm text-[hsl(var(--text-muted))]">
+                <p className="mt-0.5 truncate text-sm text-text-muted">
                   {activeJobLabel || "Aguardando Vaga"}
                 </p>
                 {!hasActiveJob && activeJobLabel && activeJobLabel !== "Não vinculado" ? (
-                  <p className="mt-1 text-[11px] font-medium text-[hsl(var(--text-muted))]">
+                  <p className="mt-1 text-[11px] font-medium text-text-muted">
                     Última vaga vinculada
                   </p>
                 ) : null}
@@ -114,7 +114,7 @@ export function CandidateProfileHeader({
                       {semantics.primaryLabel} {semantics.primaryDisplay}
                     </span>
                   ) : null}
-                  <span className="max-w-[260px] truncate text-[11px] text-[hsl(var(--text-muted))]">
+                  <span className="max-w-[260px] truncate text-[11px] text-text-muted">
                     {candidate?.email ?? "Sem e-mail"}
                   </span>
                 </div>
@@ -140,7 +140,7 @@ export function CandidateProfileHeader({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg p-1.5 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+          className="rounded-lg p-1.5 text-text-muted transition hover:bg-surface-muted hover:text-text"
           aria-label="Fechar painel"
         >
           ✕

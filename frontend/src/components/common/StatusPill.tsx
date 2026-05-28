@@ -1,1 +1,1 @@
-export { StatusBadge as StatusPill } from "./StatusBadge";
+export * from "../ui/status-pill";

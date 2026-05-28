@@ -137,4 +137,31 @@ describe("pipelineService.moveCandidateStage — force payload", () => {
 
     fetchSpy.mockRestore();
   });
+
+  it("normaliza required_action e pre_admission_case_id no retorno", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch" as never)
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            candidate_id: "c-1",
+            job_id: "job-1",
+            stage: "pre_admission",
+            candidate_status: "Pré-admissão",
+            status: "active",
+            transition_id: "tr-1",
+            updated_at: "2026-05-25T00:00:00Z",
+            required_action: "open_pre_admission",
+            pre_admission_case_id: "case-1",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ) as never,
+      );
+
+    const response = await pipelineService.moveCandidateStage("job-1", "c-1", { stage: "pre_admission" });
+    expect(response.required_action).toBe("open_pre_admission");
+    expect(response.pre_admission_case_id).toBe("case-1");
+
+    fetchSpy.mockRestore();
+  });
 });

@@ -83,13 +83,13 @@ export function JobFormReviewStep({
                 ]
               : []),
           ] as { ok: boolean; label: string }[]).map((item) => (
-            <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--border))] px-4 py-3 text-sm">
+            <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-border px-4 py-3 text-sm">
               {item.ok ? (
-                <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                <CheckCircle2 className="h-4 w-4 text-success" />
               ) : (
-                <ShieldAlert className="h-4 w-4 text-[hsl(var(--danger))]" />
+                <ShieldAlert className="h-4 w-4 text-danger" />
               )}
-              <span className={item.ok ? "text-[hsl(var(--text))]" : "text-[hsl(var(--danger))]"}>
+              <span className={item.ok ? "text-text" : "text-danger"}>
                 {item.label}
               </span>
             </div>
@@ -123,7 +123,7 @@ export function JobFormReviewStep({
           ) : null}
 
           {!jobQuality && backendPublishErrors.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--text-muted))]">
+            <p className="text-sm text-text-muted">
               Salve ou valide a vaga para carregar mensagens do backend.
             </p>
           ) : null}

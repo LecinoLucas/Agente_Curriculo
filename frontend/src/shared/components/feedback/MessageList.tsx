@@ -7,8 +7,8 @@ type MessageListProps = {
 export function MessageList({ tone, title, items }: MessageListProps) {
   const toneClass =
     tone === "danger"
-      ? "border-[hsl(var(--danger))]/20 bg-[hsl(var(--danger-soft))] text-[hsl(var(--danger))]"
-      : "border-[hsl(var(--warning))]/20 bg-[hsl(var(--warning-soft))] text-[hsl(var(--warning))]";
+      ? "border-[hsl(var(--danger))]/20 bg-danger-soft text-danger"
+      : "border-[hsl(var(--warning))]/20 bg-warning-soft text-warning";
 
   return (
     <div className={`rounded-3xl border p-4 ${toneClass}`}>

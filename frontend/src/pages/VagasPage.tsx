@@ -126,7 +126,7 @@ export function VagasPage() {
             <Button
               type="button"
               variant="outline"
-              className="h-11 rounded-xl border-[hsl(var(--border-strong))]/55 bg-[hsl(var(--surface))] px-4 text-sm shadow-[0_10px_24px_-22px_hsl(var(--text)/0.35)]"
+              className="h-11 rounded-xl border-border-strong/55 bg-surface px-4 text-sm shadow-[0_10px_24px_-22px_hsl(var(--text)/0.35)]"
               onClick={() => void loadJobs()}
               disabled={loading}
             >
@@ -164,18 +164,18 @@ export function VagasPage() {
             : undefined
         }
         layoutClassName="grid gap-5 lg:grid-cols-[minmax(0,1.72fr)_380px] lg:items-start lg:transition-[grid-template-columns] lg:duration-200"
-        listCardClassName="overflow-hidden rounded-[28px] border-[hsl(var(--border-strong))]/55 bg-[hsl(var(--surface))] shadow-[0_24px_60px_-34px_hsl(var(--text)/0.22)]"
+        listCardClassName="overflow-hidden rounded-[28px] border-border-strong/55 bg-surface shadow-[0_24px_60px_-34px_hsl(var(--text)/0.22)]"
         dataTableClassName="overflow-hidden rounded-none border-0 bg-transparent shadow-none"
-        dataTableHeaderClassName="bg-[hsl(var(--surface-muted))]/80 backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--surface-muted))]/72"
-        dataTableFooterClassName="border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/55"
+        dataTableHeaderClassName="bg-surface-muted/80 backdrop-blur supports-[backdrop-filter]:bg-surface-muted/72"
+        dataTableFooterClassName="border-border bg-surface-muted/55"
         sidePanelClassName="min-w-0"
         filters={
-          <div className="w-full rounded-[22px] border border-[hsl(var(--border-strong))]/40 bg-[hsl(var(--surface))]/96 px-3 py-2.5 shadow-[0_18px_42px_-34px_hsl(var(--text)/0.26)]">
+          <div className="w-full rounded-[22px] border border-border-strong/40 bg-surface/96 px-3 py-2.5 shadow-[0_18px_42px_-34px_hsl(var(--text)/0.26)]">
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                 <label className="block min-w-0 flex-1">
                   <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--text-muted))]" />
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                     <input
                       value={searchInput}
                       onChange={(event) => {
@@ -183,7 +183,7 @@ export function VagasPage() {
                         setSearchInput(event.target.value);
                       }}
                       placeholder="Buscar por título, área, senioridade ou local"
-                      className="ui-input h-10 w-full rounded-xl border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface))] pl-10 pr-3 text-sm shadow-none"
+                      className="ui-input h-10 w-full rounded-xl border-border-strong/45 bg-surface pl-10 pr-3 text-sm shadow-none"
                     />
                   </div>
                 </label>
@@ -195,7 +195,7 @@ export function VagasPage() {
                       setPage(1);
                       setAreaFilter(event.target.value as JobAreaFilter);
                     }}
-                    className="ui-input h-10 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
+                    className="ui-input h-10 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
                   >
                     <option value="all">Todas as áreas</option>
                     {areaOptions.map((area) => (
@@ -211,7 +211,7 @@ export function VagasPage() {
                       setPage(1);
                       setWorkModelFilter(event.target.value as JobWorkModelFilter);
                     }}
-                    className="ui-input h-10 w-full rounded-xl border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
+                    className="ui-input h-10 w-full rounded-xl border-border bg-surface px-3 text-sm shadow-none lg:w-[168px] xl:w-[184px]"
                   >
                     <option value="all">Todos os modelos</option>
                     {workModelOptions.map((workModel) => (
@@ -224,7 +224,7 @@ export function VagasPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-10 rounded-xl border-[hsl(var(--border))] px-3 text-sm lg:w-[116px]"
+                    className="h-10 rounded-xl border-border px-3 text-sm lg:w-[116px]"
                     onClick={clearFilters}
                     disabled={!hasActiveFilters}
                   >
@@ -234,9 +234,9 @@ export function VagasPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 border-t border-[hsl(var(--border))]/70 pt-2 lg:flex-row lg:items-center lg:justify-between">
-                <div className="text-xs text-[hsl(var(--text-muted))]">
-                  <span className="font-medium text-[hsl(var(--text))]">{total} visíveis</span>
+              <div className="flex flex-col gap-2 border-t border-border/70 pt-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="text-xs text-text-muted">
+                  <span className="font-medium text-text">{total} visíveis</span>
                   <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
                   <span>{summary.published} publicadas</span>
                   <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
@@ -244,7 +244,7 @@ export function VagasPage() {
                   <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
                   <span>{summary.archived} arquivadas</span>
                   <span className="mx-2 text-[hsl(var(--border-strong))]">•</span>
-                  <span className={summary.attention > 0 ? "text-[hsl(var(--warning))]" : undefined}>
+                  <span className={summary.attention > 0 ? "text-warning" : undefined}>
                     {summary.attention} atenção
                   </span>
                 </div>
@@ -264,7 +264,7 @@ export function VagasPage() {
                           "inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition",
                           isActive
                             ? "border-[hsl(var(--primary))]/40 bg-[hsl(var(--accent-soft))] text-[hsl(var(--primary))]"
-                            : "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))] hover:border-[hsl(var(--primary))]/28 hover:text-[hsl(var(--text))]",
+                            : "border-border bg-surface text-text-muted hover:border-[hsl(var(--primary))]/28 hover:text-text",
                         ].join(" ")}
                       >
                         <span>{item.label}</span>
@@ -287,10 +287,10 @@ export function VagasPage() {
                         setPage(1);
                         chip.onClear();
                       }}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/78 px-2.5 text-[11px] font-medium text-[hsl(var(--text))] transition hover:border-[hsl(var(--primary))]/28"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface-muted/78 px-2.5 text-[11px] font-medium text-text transition hover:border-[hsl(var(--primary))]/28"
                     >
                       <span>{chip.label}</span>
-                      <X className="h-3 w-3 text-[hsl(var(--text-muted))]" />
+                      <X className="h-3 w-3 text-text-muted" />
                     </button>
                   ))}
                 </div>
@@ -319,12 +319,12 @@ export function VagasPage() {
           const surfaceClasses = getOperationalSurfaceClasses(operational.tone);
           const rowEmphasis =
             priority.level === "critical"
-              ? "hover:bg-[hsl(var(--danger-soft))]/22"
+              ? "hover:bg-danger-soft/22"
               : priority.level === "focus"
-                ? "hover:bg-[hsl(var(--warning-soft))]/22"
+                ? "hover:bg-warning-soft/22"
                 : priority.level === "active"
                   ? "hover:bg-[hsl(var(--accent-soft))]/18"
-                  : "hover:bg-[hsl(var(--surface-muted))]/28";
+                  : "hover:bg-surface-muted/28";
           const primaryAction =
             operational.actionTarget === "edit"
               ? {
@@ -353,9 +353,9 @@ export function VagasPage() {
               key={job.id}
               onClick={() => setSelectedJobId((current) => (current === job.id ? null : job.id))}
               className={[
-                "group cursor-pointer border-b border-[hsl(var(--border))] bg-[hsl(var(--surface))] transition-all duration-200",
+                "group cursor-pointer border-b border-border bg-surface transition-all duration-200",
                 isSelected
-                  ? "bg-[hsl(var(--surface))] shadow-[inset_0_0_0_1px_hsl(var(--border-strong)/0.28)]"
+                  ? "bg-surface shadow-[inset_0_0_0_1px_hsl(var(--border-strong)/0.28)]"
                   : rowEmphasis,
               ].join(" ")}
             >
@@ -366,7 +366,7 @@ export function VagasPage() {
               >
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-[hsl(var(--text))]">{job.title}</p>
+                    <p className="text-sm font-semibold text-text">{job.title}</p>
                     <span
                       className={[
                         "inline-flex items-center px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]",
@@ -377,7 +377,7 @@ export function VagasPage() {
                       {isSelected ? operational.healthLabel : priority.label}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[hsl(var(--text-muted))]">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
                     {summaryParts.length > 0 ? <span>{summaryParts.join(" • ")}</span> : null}
                     <span>Atualizada em {new Date(job.updated_at).toLocaleDateString("pt-BR")}</span>
                     {priority.compact ? null : <span>{priority.momentumLabel}</span>}
@@ -410,12 +410,12 @@ export function VagasPage() {
                   className={[
                     "transition-colors",
                     isSelected
-                      ? "rounded-lg border border-[hsl(var(--border-strong))]/35 bg-[hsl(var(--surface-muted))]/48 px-3 py-2"
+                      ? "rounded-lg border border-border-strong/35 bg-surface-muted/48 px-3 py-2"
                       : "space-y-1",
                   ].join(" ")}
                 >
-                  <p className="text-sm font-medium text-[hsl(var(--text))]">{operational.pipelineLabel}</p>
-                  <p className="mt-1 text-xs leading-5 text-[hsl(var(--text-muted))]">{operational.pipelineNote}</p>
+                  <p className="text-sm font-medium text-text">{operational.pipelineLabel}</p>
+                  <p className="mt-1 text-xs leading-5 text-text-muted">{operational.pipelineNote}</p>
                 </div>
               </td>
               <td className="px-4 py-3 align-top" onClick={(event) => event.stopPropagation()}>
@@ -428,8 +428,8 @@ export function VagasPage() {
                       isSelected || priority.level === "critical"
                         ? undefined
                         : priority.compact
-                          ? "border-[hsl(var(--border))] bg-[hsl(var(--surface))] text-[hsl(var(--text-muted))]"
-                          : "border-[hsl(var(--border-strong))]/45 bg-[hsl(var(--surface))]"
+                          ? "border-border bg-surface text-text-muted"
+                          : "border-border-strong/45 bg-surface"
                     }
                     onClick={primaryAction.onClick}
                   >

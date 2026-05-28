@@ -11,9 +11,9 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+    <section className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-sm font-semibold text-[hsl(var(--text))]">{title}</h3>
+        <h3 className="text-sm font-semibold text-text">{title}</h3>
         {action}
       </div>
       <div className="mt-3">{children}</div>
@@ -31,12 +31,12 @@ export function StatusCard({
   description: string;
 }) {
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+    <div className="rounded-xl border border-border bg-surface-muted px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold text-[hsl(var(--text))]">{title}</p>
-      <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{description}</p>
+      <p className="mt-1 text-sm font-semibold text-text">{title}</p>
+      <p className="mt-1 text-xs text-text-muted">{description}</p>
     </div>
   );
 }
@@ -53,14 +53,14 @@ export function DecisionCard({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+    <div className="rounded-xl border border-border bg-surface-muted px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
         {label}
       </p>
-      <p className={["mt-1 text-lg font-extrabold tabular-nums text-[hsl(var(--text))]", valueClassName ?? ""].join(" ")}>
+      <p className={["mt-1 text-lg font-extrabold tabular-nums text-text", valueClassName ?? ""].join(" ")}>
         {value}
       </p>
-      <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{description}</p>
+      <p className="mt-1 text-xs text-text-muted">{description}</p>
     </div>
   );
 }
@@ -75,8 +75,8 @@ function scoreColorClass(value: number | null | undefined): string {
 
 export function BreakdownItem({ label, value }: { label: string; value: number | null | undefined }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2">
-      <span className="text-xs text-[hsl(var(--text-muted))]">{label}</span>
+    <div className="flex items-center justify-between rounded-xl border border-border bg-surface-muted px-3 py-2">
+      <span className="text-xs text-text-muted">{label}</span>
       <span className={["text-xs font-semibold tabular-nums", scoreColorClass(value)].join(" ")}>
         {formatScorePercent(value)}
       </span>
@@ -86,11 +86,11 @@ export function BreakdownItem({ label, value }: { label: string; value: number |
 
 export function MetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+    <div className="rounded-xl border border-border bg-surface-muted px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
         {label}
       </div>
-      <div className="mt-1 text-sm text-[hsl(var(--text))]">{value}</div>
+      <div className="mt-1 text-sm text-text">{value}</div>
     </div>
   );
 }
@@ -148,12 +148,12 @@ export function EmptyTab({
   return (
     <div
       className={[
-        "rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-center",
+        "rounded-2xl border border-border bg-surface-muted text-center",
         compact ? "px-4 py-4" : "mx-5 my-5 px-5 py-8",
       ].join(" ")}
     >
-      <p className="text-sm font-semibold text-[hsl(var(--text))]">{title}</p>
-      <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">{description}</p>
+      <p className="text-sm font-semibold text-text">{title}</p>
+      <p className="mt-2 text-sm text-text-muted">{description}</p>
     </div>
   );
 }

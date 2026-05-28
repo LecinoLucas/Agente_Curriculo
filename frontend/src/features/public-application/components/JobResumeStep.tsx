@@ -36,8 +36,8 @@ export function JobResumeStep({ form, errors, onChange }: Props) {
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[hsl(var(--primary))]">Pretensão salarial e currículo</p>
-        <h2 className="text-2xl font-semibold tracking-tight text-[hsl(var(--text))]">Informe sua faixa pretendida e envie o currículo</h2>
-        <p className="text-sm text-[hsl(var(--text-muted))]">
+        <h2 className="text-2xl font-semibold tracking-tight text-text">Informe sua faixa pretendida e envie o currículo</h2>
+        <p className="text-sm text-text-muted">
           A pretensão salarial é obrigatória e será considerada em conjunto com o regime desejado.
         </p>
       </div>

@@ -52,7 +52,7 @@ export function JobAssessmentPolicyStep({ form, onChange }: Props) {
                 "text-left px-3 py-2.5 rounded-md border text-sm transition-colors",
                 form.selection_flow_type === opt.value
                   ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.08)] text-[hsl(var(--primary))]"
-                  : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.5)] text-[hsl(var(--foreground))]",
+                  : "border-border hover:border-[hsl(var(--primary)/0.5)] text-[hsl(var(--foreground))]",
               ].join(" ")}
             >
               <div className="font-medium">{opt.label}</div>
@@ -71,7 +71,7 @@ export function JobAssessmentPolicyStep({ form, onChange }: Props) {
                 type="checkbox"
                 checked={form[field] as boolean}
                 onChange={(e) => handleGateToggle(field, e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-[hsl(var(--border))] text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
+                className="mt-0.5 h-4 w-4 rounded border-border text-[hsl(var(--primary))] focus:ring-[hsl(var(--primary))]"
               />
               <div>
                 <span className="text-sm font-medium text-[hsl(var(--foreground))]">{label}</span>

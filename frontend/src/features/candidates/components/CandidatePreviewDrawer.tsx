@@ -7,6 +7,7 @@ import { InterviewQuickScheduleModal } from "../../pipeline/InterviewQuickSchedu
 import { PipelineRejectionReasonModal } from "../../pipeline/PipelineRejectionReasonModal";
 import { PipelineTransitionBlockedModal } from "../../pipeline/PipelineTransitionBlockedModal";
 import {
+  resolvePreAdmissionNavigationPath,
   usePipelineGateActionResolver,
   usePipelineTransitionBlockedHandler,
 } from "../../pipeline/usePipelineTransitionBlocked";
@@ -191,11 +192,17 @@ function DrawerPanel({
     if (!activeEntry || stageSaving) return false;
     setStageSaving(true);
     try {
-      await pipelineService.moveCandidateStage(activeEntry.job_id, candidateId, {
+      const moveResult = await pipelineService.moveCandidateStage(activeEntry.job_id, candidateId, {
         stage: targetStage,
         notes: null,
         reason: reason ?? "Avanço pelo preview da pipeline.",
       });
+      const preAdmissionPath = resolvePreAdmissionNavigationPath(moveResult);
+      if (preAdmissionPath) {
+        navigate(preAdmissionPath);
+        setStageSaving(false);
+        return true;
+      }
       toast.success(`Candidato movido para ${STAGE_LABEL[targetStage] ?? targetStage}.`);
     } catch (err: unknown) {
       const handled = handleBlockedError(err, {
@@ -309,7 +316,7 @@ function DrawerPanel({
       <div
         role="dialog"
         aria-label="Preview do candidato"
-        className="fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-[calc(100vw-16px)] flex-col overflow-hidden bg-[hsl(var(--surface))] shadow-xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-[calc(100vw-16px)] flex-col overflow-hidden bg-surface shadow-xl"
         data-testid="preview-drawer"
       >
         {loading ? <PreviewSkeleton /> : null}
@@ -319,7 +326,7 @@ function DrawerPanel({
             className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
             data-testid="preview-error"
           >
-            <p className="text-sm text-[hsl(var(--danger))]">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
             <button
               type="button"
               onClick={() => void reload()}
@@ -332,16 +339,16 @@ function DrawerPanel({
 
         {!loading && !error && overview && candidate ? (
           <>
-            <div className="flex items-start gap-3 border-b border-[hsl(var(--border))] p-5">
+            <div className="flex items-start gap-3 border-b border-border p-5">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-base font-semibold text-[hsl(var(--primary))]">
                 {getInitials(candidate.full_name)}
               </div>
 
               <div className="min-w-0 flex-1">
-                <h2 className="truncate font-semibold text-[hsl(var(--text))]" data-testid="preview-name">
+                <h2 className="truncate font-semibold text-text" data-testid="preview-name">
                   {candidate.full_name}
                 </h2>
-                <div className="mt-1 flex flex-col gap-0.5 text-xs text-[hsl(var(--text-muted))]">
+                <div className="mt-1 flex flex-col gap-0.5 text-xs text-text-muted">
                   {candidate.email ? <span className="truncate">{candidate.email}</span> : null}
                   {candidate.phone ? <span>{candidate.phone}</span> : null}
                   {location ? <span>{location}</span> : null}
@@ -353,7 +360,7 @@ function DrawerPanel({
                 onClick={onClose}
                 data-testid="preview-close"
                 aria-label="Fechar preview"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))]"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -374,7 +381,7 @@ function DrawerPanel({
                 {activeEntry ? (
                   <div className="mt-1.5 space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-sm font-medium text-[hsl(var(--text))]">
+                      <span className="min-w-0 truncate text-sm font-medium text-text">
                         {activeEntry.job_title}
                       </span>
                       <span
@@ -392,7 +399,7 @@ function DrawerPanel({
                         title={`Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
                         aria-label={`Avançar para fase ${STAGE_LABEL[nextStage] ?? nextStage}`}
                         data-testid="preview-advance-stage"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))]/50 px-3 py-2 text-xs font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-xs font-semibold text-text transition hover:bg-surface-muted disabled:opacity-50"
                       >
                         {stageSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
                         <span>Avançar para fase {STAGE_LABEL[nextStage] ?? nextStage}</span>
@@ -400,7 +407,7 @@ function DrawerPanel({
                     ) : null}
                   </div>
                 ) : (
-                  <p className="mt-1 text-sm text-[hsl(var(--text-muted))]" data-testid="preview-no-job">
+                  <p className="mt-1 text-sm text-text-muted" data-testid="preview-no-job">
                     Aguardando vaga
                   </p>
                 )}
@@ -410,7 +417,7 @@ function DrawerPanel({
                 <SectionLabel>Aderência</SectionLabel>
                 <div className="mt-1.5 flex items-center gap-2">
                   {activeJobScore != null ? (
-                    <span className="text-2xl font-bold text-[hsl(var(--text))]" data-testid="preview-score-value">
+                    <span className="text-2xl font-bold text-text" data-testid="preview-score-value">
                       {formatScorePercent(activeJobScore)}
                     </span>
                   ) : aiProcessingNotice ? (
@@ -418,10 +425,10 @@ function DrawerPanel({
                       Aguardando IA
                     </span>
                   ) : (
-                    <span className="text-sm text-[hsl(var(--text-muted))]">-</span>
+                    <span className="text-sm text-text-muted">-</span>
                   )}
                   {overview.active_job_decision?.analysis_status ? (
-                    <span className="text-xs text-[hsl(var(--text-muted))]">
+                    <span className="text-xs text-text-muted">
                       {ANALYSIS_STATUS_LABEL[overview.active_job_decision.analysis_status] ?? ""}
                     </span>
                   ) : null}
@@ -433,7 +440,7 @@ function DrawerPanel({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <SectionLabel>Pré-admissão</SectionLabel>
-                      <p className="mt-1.5 text-sm text-[hsl(var(--text-muted))]">
+                      <p className="mt-1.5 text-sm text-text-muted">
                         {activeEntry?.stage === "hired"
                           ? "Contratação concluída. Abra o caso admissional para iniciar o checklist."
                           : "Caso admissional disponível na macroárea de Admissão."}
@@ -471,7 +478,7 @@ function DrawerPanel({
                     />
                   </div>
                 ) : (
-                  <p className="mt-1.5 text-sm text-[hsl(var(--text-muted))]">
+                  <p className="mt-1.5 text-sm text-text-muted">
                     Skills ainda não disponíveis.
                   </p>
                 )}
@@ -481,7 +488,7 @@ function DrawerPanel({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <SectionLabel>Currículo</SectionLabel>
-                    <p className="mt-1 truncate text-sm text-[hsl(var(--text-muted))]">
+                    <p className="mt-1 truncate text-sm text-text-muted">
                       {primaryResume?.current_file_name ?? primaryResume?.title ?? "Currículo não enviado"}
                     </p>
                   </div>
@@ -490,7 +497,7 @@ function DrawerPanel({
                       type="button"
                       onClick={openResume}
                       data-testid="preview-open-resume"
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs font-semibold text-[hsl(var(--text))] transition-colors hover:bg-[hsl(var(--surface-muted))]"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text transition-colors hover:bg-surface-muted"
                     >
                       <FileText className="h-3.5 w-3.5" />
                       Ver currículo
@@ -514,7 +521,7 @@ function DrawerPanel({
                                 : "bg-[hsl(var(--primary))]",
                             ].join(" ")}
                           />
-                          <span className="text-[hsl(var(--text-muted))]">{pendency.label}</span>
+                          <span className="text-text-muted">{pendency.label}</span>
                         </li>
                       ))}
                     </ul>
@@ -522,7 +529,7 @@ function DrawerPanel({
                       <button
                         type="button"
                         onClick={openAssessments}
-                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--text))] transition-colors hover:bg-[hsl(var(--surface-muted))]"
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-surface-muted"
                       >
                         <ClipboardCheck className="h-3.5 w-3.5" />
                         Ver avaliações
@@ -530,18 +537,18 @@ function DrawerPanel({
                     ) : null}
                   </>
                 ) : (
-                  <p className="mt-1.5 text-sm text-[hsl(var(--text-muted))]">Nenhuma pendência.</p>
+                  <p className="mt-1.5 text-sm text-text-muted">Nenhuma pendência.</p>
                 )}
               </SectionCard>
 
               <SectionCard testId="preview-last-note">
                 <SectionLabel>Última observação</SectionLabel>
                 {lastNote ? (
-                  <p className="mt-1.5 line-clamp-3 text-sm text-[hsl(var(--text-muted))]">
+                  <p className="mt-1.5 line-clamp-3 text-sm text-text-muted">
                     {lastNote.note_text}
                   </p>
                 ) : (
-                  <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">
+                  <p className="mt-1 text-xs text-text-muted">
                     Nenhuma observação registrada.
                   </p>
                 )}
@@ -549,21 +556,21 @@ function DrawerPanel({
 
               <SectionCard testId="preview-latest-movement">
                 <SectionLabel>Última movimentação</SectionLabel>
-                <p className="mt-1.5 text-sm text-[hsl(var(--text-muted))]">
+                <p className="mt-1.5 text-sm text-text-muted">
                   {latestMovement ?? "Nenhuma movimentação recente."}
                 </p>
               </SectionCard>
 
               <SectionCard testId="preview-next-action">
                 <SectionLabel>Próxima ação sugerida</SectionLabel>
-                <p className="mt-1.5 text-sm font-medium text-[hsl(var(--text))]">
+                <p className="mt-1.5 text-sm font-medium text-text">
                   {nextAction.label}
                 </p>
-                <p className="text-xs text-[hsl(var(--text-muted))]">{nextAction.hint}</p>
+                <p className="text-xs text-text-muted">{nextAction.hint}</p>
               </SectionCard>
             </div>
 
-            <div className="flex gap-3 border-t border-[hsl(var(--border))] p-5">
+            <div className="flex gap-3 border-t border-border p-5">
               <button
                 type="button"
                 onClick={openFullProfile}
@@ -576,7 +583,7 @@ function DrawerPanel({
                 type="button"
                 onClick={onClose}
                 data-testid="preview-close-action"
-                className="rounded-lg border border-[hsl(var(--border))] px-4 py-2.5 text-sm font-medium text-[hsl(var(--text-muted))] transition-colors hover:bg-[hsl(var(--surface-muted))]"
+                className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-text-muted transition-colors hover:bg-surface-muted"
               >
                 Fechar
               </button>
@@ -643,16 +650,16 @@ function PreviewSkeleton() {
   return (
     <div className="animate-pulse space-y-4 p-5" data-testid="preview-skeleton">
       <div className="flex items-center gap-3">
-        <div className="h-12 w-12 rounded-full bg-[hsl(var(--surface-muted))]" />
+        <div className="h-12 w-12 rounded-full bg-surface-muted" />
         <div className="flex-1 space-y-2">
-          <div className="h-4 w-3/4 rounded bg-[hsl(var(--surface-muted))]" />
-          <div className="h-3 w-1/2 rounded bg-[hsl(var(--surface-muted))]" />
+          <div className="h-4 w-3/4 rounded bg-surface-muted" />
+          <div className="h-3 w-1/2 rounded bg-surface-muted" />
         </div>
       </div>
       {[1, 2, 3].map((item) => (
         <div key={item} className="space-y-2">
-          <div className="h-3 w-1/4 rounded bg-[hsl(var(--surface-muted))]" />
-          <div className="h-4 w-3/4 rounded bg-[hsl(var(--surface-muted))]" />
+          <div className="h-3 w-1/4 rounded bg-surface-muted" />
+          <div className="h-4 w-3/4 rounded bg-surface-muted" />
         </div>
       ))}
     </div>
@@ -663,7 +670,7 @@ function SectionCard({ children, testId }: { children: ReactNode; testId: string
   return (
     <div
       data-testid={testId}
-      className="rounded-lg border border-[hsl(var(--border))]/70 bg-[hsl(var(--bg))]/60 p-3"
+      className="rounded-lg border border-border/70 bg-[hsl(var(--bg))]/60 p-3"
     >
       {children}
     </div>
@@ -672,7 +679,7 @@ function SectionCard({ children, testId }: { children: ReactNode; testId: string
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
       {children}
     </p>
   );
@@ -693,7 +700,7 @@ function SkillList({
 
   return (
     <div data-testid={testId}>
-      <p className="text-xs font-medium text-[hsl(var(--text-muted))]">{title}</p>
+      <p className="text-xs font-medium text-text-muted">{title}</p>
       <div className="mt-1 flex flex-wrap gap-1.5">
         {items.map((item) => (
           <span

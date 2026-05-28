@@ -87,15 +87,15 @@ function getFloatingIconStyles(status: CommunicationStatus): { wrapper: string; 
     };
   }
   return {
-    wrapper: "bg-[hsl(var(--surface-muted))] border-[hsl(var(--border))] text-[hsl(var(--text-muted))] shadow-sm shadow-[hsl(var(--border)/0.1)]",
-    iconColor: "text-[hsl(var(--text-muted))]",
+    wrapper: "bg-surface-muted border-border text-text-muted shadow-sm shadow-[hsl(var(--border)/0.1)]",
+    iconColor: "text-text-muted",
   };
 }
 
 function renderChannelBadge(channel: string) {
   const isEmail = channel === "email";
   return (
-    <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]">
+    <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border border-[hsl(var(--border)/0.5)] bg-surface-muted text-text-muted">
       <Mail className="h-3 w-3 text-[hsl(var(--primary))]" />
       {isEmail ? "E-mail" : "Portal Interno"}
     </span>
@@ -120,7 +120,7 @@ function renderAudienceBadge(audience: string) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]">
+    <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold border border-[hsl(var(--border)/0.5)] bg-surface-muted text-text-muted">
       {icon}
       {label}
     </span>
@@ -133,23 +133,23 @@ function CommunicationSkeleton() {
       {[1, 2, 3].map((i) => (
         <div key={i} className="relative flex flex-col gap-2">
           {/* Shimmer Circle Icon */}
-          <div className="absolute left-[-32px] top-1.5 h-8 w-8 rounded-full bg-[hsl(var(--surface-muted))] border-2 border-[hsl(var(--border)/0.5)]" />
+          <div className="absolute left-[-32px] top-1.5 h-8 w-8 rounded-full bg-surface-muted border-2 border-[hsl(var(--border)/0.5)]" />
           {/* Card skeleton */}
-          <div className="flex-1 rounded-xl border border-[hsl(var(--border)/0.5)] bg-[hsl(var(--surface))] p-5 space-y-3">
+          <div className="flex-1 rounded-xl border border-[hsl(var(--border)/0.5)] bg-surface p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex gap-2">
-                <div className="h-4 w-32 rounded bg-[hsl(var(--surface-muted))]" />
-                <div className="h-4 w-12 rounded-full bg-[hsl(var(--surface-muted))]" />
+                <div className="h-4 w-32 rounded bg-surface-muted" />
+                <div className="h-4 w-12 rounded-full bg-surface-muted" />
               </div>
-              <div className="h-4 w-20 rounded bg-[hsl(var(--surface-muted))]" />
+              <div className="h-4 w-20 rounded bg-surface-muted" />
             </div>
             <div className="space-y-2">
-              <div className="h-3 w-full rounded bg-[hsl(var(--surface-muted))]" />
-              <div className="h-3 w-5/6 rounded bg-[hsl(var(--surface-muted))]" />
+              <div className="h-3 w-full rounded bg-surface-muted" />
+              <div className="h-3 w-5/6 rounded bg-surface-muted" />
             </div>
             <div className="flex gap-3 pt-2">
-              <div className="h-5 w-16 rounded bg-[hsl(var(--surface-muted))]" />
-              <div className="h-5 w-20 rounded bg-[hsl(var(--surface-muted))]" />
+              <div className="h-5 w-16 rounded bg-surface-muted" />
+              <div className="h-5 w-20 rounded bg-surface-muted" />
             </div>
           </div>
         </div>
@@ -166,7 +166,7 @@ function TimelineItemBody({ text }: { text: string }) {
     <div className="space-y-2">
       <p
         className={[
-          "text-sm leading-relaxed text-[hsl(var(--text-muted))] whitespace-pre-line transition-all duration-300",
+          "text-sm leading-relaxed text-text-muted whitespace-pre-line transition-all duration-300",
           !isExpanded && isLong ? "line-clamp-3" : "",
         ].join(" ")}
       >
@@ -276,7 +276,7 @@ export function CandidateCommunicationsPanel({
 
   if (!jobId || !candidateId) {
     return (
-      <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-6 text-sm text-[hsl(var(--text-muted))] flex items-center justify-center bg-[hsl(var(--surface-muted))/0.2]">
+      <div className="rounded-xl border border-dashed border-border p-6 text-sm text-text-muted flex items-center justify-center bg-[hsl(var(--surface-muted))/0.2]">
         Vincule o candidato a uma vaga para consultar comunicações.
       </div>
     );
@@ -286,8 +286,8 @@ export function CandidateCommunicationsPanel({
     <section aria-label="Comunicações do candidato" className="space-y-6 p-5 pb-24">
       <div className="flex items-center justify-between border-b border-[hsl(var(--border))/0.6] pb-4">
         <div>
-          <h3 className="text-lg font-bold tracking-tight text-[hsl(var(--text))]">Comunicações</h3>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <h3 className="text-lg font-bold tracking-tight text-text">Comunicações</h3>
+          <p className="mt-1 text-sm text-text-muted">
             Histórico de entrega de mensagens automatizadas e contatos.
           </p>
         </div>
@@ -304,20 +304,20 @@ export function CandidateCommunicationsPanel({
 
       {/* Custom Message Composition Box */}
       {isComposing ? (
-        <form onSubmit={handleSend} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-sm space-y-4 transition-all duration-300">
+        <form onSubmit={handleSend} className="rounded-xl border border-border bg-surface p-5 shadow-sm space-y-4 transition-all duration-300">
           <div className="flex items-center justify-between border-b border-[hsl(var(--border))/0.5] pb-2">
-            <h4 className="text-sm font-bold text-[hsl(var(--text))]">Nova Comunicação Direta</h4>
-            <span className="text-xs text-[hsl(var(--text-muted))]">Escreva e envie uma mensagem direta</span>
+            <h4 className="text-sm font-bold text-text">Nova Comunicação Direta</h4>
+            <span className="text-xs text-text-muted">Escreva e envie uma mensagem direta</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label htmlFor="comm-channel" className="text-xs font-semibold text-[hsl(var(--text))]">Canal de Envio</label>
+              <label htmlFor="comm-channel" className="text-xs font-semibold text-text">Canal de Envio</label>
               <select
                 id="comm-channel"
                 value={channel}
                 onChange={(e) => setChannel(e.target.value as "email" | "internal")}
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
+                className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
               >
                 <option value="email">E-mail</option>
                 <option value="internal">Portal Interno (Notificação)</option>
@@ -325,12 +325,12 @@ export function CandidateCommunicationsPanel({
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="comm-audience" className="text-xs font-semibold text-[hsl(var(--text))]">Público Alvo</label>
+              <label htmlFor="comm-audience" className="text-xs font-semibold text-text">Público Alvo</label>
               <select
                 id="comm-audience"
                 value={audience}
                 onChange={(e) => setAudience(e.target.value as "candidate" | "manager" | "hr")}
-                className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
+                className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
               >
                 <option value="candidate">Candidato</option>
                 <option value="manager">Gestor da Vaga</option>
@@ -340,7 +340,7 @@ export function CandidateCommunicationsPanel({
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="comm-subject" className="text-xs font-semibold text-[hsl(var(--text))]">Assunto</label>
+            <label htmlFor="comm-subject" className="text-xs font-semibold text-text">Assunto</label>
             <input
               id="comm-subject"
               type="text"
@@ -348,12 +348,12 @@ export function CandidateCommunicationsPanel({
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Digite o assunto da mensagem..."
-              className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
+              className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition"
             />
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="comm-body" className="text-xs font-semibold text-[hsl(var(--text))]">Mensagem</label>
+            <label htmlFor="comm-body" className="text-xs font-semibold text-text">Mensagem</label>
             <textarea
               id="comm-body"
               required
@@ -361,7 +361,7 @@ export function CandidateCommunicationsPanel({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Escreva sua mensagem aqui..."
-              className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-3 py-2 text-xs text-[hsl(var(--text))] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition resize-none"
+              className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-text focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))] outline-none transition resize-none"
             />
           </div>
 
@@ -370,7 +370,7 @@ export function CandidateCommunicationsPanel({
               type="button"
               onClick={() => setIsComposing(false)}
               disabled={sending}
-              className="rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs font-bold text-[hsl(var(--text))] bg-[hsl(var(--surface))] hover:bg-[hsl(var(--surface-muted))] transition disabled:opacity-60"
+              className="rounded-lg border border-border px-3 py-2 text-xs font-bold text-text bg-surface hover:bg-surface-muted transition disabled:opacity-60"
             >
               Cancelar
             </button>
@@ -395,11 +395,11 @@ export function CandidateCommunicationsPanel({
       ) : null}
 
       {!loading && !error && communications.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[hsl(var(--border))] p-10 text-center text-sm text-[hsl(var(--text-muted))] bg-[hsl(var(--surface-muted))/0.1]">
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border p-10 text-center text-sm text-text-muted bg-[hsl(var(--surface-muted))/0.1]">
           <Inbox className="h-8 w-8 text-[hsl(var(--text-muted))/0.6]" />
           <div>
-            <p className="font-semibold text-[hsl(var(--text))]">Nenhuma comunicação registrada</p>
-            <p className="text-xs text-[hsl(var(--text-muted))] mt-1">Este candidato não possui notificações enviadas até o momento.</p>
+            <p className="font-semibold text-text">Nenhuma comunicação registrada</p>
+            <p className="text-xs text-text-muted mt-1">Este candidato não possui notificações enviadas até o momento.</p>
           </div>
         </div>
       ) : null}
@@ -410,7 +410,7 @@ export function CandidateCommunicationsPanel({
             const iconStyles = getFloatingIconStyles(communication.status);
             const statusStyle = STATUS_CONFIG[communication.status] || {
               label: communication.status,
-              bgClass: "border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))]",
+              bgClass: "border-border bg-surface-muted text-text-muted",
               icon: null,
             };
 
@@ -427,12 +427,12 @@ export function CandidateCommunicationsPanel({
                 </div>
 
                 {/* Timeline Card */}
-                <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[hsl(var(--border)/1.5)] dark:shadow-none">
+                <div className="rounded-xl border border-border bg-surface p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[hsl(var(--border)/1.5)] dark:shadow-none">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-3 flex-1">
                       {/* Header row */}
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-bold text-[hsl(var(--text))] text-sm sm:text-base leading-snug">
+                        <p className="font-bold text-text text-sm sm:text-base leading-snug">
                           {communication.subject || communication.template_key || "Comunicação"}
                         </p>
                         <span
@@ -451,7 +451,7 @@ export function CandidateCommunicationsPanel({
 
                       {/* Footer Row (metadata & error messages) */}
                       <div className="space-y-2">
-                        <div className="flex flex-wrap gap-2 sm:gap-4 text-xs text-[hsl(var(--text-muted))] font-medium pt-1">
+                        <div className="flex flex-wrap gap-2 sm:gap-4 text-xs text-text-muted font-medium pt-1">
                           <span className="flex items-center gap-1">
                             <Clock className="h-3.5 w-3.5 text-[hsl(var(--text-muted))/0.8]" />
                             {formatDateTime(communication.created_at)}
@@ -479,7 +479,7 @@ export function CandidateCommunicationsPanel({
                         type="button"
                         onClick={() => void handleRetry(communication.id)}
                         disabled={retryingId === communication.id}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[hsl(var(--border))] px-3 py-2 text-xs font-bold text-[hsl(var(--text))] bg-[hsl(var(--surface))] transition hover:bg-[hsl(var(--surface-muted))] hover:border-[hsl(var(--border)/1.5)] disabled:cursor-not-allowed disabled:opacity-60 shadow-sm shrink-0 sm:self-start"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-text bg-surface transition hover:bg-surface-muted hover:border-[hsl(var(--border)/1.5)] disabled:cursor-not-allowed disabled:opacity-60 shadow-sm shrink-0 sm:self-start"
                       >
                         <RefreshCw
                           className={[

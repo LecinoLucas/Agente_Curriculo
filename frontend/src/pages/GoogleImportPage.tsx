@@ -112,7 +112,7 @@ export function GoogleImportPage() {
                 <div className={`w-12 h-12 flex items-center justify-center rounded-full border-2 ${bgColor} ${borderColor} ${iconColor} transition-colors duration-300`}>
                   {isCurrent && sub.status === "processing" ? <RefreshCcw className="h-5 w-5 animate-spin" /> : step.icon}
                 </div>
-                <span className={`mt-2 text-xs font-medium text-center ${isCurrent ? "text-[hsl(var(--text))]" : "text-[hsl(var(--text-muted))]"}`}>
+                <span className={`mt-2 text-xs font-medium text-center ${isCurrent ? "text-text" : "text-text-muted"}`}>
                   {step.label}
                 </span>
                 {isDuplicate && index === 3 && (
@@ -142,13 +142,13 @@ export function GoogleImportPage() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-sm text-[hsl(var(--text-muted))]">
+        <div className="flex items-center gap-2 text-sm text-text-muted">
           <span>Importação</span>
           <ChevronRight className="h-4 w-4" />
           <span>Google Forms / Drive</span>
         </div>
-        <h1 className="text-3xl font-bold text-[hsl(var(--text))]">Integração Google Forms / Drive</h1>
-        <p className="text-[hsl(var(--text-muted))]">
+        <h1 className="text-3xl font-bold text-text">Integração Google Forms / Drive</h1>
+        <p className="text-text-muted">
           Acompanhe em tempo real a entrada de candidatos que preencheram o formulário de inscrição.
         </p>
       </div>
@@ -173,7 +173,7 @@ export function GoogleImportPage() {
           <div className="ui-card rounded-3xl p-4 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg">Envios Recebidos</h3>
-              <span className="bg-[hsl(var(--surface-muted))] text-[hsl(var(--text-muted))] px-2.5 py-1 rounded-full text-xs font-bold">
+              <span className="bg-surface-muted text-text-muted px-2.5 py-1 rounded-full text-xs font-bold">
                 {submissions.length}
               </span>
             </div>
@@ -181,15 +181,15 @@ export function GoogleImportPage() {
             {/* Search and Filter */}
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-[hsl(var(--text-muted))]" />
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-text-muted" />
                 <input 
                   type="text" 
                   placeholder="Buscar candidato..." 
-                  className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-border bg-[hsl(var(--background))] focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <button className="p-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] hover:bg-[hsl(var(--surface-muted))]">
-                <Filter className="h-4 w-4 text-[hsl(var(--text-muted))]" />
+              <button className="p-2 rounded-xl border border-border bg-[hsl(var(--background))] hover:bg-surface-muted">
+                <Filter className="h-4 w-4 text-text-muted" />
               </button>
             </div>
 
@@ -202,20 +202,20 @@ export function GoogleImportPage() {
                   className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                     selectedSub?.id === sub.id 
                       ? "border-blue-500 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-900/10" 
-                      : "border-[hsl(var(--border))] hover:border-[hsl(var(--text-muted))] bg-[hsl(var(--background))]"
+                      : "border-border hover:border-[hsl(var(--text-muted))] bg-[hsl(var(--background))]"
                   }`}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex flex-col">
-                      <span className="font-bold text-sm text-[hsl(var(--text))]">{sub.candidateName}</span>
-                      <span className="text-xs text-[hsl(var(--text-muted))]">{sub.email}</span>
+                      <span className="font-bold text-sm text-text">{sub.candidateName}</span>
+                      <span className="text-xs text-text-muted">{sub.email}</span>
                     </div>
                     <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(sub.status)}`}>
                       {getStatusIcon(sub.status)}
                       <span>{getStatusLabel(sub.status)}</span>
                     </div>
                   </div>
-                  <div className="mt-3 flex justify-between items-center text-[10px] text-[hsl(var(--text-muted))] font-medium">
+                  <div className="mt-3 flex justify-between items-center text-[10px] text-text-muted font-medium">
                     <span>{new Date(sub.submittedAt).toLocaleString('pt-BR')}</span>
                     <span className="flex items-center gap-1">
                       <FileText className="h-3 w-3" />
@@ -233,17 +233,17 @@ export function GoogleImportPage() {
           {selectedSub ? (
             <div className="ui-card rounded-3xl p-6 flex flex-col gap-6">
               {/* Detail Header */}
-              <div className="flex flex-col md:flex-row justify-between gap-4 border-b border-[hsl(var(--border))] pb-4">
+              <div className="flex flex-col md:flex-row justify-between gap-4 border-b border-border pb-4">
                 <div>
-                  <h2 className="text-xl font-bold text-[hsl(var(--text))]">{selectedSub.candidateName}</h2>
-                  <p className="text-sm text-[hsl(var(--text-muted))]">{selectedSub.email}</p>
+                  <h2 className="text-xl font-bold text-text">{selectedSub.candidateName}</h2>
+                  <p className="text-sm text-text-muted">{selectedSub.email}</p>
                 </div>
                 <div className="flex items-center gap-3 self-start">
                   <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(selectedSub.status)}`}>
                     {getStatusIcon(selectedSub.status)}
                     <span>Status: {getStatusLabel(selectedSub.status)}</span>
                   </div>
-                  <button className="p-2 text-[hsl(var(--text-muted))] hover:text-[hsl(var(--text))] hover:bg-[hsl(var(--surface-muted))] rounded-full transition-colors">
+                  <button className="p-2 text-text-muted hover:text-text hover:bg-surface-muted rounded-full transition-colors">
                     <ExternalLink className="h-5 w-5" />
                   </button>
                 </div>
@@ -252,26 +252,26 @@ export function GoogleImportPage() {
               {/* Flow Visualizer */}
               <div>
                 <h3 className="font-bold text-lg mb-4">Fluxo de Ingestão</h3>
-                <div className="bg-[hsl(var(--surface-muted))] p-6 rounded-2xl">
+                <div className="bg-surface-muted p-6 rounded-2xl">
                   {renderFlowSteps(selectedSub)}
                 </div>
               </div>
 
               {/* Technical Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-[hsl(var(--border))] rounded-2xl p-4">
+                <div className="border border-border rounded-2xl p-4">
                   <h4 className="text-sm font-bold mb-2">Metadados do Formulário</h4>
                   <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-[hsl(var(--text-muted))]">ID da Resposta:</span>
+                      <span className="text-text-muted">ID da Resposta:</span>
                       <span className="font-mono">{selectedSub.id}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[hsl(var(--text-muted))]">Data de Envio:</span>
+                      <span className="text-text-muted">Data de Envio:</span>
                       <span>{new Date(selectedSub.submittedAt).toLocaleString('pt-BR')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[hsl(var(--text-muted))]">Status de Validação:</span>
+                      <span className="text-text-muted">Status de Validação:</span>
                       <span className={`font-medium ${selectedSub.validationStatus === 'valid' ? 'text-emerald-500' : selectedSub.validationStatus === 'invalid' ? 'text-rose-500' : 'text-slate-500'}`}>
                         {selectedSub.validationStatus === 'valid' ? 'Válido' : selectedSub.validationStatus === 'invalid' ? 'Inválido' : 'Não verificado'}
                       </span>
@@ -279,19 +279,19 @@ export function GoogleImportPage() {
                   </div>
                 </div>
 
-                <div className="border border-[hsl(var(--border))] rounded-2xl p-4">
+                <div className="border border-border rounded-2xl p-4">
                   <h4 className="text-sm font-bold mb-2">Detalhes do Arquivo (Drive)</h4>
                   <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-[hsl(var(--text-muted))]">ID do Arquivo:</span>
+                      <span className="text-text-muted">ID do Arquivo:</span>
                       <span className="font-mono">{selectedSub.driveFileId}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[hsl(var(--text-muted))]">Nome do Arquivo:</span>
+                      <span className="text-text-muted">Nome do Arquivo:</span>
                       <span className="truncate max-w-[150px]" title={selectedSub.fileName}>{selectedSub.fileName}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[hsl(var(--text-muted))]">Tamanho:</span>
+                      <span className="text-text-muted">Tamanho:</span>
                       <span>{selectedSub.fileSize}</span>
                     </div>
                   </div>
@@ -316,7 +316,7 @@ export function GoogleImportPage() {
               {/* Actions */}
               <div className="flex justify-end gap-3 mt-2">
                 {selectedSub.status === 'duplicate' && (
-                  <button className="px-4 py-2 text-sm font-medium rounded-xl border border-[hsl(var(--border))] hover:bg-[hsl(var(--surface-muted))] transition-colors">
+                  <button className="px-4 py-2 text-sm font-medium rounded-xl border border-border hover:bg-surface-muted transition-colors">
                     Ignorar Envio
                   </button>
                 )}
@@ -334,7 +334,7 @@ export function GoogleImportPage() {
               </div>
             </div>
           ) : (
-            <div className="ui-card rounded-3xl p-6 flex flex-col items-center justify-center min-h-[400px] text-[hsl(var(--text-muted))]">
+            <div className="ui-card rounded-3xl p-6 flex flex-col items-center justify-center min-h-[400px] text-text-muted">
               <ClipboardList className="h-12 w-12 mb-4 opacity-50" />
               <p>Selecione um envio na lista para ver o detalhamento do fluxo.</p>
             </div>

@@ -27,11 +27,11 @@ function DetailCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+    <div className="rounded-2xl border border-border bg-surface-muted px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold text-[hsl(var(--text))]">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-text">{value}</p>
     </div>
   );
 }
@@ -46,11 +46,11 @@ function CreationItem({
   icon: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-4 py-3">
+    <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-muted px-4 py-3">
       <div className="mt-0.5 text-[hsl(var(--primary))]">{icon}</div>
       <div>
-        <p className="text-sm font-semibold text-[hsl(var(--text))]">{title}</p>
-        <p className="mt-1 text-xs text-[hsl(var(--text-muted))]">{description}</p>
+        <p className="text-sm font-semibold text-text">{title}</p>
+        <p className="mt-1 text-xs text-text-muted">{description}</p>
       </div>
     </div>
   );
@@ -141,17 +141,17 @@ export function PreAdmissionStartDrawer({
         aria-modal="true"
         aria-labelledby="pre-admission-start-drawer-title"
         data-testid="pre-admission-start-drawer"
-        className="absolute inset-y-0 right-0 flex w-full max-w-[520px] flex-col border-l border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-2xl shadow-black/30"
+        className="absolute inset-y-0 right-0 flex w-full max-w-[520px] flex-col border-l border-border bg-surface shadow-2xl shadow-black/30"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[hsl(var(--border))] px-6 py-5">
+        <div className="flex items-start justify-between gap-3 border-b border-border px-6 py-5">
           <div>
             <h2
               id="pre-admission-start-drawer-title"
-              className="text-lg font-semibold text-[hsl(var(--text))]"
+              className="text-lg font-semibold text-text"
             >
               Iniciar pré-admissão
             </h2>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+            <p className="mt-1 text-sm text-text-muted">
               Confirme os dados antes de abrir o caso admissional.
             </p>
           </div>
@@ -159,7 +159,7 @@ export function PreAdmissionStartDrawer({
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-lg p-2 text-[hsl(var(--text-muted))] transition hover:bg-[hsl(var(--surface-muted))] hover:text-[hsl(var(--text))] disabled:opacity-40"
+            className="rounded-lg p-2 text-text-muted transition hover:bg-surface-muted hover:text-text disabled:opacity-40"
             aria-label="Fechar drawer"
           >
             <X className="h-4 w-4" />
@@ -199,17 +199,17 @@ export function PreAdmissionStartDrawer({
                 <DetailCard label="Decisão final" value="Contratar" />
               </section>
 
-              <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-5 py-4">
-                <p className="text-sm font-semibold text-[hsl(var(--text))]">
+              <section className="rounded-2xl border border-border bg-surface-muted px-5 py-4">
+                <p className="text-sm font-semibold text-text">
                   Esta ação criará o caso admissional para iniciar checklist, documentos e integração.
                 </p>
-                <p className="mt-2 text-sm text-[hsl(var(--text-muted))]">
+                <p className="mt-2 text-sm text-text-muted">
                   O caso será criado apenas uma vez e passa a centralizar checklist, documentos e histórico operacional.
                 </p>
               </section>
 
               <section>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                   O que será criado
                 </p>
                 <div className="mt-3 space-y-3">
@@ -239,13 +239,13 @@ export function PreAdmissionStartDrawer({
           )}
         </div>
 
-        <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--surface-muted))] px-6 py-4">
+        <div className="border-t border-border bg-surface-muted px-6 py-4">
           {result ? (
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-[hsl(var(--border))] px-4 text-sm font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface))]"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-border px-4 text-sm font-semibold text-text transition hover:bg-surface"
               >
                 Fechar
               </button>
@@ -263,7 +263,7 @@ export function PreAdmissionStartDrawer({
                 type="button"
                 onClick={onClose}
                 disabled={submitting}
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-[hsl(var(--border))] px-4 text-sm font-semibold text-[hsl(var(--text))] transition hover:bg-[hsl(var(--surface))] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-border px-4 text-sm font-semibold text-text transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancelar
               </button>

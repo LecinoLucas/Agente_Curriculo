@@ -1,6 +1,9 @@
 import { FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { aiLimitsService, type LimitScope } from "../../services/aiLimitsService";
 
 type Props = {
@@ -69,35 +72,35 @@ export function AILimitIncreaseModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-lg rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-6 shadow-xl">
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl">
         <header className="mb-4">
-          <h2 className="text-lg font-bold text-[hsl(var(--text))]">Aumentar limite</h2>
-          <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">
+          <h2 className="text-lg font-bold text-text">Aumentar limite</h2>
+          <p className="mt-1 text-sm text-text-muted">
             Aumento temporário do limite diário de análises IA. Expira em até {defaults.override_max_days} dias e fica registrado no log de auditoria.
           </p>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block text-sm">
-            <span className="mb-1 block text-[hsl(var(--text-muted))]">Escopo</span>
-            <select
-              className="ui-input h-11 w-full rounded-xl px-3 text-sm"
+            <span className="mb-1 block text-text-muted">Escopo</span>
+            <Select
+              className="h-11"
               value={scope}
               onChange={(e) => setScope(e.target.value as LimitScope)}
             >
               <option value="global">Global</option>
               <option value="user">Usuário</option>
               <option value="job">Vaga</option>
-            </select>
+            </Select>
           </label>
 
           {scope !== "global" ? (
             <label className="block text-sm">
-              <span className="mb-1 block text-[hsl(var(--text-muted))]">
+              <span className="mb-1 block text-text-muted">
                 ID do {scope === "user" ? "usuário" : "vaga"}
               </span>
-              <input
-                className="ui-input h-11 w-full rounded-xl px-3 text-sm"
+              <Input
+                className="h-11"
                 value={scopeId}
                 onChange={(e) => setScopeId(e.target.value)}
                 placeholder="UUID"
@@ -107,11 +110,11 @@ export function AILimitIncreaseModal({
           ) : null}
 
           <label className="block text-sm">
-            <span className="mb-1 block text-[hsl(var(--text-muted))]">Novo limite (precisa ser maior que o atual)</span>
-            <input
+            <span className="mb-1 block text-text-muted">Novo limite (precisa ser maior que o atual)</span>
+            <Input
               type="number"
               min={1}
-              className="ui-input h-11 w-full rounded-xl px-3 text-sm"
+              className="h-11"
               value={newLimit}
               onChange={(e) => setNewLimit(Number(e.target.value))}
               required
@@ -119,10 +122,10 @@ export function AILimitIncreaseModal({
           </label>
 
           <label className="block text-sm">
-            <span className="mb-1 block text-[hsl(var(--text-muted))]">Validade até</span>
-            <input
+            <span className="mb-1 block text-text-muted">Validade até</span>
+            <Input
               type="datetime-local"
-              className="ui-input h-11 w-full rounded-xl px-3 text-sm"
+              className="h-11"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
               required
@@ -130,9 +133,9 @@ export function AILimitIncreaseModal({
           </label>
 
           <label className="block text-sm">
-            <span className="mb-1 block text-[hsl(var(--text-muted))]">Motivo</span>
-            <textarea
-              className="ui-input min-h-[88px] w-full rounded-xl px-3 py-2 text-sm"
+            <span className="mb-1 block text-text-muted">Motivo</span>
+            <Textarea
+              className="min-h-[88px]"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Explique por que este aumento é necessário"
@@ -142,7 +145,7 @@ export function AILimitIncreaseModal({
           </label>
 
           {errorMessage ? (
-            <p className="text-sm text-[hsl(var(--danger))]">{errorMessage}</p>
+            <p className="text-sm text-danger">{errorMessage}</p>
           ) : null}
 
           <div className="flex justify-end gap-2 pt-2">

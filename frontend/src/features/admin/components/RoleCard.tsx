@@ -11,7 +11,7 @@ export function RoleCard({ label, description, roleKey }: RoleCardProps) {
   const accessible = SCREENS.filter((s) => s.roles.includes(roleKey as any));
 
   return (
-    <Card className="shadow-sm bg-[hsl(var(--surface-muted))]">
+    <Card className="shadow-sm bg-surface-muted">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold">{label}</CardTitle>
         <CardDescription className="text-xs">{description}</CardDescription>

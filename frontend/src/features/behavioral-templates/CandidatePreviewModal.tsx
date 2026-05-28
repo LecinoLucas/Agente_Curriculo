@@ -14,16 +14,16 @@ function QuestionPreview({ q, index }: { q: RawTemplateQuestion; index: number }
       <div className="space-y-2">
         <div className="flex items-start gap-2">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
-          <p className="text-sm font-medium text-[hsl(var(--text))]">
+          <p className="text-sm font-medium text-text">
             {index}. {q.prompt}
-            {q.required && <span className="ml-1 text-[hsl(var(--danger))]">*</span>}
+            {q.required && <span className="ml-1 text-danger">*</span>}
           </p>
         </div>
         <textarea
           disabled
           rows={4}
           placeholder="O candidato escreverá a resposta aqui usando o método STAR (Situação, Tarefa, Ação, Resultado)..."
-          className="w-full resize-none rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--bg))] px-3 py-2 text-sm text-[hsl(var(--text-muted))] opacity-60"
+          className="w-full resize-none rounded-lg border border-border bg-[hsl(var(--bg))] px-3 py-2 text-sm text-text-muted opacity-60"
         />
       </div>
     );
@@ -38,18 +38,18 @@ function QuestionPreview({ q, index }: { q: RawTemplateQuestion; index: number }
       <div className="space-y-2">
         <div className="flex items-start gap-2">
           <BarChart2 className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
-          <p className="text-sm font-medium text-[hsl(var(--text))]">
+          <p className="text-sm font-medium text-text">
             {index}. {q.prompt}
-            {q.required && <span className="ml-1 text-[hsl(var(--danger))]">*</span>}
+            {q.required && <span className="ml-1 text-danger">*</span>}
           </p>
         </div>
         <div className="flex gap-2">
           {steps.map((step) => (
             <label key={step} className="flex flex-1 cursor-not-allowed flex-col items-center gap-1">
               <input type="radio" disabled className="h-4 w-4 opacity-50" />
-              <span className="text-xs font-semibold text-[hsl(var(--text))]">{step}</span>
+              <span className="text-xs font-semibold text-text">{step}</span>
               {labels[String(step)] && (
-                <span className="text-center text-[10px] leading-tight text-[hsl(var(--text-muted))]">
+                <span className="text-center text-[10px] leading-tight text-text-muted">
                   {labels[String(step)]}
                 </span>
               )}
@@ -65,16 +65,16 @@ function QuestionPreview({ q, index }: { q: RawTemplateQuestion; index: number }
       <div className="space-y-2">
         <div className="flex items-start gap-2">
           <List className="mt-0.5 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
-          <p className="text-sm font-medium text-[hsl(var(--text))]">
+          <p className="text-sm font-medium text-text">
             {index}. {q.prompt}
-            {q.required && <span className="ml-1 text-[hsl(var(--danger))]">*</span>}
+            {q.required && <span className="ml-1 text-danger">*</span>}
           </p>
         </div>
         <div className="space-y-1.5 pl-6">
           {(q.options ?? []).map((opt) => (
             <label key={opt.key} className="flex cursor-not-allowed items-start gap-2 opacity-70">
               <input type="radio" disabled className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="text-sm text-[hsl(var(--text))]">{opt.label}</span>
+              <span className="text-sm text-text">{opt.label}</span>
             </label>
           ))}
         </div>
@@ -90,28 +90,28 @@ export function CandidatePreviewModal({ template, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-2xl rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] shadow-2xl">
+      <div className="my-8 w-full max-w-2xl rounded-2xl border border-border bg-surface shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-[hsl(var(--border))] px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-[hsl(var(--text-muted))]">
+            <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
               Preview — visão do candidato
             </p>
-            <h2 className="mt-1 text-lg font-bold text-[hsl(var(--text))]">{template.name}</h2>
-            <p className="mt-1 text-sm text-[hsl(var(--text-muted))]">{template.description}</p>
+            <h2 className="mt-1 text-lg font-bold text-text">{template.name}</h2>
+            <p className="mt-1 text-sm text-text-muted">{template.description}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-xl p-2 text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))]"
+            className="shrink-0 rounded-xl p-2 text-text-muted hover:bg-[hsl(var(--accent-soft))] hover:text-text"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Meta */}
-        <div className="flex gap-4 border-b border-[hsl(var(--border))] px-6 py-3 text-xs text-[hsl(var(--text-muted))]">
+        <div className="flex gap-4 border-b border-border px-6 py-3 text-xs text-text-muted">
           <span>{template.competencies.length} competências</span>
           <span>{totalQuestions} perguntas</span>
           {template.estimated_minutes && <span>~{template.estimated_minutes} min</span>}
@@ -139,12 +139,12 @@ export function CandidatePreviewModal({ template, onClose }: Props) {
                     {ci + 1}
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[hsl(var(--text))]">{comp.name}</h3>
-                    <p className="text-xs text-[hsl(var(--text-muted))]">{comp.description}</p>
+                    <h3 className="text-sm font-bold text-text">{comp.name}</h3>
+                    <p className="text-xs text-text-muted">{comp.description}</p>
                   </div>
                 </div>
                 <div className={cn(
-                  "space-y-5 rounded-xl border border-[hsl(var(--border))] p-4",
+                  "space-y-5 rounded-xl border border-border p-4",
                   "bg-[hsl(var(--bg))]",
                 )}>
                   {comp.questions.map((q, qi) => (
@@ -157,11 +157,11 @@ export function CandidatePreviewModal({ template, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end border-t border-[hsl(var(--border))] px-6 py-4">
+        <div className="flex justify-end border-t border-border px-6 py-4">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-[hsl(var(--border))] px-4 py-2 text-sm font-medium text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--text))]"
+            className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-[hsl(var(--accent-soft))] hover:text-text"
           >
             Fechar preview
           </button>
