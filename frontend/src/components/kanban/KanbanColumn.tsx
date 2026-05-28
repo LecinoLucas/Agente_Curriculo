@@ -1,8 +1,9 @@
 import { memo, type CSSProperties, type DragEvent } from "react";
 import type { JobCandidate, PipelineColumn, PipelineStage } from "../../types/domain";
 import { KanbanCard } from "./KanbanCard";
-import { Plus, Inbox, Search, ClipboardList, Users, Handshake, CheckCircle } from "lucide-react";
+import { Plus, Inbox, Search, ClipboardList, Users, Handshake, CheckCircle, Info } from "lucide-react";
 import type { PipelineMacroColumnId } from "../../features/pipeline/utils/pipelineKanbanColumns";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 type KanbanColumnData = PipelineColumn & {
   macroId?: PipelineMacroColumnId;
@@ -33,7 +34,7 @@ const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, any>> = 
     border: "border-rose-100/60 dark:border-slate-800",
     bg: "bg-[#FFFDFD] dark:bg-slate-900/40",
     accent: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
-    desc: "Triagem e análise inicial",
+    desc: "Revisão inicial de perfil",
     icon: Search,
     iconBg: "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
   },
@@ -41,7 +42,7 @@ const COL_THEMES: Partial<Record<PipelineStage | PipelineMacroColumnId, any>> = 
     border: "border-rose-100/60 dark:border-slate-800",
     bg: "bg-[#FFFDFD] dark:bg-slate-900/40",
     accent: "bg-rose-100 text-rose-800 border-rose-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
-    desc: "Avaliações e etapa final",
+    desc: "Consolidação da decisão",
     icon: ClipboardList,
     iconBg: "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
   },
@@ -135,11 +136,9 @@ export const KanbanColumn = memo(function KanbanColumn({
   return (
     <div
       className={[
-        "flex w-full min-w-[15rem] basis-[clamp(15rem,14vw,18rem)] grow flex-col rounded-2xl border p-3 transition-all duration-300 shadow-[0_1px_3px_rgba(0,0,0,0.03)] xl:min-w-[15.5rem] 2xl:min-w-[16.5rem]",
+        "flex w-full min-w-[15rem] basis-[clamp(15rem,14vw,18rem)] grow flex-col transition-all duration-300 xl:min-w-[15.5rem] 2xl:min-w-[16.5rem]",
         "kanban-column-enter",
-        theme.border,
-        theme.bg,
-        isDropTarget && !dropDisabled ? "border-red-300 bg-red-50/50 shadow-[0_0_0_2px_rgba(193,18,31,0.1)] dark:border-red-800 dark:bg-red-950/20" : "",
+        isDropTarget && !dropDisabled ? "rounded-2xl border-red-300 bg-red-50/50 shadow-[0_0_0_2px_rgba(193,18,31,0.1)] dark:border-red-800 dark:bg-red-950/20" : "",
         disabledCls,
       ]
         .filter(Boolean)
@@ -152,39 +151,50 @@ export const KanbanColumn = memo(function KanbanColumn({
       data-drop-target={isDropTarget ? "true" : "false"}
     >
       {/* Column Header */}
-      <div className="mb-4 flex flex-col gap-2 border-b border-rose-100/60 dark:border-slate-800/60 pb-3 px-1 min-w-0">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="mb-3 flex flex-col gap-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3 shadow-sm min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           {theme.icon && (
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${theme.iconBg}`}>
-              <theme.icon className="h-4 w-4" />
+            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${theme.iconBg}`}>
+              <theme.icon className="h-3.5 w-3.5" />
             </div>
           )}
           <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
-            <span className="text-sm font-black uppercase tracking-wider text-slate-800 dark:text-slate-100 truncate min-w-0" title={column.label}>
-              {column.label}
-            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate min-w-0" title={column.label}>
+                {column.label}
+              </span>
+              {dropDisabled && column.dropDisabledReason ? (
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="outline-none focus-visible:ring-2 focus-visible:ring-rose-500 rounded-full flex items-center justify-center">
+                        <Info className="h-3.5 w-3.5 text-rose-500/70 hover:text-rose-600 transition-colors cursor-pointer shrink-0" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="center" className="max-w-[220px] text-center bg-white text-slate-700 border border-slate-200 shadow-md dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-xs font-medium z-[100] mt-1 p-2 rounded-lg">
+                      <p>{column.dropDisabledReason}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : null}
+            </div>
             <span
               className={[
-                "flex h-6 shrink-0 items-center justify-center rounded-full px-2 text-[11px] font-black tabular-nums shadow-sm border",
-                isFiltered ? "min-w-[2.5rem] bg-[#C1121F] text-white border-[#C1121F]" : `min-w-[1.5rem] ${theme.accent}`,
+                "flex h-5 shrink-0 items-center justify-center rounded px-1.5 text-[10px] font-bold tabular-nums",
+                isFiltered ? "bg-[#C1121F] text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
               ].join(" ")}
             >
               {isFiltered ? `${column.candidates.length}/${totalCount}` : column.candidates.length}
             </span>
           </div>
         </div>
-        <p className="text-[11px] font-medium text-slate-500 truncate mt-1" title={column.description ?? theme.desc}>
+        <p className="text-[10px] font-medium text-slate-400 truncate" title={column.description ?? theme.desc}>
           {column.description ?? theme.desc}
         </p>
-        {dropDisabled && column.dropDisabledReason ? (
-          <p className="text-[9px] font-semibold text-slate-400 mt-0.5" title={column.dropDisabledReason}>
-            Movimento pelo perfil
-          </p>
-        ) : null}
       </div>
 
-      {/* Candidate Cards list */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1 ui-scrollbar">
+      {/* Candidate Cards list / Drop Zone */}
+      <div className="flex min-h-[120px] flex-1 flex-col gap-2.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-2 overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
         {column.candidates.map((c, cardIndex) => {
           const isTopMatch =
             showTopMatchHighlight &&
@@ -208,17 +218,14 @@ export const KanbanColumn = memo(function KanbanColumn({
           );
         })}
 
-        {column.candidates.length === 0 ? (
-          <div
-            className="flex flex-1 min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-rose-200/60 bg-white/50 dark:border-slate-800 dark:bg-slate-900/50 text-xs font-semibold text-slate-500 shadow-sm px-4 py-6 text-center animate-in fade-in duration-200"
-          >
-            <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-[#C1121F] dark:bg-rose-950/30 dark:text-rose-400`}>
-              <theme.icon className="h-5 w-5 opacity-80" />
+        {column.candidates.length === 0 && (
+          <div className="flex flex-1 flex-col items-center justify-center px-2 py-4 text-center animate-in fade-in duration-200">
+            <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-slate-800 text-slate-400 shadow-sm`}>
+              <theme.icon className="h-4 w-4 opacity-70" />
             </div>
-            <span className="text-sm font-extrabold tracking-tight text-slate-700 dark:text-slate-300">Vazio</span>
-            <span className="text-[11px] text-slate-500 mt-1.5 leading-tight max-w-[150px]">Nenhum candidato nesta fase</span>
+            <span className="text-[11px] font-semibold text-slate-500">Arraste candidatos para esta etapa</span>
           </div>
-        ) : null}
+        )}
       </div>
 
       {/* Inline "+ Vincular candidato" button at the bottom of the first active column exclusively */}
@@ -226,10 +233,10 @@ export const KanbanColumn = memo(function KanbanColumn({
         <button
           type="button"
           onClick={() => onAddCandidate(targetStage)}
-          className="mt-3 flex items-center justify-center gap-1.5 w-full rounded-xl border border-dashed border-red-200 bg-red-50/30 py-3 text-xs font-bold text-[#C1121F] transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-700 hover:shadow-sm dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-900/40"
+          className="mt-3 flex items-center justify-center gap-1.5 w-full py-2 text-xs font-bold text-[#C1121F] transition-all hover:opacity-80 dark:text-rose-400"
         >
-          <Plus className="h-4 w-4" />
-          Vincular candidato
+          <Plus className="h-3.5 w-3.5" />
+          Adicionar candidato
         </button>
       )}
     </div>

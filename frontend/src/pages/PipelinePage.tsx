@@ -1,4 +1,4 @@
-import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Users, Clock, Calendar, CheckCircle2 } from "lucide-react";
+import { PanelRightClose, PanelRightOpen, RefreshCw, UserPlus, Search, Users, Clock, Calendar, CheckCircle2, Plus, BarChart3, Home, MapPin, Sparkles, Inbox, Activity, Filter, ToggleRight, ToggleLeft } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -68,6 +68,32 @@ function resolveInitialShowRanking() {
 function getLastSelectedJobId() {
   if (typeof window === "undefined") return null;
   return window.sessionStorage.getItem(PIPELINE_LAST_SELECTED_JOB_KEY);
+}
+
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDefaultPipelineDateRange() {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 7);
+  return {
+    entered_from: formatDateInputValue(from),
+    entered_to: formatDateInputValue(to),
+  };
+}
+
+function hasAnyPipelineDateFilter(searchParams: URLSearchParams) {
+  return (
+    searchParams.has("entered_from") ||
+    searchParams.has("entered_to") ||
+    searchParams.has("updated_from") ||
+    searchParams.has("updated_to")
+  );
 }
 
 function readPipelineBoardFilters(searchParams: URLSearchParams): PipelineBoardFilters {
@@ -177,6 +203,7 @@ export function PipelinePage() {
   const kanbanScrollRef = useRef<HTMLDivElement | null>(null);
   const topKanbanScrollRef = useRef<HTMLDivElement | null>(null);
   const previewCandidateIdRef = useRef(previewCandidateId);
+  const initialDateRangeResolvedRef = useRef(false);
   const [kanbanScrollWidth, setKanbanScrollWidth] = useState(0);
   const [kanbanHasHorizontalOverflow, setKanbanHasHorizontalOverflow] = useState(false);
 
@@ -300,6 +327,19 @@ export function PipelinePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (initialDateRangeResolvedRef.current) return;
+    initialDateRangeResolvedRef.current = true;
+    if (hasAnyPipelineDateFilter(searchParams)) return;
+    const defaults = getDefaultPipelineDateRange();
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("entered_from", defaults.entered_from);
+      next.set("entered_to", defaults.entered_to);
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const current = JSON.stringify(boardFilters);
@@ -782,162 +822,165 @@ export function PipelinePage() {
     <div className="flex w-full min-w-0 flex-col gap-4 pb-8 text-slate-800 dark:text-slate-100">
       
       {/* ── SaaS Breadcrumb and Header Control Area ── */}
-      <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <div>
-          <nav className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            <span>Recrutamento</span>
-            <span className="text-slate-300 dark:text-slate-700">/</span>
-            <span className="text-[#C1121F]">Pipeline</span>
-          </nav>
-          <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-800 dark:text-slate-100">
-            Pipeline
-          </h1>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-400 dark:text-slate-500">
-            Visão macro do funil de candidatos.
-          </p>
-        </div>
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 dark:border-slate-800">
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
+              Pipeline
+            </h1>
+            <p className="mt-1 text-[13px] font-medium text-slate-500 dark:text-slate-400">
+              Acompanhe o progresso dos candidatos em todas as etapas.
+            </p>
+          </div>
 
-        {/* Action Controls */}
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-          {/* Jobs Selector Combobox */}
-          {pipelineJobsError ? (
-            <span className="text-xs text-rose-500 font-bold">{pipelineJobsError}</span>
-          ) : (
-            <JobCombobox
-              jobs={pipelineJobs}
-              loading={pipelineJobsLoading}
-              value={activeJobId ?? null}
-              onChange={handleSelectJob}
-            />
-          )}
+          {/* Action Controls */}
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            {pipelineJobsError ? (
+              <span className="text-xs text-rose-500 font-bold">{pipelineJobsError}</span>
+            ) : (
+              <JobCombobox
+                jobs={pipelineJobs}
+                loading={pipelineJobsLoading}
+                value={activeJobId ?? null}
+                onChange={handleSelectJob}
+              />
+            )}
 
-          {/* Action Buttons Group */}
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            {/* Main Sourcing Red Button */}
-            <button
-              type="button"
-              onClick={handleOpenSourceCandidates}
-              disabled={!canUse}
-              className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
-                canUse
-                  ? "border-[#C1121F]/20 bg-[#C1121F] text-white shadow-sm hover:opacity-90 dark:border-[#C1121F]/30"
-                  : "cursor-not-allowed border-border/40 bg-surface-muted text-text-muted dark:border-slate-800 dark:bg-slate-900"
-              }`}
-            >
-              <Search className="h-4 w-4" />
-              Vincular candidato
-            </button>
-            {activeJobId && (
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
                 type="button"
-                onClick={() => setShowRanking((current) => !current)}
-                className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition ${
-                  showRanking
-                    ? "border-[#C1121F]/30 bg-[#C1121F]/5 text-[#C1121F]"
-                    : "border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800"
+                onClick={handleOpenSourceCandidates}
+                disabled={!canUse}
+                className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-5 text-[13px] font-bold transition ${
+                  canUse
+                    ? "border-[#C1121F]/20 bg-[#C1121F] text-white shadow-sm hover:opacity-90 dark:border-[#C1121F]/30"
+                    : "cursor-not-allowed border-border/40 bg-surface-muted text-text-muted dark:border-slate-800 dark:bg-slate-900"
                 }`}
-                aria-expanded={showRanking}
               >
-                {showRanking ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-                {showRanking ? "Ocultar Ranking" : "Ver Ranking IA"}
+                <Plus className="h-4 w-4" />
+                Vincular candidato
               </button>
-            )}
+              {activeJobId && (
+                <button
+                  type="button"
+                  onClick={() => setShowRanking((current) => !current)}
+                  className={`inline-flex w-full sm:w-auto h-11 items-center justify-center gap-2 rounded-xl border px-5 text-[13px] font-bold transition ${
+                    showRanking
+                      ? "border-slate-200 bg-white text-slate-600 shadow-sm"
+                      : "border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700"
+                  }`}
+                  aria-expanded={showRanking}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Ver Ranking IA
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Job Tags Section */}
+        {activeJobId && !pipelineJobsLoading && selectedJob && (
+          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mt-2">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                Status: <span className="font-bold text-slate-700 dark:text-slate-200">{formatJobStatus(selectedJob.status)}</span>
+              </div>
+              {selectedJob.seniority_level && (
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-slate-400" />
+                  Sênioridade: <span className="font-bold text-slate-700 dark:text-slate-200">{formatSeniority(selectedJob.seniority_level)}</span>
+                </div>
+              )}
+              {selectedJob.work_model && (
+                <div className="flex items-center gap-1.5">
+                  <Home className="h-3.5 w-3.5 text-slate-400" />
+                  Modalidade: <span className="font-bold text-slate-700 dark:text-slate-200">{formatWorkModel(selectedJob.work_model)}</span>
+                </div>
+              )}
+              {selectedJob.location && (
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                  Local: <span className="font-bold text-slate-700 dark:text-slate-200">{selectedJob.location}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              Total de candidatos: <span className="font-bold text-slate-700 dark:text-slate-200">{totalCandidatos}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── KPIs Metric Cards Top Bar (using real calculated data) ── */}
       {activeJobId && board && !boardError && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Total de Candidatos
-                </p>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
-                    {totalCandidatos}
-                  </span>
-                </div>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-[#C1121F] dark:bg-rose-950/30 dark:text-rose-400">
-                <Users className="h-5 w-5" />
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 py-2">
+          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-[#C1121F] dark:bg-rose-950/30 dark:text-rose-400">
+              <Inbox className="h-6 w-6" />
             </div>
-            <div className="mt-4 flex items-center">
-              <span className="inline-flex items-center rounded-md bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-                Inscritos
-              </span>
+            <div>
+              <p className="text-[11px] font-bold text-slate-500">
+                Candidatos
+              </p>
+              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
+                {totalCandidatos}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium mt-1">
+                Total no processo
+              </p>
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Em andamento
-                </p>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
-                    {emAndamento}
-                  </span>
-                </div>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
-                <Clock className="h-5 w-5" />
-              </div>
+          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
+              <RefreshCw className="h-6 w-6" />
             </div>
-            <div className="mt-4 flex items-center">
-              <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-600 ring-1 ring-inset ring-blue-500/20 dark:bg-blue-950/30 dark:text-blue-400 dark:ring-blue-500/30">
-                {totalCandidatos > 0 ? `${Math.round((emAndamento / totalCandidatos) * 100)}%` : "0%"}
-              </span>
+            <div>
+              <p className="text-[11px] font-bold text-slate-500">
+                Em andamento
+              </p>
+              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
+                {emAndamento}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium mt-1">
+                Em etapas ativas
+              </p>
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Entrevistas
-                </p>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
-                    {entrevistas}
-                  </span>
-                </div>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">
-                <Calendar className="h-5 w-5" />
-              </div>
+          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500 dark:bg-amber-950/30 dark:text-amber-400">
+              <Activity className="h-6 w-6" />
             </div>
-            <div className="mt-4 flex items-center">
-              <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-600 ring-1 ring-inset ring-amber-500/20 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-500/30">
+            <div>
+              <p className="text-[11px] font-bold text-slate-500">
+                Entrevistas
+              </p>
+              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
+                {entrevistas}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium mt-1">
                 Agendadas
-              </span>
+              </p>
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-2xl border border-rose-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Contratações
-                </p>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
-                    {contratacoes}
-                  </span>
-                </div>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
+          <div className="relative overflow-hidden rounded-xl border border-slate-100 bg-white p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900 flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
+              <CheckCircle2 className="h-6 w-6" />
             </div>
-            <div className="mt-4 flex items-center">
-              <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-600 ring-1 ring-inset ring-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-500/30">
+            <div>
+              <p className="text-[11px] font-bold text-slate-500">
+                Contratações
+              </p>
+              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none mt-1">
+                {contratacoes}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium mt-1">
                 Efetivadas
-              </span>
+              </p>
             </div>
           </div>
         </div>
@@ -964,139 +1007,102 @@ export function PipelinePage() {
           <div className={boardLayoutClass}>
             
             {/* Main Board Area */}
-            <div className="min-w-0 rounded-2xl border border-border/40 bg-surface p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:p-4">
+            <div className="min-w-0">
               
-              {/* Header inside Board panel */}
-              <div className="mb-3 flex flex-col gap-3 border-b border-border/40 pb-3 dark:border-slate-800 xl:flex-row xl:flex-wrap xl:items-center xl:justify-between">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-lg font-black tracking-tight text-text dark:text-slate-100 truncate">
-                    {selectedJob ? selectedJob.title : "Candidatos"}
-                  </h2>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-text-muted">
-                    <span>{`Kanban · ${totalActive} em processo`}</span>
-                    {selectedJobMeta.map((item) => (
-                      <span key={String(item)} className="inline-flex items-center gap-2">
-                        <span className="text-[hsl(var(--border))]/80">·</span>
-                        <span>{item}</span>
-                      </span>
-                    ))}
-                  </div>
-                  <p className="mt-1 text-[10px] font-semibold text-text-muted/80">
-                    Detalhes de admissão e ERP ficam em áreas próprias.
-                  </p>
-                </div>
 
                 {/* Filters and Refresh State */}
-                <div className="flex flex-col gap-3 xl:items-end">
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                    <div className="rounded-xl border border-border/55 bg-surface-muted/55 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                        Entrada no processo
-                      </p>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
-                          <span>De</span>
-                          <input
-                            type="date"
-                            value={urlBoardFilters.entered_from ?? ""}
-                            onChange={(event) => handleBoardDateFilterChange("entered_from", event.target.value)}
-                            className="ui-input h-10 rounded-lg px-3 text-sm"
-                            aria-label="Entrada no processo de"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
-                          <span>Até</span>
-                          <input
-                            type="date"
-                            value={urlBoardFilters.entered_to ?? ""}
-                            onChange={(event) => handleBoardDateFilterChange("entered_to", event.target.value)}
-                            className="ui-input h-10 rounded-lg px-3 text-sm"
-                            aria-label="Entrada no processo até"
-                          />
-                        </label>
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between py-2 border-b border-border/40 dark:border-slate-800 mb-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Período</label>
+                      <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-9 shadow-sm">
+                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          type="date"
+                          value={urlBoardFilters.entered_from ?? ""}
+                          onChange={(event) => handleBoardDateFilterChange("entered_from", event.target.value)}
+                          className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none w-[110px]"
+                          aria-label="Entrada no processo de"
+                        />
+                        <span className="text-slate-300">-</span>
+                        <input
+                          type="date"
+                          value={urlBoardFilters.entered_to ?? ""}
+                          onChange={(event) => handleBoardDateFilterChange("entered_to", event.target.value)}
+                          className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none w-[110px]"
+                          aria-label="Entrada no processo até"
+                        />
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-border/55 bg-surface-muted/55 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                        Última atividade
-                      </p>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
-                          <span>De</span>
-                          <input
-                            type="date"
-                            value={urlBoardFilters.updated_from ?? ""}
-                            onChange={(event) => handleBoardDateFilterChange("updated_from", event.target.value)}
-                            className="ui-input h-10 rounded-lg px-3 text-sm"
-                            aria-label="Última atividade de"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1 text-[10px] font-semibold text-text-muted">
-                          <span>Até</span>
-                          <input
-                            type="date"
-                            value={urlBoardFilters.updated_to ?? ""}
-                            onChange={(event) => handleBoardDateFilterChange("updated_to", event.target.value)}
-                            className="ui-input h-10 rounded-lg px-3 text-sm"
-                            aria-label="Última atividade até"
-                          />
-                        </label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Última atividade</label>
+                      <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-9 shadow-sm">
+                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                        <select className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none pr-2">
+                          <option>Todos</option>
+                        </select>
                       </div>
                     </div>
 
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={handleClearBoardFilters}
-                        className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                      >
-                        Limpar filtros
-                      </button>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Ordenar por</label>
+                      <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 h-9 shadow-sm">
+                        <select 
+                          value={sortOrder}
+                          onChange={(e) => setSortOrder(e.target.value as any)}
+                          className="bg-transparent text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none pr-2"
+                        >
+                          <option value="score_desc">Mais recente</option>
+                          <option value="name_az">Ordem A-Z</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                  <div className="flex w-full sm:w-auto items-center gap-1 rounded-xl border border-border/55 bg-surface-muted p-1 dark:border-slate-800 dark:bg-slate-950">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
-                      onClick={() => setSortOrder("score_desc")}
-                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "score_desc" ? "bg-white text-[#C1121F] shadow-sm border border-slate-200 dark:bg-slate-900 dark:border-slate-700" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"}`}
+                      onClick={() => setSortOrder(sortOrder === "score_desc" ? "name_az" : "score_desc")}
+                      className={`flex items-center gap-2 rounded-full px-3 h-9 text-[11px] font-bold transition-all border shadow-sm ${
+                        sortOrder === "score_desc" 
+                          ? "bg-rose-50 text-[#C1121F] border-rose-200" 
+                          : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                      }`}
                     >
+                      <ToggleRight className={`h-4 w-4 ${sortOrder === "score_desc" ? "text-[#C1121F]" : "text-slate-400"}`} />
                       Top Match IA
                     </button>
-                    <button
-                      onClick={() => setSortOrder("name_az")}
-                      className={`flex-1 sm:flex-none rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all ${sortOrder === "name_az" ? "bg-white text-[#C1121F] shadow-sm border border-slate-200 dark:bg-slate-900 dark:border-slate-700" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"}`}
-                    >
-                      Ordem A-Z
-                    </button>
-                  </div>
 
-                  {activeJobId && (
-                    <div className="flex w-full sm:w-auto flex-wrap items-center justify-between sm:justify-start gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-                      <span>Atualizado às <strong className="font-mono font-semibold">{lastUpdated}</strong></span>
+                    {activeJobId && (
                       <button
                         type="button"
                         onClick={() => void handleManualRefresh()}
                         disabled={boardLoading}
                         aria-label="Atualizar board"
-                        className="inline-flex items-center gap-1 font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200"
+                        className="flex items-center gap-1.5 h-9 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-bold text-slate-600 dark:text-slate-300 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
                       >
-                        <RefreshCw className={["h-3.5 w-3.5", boardLoading ? "animate-spin" : ""].join(" ")} />
-                        {boardLoading ? "Sincronizando" : "Atualizar"}
+                        <RefreshCw className={`h-3.5 w-3.5 ${boardLoading ? "animate-spin" : ""}`} />
+                        Atualizar
                       </button>
-                    </div>
-                  )}
+                    )}
 
-                  {isBoardRefreshing && (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 animate-pulse">
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                      Sincronizando
-                    </span>
-                  )}
+                    <button
+                      type="button"
+                      onClick={handleClearBoardFilters}
+                      className="flex items-center gap-1.5 h-9 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-bold text-slate-600 dark:text-slate-300 shadow-sm hover:bg-slate-50 transition-colors"
+                    >
+                      <Filter className="h-3.5 w-3.5 text-slate-400" />
+                      Limpar filtros
+                    </button>
+                    
+                    {isBoardRefreshing && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 animate-pulse">
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        Sincronizando
+                      </span>
+                    )}
                   </div>
                 </div>
-              </div>
 
               {selectedJob && !activeJobAcceptsCandidates && !isDraft && (
                 <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
@@ -1405,7 +1411,7 @@ function RankingPanel({
         </div>
       </div>
 
-      <div id="pipeline-ranking-content" className="mt-4 flex-1 overflow-y-auto ui-scrollbar pr-0.5">
+      <div id="pipeline-ranking-content" className="mt-4 flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full pr-0.5">
         {showInitialLoading && <SkeletonRows rows={3} />}
         {isRefreshing && (
           <div className="mb-4 rounded-xl border border-[hsl(var(--primary))]/10 bg-[hsl(var(--primary))]/[0.02] px-3.5 py-2 text-[10px] font-bold text-[hsl(var(--primary))] animate-pulse">

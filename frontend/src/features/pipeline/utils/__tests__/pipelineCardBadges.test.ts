@@ -173,4 +173,52 @@ describe("derivePipelineCardBadges", () => {
 
     expect(labels(badges)).toEqual([]);
   });
+
+  describe("badges de admissão", () => {
+    it("retorna 'Iniciar admissão' para candidato em hired", () => {
+      const badges = derivePipelineCardBadges(
+        candidate({ stage: "hired", ai_status: "completed", job_fit_score: 88 }),
+        { now },
+      );
+      expect(labels(badges)).toContain("Iniciar admissão");
+      expect(badges.find((b) => b.label === "Iniciar admissão")?.tone).toBe("warning");
+    });
+
+    it("retorna 'Pré-admissão pendente' para candidato em pre_admission", () => {
+      const badges = derivePipelineCardBadges(
+        candidate({ stage: "pre_admission", ai_status: "completed", job_fit_score: 88 }),
+        { now },
+      );
+      expect(labels(badges)).toContain("Pré-admissão pendente");
+      expect(badges.find((b) => b.label === "Pré-admissão pendente")?.tone).toBe("warning");
+    });
+
+    it("retorna 'ERP pendente' para candidato em protheus", () => {
+      const badges = derivePipelineCardBadges(
+        candidate({ stage: "protheus", ai_status: "completed", job_fit_score: 88 }),
+        { now },
+      );
+      expect(labels(badges)).toContain("ERP pendente");
+      expect(badges.find((b) => b.label === "ERP pendente")?.tone).toBe("warning");
+    });
+
+    it("não retorna badge de admissão para candidato admitted", () => {
+      const badges = derivePipelineCardBadges(
+        candidate({ stage: "admitted", ai_status: "completed", job_fit_score: 88 }),
+        { now },
+      );
+      expect(labels(badges)).not.toContain("Iniciar admissão");
+      expect(labels(badges)).not.toContain("Pré-admissão pendente");
+      expect(labels(badges)).not.toContain("ERP pendente");
+    });
+
+    it("coexiste com badge de IA quando candidato em hired tem análise pendente", () => {
+      const badges = derivePipelineCardBadges(
+        candidate({ stage: "hired", ai_status: "pending", job_fit_score: null }),
+        { now },
+      );
+      expect(labels(badges)).toContain("IA pendente");
+      expect(labels(badges)).toContain("Iniciar admissão");
+    });
+  });
 });

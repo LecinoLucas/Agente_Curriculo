@@ -3,7 +3,11 @@ import { Bell } from "lucide-react";
 import { useNotifications } from "../useNotifications";
 import { NotificationsPanel } from "./NotificationsPanel";
 
-export function NotificationsBell() {
+type NotificationsBellProps = {
+  buttonClassName?: string;
+};
+
+export function NotificationsBell({ buttonClassName = "" }: NotificationsBellProps) {
   const { unreadCount } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -27,7 +31,7 @@ export function NotificationsBell() {
           isOpen
             ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5 text-[hsl(var(--primary))]"
             : "border-border/80 bg-surface-muted/40 text-text-muted hover:bg-surface-muted/80 hover:text-text"
-        }`}
+        } ${buttonClassName}`}
         aria-label="Notificações"
       >
         <Bell className="h-5 w-5" />

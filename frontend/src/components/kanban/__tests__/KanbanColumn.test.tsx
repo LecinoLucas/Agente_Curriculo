@@ -23,13 +23,11 @@ describe("KanbanColumn", () => {
       />
     );
 
-    const badges = screen.getAllByText("Mais aderente");
-    expect(badges.length).toBe(1);
-    
-    // O primeiro candidato (Candidato A) deve estar no card com o badge
-    // Como a ordem de renderização é mantida, podemos assumir que o primeiro card renderizado é o do Candidato A.
-    // Vamos verificar se o texto "Mais aderente" está presente.
-    expect(screen.getByText("Mais aderente")).toBeInTheDocument();
+    // O card top match tem a classe border border-[#C1121F]/20
+    const topMatchCards = screen.getAllByTestId(/kanban-card-/).filter(
+      (card) => card.className.includes("border-[#C1121F]/20")
+    );
+    expect(topMatchCards.length).toBe(1);
   });
 
   it("não deve destacar nenhum card quando showTopMatchHighlight for false", () => {
@@ -41,7 +39,10 @@ describe("KanbanColumn", () => {
       />
     );
 
-    expect(screen.queryByText("Mais aderente")).not.toBeInTheDocument();
+    const topMatchCards = screen.getAllByTestId(/kanban-card-/).filter(
+      (card) => card.className.includes("border-[#C1121F]/20")
+    );
+    expect(topMatchCards.length).toBe(0);
   });
 
   it("não deve destacar se o primeiro candidato não tiver score", () => {
@@ -62,7 +63,10 @@ describe("KanbanColumn", () => {
       />
     );
 
-    expect(screen.queryByText("Mais aderente")).not.toBeInTheDocument();
+    const topMatchCards = screen.getAllByTestId(/kanban-card-/).filter(
+      (card) => card.className.includes("border-[#C1121F]/20")
+    );
+    expect(topMatchCards.length).toBe(0);
   });
 
   it("permite arrastar cards e dropar na coluna", () => {

@@ -148,12 +148,12 @@ const INITIAL_STATE: PipelineState = {
 };
 
 const PIPELINE_STAGE_STATUS_LABEL: Record<PipelineStage, string> = {
-  entry: "Recebido",
+  entry: "Entrada",
   screening: "Triagem",
   hr_interview: "Entrevista RH",
   technical_interview: "Entrevista Técnica",
-  final: "Final",
-  offer: "Proposta",
+  final: "Decisão",
+  offer: "Oferta",
   hired: "Contratado",
   pre_admission: "Pré-admissão",
   protheus: "Protheus",

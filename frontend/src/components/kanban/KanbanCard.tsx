@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type DragEvent } from "react";
 import type { JobCandidate } from "../../types/domain";
 import { formatSeniority } from "../../utils/jobFormatters";
-import { Calendar, Mail, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Calendar, Mail, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import {
   derivePipelineCardBadges,
   type PipelineCardBadgeTone,
@@ -141,8 +141,8 @@ export const KanbanCard = memo(function KanbanCard({
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "group relative w-full select-none rounded-xl border bg-white dark:bg-slate-900 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
-        isTopMatch ? "border-[#C1121F]/30 bg-[#C1121F]/[0.02]" : "border-slate-100 dark:border-slate-800/80 hover:border-slate-200 dark:hover:border-slate-700",
+        "group relative w-full select-none rounded-xl bg-white dark:bg-slate-900 p-3.5 pb-4 shadow-[0_1px_4px_-1px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md overflow-hidden",
+        isTopMatch ? "border border-[#C1121F]/20" : "border border-slate-100 dark:border-slate-800",
         isSaving ? "cursor-wait opacity-50" : "cursor-pointer",
         draggable ? "active:cursor-grabbing" : "",
         isDragging ? "opacity-55 ring-2 ring-[#C1121F]/15" : "",
@@ -154,181 +154,62 @@ export const KanbanCard = memo(function KanbanCard({
       data-testid={`kanban-card-${candidate.candidate_id}`}
       data-dragging={isDragging ? "true" : "false"}
     >
-      {/* Header element: Avatar + Name & Rank */}
-      <div className="flex items-start gap-3">
-        <div
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-transform group-hover:scale-105 ${avatarClass}`}
-        >
-          {initials}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            {rank && rank <= 3 && (
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-black border ${
-                  rank === 1 ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-400" :
-                  rank === 2 ? "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400" :
-                  "border-amber-300/40 bg-orange-50 text-orange-700 dark:border-amber-900/40 dark:bg-orange-950/40 dark:text-orange-400"
-                }`}
-              >
-                {rank}
-              </span>
-            )}
-            {isTopMatch && !rank && (
-              <span className="rounded bg-[#C1121F]/10 border border-[#C1121F]/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[#C1121F]">
-                Mais aderente
-              </span>
-            )}
-            <span className="truncate text-sm font-bold tracking-tight text-slate-800 dark:text-slate-100 transition-colors group-hover:text-[#C1121F]">
-              {name}
-            </span>
-          </div>
-          
-          {meta.length > 0 && (
-            <p className="mt-1 text-[10px] font-medium text-text-muted">
-              {meta.join(" • ")}
-            </p>
-          )}
-        </div>
+      {/* Top Row: Name and Adesão Badge */}
+      <div className="flex items-start justify-between gap-2">
+        <span className="truncate text-[13px] font-bold tracking-tight text-slate-800 dark:text-slate-100 transition-colors group-hover:text-[#C1121F]">
+          {name}
+        </span>
+        
+        {jobFitScore !== null && jobFitScore !== undefined ? (
+          <span className="shrink-0 rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-2.5 py-1 text-xs font-black tracking-tight text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 shadow-sm">
+            {Math.round(jobFitScore)}%
+          </span>
+        ) : aiProcessingState ? (
+          <span className="shrink-0 rounded bg-slate-50 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200 dark:border-slate-700">
+            Pendente
+          </span>
+        ) : null}
       </div>
 
-      {/* Origin and Timing line */}
-      {(source || dateLabel) && (
-        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 dark:border-slate-800/80 pt-2 text-[9px] font-semibold text-text-muted">
-          {source ? (
-            <span className="inline-flex items-center rounded bg-surface-muted px-1.5 py-0.5 text-text-muted font-medium">
-              {source === "public_application" ? "Candidatura Pública" : source}
-            </span>
-          ) : (
-            <span />
-          )}
-          {dateLabel && <span>{dateLabel}</span>}
-        </div>
-      )}
-
-      {stageSubstatus ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <span
-            className="inline-flex max-w-full items-center truncate rounded border border-border/50 bg-surface-muted px-1.5 py-0.5 text-[9px] font-black uppercase text-text-muted"
-            title={`Status real: ${stageSubstatus}`}
-            data-testid="kanban-card-real-stage"
-          >
-            {stageSubstatus}
+      {/* Middle Row: Time and Tag */}
+      <div className="mt-2.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">
+          <Clock className="h-3 w-3" />
+          <span className="text-[10px] font-medium">
+            {stageSubstatus ? stageSubstatus : (dateLabel ? `Vinculado há ${dateLabel}` : "Recentemente")}
           </span>
-          {stageSummary ? (
-            <span
-              className="inline-flex max-w-full items-center truncate rounded border border-[#C1121F]/20 bg-[#C1121F]/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-[#C1121F]"
-              title={stageSummary}
-              data-testid="kanban-card-admission-summary"
-            >
-              {stageSummary}
-            </span>
-          ) : null}
         </div>
-      ) : null}
+        
+        {source && (
+          <span className="shrink-0 rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+            {source === "public_application" ? "Pública" : source}
+          </span>
+        )}
+      </div>
 
-      {/* Top skills tags */}
-      {operationalBadges.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
+      {/* Operational badges row */}
+      {operationalBadges.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1">
           {operationalBadges.map((badge) => (
             <span
               key={badge.label}
-              className={[
-                "inline-flex max-w-full items-center truncate rounded px-1.5 py-0.5 text-[9px] font-black uppercase",
-                BADGE_TONE_CLASS[badge.tone],
-              ].join(" ")}
-              title={badge.reason ?? badge.label}
-              data-testid={`pipeline-card-badge-${badge.label}`}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${BADGE_TONE_CLASS[badge.tone]}`}
             >
               {badge.label}
             </span>
           ))}
         </div>
-      )}
-
-      {aiProcessingState ? (
-        <div className="mt-3">
-          <span
-            className={[
-              "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase",
-              aiProcessingState.tone === "processing"
-                ? "border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
-                : "border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300",
-            ].join(" ")}
-            data-testid="kanban-ai-status-badge"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-            {aiProcessingState.label}
-          </span>
-        </div>
       ) : null}
 
-      {skills.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {skills.map((skill) => (
-            <span
-              key={skill}
-              className="rounded bg-surface-muted border border-border/40 dark:border-slate-800/80 px-2 py-0.5 text-[10px] font-medium text-text-muted truncate max-w-[100px] inline-block"
-              title={skill}
-            >
-              {skill}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Footer block: Match Score and Indicators */}
-      <div className="mt-3.5 flex items-center justify-between gap-2.5 border-t border-border/40 dark:border-slate-800/80 pt-3 min-w-0">
-        {isSaving ? (
-          <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted animate-pulse truncate">
-            Sincronizando…
-          </span>
-        ) : (
-          <>
-            {jobFitScore !== null && jobFitScore !== undefined ? (
-              <div className="flex flex-1 items-center gap-1.5 min-w-0">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 shrink-0">
-                  Match
-                </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 min-w-[24px]">
-                  <div
-                    className="h-full bg-[#C1121F] transition-all duration-500"
-                    style={{ width: `${Math.round(jobFitScore)}%` }}
-                  />
-                </div>
-                <span className="text-xs font-black tabular-nums text-[#C1121F] shrink-0">
-                  {Math.round(jobFitScore)}%
-                </span>
-              </div>
-            ) : (
-              <div className="flex flex-1 items-center justify-between gap-1.5 min-w-0">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted shrink-0">
-                  Match
-                </span>
-                <span className="rounded bg-surface-muted border border-border/40 px-1.5 py-0.5 text-[9px] font-bold text-text-muted shrink-0">
-                  {aiProcessingState ? "Aguardando IA" : "Pendente"}
-                </span>
-              </div>
-            )}
-
-            {/* Micro indicators icons */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {hasScheduledInterview && (
-                <Calendar className="h-3.5 w-3.5 text-indigo-500" title="Entrevista agendada" />
-              )}
-              {assessmentCompleted && (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" title="Avaliação concluída" />
-              )}
-              {candidate.email && (
-                <Mail className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 dark:group-hover:text-slate-400" title="Comunicação active" />
-              )}
-              {hasWarning && (
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-pulse" title="Alerta do sistema" />
-              )}
-            </div>
-          </>
-        )}
-      </div>
+      {/* Bottom Color Bar Indicator */}
+      <div
+        className="absolute bottom-0 left-0 h-1 w-full"
+        style={{
+          background: isTopMatch 
+            ? "linear-gradient(90deg, #C1121F 0%, #E85D04 100%)" 
+            : "linear-gradient(90deg, #10B981 0%, #34D399 100%)"
+        }}
+      />
     </div>
   );
 });

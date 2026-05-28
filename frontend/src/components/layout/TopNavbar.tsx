@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { LogOut, Menu, Moon, Sun, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, Menu, Moon, Search, Sun, UserRound, HelpCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
@@ -39,14 +39,16 @@ export function TopNavbar({
   onPipelineClick,
 }: TopNavbarProps) {
   return (
-    <header className="sticky top-0 z-40 flex h-14 w-full items-center gap-2 border-b border-border/40 bg-surface/95 px-3 shadow-sm backdrop-blur-md sm:px-4">
+    <header
+      className="sticky top-0 z-40 flex h-14 w-full items-center gap-2 border-b border-[hsl(var(--nav-border))] bg-[hsl(var(--nav-bg))] px-3 shadow-sm backdrop-blur-md sm:px-4"
+    >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
           aria-label={mobileMenuOpen ? "Fechar menu de navegação" : "Abrir menu de navegação"}
           aria-expanded={mobileMenuOpen}
           onClick={onToggleMobileMenu}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-text outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] xl:hidden"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--nav-text))] outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))] xl:hidden"
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
@@ -54,17 +56,17 @@ export function TopNavbar({
         <button
           type="button"
           onClick={() => onNavigate("/dashboard")}
-          className="flex min-w-0 shrink-0 items-center gap-2 rounded-lg border border-transparent px-1 py-1 text-left outline-none transition-colors hover:border-white/10 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]"
+          className="flex min-w-0 shrink-0 items-center gap-2 rounded-lg border border-transparent px-1 py-1 text-left outline-none transition-colors hover:border-white/10 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]"
           aria-label="Ir para o dashboard"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[hsl(var(--primary))] text-[10px] font-extrabold text-white">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[hsl(var(--nav-active-bg))] text-[10px] font-extrabold text-white">
             RA
           </span>
           <span className="hidden min-w-0 sm:block lg:w-[5.4rem] min-[1360px]:w-[6.25rem]">
-            <span className="block truncate font-heading text-[13px] font-extrabold leading-tight tracking-tight text-text">
+            <span className="block truncate font-heading text-[13px] font-extrabold leading-tight tracking-tight text-[hsl(var(--nav-text))]">
               Marajo RH
             </span>
-            <span className="block truncate text-[10px] leading-tight text-text-muted">
+            <span className="block truncate text-[10px] leading-tight text-[hsl(var(--nav-muted))]">
               ATS & Recrutamento IA
             </span>
           </span>
@@ -95,13 +97,11 @@ export function TopNavbar({
                   }}
                   className={cn(
                     "group inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-transparent text-[13px] font-semibold outline-none transition-colors",
-                    isDashboard
-                      ? "w-9 px-0"
-                      : "gap-1.5 px-2.5",
-                    "focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))]",
+                    isDashboard ? "w-9 px-0" : "gap-1.5 px-2.5",
+                    "focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))]",
                     active
                       ? "bg-[hsl(var(--nav-active-bg))] text-[hsl(var(--nav-active-text))] shadow-sm"
-                      : "text-text-muted hover:bg-white/5 hover:text-text",
+                      : "text-[hsl(var(--nav-muted))] hover:bg-white/5 hover:text-[hsl(var(--nav-text))]",
                   )}
                 >
                   {renderIcon(item.to)}
@@ -130,16 +130,17 @@ export function TopNavbar({
         </nav>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1.5">
         <div className="hidden min-[1400px]:block">
           <VisualThemeSwitcher />
         </div>
+        
         <button
           type="button"
           onClick={onToggleTheme}
           aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
           title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}
-          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-text-muted outline-none transition-colors hover:bg-white/10 hover:text-text focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--nav-muted))] outline-none transition-colors hover:bg-white/10 hover:text-[hsl(var(--nav-text))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))] sm:inline-flex"
         >
           {theme === "light" ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
         </button>
@@ -149,16 +150,17 @@ export function TopNavbar({
           onClick={() => onNavigate("/perfil")}
           aria-label="Abrir perfil"
           title="Perfil"
-          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-text-muted outline-none transition-colors hover:bg-white/10 hover:text-text focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[hsl(var(--nav-muted))] outline-none transition-colors hover:bg-white/10 hover:text-[hsl(var(--nav-text))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))] sm:inline-flex"
         >
           <UserRound className="h-4 w-4" aria-hidden="true" />
         </button>
+        
         <button
           type="button"
           onClick={onLogout}
           aria-label="Sair"
           title="Sair"
-          className="hidden h-9 w-9 items-center justify-center rounded-lg text-text-muted outline-none transition-colors hover:bg-[hsl(var(--danger))] hover:text-white focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--surface))] sm:inline-flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-lg text-[hsl(var(--nav-muted))] outline-none transition-colors hover:bg-[hsl(var(--danger))] hover:text-white focus-visible:ring-2 focus-visible:ring-[hsl(var(--nav-active-bg))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--nav-bg))] sm:inline-flex"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
         </button>

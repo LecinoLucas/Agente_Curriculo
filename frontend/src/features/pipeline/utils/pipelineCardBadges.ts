@@ -64,8 +64,15 @@ type DerivePipelineCardBadgesOptions = {
 
 const INTERVIEW_STAGES = new Set<PipelineStage>(["hr_interview", "technical_interview"]);
 const DECISION_STAGES = new Set<PipelineStage>(["final", "offer"]);
+const ADMISSION_STAGES = new Set<PipelineStage>(["hired", "pre_admission", "protheus"]);
 const DEFAULT_MAX_BADGES = 3;
 const AGING_THRESHOLD_DAYS = 3;
+
+const ADMISSION_STAGE_BADGE: Partial<Record<PipelineStage, Pick<PipelineCardBadge, "label" | "tone">>> = {
+  hired: { label: "Iniciar admissão", tone: "warning" },
+  pre_admission: { label: "Pré-admissão pendente", tone: "warning" },
+  protheus: { label: "ERP pendente", tone: "warning" },
+};
 
 function normalizeStatus(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : null;
@@ -318,6 +325,16 @@ export function derivePipelineCardBadges(
       reason: "Tempo desde a última atualização registrada na etapa.",
       icon: "aging",
     });
+  }
+
+  if (stage && ADMISSION_STAGES.has(stage)) {
+    const admissionBadge = ADMISSION_STAGE_BADGE[stage];
+    if (admissionBadge) {
+      badges.push({
+        ...admissionBadge,
+        priority: 78,
+      });
+    }
   }
 
   return sortAndLimitBadges(badges, maxBadges);

@@ -231,6 +231,7 @@ export function AppShell() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdownLabel, setOpenDropdownLabel] = useState<string | null>(null);
+  const isPipelineRoute = location.pathname.startsWith("/pipeline");
 
   useEffect(() => {
     setMobileMenuOpen(false);

@@ -62,8 +62,8 @@ describe("pipelineKanbanColumns", () => {
     expect(grouped.map((column) => column.macroId)).toEqual([
       "entrada",
       "analise",
-      "avaliacao",
       "entrevista",
+      "avaliacao",
       "decisao",
       "admissao",
       "finalizado",

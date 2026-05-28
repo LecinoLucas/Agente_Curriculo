@@ -13,6 +13,23 @@ const routerFuture = {
   v7_relativeSplatPath: true,
 } as const;
 
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getExpectedDefaultPipelineDateRange() {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 7);
+  return {
+    entered_from: formatDateInputValue(from),
+    entered_to: formatDateInputValue(to),
+  };
+}
+
 // Mock the usePipeline hook
 vi.mock("../../features/pipeline/PipelineContext", () => ({
   usePipeline: vi.fn(),
@@ -266,6 +283,8 @@ describe("PipelinePage", () => {
   });
 
   it("3.1. Renderiza filtros seguros por data do vínculo", async () => {
+    const defaultRange = getExpectedDefaultPipelineDateRange();
+
     render(
       <MemoryRouter future={routerFuture} initialEntries={["/pipeline/job-1"]}>
         <Routes>
@@ -275,11 +294,16 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Entrada no processo")).toBeInTheDocument();
+      expect(screen.getByText("Período")).toBeInTheDocument();
       expect(screen.getByText("Última atividade")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeInTheDocument();
     });
 
+    await waitFor(() => {
+      expect(mockSetBoardFilters).toHaveBeenCalledWith(defaultRange);
+    });
+    expect(screen.getByLabelText("Entrada no processo de")).toHaveValue(defaultRange.entered_from);
+    expect(screen.getByLabelText("Entrada no processo até")).toHaveValue(defaultRange.entered_to);
     expect(screen.queryByText(/entrou na etapa/i)).not.toBeInTheDocument();
   });
 
@@ -369,7 +393,7 @@ describe("PipelinePage", () => {
     await waitFor(() => {
       expect(screen.getByText("Total de Candidatos")).toBeInTheDocument();
       expect(screen.getByText("Em andamento")).toBeInTheDocument();
-      expect(screen.getByText("Entrevistas")).toBeInTheDocument();
+      expect(screen.getAllByText("Entrevistas").length).toBeGreaterThan(0);
       expect(screen.getByText("Contratações")).toBeInTheDocument();
     });
 
@@ -411,7 +435,7 @@ describe("PipelinePage", () => {
       expect(screen.getByText("Aline Santos")).toBeInTheDocument();
       expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
     });
-    expect(screen.getByText("Currículo recebido")).toBeInTheDocument();
+    expect(screen.getByTitle("Status real: Entrada")).toBeInTheDocument();
     expect(screen.getByText("Entrevista RH")).toBeInTheDocument();
   });
 
@@ -483,8 +507,8 @@ describe("PipelinePage", () => {
     );
 
     await waitFor(() => {
-      // screening column is empty and should display "Vazio"
-      const emptyStates = screen.getAllByText("Vazio");
+      // screening column is empty and should display "Arraste candidatos para esta etapa"
+      const emptyStates = screen.getAllByText("Arraste candidatos para esta etapa");
       expect(emptyStates.length).toBeGreaterThan(0);
     });
   });
