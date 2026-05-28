@@ -263,6 +263,7 @@ async def list_candidate_summaries(
     link_status_filter: str | None = Query(default=None),
     skill: str | None = Query(default=None),
     seniority: str | None = Query(default=None),
+    include_admitted: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[CandidateListSummaryResponse]:
     items, total = await _candidate_service(db).list_summaries(
@@ -281,6 +282,7 @@ async def list_candidate_summaries(
         link_status_filter,
         skill,
         seniority,
+        include_admitted,
     )
     return PaginatedResponse[CandidateListSummaryResponse](
         data=items,

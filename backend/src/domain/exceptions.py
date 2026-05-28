@@ -25,6 +25,30 @@ class ValidationException(DomainException):
     """Dados de entrada inválidos segundo regras de domínio."""
 
 
+class InvalidPreAdmissionStatusTransition(ValidationException):
+    """Transição de status inválida na pré-admissão."""
+
+    def __init__(
+        self,
+        *,
+        entity: str,
+        from_status: str,
+        to_status: str,
+        allowed_statuses: list[str] | tuple[str, ...] | None = None,
+    ) -> None:
+        allowed_clause = ""
+        if allowed_statuses:
+            allowed_clause = " Permitidos: " + ", ".join(allowed_statuses) + "."
+        super().__init__(
+            f"Transição de status inválida para {entity}: '{from_status}' -> '{to_status}'."
+            f"{allowed_clause}"
+        )
+        self.entity = entity
+        self.from_status = from_status
+        self.to_status = to_status
+        self.allowed_statuses = list(allowed_statuses or [])
+
+
 class AccountLockedException(DomainException):
     """Conta bloqueada por excesso de tentativas de login."""
 

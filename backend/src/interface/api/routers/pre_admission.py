@@ -5,7 +5,7 @@ import unicodedata
 from uuid import UUID
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,10 +13,14 @@ from src.application.services.admission_case_workspace_service import (
     AdmissionCaseWorkspaceService,
     AdmissionReadinessError,
 )
+from src.application.services.pre_admission_checklist_template_service import (
+    PreAdmissionChecklistTemplateService,
+)
 from src.application.services.pre_admission_service import (
     MAX_PRE_ADMISSION_DOCUMENT_BYTES,
     PreAdmissionService,
 )
+from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.database.models.pre_admission_model import PreAdmissionChecklistItemModel
 from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import (
     SQLAlchemyPreAdmissionRepository,
@@ -30,9 +34,20 @@ from src.interface.api.dependencies import (
 )
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.pre_admission_schemas import (
+    AdmissionCaseDocumentsResponse,
+    AdmissionCaseEventsPageResponse,
+    AdmissionCaseOverviewResponse,
     AdmissionCaseWorkspaceResponse,
+    CandidatePortalPreAdmissionDocumentUploadResponse,
     CandidatePortalPreAdmissionEnvelopeResponse,
     PreAdmissionCaseResponse,
+    PreAdmissionChecklistTemplateCreateRequest,
+    PreAdmissionChecklistTemplateDetailResponse,
+    PreAdmissionChecklistTemplateItemCreateRequest,
+    PreAdmissionChecklistTemplateItemResponse,
+    PreAdmissionChecklistTemplateResponse,
+    PreAdmissionChecklistTemplateUpdateRequest,
+    PreAdmissionChecklistTemplateItemUpdateRequest,
     PreAdmissionChecklistItemCreateRequest,
     PreAdmissionChecklistItemResponse,
     PreAdmissionChecklistItemUpdateRequest,
@@ -67,6 +82,10 @@ def _workspace_service(db: AsyncSession) -> AdmissionCaseWorkspaceService:
     return AdmissionCaseWorkspaceService(SQLAlchemyPreAdmissionRepository(db))
 
 
+def _template_service(db: AsyncSession) -> PreAdmissionChecklistTemplateService:
+    return PreAdmissionChecklistTemplateService(SQLAlchemyPreAdmissionRepository(db))
+
+
 @router.get(
     "/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
     response_model=PreAdmissionEnvelopeResponse,
@@ -81,6 +100,197 @@ async def get_pre_admission(
 
 
 @router.get(
+    "/admin/pre-admission/checklists",
+    response_model=list[PreAdmissionChecklistTemplateResponse],
+)
+async def list_pre_admission_checklists(
+    _current_user: PreAdmissionReadStaff,
+    db: AsyncSession = Depends(get_db),
+) -> list[PreAdmissionChecklistTemplateResponse]:
+    return await _template_service(db).list_templates()
+
+
+@router.get(
+    "/admin/pre-admission/checklists/{template_id}",
+    response_model=PreAdmissionChecklistTemplateDetailResponse,
+)
+async def get_pre_admission_checklist(
+    template_id: UUID,
+    _current_user: PreAdmissionReadStaff,
+    db: AsyncSession = Depends(get_db),
+) -> PreAdmissionChecklistTemplateDetailResponse:
+    try:
+        return await _template_service(db).get_template(template_id)
+    except NotFoundException as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+
+
+@router.post(
+    "/admin/pre-admission/checklists",
+    response_model=PreAdmissionChecklistTemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_pre_admission_checklist(
+    body: PreAdmissionChecklistTemplateCreateRequest,
+    _current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> PreAdmissionChecklistTemplateResponse:
+    try:
+        result = await _template_service(db).create_template(body=body)
+        await db.commit()
+        return result
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.patch(
+    "/admin/pre-admission/checklists/{template_id}",
+    response_model=PreAdmissionChecklistTemplateResponse,
+)
+async def update_pre_admission_checklist(
+    template_id: UUID,
+    body: PreAdmissionChecklistTemplateUpdateRequest,
+    _current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> PreAdmissionChecklistTemplateResponse:
+    try:
+        result = await _template_service(db).update_template(template_id=template_id, body=body)
+        await db.commit()
+        return result
+    except NotFoundException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admin/pre-admission/checklists/{template_id}/archive",
+    response_model=PreAdmissionChecklistTemplateResponse,
+)
+async def archive_pre_admission_checklist(
+    template_id: UUID,
+    _current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> PreAdmissionChecklistTemplateResponse:
+    try:
+        result = await _template_service(db).archive_template(template_id=template_id)
+        await db.commit()
+        return result
+    except NotFoundException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admin/pre-admission/checklists/{template_id}/duplicate",
+    response_model=PreAdmissionChecklistTemplateDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def duplicate_pre_admission_checklist(
+    template_id: UUID,
+    _current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> PreAdmissionChecklistTemplateDetailResponse:
+    try:
+        result = await _template_service(db).duplicate_template(template_id=template_id)
+        await db.commit()
+        return result
+    except NotFoundException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admin/pre-admission/checklists/{template_id}/items",
+    response_model=PreAdmissionChecklistTemplateItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_pre_admission_checklist_template_item(
+    template_id: UUID,
+    body: PreAdmissionChecklistTemplateItemCreateRequest,
+    _current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> PreAdmissionChecklistTemplateItemResponse:
+    try:
+        result = await _template_service(db).create_item(template_id=template_id, body=body)
+        await db.commit()
+        return result
+    except NotFoundException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.patch(
+    "/admin/pre-admission/checklists/{template_id}/items/{item_id}",
+    response_model=PreAdmissionChecklistTemplateItemResponse,
+)
+async def update_pre_admission_checklist_template_item(
+    template_id: UUID,
+    item_id: UUID,
+    body: PreAdmissionChecklistTemplateItemUpdateRequest,
+    _current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> PreAdmissionChecklistTemplateItemResponse:
+    try:
+        result = await _template_service(db).update_item(template_id=template_id, item_id=item_id, body=body)
+        await db.commit()
+        return result
+    except NotFoundException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except ValidationException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.delete(
+    "/admin/pre-admission/checklists/{template_id}/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
+async def delete_pre_admission_checklist_template_item(
+    template_id: UUID,
+    item_id: UUID,
+    _current_user: PreAdmissionWriteStaff,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await _template_service(db).remove_item(template_id=template_id, item_id=item_id)
+        await db.commit()
+    except NotFoundException as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.message) from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.get(
     "/admission/cases/{case_id}/workspace",
     response_model=AdmissionCaseWorkspaceResponse,
 )
@@ -90,6 +300,48 @@ async def get_admission_case_workspace(
     db: AsyncSession = Depends(get_db),
 ) -> AdmissionCaseWorkspaceResponse:
     return await _workspace_service(db).get_workspace(case_id=case_id)
+
+
+@router.get(
+    "/pre-admission/cases/{case_id}/overview",
+    response_model=AdmissionCaseOverviewResponse,
+)
+async def get_admission_case_overview(
+    case_id: UUID,
+    _current_user: PreAdmissionReadStaff,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseOverviewResponse:
+    return await _workspace_service(db).get_overview(case_id=case_id)
+
+
+@router.get(
+    "/pre-admission/cases/{case_id}/documents",
+    response_model=AdmissionCaseDocumentsResponse,
+)
+async def get_admission_case_documents(
+    case_id: UUID,
+    _current_user: PreAdmissionReadStaff,
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseDocumentsResponse:
+    return await _workspace_service(db).get_documents(case_id=case_id)
+
+
+@router.get(
+    "/pre-admission/cases/{case_id}/events",
+    response_model=AdmissionCaseEventsPageResponse,
+)
+async def get_admission_case_events_page(
+    case_id: UUID,
+    _current_user: PreAdmissionReadStaff,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionCaseEventsPageResponse:
+    return await _workspace_service(db).get_events(
+        case_id=case_id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post(
@@ -444,7 +696,7 @@ async def get_candidate_portal_pre_admission_case(
 
 @router.post(
     "/candidate-portal/pre-admission/{case_id}/checklist-items/{item_id}/documents",
-    response_model=PreAdmissionDocumentResponse,
+    response_model=CandidatePortalPreAdmissionDocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_candidate_portal_pre_admission_document(
@@ -453,7 +705,7 @@ async def upload_candidate_portal_pre_admission_document(
     candidate_session: CurrentCompleteCandidateSession,
     document_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-) -> PreAdmissionDocumentResponse:
+) -> CandidatePortalPreAdmissionDocumentUploadResponse:
     try:
         content = await document_file.read(MAX_PRE_ADMISSION_DOCUMENT_BYTES + 1)
         result = await _service(db).candidate_upload_document(

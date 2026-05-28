@@ -495,14 +495,14 @@ startxref
     assert "job" in exported_data
     assert "pre_admission" in exported_data
 
-    # Após export, status deve ser "exported"
+    # Download técnico não deve alterar o estado do pacote
     resp = await client.get(
         f"/api/v1/pre-admission/{case_id}/admission-package",
         headers=admin_headers,
     )
     assert resp.status_code == 200
     package_after_export = resp.json()
-    assert package_after_export["status"] == "exported"
+    assert package_after_export["status"] == "approved_for_export"
 
     # ========== PASSO 21: Exportar CSV (re-download) ==========
     resp = await client.get(
@@ -518,13 +518,13 @@ startxref
     csv_text = resp.text
     assert "Campo" in csv_text or "candidate" in csv_text.lower()
 
-    # Status deve manter "exported" após re-download
+    # Status deve permanecer estável após re-download
     resp = await client.get(
         f"/api/v1/pre-admission/{case_id}/admission-package",
         headers=admin_headers,
     )
     final_package = resp.json()
-    assert final_package["status"] == "exported"
+    assert final_package["status"] == "approved_for_export"
 
     # ========== VALIDAÇÕES FINAIS ==========
 

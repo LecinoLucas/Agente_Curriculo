@@ -316,6 +316,13 @@ class PipelineGateEvaluator:
             candidate_id=candidate_id,
             job_id=job_id,
         )
+        base_action_payload: dict[str, object] = {
+            "candidate_id": str(candidate_id),
+            "job_id": str(job_id),
+        }
+        case_id = snapshot.get("case_id")
+        if case_id is not None:
+            base_action_payload["case_id"] = str(case_id)
 
         if not bool(snapshot.get("has_case")):
             result.missing_gates.append(
@@ -324,6 +331,7 @@ class PipelineGateEvaluator:
                     label="Pré-admissão obrigatória",
                     description="Crie o caso de pré-admissão antes de avançar para Protheus.",
                     action="open_pre_admission",
+                    action_payload={**base_action_payload},
                 )
             )
             return
@@ -335,6 +343,7 @@ class PipelineGateEvaluator:
                     label="Checklist documental obrigatório",
                     description="Cadastre ao menos um item no checklist da pré-admissão antes de seguir para Protheus.",
                     action="open_pre_admission",
+                    action_payload={**base_action_payload},
                 )
             )
 
@@ -353,7 +362,10 @@ class PipelineGateEvaluator:
                     label="Pendências documentais na pré-admissão",
                     description=description,
                     action="open_pre_admission",
-                    action_payload={"unresolved_required_count": unresolved_required_count},
+                    action_payload={
+                        **base_action_payload,
+                        "unresolved_required_count": unresolved_required_count,
+                    },
                 )
             )
 
@@ -364,6 +376,7 @@ class PipelineGateEvaluator:
                     label="Pré-admissão ainda não liberada",
                     description="Conclua a revisão documental e marque a pré-admissão como pronta antes de enviar para Protheus.",
                     action="open_pre_admission",
+                    action_payload={**base_action_payload},
                 )
             )
 

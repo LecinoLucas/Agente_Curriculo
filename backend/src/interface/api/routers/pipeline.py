@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +51,7 @@ from src.interface.api.schemas.pipeline_schemas import (
     MoveCandidateRequest,
     MoveCandidateResponse,
     PipelineAnalysisDecisionResponse,
+    PipelineBoardFilters,
     PipelineBoardResponse,
     PipelineJobSummaryResponse,
     ReconsiderCandidateRequest,
@@ -204,10 +206,22 @@ async def list_pipeline_jobs(
 async def get_pipeline_board(
     job_id: UUID,
     current_user: RecruiterOrAdmin,
+    entered_from: datetime | None = Query(default=None),
+    entered_to: datetime | None = Query(default=None),
+    updated_from: datetime | None = Query(default=None),
+    updated_to: datetime | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PipelineBoardResponse:
     try:
-        return await _service(db).get_board(job_id)
+        return await _service(db).get_board(
+            job_id,
+            PipelineBoardFilters(
+                entered_from=entered_from,
+                entered_to=entered_to,
+                updated_from=updated_from,
+                updated_to=updated_to,
+            ),
+        )
     except Exception as exc:
         _handle(exc)
         raise

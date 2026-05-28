@@ -244,6 +244,37 @@ async def test_manager_sees_directed_review_request(client: AsyncClient, db_sess
 
 
 @pytest.mark.asyncio
+async def test_directed_manager_can_view_collaboration_without_existing_scorecard(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_h, admin_id = await _make_headers(client, db_session, UserRole.ADMIN, "owner")
+    rec_h, _ = await _make_headers(client, db_session, UserRole.RECRUITER, "recruiter")
+    mgr_h, mgr_id = await _make_headers(client, db_session, UserRole.MANAGER, "target")
+    job_id, candidate_id = await _seed_job_candidate(db_session, admin_id)
+
+    await _post_review_request(
+        client,
+        rec_h,
+        job_id,
+        candidate_id,
+        message="Revise sem scorecard prévio.",
+        target_manager_id=mgr_id,
+        priority="high",
+    )
+
+    resp = await client.get(
+        f"/api/v1/manager/jobs/{job_id}/candidates/{candidate_id}/collaboration",
+        headers=mgr_h,
+    )
+
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    comments = resp.json()["comments"]
+    assert len(comments) == 1
+    assert comments[0]["comment_type"] == "review_request"
+    assert comments[0]["target_manager_id"] == str(mgr_id)
+
+
+@pytest.mark.asyncio
 async def test_manager_does_not_see_other_manager_directed_request(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -311,6 +342,38 @@ async def test_manager_submits_feedback(client: AsyncClient, db_session: AsyncSe
     comment = await _post_manager_feedback(
         client, mgr_h, job_id, candidate_id,
         message="Candidato alinhado com a cultura da equipe.",
+        recommendation="advance",
+    )
+
+    assert comment["comment_type"] == "manager_feedback"
+    assert comment["author_role"] == "manager"
+    assert comment["recommendation"] == "advance"
+
+
+@pytest.mark.asyncio
+async def test_directed_manager_submits_feedback_without_existing_scorecard(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin_h, admin_id = await _make_headers(client, db_session, UserRole.ADMIN, "owner")
+    rec_h, _ = await _make_headers(client, db_session, UserRole.RECRUITER, "recruiter")
+    mgr_h, mgr_id = await _make_headers(client, db_session, UserRole.MANAGER, "target")
+    job_id, candidate_id = await _seed_job_candidate(db_session, admin_id)
+
+    await _post_review_request(
+        client,
+        rec_h,
+        job_id,
+        candidate_id,
+        message="Pode responder sem scorecard prévio.",
+        target_manager_id=mgr_id,
+    )
+
+    comment = await _post_manager_feedback(
+        client,
+        mgr_h,
+        job_id,
+        candidate_id,
+        message="Feedback coerente sem scorecard anterior.",
         recommendation="advance",
     )
 

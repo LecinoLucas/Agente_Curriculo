@@ -29,7 +29,9 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import (
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.interview_schedule_model import InterviewScheduleModel
+from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.user_model import UserModel
 from src.interface.workers.resume_extraction_tasks import _process_resume_extraction_async
@@ -1230,7 +1232,7 @@ async def test_portal_overview_returns_talent_pool_when_candidate_has_no_active_
     [
         ("hired", "Contratado"),
         ("pre_admission", "Pré-admissão"),
-        ("protheus", "Protheus"),
+        ("protheus", "Pré-admissão"),
     ],
 )
 async def test_portal_overview_keeps_post_hiring_stages_active(
@@ -1329,12 +1331,159 @@ async def test_portal_overview_shows_admitted_as_closed_success_not_talent_pool(
     assert payload["status_public"] == "Admitido"
     assert payload["current_process_status_label"] == "Admitido"
     assert payload["is_process_closed"] is True
-    assert payload["closed_reason_public_label"] == "Admissão concluída."
+    assert payload["closed_reason_public_label"] == "Seu processo foi concluído com sucesso."
+    assert payload["can_apply_to_other_jobs"] is False
     assert payload["talent_pool"] is False
     assert payload["application_history"][0]["job_id"] == str(job.id)
     assert payload["application_history"][0]["status"] == "admitted"
     assert payload["public_timeline"]["current_step_key"] == "result"
     assert payload["public_timeline"]["steps"][-1]["label"] == "Admitido"
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_uses_admitted_pre_admission_case_as_success_state(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Candidata Caso Admitido",
+        email=f"portal-case-admitted-{uuid4().hex[:6]}@example.com",
+        cpf=f"{uuid4().int % 10**11:011d}",
+    )
+    job = await _create_published_job(db_session, title="Vaga Caso Admitido")
+    now = datetime.now(UTC)
+    resume_version_id = await db_session.scalar(
+        sa.select(ResumeVersionModel.id)
+        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+        .where(ResumeModel.candidate_id == candidate.id)
+    )
+    decision = CandidateJobHiringDecisionModel(
+        candidate_id=candidate.id,
+        job_id=job.id,
+        decision_status="submitted",
+        decision_outcome="hire",
+        reason_code="strong_fit",
+        submitted_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(decision)
+    await db_session.flush()
+    db_session.add_all([
+        CandidateJobPipelineModel(
+            candidate_id=candidate.id,
+            job_id=job.id,
+            resume_version_id=resume_version_id,
+            link_status="hired",
+            pipeline_stage="protheus",
+            pipeline_status="active",
+            relationship_status="active",
+            is_terminal=False,
+            entered_at=now,
+            updated_at=now,
+        ),
+        PreAdmissionCaseModel(
+            candidate_id=candidate.id,
+            job_id=job.id,
+            hiring_decision_id=decision.id,
+            status="admitted",
+            created_at=now,
+            updated_at=now,
+            closed_at=now,
+        ),
+    ])
+    await db_session.commit()
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-case-admitted")
+    client.cookies.set("candidate_portal_token", "portal-token-case-admitted")
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+
+    assert payload["application_status"] == "admitted"
+    assert payload["current_process_status_label"] == "Admitido"
+    assert payload["is_process_closed"] is True
+    assert payload["can_apply_to_other_jobs"] is False
+    assert payload["talent_pool"] is False
+    assert payload["pre_admission"]["pre_admission_status"] == "admitted"
+
+
+@pytest.mark.asyncio
+async def test_portal_overview_uses_dismissed_pre_admission_case_without_talent_pool(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    candidate = await _create_candidate(
+        db_session,
+        full_name="Candidata Desligada",
+        email=f"portal-case-dismissed-{uuid4().hex[:6]}@example.com",
+        cpf=f"{uuid4().int % 10**11:011d}",
+    )
+    job = await _create_published_job(db_session, title="Vaga Caso Desligado")
+    now = datetime.now(UTC)
+    resume_version_id = await db_session.scalar(
+        sa.select(ResumeVersionModel.id)
+        .join(ResumeModel, ResumeModel.id == ResumeVersionModel.resume_id)
+        .where(ResumeModel.candidate_id == candidate.id)
+    )
+    decision = CandidateJobHiringDecisionModel(
+        candidate_id=candidate.id,
+        job_id=job.id,
+        decision_status="submitted",
+        decision_outcome="hire",
+        reason_code="strong_fit",
+        submitted_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(decision)
+    await db_session.flush()
+    db_session.add_all([
+        CandidateJobPipelineModel(
+            candidate_id=candidate.id,
+            job_id=job.id,
+            resume_version_id=resume_version_id,
+            link_status="hired",
+            pipeline_stage="admitted",
+            pipeline_status="terminal",
+            relationship_status="hired",
+            is_terminal=True,
+            terminated_at=now,
+            entered_at=now,
+            updated_at=now,
+        ),
+        PreAdmissionCaseModel(
+            candidate_id=candidate.id,
+            job_id=job.id,
+            hiring_decision_id=decision.id,
+            status="dismissed",
+            created_at=now,
+            updated_at=now,
+            closed_at=now - timedelta(days=10),
+            dismissed_at=now,
+            dismissal_reason="Motivo interno sigiloso",
+        ),
+    ])
+    await db_session.commit()
+
+    await _create_portal_session(db_session, candidate.id, "portal-token-case-dismissed")
+    client.cookies.set("candidate_portal_token", "portal-token-case-dismissed")
+
+    response = await client.get("/api/v1/public/candidate-portal/overview")
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+
+    assert payload["application_status"] == "dismissed"
+    assert payload["current_process_status_label"] == "Processo admissional encerrado"
+    assert payload["is_process_closed"] is True
+    assert payload["closed_reason_public_label"] == "Seu vínculo admissional foi encerrado pela equipe de RH."
+    assert payload["can_apply_to_other_jobs"] is False
+    assert payload["can_request_contact"] is True
+    assert payload["talent_pool"] is False
+    assert payload["pre_admission"]["pre_admission_status"] == "dismissed"
+    assert "Motivo interno sigiloso" not in str(payload)
 
 
 @pytest.mark.asyncio

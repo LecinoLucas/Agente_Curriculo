@@ -251,6 +251,7 @@ class CandidateService:
         link_status_filter: str | None = None,
         skill: str | None = None,
         seniority: str | None = None,
+        include_admitted: bool = False,
     ) -> tuple[list[CandidateListSummaryResponse], int]:
         rows, total = await self._repository.list_summaries(
             page,
@@ -268,6 +269,7 @@ class CandidateService:
             link_status_filter=link_status_filter,
             skill=skill,
             seniority=seniority,
+            include_admitted=include_admitted,
         )
         items = [
             CandidateListSummaryResponse(

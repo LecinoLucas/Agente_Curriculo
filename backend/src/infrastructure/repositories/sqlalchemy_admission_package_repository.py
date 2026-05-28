@@ -5,6 +5,10 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.pre_admission_state_machine import (
+    ADMISSION_PACKAGE_ENTITY,
+    transition_status,
+)
 from src.infrastructure.database.models import AdmissionExportPackageModel
 
 
@@ -61,7 +65,7 @@ class SQLAlchemyAdmissionPackageRepository:
         if not package:
             raise ValueError(f"Package {package_id} not found")
 
-        package.status = new_status
+        transition_status(package, entity=ADMISSION_PACKAGE_ENTITY, to_status=new_status)
         if approved_by and new_status == "approved_for_export":
             package.approved_by = approved_by
             from datetime import UTC, datetime

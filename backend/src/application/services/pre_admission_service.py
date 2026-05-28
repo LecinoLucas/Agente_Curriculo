@@ -6,9 +6,22 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+from src.application.services.pre_admission_checklist_template_service import (
+    PreAdmissionChecklistTemplateService,
+)
+from src.application.services.pre_admission_state_machine import (
+    PRE_ADMISSION_CASE_ENTITY,
+    PRE_ADMISSION_CHECKLIST_ITEM_ENTITY,
+    PRE_ADMISSION_DOCUMENT_ENTITY,
+    TERMINAL_CASE_STATUSES,
+    derive_case_status_from_checklist,
+    transition_payload,
+    transition_status,
+)
 from src.application.services.upload_validation_service import (
     MIME_EXTENSIONS,
     UploadValidationError,
+    UploadValidationPolicy,
     ValidatedUpload,
     document_upload_policy,
     sanitize_upload_filename,
@@ -20,6 +33,8 @@ from src.infrastructure.database.models.candidate_job_pipeline_model import Cand
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistItemModel,
+    PreAdmissionChecklistTemplateModel,
+    PreAdmissionChecklistTemplateItemModel,
     PreAdmissionDocumentModel,
     PreAdmissionEventModel,
 )
@@ -32,6 +47,7 @@ from src.infrastructure.storage.pre_admission_documents import (
 from src.interface.api.schemas.pre_admission_schemas import (
     CandidatePortalPreAdmissionCaseResponse,
     CandidatePortalPreAdmissionChecklistItemResponse,
+    CandidatePortalPreAdmissionDocumentUploadResponse,
     CandidatePortalPreAdmissionEnvelopeResponse,
     CandidatePortalPreAdmissionSummary,
     CandidatePortalPreAdmissionUploadedDocumentResponse,
@@ -62,6 +78,24 @@ _CANDIDATE_ITEM_DESCRIPTIONS: dict[str, str] = {
     "other": "Documento solicitado pelo RH para a admissão.",
 }
 
+_CANDIDATE_DOCUMENT_STATUS_LABELS: dict[str, str] = {
+    "pending": "Pendente",
+    "submitted": "Enviado",
+    "in_review": "Documentos em análise",
+    "approved": "Documentos aprovados",
+    "rejected": "Correções solicitadas",
+    "waived": "Dispensado",
+}
+
+_CANDIDATE_PROCESS_STATUS_LABELS: dict[str, str] = {
+    "waiting_documents": "Aguardando documentos",
+    "in_review": "Documentos em análise",
+    "corrections_requested": "Correções solicitadas",
+    "documents_approved": "Documentos aprovados",
+    "completed": "Pré-admissão concluída",
+    "closed": "Pré-admissão encerrada",
+}
+
 
 def _candidate_item_description(item_type: str, fallback: str | None = None) -> str | None:
     description = _CANDIDATE_ITEM_DESCRIPTIONS.get(item_type)
@@ -69,12 +103,13 @@ def _candidate_item_description(item_type: str, fallback: str | None = None) -> 
         return description
     return fallback
 
-
-TERMINAL_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
-DOCUMENT_UPLOAD_BLOCKED_CASE_STATUSES = {"admitted", "cancelled", "offer_declined"}
+DOCUMENT_UPLOAD_BLOCKED_CASE_STATUSES = {"admitted", "dismissed", "cancelled", "offer_declined"}
 CANDIDATE_DOWNLOAD_BLOCKED_CASE_STATUSES = {"cancelled", "offer_declined"}
 MAX_PRE_ADMISSION_DOCUMENT_BYTES = settings.max_upload_size_bytes
 PRE_ADMISSION_CREATE_ALLOWED_PIPELINE_STAGES = {"hired", "pre_admission", "protheus"}
+DEFAULT_PRE_ADMISSION_ACCEPTED_FILE_TYPES = sorted(document_upload_policy().allowed_mime_types)
+DEFAULT_PRE_ADMISSION_MAX_FILE_SIZE_MB = max(1, MAX_PRE_ADMISSION_DOCUMENT_BYTES // (1024 * 1024))
+KNOWN_PRE_ADMISSION_DOCUMENT_KEYS = set(_CANDIDATE_ITEM_DESCRIPTIONS.keys())
 
 
 class PreAdmissionService:
@@ -128,11 +163,16 @@ class PreAdmissionService:
         if active_case is not None:
             return self._case_response(active_case)
 
+        template = await PreAdmissionChecklistTemplateService(self._repository).resolve_template_for_case(
+            template_id=body.checklist_template_id
+        )
         now = datetime.now(UTC)
         case = PreAdmissionCaseModel(
             candidate_id=candidate_id,
             job_id=job_id,
             hiring_decision_id=decision.id,
+            checklist_template_id=template.id,
+            checklist_template_name=template.name,
             status="draft",
             salary_offer=body.salary_offer,
             start_date=body.start_date,
@@ -143,12 +183,16 @@ class PreAdmissionService:
             updated_at=now,
         )
         await self._repository.add_case(case)
+        await self._create_case_checklist_snapshot(case=case, template=template, created_at=now)
         await self._event(
             case_id=case.id,
             event_type="case_created",
             actor_id=actor_id,
             payload={
                 "hiring_decision_id": str(decision.id),
+                "checklist_template_id": str(template.id),
+                "checklist_template_name": template.name,
+                "checklist_items_count": len(case.checklist_items),
                 "status": case.status,
                 "salary_offer": self._json_value(case.salary_offer),
                 "start_date": self._json_value(case.start_date),
@@ -165,6 +209,8 @@ class PreAdmissionService:
         body: PreAdmissionUpdateRequest,
     ) -> PreAdmissionCaseResponse:
         case = await self._required_case(case_id)
+        if self._case_has_mutation_request(case=case, body=body):
+            raise ValidationException("Caso de pré-admissão encerrado não pode ser alterado.")
         before_status = case.status
         changes: dict[str, dict[str, object | None]] = {}
 
@@ -174,6 +220,20 @@ class PreAdmissionService:
             next_value = getattr(body, field)
             current_value = getattr(case, field)
             if current_value != next_value:
+                if field == "status":
+                    if next_value == "dismissed":
+                        raise ValidationException(
+                            "Use a ação específica de desligamento para encerrar um admitido."
+                        )
+                    old_status, new_status = transition_status(
+                        case,
+                        entity=PRE_ADMISSION_CASE_ENTITY,
+                        to_status=next_value,
+                    )
+                    changes[field] = {
+                        **transition_payload(old_status=old_status, new_status=new_status),
+                    }
+                    continue
                 changes[field] = {"from": self._json_value(current_value), "to": self._json_value(next_value)}
                 setattr(case, field, next_value)
 
@@ -182,7 +242,11 @@ class PreAdmissionService:
 
         now = datetime.now(UTC)
         case.updated_at = now
-        if "status" in changes and case.status in TERMINAL_CASE_STATUSES:
+        if "status" in changes and case.status == "dismissed":
+            case.dismissed_at = now
+            if case.closed_at is None:
+                case.closed_at = now
+        elif "status" in changes and case.status in TERMINAL_CASE_STATUSES:
             case.closed_at = now
         elif "status" in changes and before_status in TERMINAL_CASE_STATUSES and case.status not in TERMINAL_CASE_STATUSES:
             case.closed_at = None
@@ -193,7 +257,7 @@ class PreAdmissionService:
                 case_id=case.id,
                 event_type="status_changed",
                 actor_id=actor_id,
-                payload=changes["status"],
+                payload={**changes["status"]},
             )
         await self._event(case_id=case.id, event_type="case_updated", actor_id=actor_id, payload={"changes": changes})
         return self._case_response(case)
@@ -205,15 +269,21 @@ class PreAdmissionService:
         actor_id: UUID | None,
         body: PreAdmissionChecklistItemCreateRequest,
     ) -> PreAdmissionChecklistItemResponse:
-        await self._required_case(case_id)
+        case = await self._required_case(case_id)
         now = datetime.now(UTC)
+        document_key = body.document_key or body.item_type
         item = PreAdmissionChecklistItemModel(
             case_id=case_id,
-            item_type=body.item_type,
+            document_key=document_key,
+            item_type=self._case_item_type_from_document_key(body.item_type or document_key),
             title=body.title,
             status=body.status,
             required=body.required,
             notes=body.notes,
+            candidate_description=body.candidate_description,
+            accepted_file_types=self._clean_accepted_file_types(body.accepted_file_types),
+            max_file_size_mb=self._clean_max_file_size_mb(body.max_file_size_mb),
+            display_order=body.display_order if body.display_order is not None else self._next_case_item_display_order(case),
             created_at=now,
             updated_at=now,
         )
@@ -224,6 +294,7 @@ class PreAdmissionService:
             actor_id=actor_id,
             payload={
                 "item_id": str(item.id),
+                "document_key": item.document_key,
                 "item_type": item.item_type,
                 "title": item.title,
                 "status": item.status,
@@ -240,26 +311,90 @@ class PreAdmissionService:
         actor_id: UUID | None,
         body: PreAdmissionChecklistItemUpdateRequest,
     ) -> PreAdmissionChecklistItemResponse:
-        await self._required_case(case_id)
+        case = await self._required_case(case_id)
         item = await self._repository.get_checklist_item(case_id=case_id, item_id=item_id)
         if item is None:
             raise NotFoundException("Item de checklist não encontrado.")
 
         changes: dict[str, dict[str, object | None]] = {}
-        for field in ("item_type", "title", "status", "required", "notes"):
+        original_item_type = item.item_type
+        for field in ("title", "status", "required", "notes", "candidate_description", "display_order"):
             if field not in body.model_fields_set:
                 continue
             next_value = getattr(body, field)
             current_value = getattr(item, field)
             if current_value != next_value:
+                if field == "status":
+                    old_status, new_status = transition_status(
+                        item,
+                        entity=PRE_ADMISSION_CHECKLIST_ITEM_ENTITY,
+                        to_status=next_value,
+                    )
+                    changes[field] = {
+                        **transition_payload(old_status=old_status, new_status=new_status),
+                    }
+                    continue
                 changes[field] = {"from": self._json_value(current_value), "to": self._json_value(next_value)}
                 setattr(item, field, next_value)
+
+        if "item_type" in body.model_fields_set and body.item_type is not None:
+            next_item_type = self._case_item_type_from_document_key(body.item_type)
+            if item.item_type != next_item_type:
+                changes["item_type"] = {
+                    "from": self._json_value(item.item_type),
+                    "to": self._json_value(next_item_type),
+                }
+                item.item_type = next_item_type
+
+        if "document_key" in body.model_fields_set:
+            next_document_key = body.document_key
+            if next_document_key is not None and item.document_key != next_document_key:
+                changes["document_key"] = {
+                    "from": self._json_value(item.document_key),
+                    "to": self._json_value(next_document_key),
+                }
+                item.document_key = next_document_key
+                if "item_type" not in body.model_fields_set:
+                    item.item_type = self._case_item_type_from_document_key(next_document_key)
+                    changes["item_type"] = {
+                        "from": self._json_value(original_item_type),
+                        "to": self._json_value(item.item_type),
+                    }
+        elif "item_type" in body.model_fields_set and body.item_type is not None and item.document_key != body.item_type:
+            changes["document_key"] = {
+                "from": self._json_value(item.document_key),
+                "to": self._json_value(body.item_type),
+            }
+            item.document_key = body.item_type
+
+        if "accepted_file_types" in body.model_fields_set:
+            next_types = self._clean_accepted_file_types(body.accepted_file_types)
+            if item.accepted_file_types != next_types:
+                changes["accepted_file_types"] = {
+                    "from": self._json_value(item.accepted_file_types),
+                    "to": self._json_value(next_types),
+                }
+                item.accepted_file_types = next_types
+
+        if "max_file_size_mb" in body.model_fields_set:
+            next_size = self._clean_max_file_size_mb(body.max_file_size_mb)
+            if item.max_file_size_mb != next_size:
+                changes["max_file_size_mb"] = {
+                    "from": self._json_value(item.max_file_size_mb),
+                    "to": self._json_value(next_size),
+                }
+                item.max_file_size_mb = next_size
 
         if not changes:
             return self._item_response(item)
 
         item.updated_at = datetime.now(UTC)
         await self._repository.flush()
+        await self._sync_case_status_after_checklist_change(
+            case=case,
+            actor_id=actor_id,
+            reason="checklist_item_updated",
+        )
         await self._event(
             case_id=case_id,
             event_type="checklist_item_updated",
@@ -320,7 +455,7 @@ class PreAdmissionService:
         file_name: str,
         content_type: str | None,
         content: bytes,
-    ) -> PreAdmissionDocumentResponse:
+    ) -> CandidatePortalPreAdmissionDocumentUploadResponse:
         case = await self._repository.get_candidate_case(candidate_id=candidate_id, case_id=case_id)
         if case is None:
             raise NotFoundException("Pré-admissão não encontrada.")
@@ -335,6 +470,7 @@ class PreAdmissionService:
             file_name=file_name,
             content_type=content_type,
             content=content,
+            policy=self._upload_policy_for_item(item),
         )
         file_name = validated_file.file_name
         content = validated_file.content
@@ -344,7 +480,11 @@ class PreAdmissionService:
 
         now = datetime.now(UTC)
         if previous_document is not None and previous_document.status == "rejected":
-            previous_document.status = "replaced"
+            transition_status(
+                previous_document,
+                entity=PRE_ADMISSION_DOCUMENT_ENTITY,
+                to_status="replaced",
+            )
             previous_document.updated_at = now
 
         document_id = uuid4()
@@ -371,10 +511,15 @@ class PreAdmissionService:
             updated_at=now,
         )
 
-        item.status = "received"
+        transition_status(item, entity=PRE_ADMISSION_CHECKLIST_ITEM_ENTITY, to_status="received")
         item.updated_at = now
         await self._repository.add_document(document)
         await self._repository.flush()
+        await self._sync_case_status_after_checklist_change(
+            case=case,
+            actor_id=None,
+            reason="document_uploaded",
+        )
         write_pre_admission_document(storage_key, content)
         await self._event(
             case_id=case_id,
@@ -389,7 +534,7 @@ class PreAdmissionService:
                 "replaced_document_id": str(previous_document.id) if previous_document else None,
             },
         )
-        return self._document_response(document)
+        return self._candidate_document_upload_response(document)
 
     async def list_documents(self, *, case_id: UUID) -> PreAdmissionDocumentsResponse:
         await self._required_case(case_id)
@@ -403,18 +548,24 @@ class PreAdmissionService:
         actor_id: UUID | None,
     ) -> PreAdmissionDocumentResponse:
         document = await self._required_document(document_id)
+        case = await self._required_case(document.case_id)
         item = await self._repository.get_checklist_item(case_id=document.case_id, item_id=document.checklist_item_id)
         if item is None:
             raise NotFoundException("Item de checklist não encontrado.")
         now = datetime.now(UTC)
-        document.status = "approved"
+        transition_status(document, entity=PRE_ADMISSION_DOCUMENT_ENTITY, to_status="approved")
         document.reviewed_at = now
         document.reviewed_by = actor_id
         document.review_notes = None
         document.updated_at = now
-        item.status = "approved"
+        transition_status(item, entity=PRE_ADMISSION_CHECKLIST_ITEM_ENTITY, to_status="approved")
         item.updated_at = now
         await self._repository.flush()
+        await self._sync_case_status_after_checklist_change(
+            case=case,
+            actor_id=actor_id,
+            reason="document_approved",
+        )
         await self._event(
             case_id=document.case_id,
             event_type="document_approved",
@@ -450,19 +601,25 @@ class PreAdmissionService:
             )
 
         document = await self._required_document(document_id)
+        case = await self._required_case(document.case_id)
         item = await self._repository.get_checklist_item(case_id=document.case_id, item_id=document.checklist_item_id)
         if item is None:
             raise NotFoundException("Item de checklist não encontrado.")
         now = datetime.now(UTC)
-        document.status = "rejected"
+        transition_status(document, entity=PRE_ADMISSION_DOCUMENT_ENTITY, to_status="rejected")
         document.reviewed_at = now
         document.reviewed_by = actor_id
         document.review_notes = internal_notes
         document.rejection_reason_public = public_reason
         document.updated_at = now
-        item.status = "rejected"
+        transition_status(item, entity=PRE_ADMISSION_CHECKLIST_ITEM_ENTITY, to_status="rejected")
         item.updated_at = now
         await self._repository.flush()
+        await self._sync_case_status_after_checklist_change(
+            case=case,
+            actor_id=actor_id,
+            reason="document_rejected",
+        )
         await self._event(
             case_id=document.case_id,
             event_type="document_rejected",
@@ -543,15 +700,148 @@ class PreAdmissionService:
             raise NotFoundException("Caso de pré-admissão não encontrado.")
         return case
 
+    async def _create_case_checklist_snapshot(
+        self,
+        *,
+        case: PreAdmissionCaseModel,
+        template: PreAdmissionChecklistTemplateModel,
+        created_at: datetime,
+    ) -> None:
+        template_items = sorted(
+            [item for item in template.items if item.is_active],
+            key=lambda item: (item.display_order, item.created_at, item.id),
+        )
+        snapshot_items: list[PreAdmissionChecklistItemModel] = []
+        for template_item in template_items:
+            snapshot_items.append(
+                PreAdmissionChecklistItemModel(
+                    case_id=case.id,
+                    template_item_id=template_item.id,
+                    document_key=template_item.document_key,
+                    item_type=self._case_item_type_from_document_key(template_item.document_key),
+                    title=template_item.title,
+                    status="pending",
+                    required=template_item.is_required,
+                    candidate_description=template_item.candidate_description,
+                    accepted_file_types=list(
+                        template_item.accepted_file_types or DEFAULT_PRE_ADMISSION_ACCEPTED_FILE_TYPES
+                    ),
+                    max_file_size_mb=template_item.max_file_size_mb or DEFAULT_PRE_ADMISSION_MAX_FILE_SIZE_MB,
+                    display_order=template_item.display_order,
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+            )
+
+        for item in snapshot_items:
+            await self._repository.add_checklist_item(item)
+        case.checklist_items = snapshot_items
+
+    @staticmethod
+    def _case_item_type_from_document_key(document_key: str | None) -> str:
+        cleaned = (document_key or "").strip()
+        if cleaned in KNOWN_PRE_ADMISSION_DOCUMENT_KEYS:
+            return cleaned
+        return "other"
+
+    @staticmethod
+    def _clean_accepted_file_types(value: list[str] | None) -> list[str]:
+        allowed_policy = document_upload_policy().allowed_mime_types
+        if value is None:
+            return list(DEFAULT_PRE_ADMISSION_ACCEPTED_FILE_TYPES)
+
+        normalized: list[str] = []
+        for item in value:
+            cleaned = (item or "").strip().lower()
+            if not cleaned:
+                continue
+            if cleaned not in MIME_EXTENSIONS or cleaned not in allowed_policy:
+                raise ValidationException("Tipo de arquivo não suportado para checklist.")
+            normalized.append(cleaned)
+
+        deduplicated = sorted(set(normalized))
+        if not deduplicated:
+            raise ValidationException("Informe ao menos um tipo de arquivo aceito.")
+        return deduplicated
+
+    @staticmethod
+    def _clean_max_file_size_mb(value: int | None) -> int:
+        if value is None:
+            return DEFAULT_PRE_ADMISSION_MAX_FILE_SIZE_MB
+        if value < 1 or value > DEFAULT_PRE_ADMISSION_MAX_FILE_SIZE_MB:
+            raise ValidationException(
+                f"Tamanho máximo do arquivo deve ficar entre 1MB e {DEFAULT_PRE_ADMISSION_MAX_FILE_SIZE_MB}MB."
+            )
+        return value
+
+    @staticmethod
+    def _upload_policy_for_item(item: PreAdmissionChecklistItemModel) -> UploadValidationPolicy:
+        allowed_mime_types = set(item.accepted_file_types or DEFAULT_PRE_ADMISSION_ACCEPTED_FILE_TYPES)
+        return UploadValidationPolicy(
+            allowed_mime_types=allowed_mime_types,
+            max_size_bytes=max(1, item.max_file_size_mb) * 1024 * 1024,
+        )
+
+    @staticmethod
+    def _next_case_item_display_order(case: PreAdmissionCaseModel) -> int:
+        if not case.checklist_items:
+            return 0
+        return max(item.display_order for item in case.checklist_items) + 1
+
     @staticmethod
     def _pipeline_allows_case_creation(pipeline: CandidateJobPipelineModel | None) -> bool:
         return pipeline is not None and pipeline.pipeline_stage in PRE_ADMISSION_CREATE_ALLOWED_PIPELINE_STAGES
+
+    @staticmethod
+    def _case_has_mutation_request(
+        *,
+        case: PreAdmissionCaseModel,
+        body: PreAdmissionUpdateRequest,
+    ) -> bool:
+        if case.status not in TERMINAL_CASE_STATUSES:
+            return False
+        for field in ("status", "salary_offer", "start_date", "work_model", "notes"):
+            if field in body.model_fields_set and getattr(case, field) != getattr(body, field):
+                return True
+        return False
 
     async def _required_document(self, document_id: UUID) -> PreAdmissionDocumentModel:
         document = await self._repository.get_document(document_id)
         if document is None:
             raise NotFoundException("Documento não encontrado.")
         return document
+
+    async def _sync_case_status_after_checklist_change(
+        self,
+        *,
+        case: PreAdmissionCaseModel,
+        actor_id: UUID | None,
+        reason: str,
+    ) -> None:
+        target_status = derive_case_status_from_checklist(
+            current_status=case.status,
+            checklist_items=case.checklist_items,
+        )
+        if target_status == case.status:
+            return
+        old_status, new_status = transition_status(
+            case,
+            entity=PRE_ADMISSION_CASE_ENTITY,
+            to_status=target_status,
+        )
+        now = datetime.now(UTC)
+        case.updated_at = now
+        case.closed_at = now if case.status in TERMINAL_CASE_STATUSES else None
+        await self._repository.flush()
+        await self._event(
+            case_id=case.id,
+            event_type="status_changed",
+            actor_id=actor_id,
+            payload={
+                **transition_payload(old_status=old_status, new_status=new_status),
+                "reason": reason,
+            },
+        )
 
     async def _event(
         self,
@@ -580,13 +870,19 @@ class PreAdmissionService:
         return value
 
     @staticmethod
-    def _validate_document_upload(*, file_name: str, content_type: str | None, content: bytes) -> ValidatedUpload:
+    def _validate_document_upload(
+        *,
+        file_name: str,
+        content_type: str | None,
+        content: bytes,
+        policy: UploadValidationPolicy,
+    ) -> ValidatedUpload:
         try:
             return validate_upload(
                 file_name=file_name,
                 content_type=content_type,
                 content=content,
-                policy=document_upload_policy(),
+                policy=policy,
             )
         except UploadValidationError as exc:
             raise ValidationException(str(exc)) from exc
@@ -605,11 +901,14 @@ class PreAdmissionService:
 
     @classmethod
     def _case_response(cls, case: PreAdmissionCaseModel) -> PreAdmissionCaseResponse:
+        ordered_items = sorted(case.checklist_items, key=lambda item: (item.display_order, item.created_at, item.id))
         return PreAdmissionCaseResponse(
             id=case.id,
             candidate_id=case.candidate_id,
             job_id=case.job_id,
             hiring_decision_id=case.hiring_decision_id,
+            checklist_template_id=case.checklist_template_id,
+            checklist_template_name=case.checklist_template_name,
             status=case.status,  # type: ignore[arg-type]
             salary_offer=case.salary_offer,
             start_date=case.start_date,
@@ -622,7 +921,9 @@ class PreAdmissionService:
             created_at=case.created_at,
             updated_at=case.updated_at,
             closed_at=case.closed_at,
-            checklist_items=[cls._item_response(item) for item in case.checklist_items],
+            dismissed_at=case.dismissed_at,
+            dismissal_reason=case.dismissal_reason,
+            checklist_items=[cls._item_response(item) for item in ordered_items],
         )
 
     @staticmethod
@@ -630,11 +931,17 @@ class PreAdmissionService:
         return PreAdmissionChecklistItemResponse(
             id=item.id,
             case_id=item.case_id,
+            template_item_id=item.template_item_id,
+            document_key=item.document_key,
             item_type=item.item_type,  # type: ignore[arg-type]
             title=item.title,
             status=item.status,  # type: ignore[arg-type]
             required=item.required,
             notes=item.notes,
+            candidate_description=item.candidate_description,
+            accepted_file_types=list(item.accepted_file_types or []),
+            max_file_size_mb=item.max_file_size_mb,
+            display_order=item.display_order,
             created_at=item.created_at,
             updated_at=item.updated_at,
         )
@@ -652,12 +959,13 @@ class PreAdmissionService:
 
     @classmethod
     def _candidate_case_response(cls, case: PreAdmissionCaseModel) -> CandidatePortalPreAdmissionCaseResponse:
-        items = sorted(case.checklist_items, key=lambda item: (not item.required, item.created_at))
+        items = sorted(case.checklist_items, key=lambda item: (not item.required, item.display_order, item.created_at))
         item_responses = [cls._candidate_item_response(item) for item in items]
         summary = cls._build_summary(case)
         return CandidatePortalPreAdmissionCaseResponse(
             id=case.id,
             status=case.status,  # type: ignore[arg-type]
+            status_public_label=summary.status_public_label or _CANDIDATE_PROCESS_STATUS_LABELS["waiting_documents"],
             salary_offer=case.salary_offer,
             start_date=case.start_date,
             work_model=case.work_model,
@@ -683,20 +991,22 @@ class PreAdmissionService:
                 mime_type=latest.mime_type,
                 size_bytes=latest.size_bytes,
                 status=latest.status,  # type: ignore[arg-type]
+                status_public_label=cls._candidate_item_status_label(item),
                 uploaded_at=latest.uploaded_at,
             )
             if latest.status == "rejected":
                 rejection_reason_public = latest.rejection_reason_public
 
-        allowed_types = sorted(MIME_EXTENSIONS.keys() & document_upload_policy().allowed_mime_types)
-        max_file_size_mb = max(1, MAX_PRE_ADMISSION_DOCUMENT_BYTES // (1024 * 1024))
+        allowed_types = list(item.accepted_file_types or DEFAULT_PRE_ADMISSION_ACCEPTED_FILE_TYPES)
+        max_file_size_mb = item.max_file_size_mb or DEFAULT_PRE_ADMISSION_MAX_FILE_SIZE_MB
 
         return CandidatePortalPreAdmissionChecklistItemResponse(
             item_id=item.id,
             title=item.title,
-            description=_candidate_item_description(item.item_type),
+            description=_candidate_item_description(item.document_key or item.item_type, item.candidate_description),
             required=item.required,
             status=item.status,  # type: ignore[arg-type]
+            status_public_label=cls._candidate_item_status_label(item),
             rejection_reason_public=rejection_reason_public,
             uploaded_document=uploaded_document,
             allowed_file_types=allowed_types,
@@ -707,29 +1017,92 @@ class PreAdmissionService:
     def _build_summary(cls, case: PreAdmissionCaseModel) -> CandidatePortalPreAdmissionSummary:
         items = list(case.checklist_items)
         total = len(items)
-        approved = sum(1 for item in items if item.status == "approved")
+        approved = sum(1 for item in items if cls._candidate_item_display_status(item) in {"approved", "waived"})
         submitted = sum(
             1
             for item in items
-            if any(doc.status in {"uploaded", "approved"} for doc in item.documents)
+            if cls._candidate_item_display_status(item) in {"submitted", "in_review", "approved", "waived"}
         )
-        pending = total - approved
+        pending = sum(1 for item in items if cls._candidate_item_display_status(item) not in {"approved", "waived"})
         next_pending: str | None = None
-        required_first = sorted(items, key=lambda item: (not item.required, item.created_at))
+        required_first = sorted(items, key=lambda item: (not item.required, item.display_order, item.created_at))
         for item in required_first:
-            has_active = any(doc.status in {"uploaded", "approved"} for doc in item.documents)
-            if item.status not in {"approved"} and not has_active:
+            if cls._candidate_item_display_status(item) == "pending":
                 next_pending = item.title
                 break
         return CandidatePortalPreAdmissionSummary(
             has_pre_admission_case=True,
             pre_admission_status=case.status,  # type: ignore[arg-type]
+            status_public_label=cls._candidate_process_status_label(case),
             documents_total=total,
             documents_pending=max(pending, 0),
             documents_submitted=submitted,
             documents_approved=approved,
             next_pending_document=next_pending,
         )
+
+    @classmethod
+    def _candidate_document_upload_response(
+        cls,
+        document: PreAdmissionDocumentModel,
+    ) -> CandidatePortalPreAdmissionDocumentUploadResponse:
+        return CandidatePortalPreAdmissionDocumentUploadResponse(
+            id=document.id,
+            original_filename=document.original_filename,
+            mime_type=document.mime_type,
+            size_bytes=document.size_bytes,
+            status=document.status,  # type: ignore[arg-type]
+            status_public_label=_CANDIDATE_DOCUMENT_STATUS_LABELS["in_review"],
+            uploaded_at=document.uploaded_at,
+        )
+
+    @staticmethod
+    def _candidate_item_display_status(item: PreAdmissionChecklistItemModel) -> str:
+        active_documents = [doc for doc in item.documents if doc.status != "replaced"]
+        active_documents.sort(key=lambda doc: doc.uploaded_at, reverse=True)
+        latest = active_documents[0] if active_documents else None
+        if item.status == "approved":
+            return "approved"
+        if item.status == "rejected":
+            return "rejected"
+        if item.status == "waived":
+            return "waived"
+        if latest is not None:
+            if latest.status == "approved":
+                return "approved"
+            if latest.status == "rejected":
+                return "rejected"
+            if latest.status == "uploaded":
+                return "in_review"
+        if item.status == "received":
+            return "submitted"
+        return "pending"
+
+    @classmethod
+    def _candidate_item_status_label(cls, item: PreAdmissionChecklistItemModel) -> str:
+        return _CANDIDATE_DOCUMENT_STATUS_LABELS[cls._candidate_item_display_status(item)]
+
+    @classmethod
+    def _candidate_process_status_label(cls, case: PreAdmissionCaseModel) -> str:
+        if case.status == "admitted":
+            return _CANDIDATE_PROCESS_STATUS_LABELS["completed"]
+        if case.status == "dismissed":
+            return _CANDIDATE_PROCESS_STATUS_LABELS["closed"]
+        if case.status in {"offer_declined", "cancelled"}:
+            return _CANDIDATE_PROCESS_STATUS_LABELS["closed"]
+
+        items = list(case.checklist_items)
+        if not items:
+            return _CANDIDATE_PROCESS_STATUS_LABELS["waiting_documents"]
+
+        buckets = [cls._candidate_item_display_status(item) for item in items]
+        if "rejected" in buckets:
+            return _CANDIDATE_PROCESS_STATUS_LABELS["corrections_requested"]
+        if all(bucket in {"approved", "waived"} for bucket in buckets):
+            return _CANDIDATE_PROCESS_STATUS_LABELS["documents_approved"]
+        if any(bucket in {"submitted", "in_review"} for bucket in buckets):
+            return _CANDIDATE_PROCESS_STATUS_LABELS["in_review"]
+        return _CANDIDATE_PROCESS_STATUS_LABELS["waiting_documents"]
 
     @staticmethod
     def _document_response(document: PreAdmissionDocumentModel) -> PreAdmissionDocumentResponse:

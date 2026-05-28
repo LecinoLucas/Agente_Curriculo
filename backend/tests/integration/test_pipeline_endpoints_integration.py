@@ -23,6 +23,9 @@ from src.infrastructure.database.models.behavioral_template_model import (
     BehavioralTemplateQuestionModel,
 )
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.hiring_decision_model import (
+    CandidateJobHiringDecisionModel,
+)
 from src.infrastructure.database.models.job_model import JobModel
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
@@ -139,6 +142,44 @@ async def _add_candidate_to_job(
     return resp.json()
 
 
+async def _submit_hire_decision(
+    db_session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+    actor_id: UUID,
+) -> CandidateJobHiringDecisionModel:
+    pipeline_id = await db_session.scalar(
+        sa.select(CandidateJobPipelineModel.candidate_job_pipeline_id).where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+    )
+    decision = CandidateJobHiringDecisionModel(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        job_id=job_id,
+        pipeline_id=pipeline_id,
+        decided_by=actor_id,
+        decision_status="submitted",
+        decision_outcome="hire",
+        reason_code="strong_fit",
+        notes="Aprovado para pré-admissão.",
+        submitted_at=datetime.now(UTC),
+    )
+    db_session.add(decision)
+    await db_session.commit()
+    return decision
+
+
+def _board_candidate_ids(board_payload: dict) -> list[str]:
+    return [
+        candidate["candidate_id"]
+        for column in board_payload["columns"]
+        for candidate in column["candidates"]
+    ]
+
+
 async def _create_behavioral_template(db_session: AsyncSession) -> UUID:
     template = BehavioralAssessmentTemplateModel(
         id=uuid4(),
@@ -228,6 +269,312 @@ async def test_patch_pipeline_stage_v2_endpoint(
     result = move_resp.json()
     assert result["stage"] == "screening"
     assert result["candidate_id"] == str(candidate_id)
+
+
+@pytest.mark.asyncio
+async def test_move_to_pre_admission_returns_required_action_and_case_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-pre-adm-case-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(client, headers, db_session, title="Pre Admission Case Job")
+    candidate_id = await _create_candidate(
+        client, headers, db_session, "Case Candidate", f"case-{uuid4().hex[:6]}@test.com"
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="hired")
+    )
+    await db_session.commit()
+    await _submit_hire_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        actor_id=recruiter.id,
+    )
+
+    response = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Iniciar pré-admissão."},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["required_action"] == "open_pre_admission"
+    assert payload["pre_admission_case_id"] is not None
+
+    case_row = await db_session.scalar(
+        sa.select(PreAdmissionCaseModel).where(
+            PreAdmissionCaseModel.id == UUID(payload["pre_admission_case_id"])
+        )
+    )
+    assert case_row is not None
+    assert case_row.candidate_id == candidate_id
+    assert case_row.job_id == job_id
+
+
+@pytest.mark.asyncio
+async def test_move_stage_outside_pre_admission_returns_null_pre_admission_case_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-pre-adm-null-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(client, headers, db_session, title="Non Pre Admission Stage Job")
+    candidate_id = await _create_candidate(
+        client, headers, db_session, "Null Case Candidate", f"null-case-{uuid4().hex[:6]}@test.com"
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+
+    response = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "screening", "notes": "", "reason": ""},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["pre_admission_case_id"] is None
+    assert payload["required_action"] is None
+
+
+@pytest.mark.asyncio
+async def test_move_to_pre_admission_reuses_existing_case_idempotently(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-pre-adm-idem-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(client, headers, db_session, title="Pre Admission Idempotency Job")
+    candidate_id = await _create_candidate(
+        client, headers, db_session, "Idempotency Candidate", f"idem-{uuid4().hex[:6]}@test.com"
+    )
+    await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="hired")
+    )
+    await db_session.commit()
+    await _submit_hire_decision(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        actor_id=recruiter.id,
+    )
+
+    first_response = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Primeira ida para pré-admissão."},
+        headers=headers,
+    )
+    assert first_response.status_code == 200, first_response.text
+    first_case_id = first_response.json()["pre_admission_case_id"]
+    assert first_case_id is not None
+
+    # Simula retry/novo avanço após retorno ao estágio anterior.
+    await db_session.execute(
+        sa.update(CandidateJobPipelineModel)
+        .where(
+            CandidateJobPipelineModel.candidate_id == candidate_id,
+            CandidateJobPipelineModel.job_id == job_id,
+        )
+        .values(pipeline_stage="hired")
+    )
+    await db_session.commit()
+
+    second_response = await client.patch(
+        f"/api/v1/pipeline/{job_id}/{candidate_id}/stage",
+        json={"stage": "pre_admission", "notes": "", "reason": "Retorno para pré-admissão."},
+        headers=headers,
+    )
+    assert second_response.status_code == 200, second_response.text
+    second_case_id = second_response.json()["pre_admission_case_id"]
+    assert second_case_id == first_case_id
+
+    total_cases = await db_session.scalar(
+        sa.select(sa.func.count(PreAdmissionCaseModel.id)).where(
+            PreAdmissionCaseModel.candidate_id == candidate_id,
+            PreAdmissionCaseModel.job_id == job_id,
+        )
+    )
+    assert int(total_cases or 0) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_pipeline_board_supports_safe_link_date_filters(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-board-filters-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+
+    job_id = await _create_job(client, headers, db_session, title="Pipeline Date Filters Job")
+    candidate_ids = [
+        await _create_candidate(
+            client,
+            headers,
+            db_session,
+            full_name=f"Candidate {index}",
+            email=f"candidate-filter-{index}-{uuid4().hex[:6]}@test.com",
+        )
+        for index in range(1, 4)
+    ]
+    for candidate_id in candidate_ids:
+        await _add_candidate_to_job(client, headers, candidate_id, job_id, "entry")
+
+    timestamps = {
+        candidate_ids[0]: (
+            datetime(2026, 5, 10, 9, 0, tzinfo=UTC),
+            datetime(2026, 5, 15, 14, 0, tzinfo=UTC),
+        ),
+        candidate_ids[1]: (
+            datetime(2026, 5, 20, 9, 0, tzinfo=UTC),
+            datetime(2026, 5, 25, 14, 0, tzinfo=UTC),
+        ),
+        candidate_ids[2]: (
+            datetime(2026, 6, 1, 9, 0, tzinfo=UTC),
+            datetime(2026, 6, 3, 14, 0, tzinfo=UTC),
+        ),
+    }
+    for candidate_id, (entered_at, updated_at) in timestamps.items():
+        await db_session.execute(
+            sa.update(CandidateJobPipelineModel)
+            .where(
+                CandidateJobPipelineModel.candidate_id == candidate_id,
+                CandidateJobPipelineModel.job_id == job_id,
+            )
+            .values(entered_at=entered_at, updated_at=updated_at)
+        )
+    await db_session.commit()
+
+    board = await client.get(f"/api/v1/pipeline/{job_id}", headers=headers)
+    assert board.status_code == 200, board.text
+    assert _board_candidate_ids(board.json()) == [
+        str(candidate_ids[2]),
+        str(candidate_ids[1]),
+        str(candidate_ids[0]),
+    ]
+
+    entered_from = await client.get(
+        f"/api/v1/pipeline/{job_id}",
+        params={"entered_from": "2026-05-15T00:00:00+00:00"},
+        headers=headers,
+    )
+    assert entered_from.status_code == 200, entered_from.text
+    assert _board_candidate_ids(entered_from.json()) == [
+        str(candidate_ids[2]),
+        str(candidate_ids[1]),
+    ]
+
+    entered_to = await client.get(
+        f"/api/v1/pipeline/{job_id}",
+        params={"entered_to": "2026-05-20T23:59:59+00:00"},
+        headers=headers,
+    )
+    assert entered_to.status_code == 200, entered_to.text
+    assert _board_candidate_ids(entered_to.json()) == [
+        str(candidate_ids[1]),
+        str(candidate_ids[0]),
+    ]
+
+    updated_from = await client.get(
+        f"/api/v1/pipeline/{job_id}",
+        params={"updated_from": "2026-05-20T00:00:00+00:00"},
+        headers=headers,
+    )
+    assert updated_from.status_code == 200, updated_from.text
+    assert _board_candidate_ids(updated_from.json()) == [
+        str(candidate_ids[2]),
+        str(candidate_ids[1]),
+    ]
+
+    updated_to = await client.get(
+        f"/api/v1/pipeline/{job_id}",
+        params={"updated_to": "2026-05-25T23:59:59+00:00"},
+        headers=headers,
+    )
+    assert updated_to.status_code == 200, updated_to.text
+    assert _board_candidate_ids(updated_to.json()) == [
+        str(candidate_ids[1]),
+        str(candidate_ids[0]),
+    ]
+
+    combined = await client.get(
+        f"/api/v1/pipeline/{job_id}",
+        params={
+            "entered_from": "2026-05-15T00:00:00+00:00",
+            "updated_to": "2026-05-31T23:59:59+00:00",
+        },
+        headers=headers,
+    )
+    assert combined.status_code == 200, combined.text
+    assert _board_candidate_ids(combined.json()) == [str(candidate_ids[1])]
+
+
+@pytest.mark.asyncio
+async def test_get_pipeline_board_rejects_invalid_date_filter_ranges(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    recruiter = await _create_active_user(
+        db_session,
+        f"recruiter-board-range-{uuid4().hex[:6]}@test.com",
+        "password123",
+        UserRole.RECRUITER,
+    )
+    headers = await _auth_headers(client, recruiter.email, "password123")
+    job_id = await _create_job(client, headers, db_session, title="Pipeline Invalid Range Job")
+
+    invalid_entered = await client.get(
+        f"/api/v1/pipeline/{job_id}",
+        params={
+            "entered_from": "2026-06-01T00:00:00+00:00",
+            "entered_to": "2026-05-01T00:00:00+00:00",
+        },
+        headers=headers,
+    )
+    assert invalid_entered.status_code == 422, invalid_entered.text
+    assert "entered_from" in invalid_entered.text
+
+    invalid_updated = await client.get(
+        f"/api/v1/pipeline/{job_id}",
+        params={
+            "updated_from": "2026-06-01T00:00:00+00:00",
+            "updated_to": "2026-05-01T00:00:00+00:00",
+        },
+        headers=headers,
+    )
+    assert invalid_updated.status_code == 422, invalid_updated.text
+    assert "updated_from" in invalid_updated.text
 
 
 @pytest.mark.asyncio

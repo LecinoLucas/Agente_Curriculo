@@ -8,6 +8,10 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.pre_admission_state_machine import (
+    ERP_INTEGRATION_ATTEMPT_ENTITY,
+    transition_status,
+)
 from src.infrastructure.database.models.erp_integration_attempt_model import (
     ErpIntegrationAttemptModel,
 )
@@ -44,7 +48,7 @@ class SQLAlchemyErpIntegrationAttemptRepository:
             job_id=job_id,
             provider=provider,
             mode=mode,
-            status=status,
+            status="draft",
             idempotency_key=idempotency_key,
             external_reference=external_reference,
             http_status=http_status,
@@ -55,6 +59,7 @@ class SQLAlchemyErpIntegrationAttemptRepository:
             validation_errors_json=validation_errors_json,
             attempted_by=attempted_by,
         )
+        transition_status(attempt, entity=ERP_INTEGRATION_ATTEMPT_ENTITY, to_status=status)
         self.session.add(attempt)
         await self.session.flush()
         return attempt
@@ -86,6 +91,28 @@ class SQLAlchemyErpIntegrationAttemptRepository:
     async def get_by_id(self, attempt_id: UUID) -> ErpIntegrationAttemptModel | None:
         return await self.session.get(ErpIntegrationAttemptModel, attempt_id)
 
+    async def get_latest_by_package_provider_mode(
+        self,
+        *,
+        package_id: UUID,
+        provider: str,
+        mode: str,
+    ) -> ErpIntegrationAttemptModel | None:
+        stmt = (
+            sa.select(ErpIntegrationAttemptModel)
+            .where(ErpIntegrationAttemptModel.package_id == package_id)
+            .where(ErpIntegrationAttemptModel.provider == provider)
+            .where(ErpIntegrationAttemptModel.mode == mode)
+            .order_by(
+                ErpIntegrationAttemptModel.created_at.desc(),
+                ErpIntegrationAttemptModel.attempt_number.desc(),
+                ErpIntegrationAttemptModel.id.desc(),
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_by_package_id(self, package_id: UUID) -> list[ErpIntegrationAttemptModel]:
         stmt = (
             sa.select(ErpIntegrationAttemptModel)
@@ -107,7 +134,7 @@ class SQLAlchemyErpIntegrationAttemptRepository:
             raise ValueError(f"ERP integration attempt {attempt_id} not found")
 
         now = datetime.now(UTC)
-        attempt.status = "simulated"
+        transition_status(attempt, entity=ERP_INTEGRATION_ATTEMPT_ENTITY, to_status="simulated")
         attempt.response_payload_json = response_payload_json
         attempt.external_reference = response_payload_json.get("external_reference")
         attempt.http_status = 200
@@ -134,7 +161,7 @@ class SQLAlchemyErpIntegrationAttemptRepository:
             raise ValueError(f"ERP integration attempt {attempt_id} not found")
 
         now = datetime.now(UTC)
-        attempt.status = "failed"
+        transition_status(attempt, entity=ERP_INTEGRATION_ATTEMPT_ENTITY, to_status="failed")
         attempt.response_payload_json = response_payload_json
         attempt.error_message = error_message
         attempt.http_status = http_status
@@ -162,7 +189,7 @@ class SQLAlchemyErpIntegrationAttemptRepository:
             raise ValueError(f"ERP integration attempt {attempt_id} not found")
 
         now = datetime.now(UTC)
-        attempt.status = "sent"
+        transition_status(attempt, entity=ERP_INTEGRATION_ATTEMPT_ENTITY, to_status="sent")
         attempt.response_payload_json = response_payload_json
         attempt.external_reference = external_reference
         attempt.error_message = None

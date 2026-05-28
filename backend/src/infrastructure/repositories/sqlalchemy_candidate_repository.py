@@ -304,6 +304,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         link_status_filter: str | None = None,
         skill: str | None = None,
         seniority: str | None = None,
+        include_admitted: bool = False,
     ) -> tuple[list[dict], int]:
         # ── WHERE filters ─────────────────────────────────────────────────────
         filters = self._build_common_candidate_filters(
@@ -320,6 +321,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             skill=skill,
             seniority=seniority,
             ai_status_filter=ai_status_filter,
+            include_admitted=include_admitted,
         )
 
         # ── COUNT (unchanged contract) ─────────────────────────────────────────
@@ -1835,6 +1837,7 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
         skill: str | None = None,
         seniority: str | None = None,
         ai_status_filter: list[str] | None = None,
+        include_admitted: bool = True,
     ) -> list[sa.ColumnElement[bool]]:
         filters: list[sa.ColumnElement[bool]] = [CandidateModel.deleted_at.is_(None)]
         filters.append(CandidateModel.archived_at.is_not(None) if archived else CandidateModel.archived_at.is_(None))
@@ -1916,13 +1919,57 @@ class SQLAlchemyCandidateRepository(BaseSoftDeleteRepository[CandidateModel]):
             .correlate(CandidateModel)
             .exists()
         )
+        admitted_pipeline_exists = (
+            sa.select(sa.literal(1))
+            .select_from(CandidateJobPipelineModel)
+            .join(JobModel, JobModel.id == CandidateJobPipelineModel.job_id)
+            .where(
+                CandidateJobPipelineModel.candidate_id == CandidateModel.id,
+                CandidateJobPipelineModel.pipeline_stage == "admitted",
+                JobModel.deleted_at.is_(None),
+            )
+            .correlate(CandidateModel)
+            .exists()
+        )
+        admitted_case_exists = (
+            sa.select(sa.literal(1))
+            .select_from(PreAdmissionCaseModel)
+            .where(
+                PreAdmissionCaseModel.candidate_id == CandidateModel.id,
+                PreAdmissionCaseModel.status == "admitted",
+            )
+            .correlate(CandidateModel)
+            .exists()
+        )
+        dismissed_case_exists = (
+            sa.select(sa.literal(1))
+            .select_from(PreAdmissionCaseModel)
+            .where(
+                PreAdmissionCaseModel.candidate_id == CandidateModel.id,
+                PreAdmissionCaseModel.status == "dismissed",
+            )
+            .correlate(CandidateModel)
+            .exists()
+        )
+
+        filters.append(~dismissed_case_exists)
+
+        if not include_admitted:
+            filters.append(sa.and_(~admitted_pipeline_exists, ~admitted_case_exists))
 
         if link_status_filter:
             normalized_link_status = link_status_filter.strip().lower()
             if normalized_link_status in {"with_active_job", "com_vaga_ativa", "active"}:
                 filters.append(active_pipeline_exists)
             elif normalized_link_status in {"without_active_job", "sem_vaga_ativa", "talent_pool"}:
-                filters.append(sa.and_(~active_pipeline_exists, ~visible_post_hire_pipeline_exists))
+                filters.append(
+                    sa.and_(
+                        ~active_pipeline_exists,
+                        ~visible_post_hire_pipeline_exists,
+                        ~admitted_pipeline_exists,
+                        ~admitted_case_exists,
+                    )
+                )
             elif normalized_link_status in {"closed_process", "processo_encerrado"}:
                 filters.append(sa.and_(~active_pipeline_exists, closed_pipeline_exists))
 

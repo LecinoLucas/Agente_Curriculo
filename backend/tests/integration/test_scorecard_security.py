@@ -266,8 +266,7 @@ async def test_cross_manager_scorecard_isolation(
 
     job_id, candidate_id = await _seed_pipeline(db_session, recruiter_id)
 
-    # Manager A creates a scorecard (the unique constraint allows only ONE per context,
-    # so manager B cannot create a second one; instead, we verify that B gets None)
+    # Manager A creates an initial scorecard.
     await _create_scorecard_in_db(
         db_session, candidate_id=candidate_id, job_id=job_id, evaluator_id=manager_a_id
     )
@@ -297,7 +296,7 @@ async def test_cross_manager_scorecard_isolation(
     assert resp_a.status_code == 200
     assert resp_a.json()["scorecard"]["evaluator_id"] == str(manager_a_id)
 
-    # Manager B sees None (has no own scorecard for this context)
+    # Manager B initially sees no own scorecard even though they have access via review_request.
     headers_b = await _auth_headers(client, mgr_b_email, mgr_b_pass)
     resp_b = await client.get(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
@@ -305,3 +304,19 @@ async def test_cross_manager_scorecard_isolation(
     )
     assert resp_b.status_code == 200
     assert resp_b.json()["scorecard"] is None
+
+    # Manager B can still create and read their own scorecard in the same context.
+    create_b = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=headers_b,
+        json={"items": [{"competency_name": "Liderança", "display_order": 1}]},
+    )
+    assert create_b.status_code == 201, create_b.text
+    assert create_b.json()["evaluator_id"] == str(manager_b_id)
+
+    resp_b_after = await client.get(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=headers_b,
+    )
+    assert resp_b_after.status_code == 200
+    assert resp_b_after.json()["scorecard"]["evaluator_id"] == str(manager_b_id)

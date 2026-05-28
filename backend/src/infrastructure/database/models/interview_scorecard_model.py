@@ -75,23 +75,60 @@ class InterviewScorecardModel(Base):
             name="ck_interview_scorecards_final_recommendation",
         ),
         sa.Index(
-            "uq_interview_scorecard_pipeline_no_interview",
+            "uq_interview_scorecard_pipe_eval_no_iv",
+            "pipeline_id",
+            "candidate_id",
+            "job_id",
+            "evaluator_id",
+            unique=True,
+            postgresql_where=sa.text(
+                "interview_id IS NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NOT NULL"
+            ),
+            sqlite_where=sa.text(
+                "interview_id IS NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NOT NULL"
+            ),
+        ),
+        sa.Index(
+            "uq_interview_scorecard_pipe_eval_with_iv",
+            "pipeline_id",
+            "candidate_id",
+            "job_id",
+            "interview_id",
+            "evaluator_id",
+            unique=True,
+            postgresql_where=sa.text(
+                "interview_id IS NOT NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NOT NULL"
+            ),
+            sqlite_where=sa.text(
+                "interview_id IS NOT NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NOT NULL"
+            ),
+        ),
+        sa.Index(
+            "uq_interview_scorecard_pipe_anon_no_iv",
             "pipeline_id",
             "candidate_id",
             "job_id",
             unique=True,
-            postgresql_where=sa.text("interview_id IS NULL AND pipeline_id IS NOT NULL"),
-            sqlite_where=sa.text("interview_id IS NULL AND pipeline_id IS NOT NULL"),
+            postgresql_where=sa.text(
+                "interview_id IS NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NULL"
+            ),
+            sqlite_where=sa.text(
+                "interview_id IS NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NULL"
+            ),
         ),
         sa.Index(
-            "uq_interview_scorecard_pipeline_with_interview",
+            "uq_interview_scorecard_pipe_anon_with_iv",
             "pipeline_id",
             "candidate_id",
             "job_id",
             "interview_id",
             unique=True,
-            postgresql_where=sa.text("interview_id IS NOT NULL AND pipeline_id IS NOT NULL"),
-            sqlite_where=sa.text("interview_id IS NOT NULL AND pipeline_id IS NOT NULL"),
+            postgresql_where=sa.text(
+                "interview_id IS NOT NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NULL"
+            ),
+            sqlite_where=sa.text(
+                "interview_id IS NOT NULL AND pipeline_id IS NOT NULL AND evaluator_id IS NULL"
+            ),
         ),
         sa.Index("idx_interview_scorecards_job_candidate", "job_id", "candidate_id"),
         sa.Index("idx_interview_scorecards_pipeline", "pipeline_id"),

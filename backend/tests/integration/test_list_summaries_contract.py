@@ -23,7 +23,9 @@ from src.infrastructure.database.models.analysis_model import (
 )
 from src.infrastructure.database.models.candidate_job_pipeline_model import CandidateJobPipelineModel
 from src.infrastructure.database.models.candidate_model import CandidateModel
+from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
 from src.infrastructure.database.models.job_model import JobModel
+from src.infrastructure.database.models.pre_admission_model import PreAdmissionCaseModel
 from src.infrastructure.database.models.resume_model import ResumeModel, ResumeVersionModel
 from src.infrastructure.database.models.scoring_model import (
     CandidateJobScoreModel,
@@ -128,6 +130,44 @@ async def _make_pipeline(
     db_session.add(p)
     await db_session.flush()
     return p
+
+
+async def _make_pre_admission_case(
+    db_session: AsyncSession,
+    *,
+    candidate_id: UUID,
+    job_id: UUID,
+    created_by: UUID,
+    status: str,
+) -> PreAdmissionCaseModel:
+    decision = CandidateJobHiringDecisionModel(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        decided_by=created_by,
+        decision_status="submitted",
+        decision_outcome="hire",
+        reason_code="strong_fit",
+        submitted_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db_session.add(decision)
+    await db_session.flush()
+    case = PreAdmissionCaseModel(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        hiring_decision_id=decision.id,
+        status=status,
+        created_by=created_by,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        closed_at=datetime.now(timezone.utc),
+        dismissed_at=datetime.now(timezone.utc) if status == "dismissed" else None,
+        dismissal_reason="Desligamento solicitado pelo RH" if status == "dismissed" else None,
+    )
+    db_session.add(case)
+    await db_session.flush()
+    return case
 
 
 async def _make_analysis(
@@ -478,6 +518,115 @@ async def test_contract_terminal_pipeline_not_active(client: AsyncClient, db_ses
     # BUT latest_job shows the terminal pipeline (rejected is visible)
     assert row["latest_job_id"] == str(j.id)
     assert row["latest_relationship_status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_without_active_job_filter_excludes_admitted_candidates(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _recruiter_headers(client, db_session)
+    creator = uuid4()
+    admitted = await _make_candidate(db_session, creator)
+    available = await _make_candidate(db_session, creator)
+    _, admitted_rv = await _make_resume(db_session, admitted.id, creator)
+    job = await _make_job(db_session, creator, "Admitted Job")
+    now = datetime.now(timezone.utc)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_id=admitted.id,
+            job_id=job.id,
+            resume_version_id=admitted_rv.id,
+            link_status="hired",
+            pipeline_stage="admitted",
+            pipeline_status="terminal",
+            relationship_status="hired",
+            is_terminal=True,
+            terminated_at=now,
+            termination_reason="process_completed",
+            entered_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(ENDPOINT, headers=headers, params={"search": admitted.email})
+    assert resp.status_code == 200
+    assert resp.json()["data"] == []
+
+    include_resp = await client.get(
+        ENDPOINT,
+        headers=headers,
+        params={"search": admitted.email, "include_admitted": "true"},
+    )
+    assert include_resp.status_code == 200
+    assert [item["id"] for item in include_resp.json()["data"]] == [str(admitted.id)]
+
+    talent_pool_resp = await client.get(
+        ENDPOINT,
+        headers=headers,
+        params={"search": available.email, "link_status_filter": "without_active_job"},
+    )
+    assert talent_pool_resp.status_code == 200
+    assert [item["id"] for item in talent_pool_resp.json()["data"]] == [str(available.id)]
+
+
+@pytest.mark.asyncio
+async def test_contract_dismissed_candidate_is_excluded_even_with_include_admitted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    headers = await _recruiter_headers(client, db_session)
+    creator = uuid4()
+    dismissed = await _make_candidate(db_session, creator)
+    _, dismissed_rv = await _make_resume(db_session, dismissed.id, creator)
+    job = await _make_job(db_session, creator, "Dismissed Job")
+    now = datetime.now(timezone.utc)
+    db_session.add(
+        CandidateJobPipelineModel(
+            candidate_id=dismissed.id,
+            job_id=job.id,
+            resume_version_id=dismissed_rv.id,
+            link_status="hired",
+            pipeline_stage="admitted",
+            pipeline_status="terminal",
+            relationship_status="hired",
+            is_terminal=True,
+            terminated_at=now,
+            termination_reason="process_completed",
+            entered_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.flush()
+    await _make_pre_admission_case(
+        db_session,
+        candidate_id=dismissed.id,
+        job_id=job.id,
+        created_by=creator,
+        status="dismissed",
+    )
+    await db_session.commit()
+
+    default_resp = await client.get(ENDPOINT, headers=headers, params={"search": dismissed.email})
+    assert default_resp.status_code == 200
+    assert default_resp.json()["data"] == []
+
+    include_resp = await client.get(
+        ENDPOINT,
+        headers=headers,
+        params={"search": dismissed.email, "include_admitted": "true"},
+    )
+    assert include_resp.status_code == 200
+    assert include_resp.json()["data"] == []
+
+    talent_pool_resp = await client.get(
+        ENDPOINT,
+        headers=headers,
+        params={"search": dismissed.email, "link_status_filter": "without_active_job"},
+    )
+    assert talent_pool_resp.status_code == 200
+    assert talent_pool_resp.json()["data"] == []
 
 
 @pytest.mark.asyncio

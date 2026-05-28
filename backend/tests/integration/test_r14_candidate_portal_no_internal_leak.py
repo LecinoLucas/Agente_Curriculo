@@ -162,3 +162,8 @@ async def test_candidate_portal_overview_does_not_leak_internal_fields(
     assert "verysecrethash" not in body_text, (
         "Password hash leaked into portal response body"
     )
+    assert "Protheus" not in body_text
+    assert "protheus" not in body_text
+    assert "export_package" not in body_text
+    assert "package_id" not in body_text
+    assert "attempt_id" not in body_text

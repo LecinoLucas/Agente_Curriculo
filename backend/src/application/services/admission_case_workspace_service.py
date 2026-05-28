@@ -3,6 +3,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from src.application.services.pre_admission_state_machine import (
+    PRE_ADMISSION_CASE_ENTITY,
+    PRE_ADMISSION_CHECKLIST_ITEM_ENTITY,
+    PRE_ADMISSION_DOCUMENT_ENTITY,
+    READY_CHECKLIST_ITEM_STATUSES,
+    TERMINAL_CASE_STATUSES,
+    derive_case_status_from_checklist,
+    transition_payload,
+    transition_status,
+)
 from src.domain.exceptions import NotFoundException, ValidationException
 from src.infrastructure.database.models.candidate_job_pipeline_model import (
     CandidateJobPipelineModel,
@@ -21,19 +31,23 @@ from src.infrastructure.repositories.sqlalchemy_pre_admission_repository import 
 from src.interface.api.schemas.pre_admission_schemas import (
     AdmissionBlockerSchema,
     AdmissionCandidateSummarySchema,
+    AdmissionCaseDocumentsResponse,
+    AdmissionCaseEventsPageResponse,
+    AdmissionCaseOverviewResponse,
     AdmissionCaseSummarySchema,
     AdmissionCaseWorkspaceResponse,
     AdmissionCaseWorkspaceSummarySchema,
     AdmissionChecklistItemSchema,
     AdmissionChecklistSummarySchema,
     AdmissionDocumentSummarySchema,
+    AdmissionIntegrationStatusSchema,
     AdmissionJobSummarySchema,
     AdmissionNextActionSchema,
+    AdmissionProgressSchema,
     AdmissionRecentEventSchema,
 )
 
-READY_ITEM_STATUSES = {"approved", "waived"}
-TERMINAL_NOT_EXPORTABLE_STATUSES = {"cancelled", "offer_declined"}
+TERMINAL_NOT_EXPORTABLE_STATUSES = {"cancelled", "offer_declined", "dismissed"}
 
 
 class AdmissionReadinessError(Exception):
@@ -45,6 +59,65 @@ class AdmissionReadinessError(Exception):
 class AdmissionCaseWorkspaceService:
     def __init__(self, repository: SQLAlchemyPreAdmissionRepository) -> None:
         self._repository = repository
+
+    async def get_overview(self, *, case_id: UUID) -> AdmissionCaseOverviewResponse:
+        case, pipeline, candidate, job = await self._load_overview_context(case_id)
+        user_names = await self._repository.get_user_names(
+            {case.created_by} if case.created_by is not None else set()
+        )
+        return self._overview_response(
+            case=case,
+            pipeline=pipeline,
+            candidate=candidate,
+            job=job,
+            responsible_name=user_names.get(case.created_by) if case.created_by else None,
+        )
+
+    async def get_documents(self, *, case_id: UUID) -> AdmissionCaseDocumentsResponse:
+        case, _pipeline, _candidate, _job = await self._load_workspace_context(case_id)
+        events = await self._repository.list_recent_events(case_id=case.id, limit=10)
+        user_names = await self._user_names_for(case=case, events=events)
+        return AdmissionCaseDocumentsResponse(
+            checklist=self._checklist_summary(case=case, events=events, user_names=user_names),
+            documents=self._document_summaries(case=case, user_names=user_names),
+        )
+
+    async def get_events(
+        self,
+        *,
+        case_id: UUID,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> AdmissionCaseEventsPageResponse:
+        case = await self._repository.get_case_overview(case_id)
+        if case is None:
+            raise NotFoundException("Caso de pré-admissão não encontrado.")
+        pipeline = await self._repository.get_latest_pipeline_for_job_candidate(
+            candidate_id=case.candidate_id,
+            job_id=case.job_id,
+        )
+        if pipeline is None:
+            raise ValidationException(
+                "Caso de pré-admissão não possui pipeline vinculado."
+            )
+
+        offset = (page - 1) * page_size
+        total = await self._repository.count_events(case_id=case.id)
+        events = await self._repository.list_events_page(
+            case_id=case.id,
+            offset=offset,
+            limit=page_size,
+        )
+        user_names = await self._repository.get_user_names(
+            {event.actor_id for event in events if event.actor_id is not None}
+        )
+        return AdmissionCaseEventsPageResponse(
+            items=[self._recent_event(event, user_names=user_names) for event in events],
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_next=offset + len(events) < total,
+        )
 
     async def get_workspace(self, *, case_id: UUID) -> AdmissionCaseWorkspaceResponse:
         case, pipeline, candidate, job = await self._load_workspace_context(case_id)
@@ -63,16 +136,21 @@ class AdmissionCaseWorkspaceService:
     ) -> AdmissionCaseWorkspaceResponse:
         case, item = await self._required_item_context(item_id)
         now = datetime.now(UTC)
-        item.status = "approved"
+        transition_status(item, entity=PRE_ADMISSION_CHECKLIST_ITEM_ENTITY, to_status="approved")
         item.updated_at = now
         document = self._latest_active_document(item)
         if document is not None:
-            document.status = "approved"
+            transition_status(document, entity=PRE_ADMISSION_DOCUMENT_ENTITY, to_status="approved")
             document.reviewed_at = now
             document.reviewed_by = actor_id
             document.review_notes = None
             document.updated_at = now
         await self._repository.flush()
+        await self._sync_case_status_after_checklist_change(
+            case=case,
+            actor_id=actor_id,
+            reason="checklist_item_approved",
+        )
         await self._event(
             case_id=case.id,
             event_type="checklist_item_approved",
@@ -118,10 +196,15 @@ class AdmissionCaseWorkspaceService:
         actor_id: UUID | None,
     ) -> AdmissionCaseWorkspaceResponse:
         case, item = await self._required_item_context(item_id)
-        item.status = "waived"
+        transition_status(item, entity=PRE_ADMISSION_CHECKLIST_ITEM_ENTITY, to_status="waived")
         item.required = False
         item.updated_at = datetime.now(UTC)
         await self._repository.flush()
+        await self._sync_case_status_after_checklist_change(
+            case=case,
+            actor_id=actor_id,
+            reason="checklist_item_marked_not_required",
+        )
         await self._event(
             case_id=case.id,
             event_type="checklist_item_marked_not_required",
@@ -150,14 +233,21 @@ class AdmissionCaseWorkspaceService:
         case.ready_for_export = True
         case.ready_for_export_at = now
         case.ready_for_export_by = actor_id
-        case.status = "ready_for_admission"
+        old_status, new_status = transition_status(
+            case,
+            entity=PRE_ADMISSION_CASE_ENTITY,
+            to_status="ready_for_admission",
+        )
         case.updated_at = now
         await self._repository.flush()
         await self._event(
             case_id=case.id,
             event_type="case_ready_for_export",
             actor_id=actor_id,
-            payload={"ready_for_export": True},
+            payload={
+                "ready_for_export": True,
+                **transition_payload(old_status=old_status, new_status=new_status),
+            },
         )
         return await self._workspace_response(
             case=case,
@@ -176,16 +266,21 @@ class AdmissionCaseWorkspaceService:
     ) -> AdmissionCaseWorkspaceResponse:
         case, item = await self._required_item_context(item_id)
         now = datetime.now(UTC)
-        item.status = "rejected"
+        transition_status(item, entity=PRE_ADMISSION_CHECKLIST_ITEM_ENTITY, to_status="rejected")
         item.updated_at = now
         document = self._latest_active_document(item)
         if document is not None:
-            document.status = "rejected"
+            transition_status(document, entity=PRE_ADMISSION_DOCUMENT_ENTITY, to_status="rejected")
             document.reviewed_at = now
             document.reviewed_by = actor_id
             document.review_notes = review_notes
             document.updated_at = now
         await self._repository.flush()
+        await self._sync_case_status_after_checklist_change(
+            case=case,
+            actor_id=actor_id,
+            reason=event_type,
+        )
         await self._event(
             case_id=case.id,
             event_type=event_type,
@@ -206,12 +301,38 @@ class AdmissionCaseWorkspaceService:
         if case is None:
             raise NotFoundException("Caso de pré-admissão não encontrado.")
 
-        pipeline = await self._repository.get_active_pipeline_for_candidate(
+        pipeline = await self._repository.get_latest_pipeline_for_job_candidate(
             candidate_id=case.candidate_id,
+            job_id=case.job_id,
         )
-        if pipeline is None or pipeline.job_id != case.job_id:
+        if pipeline is None:
             raise ValidationException(
-                "Caso de pré-admissão não pertence ao pipeline ativo do candidato."
+                "Caso de pré-admissão não possui pipeline vinculado."
+            )
+
+        candidate = await self._repository.get_candidate(pipeline.candidate_id)
+        job = await self._repository.get_job(pipeline.job_id)
+        if candidate is None:
+            raise NotFoundException("Candidato do pipeline ativo não encontrado.")
+        if job is None:
+            raise NotFoundException("Vaga do pipeline ativo não encontrada.")
+        return case, pipeline, candidate, job
+
+    async def _load_overview_context(
+        self,
+        case_id: UUID,
+    ) -> tuple[PreAdmissionCaseModel, CandidateJobPipelineModel, CandidateModel, JobModel]:
+        case = await self._repository.get_case_overview(case_id)
+        if case is None:
+            raise NotFoundException("Caso de pré-admissão não encontrado.")
+
+        pipeline = await self._repository.get_latest_pipeline_for_job_candidate(
+            candidate_id=case.candidate_id,
+            job_id=case.job_id,
+        )
+        if pipeline is None:
+            raise ValidationException(
+                "Caso de pré-admissão não possui pipeline vinculado."
             )
 
         candidate = await self._repository.get_candidate(pipeline.candidate_id)
@@ -263,7 +384,7 @@ class AdmissionCaseWorkspaceService:
             ),
             job=AdmissionJobSummarySchema(id=job.id, title=job.title),
             checklist=self._checklist_summary(case=case, events=events, user_names=user_names),
-            documents=self._document_summaries(case),
+            documents=self._document_summaries(case=case, user_names=user_names),
             main_blockers=blockers,
             next_actions=self._next_actions(ready_for_export=ready_for_export),
             summary=AdmissionCaseWorkspaceSummarySchema(
@@ -273,7 +394,52 @@ class AdmissionCaseWorkspaceService:
                 readiness_status="ready" if ready_for_export else "not_ready",
                 ready_for_export=ready_for_export,
             ),
-            recent_events=[self._recent_event(event) for event in events],
+            recent_events=[self._recent_event(event, user_names=user_names) for event in events],
+        )
+
+    def _overview_response(
+        self,
+        *,
+        case: PreAdmissionCaseModel,
+        pipeline: CandidateJobPipelineModel,
+        candidate: CandidateModel,
+        job: JobModel,
+        responsible_name: str | None,
+    ) -> AdmissionCaseOverviewResponse:
+        progress = self._progress_summary(case=case)
+        blockers = self._overview_blockers(case=case, pipeline_is_active=True)
+        ready_for_export = not blockers
+        next_actions = self._next_actions(ready_for_export=ready_for_export)
+        return AdmissionCaseOverviewResponse(
+            case=AdmissionCaseSummarySchema(
+                id=case.id,
+                status=case.status,
+                current_stage=pipeline.pipeline_stage,
+                created_at=case.created_at,
+                updated_at=case.updated_at,
+            ),
+            candidate=AdmissionCandidateSummarySchema(
+                id=candidate.id,
+                name=candidate.full_name,
+                initials=self._initials(candidate.full_name),
+                avatar_url=candidate.google_picture_url,
+            ),
+            job=AdmissionJobSummarySchema(id=job.id, title=job.title),
+            status_label=self._case_status_label(case.status),
+            progress=progress,
+            main_blocker=blockers[0] if blockers else None,
+            main_blockers=blockers,
+            next_action=next_actions[0] if next_actions else None,
+            next_actions=next_actions,
+            summary=AdmissionCaseWorkspaceSummarySchema(
+                responsible_name=responsible_name,
+                created_at=case.created_at,
+                last_update_at=case.updated_at,
+                readiness_status="ready" if ready_for_export else "not_ready",
+                ready_for_export=ready_for_export,
+            ),
+            integration_status=self._integration_status(case=case, blockers=blockers),
+            updated_at=case.updated_at,
         )
 
     async def _recalculate_case_readiness(self, case: PreAdmissionCaseModel) -> None:
@@ -289,6 +455,22 @@ class AdmissionCaseWorkspaceService:
             case.ready_for_export_by = None
         case.updated_at = now
         await self._repository.flush()
+
+    def _progress_summary(self, *, case: PreAdmissionCaseModel) -> AdmissionProgressSchema:
+        items = list(case.checklist_items)
+        approved = sum(1 for item in items if item.status == "approved")
+        waived = sum(1 for item in items if item.status == "waived")
+        rejected = sum(1 for item in items if item.status == "rejected")
+        in_review = sum(1 for item in items if item.status == "received")
+        pending = sum(1 for item in items if item.status == "pending")
+        return AdmissionProgressSchema(
+            total=len(items),
+            approved=approved,
+            pending=pending,
+            rejected=rejected,
+            in_review=in_review,
+            waived=waived,
+        )
 
     def _readiness_blockers(
         self,
@@ -344,7 +526,74 @@ class AdmissionCaseWorkspaceService:
                 )
                 continue
 
-            if item.required and item.status not in READY_ITEM_STATUSES:
+            if item.required and item.status not in READY_CHECKLIST_ITEM_STATUSES:
+                blockers.append(
+                    AdmissionBlockerSchema(
+                        type="pending_checklist_item",
+                        severity="medium",
+                        title=f"{item.title} pendente",
+                        description=(
+                            "Revise e aprove o item obrigatório ou marque-o como não obrigatório."
+                        ),
+                        action="approve_document",
+                    )
+                )
+        return blockers
+
+    def _overview_blockers(
+        self,
+        *,
+        case: PreAdmissionCaseModel,
+        pipeline_is_active: bool,
+    ) -> list[AdmissionBlockerSchema]:
+        blockers: list[AdmissionBlockerSchema] = []
+        if not pipeline_is_active:
+            blockers.append(
+                AdmissionBlockerSchema(
+                    type="inactive_pipeline",
+                    severity="high",
+                    title="Pipeline ativo divergente",
+                    description="O caso não está vinculado à vaga ativa atual do candidato.",
+                    action="review_pipeline",
+                )
+            )
+        if case.status in TERMINAL_NOT_EXPORTABLE_STATUSES:
+            blockers.append(
+                AdmissionBlockerSchema(
+                    type="case_cancelled",
+                    severity="high",
+                    title="Caso encerrado",
+                    description="Casos cancelados ou com oferta recusada não podem ser exportados.",
+                    action="review_case",
+                )
+            )
+
+        for item in case.checklist_items:
+            if item.status == "rejected":
+                blockers.append(
+                    AdmissionBlockerSchema(
+                        type="rejected_item",
+                        severity="high",
+                        title=f"{item.title} rejeitado",
+                        description="Resolva a rejeição antes de liberar o caso para exportação.",
+                        action="request_correction",
+                    )
+                )
+                continue
+
+            if item.required and item.status == "pending":
+                blockers.append(
+                    AdmissionBlockerSchema(
+                        type="missing_document",
+                        severity="high",
+                        title=f"{item.title} ausente",
+                        description="Solicite o envio para prosseguir com o checklist.",
+                        action="request_document",
+                    )
+                )
+                continue
+
+            if item.required and item.status not in READY_CHECKLIST_ITEM_STATUSES and item.status != "waived":
                 blockers.append(
                     AdmissionBlockerSchema(
                         type="pending_checklist_item",
@@ -393,24 +642,47 @@ class AdmissionCaseWorkspaceService:
 
     def _document_summaries(
         self,
+        *,
         case: PreAdmissionCaseModel,
+        user_names: dict[UUID, str],
     ) -> list[AdmissionDocumentSummarySchema]:
         documents: list[AdmissionDocumentSummarySchema] = []
         for item in case.checklist_items:
+            latest_active = self._latest_active_document(item)
             for document in item.documents:
                 if document.status == "replaced" or document.deleted_at is not None:
                     continue
                 documents.append(
                     AdmissionDocumentSummarySchema(
                         id=document.id,
+                        checklist_item_id=item.id,
+                        checklist_title=item.title,
+                        required=item.required,
                         filename=document.original_filename,
                         document_type=item.item_type,
+                        mime_type=document.mime_type,
+                        size_bytes=document.size_bytes,
                         status=document.status,
                         uploaded_at=document.uploaded_at,
+                        reviewed_at=document.reviewed_at,
+                        reviewed_by_name=(
+                            user_names.get(document.reviewed_by) if document.reviewed_by else None
+                        ),
+                        review_notes=document.review_notes,
+                        rejection_reason_public=document.rejection_reason_public,
                         approved_at=document.reviewed_at if document.status == "approved" else None,
+                        is_current_for_item=latest_active is not None and latest_active.id == document.id,
                     )
                 )
-        return sorted(documents, key=lambda document: document.uploaded_at, reverse=True)
+        return sorted(
+            documents,
+            key=lambda document: (
+                document.is_current_for_item,
+                document.uploaded_at,
+                str(document.id),
+            ),
+            reverse=True,
+        )
 
     async def _user_names_for(
         self,
@@ -443,6 +715,38 @@ class AdmissionCaseWorkspaceService:
                 payload_json=payload,
                 created_at=datetime.now(UTC),
             )
+        )
+
+    async def _sync_case_status_after_checklist_change(
+        self,
+        *,
+        case: PreAdmissionCaseModel,
+        actor_id: UUID | None,
+        reason: str,
+    ) -> None:
+        target_status = derive_case_status_from_checklist(
+            current_status=case.status,
+            checklist_items=case.checklist_items,
+        )
+        if target_status == case.status:
+            return
+        old_status, new_status = transition_status(
+            case,
+            entity=PRE_ADMISSION_CASE_ENTITY,
+            to_status=target_status,
+        )
+        now = datetime.now(UTC)
+        case.updated_at = now
+        case.closed_at = now if new_status in TERMINAL_CASE_STATUSES else None
+        await self._repository.flush()
+        await self._event(
+            case_id=case.id,
+            event_type="status_changed",
+            actor_id=actor_id,
+            payload={
+                **transition_payload(old_status=old_status, new_status=new_status),
+                "reason": reason,
+            },
         )
 
     @staticmethod
@@ -499,7 +803,60 @@ class AdmissionCaseWorkspaceService:
         ]
 
     @staticmethod
-    def _recent_event(event: PreAdmissionEventModel) -> AdmissionRecentEventSchema:
+    def _case_status_label(status: str) -> str:
+        labels = {
+            "draft": "Rascunho",
+            "offer_preparing": "Preparando oferta",
+            "offer_sent": "Oferta enviada",
+            "offer_accepted": "Oferta aceita",
+            "offer_declined": "Oferta recusada",
+            "documents_pending": "Documentos pendentes",
+            "documents_received": "Documentos recebidos",
+            "ready_for_admission": "Pronto para admissão",
+            "admitted": "Admitido",
+            "dismissed": "Desligado",
+            "cancelled": "Cancelado",
+            "in_progress": "Em andamento",
+        }
+        return labels.get(status, "Em andamento")
+
+    @staticmethod
+    def _integration_status(
+        *,
+        case: PreAdmissionCaseModel,
+        blockers: list[AdmissionBlockerSchema],
+    ) -> AdmissionIntegrationStatusSchema:
+        if case.status == "admitted":
+            return AdmissionIntegrationStatusSchema(
+                state="completed",
+                label="Exportado",
+                ready_for_export=True,
+            )
+        if case.status == "dismissed":
+            return AdmissionIntegrationStatusSchema(
+                state="completed",
+                label="Desligado",
+                ready_for_export=False,
+            )
+        if any(blocker.type in {"integration_error", "erp_error"} for blocker in blockers):
+            return AdmissionIntegrationStatusSchema(
+                state="error",
+                label="Erro na exportação",
+                ready_for_export=False,
+            )
+        ready_for_export = not blockers
+        return AdmissionIntegrationStatusSchema(
+            state="ready" if ready_for_export else "pending",
+            label="Pronto para exportação" if ready_for_export else "Pendente",
+            ready_for_export=ready_for_export,
+        )
+
+    @staticmethod
+    def _recent_event(
+        event: PreAdmissionEventModel,
+        *,
+        user_names: dict[UUID, str],
+    ) -> AdmissionRecentEventSchema:
         payload = event.payload_json or {}
         filename = payload.get("original_filename")
         titles = {
@@ -539,6 +896,7 @@ class AdmissionCaseWorkspaceService:
                 "Evento registrado no caso de pré-admissão.",
             ),
             created_at=event.created_at,
+            actor_name=user_names.get(event.actor_id) if event.actor_id else None,
         )
 
     @staticmethod

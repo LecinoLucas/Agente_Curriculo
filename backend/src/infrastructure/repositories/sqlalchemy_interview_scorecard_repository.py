@@ -76,6 +76,38 @@ class SQLAlchemyInterviewScorecardRepository:
             .limit(1)
         )
 
+    async def list_for_candidate_job(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        pipeline_id: UUID | None,
+        interview_id: UUID | None = None,
+    ) -> list[InterviewScorecardModel]:
+        if pipeline_id is None:
+            return []
+        conditions = [
+            InterviewScorecardModel.candidate_id == candidate_id,
+            InterviewScorecardModel.job_id == job_id,
+            InterviewScorecardModel.pipeline_id == pipeline_id,
+        ]
+        if interview_id is None:
+            conditions.append(InterviewScorecardModel.interview_id.is_(None))
+        else:
+            conditions.append(InterviewScorecardModel.interview_id == interview_id)
+
+        result = await self._session.scalars(
+            sa.select(InterviewScorecardModel)
+            .options(selectinload(InterviewScorecardModel.items))
+            .where(*conditions)
+            .order_by(
+                InterviewScorecardModel.submitted_at.desc().nullslast(),
+                InterviewScorecardModel.updated_at.desc(),
+                InterviewScorecardModel.created_at.desc(),
+            )
+        )
+        return list(result.all())
+
     async def get(self, scorecard_id: UUID) -> InterviewScorecardModel | None:
         return await self._session.scalar(
             sa.select(InterviewScorecardModel)

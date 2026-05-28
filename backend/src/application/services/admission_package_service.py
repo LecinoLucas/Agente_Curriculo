@@ -9,6 +9,11 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.application.services.pre_admission_state_machine import (
+    ADMISSION_PACKAGE_ENTITY,
+    transition_payload,
+    transition_status,
+)
 from src.domain.exceptions import ValidationException
 from src.infrastructure.database.models import (
     PreAdmissionCaseModel,
@@ -96,10 +101,9 @@ class AdmissionPackageService:
         )
 
         # Transition to ready_for_review if no errors, else stay draft
+        old_status = package.status
         if not validation_errors:
-            package.status = "ready_for_review"
-        else:
-            package.status = "draft"
+            transition_status(package, entity=ADMISSION_PACKAGE_ENTITY, to_status="ready_for_review")
 
         await self.session.flush()
 
@@ -108,7 +112,11 @@ class AdmissionPackageService:
             case_id=package.case_id,
             event_type="package_created",
             actor_id=user_id,
-            payload={"package_id": str(package.id), "status": package.status},
+            payload={
+                "package_id": str(package.id),
+                "status": package.status,
+                **transition_payload(old_status=old_status, new_status=package.status),
+            },
         )
 
         logger.info(
@@ -140,6 +148,7 @@ class AdmissionPackageService:
                 f"Cannot approve package with {len(package.validation_errors_json)} validation errors"
             )
 
+        previous_status = package.status
         result = await self.repository.update_status(
             package_id,
             "approved_for_export",
@@ -151,7 +160,11 @@ class AdmissionPackageService:
             case_id=result.case_id,
             event_type="package_approved",
             actor_id=user_id,
-            payload={"package_id": str(result.id), "status": result.status},
+            payload={
+                "package_id": str(result.id),
+                "status": result.status,
+                **transition_payload(old_status=previous_status, new_status=result.status),
+            },
         )
 
         return result
@@ -169,48 +182,43 @@ class AdmissionPackageService:
         if not package:
             raise ValidationException(f"Package {package_id} not found")
 
-        if package.status == "exported":
-            raise ValidationException("Cannot cancel an already exported package")
-
-        package.status = "cancelled"
-        package.cancelled_at = datetime.now(UTC)
+        previous_status = package.status
+        result = await self.repository.update_status(package_id, "cancelled")
+        result.cancelled_at = datetime.now(UTC)
         await self.session.flush()
 
         # Register event
         await self._register_event(
-            case_id=package.case_id,
+            case_id=result.case_id,
             event_type="package_cancelled",
             actor_id=None,
-            payload={"package_id": str(package.id), "status": package.status, "reason": reason},
+            payload={
+                "package_id": str(result.id),
+                "status": result.status,
+                "reason": reason,
+                **transition_payload(old_status=previous_status, new_status=result.status),
+            },
         )
 
         logger.info(f"Cancelled admission package {package_id}, reason: {reason}")
 
-        return package
+        return result
 
     async def get_export_payload(
         self,
         package_id: UUID,
-        user_id: UUID | None = None,
     ) -> AdmissionExportPackageModel:
-        """Get package for export (marks as exported if not already).
-
-        If status='approved_for_export' → calls export_package() to transition to 'exported'
-        If status='exported' → returns package (allows re-download)
-        Otherwise → raises ValidationException
-        """
+        """Get package payload for download without changing business state."""
         package = await self.repository.get_by_id(package_id)
         if not package:
             raise ValidationException(f"Package {package_id} not found")
 
-        if package.status == "approved_for_export":
-            return await self.export_package(package_id, user_id)
-        elif package.status == "exported":
+        if package.status in {"approved_for_export", "exported"}:
             return package
-        else:
-            raise ValidationException(
-                f"Cannot export package with status '{package.status}', must be 'approved_for_export' or 'exported'"
-            )
+
+        raise ValidationException(
+            f"Cannot export package with status '{package.status}', must be 'approved_for_export' or 'exported'"
+        )
 
     async def export_package(
         self,
@@ -230,6 +238,7 @@ class AdmissionPackageService:
                 f"Cannot export package with status '{package.status}', must be 'approved_for_export'"
             )
 
+        previous_status = package.status
         result = await self.repository.mark_exported(package_id, exported_by=user_id)
 
         # Register event
@@ -237,7 +246,11 @@ class AdmissionPackageService:
             case_id=result.case_id,
             event_type="package_exported",
             actor_id=user_id,
-            payload={"package_id": str(result.id), "status": result.status},
+            payload={
+                "package_id": str(result.id),
+                "status": result.status,
+                **transition_payload(old_status=previous_status, new_status=result.status),
+            },
         )
 
         return result
@@ -328,6 +341,17 @@ class AdmissionPackageService:
                         "message": f"{item.title} ({item.status}) — must be approved or waived",
                     }
                 )
+                continue
+
+            if item.status == "approved" and self._get_current_approved_document_for_item(item) is None:
+                errors.append(
+                    {
+                        "field": f"checklist_item_{item.id}_document",
+                        "message": (
+                            f"{item.title} — approved item must have a current approved document"
+                        ),
+                    }
+                )
         return errors if errors else None
 
     async def _register_event(
@@ -363,18 +387,24 @@ class AdmissionPackageService:
         # Build documents section
         documents = []
         for item in checklist_items:
-            if item.documents:
-                doc = item.documents[0]
-                documents.append(
-                    {
-                        "checklist_item_id": str(item.id),
-                        "title": item.title,
-                        "status": item.status,
-                        "document_id": str(doc.id),
-                        "mime_type": doc.mime_type,
-                        "size_bytes": doc.size_bytes,
-                    }
-                )
+            doc = self._get_current_approved_document_for_item(item)
+            if doc is None:
+                continue
+
+            documents.append(
+                {
+                    "checklist_item_id": str(item.id),
+                    "title": item.title,
+                    "item_status": item.status,
+                    "status": doc.status,
+                    "document_id": str(doc.id),
+                    "original_filename": doc.original_filename,
+                    "mime_type": doc.mime_type,
+                    "size_bytes": doc.size_bytes,
+                    "uploaded_at": doc.uploaded_at.isoformat(),
+                    "reviewed_at": doc.reviewed_at.isoformat() if doc.reviewed_at else None,
+                }
+            )
 
         # Build payload
         payload = {
@@ -411,3 +441,37 @@ class AdmissionPackageService:
         }
 
         return payload
+
+    @staticmethod
+    def _get_current_approved_document_for_item(
+        item: PreAdmissionChecklistItemModel,
+    ) -> PreAdmissionDocumentModel | None:
+        current_document = AdmissionPackageService._get_current_document_for_item(item)
+        if current_document is None:
+            return None
+        if current_document.status != "approved":
+            return None
+        return current_document
+
+    @staticmethod
+    def _get_current_document_for_item(
+        item: PreAdmissionChecklistItemModel,
+    ) -> PreAdmissionDocumentModel | None:
+        eligible_documents = [
+            document
+            for document in item.documents
+            if document.case_id == item.case_id
+            and document.checklist_item_id == item.id
+            and document.deleted_at is None
+            and document.status != "replaced"
+        ]
+        if not eligible_documents:
+            return None
+        return max(
+            eligible_documents,
+            key=lambda document: (
+                document.uploaded_at.isoformat() if document.uploaded_at else "",
+                document.created_at.isoformat() if document.created_at else "",
+                str(document.id),
+            ),
+        )

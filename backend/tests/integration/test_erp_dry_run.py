@@ -1,5 +1,6 @@
-"""Integration tests for ERP Protheus dry-run attempts."""
+"""Integration tests for ERP Protheus dry-run and explicit export attempts."""
 
+import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import patch
@@ -336,6 +337,310 @@ async def test_protheus_capabilities_allows_real_send_only_when_fully_configured
     assert body["real_send"]["disabled_reason"] is None
     assert body["real_send"]["missing_configuration"] == []
     assert body["real_send"]["blocking_flags"] == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_marks_attempt_and_package_as_exported(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["mode"] == "mock"
+    assert body["status"] == "sent"
+    assert body["lifecycle_status"] == "exported"
+    assert body["external_reference"].startswith("PROTHEUS-MOCK-")
+
+    await db_session.refresh(data["package"])
+    assert data["package"].status == "exported"
+    assert data["package"].exported_at is not None
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_blocks_package_not_approved(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    data["package"].status = "ready_for_review"
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+    assert resp.status_code == 422
+    assert "approved_for_export" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_uses_existing_snapshot_not_live_candidate_data(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    snapshot_name = data["package"].payload_json["candidate"]["full_name"]
+
+    data["candidate"].full_name = "Changed After Snapshot"
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["request_payload_json"]["candidate"]["name"] == snapshot_name
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_failure_is_sanitized_and_retryable(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={"simulate_failure": True},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["status"] == "failed"
+    assert body["lifecycle_status"] == "retry_pending"
+    assert body["retryable"] is True
+    assert body["error_summary"]["code"] == "PROTHEUS_MOCK_VALIDATION_ERROR"
+    assert body["error_summary"]["retryable"] is True
+    assert data["candidate"].cpf not in json.dumps(body["response_payload_json"])
+    assert "cpf.pdf" not in json.dumps(body["response_payload_json"])
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_retry_succeeds_without_new_package_snapshot(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    original_snapshot = json.loads(json.dumps(data["package"].payload_json))
+    await db_session.commit()
+
+    first = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={"simulate_failure": True},
+    )
+    assert first.status_code == 201
+    retry = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp/retry",
+        headers=headers,
+        json={},
+    )
+    assert retry.status_code == 200
+    retry_body = retry.json()
+    assert retry_body["status"] == "sent"
+    assert retry_body["lifecycle_status"] == "exported"
+    assert retry_body["attempt_number"] == 2
+
+    await db_session.refresh(data["package"])
+    assert data["package"].status == "exported"
+    assert data["package"].payload_json == original_snapshot
+
+    attempts = await ErpIntegrationService(db_session).list_attempts(package_id=data["package"].id)
+    assert len([attempt for attempt in attempts if attempt.mode == "mock"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_retry_blocks_non_retryable_validation_failure(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session, candidate_cpf=None)
+    await db_session.commit()
+
+    first = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+    assert first.status_code == 201
+    assert first.json()["status"] == "validation_failed"
+
+    retry = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp/retry",
+        headers=headers,
+        json={},
+    )
+    assert retry.status_code == 422
+    assert "retryable" in retry.text
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_blocks_when_case_regresses_after_package_approval(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    data["case"].status = "documents_pending"
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+
+    assert response.status_code == 422
+    assert "ready_for_admission" in response.text
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_retry_blocks_when_latest_attempt_did_not_fail(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    await db_session.commit()
+
+    first = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+    assert first.status_code == 201
+    assert first.json()["status"] == "sent"
+
+    retry = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp/retry",
+        headers=headers,
+        json={},
+    )
+
+    assert retry.status_code == 422
+    assert "Retry permitido apenas após falha retryable" in retry.text
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_is_idempotent_after_success_and_audits_once(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    await db_session.commit()
+
+    first = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+    second = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={},
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+    attempts = await ErpIntegrationService(db_session).list_attempts(package_id=data["package"].id)
+    assert len([attempt for attempt in attempts if attempt.mode == "mock"]) == 1
+
+    events_stmt = (
+        sa.select(PreAdmissionEventModel)
+        .where(PreAdmissionEventModel.case_id == data["case"].id)
+        .where(
+            PreAdmissionEventModel.event_type.in_(
+                [
+                    "erp_export_requested",
+                    "erp_export_started",
+                    "erp_export_succeeded",
+                ]
+            )
+        )
+        .order_by(PreAdmissionEventModel.created_at.asc(), PreAdmissionEventModel.id.asc())
+    )
+    events = list((await db_session.scalars(events_stmt)).all())
+    assert [event.event_type for event in events] == [
+        "erp_export_requested",
+        "erp_export_started",
+        "erp_export_succeeded",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_explicit_export_retry_creates_audit_events(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "ERP_INTEGRATION_MODE", "mock")
+    headers = await _auth_headers(client, db_session)
+    data = await _prepare_package(db_session)
+    await db_session.commit()
+
+    first = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp",
+        headers=headers,
+        json={"simulate_failure": True},
+    )
+    assert first.status_code == 201
+
+    retry = await client.post(
+        f"/api/v1/admission-packages/{data['package'].id}/export-erp/retry",
+        headers=headers,
+        json={},
+    )
+    assert retry.status_code == 200
+
+    events_stmt = (
+        sa.select(PreAdmissionEventModel)
+        .where(PreAdmissionEventModel.case_id == data["case"].id)
+        .order_by(PreAdmissionEventModel.created_at.asc(), PreAdmissionEventModel.id.asc())
+    )
+    event_types = [event.event_type for event in list((await db_session.scalars(events_stmt)).all())]
+    assert "erp_export_requested" in event_types
+    assert "erp_export_started" in event_types
+    assert "erp_export_failed" in event_types
+    assert "erp_export_retry_requested" in event_types
+    assert "erp_export_succeeded" in event_types
 
 
 @pytest.mark.asyncio

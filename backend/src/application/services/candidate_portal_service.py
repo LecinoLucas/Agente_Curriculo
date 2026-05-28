@@ -56,7 +56,7 @@ MAX_PDF_UPLOAD_BYTES = settings.max_upload_size_bytes
 _POST_HIRING_STATUS_LABELS = {
     "hired": "Contratado",
     "pre_admission": "Pré-admissão",
-    "protheus": "Protheus",
+    "protheus": "Pré-admissão",
 }
 
 
@@ -144,22 +144,38 @@ class CandidatePortalService:
             latest_resume=latest_resume,
         )
 
+        pre_admission_summary = await PreAdmissionService(
+            SQLAlchemyPreAdmissionRepository(self._db)
+        ).candidate_portal_summary(candidate_id=candidate_id)
         source_value = candidate["application_source"]
         source_label = self._source_label(source_value)
         application_status = self._application_status(
             active_application=active_application,
             current_process_row=current_process_row,
             latest_resume=latest_resume,
+            has_dismissed_pre_admission=(
+                pre_admission_summary.has_pre_admission_case
+                and pre_admission_summary.pre_admission_status == "dismissed"
+            ),
+            has_admitted_pre_admission=(
+                pre_admission_summary.has_pre_admission_case
+                and pre_admission_summary.pre_admission_status == "admitted"
+            ),
         )
         current_process_status_label = self._current_process_status_label(
             application_status=application_status,
             active_application=active_application,
         )
         closed_reason_public_label = self._closed_reason_public_label(application_status)
-        is_process_closed = application_status in {"admitted", "rejected"}
-        pre_admission_summary = await PreAdmissionService(
-            SQLAlchemyPreAdmissionRepository(self._db)
-        ).candidate_portal_summary(candidate_id=candidate_id)
+        if application_status == "dismissed" and public_timeline is not None:
+            public_timeline.current_step_label = current_process_status_label
+            if public_timeline.current_step_key == "result" and public_timeline.steps:
+                public_timeline.steps[-1].label = current_process_status_label
+                public_timeline.steps[-1].description = (
+                    closed_reason_public_label or public_timeline.steps[-1].description
+                )
+                public_timeline.steps[-1].status = "closed"
+        is_process_closed = application_status in {"admitted", "dismissed", "rejected"}
         return CandidatePortalOverviewResponse(
             candidate=CandidatePortalCandidateSummaryResponse(
                 id=candidate["id"],
@@ -185,7 +201,7 @@ class CandidatePortalService:
             is_process_closed=is_process_closed,
             closed_reason_public_label=closed_reason_public_label,
             can_request_contact=True,
-            can_apply_to_other_jobs=True,
+            can_apply_to_other_jobs=application_status not in {"admitted", "dismissed"},
             public_timeline=public_timeline,
             pre_admission=pre_admission_summary,
         )
@@ -413,7 +429,13 @@ class CandidatePortalService:
         active_application: CandidatePortalActiveApplicationResponse | None,
         current_process_row: dict | None,
         latest_resume: CandidatePortalResumeResponse | None,
+        has_dismissed_pre_admission: bool = False,
+        has_admitted_pre_admission: bool = False,
     ) -> str:
+        if has_dismissed_pre_admission:
+            return "dismissed"
+        if has_admitted_pre_admission:
+            return "admitted"
         if active_application is not None:
             return "active"
         if current_process_row is not None:
@@ -440,6 +462,8 @@ class CandidatePortalService:
             return active_application.status_public
         if application_status == "rejected":
             return "Processo encerrado"
+        if application_status == "dismissed":
+            return "Processo admissional encerrado"
         if application_status == "admitted":
             return "Admitido"
         if application_status == "talent_pool":
@@ -450,8 +474,10 @@ class CandidatePortalService:
     def _closed_reason_public_label(application_status: str) -> str | None:
         if application_status == "rejected":
             return "Você não foi selecionado para esta vaga no momento."
+        if application_status == "dismissed":
+            return "Seu vínculo admissional foi encerrado pela equipe de RH."
         if application_status == "admitted":
-            return "Admissão concluída."
+            return "Seu processo foi concluído com sucesso."
         return None
 
     async def _build_public_timeline(
@@ -494,7 +520,7 @@ class CandidatePortalService:
                 (
                 "result",
                 self._result_label(active_pipeline_row["relationship_status"], active_pipeline_row["stage"]),
-                "Você será atualizado sobre o andamento.",
+                self._result_description(active_pipeline_row["relationship_status"], active_pipeline_row["stage"]),
                 ),
             ]
         )
@@ -748,6 +774,12 @@ class CandidatePortalService:
         return "Resultado"
 
     @staticmethod
+    def _result_description(relationship_status: str, stage: str) -> str:
+        if is_success_terminal_stage(stage) or relationship_status == "hired":
+            return "Seu processo foi concluído com sucesso."
+        return "Você será atualizado sobre o andamento."
+
+    @staticmethod
     def _map_public_status(
         *,
         stage: str,
@@ -811,6 +843,8 @@ class CandidatePortalService:
             return "protheus"
         if status_public == "Admitido":
             return "admitted"
+        if status_public == "Processo admissional encerrado":
+            return "dismissed"
         if status_public == "Processo encerrado":
             return "finished"
         if status_public == "Banco de Talentos":

@@ -10,10 +10,14 @@ class DocumentMetadataInPackage(BaseModel):
     """Document metadata in admission package."""
     checklist_item_id: str
     title: str
+    item_status: str | None = None
     status: str  # approved, waived, etc.
     document_id: str
+    original_filename: str | None = None
     mime_type: str
     size_bytes: int
+    uploaded_at: str | None = None
+    reviewed_at: str | None = None
 
 
 class CandidateDataInPackage(BaseModel):
@@ -121,6 +125,16 @@ class ErpIntegrationAttemptValidationError(BaseModel):
     message: str
 
 
+class ErpIntegrationAttemptErrorSummary(BaseModel):
+    code: str
+    message: str
+    stage: str | None = None
+    field: str | None = None
+    retryable: bool = False
+    http_status: int | None = None
+    timestamp: str | None = None
+
+
 class ErpDryRunPreviewPayload(BaseModel):
     provider: str
     mode: str
@@ -141,6 +155,8 @@ class ErpIntegrationAttemptResponse(BaseModel):
     provider: str
     mode: str
     status: str
+    lifecycle_status: str
+    retryable: bool = False
     idempotency_key: str | None = None
     external_reference: str | None = None
     http_status: int | None = None
@@ -151,6 +167,7 @@ class ErpIntegrationAttemptResponse(BaseModel):
     response_payload_json: dict | None = None
     validation_errors_json: list[ErpIntegrationAttemptValidationError] | None = None
     error_message: str | None = None
+    error_summary: ErpIntegrationAttemptErrorSummary | None = None
     attempted_by: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -182,6 +199,10 @@ class ProtheusCapabilitiesResponse(BaseModel):
 
 
 class ProtheusMockSendRequest(BaseModel):
+    simulate_failure: bool = False
+
+
+class ErpExportRequest(BaseModel):
     simulate_failure: bool = False
 
 

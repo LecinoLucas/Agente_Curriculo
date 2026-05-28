@@ -16,6 +16,7 @@ from src.domain.exceptions import (
     ConflictException,
     DomainException,
     ForbiddenException,
+    InvalidPreAdmissionStatusTransition,
     NotFoundException,
     UnauthorizedException,
     ValidationException,
@@ -36,6 +37,7 @@ from src.interface.api.routers import (
     admin_audit_logs,
     admin_system_health,
     admin_notifications,
+    admissions,
     admission_packages,
     ai_models,
     analyses,
@@ -134,6 +136,7 @@ app.include_router(interview_schedules.router, prefix=_PREFIX)
 app.include_router(interview_schedules.operational_router, prefix=_PREFIX)
 app.include_router(interview_scorecards.router, prefix=_PREFIX)
 app.include_router(pre_admission.router, prefix=_PREFIX)
+app.include_router(admissions.router, prefix=_PREFIX)
 app.include_router(admission_packages.router, prefix=_PREFIX)
 app.include_router(manager.router, prefix=_PREFIX)
 app.include_router(collaboration.router, prefix=_PREFIX)
@@ -193,6 +196,19 @@ async def handle_forbidden(request: Request, exc: ForbiddenException) -> JSONRes
 @app.exception_handler(ConflictException)
 async def handle_conflict(request: Request, exc: ConflictException) -> JSONResponse:
     return _error_response("CONFLICT", exc.message, status.HTTP_409_CONFLICT, request)
+
+
+@app.exception_handler(InvalidPreAdmissionStatusTransition)
+async def handle_invalid_pre_admission_transition(
+    request: Request,
+    exc: InvalidPreAdmissionStatusTransition,
+) -> JSONResponse:
+    return _error_response(
+        "INVALID_PRE_ADMISSION_STATUS_TRANSITION",
+        exc.message,
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        request,
+    )
 
 
 @app.exception_handler(ValidationException)

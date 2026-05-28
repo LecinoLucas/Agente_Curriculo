@@ -21,6 +21,7 @@ from src.interface.api.dependencies import (
 from src.interface.api.routers.communication_events import notify_candidate_event_safely
 from src.interface.api.schemas.admission_package_schemas import (
     AdmissionPackageResponse,
+    ErpExportRequest,
     ErpIntegrationAttemptListResponse,
     ErpIntegrationAttemptResponse,
     ErpRetryRequest,
@@ -62,6 +63,12 @@ def _to_response(package) -> AdmissionPackageResponse:
 
 
 def _to_attempt_response(attempt) -> ErpIntegrationAttemptResponse:
+    error_summary = None
+    if isinstance(attempt.response_payload_json, dict):
+        maybe_error = attempt.response_payload_json.get("error")
+        if isinstance(maybe_error, dict):
+            error_summary = maybe_error
+
     return ErpIntegrationAttemptResponse.model_validate(
         {
             "id": str(attempt.id),
@@ -72,6 +79,8 @@ def _to_attempt_response(attempt) -> ErpIntegrationAttemptResponse:
             "provider": attempt.provider,
             "mode": attempt.mode,
             "status": attempt.status,
+            "lifecycle_status": _erp_service_status(attempt),
+            "retryable": _erp_attempt_retryable(attempt),
             "idempotency_key": attempt.idempotency_key,
             "external_reference": attempt.external_reference,
             "http_status": attempt.http_status,
@@ -82,12 +91,32 @@ def _to_attempt_response(attempt) -> ErpIntegrationAttemptResponse:
             "response_payload_json": attempt.response_payload_json,
             "validation_errors_json": attempt.validation_errors_json,
             "error_message": attempt.error_message,
+            "error_summary": error_summary,
             "attempted_by": str(attempt.attempted_by) if attempt.attempted_by else None,
             "created_at": attempt.created_at,
             "updated_at": attempt.updated_at,
             "completed_at": attempt.completed_at,
         }
     )
+
+
+def _erp_attempt_retryable(attempt) -> bool:
+    if attempt.status != "failed":
+        return False
+    if not isinstance(attempt.response_payload_json, dict):
+        return False
+    error = attempt.response_payload_json.get("error")
+    return bool(isinstance(error, dict) and error.get("retryable"))
+
+
+def _erp_service_status(attempt) -> str:
+    if attempt.status == "sent":
+        return "exported"
+    if attempt.status == "failed":
+        return "retry_pending" if _erp_attempt_retryable(attempt) else "failed"
+    if attempt.status == "validation_failed":
+        return "failed"
+    return "pending"
 
 
 @router.post(
@@ -184,8 +213,7 @@ async def export_package_json(
 ) -> Response:
     """Export admission package as JSON."""
     try:
-        package = await _service(db).get_export_payload(package_id, user_id=_current_user.id)
-        await db.commit()
+        package = await _service(db).get_export_payload(package_id)
         return Response(
             content=json.dumps(package.payload_json, ensure_ascii=False, indent=2),
             media_type="application/json",
@@ -212,8 +240,7 @@ async def export_package_csv(
 ) -> Response:
     """Export admission package as CSV."""
     try:
-        package = await _service(db).get_export_payload(package_id, user_id=_current_user.id)
-        await db.commit()
+        package = await _service(db).get_export_payload(package_id)
 
         # Build CSV from payload
         p = package.payload_json
@@ -267,6 +294,53 @@ async def get_protheus_capabilities(
     db: AsyncSession = Depends(get_db),
 ) -> ProtheusCapabilitiesResponse:
     return ProtheusCapabilitiesResponse.model_validate(_erp_service(db).get_protheus_capabilities())
+
+
+@router.post(
+    "/admission-packages/{package_id}/export-erp",
+    response_model=ErpIntegrationAttemptResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def export_package_to_erp(
+    package_id: UUID,
+    payload: ErpExportRequest,
+    current_user: PreAdmissionExportStaff,
+    db: AsyncSession = Depends(get_db),
+) -> ErpIntegrationAttemptResponse:
+    try:
+        attempt = await _erp_service(db).export_package_to_erp(
+            package_id=package_id,
+            user_id=current_user.id,
+            simulate_failure=payload.simulate_failure,
+        )
+        await db.commit()
+        return _to_attempt_response(attempt)
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.post(
+    "/admission-packages/{package_id}/export-erp/retry",
+    response_model=ErpIntegrationAttemptResponse,
+)
+async def retry_package_export_to_erp(
+    package_id: UUID,
+    payload: ErpRetryRequest,
+    current_user: PreAdmissionExportStaff,
+    db: AsyncSession = Depends(get_db),
+) -> ErpIntegrationAttemptResponse:
+    try:
+        attempt = await _erp_service(db).retry_package_export(
+            package_id=package_id,
+            user_id=current_user.id,
+            simulate_failure=payload.simulate_failure,
+        )
+        await db.commit()
+        return _to_attempt_response(attempt)
+    except Exception:
+        await db.rollback()
+        raise
 
 
 @router.post(

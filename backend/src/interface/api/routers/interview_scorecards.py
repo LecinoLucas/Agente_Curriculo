@@ -75,12 +75,12 @@ async def get_interview_scorecard(
 ) -> InterviewScorecardEnvelopeResponse:
     if current_user.role == UserRole.MANAGER:
         await _assert_manager_candidate_access(current_user.id, candidate_id, job_id, db)
-    evaluator_id = current_user.id if current_user.role == UserRole.MANAGER else None
     return await _service(db).get_for_candidate_job(
         candidate_id=candidate_id,
         job_id=job_id,
         interview_id=interview_id,
-        evaluator_id=evaluator_id,
+        viewer_evaluator_id=current_user.id,
+        include_all_scorecards=current_user.role != UserRole.MANAGER,
     )
 
 

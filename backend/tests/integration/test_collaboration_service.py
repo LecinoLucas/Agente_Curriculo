@@ -337,6 +337,73 @@ async def test_manager_sends_feedback_with_recommendation(db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
+async def test_directed_manager_sees_collaboration_without_existing_scorecard(
+    db_session: AsyncSession,
+):
+    """Directed manager can read collaboration even before creating a scorecard."""
+    manager = await _create_user(db_session, "manager-directed@test.com", UserRole.MANAGER)
+    recruiter = await _create_user(db_session, "recruiter-directed@test.com", UserRole.RECRUITER)
+    job_id = await _create_job(db_session)
+    candidate_id = await _create_candidate(db_session)
+    await _create_pipeline(db_session, candidate_id, job_id)
+
+    recruiter_service = CollaborationService(db_session, recruiter)
+    await recruiter_service.create_comment(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        comment_type="comment",
+        message="Contexto inicial do recrutador",
+    )
+    await recruiter_service.create_comment(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        comment_type="review_request",
+        message="Preciso da sua revisão final",
+        target_manager_id=manager.id,
+    )
+
+    manager_service = CollaborationService(db_session, manager)
+    comments = await manager_service.list_collaboration(candidate_id, job_id)
+
+    assert [comment["comment_type"] for comment in comments] == ["review_request", "comment"]
+
+
+@pytest.mark.asyncio
+async def test_directed_manager_can_send_feedback_without_existing_scorecard(
+    db_session: AsyncSession,
+):
+    """Directed manager can respond via manager_feedback before any scorecard exists."""
+    manager = await _create_user(db_session, "manager-feedback-directed@test.com", UserRole.MANAGER)
+    recruiter = await _create_user(db_session, "recruiter-feedback-directed@test.com", UserRole.RECRUITER)
+    job_id = await _create_job(db_session)
+    candidate_id = await _create_candidate(db_session)
+    await _create_pipeline(db_session, candidate_id, job_id)
+
+    recruiter_service = CollaborationService(db_session, recruiter)
+    await recruiter_service.create_comment(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        comment_type="review_request",
+        message="Avalie este candidato sem scorecard prévio.",
+        target_manager_id=manager.id,
+    )
+
+    manager_service = CollaborationService(db_session, manager)
+    comment = await manager_service.create_comment(
+        candidate_id=candidate_id,
+        job_id=job_id,
+        comment_type="manager_feedback",
+        message="Consigo responder mesmo sem scorecard.",
+        recommendation="advance",
+    )
+
+    assert comment is not None
+    assert comment["comment_type"] == "manager_feedback"
+    assert comment["author_role"] == "manager"
+    assert comment["recommendation"] == "advance"
+
+
+@pytest.mark.asyncio
 async def test_candidate_cannot_access_collaboration(client: AsyncClient, db_session: AsyncSession):
     """Candidate cannot access collaboration endpoints."""
     candidate_user = await _create_user(db_session, "candidate@test.com", UserRole.CANDIDATE)

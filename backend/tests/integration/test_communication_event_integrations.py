@@ -197,7 +197,7 @@ async def test_pre_admission_and_document_events_create_safe_communications(
     assert "strong_fit" not in decision_comms[0].body
     assert "Decisão humana" not in decision_comms[0].body
 
-    case = await _create_pre_admission(client, headers, job_id, candidate_id)
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
     assert await _communications(db_session, candidate_id, template_key="pre_admission_created")
 
     item = await _create_checklist_item(client, headers, case["id"], title="CPF")
@@ -238,7 +238,7 @@ async def test_admission_package_approved_creates_communication(
     headers = await _recruiter_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
-    case = await _create_pre_admission(client, headers, job_id, candidate_id)
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
     item = await _create_checklist_item(client, headers, case["id"], title="CPF")
 
     ready = await client.patch(

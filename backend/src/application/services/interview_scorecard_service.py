@@ -31,7 +31,8 @@ class InterviewScorecardService:
         candidate_id: UUID,
         job_id: UUID,
         interview_id: UUID | None = None,
-        evaluator_id: UUID | None = None,
+        viewer_evaluator_id: UUID | None = None,
+        include_all_scorecards: bool = False,
     ) -> InterviewScorecardEnvelopeResponse:
         pipeline_id = await self._assert_active_pipeline(candidate_id=candidate_id, job_id=job_id)
         await self._validate_interview(
@@ -40,15 +41,30 @@ class InterviewScorecardService:
             interview_id=interview_id,
             pipeline_id=pipeline_id,
         )
-        scorecard = await self._repository.find_for_candidate_job(
+        scorecard = None
+        if viewer_evaluator_id is not None:
+            scorecard = await self._repository.find_for_candidate_job(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                pipeline_id=pipeline_id,
+                interview_id=interview_id,
+                evaluator_id=viewer_evaluator_id,
+            )
+
+        all_scorecards = await self._repository.list_for_candidate_job(
             candidate_id=candidate_id,
             job_id=job_id,
             pipeline_id=pipeline_id,
             interview_id=interview_id,
-            evaluator_id=evaluator_id,
         )
+        if include_all_scorecards and scorecard is None and all_scorecards:
+            scorecard = all_scorecards[0]
         return InterviewScorecardEnvelopeResponse(
             scorecard=self._response(scorecard) if scorecard else None,
+            scorecards=[
+                self._response(current)
+                for current in (all_scorecards if include_all_scorecards else ([scorecard] if scorecard else []))
+            ],
             suggested_behavioral_questions=await self._repository.list_suggested_behavioral_questions(
                 candidate_id=candidate_id,
                 job_id=job_id,
@@ -77,6 +93,7 @@ class InterviewScorecardService:
             job_id=job_id,
             pipeline_id=pipeline_id,
             interview_id=body.interview_id,
+            evaluator_id=evaluator_id,
         )
         if existing is not None:
             raise ConflictException("Scorecard de entrevista já existe para este contexto.")

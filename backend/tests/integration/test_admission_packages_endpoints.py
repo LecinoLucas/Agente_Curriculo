@@ -1,18 +1,20 @@
 """Integration tests for admission packages endpoints."""
 
 import json
-from datetime import UTC, datetime
-from uuid import uuid4
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.admission_package_service import AdmissionPackageService
 from src.infrastructure.database.models import (
     CandidateJobHiringDecisionModel,
     CandidateJobPipelineModel,
     CandidateModel,
     JobModel,
+    PreAdmissionDocumentModel,
     PreAdmissionCaseModel,
     PreAdmissionChecklistItemModel,
     PreAdmissionEventModel,
@@ -150,6 +152,56 @@ async def _create_checklist_item(
     return item
 
 
+async def _create_document(
+    session: AsyncSession,
+    *,
+    case_id,
+    checklist_item_id,
+    candidate_id,
+    status: str = "approved",
+    original_filename: str = "doc.pdf",
+    uploaded_at: datetime | None = None,
+) -> PreAdmissionDocumentModel:
+    document = PreAdmissionDocumentModel(
+        id=uuid4(),
+        case_id=case_id,
+        checklist_item_id=checklist_item_id,
+        candidate_id=candidate_id,
+        original_filename=original_filename,
+        stored_filename=original_filename,
+        storage_key=f"tests/{uuid4()}-{original_filename}",
+        mime_type="application/pdf",
+        size_bytes=1024,
+        status=status,
+        uploaded_at=uploaded_at or datetime.now(UTC),
+        reviewed_at=datetime.now(UTC) if status == "approved" else None,
+    )
+    session.add(document)
+    await session.flush()
+    return document
+
+
+async def _create_approved_item_with_document(
+    session: AsyncSession,
+    *,
+    case_id,
+    candidate_id,
+    required: bool = True,
+    title: str = "Test Document",
+) -> tuple[PreAdmissionChecklistItemModel, PreAdmissionDocumentModel]:
+    item = await _create_checklist_item(session, case_id, required=required, status="approved")
+    item.title = title
+    document = await _create_document(
+        session,
+        case_id=case_id,
+        checklist_item_id=item.id,
+        candidate_id=candidate_id,
+        status="approved",
+        original_filename=f"{title.lower().replace(' ', '-')}.pdf",
+    )
+    return item, document
+
+
 async def _create_hiring_decision(
     session: AsyncSession,
     job_id,
@@ -187,7 +239,11 @@ async def test_post_creates_package_when_case_ready(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     response = await client.post(f"/api/v1/pre-admission/{case.id}/admission-package", json={})
@@ -231,7 +287,11 @@ async def test_get_returns_existing_package(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package
@@ -270,7 +330,11 @@ async def test_approve_ready_for_review(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package
@@ -320,7 +384,11 @@ async def test_cancel_before_exported(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package
@@ -348,7 +416,11 @@ async def test_cancel_blocks_exported(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package
@@ -358,8 +430,9 @@ async def test_cancel_blocks_exported(
     # Approve
     await client.post(f"/api/v1/admission-packages/{package_id}/approve", json={})
 
-    # Export (via get payload)
-    await client.get(f"/api/v1/admission-packages/{package_id}/export-json")
+    # Mark exported explicitly; download alone must not change business state.
+    await AdmissionPackageService(db_session).export_package(UUID(package_id))
+    await db_session.commit()
 
     # Try to cancel (should fail)
     response = await client.post(f"/api/v1/admission-packages/{package_id}/cancel", json={})
@@ -400,7 +473,11 @@ async def test_export_json_returns_payload(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package
@@ -423,6 +500,103 @@ async def test_export_json_returns_payload(
 
 
 @pytest.mark.asyncio
+async def test_package_snapshot_uses_only_current_approved_document(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    client.headers.update(await _auth_headers(client, db_session))
+    candidate = await _create_candidate(db_session)
+    job = await _create_job(db_session)
+    decision = await _create_hiring_decision(db_session, job.id, candidate.id)
+    case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
+    item = await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    now = datetime.now(UTC).replace(microsecond=0)
+    await _create_document(
+        db_session,
+        case_id=case.id,
+        checklist_item_id=item.id,
+        candidate_id=candidate.id,
+        status="approved",
+        original_filename="old-approved.pdf",
+        uploaded_at=now - timedelta(minutes=4),
+    )
+    current = await _create_document(
+        db_session,
+        case_id=case.id,
+        checklist_item_id=item.id,
+        candidate_id=candidate.id,
+        status="approved",
+        original_filename="current-approved.pdf",
+        uploaded_at=now,
+    )
+    await db_session.commit()
+
+    create_resp = await client.post(f"/api/v1/pre-admission/{case.id}/admission-package", json={})
+    assert create_resp.status_code == 201, create_resp.text
+    data = create_resp.json()
+
+    assert data["status"] == "ready_for_review"
+    assert data["payload"]["documents"] == [
+        {
+            "checklist_item_id": str(item.id),
+            "title": item.title,
+            "item_status": "approved",
+            "status": "approved",
+            "document_id": str(current.id),
+            "original_filename": "current-approved.pdf",
+            "mime_type": "application/pdf",
+            "size_bytes": 1024,
+            "uploaded_at": current.uploaded_at.isoformat(),
+            "reviewed_at": current.reviewed_at.isoformat() if current.reviewed_at else None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_package_creation_does_not_use_stale_approved_document_when_latest_is_rejected(
+    client: httpx.AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    client.headers.update(await _auth_headers(client, db_session))
+    candidate = await _create_candidate(db_session)
+    job = await _create_job(db_session)
+    decision = await _create_hiring_decision(db_session, job.id, candidate.id)
+    case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
+    item = await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    now = datetime.now(UTC).replace(microsecond=0)
+    await _create_document(
+        db_session,
+        case_id=case.id,
+        checklist_item_id=item.id,
+        candidate_id=candidate.id,
+        status="approved",
+        original_filename="stale-approved.pdf",
+        uploaded_at=now - timedelta(minutes=8),
+    )
+    await _create_document(
+        db_session,
+        case_id=case.id,
+        checklist_item_id=item.id,
+        candidate_id=candidate.id,
+        status="rejected",
+        original_filename="latest-rejected.pdf",
+        uploaded_at=now,
+    )
+    await db_session.commit()
+
+    create_resp = await client.post(f"/api/v1/pre-admission/{case.id}/admission-package", json={})
+    assert create_resp.status_code == 201, create_resp.text
+    data = create_resp.json()
+
+    assert data["status"] == "draft"
+    assert data["payload"]["documents"] == []
+    assert any(
+        "current approved document" in error["message"]
+        for error in data["validation_errors"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_recruiter_cannot_export_or_use_protheus_endpoints(
     client: httpx.AsyncClient,
     db_session: AsyncSession,
@@ -433,7 +607,11 @@ async def test_recruiter_cannot_export_or_use_protheus_endpoints(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     create_resp = await client.post(f"/api/v1/pre-admission/{case.id}/admission-package", json={})
@@ -472,7 +650,11 @@ async def test_export_csv_returns_csv(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package
@@ -491,7 +673,7 @@ async def test_export_csv_returns_csv(
 
 
 @pytest.mark.asyncio
-async def test_export_marks_package_as_exported(
+async def test_export_json_does_not_mark_package_as_exported(
     client: httpx.AsyncClient,
     db_session: AsyncSession,
 ) -> None:
@@ -501,7 +683,11 @@ async def test_export_marks_package_as_exported(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package
@@ -511,14 +697,14 @@ async def test_export_marks_package_as_exported(
     # Approve
     await client.post(f"/api/v1/admission-packages/{package_id}/approve", json={})
 
-    # Export (should transition to exported)
+    # Export JSON should not transition package state
     response = await client.get(f"/api/v1/admission-packages/{package_id}/export-json")
     assert response.status_code == 200
 
-    # Check status is now exported
+    # Check status remains approved_for_export
     get_resp = await client.get(f"/api/v1/pre-admission/{case.id}/admission-package")
-    assert get_resp.json()["status"] == "exported"
-    assert get_resp.json()["exported_at"] is not None
+    assert get_resp.json()["status"] == "approved_for_export"
+    assert get_resp.json()["exported_at"] is None
 
 
 @pytest.mark.asyncio
@@ -532,7 +718,11 @@ async def test_events_are_registered(
     job = await _create_job(db_session)
     decision = await _create_hiring_decision(db_session, job.id, candidate.id)
     case = await _create_pre_admission_case(db_session, candidate.id, job.id, decision.id)
-    await _create_checklist_item(db_session, case.id, required=True, status="approved")
+    await _create_approved_item_with_document(
+        db_session,
+        case_id=case.id,
+        candidate_id=candidate.id,
+    )
     await db_session.commit()
 
     # Create package

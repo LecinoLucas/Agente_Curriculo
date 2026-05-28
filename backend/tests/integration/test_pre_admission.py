@@ -20,6 +20,8 @@ from src.infrastructure.database.models.candidate_model import CandidateModel
 from src.infrastructure.database.models.hiring_decision_model import CandidateJobHiringDecisionModel
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
+    PreAdmissionChecklistTemplateItemModel,
+    PreAdmissionChecklistTemplateModel,
     PreAdmissionDocumentModel,
 )
 from src.infrastructure.database.models.scoring_model import CandidateJobScoreModel
@@ -72,10 +74,12 @@ async def _move_pipeline_to_stage(
 
 async def _create_pre_admission(
     client: AsyncClient,
+    db_session: AsyncSession,
     headers: dict[str, str],
     job_id: UUID,
     candidate_id: UUID,
 ) -> dict:
+    await _ensure_default_checklist_template(db_session)
     response = await client.post(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
         headers=headers,
@@ -88,6 +92,49 @@ async def _create_pre_admission(
     )
     assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
+
+
+async def _ensure_default_checklist_template(db_session: AsyncSession) -> PreAdmissionChecklistTemplateModel:
+    existing = await db_session.scalar(
+        sa.select(PreAdmissionChecklistTemplateModel).where(
+            PreAdmissionChecklistTemplateModel.is_default.is_(True),
+            PreAdmissionChecklistTemplateModel.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return existing
+
+    now = datetime.now(UTC)
+    template = PreAdmissionChecklistTemplateModel(
+        id=uuid4(),
+        name="Checklist padrão de testes",
+        description="Template padrão para testes de pré-admissão.",
+        is_active=True,
+        is_default=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(template)
+    await db_session.flush()
+
+    db_session.add(
+        PreAdmissionChecklistTemplateItemModel(
+            id=uuid4(),
+            template_id=template.id,
+            document_key="cpf",
+            title="CPF",
+            candidate_description="Envie o CPF.",
+            is_required=True,
+            accepted_file_types=["application/pdf", "image/jpeg", "image/png"],
+            max_file_size_mb=10,
+            display_order=0,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+    return template
 
 
 async def _create_checklist_item(
@@ -130,8 +177,8 @@ async def _seed_pre_admission_with_item(
     await _complete_candidate_portal_profile(db_session, candidate_id)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
-    case = await _create_pre_admission(client, headers, job_id, candidate_id)
-    item = await _create_checklist_item(client, headers, case["id"])
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
+    item = case["checklist_items"][0]
     return headers, job_id, candidate_id, case, item
 
 
@@ -208,7 +255,7 @@ async def test_creates_pre_admission_with_submitted_hire_decision(
     decision = await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
 
-    payload = await _create_pre_admission(client, headers, job_id, candidate_id)
+    payload = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
 
     assert payload["candidate_id"] == str(candidate_id)
     assert payload["job_id"] == str(job_id)
@@ -266,8 +313,8 @@ async def test_does_not_duplicate_case_for_same_decision(
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
 
-    first = await _create_pre_admission(client, headers, job_id, candidate_id)
-    second = await _create_pre_admission(client, headers, job_id, candidate_id)
+    first = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
+    second = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
 
     count = int(
         await db_session.scalar(
@@ -288,7 +335,7 @@ async def test_get_lists_existing_case(client: AsyncClient, db_session: AsyncSes
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
-    created = await _create_pre_admission(client, headers, job_id, candidate_id)
+    created = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
 
     response = await client.get(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
@@ -310,7 +357,7 @@ async def test_recruiter_cannot_access_pre_admission_staff_endpoints(
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, admin_headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
-    created = await _create_pre_admission(client, admin_headers, job_id, candidate_id)
+    created = await _create_pre_admission(client, db_session, admin_headers, job_id, candidate_id)
 
     read_response = await client.get(
         f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/pre-admission",
@@ -339,7 +386,7 @@ async def test_updates_status_and_registers_event(
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
-    case = await _create_pre_admission(client, headers, job_id, candidate_id)
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
 
     response = await client.patch(
         f"/api/v1/pre-admission/{case['id']}",
@@ -355,12 +402,86 @@ async def test_updates_status_and_registers_event(
 
 
 @pytest.mark.asyncio
+async def test_case_status_machine_allows_valid_operational_transitions(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers = await _admin_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
+
+    for next_status in ("documents_pending", "documents_received", "ready_for_admission", "admitted"):
+        response = await client.patch(
+            f"/api/v1/pre-admission/{case['id']}",
+            headers=headers,
+            json={"status": next_status},
+        )
+        assert response.status_code == status.HTTP_200_OK, response.text
+        assert response.json()["status"] == next_status
+
+
+@pytest.mark.asyncio
+async def test_case_status_machine_blocks_invalid_transition_with_predictable_error(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers = await _admin_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
+
+    response = await client.patch(
+        f"/api/v1/pre-admission/{case['id']}",
+        headers=headers,
+        json={"status": "admitted"},
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    payload = response.json()
+    assert payload["error"]["code"] == "INVALID_PRE_ADMISSION_STATUS_TRANSITION"
+    assert "Transição de status inválida" in payload["error"]["message"]
+    assert "'draft' -> 'admitted'" in payload["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_case_cannot_be_changed_after_terminal_transition(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers = await _admin_headers(client, db_session)
+    job_id, candidate_id = await _seed_candidate_job(db_session)
+    await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
+    await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
+
+    cancelled = await client.patch(
+        f"/api/v1/pre-admission/{case['id']}",
+        headers=headers,
+        json={"status": "cancelled"},
+    )
+    assert cancelled.status_code == status.HTTP_200_OK
+
+    response = await client.patch(
+        f"/api/v1/pre-admission/{case['id']}",
+        headers=headers,
+        json={"notes": "Tentar alterar caso cancelado."},
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert "encerrado" in response.json()["error"]["message"].lower()
+
+
+@pytest.mark.asyncio
 async def test_creates_checklist_item(client: AsyncClient, db_session: AsyncSession) -> None:
     headers = await _admin_headers(client, db_session)
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
-    case = await _create_pre_admission(client, headers, job_id, candidate_id)
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
 
     response = await client.post(
         f"/api/v1/pre-admission/{case['id']}/checklist-items",
@@ -382,7 +503,7 @@ async def test_updates_checklist_item_and_registers_event(
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
-    case = await _create_pre_admission(client, headers, job_id, candidate_id)
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
     item = (
         await client.post(
             f"/api/v1/pre-admission/{case['id']}/checklist-items",
@@ -421,7 +542,7 @@ async def test_pre_admission_does_not_move_pipeline_automatically(
     assert pipeline is not None
     before_stage = pipeline.pipeline_stage
 
-    await _create_pre_admission(client, headers, job_id, candidate_id)
+    await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
 
     await db_session.refresh(pipeline)
     assert pipeline.pipeline_stage == before_stage
@@ -446,7 +567,7 @@ async def test_pre_admission_does_not_change_ranking_or_hiring_decision(
         or 0
     )
 
-    await _create_pre_admission(client, headers, job_id, candidate_id)
+    await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
 
     score_count_after = int(
         await db_session.scalar(
@@ -474,7 +595,7 @@ async def test_events_are_returned_ordered(client: AsyncClient, db_session: Asyn
     job_id, candidate_id = await _seed_candidate_job(db_session)
     await _create_hire_decision(client, db_session, headers, job_id, candidate_id)
     await _move_pipeline_to_stage(db_session, job_id=job_id, candidate_id=candidate_id, stage="hired")
-    case = await _create_pre_admission(client, headers, job_id, candidate_id)
+    case = await _create_pre_admission(client, db_session, headers, job_id, candidate_id)
     await client.patch(
         f"/api/v1/pre-admission/{case['id']}",
         headers=headers,
@@ -676,6 +797,42 @@ async def test_admin_reject_requires_reason_and_changes_document_and_checklist(
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["status"] == "rejected"
     assert response.json()["review_notes"] == "Documento ilegível."
+
+
+@pytest.mark.asyncio
+async def test_approved_document_cannot_be_rejected_without_explicit_reopen(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    headers, _job_id, candidate_id, case, item = await _seed_pre_admission_with_item(
+        client, db_session
+    )
+    await _create_portal_session(db_session, candidate_id, "portal-pre-admission-approve-lock")
+    client.cookies.set("candidate_portal_token", "portal-pre-admission-approve-lock")
+    document = (
+        await client.post(
+            f"/api/v1/candidate-portal/pre-admission/{case['id']}/checklist-items/{item['id']}/documents",
+            files=_pdf_upload(),
+        )
+    ).json()
+    client.cookies.clear()
+
+    approved = await client.post(
+        f"/api/v1/pre-admission/documents/{document['id']}/approve",
+        headers=headers,
+    )
+    assert approved.status_code == status.HTTP_200_OK
+
+    rejected = await client.post(
+        f"/api/v1/pre-admission/documents/{document['id']}/reject",
+        headers=headers,
+        json={"review_notes": "Não deveria aceitar reprovação após aprovação."},
+    )
+
+    assert rejected.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    payload = rejected.json()
+    assert payload["error"]["code"] == "INVALID_PRE_ADMISSION_STATUS_TRANSITION"
+    assert "'approved' -> 'rejected'" in payload["error"]["message"]
 
 
 @pytest.mark.asyncio

@@ -33,7 +33,8 @@ class CollaborationService:
         List collaboration comments for candidate+job.
 
         Recruiter/Admin: see all comments.
-        Manager: see only if they are evaluator for this candidate in this job.
+        Manager: see only if they are evaluator for this candidate in this job
+        or have a directed review_request for the same candidate+job.
         """
         # Verify access
         if not await self._verify_access(candidate_id, job_id):
@@ -136,7 +137,8 @@ class CollaborationService:
         if self.is_admin or self.is_recruiter:
             return True
 
-        # Manager: only if evaluator for this candidate in this job
+        # Manager: evaluator for this candidate/job OR explicitly targeted
+        # by a review request for the same candidate/job.
         if self.is_manager:
             count = await self.session.scalar(
                 sa.select(sa.func.count(InterviewScorecardModel.id)).where(
@@ -147,7 +149,20 @@ class CollaborationService:
                     )
                 )
             )
-            return (count or 0) > 0
+            if (count or 0) > 0:
+                return True
+
+            directed_review_count = await self.session.scalar(
+                sa.select(sa.func.count(CollaborationCommentModel.id)).where(
+                    and_(
+                        CollaborationCommentModel.job_id == job_id,
+                        CollaborationCommentModel.candidate_id == candidate_id,
+                        CollaborationCommentModel.comment_type == "review_request",
+                        CollaborationCommentModel.target_manager_id == self.user.id,
+                    )
+                )
+            )
+            return (directed_review_count or 0) > 0
 
         return False
 

@@ -175,6 +175,7 @@ class SQLAlchemyPipelineRepository:
         if case is None:
             return {
                 "has_case": False,
+                "case_id": None,
                 "case_status": None,
                 "total_items": 0,
                 "unresolved_required_count": 0,
@@ -202,6 +203,7 @@ class SQLAlchemyPipelineRepository:
 
         return {
             "has_case": True,
+            "case_id": case.id,
             "case_status": case.status,
             "total_items": total_items,
             "unresolved_required_count": len(unresolved_required_titles),
@@ -304,7 +306,15 @@ class SQLAlchemyPipelineRepository:
         await self._session.refresh(entry)
         return entry
 
-    async def list_job_matches(self, job_id: UUID) -> list[dict]:
+    async def list_job_matches(
+        self,
+        job_id: UUID,
+        *,
+        entered_from: datetime | None = None,
+        entered_to: datetime | None = None,
+        updated_from: datetime | None = None,
+        updated_to: datetime | None = None,
+    ) -> list[dict]:
         # Non-correlated scalar — runs once, resolved before the main query.
         active_score_version = (
             sa.select(ScoreModelVersionModel.id)
@@ -457,6 +467,33 @@ class SQLAlchemyPipelineRepository:
         # ── Main query — drives from active pipeline rows for this job ────
         # Five LEFT JOINs to pre-computed CTEs replace seven correlated
         # scalar subqueries that previously executed once per candidate row.
+        conditions = [
+            CandidateJobPipelineModel.job_id == job_id,
+            CandidateModel.deleted_at.is_(None),
+            sa.or_(
+                sa.and_(
+                    CandidateJobPipelineModel.relationship_status == "active",
+                    CandidateJobPipelineModel.pipeline_status == "active",
+                    CandidateJobPipelineModel.is_terminal.is_(False),
+                    CandidateJobPipelineModel.terminated_at.is_(None),
+                ),
+                sa.and_(
+                    CandidateJobPipelineModel.pipeline_stage == "admitted",
+                    CandidateJobPipelineModel.relationship_status == "hired",
+                    CandidateJobPipelineModel.pipeline_status == "terminal",
+                    CandidateJobPipelineModel.is_terminal.is_(True),
+                ),
+            ),
+        ]
+        if entered_from is not None:
+            conditions.append(CandidateJobPipelineModel.entered_at >= entered_from)
+        if entered_to is not None:
+            conditions.append(CandidateJobPipelineModel.entered_at <= entered_to)
+        if updated_from is not None:
+            conditions.append(CandidateJobPipelineModel.updated_at >= updated_from)
+        if updated_to is not None:
+            conditions.append(CandidateJobPipelineModel.updated_at <= updated_to)
+
         result = await self._session.execute(
             sa.select(
                 CandidateJobPipelineModel.candidate_id,
@@ -529,22 +566,7 @@ class SQLAlchemyPipelineRepository:
                 == CandidateJobPipelineModel.candidate_job_pipeline_id,
             )
             .where(
-                CandidateJobPipelineModel.job_id == job_id,
-                CandidateModel.deleted_at.is_(None),
-                sa.or_(
-                    sa.and_(
-                        CandidateJobPipelineModel.relationship_status == "active",
-                        CandidateJobPipelineModel.pipeline_status == "active",
-                        CandidateJobPipelineModel.is_terminal.is_(False),
-                        CandidateJobPipelineModel.terminated_at.is_(None),
-                    ),
-                    sa.and_(
-                        CandidateJobPipelineModel.pipeline_stage == "admitted",
-                        CandidateJobPipelineModel.relationship_status == "hired",
-                        CandidateJobPipelineModel.pipeline_status == "terminal",
-                        CandidateJobPipelineModel.is_terminal.is_(True),
-                    ),
-                ),
+                *conditions,
             )
             .order_by(CandidateJobPipelineModel.updated_at.desc())
         )

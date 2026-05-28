@@ -33,7 +33,7 @@ from src.application.services.pre_admission_service import PreAdmissionService
 from src.infrastructure.repositories.sqlalchemy_behavioral_assignment_repository import (
     SQLAlchemyBehavioralAssignmentRepository,
 )
-
+from src.domain.exceptions import ValidationException
 from src.interface.api.schemas.pipeline_schemas import (
     AddCandidateToJobRequest,
     AddCandidateToJobResponse,
@@ -42,6 +42,7 @@ from src.interface.api.schemas.pipeline_schemas import (
     JobMatchCandidateResponse,
     MoveCandidateRequest,
     MoveCandidateResponse,
+    PipelineBoardFilters,
     PipelineBoardResponse,
     PipelineColumnResponse,
     PipelineJobSummaryResponse,
@@ -53,7 +54,10 @@ from src.interface.api.schemas.pipeline_schemas import (
     UpdateCandidateStageRequest,
     UpdateCandidateStageResponse,
 )
-from src.interface.api.schemas.pre_admission_schemas import PreAdmissionUpdateRequest
+from src.interface.api.schemas.pre_admission_schemas import (
+    PreAdmissionCreateRequest,
+    PreAdmissionUpdateRequest,
+)
 
 TRANSFER_ALLOWED_STAGES: list[str] = ["entry", "screening"]
 
@@ -376,14 +380,30 @@ class PipelineService:
     # Board (existing — unchanged)
     # ------------------------------------------------------------------
 
-    async def list_job_matches(self, job_id: UUID) -> list[JobMatchCandidateResponse]:
+    async def list_job_matches(
+        self,
+        job_id: UUID,
+        filters: PipelineBoardFilters | None = None,
+    ) -> list[JobMatchCandidateResponse]:
         await self._ensure_active_job(job_id)
-        rows = await self._repository.list_job_matches(job_id)
+        normalized_filters = filters or PipelineBoardFilters()
+        self._validate_board_filters(normalized_filters)
+        rows = await self._repository.list_job_matches(
+            job_id,
+            entered_from=normalized_filters.entered_from,
+            entered_to=normalized_filters.entered_to,
+            updated_from=normalized_filters.updated_from,
+            updated_to=normalized_filters.updated_to,
+        )
         return [self._row_to_match_response(row) for row in rows]
 
-    async def get_board(self, job_id: UUID) -> PipelineBoardResponse:
+    async def get_board(
+        self,
+        job_id: UUID,
+        filters: PipelineBoardFilters | None = None,
+    ) -> PipelineBoardResponse:
         _t0 = time.perf_counter()
-        matches = await self.list_job_matches(job_id)
+        matches = await self.list_job_matches(job_id, filters)
         by_stage: dict[str, list[JobMatchCandidateResponse]] = {stage: [] for stage in KANBAN_STAGES}
         for item in matches:
             by_stage[item.stage].append(item)
@@ -405,6 +425,21 @@ class PipelineService:
             for stage in KANBAN_STAGES
         ]
         return PipelineBoardResponse(job_id=job_id, columns=columns)
+
+    @staticmethod
+    def _validate_board_filters(filters: PipelineBoardFilters) -> None:
+        if (
+            filters.entered_from is not None
+            and filters.entered_to is not None
+            and filters.entered_from > filters.entered_to
+        ):
+            raise ValidationException("entered_from não pode ser maior que entered_to.")
+        if (
+            filters.updated_from is not None
+            and filters.updated_to is not None
+            and filters.updated_from > filters.updated_to
+        ):
+            raise ValidationException("updated_from não pode ser maior que updated_to.")
 
     # ------------------------------------------------------------------
     # Legacy stage update (existing — unchanged, kept for backwards compat)
@@ -663,6 +698,13 @@ class PipelineService:
             target_stage=body.stage,
             actor_id=moved_by,
         )
+        pre_admission_case_id = await self._ensure_pre_admission_case_for_stage(
+            candidate_id=candidate_id,
+            job_id=body.job_id,
+            target_stage=body.stage,
+            actor_id=moved_by,
+        )
+        required_action = "open_pre_admission" if body.stage == "pre_admission" else None
 
         return MoveCandidateResponse(
             candidate_id=saved_row["candidate_id"],
@@ -672,6 +714,8 @@ class PipelineService:
             status=saved_row["status"],  # type: ignore[arg-type]
             transition_id=saved_transition.id,
             updated_at=saved_row["updated_at"],
+            required_action=required_action,
+            pre_admission_case_id=pre_admission_case_id,
         )
 
     async def _sync_pre_admission_case_for_stage(
@@ -696,6 +740,49 @@ class PipelineService:
             actor_id=actor_id,
             body=PreAdmissionUpdateRequest(status="admitted"),
         )
+
+    async def _ensure_pre_admission_case_for_stage(
+        self,
+        *,
+        candidate_id: UUID,
+        job_id: UUID,
+        target_stage: str,
+        actor_id: UUID,
+    ) -> UUID | None:
+        if target_stage != "pre_admission":
+            return None
+
+        db_session = self._session or self._repository._session
+        repository = SQLAlchemyPreAdmissionRepository(db_session)
+        active_case = await repository.get_active_case(candidate_id=candidate_id, job_id=job_id)
+        if active_case is not None:
+            return active_case.id
+
+        service = PreAdmissionService(repository)
+        try:
+            async with db_session.begin_nested():
+                created = await service.create(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    actor_id=actor_id,
+                    body=PreAdmissionCreateRequest(),
+                )
+            return created.id
+        except ValidationException as exc:
+            logger.info(
+                "pipeline.pre_admission_case.autocreate_skipped",
+                candidate_id=str(candidate_id),
+                job_id=str(job_id),
+                reason=exc.message,
+            )
+            return None
+        except IntegrityError:
+            # Concurrency-safe idempotency: another request likely created the
+            # case first. Re-read and return it.
+            existing_case = await repository.get_active_case(candidate_id=candidate_id, job_id=job_id)
+            if existing_case is not None:
+                return existing_case.id
+            raise
 
     async def add_candidate_to_job(
         self,

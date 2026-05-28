@@ -14,7 +14,7 @@ JSONB_COMPAT = JSONB().with_variant(sa.JSON(), "sqlite")
 
 PRE_ADMISSION_STATUSES = (
     "'draft', 'offer_preparing', 'offer_sent', 'offer_accepted', 'offer_declined', "
-    "'documents_pending', 'documents_received', 'ready_for_admission', 'admitted', 'cancelled'"
+    "'documents_pending', 'documents_received', 'ready_for_admission', 'admitted', 'dismissed', 'cancelled'"
 )
 PRE_ADMISSION_ITEM_TYPES = (
     "'cpf', 'rg', 'comprovante_endereco', 'carteira_trabalho', 'pis', "
@@ -22,6 +22,132 @@ PRE_ADMISSION_ITEM_TYPES = (
 )
 PRE_ADMISSION_ITEM_STATUSES = "'pending', 'received', 'approved', 'rejected', 'waived'"
 PRE_ADMISSION_DOCUMENT_STATUSES = "'uploaded', 'approved', 'rejected', 'replaced'"
+
+
+class PreAdmissionChecklistTemplateModel(Base):
+    __tablename__ = "pre_admission_checklist_templates"
+
+    id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
+    )
+    name: Mapped[str] = mapped_column(sa.String(180), nullable=False)
+    description: Mapped[str | None] = mapped_column(sa.Text)
+    admission_type: Mapped[str | None] = mapped_column(sa.String(80))
+    is_active: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=True,
+        server_default=sa.text("true"),
+    )
+    is_default: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa.text("false"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+
+    items: Mapped[list["PreAdmissionChecklistTemplateItemModel"]] = relationship(
+        back_populates="template",
+        cascade="all, delete-orphan",
+        order_by="PreAdmissionChecklistTemplateItemModel.display_order",
+    )
+
+    __table_args__ = (
+        sa.Index("idx_pre_admission_checklist_templates_active", "is_active"),
+        sa.Index(
+            "uq_pre_admission_checklist_templates_default_active",
+            "is_default",
+            unique=True,
+            postgresql_where=sa.text("is_default = true AND is_active = true"),
+            sqlite_where=sa.text("is_default = 1 AND is_active = 1"),
+        ),
+    )
+
+
+class PreAdmissionChecklistTemplateItemModel(Base):
+    __tablename__ = "pre_admission_checklist_template_items"
+
+    id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        server_default=sa.text("uuid_generate_v4()"),
+    )
+    template_id: Mapped[UUID] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("pre_admission_checklist_templates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    document_key: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    title: Mapped[str] = mapped_column(sa.String(180), nullable=False)
+    candidate_description: Mapped[str | None] = mapped_column(sa.Text)
+    is_required: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=True,
+        server_default=sa.text("true"),
+    )
+    accepted_file_types: Mapped[list[str]] = mapped_column(
+        JSONB_COMPAT,
+        nullable=False,
+        default=list,
+    )
+    max_file_size_mb: Mapped[int] = mapped_column(
+        sa.Integer,
+        nullable=False,
+        default=10,
+        server_default="10",
+    )
+    display_order: Mapped[int] = mapped_column(
+        sa.Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=True,
+        server_default=sa.text("true"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=sa.text("NOW()"),
+    )
+
+    template: Mapped[PreAdmissionChecklistTemplateModel] = relationship(back_populates="items")
+
+    __table_args__ = (
+        sa.Index("idx_pre_admission_checklist_template_items_template", "template_id"),
+        sa.Index(
+            "idx_pre_admission_checklist_template_items_template_order",
+            "template_id",
+            "display_order",
+        ),
+    )
 
 
 class PreAdmissionCaseModel(Base):
@@ -48,6 +174,11 @@ class PreAdmissionCaseModel(Base):
         sa.ForeignKey("candidate_job_hiring_decisions.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    checklist_template_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("pre_admission_checklist_templates.id", ondelete="SET NULL"),
+    )
+    checklist_template_name: Mapped[str | None] = mapped_column(sa.String(180))
     status: Mapped[str] = mapped_column(sa.String(40), nullable=False, server_default="draft")
     salary_offer: Mapped[Decimal | None] = mapped_column(sa.Numeric(12, 2))
     start_date: Mapped[date | None] = mapped_column(sa.Date)
@@ -78,6 +209,8 @@ class PreAdmissionCaseModel(Base):
         server_default=sa.text("NOW()"),
     )
     closed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    dismissed_at: Mapped[datetime | None] = mapped_column(sa.TIMESTAMP(timezone=True))
+    dismissal_reason: Mapped[str | None] = mapped_column(sa.Text)
 
     checklist_items: Mapped[list["PreAdmissionChecklistItemModel"]] = relationship(
         back_populates="case",
@@ -93,8 +226,8 @@ class PreAdmissionCaseModel(Base):
             "candidate_id",
             "job_id",
             unique=True,
-            postgresql_where=sa.text("status NOT IN ('admitted', 'cancelled', 'offer_declined')"),
-            sqlite_where=sa.text("status NOT IN ('admitted', 'cancelled', 'offer_declined')"),
+            postgresql_where=sa.text("status NOT IN ('admitted', 'dismissed', 'cancelled', 'offer_declined')"),
+            sqlite_where=sa.text("status NOT IN ('admitted', 'dismissed', 'cancelled', 'offer_declined')"),
         ),
         sa.Index("idx_pre_admission_cases_job_candidate", "job_id", "candidate_id"),
         sa.Index("idx_pre_admission_cases_status", "status"),
@@ -116,11 +249,34 @@ class PreAdmissionChecklistItemModel(Base):
         sa.ForeignKey("pre_admission_cases.id", ondelete="CASCADE"),
         nullable=False,
     )
+    template_item_id: Mapped[UUID | None] = mapped_column(
+        sa.UUID(as_uuid=True),
+        sa.ForeignKey("pre_admission_checklist_template_items.id", ondelete="SET NULL"),
+    )
+    document_key: Mapped[str] = mapped_column(sa.String(120), nullable=False, server_default="other")
     item_type: Mapped[str] = mapped_column(sa.String(40), nullable=False)
     title: Mapped[str] = mapped_column(sa.String(180), nullable=False)
     status: Mapped[str] = mapped_column(sa.String(20), nullable=False, server_default="pending")
     required: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.text("true"))
     notes: Mapped[str | None] = mapped_column(sa.Text)
+    candidate_description: Mapped[str | None] = mapped_column(sa.Text)
+    accepted_file_types: Mapped[list[str]] = mapped_column(
+        JSONB_COMPAT,
+        nullable=False,
+        default=list,
+    )
+    max_file_size_mb: Mapped[int] = mapped_column(
+        sa.Integer,
+        nullable=False,
+        default=10,
+        server_default="10",
+    )
+    display_order: Mapped[int] = mapped_column(
+        sa.Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.TIMESTAMP(timezone=True),
         nullable=False,
@@ -145,6 +301,7 @@ class PreAdmissionChecklistItemModel(Base):
         sa.CheckConstraint(f"item_type IN ({PRE_ADMISSION_ITEM_TYPES})", name="ck_pre_admission_items_type"),
         sa.CheckConstraint(f"status IN ({PRE_ADMISSION_ITEM_STATUSES})", name="ck_pre_admission_items_status"),
         sa.Index("idx_pre_admission_items_case", "case_id"),
+        sa.Index("idx_pre_admission_items_case_order", "case_id", "display_order"),
     )
 
 

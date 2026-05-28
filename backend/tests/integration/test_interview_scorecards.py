@@ -85,6 +85,60 @@ async def test_creates_scorecard_as_draft(client: AsyncClient, db_session: Async
 
 
 @pytest.mark.asyncio
+async def test_same_evaluator_cannot_create_duplicate_scorecard_for_same_context(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    headers, _evaluator_id = await _recruiter_headers(client, db_session)
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+
+    await _create_scorecard(client, headers, job_id, candidate_id)
+    response = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=headers,
+        json={
+            "items": [
+                {
+                    "competency_name": "Comunicação",
+                    "question_text": "Tentativa duplicada",
+                    "display_order": 1,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == status.HTTP_409_CONFLICT, response.text
+
+
+@pytest.mark.asyncio
+async def test_recruiter_reads_own_scorecard_and_list_of_parallel_evaluations(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    headers_a, evaluator_a_id = await _recruiter_headers(client, db_session)
+    headers_b, evaluator_b_id = await _recruiter_headers(client, db_session)
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+
+    scorecard_a = await _create_scorecard(client, headers_a, job_id, candidate_id)
+    scorecard_b = await _create_scorecard(client, headers_b, job_id, candidate_id)
+
+    response = await client.get(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=headers_a,
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    payload = response.json()
+    assert payload["scorecard"]["evaluator_id"] == str(evaluator_a_id)
+    assert {scorecard["id"] for scorecard in payload["scorecards"]} == {
+        scorecard_a["id"],
+        scorecard_b["id"],
+    }
+    assert {scorecard["evaluator_id"] for scorecard in payload["scorecards"]} == {
+        str(evaluator_a_id),
+        str(evaluator_b_id),
+    }
+
+
+@pytest.mark.asyncio
 async def test_edits_draft_and_adds_items(client: AsyncClient, db_session: AsyncSession) -> None:
     headers, _evaluator_id = await _recruiter_headers(client, db_session)
     job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
@@ -451,6 +505,41 @@ async def test_manager_with_review_request_can_create_scorecard(client: AsyncCli
     payload = response.json()
     assert payload["evaluator_id"] == str(mgr_id)
     assert payload["status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_directed_manager_can_create_own_scorecard_even_when_other_evaluator_already_has_one(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    rec_headers, rec_id = await _recruiter_headers(client, db_session)
+    mgr_headers, mgr_id = await _manager_headers(client, db_session)
+    job_id, candidate_id, _match_id = await _seed_candidate_job(db_session)
+
+    recruiter_scorecard = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=rec_headers,
+        json={"items": [{"competency_name": "Triagem inicial", "display_order": 1}]},
+    )
+    assert recruiter_scorecard.status_code == status.HTTP_201_CREATED, recruiter_scorecard.text
+
+    await _seed_review_request(
+        db_session,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        target_manager_id=mgr_id,
+        author_id=rec_id,
+    )
+
+    manager_scorecard = await client.post(
+        f"/api/v1/jobs/{job_id}/candidates/{candidate_id}/interview-scorecard",
+        headers=mgr_headers,
+        json={"items": [{"competency_name": "Liderança", "display_order": 1}]},
+    )
+
+    assert manager_scorecard.status_code == status.HTTP_201_CREATED, manager_scorecard.text
+    payload = manager_scorecard.json()
+    assert payload["evaluator_id"] == str(mgr_id)
+    assert payload["items"][0]["competency_name"] == "Liderança"
 
 
 @pytest.mark.asyncio

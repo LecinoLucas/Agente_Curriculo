@@ -73,4 +73,5 @@ class InterviewScorecardResponse(BaseModel):
 
 class InterviewScorecardEnvelopeResponse(BaseModel):
     scorecard: InterviewScorecardResponse | None = None
+    scorecards: list[InterviewScorecardResponse] = Field(default_factory=list)
     suggested_behavioral_questions: list[str] = Field(default_factory=list)

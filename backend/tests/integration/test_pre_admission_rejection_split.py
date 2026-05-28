@@ -115,7 +115,9 @@ async def test_reject_with_public_reason_stores_field_and_exposes_to_portal(
     envelope = (await client.get("/api/v1/candidate-portal/pre-admission")).json()
     item_payload = envelope["case"]["checklist_items"][0]
     assert item_payload["status"] == "rejected"
+    assert item_payload["status_public_label"] == "Correções solicitadas"
     assert item_payload["rejection_reason_public"] == "Imagem ilegível, reenvie."
+    assert envelope["summary"]["status_public_label"] == "Correções solicitadas"
 
 
 @pytest.mark.asyncio
@@ -152,6 +154,9 @@ async def test_portal_envelope_never_carries_review_notes(
     leaked_keys = _walk_keys(payload) & _FORBIDDEN_PORTAL_KEYS
     assert not leaked_keys, f"Portal leaked: {sorted(leaked_keys)}"
     assert INTERNAL_TEXT not in envelope_response.text
+    assert "attempt_id" not in envelope_response.text
+    assert "package_id" not in envelope_response.text
+    assert "export_package" not in envelope_response.text
 
 
 @pytest.mark.asyncio
@@ -180,6 +185,7 @@ async def test_portal_falls_back_to_null_when_no_public_reason_provided(
     envelope = (await client.get("/api/v1/candidate-portal/pre-admission")).json()
     item_payload = envelope["case"]["checklist_items"][0]
     assert item_payload["status"] == "rejected"
+    assert item_payload["status_public_label"] == "Correções solicitadas"
     assert item_payload["rejection_reason_public"] is None
     assert "Internal" not in envelope.__repr__()
 

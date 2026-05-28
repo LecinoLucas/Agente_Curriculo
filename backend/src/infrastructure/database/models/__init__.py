@@ -66,6 +66,8 @@ from src.infrastructure.database.models.hiring_decision_model import CandidateJo
 from src.infrastructure.database.models.pre_admission_model import (
     PreAdmissionCaseModel,
     PreAdmissionChecklistItemModel,
+    PreAdmissionChecklistTemplateItemModel,
+    PreAdmissionChecklistTemplateModel,
     PreAdmissionDocumentModel,
     PreAdmissionEventModel,
 )
@@ -146,6 +148,8 @@ __all__ = [
     "InterviewScorecardModel",
     "InterviewScorecardItemModel",
     "CandidateJobHiringDecisionModel",
+    "PreAdmissionChecklistTemplateModel",
+    "PreAdmissionChecklistTemplateItemModel",
     "PreAdmissionCaseModel",
     "PreAdmissionChecklistItemModel",
     "PreAdmissionDocumentModel",

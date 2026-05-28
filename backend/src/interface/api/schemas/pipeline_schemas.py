@@ -89,6 +89,13 @@ class PipelineBoardResponse(BaseModel):
     columns: list[PipelineColumnResponse]
 
 
+class PipelineBoardFilters(BaseModel):
+    entered_from: datetime | None = None
+    entered_to: datetime | None = None
+    updated_from: datetime | None = None
+    updated_to: datetime | None = None
+
+
 # ---------------------------------------------------------------------------
 # Stage move — existing schemas (unchanged, used by PipelineService internals)
 # ---------------------------------------------------------------------------
@@ -136,6 +143,8 @@ class MoveCandidateResponse(BaseModel):
     status: CandidateOutcomeStatus
     transition_id: UUID
     updated_at: datetime
+    required_action: Literal["open_pre_admission"] | None = None
+    pre_admission_case_id: UUID | None = None
     analysis: PipelineAnalysisDecisionResponse | None = None
 
 

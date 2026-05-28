@@ -256,7 +256,7 @@ async def test_overview_keeps_offer_unblocked_when_optional_hire_decision_submit
     [
         ("hired", "Contratado"),
         ("pre_admission", "Pré-admissão"),
-        ("protheus", "Protheus"),
+        ("protheus", "Pré-admissão"),
     ],
 )
 async def test_overview_keeps_post_hiring_stages_linked_to_active_job(
